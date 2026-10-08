@@ -466,6 +466,9 @@ abstract class TestCase extends BaseTestCase
     /** A folder of this test's own, gone with everything in it once the test is over. */
     protected function scratchDir(): string
     {
+        // The app booted first: its boot empties the run's folder once, which would take a folder made before it with it
+        // — the first test of a run to reach the app, in whatever order the run has them.
+        $this->app();
         $dir = self::runDir() . '/' . bin2hex(random_bytes(6));
         mkdir($dir);
 
