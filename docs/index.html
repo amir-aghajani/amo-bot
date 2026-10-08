@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AmoBot</title>
+    <meta name="description" content="AmoBot's documentation: installing and running a shop, the owner's guide, the bot, the Store API and the code." />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/themes/vue.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      // GitHub Pages serves docs/ as it is, and Docsify renders its Markdown here, in the browser: the same pages the
+      // repository's view and the wiki show (Contributing.md, "Documentation"). There is nothing to build.
+      window.$docsify = {
+        name: 'AmoBot',
+        repo: 'amir-aghajani/amo-bot',
+        homepage: 'Home.md',
+        loadSidebar: '_Sidebar.md',
+        subMaxLevel: 2,
+        auto2top: true,
+        search: { paths: 'auto', depth: 3, placeholder: 'Search', noData: 'Nothing found.' },
+        plugins: [
+          // _Footer.md under every page, as the wiki shows it.
+          function (hook) {
+            var footer = fetch('_Footer.md')
+              .then(function (response) {
+                return response.ok ? response.text() : ''
+              })
+              .catch(function () {
+                return ''
+              })
+            hook.beforeEach(function (markdown, next) {
+              footer.then(function (text) {
+                next(text ? markdown + '\n\n---\n\n' + text : markdown)
+              })
+            })
+          },
+        ],
+      }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/docsify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/plugins/search.min.js"></script>
+  </body>
+</html>

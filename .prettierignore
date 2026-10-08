@@ -1,0 +1,8 @@
+public
+vendor
+node_modules
+storage
+graphify-out
+resources/panel/src/components/ui
+# Vendored font builds (Google Fonts), kept as downloaded.
+resources/panel/src/fonts/

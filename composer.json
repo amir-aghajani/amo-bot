@@ -1,0 +1,91 @@
+{
+    "name": "amir-aghajani/amo-bot",
+    "description": "Open-source VPN config shop: a Telegram bot that sells, an owner's panel and agents' panels, with pluggable panel connectors (3x-ui, PasarGuard), payment gateways and database drivers.",
+    "type": "project",
+    "license": "MIT",
+    "keywords": ["vpn", "3x-ui", "pasarguard", "xray", "telegram-bot", "shop", "php"],
+    "homepage": "https://github.com/amir-aghajani/amo-bot",
+    "authors": [
+        {
+            "name": "AmoBot contributors",
+            "homepage": "https://github.com/amir-aghajani/amo-bot/graphs/contributors"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/amir-aghajani/amo-bot/issues",
+        "source": "https://github.com/amir-aghajani/amo-bot",
+        "docs": "https://github.com/amir-aghajani/amo-bot/tree/main/docs",
+        "security": "https://github.com/amir-aghajani/amo-bot/security/policy"
+    },
+    "require": {
+        "php": "^8.2",
+        "ext-bcmath": "*",
+        "ext-curl": "*",
+        "ext-fileinfo": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-openssl": "*",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
+        "chillerlan/php-qrcode": "^5.0",
+        "firebase/php-jwt": "^7.2",
+        "guzzlehttp/guzzle": "^8.2",
+        "illuminate/database": "^12.69",
+        "illuminate/events": "^12.69",
+        "monolog/monolog": "^3.12",
+        "php-di/php-di": "^7.1",
+        "ramsey/uuid": "^4.9",
+        "slim/psr7": "^1.8",
+        "slim/slim": "^4.15",
+        "symfony/console": "^7.4",
+        "symfony/mailer": "^7.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/"
+        },
+        "files": [
+            "app/Support/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/",
+            "AmoBot\\PHPStan\\": "phpstan/src/"
+        }
+    },
+    "scripts": {
+        "serve": "@php -S 127.0.0.1:8080 -t public public/index.php",
+        "test": "@php vendor/bin/phpunit",
+        "lint": "@php vendor/bin/php-cs-fixer fix --dry-run --diff",
+        "fix": "@php vendor/bin/php-cs-fixer fix",
+        "analyse": "@php vendor/bin/phpstan analyse --memory-limit=1G",
+        "check": [
+            "@lint",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.2.0"
+        },
+        "allow-plugins": {}
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "suggest": {
+        "ext-gd": "Draws the QR card a delivered service comes with; without it the bot sends the link as text",
+        "ext-sodium": "Checks the signature of a new release, so the owner's panel updates the shop itself; without it the shop is updated by hand",
+        "ext-zip": "Unpacks a new release, so the owner's panel updates the shop itself; without it the shop is updated by hand"
+    },
+    "require-dev": {
+        "ext-pdo_sqlite": "*",
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "league/openapi-psr7-validator": "^0.24.0",
+        "phpstan/phpstan": "^2.2",
+        "phpunit/phpunit": "^11.5",
+        "shipmonk/dead-code-detector": "^1.4"
+    }
+}

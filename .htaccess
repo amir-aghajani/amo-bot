@@ -1,0 +1,27 @@
+# Shared-hosting fallback: when the document root is the project folder itself
+# (typical cPanel public_html), forward every request into public/.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Never serve a version-control folder (a cloned project carries its whole history), even if rewriting is unavailable.
+<IfModule mod_alias.c>
+    RedirectMatch 404 /\.(git|svn|hg)(/|$)
+</IfModule>
+
+# Never serve project internals — the shop's config.php above all, and any copy of it an editor left beside it
+# (config.php.bak, config.php~) —, even if rewriting is unavailable.
+<FilesMatch "^(config\.php.*|composer\.(json|lock)|phpunit\.xml|phpstan\.neon|\.php-cs-fixer\.php)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+Options -Indexes

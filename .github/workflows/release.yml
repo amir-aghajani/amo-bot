@@ -1,0 +1,76 @@
+# A tag v1.2.3 makes a release: the checks again, then scripts/release.php builds the zip a shop owner uploads (the app,
+# vendor/ without development packages, the built panels, the release key, an empty storage/) and its manifest,
+# release.json, signed with the RELEASE_SIGNING_KEY secret — the shops' updater installs nothing else. The tag must match
+# Application::VERSION, and its notes are the version's section of CHANGELOG.md. No unsigned release is ever published.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # The whole history: the last release's tag names the key the shops trust now.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: bcmath, curl, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sodium, zip
+          coverage: none
+
+      # The pnpm package.json names (packageManager): the action takes it from there, and refuses a version of its own.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: The tag names this version, the changelog has its notes, and the signing key is there
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          version=$(sed -n "s/.*const VERSION = '\([^']*\)'.*/\1/p" app/Core/Application.php)
+          test "v${version}" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} does not match Application::VERSION ${version}"; exit 1; }
+          mkdir -p build
+          # The version's section: from its heading (## 1.2.3, or ## [1.2.3] - date) to the next one.
+          awk -v version="${version}" '
+            /^## / { if (found) exit; heading = $2; gsub(/[\[\]]/, "", heading); found = (heading == version); next }
+            found { print }
+          ' CHANGELOG.md > build/notes.md
+          test -s build/notes.md || { echo "CHANGELOG.md has no section for ${version}"; exit 1; }
+          test -n "${RELEASE_SIGNING_KEY}" || { echo "The RELEASE_SIGNING_KEY secret is not set: no unsigned release is published (docs/Releasing.md)"; exit 1; }
+
+      - run: composer install --no-interaction --no-progress
+      - run: composer check
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+      # The key the shops trust now: the last release's, which a release bringing a new key is still signed with.
+      - name: Build and sign the release
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          trusted=()
+          if [ -n "${previous}" ] && git show "${previous}:resources/release-key.pub" > build/trusted-key.pub 2>/dev/null && [ -s build/trusted-key.pub ]; then
+            trusted=(--trusted-key=build/trusted-key.pub)
+          fi
+          php scripts/release.php "${trusted[@]}"
+          test -s build/release.json.sig || { echo "The release was not signed"; exit 1; }
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          body_path: build/notes.md
+          files: |
+            build/amobot-*.zip
+            build/release.json
+            build/release.json.sig

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#151515" />
+    <script>
+      // The owner's panel's folder (…/admin/, wherever the shop is installed) is the page's base: every relative
+      // address — the built scripts and styles, the API beside the panel — reads against it from any of its pages.
+      ;(function () {
+        var match = location.pathname.match(/^(.*\/admin)(?:\/|$)/)
+        var base = document.createElement('base')
+        // One leading slash: "//admin/" would be read as another host.
+        base.href = (match ? match[1].replace(/^\/+/, '/') : '/admin') + '/'
+        document.head.appendChild(base)
+      })()
+      // The saved theme before the first paint (src/lib/theme.tsx keeps it).
+      ;(function () {
+        var dark = true
+        try {
+          dark = localStorage.getItem('amobot-panel-theme') !== 'light'
+        } catch (e) {}
+        document.documentElement.classList.toggle('dark', dark)
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        document.querySelector('meta[name="theme-color"]').content = dark ? '#151515' : '#fcfcfb'
+      })()
+    </script>
+    <title>پنل مدیریت</title>
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  </head>
+  <body>
+    <noscript>
+      <p style="font-family: Vazirmatn, sans-serif; text-align: center; margin-top: 4rem">پنل مدیریت بدون JavaScript کار نمی‌کند؛ آن را در مرورگر روشن کنید.</p>
+    </noscript>
+    <div id="root">
+      <!-- What the panel draws while it loads (components/app-status: AppLoading), from the page's first paint on; the script takes its place. -->
+      <div class="flex min-h-svh items-center justify-center gap-2 text-body text-muted-foreground" role="status">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="size-4 animate-spin"
+          aria-hidden="true"
+        >
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </svg>
+        در حال بارگذاری…
+      </div>
+    </div>
+    <script type="module" src="/src/apps/admin/main.tsx"></script>
+  </body>
+</html>

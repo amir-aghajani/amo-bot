@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security weakness
+    url: https://github.com/amir-aghajani/amo-bot/security/advisories/new
+    about: Privately, through GitHub's private vulnerability reporting — never in a public issue.
+  - name: Documentation
+    url: https://github.com/amir-aghajani/amo-bot/tree/main/docs
+    about: Installing and running a shop, the owner's guide, the bot, the Store API and the code.

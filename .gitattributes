@@ -1,0 +1,37 @@
+# Text is LF in the repository and in every checkout, Windows' included (bin/console's shebang, the PHP, the panels).
+* text=auto eol=lf
+*.php text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+bin/console text eol=lf
+
+# Binaries as they are.
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff2 binary
+*.zip binary
+
+# What a source archive (GitHub's "Source code", `git archive`) need not carry: the tests, the documentation (the wiki
+# and GitHub Pages publish it), CI and the development tools' settings. A shop installs from the release zip, which
+# scripts/release.php builds.
+/tests export-ignore
+/docs export-ignore
+/.github export-ignore
+/phpunit.xml export-ignore
+/phpstan.neon export-ignore
+/phpstan export-ignore
+/.php-cs-fixer.php export-ignore
+/.oxlintrc.json export-ignore
+/knip.jsonc export-ignore
+/.prettierrc export-ignore
+/.prettierignore export-ignore
+/.editorconfig export-ignore
+/components.json export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore

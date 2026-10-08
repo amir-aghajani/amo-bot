@@ -1,0 +1,55 @@
+# The panels are static files (pnpm build): the owner's page under admin/, an agent's under agent/, and the hashed
+# files both pages share under assets/. PHP answers the rest — the API, the Telegram webhook, the cron URL — as JSON.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # The panels: their files as they are; a build file that is not there is a 404 (a tab opened before an upgrade asks
+    # for the old build's files, and must not get a page instead); any other address under admin/ or agent/ is that
+    # panel's page.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^assets/ - [R=404,L]
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^(admin|agent)(/.*)?$ $1/index.html [L]
+
+    # Everything else that is not a real file goes to the front controller.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "DENY"
+    Header set Referrer-Policy "same-origin"
+
+    # A panel's page must always be asked for again (it names the build's files); the files themselves never change —
+    # the build writes assets/.htaccess, which lets a browser keep them for good.
+    <FilesMatch "^index\.html$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>
+
+# Text goes compressed — brotli to a browser that reads it, else gzip —, where the host has the modules: the API's JSON,
+# the panels' pages, and the build's scripts and styles to a browser that does not read brotli (one that does is given the
+# brotli the build made beside each — assets/.htaccess).
+<IfModule mod_filter.c>
+    <IfModule mod_brotli.c>
+        AddOutputFilterByType BROTLI_COMPRESS text/html text/plain text/css application/javascript text/javascript application/json image/svg+xml
+    </IfModule>
+    <IfModule mod_deflate.c>
+        AddOutputFilterByType DEFLATE text/html text/plain text/css application/javascript text/javascript application/json image/svg+xml
+    </IfModule>
+</IfModule>
+
+# PHP's own error log, should the host write one beside the scripts despite the app's own setting.
+<Files "error_log">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</Files>
+
+Options -Indexes

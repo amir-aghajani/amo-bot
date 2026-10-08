@@ -1,0 +1,79 @@
+# The documentation, docs/, published to the project's GitHub wiki on every push to main that changes it (or by hand):
+# the wiki's own repository checked out, `php scripts/docs.php --wiki` writes the tree into it (its links between pages
+# written without `.md`, a page the tree no longer has taken out), and the result is committed and pushed with the
+# workflow's own token.
+#
+# GitHub makes a wiki's repository only once its first page exists: switch the wiki on (Settings › Features › Wikis) and
+# create one page by hand — the export replaces it (docs/Contributing.md, "Documentation"). Until then a run says so in a
+# warning and publishes nothing.
+name: Wiki
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', 'scripts/docs.php', '.github/workflows/wiki.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One publication at a time, each to the end: the next starts from what the last pushed.
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  wiki:
+    name: Publish the wiki
+    # The default branch's documentation alone (a run started by hand on another branch publishes nothing), and only
+    # where the repository has a wiki.
+    if: github.ref_name == github.event.repository.default_branch && github.event.repository.has_wiki
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # GitHub makes a wiki's own repository only with its first page, made by hand: until then there is nothing to
+      # publish to, which the run says — a warning with the way out — rather than fail.
+      # Asked with the workflow's token (from outside the checkout, so the one header is this one): a wiki that is not
+      # there is "not found" only to a caller GitHub knows — to anyone else it asks for a login.
+      - name: Find the wiki
+        id: wiki
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+          TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "${TOKEN}" | base64 -w0)
+          if refused=$(git -C "${RUNNER_TEMP}" -c "http.extraheader=AUTHORIZATION: basic ${auth}" ls-remote "https://github.com/${GITHUB_REPOSITORY}.wiki.git" 2>&1 > /dev/null); then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif grep -qi 'not found' <<< "${refused}"; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=No wiki page yet::GitHub makes a wiki's repository with its first page. Create one by hand in the repository's Wiki tab, then run this workflow again (Actions › Wiki › Run workflow): the documentation replaces it."
+          else
+            echo "${refused}"
+            exit 1
+          fi
+
+      - if: steps.wiki.outputs.ready == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki
+
+      - if: steps.wiki.outputs.ready == 'true'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - if: steps.wiki.outputs.ready == 'true'
+        run: php scripts/docs.php --wiki wiki
+
+      - name: Commit and push
+        if: steps.wiki.outputs.ready == 'true'
+        working-directory: wiki
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          git diff --cached --quiet || git commit -m "The documentation as of ${GITHUB_SHA}"
+          git push

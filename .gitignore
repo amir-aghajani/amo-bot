@@ -1,0 +1,39 @@
+# The shop's own configuration, and any copy an editor leaves beside it (config.php.bak): secrets, never committed.
+/config.php*
+
+# What the shop writes as it runs: storage/ keeps its .htaccess and its folders (a .gitkeep each) — a folder added
+# later included — and nothing else.
+/storage/*
+!/storage/.htaccess
+!/storage/*/
+/storage/*/*
+!/storage/*/.gitkeep
+
+# Dependencies and builds: Composer's and pnpm's, the panels' build (shipped in the release zip), the release zip.
+/vendor/
+/node_modules/
+/.pnpm-store/
+/composer.phar
+/public/admin/
+/public/agent/
+/public/assets/
+/build/
+
+# The tools' caches and local files.
+/.phpunit.cache/
+/.php-cs-fixer.cache
+/phpstan.neon.local
+/coverage/
+*.log
+*.sqlite*
+/graphify-out/
+/.claude/
+
+# Editors and operating systems.
+.idea/
+.vscode/
+.fleet/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

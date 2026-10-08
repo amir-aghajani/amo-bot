@@ -1,0 +1,18 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/*
+ * CLI entry point: php bin/console <command>
+ * Run `php bin/console list` to see every command.
+ */
+
+if (PHP_SAPI !== 'cli') {
+    echo 'bin/console must be run from the command line.' . PHP_EOL;
+    exit(1);
+}
+
+$app = require dirname(__DIR__) . '/bootstrap/app.php';
+
+exit($app->console()->run());

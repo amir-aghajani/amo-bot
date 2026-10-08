@@ -1,0 +1,24 @@
+{
+  "semi": false,
+  "singleQuote": true,
+  "printWidth": 200,
+  "trailingComma": "all",
+  "plugins": [
+    "@ianvs/prettier-plugin-sort-imports",
+    "prettier-plugin-tailwindcss"
+  ],
+  "importOrder": [
+    "<BUILTIN_MODULES>",
+    "^react$",
+    "<THIRD_PARTY_MODULES>",
+    "^@/(.*)$",
+    "^[./]"
+  ],
+  "tailwindStylesheet": "./resources/panel/src/index.css",
+  "tailwindFunctions": [
+    "cn",
+    "cva"
+  ],
+  "tabWidth": 2,
+  "useTabs": false
+}

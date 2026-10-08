@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in the bot, the panels, the Store API or the installer does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A weakness that could hurt a shop or its customers is not a bug report: report it privately
+        ([SECURITY.md](https://github.com/amir-aghajani/amo-bot/blob/main/SECURITY.md)). Leave every token, password,
+        key and customer's detail out of what you paste.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The owner's panel shows it on the dashboard («وضعیت سیستم»); from the source, the commit.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: The hosting control panel, PHP's version, and the database with its version.
+      placeholder: cPanel, PHP 8.3, MariaDB 10.6
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Where it happens — a bot screen, a panel page, an API request — and what you did, step by step.
+      placeholder: |
+        1. In the owner's panel, open …
+        2. Press …
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        The «کد پیگیری» the panel showed, and the lines of storage/logs/app-YYYY-MM-DD.log that carry it (or of
+        storage/logs/php-errors.log).
+      render: text

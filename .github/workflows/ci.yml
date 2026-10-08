@@ -1,0 +1,66 @@
+# Every push to main and every pull request to it: the PHP side (code style, PHPStan, the test suite — every API answer
+# checked against resources/api/openapi.yaml — and the documentation's check) on the PHP versions shops run, and the
+# panels (`pnpm check`: API types current, types, lint, unused code, format, the unit tests — then a production build).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A pull request's run gives way to the one its next push starts; every run of main goes to its end.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  php:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every version a shop may run is held to the whole suite, which fails on any deprecation.
+        php: ['8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v7
+
+      # What composer.json requires and suggests (gd the QR card; sodium and zip the updater), and pdo_sqlite for the tests.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: bcmath, curl, fileinfo, gd, mbstring, openssl, pdo_mysql, pdo_sqlite, sodium, zip
+          coverage: none
+
+      - name: Composer cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+
+      - run: composer install --no-interaction --no-progress
+      - run: composer check
+      # The documentation: its pages generated from the code current, and every link between its pages leading somewhere.
+      - run: php scripts/docs.php --check
+
+  panels:
+    name: Panels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The pnpm package.json names (packageManager): the action takes it from there, and refuses a version of its own.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build

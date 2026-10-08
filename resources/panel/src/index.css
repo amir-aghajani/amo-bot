@@ -1,0 +1,550 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens. The panel follows the Claude Console's design language: near-neutral surfaces stepped a few
+ * percent apart, hairline borders and fills drawn as alpha over whatever is beneath them, one inverted primary
+ * (black on light, near-white on dark), blue only for links, focus and information, and green / amber / red kept for
+ * status. Hierarchy comes from type, spacing and those hairlines — no gradients, glows or entrance motion.
+ *
+ * Every colour exists once per theme here; components read the semantic names mapped in @theme below.
+ */
+:root {
+  /* Geometry the shell and scroll offsets read. */
+  --sidebar-width: 16rem;
+  --sidebar-width-collapsed: 3.25rem;
+  --topbar-height: 3.5rem;
+
+  /* Surfaces, from the sidebar (lowest) to floating layers (highest). */
+  --surface-0: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --surface-2: #ffffff;
+  --surface-3: #ffffff;
+
+  /* Text: primary, secondary (descriptions, labels of lists), tertiary (hints, timestamps, placeholders) — each at least
+     4.5:1 on every surface, the tertiary too, since it carries real 12–13px words. */
+  --fg: #0b0b0b;
+  --fg-2: #52514e;
+  --fg-3: #73716c;
+  --on-primary: #ffffff;
+
+  /* Hairlines and fills, as alpha over the surface beneath. */
+  --line: rgb(11 11 11 / 10%);
+  --line-strong: rgb(11 11 11 / 20%);
+  --line-stronger: rgb(11 11 11 / 40%);
+  --fill: rgb(11 11 11 / 5%);
+  --fill-hover: rgb(11 11 11 / 9%);
+  --fill-active: rgb(11 11 11 / 10%);
+
+  /* Status families: text, soft background, line (the tones of lib/statuses). */
+  --info: #184f95;
+  --info-soft: #cde2fb;
+  --info-line: #86b6ef;
+  --success: #006300;
+  --success-soft: #caeac7;
+  --success-line: #73cb6d;
+  --warning: #734500;
+  --warning-soft: #f9dca4;
+  --warning-line: #eda100;
+  --danger: #8e2626;
+  --danger-soft: #fad6d6;
+  --danger-line: #f09595;
+
+  --danger-solid: #c93a3a;
+  --focus: #2a78d6;
+  --link: #184f95;
+
+  --shadow-popover: 0 8px 24px rgb(0 0 0 / 12%), 0 2px 6px rgb(0 0 0 / 6%);
+  --shadow-card: 0 1px 2px rgb(11 11 11 / 4%);
+  --backdrop: rgb(11 11 11 / 28%);
+
+  /* The surface a table sits on — the page's; a card sets its own —, under its last column when it sticks (see below). */
+  --table-surface: var(--surface-1);
+
+  /* The overview's one series (one metric at a time, by decision; components/dashboard/area-chart). */
+  --chart-1: #2a78d6;
+}
+
+.dark {
+  --surface-0: #0b0b0b;
+  --surface-1: #151515;
+  --surface-2: #1a1a19;
+  --surface-3: #20201f;
+
+  --fg: #f0efec;
+  --fg-2: #c3c2b7;
+  --fg-3: #898781;
+  --on-primary: #0b0b0b;
+
+  --line: rgb(255 255 255 / 10%);
+  --line-strong: rgb(255 255 255 / 20%);
+  --line-stronger: rgb(255 255 255 / 40%);
+  --fill: rgb(255 255 255 / 5%);
+  --fill-hover: rgb(255 255 255 / 9%);
+  --fill-active: rgb(255 255 255 / 14%);
+
+  --info: #6da7ec;
+  --info-soft: #032042;
+  --info-line: #0d366b;
+  --success: #0ca30c;
+  --success-soft: #11260f;
+  --success-line: #074506;
+  --warning: #db9300;
+  --warning-soft: #311a00;
+  --warning-line: #512e00;
+  --danger: #ec7e7e;
+  --danger-soft: #3c0e0e;
+  --danger-line: #641919;
+
+  --danger-solid: #c93a3a;
+  --focus: #2a78d6;
+  --link: #6da7ec;
+
+  --shadow-popover: 0 8px 24px rgb(0 0 0 / 32%), 0 2px 6px rgb(0 0 0 / 20%);
+  --shadow-card: none;
+  --backdrop: rgb(0 0 0 / 62%);
+
+  --chart-1: #4f93e6;
+}
+
+@theme inline {
+  /* One typeface, by decision: Vazirmatn (self-hosted, src/fonts/vazirmatn) for every word of both panels — Persian,
+     Latin and identifiers alike. Tailwind's other families are not kept (`font-mono`, `font-serif` would bring a
+     system face back), and code, keys and samples take the page's face (the base layer below). */
+  --font-*: initial;
+  --font-sans: 'Vazirmatn', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* The type scale (the Console's names; line heights opened up for Persian's taller letters). `subtitle` is a dialog's
+     title, `display` the voice of the overview's greeting and the sign-in and installer titles (24px: as large to the
+     eye as the 32px serif it was set in before). Every name is also in lib/utils' tailwind-merge, which must know it is
+     a size. */
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.125rem;
+  --text-footnote: 0.8125rem;
+  --text-footnote--line-height: 1.25rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-heading: 0.9375rem;
+  --text-heading--line-height: 1.375rem;
+  --text-subtitle: 1.0625rem;
+  --text-subtitle--line-height: 1.75rem;
+  --text-title: 1.375rem;
+  --text-title--line-height: 2rem;
+  --text-stat: 1.75rem;
+  --text-stat--line-height: 2.25rem;
+  --text-display: 1.5rem;
+  --text-display--line-height: 2rem;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+
+  --shadow-popover: var(--shadow-popover);
+  --shadow-card: var(--shadow-card);
+
+  --color-background: var(--surface-1);
+  --color-foreground: var(--fg);
+  --color-card: var(--surface-2);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--surface-3);
+  --color-popover-foreground: var(--fg);
+  --color-primary: var(--fg);
+  --color-primary-foreground: var(--on-primary);
+  --color-muted-foreground: var(--fg-2);
+  --color-faint: var(--fg-3);
+  --color-destructive: var(--danger-solid);
+  --color-border: var(--line);
+  --color-border-strong: var(--line-strong);
+  --color-border-stronger: var(--line-stronger);
+  /* What is on or chosen (a switch, a picked card, a bar's progress) — the focus blue, but not the focus. */
+  --color-selected: var(--focus);
+  --color-fill: var(--fill);
+  --color-fill-hover: var(--fill-hover);
+  --color-fill-active: var(--fill-active);
+  --color-link: var(--link);
+
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
+
+  --color-sidebar: var(--surface-0);
+  --color-sidebar-border: var(--line);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-feature-settings: 'ss01';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* What the browser scrolls into view (a focused control, the skip link's target) clears the page's edge… */
+    scroll-padding-top: 1rem;
+
+    /* …and on a phone (below `md`, lib/use-media-query's PHONE) the sticky topbar too. */
+    @media (width < 48rem) {
+      scroll-padding-top: calc(var(--topbar-height) + 1rem);
+    }
+  }
+
+  /* Motion is decorative everywhere in the panel; honour the OS preference wholesale. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after,
+    ::backdrop {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  body {
+    @apply bg-background text-body text-foreground;
+  }
+
+  /* The panel's one face for code, keys and samples too (Tailwind's preflight gives them a monospace family). */
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--focus) 28%, transparent);
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+}
+
+/* Numbers line up in tables and stat cards. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The Console's focus ring: a crisp 1px blue line with a soft halo, drawn outside the control. */
+@utility focus-ring {
+  box-shadow:
+    0 0 0 1px var(--focus),
+    0 0 0 4px color-mix(in srgb, var(--focus) 22%, transparent);
+}
+
+/* The same ring for a field, whose own hairline turns blue. */
+@utility focus-field {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 20%, transparent);
+}
+
+/* Unobtrusive scrollbars inside panels (sidebar nav, dialogs). */
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* A row that scrolls sideways only when it must (tabs on a narrow screen): no bar to see. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer components {
+  /*
+   * A table's last column — the row's controls, ⋮ or «جزئیات» (components/ui/table) — stays in sight when the table is
+   * wider than its place and scrolls sideways (a phone, a window narrowed by the sidebar): it sticks to the scroll's
+   * inline end over the surface the table sits on, lit with its row as the row's own fill is lit under the other cells.
+   */
+  [data-slot='table'] :is([data-slot='table-head'], [data-slot='table-cell']):last-child {
+    position: sticky;
+    inset-inline-end: 0;
+    background-color: var(--table-surface);
+  }
+
+  /* …over the table container's padding beyond it too — where a lit row's fill reaches past the column, rounded —, so
+     nothing that scrolls shows between that column and the edge. */
+  [data-slot='table'] :is([data-slot='table-head'], [data-slot='table-cell']):last-child::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: -0.625rem;
+    width: 0.625rem;
+    background: inherit;
+  }
+
+  [data-slot='table-body'] > [data-slot='table-row']:is(:hover, :has([aria-expanded='true']), [data-state='selected']) > [data-slot='table-cell']:last-child::before {
+    border-start-end-radius: var(--radius-lg);
+    border-end-end-radius: var(--radius-lg);
+  }
+
+  [data-slot='table-body'] > [data-slot='table-row']:is(:hover, :has([aria-expanded='true'])) > [data-slot='table-cell']:last-child {
+    background-image: linear-gradient(var(--fill), var(--fill));
+  }
+
+  [data-slot='table-body'] > [data-slot='table-row'][data-state='selected'] > [data-slot='table-cell']:last-child {
+    background-image: linear-gradient(var(--fill-hover), var(--fill-hover));
+  }
+
+  /* The login and installer screens: a faint dot grid on the plain page — texture, not decoration. */
+  .login-backdrop {
+    background-color: var(--surface-1);
+    background-image: radial-gradient(color-mix(in srgb, var(--fg) 7%, transparent) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: center;
+  }
+
+  /*
+   * Native <dialog> overlays. showModal() handles focus, Escape and stacking; these rules only place them and fade
+   * them with @starting-style + discrete transitions.
+   */
+  .app-modal {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: calc(100vw - 2rem);
+    max-height: min(90dvh, 52rem);
+    /* The panel is the flex column and clips; the body inside it is the only scroll container. */
+    overflow: hidden;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-2xl);
+    background: var(--surface-3);
+    padding: 0;
+    color: inherit;
+    box-shadow: var(--shadow-popover);
+    opacity: 0;
+    scale: 0.98;
+    transition-property: opacity, scale, display, overlay;
+    transition-duration: 160ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    transition-behavior: allow-discrete;
+  }
+
+  .app-modal[open] {
+    display: flex;
+    opacity: 1;
+    /* `none`, not `1`: any other value makes the dialog the containing block of the fixed-position layers portalled
+       into it (selects, menus), which its overflow: hidden would then clip. */
+    scale: none;
+  }
+
+  /* On a phone (below `md`) a sheet: the screen's whole width, rising from its bottom edge — every pixel of a narrow
+     screen for the form, its actions by the thumb — and above the keyboard as it opens: the page's viewport gives way to
+     the keyboard (index.html's `interactive-widget=resizes-content`), and the sheet's height with it. */
+  @media (width < 48rem) {
+    .app-modal {
+      width: 100%;
+      /* The browser's own keeps a modal dialog 2em and some off the edges. */
+      max-width: none;
+      margin-block-end: 0;
+      border-block-end: 0;
+      border-end-start-radius: 0;
+      border-end-end-radius: 0;
+    }
+  }
+
+  @starting-style {
+    .app-modal[open] {
+      opacity: 0;
+      scale: 0.98;
+    }
+  }
+
+  .app-modal::backdrop,
+  .app-drawer::backdrop {
+    background: var(--backdrop);
+    opacity: 0;
+    transition:
+      opacity 160ms ease,
+      display 160ms allow-discrete,
+      overlay 160ms allow-discrete;
+  }
+
+  .app-modal[open]::backdrop,
+  .app-drawer[open]::backdrop {
+    opacity: 1;
+  }
+
+  @starting-style {
+    .app-modal[open]::backdrop,
+    .app-drawer[open]::backdrop {
+      opacity: 0;
+    }
+  }
+
+  /* Off-canvas navigation anchored to the inline-start edge, sliding in from it. */
+  .app-drawer {
+    position: fixed;
+    inset-block: 0;
+    inset-inline: 0 auto;
+    margin: 0;
+    height: 100dvh;
+    max-height: none;
+    width: 17rem;
+    max-width: 85vw;
+    border: 0;
+    border-inline-end: 1px solid var(--line);
+    padding: 0;
+    color: inherit;
+    background: var(--surface-0);
+    translate: -100% 0;
+    transition-property: translate, display, overlay;
+    transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+    transition-behavior: allow-discrete;
+  }
+
+  [dir='rtl'] .app-drawer {
+    translate: 100% 0;
+  }
+
+  .app-drawer[open] {
+    /* `none`, not `0 0`, as the modal's scale: any other value makes the drawer the containing block of the fixed layers
+       drawn in it (the toasts, the menus), which its own overflow would then clip. */
+    translate: none;
+  }
+
+  @starting-style {
+    .app-drawer[open] {
+      translate: -100% 0;
+    }
+
+    [dir='rtl'] .app-drawer[open] {
+      translate: 100% 0;
+    }
+  }
+}
+
+/*
+ * Optical centring of Latin text. Vazirmatn's Latin letters and digits carry their mass about 0.1em higher than its
+ * Persian letters, whose bodies sit on the baseline (measured centroids: Persian 0.18em above the baseline, Latin
+ * 0.29em, digits 0.35em; the font's own centre is 0.245em). Metric centring is therefore right for Persian and about
+ * a pixel high for purely Latin content — LTR fields, identifier badges, `dir="ltr"` runs inside Persian text and code.
+ * These rules push that content back down; Persian text is untouched. Unlayered on purpose so they win over the padding
+ * utilities on the components.
+ */
+input[dir='ltr'] {
+  padding-block: 5px 3px;
+}
+
+/*
+ * Latin values in a Persian form: the field is LTR so typing, the caret and selection behave, but the text is
+ * aligned to the right so a value sits under its label instead of hugging the far edge of the box.
+ */
+input[dir='ltr'],
+textarea[dir='ltr'],
+[dir='ltr'] > input[data-slot='input'] {
+  text-align: right;
+}
+
+[data-slot='badge'][dir='ltr'] {
+  padding-top: 2px;
+}
+
+:is(span, bdi, dd, code)[dir='ltr']:not([data-slot]) {
+  position: relative;
+  top: 0.07em;
+}
+
+/*
+ * Telegram's palette. The preview mimics Telegram Desktop's dark theme whatever the panel's theme; the
+ * button colours (the Bot API `style` field, as the clients draw them) sit on :root because the keyboard
+ * editor's chips and colour cards show them outside the preview.
+ */
+:root {
+  --tg-button: #1f2c39;
+  --tg-button-text: #f1f3f5;
+  --tg-primary: #3390ec;
+  --tg-success: #3fb950;
+  --tg-danger: #e5484d;
+}
+
+.tg-preview {
+  --tg-header: #17212b;
+  --tg-chat: #0e1621;
+  --tg-in: #182533;
+  --tg-out: #2b5278;
+  --tg-out-meta: #7da8d3;
+  --tg-muted: #6d7f8f;
+  --tg-accent: #3e88c9;
+  --tg-inline: rgba(255, 255, 255, 0.1);
+  --tg-avatar: #5288c1;
+  color: #f1f3f5;
+  font-family: var(--font-sans);
+}
+
+/* Telegram's formatting inside a previewed message (the bot texts screen) — code told apart by its colour, in the
+   panel's one face. */
+.tg-preview .tg-code,
+.tg-preview .tg-pre {
+  color: #9fd0ff;
+  /* A link runs on without a break opportunity; Telegram wraps it anywhere. */
+  overflow-wrap: anywhere;
+}
+.tg-preview .tg-pre {
+  display: block;
+  margin: 2px 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  white-space: pre-wrap;
+}
+.tg-preview .tg-link {
+  color: #71b7f5;
+  overflow-wrap: anywhere;
+}
+.tg-preview .tg-spoiler {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  filter: blur(3px);
+  transition: filter 150ms;
+}
+.tg-preview .tg-spoiler:hover {
+  filter: none;
+}
+.tg-preview .tg-quote {
+  display: block;
+  margin: 2px 0;
+  padding: 2px 8px;
+  border-inline-start: 3px solid var(--tg-accent);
+  border-radius: 4px;
+  background: rgba(62, 136, 201, 0.12);
+}
+
+.tg-chat {
+  background-color: var(--tg-chat);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+
+/* A premium emoji Telegram paints in the colour of the text around it (its needs_repainting — drawn black, as the
+   sticker comes): every fill and stroke of its animation takes that colour, as its still picture does through a mask.
+   Not inside a mask or a clip, where a colour is a shape's visibility rather than its look. */
+.emoji-repaint svg [fill]:not([fill='none'], mask *, clipPath *) {
+  fill: currentColor;
+}
+.emoji-repaint svg [stroke]:not([stroke='none'], mask *, clipPath *) {
+  stroke: currentColor;
+}

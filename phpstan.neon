@@ -1,0 +1,64 @@
+includes:
+    # Dead code — methods, constants, enum cases and properties nothing uses — fails the analysis (CLAUDE.md, Conventions).
+    - vendor/shipmonk/dead-code-detector/rules.neon
+
+parameters:
+    level: 6
+    paths:
+        - app
+        - bin/console
+        - bootstrap
+        - config
+        - database
+        - public/index.php
+        - routes
+        - scripts
+        - tests
+    tmpDir: storage/cache/phpstan
+    treatPhpDocTypesAsCertain: false
+
+    shipmonkDeadCode:
+        usageProviders:
+            # It counts every relation as used; ModelUsageProvider counts the ones something reads.
+            eloquent:
+                enabled: false
+        usageExcluders:
+            # What only the tests call is dead: the tests are no caller.
+            tests:
+                enabled: true
+
+    ignoreErrors:
+        # A process's own state put back between two tests (the suite is one process): nothing of the app's calls them.
+        -
+            identifier: shipmonk.deadMethod
+            message: '#^Unused App\\Core\\Database\\ChangeFeed::countAsCommitted #'
+        -
+            identifier: shipmonk.deadMethod
+            message: '#^Unused App\\Core\\Http\\RequestId::reset #'
+        -
+            identifier: shipmonk.deadMethod
+            message: '#^Unused App\\Modules\\Bots\\CurrentBot::reset #'
+        -
+            identifier: shipmonk.deadMethod
+            message: '#^Unused App\\Modules\\Providers\\ProviderRegistry::(unregister|flush) #'
+
+services:
+    # Keeps model types through Eloquent's forwarded query-builder methods (see phpstan/src).
+    -
+        class: AmoBot\PHPStan\EloquentBuilderExtension
+        tags:
+            - phpstan.broker.methodsClassReflectionExtension
+
+    # What the dead-code detector cannot see by itself: the calls the container, Slim and Eloquent make by name.
+    -
+        class: AmoBot\PHPStan\DeadCode\ContainerUsageProvider
+        tags:
+            - shipmonk.deadCode.memberUsageProvider
+    -
+        class: AmoBot\PHPStan\DeadCode\SlimRouteUsageProvider
+        tags:
+            - shipmonk.deadCode.memberUsageProvider
+    -
+        class: AmoBot\PHPStan\DeadCode\ModelUsageProvider
+        tags:
+            - shipmonk.deadCode.memberUsageProvider

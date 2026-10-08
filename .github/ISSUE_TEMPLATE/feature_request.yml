@@ -1,0 +1,29 @@
+name: Feature request
+description: Something AmoBot should do — a screen, a bot feature, a VPN panel, a payment gateway, an API endpoint.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is missing, and for whom
+      description: The shop's owner, an agent, a customer in the bot, a website's developer — and what they cannot do today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: How it would work, and where — the bot, a panel, the Store API. For a new driver, the panel's or the gateway's API documentation.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version you run, when the request is about something that exists already.
+      placeholder: 0.1.0
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do meanwhile
+      description: How you work around it today, or what else you considered.
