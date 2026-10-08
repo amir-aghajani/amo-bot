@@ -13,7 +13,7 @@ body:
     attributes:
       label: Version
       description: The owner's panel shows it on the dashboard («وضعیت سیستم»); from the source, the commit.
-      placeholder: 0.1.0
+      placeholder: 0.1.1
     validations:
       required: true
   - type: input

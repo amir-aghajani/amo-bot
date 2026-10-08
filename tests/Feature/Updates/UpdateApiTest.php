@@ -29,16 +29,16 @@ final class UpdateApiTest extends UpdateTestCase
 
     public function testTheScreenSaysTheVersionTheNewestReleaseAndItsNotes(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0', null, "Faster checkouts.\r\n\r\n- A fix <b>here</b>");
+        $this->release()->publish($this->gitHub, $this->next, null, "Faster checkouts.\r\n\r\n- A fix <b>here</b>");
 
         $update = $this->screen($this->get(self::SCREEN));
 
-        self::assertSame('0.1.0', $update['current']);
+        self::assertSame(self::CURRENT, $update['current']);
         self::assertSame([
-            'version' => '0.2.0',
+            'version' => $this->next,
             'published_at' => '2026-10-01T09:30:00+00:00',
             'notes' => "Faster checkouts.\n\n- A fix <b>here</b>",
-            'url' => 'https://github.com/amir-aghajani/amo-bot/releases/tag/v0.2.0',
+            'url' => "https://github.com/amir-aghajani/amo-bot/releases/tag/v{$this->next}",
         ], $update['latest'], 'the notes as plain text — the panel shows them as they are');
         self::assertTrue($update['available']);
         self::assertNull($update['blocker']);
@@ -46,39 +46,40 @@ final class UpdateApiTest extends UpdateTestCase
         self::assertNotNull($update['checked_at']);
 
         self::assertSame(['GET ' . FakeGitHub::API], $this->gitHub->calls());
-        self::assertSame('AmoBot/0.1.0', $this->gitHub->request(0)->getHeaderLine('User-Agent'), 'a User-Agent naming AmoBot and its version');
+        self::assertSame('AmoBot/' . self::CURRENT, $this->gitHub->request(0)->getHeaderLine('User-Agent'), 'a User-Agent naming AmoBot and its version');
         $this->get(self::SCREEN);
         self::assertCount(1, $this->gitHub->calls(), 'read again only once a few hours have passed: GitHub takes 60 calls an hour from an address');
     }
 
     public function testAnUpdateGoesAStepARequestAndInstallsTheReleaseWithTheShopHeld(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0', FakeRelease::files('0.2.0', ['database/upgrades/0.2.0.php' => $this->upgrade()]));
+        $this->release()->publish($this->gitHub, $this->next, FakeRelease::files($this->next, ["database/upgrades/{$this->next}.php" => $this->upgrade()]));
 
-        $started = $this->screen($this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']));
-        self::assertSame(['version' => '0.2.0', 'from' => '0.1.0', 'step' => 'download', 'progress' => 0, 'error' => null, 'cancel' => true, 'rollback' => false, 'finished_at' => null], $started['run']);
+        $started = $this->screen($this->postJson(self::SCREEN . '/start', ['version' => $this->next]));
+        self::assertSame(['version' => $this->next, 'from' => self::CURRENT, 'step' => 'download', 'progress' => 0, 'error' => null, 'cancel' => true, 'rollback' => false, 'finished_at' => null], $started['run']);
         self::assertFalse($started['available'], 'one update at a time');
 
         $screen = $this->stepUntil('done');
         $done = $screen['run'];
 
         self::assertFalse($screen['available'], 'installed: nothing more to offer before the page reloads on the new code');
-        self::assertSame(['0.2.0', 100, null, false, false], [$done['version'], $done['progress'], $done['error'], $done['cancel'], $done['rollback']], 'it changed the database: only a backup takes it back');
+        self::assertSame([$this->next, 100, null, false, false], [$done['version'], $done['progress'], $done['error'], $done['cancel'], $done['rollback']], 'it changed the database: only a backup takes it back');
         self::assertNotNull($done['finished_at']);
-        self::assertSame(['0.2.0', "# 0.2.0\n", '<p>0.2.0</p>'], [$this->shopFile('app/marker.txt'), $this->shopFile('.htaccess'), $this->shopFile('public/admin/index.html')], 'the release in the app\'s place');
+        self::assertSame([$this->next, "# {$this->next}\n", "<p>{$this->next}</p>"], [$this->shopFile('app/marker.txt'), $this->shopFile('.htaccess'), $this->shopFile('public/admin/index.html')], 'the release in the app\'s place');
         self::assertSame("<?php return ['APP_NAME' => 'The shop'];", $this->shopFile('config.php'), 'the shop\'s configuration untouched');
         self::assertSame('a customer\'s receipt', $this->shopFile('storage/uploads/receipts/7.jpg'), 'and its files');
-        self::assertSame('0.1.0', file_get_contents("{$this->work}/previous/app/marker.txt"), 'the version it replaced, kept until the next update');
-        self::assertSame('0.2.0', $this->service(Installation::class)->version(), 'the version recorded');
+        self::assertSame(self::CURRENT, file_get_contents("{$this->work}/previous/app/marker.txt"), 'the version it replaced, kept until the next update');
+        self::assertSame($this->next, $this->service(Installation::class)->version(), 'the version recorded');
         self::assertSame(['held'], $this->db()->table('update_probe')->pluck('shop')->all(), 'the database upgraded while every other request was told to come back');
         self::assertFileDoesNotExist($this->flag, 'and the shop open again');
         self::assertFileDoesNotExist("{$this->routes}/routes-old.php", 'the router\'s table of the old routes forgotten');
         self::assertDirectoryDoesNotExist("{$this->work}/download", 'the downloads gone');
-        self::assertDirectoryDoesNotExist("{$this->work}/0.2.0");
+        self::assertDirectoryDoesNotExist("{$this->work}/{$this->next}");
 
-        $files = ['release.json', 'release.json.sig', 'amobot-0.2.0.zip'];
+        $files = ['release.json', 'release.json.sig', "amobot-{$this->next}.zip"];
+        $download = "GET https://github.com/amir-aghajani/amo-bot/releases/download/v{$this->next}/";
         self::assertSame(['GET ' . FakeGitHub::API, ...array_merge(...array_map(static fn(string $name): array => [
-            'GET https://github.com/amir-aghajani/amo-bot/releases/download/v0.2.0/' . $name,
+            $download . $name,
             'GET https://' . FakeGitHub::STORAGE . "/github-production-release-asset/{$name}?sig=x",
         ], $files))], $this->gitHub->calls(), 'each file from github.com, through its redirect to GitHub\'s storage');
         self::assertFalse($this->gitHub->options(1)['allow_redirects'], 'every redirect looked at before it is followed');
@@ -86,16 +87,16 @@ final class UpdateApiTest extends UpdateTestCase
 
     public function testAnUpdateThatChangedNothingOfTheDatabaseIsTakenBack(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0');
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->release()->publish($this->gitHub, $this->next);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         self::assertTrue($this->stepUntil('done')['run']['rollback']);
 
         $response = $this->postJson(self::SCREEN . '/rollback');
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertSame('rolled_back', $this->screen($response)['run']['step']);
-        self::assertSame(['0.1.0', "# 0.1.0\n"], [$this->shopFile('app/marker.txt'), $this->shopFile('.htaccess')], 'the version it replaced in its place again');
-        self::assertSame('0.1.0', $this->service(Installation::class)->version());
+        self::assertSame([self::CURRENT, '# ' . self::CURRENT . "\n"], [$this->shopFile('app/marker.txt'), $this->shopFile('.htaccess')], 'the version it replaced in its place again');
+        self::assertSame(self::CURRENT, $this->service(Installation::class)->version());
         self::assertFileDoesNotExist($this->flag);
         self::assertDirectoryDoesNotExist("{$this->work}/previous/app", 'nothing kept aside any more');
         self::assertSame(422, $this->postJson(self::SCREEN . '/rollback')->getStatusCode(), 'once');
@@ -103,82 +104,82 @@ final class UpdateApiTest extends UpdateTestCase
 
     public function testAnUpdateThatChangedTheDatabaseIsTakenBackOnlyWithABackup(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0', FakeRelease::files('0.2.0', ['database/upgrades/0.2.0.php' => $this->upgrade()]));
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->release()->publish($this->gitHub, $this->next, FakeRelease::files($this->next, ["database/upgrades/{$this->next}.php" => $this->upgrade()]));
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         $this->stepUntil('done');
 
         $response = $this->postJson(self::SCREEN . '/rollback');
 
         self::assertSame([422, Updater::DATABASE_CHANGED], [$response->getStatusCode(), $this->decode($response)['message']]);
-        self::assertSame('0.2.0', $this->shopFile('app/marker.txt'));
+        self::assertSame($this->next, $this->shopFile('app/marker.txt'));
     }
 
     public function testAnInstallWhoseDatabaseUpgradeFailsIsTakenBackAndSaysWhy(): void
     {
         $failing = '<?php return static function (): void { throw new RuntimeException("Duplicate column name \'badge\'"); };';
-        $this->release()->publish($this->gitHub, '0.2.0', FakeRelease::files('0.2.0', ['database/upgrades/0.2.0.php' => $failing]));
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->release()->publish($this->gitHub, $this->next, FakeRelease::files($this->next, ["database/upgrades/{$this->next}.php" => $failing]));
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         $this->stepUntil('install');
 
         $response = $this->postJson(self::SCREEN . '/step');
 
         self::assertSame(422, $response->getStatusCode());
-        self::assertSame("به‌روزرسانی دیتابیس به نسخه 0.2.0 انجام نشد: Duplicate column name 'badge'. فایل‌های برنامه به نسخه 0.1.0 برگشت؛ دوباره امتحان کنید.", $this->decode($response)['message']);
-        self::assertSame(['0.1.0', "# 0.1.0\n"], [$this->shopFile('app/marker.txt'), $this->shopFile('.htaccess')], 'the swap taken back');
-        self::assertSame('0.1.0', $this->service(Installation::class)->version());
+        self::assertSame("به‌روزرسانی دیتابیس به نسخه {$this->next} انجام نشد: Duplicate column name 'badge'. فایل‌های برنامه به نسخه " . self::CURRENT . ' برگشت؛ دوباره امتحان کنید.', $this->decode($response)['message']);
+        self::assertSame([self::CURRENT, '# ' . self::CURRENT . "\n"], [$this->shopFile('app/marker.txt'), $this->shopFile('.htaccess')], 'the swap taken back');
+        self::assertSame(self::CURRENT, $this->service(Installation::class)->version());
         self::assertFileDoesNotExist($this->flag, 'the shop open again');
 
         $run = $this->screen($this->get(self::SCREEN))['run'];
         self::assertSame(['install', $this->decode($response)['message'], true], [$run['step'], $run['error'], $run['cancel']], 'said with the run, for another try — or giving it up');
         self::assertSame(200, $this->postJson(self::SCREEN . '/cancel')->getStatusCode());
         self::assertNull($this->screen($this->get(self::SCREEN))['run']);
-        self::assertDirectoryDoesNotExist("{$this->work}/0.2.0", 'what it fetched and unpacked gone');
+        self::assertDirectoryDoesNotExist("{$this->work}/{$this->next}", 'what it fetched and unpacked gone');
     }
 
     public function testAnInstallACrashCutShortIsFinishedByTheNextStep(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0', FakeRelease::files('0.2.0', ['database/upgrades/0.2.0.php' => $this->upgrade()]));
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->release()->publish($this->gitHub, $this->next, FakeRelease::files($this->next, ["database/upgrades/{$this->next}.php" => $this->upgrade()]));
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         $this->stepUntil('install');
         // The install's request swapped the app's folders and died before its upgrades.
         $workspace = new Workspace($this->work);
         $run = $workspace->run();
         self::assertNotNull($run);
         $workspace->save($run->installing(true, FakeRelease::PATHS));
-        (new AppFolders($this->folder, $workspace->previous()))->install($workspace->release('0.2.0'), FakeRelease::PATHS);
+        (new AppFolders($this->folder, $workspace->previous()))->install($workspace->release($this->next), FakeRelease::PATHS);
         self::assertFalse($this->screen($this->get(self::SCREEN))['run']['cancel'], 'the app\'s files are the release\'s already');
 
         $done = $this->stepUntil('done');
 
-        self::assertSame('0.2.0', $done['run']['version']);
-        self::assertSame('0.2.0', $this->service(Installation::class)->version());
+        self::assertSame($this->next, $done['run']['version']);
+        self::assertSame($this->next, $this->service(Installation::class)->version());
         self::assertSame(['held'], $this->db()->table('update_probe')->pluck('shop')->all());
-        self::assertSame('0.1.0', file_get_contents("{$this->work}/previous/app/marker.txt"));
+        self::assertSame(self::CURRENT, file_get_contents("{$this->work}/previous/app/marker.txt"));
     }
 
     public function testFilesPutInPlaceByHandHaveTheirDatabaseBroughtAlong(): void
     {
-        // 0.1.0 uploaded over a shop whose database is 0.0.9's.
-        $this->service(Installation::class)->moveTo('0.0.9');
-        $this->place($this->folder, ['database/upgrades/0.1.0.php' => $this->upgrade()]);
+        // This code uploaded over a shop whose database an older version left.
+        $this->service(Installation::class)->moveTo(self::OLDER);
+        $this->place($this->folder, ['database/upgrades/' . self::CURRENT . '.php' => $this->upgrade()]);
 
         $waiting = $this->screen($this->get(self::SCREEN))['run'];
-        self::assertSame(['version' => '0.1.0', 'from' => '0.0.9', 'step' => 'install', 'progress' => 0, 'error' => null, 'cancel' => false, 'rollback' => false, 'finished_at' => null], $waiting);
+        self::assertSame(['version' => self::CURRENT, 'from' => self::OLDER, 'step' => 'install', 'progress' => 0, 'error' => null, 'cancel' => false, 'rollback' => false, 'finished_at' => null], $waiting);
 
         $done = $this->stepUntil('done')['run'];
 
         self::assertFalse($done['rollback'], 'nothing was swapped, nothing is kept to put back');
-        self::assertSame('0.1.0', $this->service(Installation::class)->version());
+        self::assertSame(self::CURRENT, $this->service(Installation::class)->version());
         self::assertSame(['held'], $this->db()->table('update_probe')->pluck('shop')->all());
-        self::assertSame("# 0.1.0\n", $this->shopFile('.htaccess'), 'the files stay as they were put');
+        self::assertSame('# ' . self::CURRENT . "\n", $this->shopFile('.htaccess'), 'the files stay as they were put');
     }
 
     public function testFilesByHandWhoseUpgradeFailsAreUpgradedOnTheNextTry(): void
     {
-        $this->service(Installation::class)->moveTo('0.0.9');
+        $this->service(Installation::class)->moveTo(self::OLDER);
         $once = "{$this->folder}/storage/fail-once";
         file_put_contents($once, '');
-        $this->place($this->folder, ['database/upgrades/0.1.0.php' => sprintf(
+        $this->place($this->folder, ['database/upgrades/' . self::CURRENT . '.php' => sprintf(
             '<?php return static function (): void { if (is_file(%1$s)) { unlink(%1$s); throw new RuntimeException("Lock wait timeout exceeded"); } };',
             var_export($once, true),
         )]);
@@ -186,67 +187,67 @@ final class UpdateApiTest extends UpdateTestCase
         $failed = $this->postJson(self::SCREEN . '/step');
 
         self::assertSame(422, $failed->getStatusCode());
-        self::assertSame('به‌روزرسانی دیتابیس به نسخه 0.1.0 انجام نشد: Lock wait timeout exceeded. دوباره امتحان کنید.', $this->decode($failed)['message']);
+        self::assertSame('به‌روزرسانی دیتابیس به نسخه ' . self::CURRENT . ' انجام نشد: Lock wait timeout exceeded. دوباره امتحان کنید.', $this->decode($failed)['message']);
         $run = $this->screen($this->get(self::SCREEN))['run'];
         self::assertSame(['install', false], [$run['step'], $run['cancel']], 'still the upgrades the files wait for: nothing to give up');
-        self::assertSame('0.0.9', $this->service(Installation::class)->version());
+        self::assertSame(self::OLDER, $this->service(Installation::class)->version());
 
         self::assertSame('done', $this->stepUntil('done')['run']['step'], 'tried again, the upgrade goes');
-        self::assertSame('0.1.0', $this->service(Installation::class)->version());
+        self::assertSame(self::CURRENT, $this->service(Installation::class)->version());
     }
 
     public function testAReleaseSignedByAnotherKeyIsNeverInstalled(): void
     {
         $this->release();
-        $zip = FakeRelease::zip('0.2.0', FakeRelease::files('0.2.0'));
-        $manifest = FakeRelease::manifest('0.2.0', $zip);
+        $zip = FakeRelease::zip($this->next, FakeRelease::files($this->next));
+        $manifest = FakeRelease::manifest($this->next, $zip);
         // A hijacked account publishes a release of its own, signed with a key of its own.
-        $this->gitHub->publish('0.2.0', ['amobot-0.2.0.zip' => $zip, 'release.json' => $manifest, 'release.json.sig' => (new FakeRelease())->sign($manifest)]);
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->gitHub->publish($this->next, ["amobot-{$this->next}.zip" => $zip, 'release.json' => $manifest, 'release.json.sig' => (new FakeRelease())->sign($manifest)]);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
 
         $response = $this->postJson(self::SCREEN . '/step');
 
         self::assertSame([422, Manifest::UNSIGNED], [$response->getStatusCode(), $this->decode($response)['message']]);
-        self::assertNotContains('GET https://github.com/amir-aghajani/amo-bot/releases/download/v0.2.0/amobot-0.2.0.zip', $this->gitHub->calls(), 'its zip never fetched');
+        self::assertNotContains("GET https://github.com/amir-aghajani/amo-bot/releases/download/v{$this->next}/amobot-{$this->next}.zip", $this->gitHub->calls(), 'its zip never fetched');
         self::assertDirectoryDoesNotExist("{$this->work}/download", 'nothing unsigned kept');
         self::assertSame(['download', Manifest::UNSIGNED], [$this->screen($this->get(self::SCREEN))['run']['step'], $this->screen($this->get(self::SCREEN))['run']['error']]);
-        self::assertSame('0.1.0', $this->shopFile('app/marker.txt'));
+        self::assertSame(self::CURRENT, $this->shopFile('app/marker.txt'));
     }
 
     public function testAZipOtherThanTheOneSignedIsNeverUnpacked(): void
     {
-        $zip = FakeRelease::zip('0.2.0', FakeRelease::files('0.2.0'));
-        $manifest = FakeRelease::manifest('0.2.0', $zip);
+        $zip = FakeRelease::zip($this->next, FakeRelease::files($this->next));
+        $manifest = FakeRelease::manifest($this->next, $zip);
         // The same size, a byte of it another.
         $other = substr_replace($zip, chr(ord($zip[100]) ^ 1), 100, 1);
-        $this->gitHub->publish('0.2.0', ['amobot-0.2.0.zip' => $other, 'release.json' => $manifest, 'release.json.sig' => $this->release()->sign($manifest)]);
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->gitHub->publish($this->next, ["amobot-{$this->next}.zip" => $other, 'release.json' => $manifest, 'release.json.sig' => $this->release()->sign($manifest)]);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
 
         $response = $this->postJson(self::SCREEN . '/step');
 
         self::assertSame([422, Updater::ZIP_MISMATCH], [$response->getStatusCode(), $this->decode($response)['message']]);
-        self::assertFileDoesNotExist("{$this->work}/download/amobot-0.2.0.zip");
+        self::assertFileDoesNotExist("{$this->work}/download/amobot-{$this->next}.zip");
     }
 
     public function testAZipBiggerThanItsManifestSaysIsNotTakenWhole(): void
     {
-        $zip = FakeRelease::zip('0.2.0', FakeRelease::files('0.2.0'));
-        $manifest = FakeRelease::manifest('0.2.0', $zip);
-        $this->gitHub->publish('0.2.0', ['amobot-0.2.0.zip' => $zip . str_repeat('x', 100000), 'release.json' => $manifest, 'release.json.sig' => $this->release()->sign($manifest)]);
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $zip = FakeRelease::zip($this->next, FakeRelease::files($this->next));
+        $manifest = FakeRelease::manifest($this->next, $zip);
+        $this->gitHub->publish($this->next, ["amobot-{$this->next}.zip" => $zip . str_repeat('x', 100000), 'release.json' => $manifest, 'release.json.sig' => $this->release()->sign($manifest)]);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
 
         $response = $this->postJson(self::SCREEN . '/step');
 
         self::assertSame(422, $response->getStatusCode());
-        self::assertSame('فایل amobot-0.2.0.zip بزرگ‌تر از چیزی است که این نسخه گفته؛ نصب نمی‌شود.', $this->decode($response)['message']);
-        self::assertSame([], glob("{$this->work}/download/amobot-0.2.0.zip*") ?: [], 'not a byte of it kept');
+        self::assertSame("فایل amobot-{$this->next}.zip بزرگ‌تر از چیزی است که این نسخه گفته؛ نصب نمی‌شود.", $this->decode($response)['message']);
+        self::assertSame([], glob("{$this->work}/download/amobot-{$this->next}.zip*") ?: [], 'not a byte of it kept');
     }
 
     public function testAFileGitHubSendsElsewhereIsNotFetched(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0');
+        $this->release()->publish($this->gitHub, $this->next);
         $this->gitHub->storeOn('downloads.example.com');
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
 
         $response = $this->postJson(self::SCREEN . '/step');
 
@@ -257,32 +258,32 @@ final class UpdateApiTest extends UpdateTestCase
     public function testAHostTheReleaseOutgrowsIsSaidSoBeforeAnythingIsReplaced(): void
     {
         foreach ([[['php' => '99.0'], 'PHP 99.0'], [['extensions' => ['json', 'an_extension_nobody_has']], 'an_extension_nobody_has']] as [$needs, $said]) {
-            $zip = FakeRelease::zip('0.2.0', FakeRelease::files('0.2.0'));
-            $manifest = FakeRelease::manifest('0.2.0', $zip, $needs);
-            $this->gitHub->publish('0.2.0', ['amobot-0.2.0.zip' => $zip, 'release.json' => $manifest, 'release.json.sig' => $this->release()->sign($manifest)]);
+            $zip = FakeRelease::zip($this->next, FakeRelease::files($this->next));
+            $manifest = FakeRelease::manifest($this->next, $zip, $needs);
+            $this->gitHub->publish($this->next, ["amobot-{$this->next}.zip" => $zip, 'release.json' => $manifest, 'release.json.sig' => $this->release()->sign($manifest)]);
             $this->postJson(self::SCREEN . '/cancel');
-            $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+            $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
             $this->stepUntil('preflight');
 
             $response = $this->postJson(self::SCREEN . '/step');
 
             self::assertSame(422, $response->getStatusCode());
             self::assertStringContainsString($said, $this->decode($response)['message']);
-            self::assertSame('0.1.0', $this->shopFile('app/marker.txt'));
+            self::assertSame(self::CURRENT, $this->shopFile('app/marker.txt'));
         }
     }
 
     public function testAShopThatCannotCheckAReleaseIsUpdatedByHand(): void
     {
-        $this->gitHub->publish('0.2.0');
+        $this->gitHub->publish($this->next);
 
         $update = $this->screen($this->get(self::SCREEN));
         self::assertSame([true, Updater::NO_KEY], [$update['available'], $update['blocker']], 'no release key of its own: a build made without one');
-        $start = $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $start = $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         self::assertSame([422, Updater::NO_KEY], [$start->getStatusCode(), $this->decode($start)['message']]);
 
         $this->release();
-        self::assertSame(sprintf('نسخه %s فایل‌های امضاشده‌ای را که به‌روزرسانی از داخل پنل لازم دارد ندارد؛ دستی به‌روز کنید (راهنمای Upgrading).', '0.2.0'), $this->screen($this->get(self::SCREEN))['blocker'], 'a release without its signed files');
+        self::assertSame(sprintf('نسخه %s فایل‌های امضاشده‌ای را که به‌روزرسانی از داخل پنل لازم دارد ندارد؛ دستی به‌روز کنید (راهنمای Upgrading).', $this->next), $this->screen($this->get(self::SCREEN))['blocker'], 'a release without its signed files');
 
         mkdir("{$this->folder}/.git");
         self::assertSame(Updater::CHECKOUT, $this->screen($this->get(self::SCREEN))['blocker'], 'a clone of the repository');
@@ -290,13 +291,13 @@ final class UpdateApiTest extends UpdateTestCase
 
     public function testOnlyTheNewestReleaseNewerThanTheShopsIsBegunAndOneAtATime(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0');
+        $this->release()->publish($this->gitHub, $this->next);
 
-        $other = $this->postJson(self::SCREEN . '/start', ['version' => '0.3.0']);
+        $other = $this->postJson(self::SCREEN . '/start', ['version' => $this->later]);
         self::assertSame([422, ['version' => [Updater::NOT_LATEST]]], [$other->getStatusCode(), $this->decode($other)['errors']]);
 
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
-        $again = $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
+        $again = $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         self::assertSame([409, Updater::UNDER_WAY], [$again->getStatusCode(), $this->decode($again)['message']]);
 
         // Another request works the update this moment.
@@ -311,8 +312,8 @@ final class UpdateApiTest extends UpdateTestCase
 
     public function testAnInstallWaitsForTheSchedulersRunAndDoesNotOutwaitIt(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0');
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->release()->publish($this->gitHub, $this->next);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         $this->stepUntil('install');
         $scheduler = FileLock::take($this->schedulerLock);
 
@@ -323,15 +324,15 @@ final class UpdateApiTest extends UpdateTestCase
         }
 
         self::assertSame([409, Updater::SCHEDULER_BUSY], [$response->getStatusCode(), $this->decode($response)['message']]);
-        self::assertSame('0.1.0', $this->shopFile('app/marker.txt'), 'nothing swapped');
+        self::assertSame(self::CURRENT, $this->shopFile('app/marker.txt'), 'nothing swapped');
         self::assertFileDoesNotExist($this->flag, 'the shop never held');
         self::assertSame('done', $this->stepUntil('done')['run']['step'], 'once it ended, the install goes');
     }
 
     public function testARunIsGivenUpBeforeItsInstallAndNotAfter(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0');
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->release()->publish($this->gitHub, $this->next);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         $this->stepUntil('extract');
 
         $cancelled = $this->postJson(self::SCREEN . '/cancel');
@@ -341,7 +342,7 @@ final class UpdateApiTest extends UpdateTestCase
         self::assertDirectoryDoesNotExist("{$this->work}/download", 'what it fetched gone');
         self::assertSame(422, $this->postJson(self::SCREEN . '/cancel')->getStatusCode(), 'nothing left to give up');
 
-        $this->postJson(self::SCREEN . '/start', ['version' => '0.2.0']);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
         $this->stepUntil('done');
         $done = $this->postJson(self::SCREEN . '/cancel');
         self::assertSame([422, Updater::NO_RUN], [$done->getStatusCode(), $this->decode($done)['message']], 'an installed update is taken back, not given up');
@@ -349,7 +350,7 @@ final class UpdateApiTest extends UpdateTestCase
 
     public function testGitHubOutOfReachIsSaidAndTheReleaseReadLastStands(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0');
+        $this->release()->publish($this->gitHub, $this->next);
         $this->get(self::SCREEN);
         $this->gitHub->down();
 
@@ -357,18 +358,18 @@ final class UpdateApiTest extends UpdateTestCase
 
         self::assertSame(502, $response->getStatusCode());
         self::assertSame('GitHub جواب نداد؛ کمی بعد دوباره امتحان کنید.', $this->decode($response)['message']);
-        self::assertSame('0.2.0', $this->screen($this->get(self::SCREEN))['latest']['version']);
+        self::assertSame($this->next, $this->screen($this->get(self::SCREEN))['latest']['version']);
     }
 
     public function testTheUpdateIsTheOwnersAlone(): void
     {
-        $this->release()->publish($this->gitHub, '0.2.0');
+        $this->release()->publish($this->gitHub, $this->next);
         $_SESSION = [];
         self::assertSame(401, $this->get(self::SCREEN)->getStatusCode(), 'signed out');
 
         $this->loginAsAgent($this->agentBot());
         self::assertSame(404, $this->unchecked()->get('/api/agent/system/update')->getStatusCode(), 'an agent\'s panel has no such address');
-        self::assertSame(404, $this->unchecked()->postJson('/api/agent/system/update/start', ['version' => '0.2.0'])->getStatusCode());
+        self::assertSame(404, $this->unchecked()->postJson('/api/agent/system/update/start', ['version' => $this->next])->getStatusCode());
 
         $_SESSION = [];
         $website = $this->website(['staff_grants' => []]);

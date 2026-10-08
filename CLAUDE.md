@@ -285,7 +285,10 @@ Content-Security-Policy into its index.html (vite.config.ts `production()`: only
 origin, no frame at all (`frame-src 'none'`); the page's inline `<script>` allowed by its sha256, taken from the built page — keep every inline script in that
 one block; styles may be inline, for Radix and the chart), each script's and stylesheet's brotli beside it (`x.js.br`,
 the best level, once) and `assets/.htaccess` (the hashed files cached for good; a browser that reads brotli given the `.br` as it
-is — tested on Apache with and without mod_brotli, mod_deflate, mod_headers, mod_rewrite); each index.html sets
+is, its type set by name — `ForceType` for `.js.br`, `.css.br`, `.svg.br`: LiteSpeed, most Iranian hosts' server, types a
+file by its last extension alone and sent the panels' scripts as `application/octet-stream`, which a browser never runs,
+the panel stuck on its loading screen (0.1.0) —; tested on Apache with and without mod_brotli, mod_deflate, mod_headers,
+mod_rewrite); each index.html sets
 `theme-color` (lib/theme follows it), a `<noscript>`, and draws `AppLoading`'s markup in `#root` from its first paint.
 The chunks (vite.config.ts `codeSplitting`, by how often they change and who needs them): `react` and `vendor` — the
 libraries the first screen needs, changed only by a dependency, so a browser keeps them across upgrades —, `app` — both
@@ -1282,8 +1285,10 @@ request each, its state kept between them.
   order, newer than the lock's version (`Installation::version()`; a lock that says none is `FIRST_RELEASE`, 0.1.0) and not
   newer than the code's; a PHP file there no version names stops it; `UpgradeFailedException` names the one that failed.
   A fresh install makes schema.php's tables and records the code's version: it runs none.
-- **Tests**: tests/Feature/Updates — `UpdateTestCase` (an installed 0.1.0 in a scratch folder, never this repository; the
-  run's folders in its storage/; a release key made for the test, `Tests\Support\FakeRelease` — zip, manifest, signature
+- **Tests**: tests/Feature/Updates — `UpdateTestCase` (this code installed in a scratch folder at its own version, never
+  this repository: every version a test names is the code's — `CURRENT`, `Application::VERSION`, the database recorded at
+  it — or reckoned from it — `$next` and `$later` its next minors, `OLDER` a database behind it —, so a release of the
+  shop's own moves nothing a test means; the run's folders in its storage/; a release key made for the test, `Tests\Support\FakeRelease` — zip, manifest, signature
   —; GitHub, `Tests\Support\FakeGitHub`, the outgoing transport: the API, a file's redirect to GitHub's storage,
   `down()`, `answer()`, `storeOn()`; an Updater made over them swapped in), `UpdateApiTest` (the whole run, the swap and
   the rollback, a failing upgrade taken back, a crash finished, files by hand, every refusal, the owner's alone),

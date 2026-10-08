@@ -21,27 +21,27 @@ final class ReleasesTest extends UpdateTestCase
 {
     public function testTheNewestReleaseIsKeptAndReadAgainOnceItIsAFewHoursOld(): void
     {
-        $this->gitHub->publish('0.2.0');
+        $this->gitHub->publish($this->next);
         $releases = $this->service(Releases::class);
 
         $first = $releases->latest()['release'];
         $again = $releases->latest()['release'];
-        self::assertSame(['0.2.0', '0.2.0'], [$first?->version, $again?->version]);
+        self::assertSame([$this->next, $this->next], [$first?->version, $again?->version]);
         self::assertCount(1, $this->gitHub->calls(), 'kept');
         self::assertSame('application/vnd.github+json', $this->gitHub->request(0)->getHeaderLine('Accept'));
 
         Carbon::setTestNow(now()->addSeconds(Releases::KEEP_SECONDS + 1));
-        $this->gitHub->publish('0.3.0');
-        self::assertSame('0.3.0', $releases->latest()['release']?->version, 'a few hours on, read again');
+        $this->gitHub->publish($this->later);
+        self::assertSame($this->later, $releases->latest()['release']?->version, 'a few hours on, read again');
         self::assertCount(2, $this->gitHub->calls());
 
-        self::assertSame('0.3.0', $releases->check()['release']?->version);
+        self::assertSame($this->later, $releases->check()['release']?->version);
         self::assertCount(3, $this->gitHub->calls(), 'the owner\'s «بررسی دوباره» reads it at once');
     }
 
     public function testGitHubOutOfReachIsNotAskedAgainOnEveryScreen(): void
     {
-        $this->gitHub->publish('0.2.0');
+        $this->gitHub->publish($this->next);
         $releases = $this->service(Releases::class);
         $releases->latest();
         Carbon::setTestNow(now()->addSeconds(Releases::KEEP_SECONDS + 1));
@@ -49,7 +49,7 @@ final class ReleasesTest extends UpdateTestCase
 
         $first = $releases->latest()['release'];
         $again = $releases->latest()['release'];
-        self::assertSame(['0.2.0', '0.2.0'], [$first?->version, $again?->version], 'what was read last stands');
+        self::assertSame([$this->next, $this->next], [$first?->version, $again?->version], 'what was read last stands');
         self::assertCount(2, $this->gitHub->calls(), 'the try is kept: the next screen does not wait on GitHub again');
     }
 
@@ -73,7 +73,7 @@ final class ReleasesTest extends UpdateTestCase
     public function testADraftAPreReleaseOrATagThatNamesNoVersionIsNoRelease(): void
     {
         foreach ([['draft' => true], ['prerelease' => true], ['tag_name' => 'nightly']] as $answer) {
-            $this->gitHub->publish('0.2.0', [], '', $answer);
+            $this->gitHub->publish($this->next, [], '', $answer);
 
             self::assertNull($this->service(Releases::class)->check()['release'], (string) json_encode($answer));
         }
@@ -81,13 +81,13 @@ final class ReleasesTest extends UpdateTestCase
 
     public function testTheDailyCheckTellsTheDashboardANewVersionIsOut(): void
     {
-        $this->gitHub->publish('0.2.0');
+        $this->gitHub->publish($this->next);
         self::assertSame(24 * 60 * 60, $this->service(Scheduler::class)->tasks()[CheckReleasesTask::class]['interval']);
 
         $this->service(CheckReleasesTask::class)->run();
         $update = $this->screen($this->get('/api/admin/system/update'));
 
-        self::assertSame(['0.2.0', true], [$update['latest']['version'], $update['available']]);
+        self::assertSame([$this->next, true], [$update['latest']['version'], $update['available']]);
         self::assertCount(1, $this->gitHub->calls(), 'the screen read what the check kept');
     }
 

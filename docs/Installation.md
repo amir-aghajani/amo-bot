@@ -89,6 +89,21 @@ Every step can be taken again until the end. Once installed, `/admin/install` go
 API answers `404`. Then point Telegram at the shop and add the scheduler, if not done yet (steps 5 and 6 of
 [shared hosting](#shared-hosting)).
 
+## The panel stays on its loading screen
+
+The page arrives but its scripts never run: the browser refuses a script its server sends as some other type. The
+browser's console (F12) says so — *Expected a JavaScript-or-Wasm module script but the server responded with a MIME
+type of "application/octet-stream"*.
+
+- **0.1.0 on a LiteSpeed server** (most Iranian shared hosts; LiteSpeed's error pages read *Access to this resource on
+  the server is denied!*): that release's `public/assets/.htaccess` left the compressed scripts without a type LiteSpeed
+  reads. Take that file from 0.1.1 or later, or add inside its `<IfModule mod_mime.c>` block a `<FilesMatch>` each
+  with `ForceType text/javascript` for `"\.js\.br$"`, `ForceType text/css` for `"\.css\.br$"` and `ForceType
+  image/svg+xml` for `"\.svg\.br$"`. Then load the page with **Ctrl+Shift+R**: a browser keeps those files for a year,
+  and a plain reload would use the broken copies.
+- **After an upload or an upgrade by hand**: everything under `public/assets/` must be the release's own, whole — upload
+  that folder again.
+
 ## Next
 
 - [Running in production](Running-In-Production.md): the bot's updates, the scheduler, the checklist, the logs.

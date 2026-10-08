@@ -21,7 +21,7 @@ body:
     attributes:
       label: Version
       description: The version you run, when the request is about something that exists already.
-      placeholder: 0.1.0
+      placeholder: 0.1.1
   - type: textarea
     id: alternatives
     attributes:

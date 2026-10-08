@@ -11,7 +11,7 @@ It runs on shared hosting — cPanel, DirectAdmin and the like —, the one way 
 nothing else, the panels ship as static files, a web installer sets the shop up from the browser, the host's cron runs
 its scheduler and Telegram reaches its bots through webhooks — no shell, Composer or Node on the host.
 
-> **Status:** pre-release (0.1.0). The [Roadmap](docs/Roadmap.md) says what is done and what is left, the
+> **Status:** pre-release (0.1.1). The [Roadmap](docs/Roadmap.md) says what is done and what is left, the
 > [changelog](CHANGELOG.md) what each release brought.
 
 ## Features

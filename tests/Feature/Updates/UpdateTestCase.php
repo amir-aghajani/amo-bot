@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Updates;
 
+use App\Core\Application;
 use App\Core\Database\Upgrades;
 use App\Core\Installation;
 use App\Core\Scheduling\Budget;
@@ -30,13 +31,27 @@ use Tests\Support\FakeGitHub;
 use Tests\Support\FakeRelease;
 
 /**
- * The owner's update, played on a shop of the test's own — never this repository: an installed 0.1.0 in a scratch folder
- * (its config.php and storage/ the shop's own), the updater's folder and its flag in that storage/, a release key made
- * for the test (release(): FakeRelease), and GitHub (FakeGitHub) the transport of the app's outgoing client. The update
- * screen's API runs on an Updater made over them; the owner is signed in.
+ * The owner's update, played on a shop of the test's own — never this repository: this code installed in a scratch
+ * folder at its own version (CURRENT; its config.php and storage/ the shop's own, its database recorded at that version),
+ * the updater's folder and its flag in that storage/, a release key made for the test (release(): FakeRelease), and
+ * GitHub (FakeGitHub) the transport of the app's outgoing client. The update screen's API runs on an Updater made over
+ * them; the owner is signed in. Every version is the code's or reckoned from it, so a release of the shop's own never
+ * moves what the tests mean.
  */
 abstract class UpdateTestCase extends HttpTestCase
 {
+    /** The version the shop runs: the code's own. */
+    protected const CURRENT = Application::VERSION;
+
+    /** A database older than the code: one that files put in place by hand left behind. */
+    protected const OLDER = '0.0.9';
+
+    /** The next release: newer than the shop, its next minor version (0.1.1 → 0.2.0). */
+    protected string $next;
+
+    /** A release newer still, two minor versions on. */
+    protected string $later;
+
     /** The installed shop's folder. */
     protected string $folder;
 
@@ -69,8 +84,11 @@ abstract class UpdateTestCase extends HttpTestCase
         $this->routes = "{$this->folder}/storage/cache/routes";
         $this->schedulerLock = "{$this->folder}/storage/cache/schedule.json.lock";
         $this->keyFile = "{$root}/release-key.pub";
+        [$this->next, $this->later] = [self::ahead(1), self::ahead(2)];
+        // The shop's database at the code's version: a lock that names none reads as the first release's.
+        $this->service(Installation::class)->markInstalled();
         $this->place($this->folder, [
-            ...FakeRelease::files('0.1.0'),
+            ...FakeRelease::files(self::CURRENT),
             'config.php' => "<?php return ['APP_NAME' => 'The shop'];",
             'storage/uploads/receipts/7.jpg' => 'a customer\'s receipt',
             'storage/cache/routes/routes-old.php' => '<?php return [];',
@@ -151,6 +169,14 @@ abstract class UpdateTestCase extends HttpTestCase
     }
 
     /** The Updater of the test's shop: its folders, its key — the app's own services for the rest. */
+    /** The version `$minors` minor versions after the shop's (one on: 0.1.1 → 0.2.0). */
+    private static function ahead(int $minors): string
+    {
+        [$major, $minor] = array_map(intval(...), explode('.', self::CURRENT));
+
+        return "{$major}." . ($minor + $minors) . '.0';
+    }
+
     private function updater(): Updater
     {
         $workspace = new Workspace($this->work);

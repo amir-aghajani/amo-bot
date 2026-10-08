@@ -6,6 +6,15 @@ a release's section is its notes on GitHub.
 
 ## Unreleased
 
+## 0.1.1
+
+### Fixed
+
+- The panels stayed on their loading screen on LiteSpeed servers (most Iranian shared hosts): their compressed scripts
+  and stylesheets were sent as `application/octet-stream`, which a browser refuses to run. `public/assets/.htaccess` now
+  names their types; a shop on 0.1.0 can take that file from this release by hand
+  ([the panel stays on its loading screen](docs/Installation.md#the-panel-stays-on-its-loading-screen)).
+
 ## 0.1.0
 
 The first release: an open-source shop for VPN services — a Telegram bot customers buy from, the owner's panel, a panel

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.1.0
+  version: 0.1.1
   description: |
     Everything AmoBot answers over HTTP, as JSON (the panels are static files and render their own pages). Two panels,
     each with its API and its session: `/api/admin/*` is the owner's (signed in with the login config.php keeps, each
