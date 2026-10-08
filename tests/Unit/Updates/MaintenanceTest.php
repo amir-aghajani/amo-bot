@@ -29,9 +29,12 @@ final class MaintenanceTest extends TestCase
         self::assertNull(Maintenance::retryAfter($this->flag, time()), 'no update installs');
 
         $maintenance->hold();
+        // Measured from the moment the flag holds, never a second read of the clock: one that ticked between the two
+        // would leave four seconds of five.
+        $heldAt = (int) file_get_contents($this->flag);
 
-        self::assertSame(10, Maintenance::retryAfter($this->flag, time()), 'a few seconds: an install takes seconds');
-        self::assertSame(5, Maintenance::retryAfter($this->flag, time() + Maintenance::SECONDS - 5), 'no longer than the flag holds');
+        self::assertSame(10, Maintenance::retryAfter($this->flag, $heldAt), 'a few seconds: an install takes seconds');
+        self::assertSame(5, Maintenance::retryAfter($this->flag, $heldAt + Maintenance::SECONDS - 5), 'no longer than the flag holds');
 
         $maintenance->release();
         self::assertNull(Maintenance::retryAfter($this->flag, time()));
