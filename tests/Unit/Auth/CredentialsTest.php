@@ -9,7 +9,7 @@ use App\Support\Password;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The one rule for the panel's login, wherever it is set (the installer, the recovery, the owner's own change): a
+ * The rules for the panel's login, wherever it is set (the installer, the recovery, the owner's own change): a
  * password long enough, and no longer than what bcrypt reads of it — past that a hash would open the panel with only its
  * start —, counted in bytes, so a Persian letter is two.
  */

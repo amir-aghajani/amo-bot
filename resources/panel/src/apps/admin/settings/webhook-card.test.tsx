@@ -46,7 +46,7 @@ async function confirm(name: string) {
 }
 
 describe('the bots’ webhook', () => {
-  it('puts every bot on it after a second look, says what happened to each, and reads the mode again', async () => {
+  it('puts every bot on it after confirmation, says what happened to each, and reads the mode again', async () => {
     await card('offline')
     server().on(
       'POST',

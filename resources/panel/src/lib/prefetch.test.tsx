@@ -28,7 +28,7 @@ const pages = () => {
   return { users, plans, routes }
 }
 
-/** Two of the panel's links — one with its words in a span —, and one out of it. */
+/** Two of the panel's links — one with its text in a span —, and one out of it. */
 const links = () =>
   render(
     <nav>
@@ -97,7 +97,7 @@ describe('a link about to be followed', () => {
     expect(plans).toHaveBeenCalledTimes(1)
   })
 
-  it('leaves alone a link out of the panel, and stops when told', () => {
+  it('leaves alone a link out of the panel, and does nothing once stopped', () => {
     const { users, routes } = pages()
     stop = startPrefetching(routes, '/admin')
     const { getByText } = links()

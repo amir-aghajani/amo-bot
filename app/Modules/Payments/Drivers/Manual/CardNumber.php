@@ -12,9 +12,8 @@ use App\Support\BankCard;
 use App\Support\Input;
 
 /**
- * An Iranian bank card's number (App\Support\BankCard): typed as it is printed — Persian digits, spaces or dashes
- * between them — and kept as its 16 bare digits, which must pass the check digit every bank's card carries. A kept one
- * that would not is none.
+ * An Iranian bank card number (App\Support\BankCard): typed as printed (Persian digits, spaces, dashes), kept as 16 bare
+ * digits that must pass the Luhn check. A kept value that fails it reads as none.
  *
  * @extends Field<string>
  */

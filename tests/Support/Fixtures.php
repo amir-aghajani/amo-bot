@@ -21,6 +21,10 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Catalog\Models\PlanServer;
+use App\Modules\Discounts\Enums\DiscountType;
+use App\Modules\Discounts\Models\DiscountCode;
+use App\Modules\Discounts\Models\LoyaltyTier;
+use App\Modules\Discounts\Models\Sale;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
@@ -32,9 +36,18 @@ use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Models\ServerInbound;
+use App\Modules\Referrals\Enums\AlertReason;
+use App\Modules\Referrals\Models\ReferralAlert;
 use App\Modules\Reviews\Models\Review;
+use App\Modules\Rewards\Enums\GiftCodeKind;
+use App\Modules\Rewards\Enums\RewardKind;
+use App\Modules\Rewards\Models\CashbackRule;
+use App\Modules\Rewards\Models\GiftCode;
+use App\Modules\Rewards\Models\WheelPrize;
+use App\Modules\Rewards\Models\WheelSpin;
 use App\Modules\Settings\Services\BotSettingsScreen;
 use App\Modules\Store\Models\Website;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Support\Enums\TicketAuthor;
@@ -235,7 +248,7 @@ trait Fixtures
         $plan = Plan::query()->create($overrides + [
             'name' => 'یک‌ماهه',
             'price' => '120000.00',
-            'duration_days' => 30,
+            'duration_hours' => 720,
             'traffic_gb' => 30,
             'ip_limit' => 1,
             'is_active' => true,
@@ -385,9 +398,9 @@ trait Fixtures
             'status' => SubscriptionStatus::Active,
             'traffic_limit_bytes' => $plan->trafficBytes(),
             'ip_limit' => $plan->ip_limit,
-            'duration_days' => $plan->duration_days,
+            'duration_hours' => $plan->duration_hours,
             'starts_at' => now(),
-            'expires_at' => $plan->duration_days > 0 ? now()->addDays($plan->duration_days) : null,
+            'expires_at' => $plan->duration_hours > 0 ? now()->addHours($plan->duration_hours) : null,
         ]);
     }
 
@@ -519,10 +532,40 @@ trait Fixtures
         $this->service(AgencySettings::class)->save(['enabled' => $enabled, 'default_credit' => $credit, 'traffic_presets' => [50, 100], 'traffic_min' => 10]);
     }
 
-    /** The referral program, switched on (or off): `$rate` percent of the money a referral pays — or of their first only. */
-    protected function referralProgram(bool $enabled = true, bool $firstOnly = false, int $rate = 10): void
+    /**
+     * The referral program, switched on (or off): `$rate` percent of the money a referral pays — a renewal's too — or of
+     * their first only; no start gift, no plan reward, the alerts at their defaults — unless `$overrides` (the group's
+     * fields by name) says otherwise.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function referralProgram(bool $enabled = true, bool $firstOnly = false, int $rate = 10, array $overrides = []): void
     {
-        $this->botSettings('referral', ['referral_enabled' => $enabled, 'referral_rate' => $rate, 'referral_first_only' => $firstOnly]);
+        $this->botSettings('referral', $overrides + [
+            'referral_enabled' => $enabled,
+            'referral_rate' => $rate,
+            'referral_renewal_rate' => $rate,
+            'referral_first_only' => $firstOnly,
+            'referral_start_referrer' => 0,
+            'referral_start_invitee' => 0,
+            'referral_start_when' => 'purchase',
+            'referral_reward_every' => 0,
+            'referral_reward_plan_id' => null,
+            'referral_alert_burst' => 10,
+            'referral_alert_minutes' => 60,
+            'referral_alert_idle' => 20,
+        ]);
+    }
+
+    /**
+     * An alert on a referrer whose referrals look made up — ten joined through their link in the window — standing
+     * until support clears it.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function referralAlert(User $referrer, array $overrides = []): ReferralAlert
+    {
+        return ReferralAlert::query()->create($overrides + ['referrer_id' => $referrer->id, 'reason' => AlertReason::Burst, 'count' => 10]);
     }
 
     /** A customer's request to become an agent, waiting for support. */
@@ -535,10 +578,11 @@ trait Fixtures
      * One of the admin's customer groups, last in their order, with these customers in it.
      *
      * @param list<User> $members
+     * @param array<string, mixed> $overrides
      */
-    protected function customerGroup(string $name = 'VIP', array $members = []): CustomerGroup
+    protected function customerGroup(string $name = 'VIP', array $members = [], array $overrides = []): CustomerGroup
     {
-        $group = CustomerGroup::query()->create(['name' => $name, 'sort' => Sorting::next(CustomerGroup::class)]);
+        $group = CustomerGroup::query()->create($overrides + ['name' => $name, 'sort' => Sorting::next(CustomerGroup::class)]);
         $group->users()->attach(array_map(static fn(User $user): int => $user->id, $members));
 
         return $group;
@@ -648,10 +692,15 @@ trait Fixtures
         return $review->refresh();
     }
 
-    /** A wallet-paid purchase of the plan on that server: credited, ordered, paid — and delivered, or the test stops here. */
+    /**
+     * A wallet-paid purchase of the plan on that server (its price credited first; a free plan takes nothing): ordered,
+     * paid — and delivered, or the test stops here.
+     */
     protected function buy(User $user, Plan $plan, Server $server): Order
     {
-        $this->service(WalletService::class)->credit($user, $plan->price, 'test');
+        if ((float) $plan->price > 0) {
+            $this->service(WalletService::class)->credit($user, $plan->price, 'test');
+        }
         $order = $this->service(OrderService::class)->openPurchase($user, $plan, $server);
         $this->service(PaymentService::class)->createForOrder($order, $this->walletMethod());
 
@@ -675,6 +724,185 @@ trait Fixtures
         $subscription->refresh();
 
         return $order;
+    }
+
+    /**
+     * Extra traffic or time for the service at `$price`, paid from the wallet: credited, ordered, paid — and delivered by
+     * its panel, or the test stops here. The service is read again afterwards.
+     */
+    protected function paidExtra(Subscription $subscription, ExtraKind $kind, int $quantity, string $price): Order
+    {
+        $this->service(WalletService::class)->credit($subscription->user, $price, 'test');
+        $order = $this->service(OrderService::class)->openExtra($subscription->user, $subscription, $kind, $quantity, $price);
+        $this->service(PaymentService::class)->createForOrder($order, $this->walletMethod());
+
+        self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status, (string) $order->notes);
+        $subscription->refresh();
+
+        return $order;
+    }
+
+    /**
+     * The current shop selling «حجم و زمان اضافه» as its bot settings save it: 2,000 Toman a GB — 10 GB offered at
+     * 18,000, 50 GB at the price of a GB —, any 1 to 100 GB typed; 1,000 Toman a day — 7 days at the price of a day, 30
+     * at 25,000 —, any 1 to 60 days typed; `$overrides` the group's fields.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function extrasOnSale(array $overrides = []): void
+    {
+        $this->botSettings('extras', $overrides + [
+            'extras_enabled' => true,
+            'extra_traffic_price' => '2000',
+            'extra_traffic_options' => [['quantity' => 10, 'price' => '18000'], ['quantity' => 50, 'price' => null]],
+            'extra_traffic_min' => 1,
+            'extra_traffic_max' => 100,
+            'extra_time_price' => '1000',
+            'extra_time_options' => [['quantity' => 7, 'price' => null], ['quantity' => 30, 'price' => '25000']],
+            'extra_time_min' => 1,
+            'extra_time_max' => 60,
+        ]);
+    }
+
+    /** Gift codes switched on (or off) in the current shop, as the bot settings save the switch. */
+    protected function giftCodesOn(bool $enabled = true): void
+    {
+        $this->botSettings('gift_codes', ['gift_codes_enabled' => $enabled]);
+    }
+
+    /**
+     * A gift code of the current shop, as a batch makes it: 50,000 Toman for the wallet, in the batch «نوروز», for ever —
+     * `$overrides` its columns (a plan's: `kind` plan, `amount` null, `plan_id`; taken: `redeemed_by`, `redeemed_at`).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function giftCode(string $code = 'NOWRUZ7K3M9QXAPT', array $overrides = []): GiftCode
+    {
+        $gift = new GiftCode();
+        $gift->forceFill($overrides + ['code' => $code, 'batch' => 'نوروز', 'kind' => GiftCodeKind::Wallet, 'amount' => '50000'])->save();
+
+        return $gift->refresh();
+    }
+
+    /**
+     * The current shop's lucky wheel switched on as its bot settings save it: free, a spin every 24 hours, for everyone —
+     * `$overrides` the group's fields.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function wheelOn(array $overrides = []): void
+    {
+        $this->botSettings('wheel', $overrides + ['wheel_enabled' => true, 'wheel_cooldown_hours' => 24, 'wheel_buyers_only' => false, 'wheel_cost' => 0]);
+    }
+
+    /**
+     * A slice of the current shop's lucky wheel, after the ones it has: 10,000 Toman for the wallet, weight 1, on —
+     * `$overrides` its columns (`kind`, `amount`, `plan_id`, `weight`, `enabled`).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function wheelPrize(string $label = '۱۰ هزار تومان', array $overrides = []): WheelPrize
+    {
+        $prize = new WheelPrize();
+        $prize->forceFill($overrides + ['label' => $label, 'kind' => RewardKind::Wallet, 'amount' => '10000', 'weight' => 1, 'enabled' => true, 'sort' => Sorting::next(WheelPrize::class)])->save();
+
+        return $prize->refresh();
+    }
+
+    /**
+     * A spin of the current shop's lucky wheel the customer made, as it is kept once given: 10,000 Toman for the wallet —
+     * `$overrides` its columns (`kind`, `label`, `amount`, `outcome`, `order_id`, `subscription_id`).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function wheelSpin(User $user, array $overrides = []): WheelSpin
+    {
+        $spin = new WheelSpin();
+        $spin->forceFill($overrides + ['user_id' => $user->id, 'kind' => RewardKind::Wallet, 'label' => '۱۰ هزار تومان', 'amount' => '10000'])->save();
+
+        return $spin->refresh();
+    }
+
+    /**
+     * A loyalty tier of the current shop: a customer who spent `$minSpent` Toman is on it, it takes `$discount` percent off
+     * and adds `$cashback` percent of cashback — `$overrides` its columns.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function loyaltyTier(string $name = 'طلایی', string $minSpent = '500000', int $discount = 5, int $cashback = 2, array $overrides = []): LoyaltyTier
+    {
+        $tier = new LoyaltyTier();
+        $tier->forceFill($overrides + ['name' => $name, 'min_spent' => $minSpent, 'discount_percent' => $discount, 'cashback_percent' => $cashback, 'sort' => Sorting::next(LoyaltyTier::class)])->save();
+
+        return $tier->refresh();
+    }
+
+    /**
+     * A cashback rule of the current shop, on: `$percent` of what a delivered purchase or renewal paid, for anyone, any way
+     * paid — `$overrides` its columns (`order_types`, `customer_group_id`, `payment_method_id`, `enabled`).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function cashbackRule(int $percent = 10, array $overrides = []): CashbackRule
+    {
+        $rule = new CashbackRule();
+        $rule->forceFill($overrides + ['percent' => $percent, 'order_types' => null, 'enabled' => true, 'sort' => Sorting::next(CashbackRule::class)])->save();
+
+        return $rule->refresh();
+    }
+
+    /** The current shop's cashback switched on (the bot settings' `cashback` group), or off. */
+    protected function cashbackOn(bool $enabled = true): void
+    {
+        $this->botSettings('cashback', ['cashback_enabled' => $enabled]);
+    }
+
+    /**
+     * The current shop's nightly draw switched on as its bot settings save it: at 22:00, one winner, 50,000 Toman for the
+     * wallet, every paid order an entry, agents left out — `$overrides` the group's fields.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function lotteryOn(array $overrides = []): void
+    {
+        $this->botSettings('lottery', $overrides + [
+            'lottery_enabled' => true,
+            'lottery_hour' => 22,
+            'lottery_winners' => 1,
+            'lottery_prize' => 'wallet',
+            'lottery_wallet' => '50000',
+            'lottery_entries' => 'order',
+            'lottery_exclude_agents' => true,
+        ]);
+    }
+
+    /**
+     * A discount code of the current shop, switched on: `$value` percent off anything a code takes, for anyone, no window,
+     * no limit — `$overrides` its columns (`type`, `max_discount`, `min_amount`, `order_types`, `plan_ids`, `server_ids`,
+     * `first_purchase_only`, `starts_at`, `ends_at`, `max_uses`, `per_user`, `enabled`).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function discountCode(string $code = 'NOWRUZ', int $value = 20, array $overrides = []): DiscountCode
+    {
+        $row = new DiscountCode();
+        $row->forceFill($overrides + ['code' => $code, 'type' => DiscountType::Percent, 'value' => (string) $value, 'enabled' => true])->save();
+
+        return $row->refresh();
+    }
+
+    /**
+     * A timed sale of the current shop, running: `$percent` off every plan for every kind a discount takes, no window —
+     * `$overrides` its columns (`order_types`, `plan_ids`, `starts_at`, `ends_at`, `enabled`).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function sale(string $name = 'فروش ویژه نوروز', int $percent = 20, array $overrides = []): Sale
+    {
+        $sale = new Sale();
+        $sale->forceFill($overrides + ['name' => $name, 'percent' => $percent, 'enabled' => true])->save();
+
+        return $sale->refresh();
     }
 
     /** The name as a host label: its Latin letters and digits, or "fake" for a name without any. */

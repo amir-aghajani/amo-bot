@@ -17,14 +17,11 @@ use App\Support\Input;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * A signed-in customer proving one way into their account again (POST /me/reauthenticate) — what a change of how the
- * account is signed in to asks of a session whose sign-in is not recent (Http\RecentSignInMiddleware), so a bearer token
- * alone changes none of it: the account's password — and, its sign-in asking a second step, its app's code or a recovery
- * code (TwoFactor::confirm(), the second step's own budget) —, or its Telegram account or its Google account, proven as a
- * sign-in proves them (the redirect's state this session's own: POST /me/telegram/authorize). A proof of another account
- * is refused under its field; every failure counts as a failed sign-in does. Proven, the session may change the
- * account's ways in for CustomerSessions::RECENT_SECONDS — and a strong way proven (Telegram, Google, a password with its
- * second step) makes a session signed in with a password alone a strong one (CustomerSessions::reauthenticated()).
+ * POST /me/reauthenticate: a signed-in customer proves one way into their account again, so a bearer token alone (one
+ * that leaked) cannot change how the account is signed in to (Http\RecentSignInMiddleware). The proof is the account's
+ * password (with its second step's code while two-factor sign-in is on), or its Telegram or Google account proven as a
+ * sign-in proves them. Every failure counts as a failed sign-in, and proving another account is refused under its field.
+ * A strong way proven also makes a password-only session a strong one (CustomerSessions::reauthenticated()).
  */
 final class Reauthentication
 {
@@ -42,10 +39,10 @@ final class Reauthentication
     ) {}
 
     /**
-     * The customer's way in proven again: the session they asked from is recent from now on.
+     * Prove a way into the customer's account again; the session is recent from now on.
      *
      * @param array<string, mixed> $input {method: password, password, code?} | {method: telegram, id_token, nonce} | {method: telegram, code, state, code_verifier} | {method: google, id_token, nonce}
-     * @throws ValidationException 422 under the fields — a proof that does not hold, or proves another account
+     * @throws ValidationException 422 under the fields: a proof that does not hold, or proves another account
      * @throws SignInRefusedException 422 a way in the website has not set up; 502 Google out of reach
      * @throws TooManyAttemptsException 429 while the address or the account must wait
      * @throws TelegramUnreachableException 502
@@ -53,25 +50,18 @@ final class Reauthentication
     public function prove(SignInSite $site, ServerRequestInterface $request, Customer $customer, array $input): void
     {
         $user = $customer->user;
-        $method = Input::text($input, 'method');
-        if ($method === 'password') {
-            $proven = $this->password($request, $user, $input);
-        } elseif ($method === 'telegram') {
-            $this->ours($request, $this->telegram->account($site, $request, $input, $customer)->id === $user->telegram_id, TelegramSignIn::proofField($input));
-            $proven = SignInMethod::Telegram;
-        } elseif ($method === 'google') {
-            $this->ours($request, $this->google->account($site, $request, $input, $user)->sub === $user->google_sub, 'id_token');
-            $proven = SignInMethod::Google;
-        } else {
-            throw ValidationException::on('method', self::METHOD);
-        }
+        $proven = match (Input::text($input, 'method')) {
+            'password' => $this->password($request, $user, $input),
+            'telegram' => $this->ours($request, $this->telegram->account($site, $request, $input, $customer)->id === $user->telegram_id, TelegramSignIn::proofField($input), SignInMethod::Telegram),
+            'google' => $this->ours($request, $this->google->account($site, $request, $input, $customer)->sub === $user->google_sub, 'id_token', SignInMethod::Google),
+            default => throw ValidationException::on('method', self::METHOD),
+        };
 
         $this->sessions->reauthenticated($customer->session, $proven);
     }
 
     /**
-     * The account's password — and its second step's code while it asks one —, each checked as a sign-in checks it: how
-     * the account was proven.
+     * The account's password, and its second step's code while one is asked — each checked and counted as a sign-in's.
      *
      * @param array<string, mixed> $input
      */
@@ -99,16 +89,15 @@ final class Reauthentication
         return SignInMethod::PasswordAndCode;
     }
 
-    /**
-     * A provider's proof held: `$ours` — the account it proved is this one's —, else refused under `$field`, counted as
-     * the failed sign-in it is.
-     */
-    private function ours(ServerRequestInterface $request, bool $ours, string $field): void
+    /** A provider's proof must be of this very account; another account's is refused under `$field` and counted as a failed sign-in. */
+    private function ours(ServerRequestInterface $request, bool $ours, string $field, SignInMethod $method): SignInMethod
     {
         if (!$ours) {
             $this->throttle->failed(SignInThrottle::WEBSITE, $request);
 
             throw ValidationException::on($field, self::NOT_THIS_ACCOUNT);
         }
+
+        return $method;
     }
 }

@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Api;
 
 /**
- * A bot's token as @BotFather hands it over — the bot's id, a colon, its secret — and the one way the shop learns whose
- * it is before keeping it: the main bot's from the settings screen and the installer, an agent's from the main bot.
- * One rule and one set of words for all of them.
+ * A bot token as @BotFather hands it over (the bot's id, a colon, the secret), and the one check every place that
+ * accepts one runs before keeping it (the settings screen, the installer, an agent in the main bot).
  */
 final class BotToken
 {
@@ -18,6 +17,7 @@ final class BotToken
     public const REFUSED = 'تلگرام این توکن را نمی‌پذیرد؛ آن را دوباره از @BotFather بگیرید.';
     public const UNREACHABLE = TelegramUnreachableException::MESSAGE;
 
+    /** Whether the text has a token's shape (asking Telegram is identify()'s). */
     public static function isWellFormed(string $token): bool
     {
         return preg_match(self::PATTERN, $token) === 1;

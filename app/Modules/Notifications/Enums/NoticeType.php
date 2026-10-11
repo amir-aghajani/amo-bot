@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Notifications\Enums;
 
 /**
- * What a notice the shop sent a customer was (`notifications.type`) — one for each thing the bot tells them on its own
- * (Services\CustomerNotifier): what the website files it under, and the line an email of it carries as its subject
- * (subject()). Its words are the bot text's, never these.
+ * The kind of a notice (`notifications.type`), one per CustomerNotifier notice: what the website files it under, and
+ * its email's subject line (subject()). The notice's text comes from the bot texts, never from here.
  */
 enum NoticeType: string
 {
@@ -65,6 +64,12 @@ enum NoticeType: string
     /** A referral's payment earned them a commission. */
     case ReferralCommission = 'referral_commission';
 
+    /** «هدیه شروع»: a referral brought them a start gift — the referrer for the newcomer, the newcomer for joining by a link. */
+    case ReferralStartGift = 'referral_start_gift';
+
+    /** «جایزه دعوت»: enough of their referrals bought — a plan's service given to them free. */
+    case ReferralReward = 'referral_reward';
+
     /** Their request to become an agent was approved. */
     case AgencyApproved = 'agency_approved';
 
@@ -110,7 +115,16 @@ enum NoticeType: string
     /** Support closed their ticket. */
     case TicketClosed = 'ticket_closed';
 
-    /** What an email of the notice says it is about, in one line — its subject, and the heading over its words. */
+    /** A delivered order moved them up to a higher loyalty tier. */
+    case LoyaltyTierUp = 'loyalty_tier_up';
+
+    /** A delivered order earned them cashback in their wallet. */
+    case CashbackEarned = 'cashback_earned';
+
+    /** They won the shop's nightly draw among its buyers, and were given its prize. */
+    case LotteryWon = 'lottery_won';
+
+    /** An email's subject line for the notice, also the heading over its text. */
     public function subject(): string
     {
         return match ($this) {
@@ -132,6 +146,8 @@ enum NoticeType: string
             self::RenewalFailed => 'تمدید سرویس شما روی سرور انجام نشد',
             self::ReferralJoined => 'زیرمجموعه جدید با لینک دعوت شما',
             self::ReferralCommission => 'پورسانت زیرمجموعه به کیف پول شما اضافه شد',
+            self::ReferralStartGift => 'هدیه شروع به کیف پول شما اضافه شد',
+            self::ReferralReward => 'جایزه دعوت: یک سرویس رایگان برای شما',
             self::AgencyApproved => 'درخواست نمایندگی شما تایید شد',
             self::AgencyRejected => 'درخواست نمایندگی شما تایید نشد',
             self::AgencyChanged => 'نمایندگی شما به‌روز شد',
@@ -147,6 +163,9 @@ enum NoticeType: string
             self::EmailCodesFailed => 'کد ایمیل حساب شما چند بار اشتباه وارد شد',
             self::TicketAnswered => 'پاسخ پشتیبانی به تیکت شما',
             self::TicketClosed => 'تیکت پشتیبانی شما بسته شد',
+            self::LoyaltyTierUp => 'سطح وفاداری شما بالاتر رفت',
+            self::CashbackEarned => 'کش‌بک به کیف پول شما اضافه شد',
+            self::LotteryWon => 'شما برنده قرعه‌کشی شبانه شدید',
         };
     }
 }

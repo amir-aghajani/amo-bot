@@ -18,18 +18,15 @@ use GuzzleHttp\Exception\GuzzleException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Cloudflare Turnstile: the page draws Cloudflare's widget with the site key, and its token is checked with Cloudflare's
- * siteverify — the site's secret, the token, the visitor's address when it came with them — through the shop's outgoing
- * client. Cloudflare takes a token once, and says the host it was solved on and the action the widget named: one solved
- * on none of the site's hosts, or for another action than the form's, does not pass (CaptchaVerdict::held()). Cloudflare
- * out of reach, or not answering as its API does, is a 503 (logged); a secret Cloudflare does not know refuses everyone,
- * which the log says, for the owner. Reachable from Iran.
+ * Cloudflare Turnstile: the page draws the widget with the site key; the token is checked with siteverify using the
+ * secret. Cloudflare takes a token once and reports its host and action, both held to the site's. Cloudflare out of
+ * reach is a 503; a secret it does not know refuses everyone, which is logged as an error for the owner.
  */
 final class Turnstile implements CaptchaDriver
 {
     public const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 
-    /** A key of Cloudflare's as it shows one: printable Latin characters, no spaces. */
+    /** A Cloudflare key: printable Latin characters, no spaces. */
     private const KEY = '/^[\x21-\x7e]+$/';
 
     public function __construct(

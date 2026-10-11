@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Update;
 
 /**
- * A button's callback data as the bot writes it: a prefix routes/bot.php routes by ("plan:", "menu:subs") and the
- * arguments after it, apart by ":" — "plan:12:srv:3". build() writes it, args() reads the arguments back
- * (Update::callbackArgs()), so the format is spelled here alone.
+ * The one format of a button's callback data: a route prefix ("plan:", "menu:subs") and ":"-separated arguments —
+ * "plan:12:srv:3". build() writes it (refusing more than Telegram's 64 bytes), args() reads it back.
  */
 final class CallbackData
 {

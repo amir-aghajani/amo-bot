@@ -9,10 +9,8 @@ use App\Core\Support\Files;
 use App\Modules\Updates\Exceptions\UpdateRefusedException;
 
 /**
- * The updater's own folder, storage/updates (the container's `updates.path`): the run (state.json, written whole, and
- * the lock that lets one request work it at a time), what it fetched (download/), the release unpacked (<version>/), and
- * the app's paths an install replaced (previous/) — kept so the update can be taken back, until the next one installs.
- * The shop's storage, never the web's to read, like the rest of storage/.
+ * The updater's folder, storage/updates: the run (state.json) and its lock (one request at a time), download/, the
+ * unpacked release (<version>/), and previous/ — the replaced paths, kept for a rollback until the next update installs.
  */
 final class Workspace
 {
@@ -28,7 +26,7 @@ final class Workspace
     public function __construct(private readonly string $folder) {}
 
     /**
-     * The run's lock: one request works the update at a time — another tab's waits its turn.
+     * The run's lock: one request works the update at a time.
      *
      * @throws UpdateRefusedException while another request holds it, or when the folder cannot be written
      */
@@ -50,7 +48,7 @@ final class Workspace
     }
 
     /**
-     * The run kept as it stands now, whole or not at all.
+     * Save the run atomically.
      *
      * @throws UpdateRefusedException when it cannot be written
      */
@@ -63,7 +61,7 @@ final class Workspace
         }
     }
 
-    /** No run kept any more: the next screen offers a new one. */
+    /** Delete the run. */
     public function forget(): void
     {
         Files::delete($this->folder . '/' . self::STATE);
@@ -75,7 +73,7 @@ final class Workspace
         return $this->folder . '/' . self::DOWNLOAD . '/' . $name;
     }
 
-    /** Where release `$version` is unpacked — and where its paths go back to when an install is taken back. */
+    /** Where release `$version` is unpacked, and where its paths return when an install is taken back. */
     public function release(string $version): string
     {
         return $this->folder . '/' . $version;
@@ -88,8 +86,8 @@ final class Workspace
     }
 
     /**
-     * Everything here but the run itself and `$keep` (download/, previous/, a release's folder by its version) gone —
-     * as much of it as goes before `$until` (microtime).
+     * Delete everything but the run and `$keep` (download/, previous/, a release's folder), as much as goes before
+     * `$until` (microtime).
      *
      * @param list<string> $keep
      * @return bool Whether it is all gone

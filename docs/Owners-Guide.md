@@ -22,14 +22,16 @@ A new shop sells once it has a bot, a server, a plan and a way to pay. In order:
    on ([Plans](Plans.md)). Categories are optional.
 4. **A way to pay** — the wallet is built in; for card-to-card payments add your card in «فروشگاه › روش‌های پرداخت»
    ([Payment methods](Payment-Methods.md)).
-5. **The bot's rules and words** — the support contact, required channels, top-ups, renewals and reminders in
+5. **The bot's rules and words** — the support contact, required channels, top-ups, renewals, the prices of extra
+   traffic and time, and reminders in
    «تنظیمات ربات» ([Bot settings](Bot-Settings.md)); the welcome, the texts and the menu in «ربات»
    ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)).
 6. **The report group** — a Telegram group where sales, receipts, failed deliveries and tickets reach the shop's admins,
    with buttons to act on them ([Report group](Telegram-Group.md)). The buttons answer the bot's admins alone: start
    the bot from your own Telegram account, then «فروش › کاربران» › your row's menu › «مدیر ربات کردن».
-7. **Then, as the shop grows**: the [referral program](Referrals.md), [agents](Agency.md) with bots of their own, and a
-   [website](Website.md) of the shop's own.
+7. **Then, as the shop grows**: [discounts](Discounts.md), [loyalty tiers and cashback](Loyalty-Cashback-And-Draws.md),
+   [gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md), the [referral program](Referrals.md),
+   [agents](Agency.md) with bots of their own, and a [website](Website.md) of the shop's own.
 
 Try it as a customer before telling anyone: `/start` the bot, buy the cheapest plan with a card, send a receipt, and
 approve it in the panel.
@@ -64,7 +66,10 @@ live: there is no need to reload.
 | [Services](Services.md) | Customers' services: read, extended, switched, moved, deleted — and what runs by itself |
 | [Support tickets](Support-Tickets.md) | Answering customers, from the panel and from the report group |
 | [Reviews](Reviews.md) | Customers' reviews from the website: approved, rejected, deleted |
-| [Referrals](Referrals.md) | Invite links and commissions |
+| [Discounts](Discounts.md) | Discount codes, timed sales and a customer's own discount, and how they add up |
+| [Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md) | Loyalty tiers, cashback rules and the nightly draw |
+| [Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md) | Codes worth Toman or a free service, and the bot's wheel |
+| [Referrals](Referrals.md) | Invite links, commissions, start gifts, plan rewards and fake-referral alerts |
 | [Agency](Agency.md) | Agents with bots and shops of their own, their levels and their traffic |
 | [Broadcasts](Broadcasts.md) | Messages to many customers, and gifts of days and traffic to all of them |
 | [Report group](Telegram-Group.md) | The shop's Telegram group of reports, and acting from it |

@@ -19,7 +19,7 @@ use App\Core\Forms\Form;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A field described to a generic form (Field::describe()): what it holds, its words, where it is shown, its bounds and
+ * A field described to a generic form (Field::describe()): what it holds, its labels, where it is shown, its bounds and
  * its default — never a secret's —, the same shape for every kind; and a field without a spec is no field a form draws.
  */
 final class FieldDescriptionTest extends TestCase

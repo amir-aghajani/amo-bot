@@ -12,10 +12,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
-/**
- * The web installer opens only with its key (InstallKey): a request without it, or with another, is a 403 that says on
- * `key` where the key is — the installer page asks for it then.
- */
+/** The installer opens only with its key (`X-Install-Key`): otherwise a 403 on `key` saying where to find it. */
 final class InstallKeyMiddleware implements MiddlewareInterface
 {
     public const MISSING = 'برای نصب، کلید نصب را وارد کنید: فایل storage/install-key.txt را از File Manager هاست باز کنید و متن آن را اینجا بنویسید.';

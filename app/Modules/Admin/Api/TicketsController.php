@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
@@ -15,17 +14,14 @@ use App\Modules\Support\Services\TicketAttachments;
 use App\Modules\Support\Services\TicketDirectory;
 use App\Modules\Support\Services\Tickets;
 use App\Modules\Telegram\Api\TelegramUnreachableException;
-use App\Support\Input;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * The tickets screen (both panels, and the shop's website for its admins): the list, one ticket with its conversation,
- * and what support does with it — answer (JSON, or a form with its picture), close, reopen —, each
- * Support\Services\Tickets' (the customer told), the request's principal the one who did it; the answer is the ticket
- * as it stands after it.
+ * The tickets screen (both panels, and the website's admin API): the list, a ticket with its conversation, and support's
+ * answer (JSON, or a form with a picture), close and reopen — each Support\Services\Tickets', by the request's principal.
+ * An operation answers the ticket as it stands after it.
  */
 final class TicketsController extends ApiController
 {
@@ -38,7 +34,7 @@ final class TicketsController extends ApiController
     /** GET /tickets?status=&user=&search=&page= */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->tickets->search(PageRequest::fromQuery($request->getQueryParams()))->toArray('tickets'));
+        return $this->json($response, $this->tickets->search($this->pageRequest($request))->toArray('tickets'));
     }
 
     /**
@@ -59,14 +55,13 @@ final class TicketsController extends ApiController
      */
     public function answer(Request $request, Response $response, array $args): Response
     {
-        $file = $request->getUploadedFiles()['file'] ?? null;
-        $this->support->answer($this->find($args), Principal::of($request)->actor(), $this->input($request), $file instanceof UploadedFileInterface ? $file : null);
+        $this->support->answer($this->find($args), Principal::of($request)->actor(), $this->input($request), $this->uploadedFile($request));
 
         return $this->ticket($response, $args);
     }
 
     /**
-     * POST /tickets/{id}/close — the customer told
+     * POST /tickets/{id}/close — the customer is notified
      *
      * @param array<string, string> $args
      * @throws ValidationException 422 on `status`
@@ -102,7 +97,7 @@ final class TicketsController extends ApiController
     public function attachment(Request $request, Response $response, array $args): Response
     {
         $ticket = $this->load(Ticket::class, $args);
-        $message = TicketMessage::query()->where('ticket_id', $ticket->id)->findOrFail(Input::integerOf($args['message'] ?? null) ?? 0);
+        $message = TicketMessage::query()->where('ticket_id', $ticket->id)->findOrFail($this->routeId($args, 'message'));
         $file = $this->attachments->fetch($message);
 
         return $this->bytes($response, $file['body'], $file['mime'], 'private, max-age=300', $file['name']);

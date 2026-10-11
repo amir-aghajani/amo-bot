@@ -19,12 +19,10 @@ use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
 
 /**
- * What support — or the review window's timer — decides about a payment, wherever it is decided: the payments screen
- * of either panel or of the shop's website (its admins), the report group's buttons, AutoApproveReceiptsTask. Each
- * operation is held to its rule (allowed()) and to who decides it (the Actor: never one's own payment approved or given
- * back), is one compare-and-swap in PaymentService, and tells the customer only when this call is the one that decided —
- * of two decisions in the same moment, the one that lost is refused with DECIDED_MEANWHILE and tells nobody. A surface
- * renders its own answer and nothing more.
+ * Support's decisions about a payment, wherever they are made (the panels, the website's admins, the report group's
+ * buttons, the auto-approve timer). Each checks its rule (allowed()) and who decides (never one's own payment), is one
+ * compare-and-swap in PaymentService, and tells the customer only when this call decided; the loser of two decisions at
+ * once is refused with DECIDED_MEANWHILE.
  */
 final class PaymentActions
 {
@@ -46,13 +44,11 @@ final class PaymentActions
 
     /**
      * What may be done with the payment now:
-     * - approve: a card payment whose money is not in — pending, waiting for review, or refused (support may see the
-     *   transfer after all) — while its order is open;
+     * - approve: an unpaid card payment (even a refused one — support may see the transfer after all) of an open order;
      * - reject: a receipt waiting for review;
-     * - cancel: anything unpaid, with its open order;
-     * - remind: a card payment the customer never finished, while its order is open;
-     * - retry: the payment that paid its order, standing (paid), while the order's delivery stalled
-     *   (OrderActions::stalled()) — its order's OrderActions::stuck(), read off the payment;
+     * - cancel: anything unpaid;
+     * - remind: a card payment the customer never finished, of an open order;
+     * - retry: the payment that paid an order whose delivery stalled (OrderActions::stalled());
      * - refund: a paid payment whose order's delivery is not under way.
      *
      * @return array{approve: bool, reject: bool, cancel: bool, remind: bool, retry: bool, refund: bool}
@@ -75,11 +71,8 @@ final class PaymentActions
     }
 
     /**
-     * Accept a card payment — its receipt, or the transfer support saw some other way: the order is delivered, and the
-     * customer gets what it brought (or hears that the delivery failed and support finishes it). One of the shop's admins
-     * — its customer too — never approves their own payment; from the website, only a receipt in review (approved there
-     * without one, a service is given away) — still in review as it is approved: one another admin rejected in the same
-     * moment is not approved after all.
+     * Accepts a card payment: the order is delivered and the customer told. An admin never approves their own payment,
+     * and the website's admins only a receipt still in review (approving without one would give a service away).
      *
      * @param Actor $actor A panel's principal, one of the shop's admins on its website or in its report group, or the
      *                     review window's timer (autoApprove())
@@ -104,10 +97,7 @@ final class PaymentActions
         return $payment;
     }
 
-    /**
-     * The method's review window ran out with nobody looking: accepted as support would have, with nobody's name on it
-     * (Actor::system()). False when it may not be any more — decided, or its order closed — or another decision came first.
-     */
+    /** Accepts a receipt whose review window ran out, with no reviewer's name; false when it was decided otherwise first. */
     public function autoApprove(Payment $payment): bool
     {
         try {
@@ -120,7 +110,7 @@ final class PaymentActions
     }
 
     /**
-     * Refuse a receipt, with the reason the customer reads (or none); the order stays open for them to pay again.
+     * Refuses a receipt with the reason the customer reads (or none); the order stays open for them to pay again.
      *
      * @throws ValidationException 422 on `status`
      */
@@ -136,9 +126,8 @@ final class PaymentActions
     }
 
     /**
-     * Drop an unpaid payment and its open order (PaymentService::cancel()); the customer hears it — not about a stale
-     * payment of an order paid another way, nor about one whose order waits on another payment's receipt in review: each
-     * is tidied away quietly, alone.
+     * Drops an unpaid payment and its open order (PaymentService::cancel()); the customer is notified only when the order
+     * went too.
      *
      * @throws ValidationException 422 on `status`
      */
@@ -157,8 +146,7 @@ final class PaymentActions
     }
 
     /**
-     * Give a paid payment back (PaymentService::refund() says how, by what it bought) and tell the customer. One of the
-     * shop's admins never gives their own back.
+     * Gives a paid payment back (PaymentService::refund()) and tells the customer. An admin never refunds their own.
      *
      * @throws ActorRefusedException 403 their own payment
      * @throws ValidationException 422 on `status`
@@ -179,8 +167,7 @@ final class PaymentActions
     }
 
     /**
-     * Nudge the customer about a card payment they never finished: send the receipt, or pay again. Telling them is all
-     * it does, so the answer is whether it did.
+     * Reminds the customer of a card payment they never finished; returns whether the message reached them.
      *
      * @throws ValidationException 422 on `status`
      */
@@ -192,7 +179,7 @@ final class PaymentActions
     }
 
     /**
-     * Deliver again what the payment paid for — the order's retry (OrderActions::retry()), from the payments screen.
+     * Retries the delivery of the order the payment paid (OrderActions::retry()).
      *
      * @throws ValidationException 422 on `status`
      */
@@ -206,8 +193,7 @@ final class PaymentActions
 
     /**
      * @param 'approve'|'reject'|'cancel'|'remind'|'retry'|'refund' $action
-     * @throws ValidationException when the payment's state does not allow the action — worded by the state the payment and
-     *                             its order are in, which most often was decided elsewhere a moment ago
+     * @throws ValidationException 422 on `status`, worded by the state the payment and its order are in
      */
     private function allow(Payment $payment, string $action): void
     {
@@ -217,9 +203,8 @@ final class PaymentActions
     }
 
     /**
-     * Why an action allowed() does not allow is refused, by the state the payment and its order are in now — the report
-     * group's buttons say it too; and why a receipt is not taken for it (`receipt`: it awaits none —
-     * PaymentService::awaitsReceipt()), which the website's upload says in the same words.
+     * Why an action is not allowed, worded by the state the payment and its order are in now (the report group's buttons
+     * say it too). `receipt` words why a receipt is not taken (PaymentService::awaitsReceipt()).
      *
      * @param 'approve'|'reject'|'cancel'|'remind'|'retry'|'refund'|'receipt' $action
      */

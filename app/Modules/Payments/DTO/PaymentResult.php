@@ -4,10 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\DTO;
 
-/**
- * Outcome of verifying a payment with its gateway: yes, with the gateway's own id of the payment when it has one, or
- * no, with why.
- */
+/** A gateway's verdict on a payment: yes (with its own reference, if any), or no with why. */
 final class PaymentResult
 {
     private function __construct(

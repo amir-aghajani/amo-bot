@@ -14,6 +14,6 @@ return static fn(ConfigValues $settings): array => [
     'settings' => $settings->prefixed('MAIL_'),
     // Who the shop's emails come from: no address, no email.
     'from_address' => $settings->string('MAIL_FROM_ADDRESS'),
-    // Empty: the shop's own name (an agent's shop: its bot's).
+    // Empty: the shop's name (an agent's shop: its bot's).
     'from_name' => $settings->string('MAIL_FROM_NAME'),
 ];

@@ -36,31 +36,21 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * Signing up and in on the shop's website with an email and a password — every stored address proven, none of them
- * told apart from outside:
- * - register() — while the website's email sign-up is on and the shop's email goes out: the form checked, the captcha
- *   (Captcha) passed, then an address with no account gets a six-digit code (AuthChallenges::issueCode(), the account
- *   it makes kept with it: the names, the password's hash, the invite code) and one with an account an email saying so
- *   (AlreadyRegistered) — the answer the same either way. A second sign-up replaces the code. verify() takes the code
- *   back and registers the account as every newcomer is (Customers::byEmail()), signed in.
- * - login() — the address and its password: either wrong is one answer (a 401), a failure counted against the address
- *   and the account (SignInThrottle — a success clears nobody's count); the hash made again when PHP's default moved on.
- *   An account whose sign-in asks a second step answers its challenge instead (TwoFactor::signIn() takes it from there).
- * - forgot() / reset() — a code to an address that has an account, and to one without an email saying so (NoAccount,
- *   once a day an address — SignInThrottle::noAccountEmail(): a later ask that day sends nothing, every count the same)
- *   —: the same answer either way —, then the new password with the code: kept, every session of the account ended,
- *   this device signed in, the customer told — or, two-factor sign-in on (a reset leaves it on), nothing changed yet:
- *   the new password waits in the second step's challenge, and only the second step sets it (TwoFactor::signIn()).
- * - a signed-in customer's own: their password set or changed (changePassword(), the current one confirmed — confirm(),
- *   a wrong one counted as a failed sign-in —, the customer told), and an email added to their account (sendLinkCode(),
- *   proveLink(): a code to the address first, whoever's it is — proving it comes first —, then the address and the
- *   password chosen for it).
- * Every email a sign-in sends is held to its budgets before it goes (emailCode(), SignInThrottle::emailing()): the
- * address's turn once a minute — taken first, so requests that come while the mail server is still talking send none of
- * their own, and given back when none went —, its day, the asking network's hour and the shop's and the installation's
- * hour and day (and a signed-in customer's day, adding an email). A code is tried CODE_ATTEMPTS times at most, and a
- * code of six digits is counted before it is judged against the address's — and the adding account's — budget of wrong
- * codes (SignInThrottle::emailedCode()): spent, no new code goes to the address for a while, and its account is told.
+ * Signing up and in on the website with an email and a password. Every stored address is proven by a six-digit code
+ * emailed to it, and no answer tells whether an address has an account:
+ * - register() / verify(): a sign-up (while the website allows it) emails a code that keeps the new account's details —
+ *   or, the address having an account, an email saying so; the code typed back registers the account and signs it in.
+ * - login(): a wrong address and a wrong password are one 401, checked against a hash either way so the time tells
+ *   nothing; an account with two-factor sign-in answers its second step's challenge instead (TwoFactor::signIn()).
+ * - forgot() / reset(): a code to an address with an account, a "no account here" email to one without (once a day).
+ *   The new password ends every session; with two-factor sign-in on it waits in the second step's challenge, since the
+ *   email alone must not get past that step.
+ * - a signed-in customer's own: their password set or changed (changePassword()), an email added (sendLinkCode(),
+ *   proveLink()).
+ *
+ * Every email is held to its budgets before it goes, and they are given back when none went (emailCode()). Every
+ * six-digit code is counted against the address's budget of wrong codes before it is judged (code()); a wrong one also
+ * counts as a failed sign-in.
  */
 final class EmailSignIn
 {
@@ -72,9 +62,9 @@ final class EmailSignIn
     private const REFERRAL_MAX = 32;
 
     /**
-     * Bcrypt hashes of nothing anyone knows, at the costs PASSWORD_DEFAULT has had — 10 before PHP 8.4, 12 since: an
-     * address without an account is checked against the one at the running PHP's cost (nobody()), so its answer takes as
-     * long as a wrong password's.
+     * Bcrypt hashes of nothing anyone knows, at PASSWORD_DEFAULT's costs — 10 before PHP 8.4, 12 since. An address without
+     * an account is checked against the one at the running PHP's cost (nobody()), so it answers as slowly as a wrong
+     * password.
      */
     private const NOBODY = [
         '$2y$10$1MJJ8KlqfAULLnoAN.u6guudmvJ0/gdPoDsMhKbD8KbFJsqbQzSrK',
@@ -93,8 +83,8 @@ final class EmailSignIn
     ) {}
 
     /**
-     * A sign-up's first step: a code to the address — or, when it has an account, an email saying so. How long the code
-     * waits, either way.
+     * A sign-up's first step: a code to the address — or, when it has an account, an email saying so; the answer is the
+     * same either way. How long the code waits.
      *
      * @param array<string, mixed> $input {first_name, last_name?, email, password, referral_code?, captcha?}
      * @throws SignInRefusedException 422 email sign-up off; 503 the shop's email does not go out, or its budget is spent
@@ -144,7 +134,8 @@ final class EmailSignIn
     }
 
     /**
-     * A sign-up's last step: its code typed back — the account it kept registered, as every newcomer is, and signed in.
+     * A sign-up's last step: the code typed back registers the account it kept (Customers::byEmail(), as every newcomer)
+     * and signs it in.
      *
      * @param array<string, mixed> $input {email, code}
      * @throws SignInRefusedException 422 email sign-up off; 409 the address has an account since
@@ -182,7 +173,8 @@ final class EmailSignIn
     }
 
     /**
-     * A sign-in with the address and its password — or, the account asking a second step, its challenge.
+     * A sign-in with an address and its password; for an account with two-factor sign-in, its second step's challenge.
+     * The hash is made again when PHP's default cost moved on.
      *
      * @param array<string, mixed> $input {email, password, captcha?}
      * @throws SignInRefusedException 401 not the address and password of an account; 403 banned
@@ -223,9 +215,9 @@ final class EmailSignIn
     }
 
     /**
-     * A forgotten password: a code to the address when it has an account, and to one without an email saying it has none
-     * (NoAccount) — once a day at most: every later ask that day is counted as the email it would be and sends nothing —,
-     * the answer the same either way. How long a code waits.
+     * A forgotten password: a code to an address with an account, or a "no account here" email (NoAccount, once a day an
+     * address — later asks that day send nothing but count the same). The answer is the same either way. How long a
+     * code waits.
      *
      * @param array<string, mixed> $input {email, captcha?}
      * @throws SignInRefusedException 503 the shop's email does not go out, or its budget is spent
@@ -261,10 +253,9 @@ final class EmailSignIn
     }
 
     /**
-     * A new password with the code forgot() sent: kept, every session of the account ended, this device signed in and the
-     * customer told — or, its sign-in asking a second step (a reset leaves two-factor sign-in on), the challenge for it,
-     * which keeps the new password until the second step sets it (TwoFactor::signIn()): the code alone changes nothing
-     * of an account the second step guards.
+     * A new password with the code forgot() sent: set, every session of the account ended, this device signed in, the
+     * customer told. With two-factor sign-in on, nothing changes yet: the new hash waits in the second step's challenge
+     * and only that step sets it (TwoFactor::signIn()).
      *
      * @param array<string, mixed> $input {email, code, password}
      * @throws SignInRefusedException 403 banned
@@ -297,9 +288,9 @@ final class EmailSignIn
     }
 
     /**
-     * The signed-in customer's password, set or changed: the account must have an email (the password signs in with
-     * it); the current password, when it has one, typed and right — a wrong one counted as a failed sign-in (confirm());
-     * the new one by the one rule. Every other session of the account ends: this one stays. The customer is told.
+     * The signed-in customer sets or changes their password. The account needs an email (the password signs in with it);
+     * a current password, when there is one, must be typed and right (confirm()). Every other session ends; the customer
+     * is notified.
      *
      * @param array<string, mixed> $input {current_password?, password}
      * @throws AccountRefusedException 422 no email on the account
@@ -331,9 +322,8 @@ final class EmailSignIn
     }
 
     /**
-     * The account's password, typed again to change what it guards (its password, two-factor sign-in): refused under
-     * `$field` when it is not — counted as a failed sign-in, against the address and the account, so it is no way around
-     * the throttle.
+     * Check the account's password typed again before a change it guards. A wrong one is refused under `$field` and counts
+     * as a failed sign-in against the address and the account, so this is no way around the sign-in throttle.
      *
      * @throws ValidationException 422 on `$field`
      * @throws TooManyAttemptsException 429 while the address or the account must wait
@@ -350,9 +340,9 @@ final class EmailSignIn
     }
 
     /**
-     * An email for a signed-in customer's account that has none — with the password chosen to sign in by it: a code to
-     * the address first, whether or not another account has it (it is proven before anything is said of it). How long
-     * the code waits.
+     * Email a code to an address a signed-in customer adds to their account (the account has none), keeping the hash of
+     * the password chosen for it. The code goes whether or not another account has the address: it is proven first. How
+     * long the code waits.
      *
      * @param array<string, mixed> $input {email, password}
      * @throws AccountRefusedException 422 the account has an email
@@ -385,8 +375,8 @@ final class EmailSignIn
     }
 
     /**
-     * The code sendLinkCode() sent, typed back by the account it was sent for: the address proven theirs, and the hash
-     * of the password they chose for it.
+     * The code sendLinkCode() sent, typed back by the account it was sent for: the address proven theirs, and the hash of
+     * the password they chose for it.
      *
      * @param array<string, mixed> $input {email, code}
      * @return array{email: string, password_hash: string}
@@ -413,11 +403,9 @@ final class EmailSignIn
     }
 
     /**
-     * An email with a code — or the one that goes in its place — to `$address`, by `$send`: every budget it spends counted
-     * first (SignInThrottle::emailing() — the address's turn among them, so requests that come while the mail server is
-     * still talking send none of their own; `$askedBy`, a signed-in customer adding an email, theirs too); what it counted
-     * is given back when it sent nothing — refused on the way, or a mail server that did not take it —, so the customer
-     * may ask again at once.
+     * Send an email to `$address` by `$send`, its budgets counted first (SignInThrottle::emailing(); `$askedBy`, a
+     * signed-in customer adding an email, has a budget too). The address's turn is taken before the mail server is asked,
+     * so requests that come meanwhile send nothing of their own; everything counted is given back when no email went.
      *
      * @param \Closure(): void $send
      * @throws TooManyAttemptsException 429 the address had a code a moment ago, or it, the network or the account had its emails
@@ -438,8 +426,8 @@ final class EmailSignIn
     }
 
     /**
-     * The second step of an account's password sign-in: a challenge for its authenticator app's code (TwoFactor::signIn()),
-     * keeping what the sign-in sets once it opens — a reset's new password.
+     * A password sign-in's second step: a challenge for the authenticator app's code (TwoFactor::signIn()), keeping what
+     * the sign-in sets once it opens — a reset's new password.
      *
      * @param array<string, string> $payload
      */
@@ -449,12 +437,12 @@ final class EmailSignIn
     }
 
     /**
-     * The code typed for `$email`, taken back (AuthChallenges::checkCode()) — with `$holder`, only one sent for that
-     * account —: what was kept with it. A code that is none — no six digits — takes no try off the real one nor off the
-     * budget; one of six digits is counted before it is judged against the address's — and the holder's — budget of
-     * wrong codes (SignInThrottle::emailedCode(): spent, a 429 whatever it is, and the address's account told once a day),
-     * and gives its count back when it is right. A wrong one counts against the address and the account as a failed
-     * sign-in too.
+     * Take back the code typed for `$email` (with `$holder`, only one sent for that account): what was kept with it.
+     *
+     * Something that is not six digits takes no try off the real code nor off the budget. A six-digit code is counted
+     * against the address's (and the holder's) budget of wrong codes before it is judged — spent, a 429 whatever it is,
+     * and the address's account notified once a day — and gives its count back when right. A wrong one also counts as a
+     * failed sign-in.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
@@ -486,7 +474,7 @@ final class EmailSignIn
         return $kept;
     }
 
-    /** The codes emailed to `$address` were failed until it waits: its account — when it has one in this shop — is told. */
+    /** The codes emailed to `$address` ran out their budget: notify its account in this shop, if any. */
     private function codesFailed(string $address): void
     {
         $owner = User::query()->where('email', $address)->first();
@@ -496,7 +484,7 @@ final class EmailSignIn
     }
 
     /**
-     * A password chosen under `$field`, as typed — or why it cannot be one (the one rule, App\Support\Password) under it.
+     * A new password typed under `$field`, or why it cannot be one (App\Support\Password) under it.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
@@ -512,7 +500,7 @@ final class EmailSignIn
         return $password;
     }
 
-    /** The hash of nothing that costs what a password made on this PHP costs to check: its default's cost, else the dearest. */
+    /** The NOBODY hash at this PHP's default cost (else the dearest), so checking it costs what a real one does. */
     private static function nobody(): string
     {
         foreach (self::NOBODY as $hash) {
@@ -525,7 +513,7 @@ final class EmailSignIn
     }
 
     /**
-     * The form's address, as the shop keeps one (App\Support\Email); null with why under `email`.
+     * The form's address as the shop keeps one (App\Support\Email); null, with why under `email`.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors

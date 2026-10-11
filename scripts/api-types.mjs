@@ -40,17 +40,17 @@ const APIS = [
     type: 'PanelWrite',
     prefixes: ['/api/{panel}', '/api/admin', '/api/agent'],
     description:
-      "Every write of a panel's own API — the owner's `/api/admin`, an agent's `/api/agent`; what both have is described under `/api/{panel}` —: its method, its path under the panel's API (a path parameter as the type of its value: `/plans/${number}`), the body it takes (`undefined`: none) and its answer (`void`: none). lib/api types each POST, PUT, PATCH and DELETE by it.",
+      "Every write of a panel's API (the owner's `/api/admin`, an agent's `/api/agent`, and `/api/{panel}` for what both have): its method, its path under the panel's API (a path parameter typed as its value: `/plans/${number}`), the body it takes (`undefined`: none) and its answer (`void`: none). lib/api types every POST, PUT, PATCH and DELETE with it.",
   },
   {
     type: 'InstallWrite',
     prefixes: ['/api/install'],
-    description: "Every write of the web installer's API (`/api/install`), as PanelWrite has the panel's.",
+    description: "Every write of the web installer's API (`/api/install`), in the same form as PanelWrite.",
   },
   {
     type: 'StoreWrite',
     prefixes: ['/api/store/v1/{store}'],
-    description: "Every write of the Store API — a shop's website's, under its store key (`/api/store/v1/{store}`) —, as PanelWrite has the panel's.",
+    description: "Every write of the Store API, a shop website's API under its store key (`/api/store/v1/{store}`), in the same form as PanelWrite.",
   },
 ]
 

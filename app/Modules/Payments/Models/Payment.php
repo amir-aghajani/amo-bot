@@ -17,10 +17,8 @@ use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Carbon;
 
 /**
- * One attempt to pay an order through a payment method. The customer is the order's, the driver the method's.
- * `reference` is the gateway's own id of the payment; a card-to-card receipt is the Telegram file the customer sent the
- * bot, or the picture they uploaded from the website (`receipt_*`); `note` is the word on its latest verdict. The shop's
- * takings are moneyIn().
+ * One attempt to pay an order with a payment method. A card transfer's receipt is a Telegram file sent in the bot or a
+ * picture uploaded from the website (`receipt_*`); `note` is the word on its latest verdict.
  *
  * @property int $id
  * @property int $order_id
@@ -75,15 +73,12 @@ class Payment extends Model
     ];
 
     /**
-     * Money that came in and stayed in the shop — its takings, the one definition the dashboard's revenue and the
-     * referral commissions go by: payments not made from the wallet (a card transfer, a gateway) that were paid, and
-     * refunded ones but a wallet top-up's. A refund puts the money in the customer's wallet, where it stays; a top-up's
-     * takes the top-up back out of the wallet instead — that money went back to the customer. A purchase from the
-     * wallet spends money counted when the wallet was charged.
+     * Money that came in and stayed: the shop's takings (the dashboard's revenue, referral commissions). Paid payments not
+     * made from the wallet, and refunded ones too — a refund goes to the customer's wallet and stays in the shop — except
+     * a top-up's, whose money went back to the customer. A wallet payment spends money counted when it was charged.
      *
-     * Read off the index of a shop's payments by status and time, which carries their method too: the shop's methods
-     * other than the wallet are a short list of ids (a subquery there has the database read every payment of each method,
-     * whatever the period), and the order behind a payment is looked up for a refunded one alone.
+     * The non-wallet method ids are passed as a list (a subquery would make the database read every payment of each
+     * method), and the order's type is looked up only for refunded rows.
      *
      * @return Builder<static>
      */
@@ -112,10 +107,7 @@ class Payment extends Model
         return $this->method->isWallet();
     }
 
-    /**
-     * Settled by the timer, not by an admin (see AutoApproveReceiptsTask): a receipt accepted with nobody's name on it —
-     * every approval by a person, on the screen or in the report group, writes its reviewer.
-     */
+    /** Accepted by the review window's timer (AutoApproveReceiptsTask): a paid receipt with no reviewer's name on it. */
     public function wasAutoApproved(): bool
     {
         return $this->isPaid() && $this->receipt_at !== null && $this->reviewer === null;

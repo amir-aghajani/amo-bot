@@ -11,9 +11,8 @@ use App\Modules\Telegram\Models\Broadcast;
 use Psr\Log\LoggerInterface;
 
 /**
- * Carries on with the broadcasts under way — messages and «لغو پین» runs, not paused ones: every minute, up to a batch
- * within the run's time (shared hosting kills long cron runs), then tells the admins whose messages went to everyone.
- * Runs are independent: one that fails is logged and the next goes on.
+ * Every minute: carries on with the broadcasts being sent, a batch each within the scheduler's time budget, and tells
+ * the admin when one is done. One run failing is logged and the next goes on.
  */
 final class SendBroadcastsTask implements Task
 {
@@ -30,7 +29,7 @@ final class SendBroadcastsTask implements Task
     {
         $deadline = $this->budget->deadline();
 
-        // Each run's admin — where its message and its progress are — read with the runs (an unpin run's is its source's).
+        // Each run's admin (an unpin run's: its source's) is read with the runs: their chat holds the message and progress.
         foreach (Broadcast::sending()->with(['user', 'source.user'])->get() as $broadcast) {
             try {
                 if ($this->broadcasts->process($broadcast, self::BATCH, $deadline)) {

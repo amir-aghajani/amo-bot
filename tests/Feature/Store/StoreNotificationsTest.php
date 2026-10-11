@@ -18,10 +18,8 @@ use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
 /**
- * What the shop told a customer, on their website: every notice its bot sent them on its own — whether it reached them
- * in Telegram, by email or not at all —, theirs alone, newest first, a page at a time, in its words as plain text and as
- * safe HTML, with what it is about for a link; how many they have not read (the feed's meta, and GET /me); and marking
- * them read — those named (another's number marks nothing, and is no error), or every one.
+ * The notice feed: every notice the shop sent the customer, theirs only, as plain text and safe HTML with its subject;
+ * the unread count (feed and /me); marking some or all read.
  */
 final class StoreNotificationsTest extends HttpTestCase
 {

@@ -20,12 +20,8 @@ use Tests\Support\AltchaWidget;
 use Tests\Support\FakeTurnstile;
 
 /**
- * The website's captcha for forms of its own — a review, a contact form —, the shop holding its secret: the site's
- * backend posts the token a form carried (POST /captcha/verify) and is answered whether it passed — for the action it
- * names, solved where —, 200 either way, the reasons' codes when not; a token is taken once. ALTCHA's widget fetches
- * its challenge from the shop (GET /captcha/challenge, fresh every time, never cached). The website asks 3000 in ten
- * minutes, whoever its visitors are, and 120 refused tokens of a visitor's network — the one the backend names, else
- * its own — in them; never the sign-ins' budget. A website that asks no captcha has nothing to judge.
+ * The captcha for the website's own forms: the backend verifies a token server to server (once), ALTCHA challenges are
+ * fresh, and the website's and the visitor network's budgets are separate from the sign-ins'.
  */
 final class WebsiteCaptchaTest extends HttpTestCase
 {

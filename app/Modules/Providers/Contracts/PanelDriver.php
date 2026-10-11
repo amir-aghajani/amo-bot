@@ -10,14 +10,13 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Support\PanelHttp;
 
 /**
- * A panel connector (3x-ui, PasarGuard, …) — a stateless definition, registered in bootstrap/container.php
- * (`panel.drivers`); its key is what `servers.driver` holds. Its description (describe()) is the connector's card in the
- * add-server picker — its words, the versions it needs in its notes, and its traits: the two letters the picker draws
- * (MARK), who makes the panel (VENDOR), its docs (DOCS) and what its panels can do (Capabilities::traits()) — and the
- * form of a server's connection, which ServerService puts between the server's own columns: the fields every connector
- * shares (Support\PanelConnection, Support\PanelCredentials) and its own. A field is kept under its key: a column of
- * the server's, or `meta.<name>` for what has none. The client of one server's panel is connect()'s, which
- * ProviderRegistry::forServer() keeps a while.
+ * A panel connector (3x-ui, PasarGuard, …): a stateless definition registered in bootstrap/container.php
+ * (`panel.drivers`); its key is what `servers.driver` holds. describe() is its card in the add-server picker — words,
+ * notes (the versions it needs), traits (MARK, VENDOR, DOCS, Capabilities::traits()) — and the form of a server's
+ * connection: the shared fields (Support\PanelConnection, Support\PanelCredentials) plus its own, each kept under its
+ * key (a column of `servers`, or `meta.<name>`). connect() builds the client of one server's panel, which
+ * ProviderRegistry::forServer() reuses a while. A new connector needs no edit outside its own folder but its
+ * registration and its request shapes in the API description.
  */
 interface PanelDriver extends Driver
 {

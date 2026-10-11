@@ -11,19 +11,14 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\Mailer\Exception\ExceptionInterface;
 use Symfony\Component\Mailer\Transport\TransportInterface;
 
-/**
- * How the shop's email goes out, as config.php says (config/mail.php): MAIL_TRANSPORT names a mail driver (MailDriver,
- * the container's `mail.drivers`), which makes its transport of its own MAIL_* settings — or `none`, no email at all.
- * Built once a process: the container's `mail.transport`.
- */
+/** Builds the transport MAIL_TRANSPORT names from its MAIL_* settings, once a process (the container's `mail.transport`). */
 final class MailTransport
 {
     /** MAIL_TRANSPORT's word for no email at all: it names no driver. */
     public const NONE = 'none';
 
     /**
-     * The transport config.php names; null for none — and for settings no transport can be built of (logged): a driver
-     * the shop does not have, a server or a key missing.
+     * The transport config.php names; null for `none`, and for settings no transport can be built from (logged).
      *
      * @param Registry<MailDriver> $drivers
      */

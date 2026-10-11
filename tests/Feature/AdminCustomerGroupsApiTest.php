@@ -53,6 +53,20 @@ final class AdminCustomerGroupsApiTest extends HttpTestCase
         self::assertSame(404, $this->deleteJson("/api/admin/customer-groups/{$vipId}")->getStatusCode());
     }
 
+    public function testAGroupMayPayThePlansAgentPrices(): void
+    {
+        $plain = $this->decode($this->postJson('/api/admin/customer-groups', ['name' => 'VIP']))['group'];
+        self::assertFalse($plain['agent_pricing'], 'a new group: off');
+
+        $colleagues = $this->decode($this->postJson('/api/admin/customer-groups', ['name' => 'همکاران', 'agent_pricing' => true]))['group'];
+        self::assertTrue($colleagues['agent_pricing']);
+        self::assertTrue($this->decode($this->putJson("/api/admin/customer-groups/{$colleagues['id']}", ['name' => 'همکاران فروش']))['group']['agent_pricing'], 'renamed without it: kept');
+        self::assertFalse($this->decode($this->putJson("/api/admin/customer-groups/{$colleagues['id']}", ['name' => 'همکاران فروش', 'agent_pricing' => false]))['group']['agent_pricing']);
+
+        $refused = $this->unchecked()->postJson('/api/admin/customer-groups', ['name' => '', 'agent_pricing' => 'maybe']);
+        self::assertSame(['name', 'agent_pricing'], array_keys($this->decode($refused)['errors'] ?? []), 'every refusal at once');
+    }
+
     public function testANameTakenInTheSameMomentIsRefusedLikeAnyTakenName(): void
     {
         // Another save takes the name between this one's check and its write: the table's unique index decides.

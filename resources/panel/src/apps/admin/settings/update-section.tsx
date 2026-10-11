@@ -24,7 +24,7 @@ export const UPDATE_DESCRIPTION = 'نسخه تازه AmoBot از GitHub، با �
 /** The update by hand — a host the shop cannot update itself on: the guide's page. */
 const BY_HAND = 'https://github.com/amir-aghajani/amo-bot/wiki/Upgrading'
 
-/** An update's steps, in the order a run takes them, in the owner's words. */
+/** An update's steps, in the order a run takes them, worded for the owner. */
 const STEPS: { step: UpdateStep; title: string }[] = [
   { step: 'download', title: 'دانلود و بررسی امضا' },
   { step: 'extract', title: 'باز کردن بسته' },
@@ -49,12 +49,9 @@ function isNewer(version: string, than: string): boolean {
 }
 
 /**
- * «تنظیمات پنل › به‌روزرسانی»: AmoBot's own update — the version the shop runs, the newest release GitHub publishes with
- * its notes, and the update to it, one press: begun behind a second look, then driven a step a request (the server
- * takes one at a time: a shared host gives a request half a minute) until it is installed, and the page reloaded on the
- * new build. A step refused is said where the run is, with «تلاش دوباره» and — before the install began — «لغو»; an
- * update installed is taken back while the server says it may be. What keeps the shop from updating itself is said with
- * the way out: an update by hand. Read only while the section is on screen.
+ * «به‌روزرسانی»: the running version, the newest release and its notes, and the one-press update — driven one step per
+ * request (a shared host gives a request half a minute) until installed, then the page reloads on the new build. A failed
+ * step offers a retry (and a cancel before the install starts); a done update can be rolled back while the server allows.
  */
 export function UpdateSection() {
   const queryClient = useQueryClient()

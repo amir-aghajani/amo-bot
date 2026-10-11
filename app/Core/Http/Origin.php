@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Http;
 
 /**
- * A web origin as a browser sends it (`Origin`) and as CORS compares it: `scheme://host[:port]` — http or https, lower
- * case, the scheme's own port left out, nothing after it. What a website's owner types (an origin, perhaps with a
- * trailing slash) and what the browser sends are compared in this one form.
+ * A web origin in the one form it is compared in: `scheme://host[:port]`, http or https, lower case, the default port
+ * left out. What an owner types and what a browser sends are both read into it.
  */
 final class Origin
 {
@@ -19,7 +18,7 @@ final class Origin
     /** The longest address read for its origin (a page's, a sign-in's return address). */
     private const MAX_ADDRESS = 2048;
 
-    /** `$value` as an origin — `scheme://host[:port]` alone, a trailing "/" tolerated —; null for anything else (a path, a query). */
+    /** `$value` as an origin (a trailing "/" tolerated); null for anything with a path, a query or credentials. */
     public static function normalize(string $value): ?string
     {
         $parts = self::parts(rtrim(trim($value), '/'));
@@ -30,7 +29,7 @@ final class Origin
         return self::build($parts);
     }
 
-    /** The origin of an http(s) address — a page of the site, a path and all —; null for what is no such address. */
+    /** The origin of any http(s) address, path and all; null for what is no such address. */
     public static function of(string $url): ?string
     {
         $parts = self::parts(trim($url));

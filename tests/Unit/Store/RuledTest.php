@@ -12,10 +12,7 @@ use App\Core\Forms\Form;
 use App\Modules\Store\Forms\Ruled;
 use PHPUnit\Framework\TestCase;
 
-/**
- * A field of the website's form with a rule of the form's own: its rule first, then everything its field says — a
- * kept secret's staying with what it belongs with among it.
- */
+/** A Ruled field: its own rule first, then everything of the wrapped field, a kept secret's binding included. */
 final class RuledTest extends TestCase
 {
     public function testItsRuleComesFirstAndItsFieldSaysTheRest(): void

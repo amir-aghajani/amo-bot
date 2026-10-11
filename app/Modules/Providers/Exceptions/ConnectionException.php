@@ -8,7 +8,7 @@ use App\Modules\Providers\Enums\ConnectionFailure;
 
 /**
  * The panel could not be reached at all: `failure` says why (its name, the port, a timeout, its TLS certificate), so
- * the admin is told what to fix; `detail` is what the transport said (cURL's words: the host and the port). The
+ * the admin knows what to fix; `detail` is what the transport said (cURL's message: the host and the port). The
  * transport's own exception is not kept with it: its message names the request's whole address, whose path may be the
  * panel's secret, and a logged exception prints the ones it was chained to — what the diagnosis needs is `failure` and
  * `detail`, scrubbed of any address.

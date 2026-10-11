@@ -7,6 +7,7 @@ namespace App\Modules\Providers\Models;
 use App\Core\Database\Casts\Encrypted;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -14,9 +15,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * A VPN panel instance (one 3x-ui or PasarGuard installation) the shop provisions clients on — the shop's as a whole:
- * every bot sells on it. `driver` names its connector (Contracts\PanelDriver), whose form its connection columns and
- * `meta` — the connection options (Support\PanelConnection) — are kept from (Services\ServerService).
+ * A VPN panel (one 3x-ui or PasarGuard installation) the shop creates clients on. Servers belong to the installation,
+ * not a shop: every bot sells on them. `driver` names its connector (Contracts\PanelDriver); the connector's form is
+ * kept in the connection columns and `meta` (Services\ServerService).
  *
  * @property int $id
  * @property string $name
@@ -31,7 +32,7 @@ use Illuminate\Support\Carbon;
  * @property int $sort
  * @property string|null $notes
  * @property Carbon|null $last_checked_at when the shop last talked to the panel (a check, a sync, any panel work)
- * @property string|null $last_error why that last contact failed, in the owner's words; null when it answered
+ * @property string|null $last_error why that last contact failed, worded for the owner; null when it answered
  * @property bool|null $serves_subscriptions Whether the panel handed out subscription links as of the last check; null = never asked
  * @property array<string, mixed>|null $meta
  * @property Carbon $created_at
@@ -80,8 +81,25 @@ class Server extends Model
     ];
 
     /**
-     * Whether the panel hands out subscription links — what a customer gets, and all they get — so a server without them
-     * (or one never checked) cannot be sold: not offered to a plan, not chosen at purchase.
+     * Its button's colour among a plan's locations in the bot (one of Telegram's styles, the form's `button_style` kept in
+     * `meta`); null for the client's default look.
+     */
+    public function buttonStyle(): ?string
+    {
+        $style = $this->meta['button_style'] ?? null;
+
+        return is_string($style) && $style !== '' ? $style : null;
+    }
+
+    /** How many location buttons share its button's row in the bot (the server form's `button_row`): 1, 2 or 3. */
+    public function buttonRow(): int
+    {
+        return max(1, min(KeyboardLayout::ROW_MOST, (int) ($this->meta['button_row'] ?? 1)));
+    }
+
+    /**
+     * Whether the panel hands out subscription links, as of the last check — the one thing a customer gets, so a server
+     * without them (or never checked) cannot be sold.
      */
     public function servesSubscriptions(): bool
     {
@@ -94,7 +112,7 @@ class Server extends Model
         return $this->capacity === null || $this->activeServices() < $this->capacity;
     }
 
-    /** Its active services, every bot's: as a list counted them with it (activeServicesCount()), or counted now. */
+    /** Its active services, every bot's: the count a list read with it (activeServicesCount()), else counted now. */
     public function activeServices(): int
     {
         return array_key_exists('active_subscriptions_count', $this->attributes)
@@ -103,8 +121,7 @@ class Server extends Model
     }
 
     /**
-     * The count activeServices() reads, for a list's `withCount()` — of the servers or of a relation to them: one
-     * subquery for the whole list.
+     * The count activeServices() reads, for a list's `withCount()`: one subquery for the whole list.
      *
      * @return array<string, \Closure(Builder<Subscription>): mixed>
      */
@@ -115,8 +132,8 @@ class Server extends Model
 
     /**
      * Whether the shop leaves the panel alone for now: its last contact failed less than BACKOFF_MINUTES ago. The tasks
-     * skip it and the customer's screen shows what the shop last knew, instead of waiting for a panel that does not
-     * answer; the first contact after the time is up — or the admin's own check — finds out whether it is back.
+     * skip it and a customer's screen says it could not read the service, instead of waiting out a timeout; the first
+     * contact after that, or the admin's own check, finds out whether it is back.
      */
     public function isBackingOff(): bool
     {
@@ -130,8 +147,8 @@ class Server extends Model
     }
 
     /**
-     * What a whole-server sale gets: the inbounds marked sellable and enabled, first seen first — out of the inbounds a
-     * list read with the server (`inbounds`), otherwise read now.
+     * What a whole-server sale gets: the inbounds marked sellable and enabled, first seen first — from the loaded
+     * `inbounds` when a list read them, otherwise read now.
      *
      * @return Collection<int, ServerInbound>
      */
@@ -143,8 +160,8 @@ class Server extends Model
     }
 
     /**
-     * The services on it, every bot's — a panel's clients are the server's, whichever shop sold them —, whatever shop
-     * the code works in.
+     * The services on it, every bot's, whatever shop the code works in: a panel's clients are the server's, whichever
+     * shop sold them.
      *
      * @return HasMany<Subscription, $this>
      */

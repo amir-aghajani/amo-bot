@@ -9,10 +9,8 @@ use App\Modules\Support\Models\TicketMessage;
 use App\Modules\Support\Presenters\TicketFields;
 
 /**
- * A support ticket of the customer's, as their website shows it: what every screen says of it (Support\Presenters\
- * TicketFields: what it is about, where it stands — and since when it is closed —, their rating), and whether support
- * wrote since they last read it — and, opened, its conversation, support's messages never saying who of support wrote
- * them (the customer reads «پشتیبانی»).
+ * A customer's ticket as their website shows it: the shared fields (Support\Presenters\TicketFields), whether support
+ * wrote since they last read it, and — opened — its conversation. Support's messages never name who of support wrote them.
  */
 final class TicketPresenter
 {

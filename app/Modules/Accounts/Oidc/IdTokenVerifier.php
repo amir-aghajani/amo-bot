@@ -9,11 +9,9 @@ use Firebase\JWT\ExpiredException;
 use Firebase\JWT\JWT;
 
 /**
- * The one way an id_token is checked, whoever signed it: its signature against the provider's published keys (Jwks —
- * the key its header names, by the algorithm that key is for), then that the provider issued it (`iss`, one of the
- * provider's spellings) for this site (`aud`, alone or among others), and its times — issued (`iat`) and until (`exp`),
- * both required — with LEEWAY seconds of the clocks' difference. Anything wrong is the sign-in's refusal
- * (SignInRefusedException, a 401) in the customer's words; the token is never repeated in one, nor in the log.
+ * Checks an id_token: its signature against the provider's published key its header names (Jwks), its issuer (`iss`)
+ * and audience (`aud`, alone or in a list), and its times (`iat` and `exp` both required, LEEWAY seconds of clock
+ * difference). Anything wrong is a 401 SignInRefusedException; the token is never repeated in it, nor in the log.
  */
 final class IdTokenVerifier
 {
@@ -40,7 +38,7 @@ final class IdTokenVerifier
             throw SignInRefusedException::tokenInvalid();
         }
 
-        // The library's clock, for this check: the shop's (now(), as every time it keeps), with the leeway.
+        // The library's static clock set to the shop's (now(), which tests move) for this check, then put back.
         [$leeway, $timestamp] = [JWT::$leeway, JWT::$timestamp];
         [JWT::$leeway, JWT::$timestamp] = [self::LEEWAY, now()->getTimestamp()];
         try {
@@ -64,8 +62,8 @@ final class IdTokenVerifier
     }
 
     /**
-     * The id of the key the token's header names (`kid`) — null when it names none —, refused for what is no token: a
-     * header whose algorithm or key id is not text never reaches the library.
+     * The key id the token's header names (`kid`), or null. A malformed token, or a header whose `alg` or `kid` is not
+     * text, is refused here before it reaches the library.
      *
      * @throws SignInRefusedException
      */
@@ -83,7 +81,7 @@ final class IdTokenVerifier
         return $header['kid'] ?? null;
     }
 
-    /** Whether the token's audience — one, or a list — is this site (a numeric Client ID, written as a number or as text alike). */
+    /** Whether the token's audience (one, or a list) names this site; a numeric Client ID matches as a number or as text. */
     private static function isFor(mixed $audience, string $site): bool
     {
         $named = static fn(mixed $one): bool => (is_string($one) || is_int($one)) && (string) $one === $site;

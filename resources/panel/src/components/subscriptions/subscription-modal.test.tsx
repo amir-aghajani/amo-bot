@@ -9,11 +9,8 @@ import { subscriptionRow } from '@/test/rows'
 import { json, noContent, refusal, server, type Answer, type SentRequest } from '@/test/server'
 
 /*
- * A service's modal (components/subscriptions/subscription-modal). Deleting a service whose panel does not take the
- * delete: the modal asks whether to delete it in the shop alone, its client left on the panel — the owner's to remove,
- * in an agent's shop support's; the server may refuse that too (an agent's shop while that panel answers), and the modal
- * goes back to the delete, saying why — never a button that silently does nothing. A link that no longer works is said
- * dead, with nothing to copy. An operation that took its own button away leaves the focus on what the service offers now.
+ * A service's dialog (components/subscriptions/subscription-modal): a delete whose panel fails, then «حذف فقط از
+ * فروشگاه» and its refusal; a dead link with nothing to copy; the focus after an operation; an hourly plan's terms.
  */
 
 const SERVICE = subscriptionRow()
@@ -79,7 +76,7 @@ describe('a delete the panel did not take', () => {
     expect(screen.queryByText(/خودتان/)).toBeNull()
   })
 
-  it('goes back to the delete in the server’s words when the server will not leave the client on the panel', async () => {
+  it('goes back to the delete with the server’s message when the server refuses to leave the client on the panel', async () => {
     const { onDeleted, onStale } = open(refusal(422, LEAVE_REFUSED, { status: [LEAVE_REFUSED] }))
     await deleteOnPanel()
 
@@ -155,10 +152,27 @@ describe('a service whose link no longer works', () => {
   })
 })
 
+/** What a fact of the modal says, by its label. */
+const fact = (label: string) => screen.getByText(label).nextElementSibling?.textContent
+
 describe('its facts', () => {
   it('name the devices it may connect at once in one word, «هم‌زمان»', async () => {
     show()
 
     expect(await screen.findByText('دستگاه هم‌زمان')).toBeTruthy()
+  })
+
+  it('show an hourly plan’s term in hours, still waiting for the first connection', async () => {
+    show(subscriptionRow({ duration_hours: 6, starts_at: null, expires_at: null }))
+
+    expect(await screen.findByText('در انتظار اولین اتصال')).toBeTruthy()
+    expect(screen.getByText('۶ ساعت از اولین اتصال')).toBeTruthy()
+    expect(fact('مدت')).toBe('۶ ساعت')
+  })
+
+  it('say the hours left once less than a day is', async () => {
+    show(subscriptionRow({ duration_hours: 6, expires_at: new Date(Date.now() + 3 * 3_600_000).toISOString() }))
+
+    expect(await screen.findByText('۳ ساعت مانده')).toBeTruthy()
   })
 })

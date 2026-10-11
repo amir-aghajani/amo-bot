@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Services;
 
+use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
 use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Exceptions\OrderNotPayableException;
@@ -22,22 +23,13 @@ use App\Modules\Users\Models\User;
 use App\Support\Money;
 
 /**
- * The checkout every door goes through — the bot's (Telegram\Handlers\CheckoutScreen) and the shop's website's (the Store
- * API): something not ordered yet, at its price, and the way to pay it the customer picked. A wallet that cannot cover it
- * says so and nothing is ordered (shortfall()); otherwise the order is made — or the open one of the same thing found
- * (OrderService::open*()) — and paid (PaymentService::createForOrder()): the wallet settles at once, the order as it
- * ended — delivered, or failed and waiting for support's retry —, a card transfer waits for its receipt. A door renders
- * what came of it (CheckoutResult) and nothing more.
+ * The one checkout of the bot (CheckoutScreen) and the website (CustomerCheckout): orders something — or finds the open
+ * order of the same thing — and pays it with the chosen method. A short wallet orders nothing; the wallet settles at
+ * once; a card transfer waits for its receipt; a free order is settled by the wallet row whatever was picked.
  *
- * A request made again with its key (the website's Idempotency-Key, `request_keys`) is answered by the order that key
- * came to — made, or found open and paid —, as it stands: never a second order, never a second charge (replayed()), and
- * never paid another way — the key keeps the way to pay it was first sent with, and another under it is refused; one
- * whose order was cancelled since — by support, or expired unpaid — is said so (cancelled). Two made in the same moment
- * make one order and get one answer: the key's unique row and the order's compare-and-swap decide which pays, and the
- * other describes it.
- *
- * In Payments rather than Orders: it is how an order gets paid — the wallet's shortfall, a gateway's next step — over
- * PaymentService, which already hands paid orders to OrderService; Orders depends on no service of Payments.
+ * A website request made again with its Idempotency-Key is answered by the order the key came to, as it stands — never
+ * a second order or charge, never paid another way. Two such requests at once make one order: the key's unique row and
+ * the order's compare-and-swap decide, and the loser describes the winner's result.
  */
 final class Checkout
 {
@@ -45,15 +37,14 @@ final class Checkout
         private readonly PaymentService $payments,
         private readonly OrderService $orders,
         private readonly GatewayRegistry $gateways,
+        private readonly PaymentMethods $methods,
     ) {}
 
-    /**
-     * What the wallet lacks to pay `$price` — an agent's credit counting —, with its balance; null when it can pay it, and
-     * for any other way to pay (only the wallet is paid out of the customer's own money at once).
-     */
+    /** What the wallet lacks to pay `$price` (an agent's credit counting); null when it can, and for any other method. */
     public function shortfall(User $user, PaymentMethod $method, string $price): ?Shortfall
     {
-        if (!$method->isWallet()) {
+        // Nothing is missing to pay nothing (a free order), whatever the wallet holds.
+        if (!$method->isWallet() || !Money::isPositive($price)) {
             return null;
         }
         $balance = $user->balance();
@@ -66,21 +57,20 @@ final class Checkout
     }
 
     /**
-     * Pay `$price` with `$method` for what `$open` orders — the order made, or the open one of the same thing found; with
-     * `$key`, the order that key came to (OrderService::open*(), the key kept with `$method`):
-     * - made again with its key — and its way to pay —, the order it came to answers as it stands once it may not be paid
-     *   any more (replayed()), and while it may, it is what is paid — at its own amount, the price it was made at;
-     * - the wallet that cannot cover it is short: nothing is ordered;
-     * - `$guard` — the door's own hold, asked once nothing else stands in the way (the bot's: a checkout's wallet pays
-     *   once) — refusing it closes the checkout: nothing ordered, nothing charged;
-     * - an order paid or closed elsewhere in the same moment is closed — nothing charged —, or, made with a key, the
-     *   order that key made as it stands (the same request made twice at once: the other paid it).
+     * Pays `$price` with `$method` for what `$open` orders (OrderService::open*()), in this order:
+     * - with `$key`, a request made again is answered by its order as it stands once it may no longer be paid, and pays
+     *   that order (at its own amount) while it still may;
+     * - a short wallet: nothing is ordered;
+     * - `$guard`, the caller's own hold (the bot: a checkout's wallet pays once), may close the checkout;
+     * - an order paid or closed elsewhere at the same moment is `closed` — or, with a key, the other request's result.
      *
      * @param \Closure(?OrderKey): Order $open
      * @param (\Closure(): bool)|null $guard
      * @throws RequestKeyReusedException 422: the key came to an order of something else, or was first sent with another way to pay
      * @throws TooManyUnpaidOrdersException 422: the website's request would leave its customer too many unpaid orders
      * @throws RenewalUnderWayException a renewal of the service is under way already (none made with this key)
+     * @throws DiscountCodeRefusedException 422: the discount code the price was quoted with had its last use taken
+     *                                      meanwhile — nothing ordered, nothing charged
      */
     public function pay(User $user, PaymentMethod $method, string $price, \Closure $open, ?string $key = null, ?\Closure $guard = null): CheckoutResult
     {
@@ -90,7 +80,12 @@ final class Checkout
             return $this->standing($order, madeAgain: true);
         }
 
-        $shortfall = $this->shortfall($user, $method, $order === null ? $price : $order->amount);
+        $amount = $order === null ? $price : $order->amount;
+        // A free order has nothing to transfer: the wallet row settles it, whichever method was picked.
+        if (!Money::isPositive($amount)) {
+            $method = $this->methods->wallet();
+        }
+        $shortfall = $this->shortfall($user, $method, $amount);
         if ($shortfall !== null) {
             return CheckoutResult::short($shortfall);
         }
@@ -126,11 +121,9 @@ final class Checkout
     }
 
     /**
-     * A request made again with its key — and the way to pay it named, `$key->method` —, when the order that key came to
-     * may not be paid any more — paid, delivered, with support, cancelled —: that order, as it stands. Null when the key
-     * came to none yet, or its order is still to be paid: the request goes on as its first did (pay()). For a door that
-     * judges a new request before paying it — a plan still sold, a service still renewable, a way to pay still offered —,
-     * so a request made again is not refused by what changed since its first.
+     * The answer to a request made again with its key once its order can no longer be paid; null when the key came to no
+     * order yet or it is still payable. The website asks this before judging a request, so a repeat is not refused by
+     * what changed since the first (a plan off sale, a method switched off).
      *
      * @param \Closure(?OrderKey): Order $open
      * @throws RequestKeyReusedException 422: the key came to an order of something else, or was first sent with another way to pay
@@ -143,8 +136,7 @@ final class Checkout
     }
 
     /**
-     * The order the request's key came to — `$open` given the key judges it the same thing asked again, the same way to
-     * pay too (OrderService) —; null while it came to none.
+     * The order the request's key came to (`$open` checks it is the same request, method included); null for none.
      *
      * @param \Closure(?OrderKey): Order $open
      * @throws RequestKeyReusedException
@@ -154,17 +146,15 @@ final class Checkout
         return $this->orders->keyed($user, $key->key) === null ? null : $open($key);
     }
 
-    /** Whether the customer may still pay the order: open, and no receipt of theirs with support (Order::payable()). */
+    /** Whether the customer may still pay the order (Order::payable()). */
     private static function payable(Order $order): bool
     {
         return Order::payable()->whereKey($order->id)->exists();
     }
 
     /**
-     * An order a request made, as it stands now: settled once paid and done with — delivered, failed, refunded —,
-     * processing while its delivery runs, and — open with a receipt of its own with support — the transfer that receipt is
-     * for. Cancelled: closed, a moment ago elsewhere — or, the request `$madeAgain` with its key, cancelled since, by
-     * support or unpaid in its time, maybe days ago.
+     * A request's order as it stands now: settled (delivered, failed or refunded), processing, or still open — then its
+     * card transfer. A cancelled order is `closed` just now elsewhere, or `cancelled` for a request `$madeAgain` later.
      */
     private function standing(Order $order, bool $madeAgain = false): CheckoutResult
     {
@@ -178,7 +168,7 @@ final class Checkout
         };
     }
 
-    /** An open order's card payment — its receipt with support, else still awaited — with the card it is paid to. */
+    /** An open order's card payment (the one with a receipt in review, else a pending one) and its card. */
     private function awaiting(Order $order): CheckoutResult
     {
         $open = $order->payments()->whereIn('status', [PaymentStatus::AwaitingReview->value, PaymentStatus::Pending->value])->get();

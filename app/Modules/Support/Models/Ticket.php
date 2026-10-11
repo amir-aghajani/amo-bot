@@ -16,10 +16,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * A support conversation («تیکت») a customer opened — from the shop's website, or its bot — about anything, or about one
- * of their services: its messages, the customer's and support's (Support\Services\Tickets). Every state it is in is one
- * conditional update away from the next: a customer's message opens it (again), support's answers it, either side
- * closes it, support reopens it; closed, the customer may rate it.
+ * A support conversation («تیکت») a customer opened on the website or in the bot, optionally about one of their services
+ * (Services\Tickets). A customer's message opens it (again), support's answers it, either side closes it, support
+ * reopens it; once closed the customer may rate it.
  *
  * @property int $id
  * @property int $bot_id
@@ -63,8 +62,7 @@ class Ticket extends Model
     ];
 
     /**
-     * The customer's own tickets — in the shop the code works in —, as their website and the bot read them: another's is
-     * not among them, as one that never was.
+     * The customer's own tickets in the current shop, as their website and the bot read them (another's is simply absent).
      *
      * @return Builder<static>
      */

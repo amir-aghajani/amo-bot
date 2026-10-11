@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Database\Drivers;
 
 /**
- * A database that did not answer to a driver's settings, or answered as one the shop cannot run on — said in the
- * admin's words, with the database's own when it gave any. Nothing is written to config.php after one.
+ * A probe that failed: the database did not answer to the settings, or is one the shop cannot run on. The message is
+ * the admin's, with the database's own error when there is one.
  */
 final class ProbeFailedException extends \RuntimeException
 {

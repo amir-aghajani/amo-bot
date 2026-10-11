@@ -24,7 +24,7 @@ then «⏳ در انتظار بررسی؛ …». The group has no buttons for it
 ## The list
 
 The tabs are «همه», «در انتظار بررسی» — counted —, «تاییدشده» and «ردشده»; the newest first. Search by a review's number
-(`#12` is review 12 alone), the name it is signed with, its words, or the customer who wrote it. A row: its number, the
+(`#12` is review 12 alone), the name it is signed with, its text, or the customer who wrote it. A row: its number, the
 name and who wrote it (their customer page, or «مهمان»), the stars, the words whole with where they use the service from,
 its status with who decided and when, and when it was written. Its menu:
 

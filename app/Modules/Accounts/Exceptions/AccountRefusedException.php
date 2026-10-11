@@ -7,12 +7,8 @@ namespace App\Modules\Accounts\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * A change a customer of the shop's website asks of their own account that the shop turns down, in their words (a 422):
- * two-factor sign-in without an email and a password to ask it of, or turned on or off twice; a password without an
- * email; a way in of a kind the account has already — another Telegram or Google account, an email —, one it does not
- * have, or its last one; a merge ticket that no longer holds, or one that would take the customer past the other
- * account's second step by its address alone (MergeOffers); and the merges the rules refuse (AccountMerger): an account with itself, a banned one, two of
- * one kind of way in, two agents.
+ * A change a website customer asks of their own account that the shop refuses (a 422, worded for them): two-factor sign-in
+ * and password rules, ways in added or removed, merge tickets and the merges AccountMerger refuses.
  */
 final class AccountRefusedException extends DomainRuleException
 {

@@ -8,11 +8,7 @@ use App\Core\Scheduling\Task;
 use App\Modules\Updates\Exceptions\UpdateRefusedException;
 use App\Modules\Updates\Releases;
 
-/**
- * Every day: AmoBot's newest release read from GitHub, so the owner's dashboard says when one is out — however seldom
- * the update screen is opened. GitHub out of reach is no failure of the shop's: what stood stands, and tomorrow's run
- * asks again.
- */
+/** Daily: reads the newest release so the dashboard says when one is out; GitHub out of reach is simply tried tomorrow. */
 final class CheckReleasesTask implements Task
 {
     public function __construct(private readonly Releases $releases) {}

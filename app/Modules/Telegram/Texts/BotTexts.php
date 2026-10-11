@@ -11,16 +11,12 @@ use App\Modules\Telegram\Messages;
 use App\Support\Validation;
 
 /**
- * The bot's texts as the admin worded them («متن‌های ربات»): each BotText is the shop's default
- * (TextCatalog) until the admin rewords it, kept in the settings table under `bot.text.<key>` — a wording
- * equal to the default is no wording, so a default improved in a later release still reaches the shop.
- * A text's `%variables%` are filled by the code that sends it, each declared by the catalog; a wording
- * is checked before it is stored (length, variables, Telegram HTML), since a text Telegram refuses would
- * leave the customer with nothing.
+ * The bot's texts as the admin worded them («متن‌های ربات»), kept in the settings under `bot.text.<key>`. A wording
+ * equal to the default is not stored, so an improved default still reaches the shop. A wording is checked before it is
+ * stored (length, variables, Telegram HTML): a text Telegram refuses would leave the customer with nothing.
  *
- * Escaping happens here and nowhere else: a value is plain text — a plan's name, a customer's caption — and goes
- * into a text Telegram reads as HTML escaped, into a popup or a button as it is; a part the admin worded goes into
- * another text as the HTML it is (part() makes it an Html, which render() takes as it is).
+ * Escaping happens here alone: a value is plain text, escaped into an HTML text and left as it is in a popup or a
+ * button; a part (an Html, from part()) goes into another text as it is.
  */
 final class BotTexts
 {
@@ -35,10 +31,7 @@ final class BotTexts
         return $this->compose(self::whole($text), []);
     }
 
-    /**
-     * A text without variables for a message, which Telegram reads as HTML: one it shows as typed
-     * elsewhere — a popup's, sent as a message when there is no button to answer — is escaped on the way.
-     */
+    /** A text without variables, ready for a message: a popup's text, sent as a message instead, is escaped. */
     public function message(BotText $text): string
     {
         $value = $this->get($text);
@@ -47,9 +40,7 @@ final class BotTexts
     }
 
     /**
-     * The text with its variables filled in — every one the catalog declares for it, and no other (a mismatch is the
-     * code's mistake, never the admin's: their wording can only use declared ones). A value is plain text, escaped for
-     * a text Telegram reads as HTML and left as it is for a popup or a button; an Html (a part) goes in as it is.
+     * The text with exactly its declared variables filled in (a mismatch is the code's mistake, a LogicException).
      *
      * @param array<string, scalar|Html> $values
      */
@@ -59,8 +50,8 @@ final class BotTexts
     }
 
     /**
-     * A part (TextKind::Part) — a piece another text takes in as a value (`%note%`, `%status%`), or a hint under a
-     * screen — with its variables filled like render()'s: the HTML it is, an empty one when the admin emptied it.
+     * A part (TextKind::Part) with its variables filled, as Html for another text to take in; empty when the admin
+     * emptied it.
      *
      * @param array<string, scalar|Html> $values
      */
@@ -80,8 +71,8 @@ final class BotTexts
     }
 
     /**
-     * Texts one under another, a blank line between — a part the admin emptied (a hint they do not want) leaves no
-     * gap, and a part's own leading line breaks (how it sits inside another text, as a `%variable%`) give way to it.
+     * Texts one under another with a blank line between; an emptied part leaves no gap, and a part's own leading line
+     * breaks give way to the blank line.
      */
     public static function paragraphs(string|Html ...$texts): string
     {
@@ -90,13 +81,14 @@ final class BotTexts
         return implode("\n\n", array_filter($texts, static fn(string $text): bool => $text !== ''));
     }
 
+    /** Whether the admin reworded the text (a wording other than the default is stored). */
     public function isCustomized(BotText $text): bool
     {
         return is_string($this->settings->get(self::key($text)));
     }
 
     /**
-     * The admin's wording, checked and stored (the default's own wording clears it).
+     * Check and store the admin's wording (the default's own wording clears it).
      *
      * @throws ValidationException on `value`
      */
@@ -129,15 +121,14 @@ final class BotTexts
         $this->settings->forget(self::key($text));
     }
 
-    /** What is wrong with a wording, in the admin's words, or null. */
+    /** What is wrong with a wording, worded for the admin, or null. */
     public static function problem(TextSpec $spec, string $value): ?string
     {
         $kind = $spec->kind;
         if ($value === '' && $kind !== TextKind::Part) {
             return 'متن نمی‌تواند خالی باشد.';
         }
-        // What the customer sees is what Telegram counts — in UTF-16 units, an emoji two —: a tag's markup (a premium
-        // emoji's is long) costs nothing.
+        // Counted as Telegram counts what the customer sees: UTF-16 units, tags free.
         if (($kind->html() ? TelegramHtml::visibleLength($value) : Limits::length($value)) > $kind->limit()) {
             return Validation::tooLong('متن', $kind->limit());
         }
@@ -227,7 +218,7 @@ final class BotTexts
     }
 
     /**
-     * The wording in use with its variables filled, as render() describes — what get(), render() and part() share.
+     * The wording in use with its variables filled and escaped by the text's kind (get(), render() and part()).
      *
      * @param array<string, scalar|Html> $values
      */

@@ -2,10 +2,10 @@
 
 # config.php reference
 
-Every setting `config.php` may hold, section by section in the order the file lists them: what the shop runs with
-while the file does not set it, and what it is for — the words the file itself says above each setting. A setting
-that names a driver (`DB_CONNECTION`, `MAIL_TRANSPORT`) is followed by each driver's own settings, as the panel
-shows them. [Configuration](Configuration.md) says how the file is made, edited and kept safe.
+Every setting `config.php` can hold, by section, in the order the file lists them: its default (used while the file
+does not set it) and what it is for (the same text the file shows above the setting). After a setting that picks a
+driver (`DB_CONNECTION`, `MAIL_TRANSPORT`) come each driver's own settings, as the panel shows them.
+[Configuration](Configuration.md) explains how the file is created, edited and protected.
 
 ## The shop
 
@@ -32,7 +32,7 @@ shows them. [Configuration](Configuration.md) says how the file is made, edited 
 | `DB_PORT` | `3306` | «پورت»; from 1 to 65535; required. |
 | `DB_DATABASE` | `'amobot'` | «نام دیتابیس»; required. |
 | `DB_USERNAME` | `'root'` | «نام کاربری»; required. |
-| `DB_PASSWORD` | `''` | «رمز عبور»; a secret: the panel never shows it, and a blank one keeps the one kept. |
+| `DB_PASSWORD` | `''` | «رمز عبور»; a secret: the panel never shows it, and leaving it blank keeps the stored value. |
 | `DB_SOCKET` | `''` | «سوکت» — «به جای هاست و پورت از راه این فایل وصل می‌شود؛ روی هاست اشتراکی خالی بماند.»; under «تنظیمات پیشرفته». |
 | `DB_PREFIX` | `''` | «پیشوند جدول‌ها» — «فقط اگر دیتابیس با برنامه‌های دیگر مشترک است؛ بعد از نصب تغییر ندهید.»; under «تنظیمات پیشرفته». |
 
@@ -79,7 +79,7 @@ shows them. [Configuration](Configuration.md) says how the file is made, edited 
 | `MAIL_PORT` | `587` | «پورت» — «587 با STARTTLS، 465 با SSL، 25 بدون رمزنگاری.»; from 1 to 65535; required. |
 | `MAIL_ENCRYPTION` | `'tls'` | «رمزنگاری اتصال»; one of `tls` («STARTTLS (پیشنهادی)»), `ssl` («SSL»), `none` («بدون رمزنگاری»); required. |
 | `MAIL_USERNAME` | `''` | «نام کاربری» — «معمولا همان آدرس کامل حساب ایمیل.». |
-| `MAIL_PASSWORD` | `''` | «رمز عبور» — «رمز همان حساب ایمیل.»; a secret: the panel never shows it, and a blank one keeps the one kept. |
+| `MAIL_PASSWORD` | `''` | «رمز عبور» — «رمز همان حساب ایمیل.»; a secret: the panel never shows it, and leaving it blank keeps the stored value. |
 
 ### The native driver
 
@@ -93,7 +93,7 @@ It has no settings of its own.
 
 | Setting | Default | In the panel |
 |---|---|---|
-| `MAIL_RESEND_API_KEY` | `''` | «کلید API» — «در resend.com › API Keys بسازید؛ با re_ شروع می‌شود.»; required; a secret: the panel never shows it, and a blank one keeps the one kept. |
+| `MAIL_RESEND_API_KEY` | `''` | «کلید API» — «در resend.com › API Keys بسازید؛ با re_ شروع می‌شود.»; required; a secret: the panel never shows it, and leaving it blank keeps the stored value. |
 
 ## Keys and secrets
 

@@ -12,10 +12,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * A grant's part on one server: the services there it reaches, worked through by Services\Grants one at a time past the
- * `last_subscription_id` cursor, by whoever holds its lease (`lease_token`, until `leased_until` — Core\Database\Lease).
- * A panel out of reach holds it at the service it was on (`waiting_reason`) — the grant's other servers go on. One part
- * runs on a server at a time: the database refuses a second (`running_server_id`, the server while the part runs).
+ * A grant's part on one server, worked through by Services\Grants one service at a time past the `last_subscription_id`
+ * cursor, by whoever holds its lease (Core\Database\Lease). An unreachable panel holds it at the service it was on
+ * (`waiting_reason`); the grant's other servers go on. The database allows one running part per server
+ * (`running_server_id`, a generated unique column set while the part runs).
  *
  * @property int $id
  * @property int $grant_id
@@ -26,7 +26,7 @@ use Illuminate\Support\Carbon;
  * @property int $granted
  * @property int $skipped services the grant was not for when their turn came (gone, switched off, ended, given nothing)
  * @property int $failed
- * @property string|null $waiting_reason why it waits at the service it was on — its panel out of reach —, in the admin's words
+ * @property string|null $waiting_reason why it waits at the service it was on (its panel out of reach), for the owner
  * @property string|null $last_failure the latest service the panel refused, and why
  * @property string|null $lease_token
  * @property Carbon|null $leased_until

@@ -7,14 +7,10 @@ namespace App\Modules\Telegram\Texts;
 use App\Modules\Telegram\Api\Limits;
 
 /**
- * Whether Telegram will take a text in HTML parse mode — an admin's wording is checked here before it is
- * stored, so a customer never gets "can't parse entities" instead of their service. It reads the text the
- * way Telegram's parser does: only the tags the Bot API knows, attributes as `name="value"` (a bare token
- * may hold only letters, digits, «.» and «-»), every tag closed in order, a «<» that opens no tag refused;
- * a stray «>» or «&» is text. It also refuses what Telegram would drop without a word — formatting inside
- * <code>/<pre>, a link inside a link, a quote inside a quote — so the customer sees what the admin wrote. A
- * premium emoji is `<tg-emoji emoji-id="…">😀</tg-emoji>`: its numeric id, and the plain emoji it stands for —
- * nothing else — inside (what is shown where the premium one cannot be).
+ * Checks a wording the way Telegram's HTML parser reads it, before it is stored, so a customer never gets "can't parse
+ * entities" instead of their service: only the Bot API's tags, quoted attributes, tags closed in order, no stray «<».
+ * It also refuses what Telegram silently drops (formatting inside <code>/<pre>, a link in a link). A premium emoji is
+ * `<tg-emoji emoji-id="…">😀</tg-emoji>`: a numeric id and the plain emoji it stands for.
  */
 final class TelegramHtml
 {
@@ -26,17 +22,13 @@ final class TelegramHtml
     private const EMOJI_ID = 'تگ <tg-emoji> باید شناسه عددی ایموجی پرمیوم را داشته باشد؛ مثلا <tg-emoji emoji-id="5368324170671202286">👍</tg-emoji>.';
     private const EMOJI_CONTENT = 'داخل <tg-emoji> فقط یک ایموجی معمولی می‌آید — همانی که جاهایی که ایموجی پرمیوم نشان داده نمی‌شود دیده می‌شود.';
 
-    /**
-     * How long what the customer sees is: the text without its tags, entities read, counted as Telegram counts it against
-     * its limits — in UTF-16 code units, an emoji beyond the basic plane two (Api\Limits::length()) —, so markup (a
-     * premium emoji's tag is long) costs nothing.
-     */
+    /** The length of what the customer sees — tags dropped, entities read — as Telegram counts it (Limits::length()). */
     public static function visibleLength(string $text): int
     {
         return Limits::length(html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5));
     }
 
-    /** The first thing Telegram would not take, in the admin's words, or null when it is fine. */
+    /** The first thing Telegram would not take, worded for the admin, or null when it is fine. */
     public static function problem(string $text): ?string
     {
         /** @var list<string> $open the open tags, innermost last */
@@ -216,7 +208,7 @@ final class TelegramHtml
         if (preg_match('/^\d{1,20}$/', $attributes['emoji-id'] ?? '') !== 1) {
             return self::EMOJI_ID;
         }
-        // No end tag: told at the end, like any tag left open.
+        // No end tag: reported at the end, like any tag left open.
         if (preg_match('/<\/tg-emoji\s*>/i', $text, $close, PREG_OFFSET_CAPTURE, $end + 1) !== 1) {
             return null;
         }

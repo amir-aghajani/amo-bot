@@ -9,10 +9,7 @@ use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Texts\BotTexts;
 
-/**
- * /start and /menu — and a contact card the gates let through — greet the customer and show the main menu as the
- * admin laid it out (MainMenu::show()).
- */
+/** /start, /menu and a contact card the gates let through: the greeting and the main menu (MainMenu::show()). */
 final class StartHandler implements Handler
 {
     public function __construct(

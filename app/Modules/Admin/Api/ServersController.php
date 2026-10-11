@@ -12,8 +12,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * Servers = panel connections, the owner's. A server is added and changed by its connector's form (ServerService);
- * credentials are stored encrypted and never leave the API again — a server's form answers whether one is kept.
+ * The servers (panel connections, the owner's): added and changed by their connector's form (ServerService). Credentials
+ * are stored encrypted and never sent back — a server's form says only whether one is kept.
  */
 final class ServersController extends ApiController
 {
@@ -114,7 +114,7 @@ final class ServersController extends ApiController
     public function updateInbound(Request $request, Response $response, array $args): Response
     {
         $server = $this->load(Server::class, $args);
-        $inbound = $server->inbounds()->findOrFail((int) $args['inbound']);
+        $inbound = $server->inbounds()->findOrFail($this->routeId($args, 'inbound'));
         \assert($inbound instanceof ServerInbound);
         $this->servers->setSelectable($inbound, $this->switch($request, 'is_selectable'));
 

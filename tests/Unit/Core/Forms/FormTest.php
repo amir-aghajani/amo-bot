@@ -54,6 +54,17 @@ final class FormTest extends TestCase
         self::assertSame([12, 3, 3], [$days->cast('12'), $days->cast(45), $days->cast(null)], 'kept out of bounds reads as the default');
     }
 
+    public function testANumberMayBeHeldToAnotherAsItsFloor(): void
+    {
+        $least = new Number('least', 'extras.min', default: 1, label: 'کمترین حجم', min: 1, max: 100);
+        $most = new Number('most', 'extras.max', default: 100, label: 'بیشترین حجم', min: 1, max: 100, atLeast: $least);
+
+        self::assertSame('بیشترین حجم نمی‌تواند از کمترین حجم کمتر باشد.', $most->conflict(['least' => 20, 'most' => 10]));
+        self::assertNull($most->conflict(['least' => 20, 'most' => 20]), 'as much as it is');
+        self::assertNull($most->conflict(['most' => 10]), 'nothing to compare with a floor that was refused');
+        self::assertNull($least->conflict(['least' => 20, 'most' => 10]), 'the floor says nothing itself: the refusal is one, under the field held to it');
+    }
+
     public function testAnAmountIsMoneyBetweenItsBounds(): void
     {
         $credit = new Amount('credit', 'agency.default_credit', default: '0', label: 'اعتبار اولیه', min: '0', max: '1000000');

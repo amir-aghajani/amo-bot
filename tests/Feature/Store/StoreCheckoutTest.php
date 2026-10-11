@@ -28,12 +28,8 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * The checkout on the shop's website — the one the bot's purchases go through (Payments\Services\Checkout), under the
- * bot's rules: the ways to pay a kind of order, a plan as the bot sells it on one of its servers, a top-up within the
- * bot's bounds; nothing ordered until a way to pay is picked, the wallet paying at once (the service in the answer), a
- * card answering where to transfer; a wallet short of the price ordering nothing. A customer is left five unpaid orders
- * at most and sends thirty ordering requests in ten minutes at most. While the bot is switched off, nothing is ordered
- * and no receipt taken.
+ * The website's checkout: ways to pay, a purchase on a server that sells it, a top-up within bounds, wallet and card
+ * outcomes, a short wallet ordering nothing, the unpaid-order and request limits, and no orders while the bot is off.
  */
 final class StoreCheckoutTest extends HttpTestCase
 {
@@ -276,6 +272,8 @@ final class StoreCheckoutTest extends HttpTestCase
         foreach ([
             'a purchase' => $this->purchase($this->walletMethod(), 'key-2'),
             'a renewal' => $this->send('POST', $this->storeApi($this->website, "/subscriptions/{$service->id}/renewal"), ['method_id' => $this->card->id], ['Idempotency-Key' => 'renew-1']),
+            'extra traffic' => $this->send('POST', $this->storeApi($this->website, "/subscriptions/{$service->id}/extra-traffic"), ['gb' => 10, 'method_id' => $this->card->id], ['Idempotency-Key' => 'extra-1']),
+            'extra time' => $this->send('POST', $this->storeApi($this->website, "/subscriptions/{$service->id}/extra-time"), ['days' => 7, 'method_id' => $this->card->id], ['Idempotency-Key' => 'extra-2']),
             'a top-up' => $this->topUp(50000, $this->card),
             'a receipt' => $this->upload($this->storeApi($this->website, "/payments/{$transfer['payment_id']}/receipt"), 'file', 'receipt.png', (string) base64_decode(self::PNG)),
         ] as $what => $response) {
@@ -285,6 +283,7 @@ final class StoreCheckoutTest extends HttpTestCase
         self::assertNull(Payment::query()->sole()->receipt_at, 'no receipt taken');
         self::assertSame(200, $this->get($this->storeApi($this->website, '/plans'))->getStatusCode(), 'what it sells is still read');
         self::assertSame(200, $this->get($this->storeApi($this->website, "/subscriptions/{$service->id}/renewal"))->getStatusCode(), 'and what a renewal would be');
+        self::assertSame(200, $this->get($this->storeApi($this->website, "/subscriptions/{$service->id}/extras"))->getStatusCode(), 'and what may be bought for a service');
 
         $this->botSettings('general', ['enabled' => true, 'phone_required' => false, 'support_contact' => '']);
         self::assertSame(200, $this->purchase($this->walletMethod(), 'key-2')->getStatusCode(), 'switched on again');

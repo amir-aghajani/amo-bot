@@ -16,7 +16,7 @@ use Tests\Support\FakeTelegram;
 /**
  * The owner puts every bot the shop runs on webhooks, or takes them off — from the panel, since a shared host has no
  * shell for bot:webhook:set: the work of the commands, at APP_URL, which Telegram calls only over HTTPS. One bot
- * Telegram refuses keeps it from none of the others, and the answer says what happened to each in the owner's words —
+ * Telegram refuses keeps it from none of the others, and the answer says what happened to each worded for the owner —
  * never a token, nor the secret a webhook's address ends with.
  */
 final class AdminWebhooksApiTest extends HttpTestCase

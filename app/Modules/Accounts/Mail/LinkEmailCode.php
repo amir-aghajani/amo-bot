@@ -9,7 +9,7 @@ use App\Core\Mail\MailMessage;
 use App\Modules\Accounts\Services\AuthChallenges;
 use App\Support\Persian;
 
-/** The code a customer adds this address to their account with — from the website, signed in — emailed to the address it proves. */
+/** The code that proves an address a signed-in customer adds to their account, emailed to that address. */
 final class LinkEmailCode
 {
     public static function message(string $to, string $shop, string $code): MailMessage

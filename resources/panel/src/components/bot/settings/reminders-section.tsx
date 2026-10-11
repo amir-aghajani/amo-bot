@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotRemindersSettingsRequest, BotSettingsData } from '@/lib/api-types'
 
-/** «یادآوری»: a service ending soon, its traffic running low — each told once while it stays so, again after a renewal or more traffic. */
+/** «یادآوری»: a service ending soon, its traffic running low — each sent once while it stays so, again after a renewal or more traffic. */
 export function RemindersSection({ settings }: { settings: BotSettingsData }) {
   const group = useBotSettingsGroup(
     {

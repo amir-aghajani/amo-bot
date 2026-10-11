@@ -12,9 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * A customer's review of the shop, written on its website — by a guest, or by a customer signed in there — and shown
- * there once support approved it (Reviews\Services\Reviews). Every change of where it stands is one conditional update
- * away from the next.
+ * A customer's review of the shop, written on its website by a guest or a signed-in customer, and shown there once
+ * support approved it (Services\Reviews).
  *
  * @property int $id
  * @property int $bot_id

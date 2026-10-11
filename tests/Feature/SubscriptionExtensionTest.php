@@ -33,12 +33,10 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * «افزایش زمان و حجم» on the subscriptions screen: support gives one service days and traffic on top of what it has —
- * exactly what a grant gives it, from what its panel says right now —, with a note the customer reads unless the admin
- * keeps it quiet. Only an active service that can take them gets them; another change holding the service is a 409, a
- * panel that fails a 502. In an agent's shop the traffic comes out of the agent's bot's — a ledger line of its own,
- * refused before any panel is asked when it is short, given back when the extension does not go through —, the days
- * cost nothing.
+ * «افزایش زمان و حجم» on the subscriptions screen: one service gets days and traffic exactly as a grant gives them, from what
+ * its panel says now, with a note the customer reads unless kept quiet. Only an active service that can take them; a
+ * service another change holds is a 409, a panel failure a 502. In an agent's shop the traffic comes out of the agent's
+ * pool (refused before any panel call when short, given back when the extension fails); days cost nothing.
  */
 final class SubscriptionExtensionTest extends HttpTestCase
 {
@@ -80,7 +78,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
             'gift' => Messages::gift(3, 10 * Traffic::GIGABYTE),
             'client' => 'ali_1',
             'note' => self::text(BotText::AdminNote, ['comment' => 'جبران قطعی دیروز']),
-            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-03 12:00:00'), 33),
+            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-03 12:00:00'), 33 * 24),
             'remaining' => Messages::bytes(20 * Traffic::GIGABYTE),
         ])], $this->telegram()->sentTo(1001), 'what it got, why, and where it stands now: the message a grant sends');
         self::assertTrue($logs->hasInfoThatContains('extended by ' . self::ADMIN_USERNAME), 'the log says who gave it');
@@ -101,7 +99,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
             'gift' => Messages::gift(5, 0),
             'client' => 'ali_1',
             'note' => '',
-            'expires' => Messages::expiry(null, 35),
+            'expires' => Messages::expiry(null, 35 * 24),
             'remaining' => Messages::bytes(30 * Traffic::GIGABYTE),
         ])], $this->telegram()->sentTo(1001));
     }
@@ -125,9 +123,9 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testWhatTheServiceCannotTakeIsRefusedUnderItsField(): void
     {
-        $endless = $this->mirrored('ali_1', ['duration_days' => 0, 'expires_at' => null]);
+        $endless = $this->mirrored('ali_1', ['duration_hours' => 0, 'expires_at' => null]);
         $unlimited = $this->mirrored('ali_2', ['traffic_limit_bytes' => 0]);
-        $neither = $this->mirrored('ali_3', ['duration_days' => 0, 'expires_at' => null, 'traffic_limit_bytes' => 0]);
+        $neither = $this->mirrored('ali_3', ['duration_hours' => 0, 'expires_at' => null, 'traffic_limit_bytes' => 0]);
 
         self::assertSame(['days' => ['این سرویس تاریخ پایان ندارد؛ روزی به آن اضافه نمی‌شود.']], $this->errors($endless, ['days' => 3, 'traffic_gb' => 5]));
         self::assertSame(['traffic_gb' => ['حجم این سرویس نامحدود است؛ حجمی به آن اضافه نمی‌شود.']], $this->errors($unlimited, ['days' => 3, 'traffic_gb' => 5]));
@@ -204,7 +202,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
         self::assertSame(409, $response->getStatusCode());
         self::assertSame((new ServiceBusyException())->getMessage(), $this->decode($response)['message']);
         self::assertSame([], FakeProvider::$updated);
-        self::assertSame(30, $subscription->refresh()->duration_days);
+        self::assertSame(30 * 24, $subscription->refresh()->duration_hours);
         self::assertSame([], $this->telegram()->calls());
     }
 
@@ -220,7 +218,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
         self::assertStringStartsWith('پنل «آلمان»: ', $body['message']);
         self::assertSame([$body['message']], $body['errors']['panel']);
         $subscription->refresh();
-        self::assertSame([30, 30 * Traffic::GIGABYTE], [$subscription->duration_days, $subscription->traffic_limit_bytes]);
+        self::assertSame([30 * 24, 30 * Traffic::GIGABYTE], [$subscription->duration_hours, $subscription->traffic_limit_bytes]);
         self::assertSame([], $this->telegram()->calls());
 
         FakeProvider::$refusing = [];
@@ -234,7 +232,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
         self::assertSame(200, $this->extend($subscription, ['days' => 3, 'note' => 'برای تست', 'notify' => false])->getStatusCode());
 
-        self::assertSame(33, $subscription->refresh()->duration_days);
+        self::assertSame(33 * 24, $subscription->refresh()->duration_hours);
         self::assertSame([], $this->telegram()->calls());
     }
 
@@ -261,14 +259,14 @@ final class SubscriptionExtensionTest extends HttpTestCase
             'gift' => Messages::gift(3, 5 * Traffic::GIGABYTE),
             'client' => 'reza_1',
             'note' => '',
-            'expires' => Messages::expiry(now()->addDays(33), 33),
+            'expires' => Messages::expiry(now()->addDays(33), 33 * 24),
             'remaining' => Messages::bytes(35 * Traffic::GIGABYTE),
         ])], $this->telegram()->sentTo(2001));
         self::assertSame(FakeTelegram::AGENT_TOKEN, $this->telegram()->tokenOf(0), "the customer hears it from the agent's bot");
 
         $this->postJson("/api/agent/subscriptions/{$subscription->id}/extend", ['days' => 7]);
 
-        self::assertSame(40, $subscription->refresh()->duration_days);
+        self::assertSame(40 * 24, $subscription->refresh()->duration_hours);
         self::assertSame(Traffic::bytesOfGb(15), $bot->trafficBalance(), 'days cost the agent nothing');
         self::assertCount(2, $this->lines($bot), 'and write no line');
     }
@@ -300,7 +298,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
         self::assertSame([], $calls->getArrayCopy(), 'no panel was asked');
         self::assertSame(Traffic::bytesOfGb(4), $bot->trafficBalance());
         self::assertCount(1, $this->lines($bot), 'nothing drawn');
-        self::assertSame([30, 30 * Traffic::GIGABYTE], [$subscription->refresh()->duration_days, $subscription->traffic_limit_bytes]);
+        self::assertSame([30 * 24, 30 * Traffic::GIGABYTE], [$subscription->refresh()->duration_hours, $subscription->traffic_limit_bytes]);
         self::assertSame([], $this->telegram()->calls());
     }
 

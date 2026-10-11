@@ -24,10 +24,7 @@ import { paymentDriversQuery, paymentMethodsQuery } from '@/lib/queries'
 import { useRows } from '@/lib/use-rows'
 import { cn } from '@/lib/utils'
 
-/**
- * The ways customers can pay, in checkout order: the wallet the shop starts with plus whatever the
- * admin adds from the driver picker — one row per card, later one per online-gateway account.
- */
+/** «روش‌های پرداخت»: the ways to pay in checkout order — the built-in wallet plus the methods the admin adds. */
 export function PaymentMethodsPage() {
   const [adding, setAdding] = useState(false)
   // A method is added through the driver picker; the editor only ever opens on one that exists.
@@ -74,8 +71,8 @@ export function PaymentMethodsPage() {
           <TableBody>
             {methods.map((method, index) => {
               const Icon = gatewayIcon(method.driver)
-              // Two short lines rather than one long one, so the table never has to scroll sideways for a note. A method
-              // whose driver is gone has nothing to pay with: no checkout offers it, switched on or not — said in its place.
+              // Two short lines rather than one long one, so the table never scrolls sideways. A method whose driver is no
+              // longer installed cannot take payments, switched on or not, and says so here.
               const summary =
                 method.kind === null ? (
                   <span className="text-warning">به مشتری پیشنهاد نمی‌شود؛ درایورش نصب نیست.</span>
@@ -114,7 +111,7 @@ export function PaymentMethodsPage() {
                     <Switch checked={method.enabled} onCheckedChange={(enabled) => list.patch.mutate({ row: method, changes: { enabled } })} aria-label={`فعال بودن ${method.label}`} />
                   </TableCell>
                   <TableCell>
-                    {/* The wallet is the shop's own: never edited, never deleted. A row whose driver is gone can still go. */}
+                    {/* The wallet is built in: never edited, never deleted. A row whose driver is gone can still go. */}
                     {!method.builtin && <EditMenu label={method.label} onEdit={editable ? () => editor.edit(method) : undefined} onRemove={() => setRemoving(method)} />}
                   </TableCell>
                 </TableRow>

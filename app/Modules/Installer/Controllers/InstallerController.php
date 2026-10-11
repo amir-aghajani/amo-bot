@@ -10,9 +10,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * /api/install — the web installer's steps, for the owner's installer page. Its route group is open only until the shop
- * is installed (`installer.open`) and only with the install key (InstallKeyMiddleware). Every step answers with where
- * the installation stands now, or a 422 with what to fix.
+ * /api/install: the web installer's steps. Open only until the shop is installed and only with the install key; each
+ * step answers with the installation's status, or a 422 saying what to fix.
  */
 final class InstallerController extends ApiController
 {

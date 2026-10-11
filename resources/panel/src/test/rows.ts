@@ -2,15 +2,20 @@ import type {
   AgencyLevelRow,
   BotSettingsData,
   CustomerAccount,
+  CustomerGroupRow,
+  DiscountCodeRow,
   DriverDescription,
   DriverValues,
   FieldDescription,
+  GiftCodeRow,
+  LoyaltyStanding,
   ManualMethodRow,
   OrderRow,
   PaymentRow,
   PlanCategoryRow,
   PlanRow,
   ReviewRow,
+  SaleRow,
   ServerRow,
   SubscriptionRow,
   TicketDetail,
@@ -18,13 +23,18 @@ import type {
   TicketRow,
   UserRow,
   Website,
+  WheelPrizeRow,
+  WheelSpinRow,
 } from '@/lib/api-types'
 
 /*
  * Rows as the API hands them to the screens, for the tests that need a whole one — each with `overrides` merged last.
  */
 
-/** A bot's settings as its page reads them: the bot on, top-ups from 10٬000 Toman offered at 50٬000 and 100٬000, every report topic on. */
+/**
+ * A bot's settings as its page reads them: the bot on, top-ups from 10٬000 Toman offered at 50٬000 and 100٬000, no extra
+ * traffic or time sold (nothing priced, what may be typed at the server's bounds), every report topic on.
+ */
 export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSettingsData {
   return {
     enabled: true,
@@ -37,13 +47,31 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     carry_traffic: false,
     auto_renew_days: 2,
     auto_renew_default: false,
+    extras_enabled: false,
+    extra_traffic_price: null,
+    extra_traffic_options: [],
+    extra_traffic_min: 1,
+    extra_traffic_max: 100,
+    extra_time_price: null,
+    extra_time_options: [],
+    extra_time_min: 1,
+    extra_time_max: 30,
     expiry_reminder: false,
     expiry_reminder_days: 3,
     traffic_reminder: false,
     traffic_reminder_percent: 80,
     referral_enabled: false,
     referral_rate: 10,
+    referral_renewal_rate: 10,
     referral_first_only: false,
+    referral_start_referrer: '0.00',
+    referral_start_invitee: '0.00',
+    referral_start_when: 'purchase',
+    referral_reward_every: 0,
+    referral_reward_plan_id: null,
+    referral_alert_burst: 10,
+    referral_alert_minutes: 60,
+    referral_alert_idle: 20,
     report_purchases: true,
     report_renewals: true,
     report_wallet: true,
@@ -52,12 +80,36 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     report_errors: true,
     report_tickets: true,
     report_reviews: true,
+    gift_codes_enabled: false,
+    wheel_enabled: false,
+    wheel_cooldown_hours: 24,
+    wheel_buyers_only: false,
+    wheel_cost: 0,
+    cashback_enabled: false,
+    lottery_enabled: false,
+    lottery_hour: 22,
+    lottery_winners: 1,
+    lottery_prize: 'wallet',
+    lottery_wallet: '50000.00',
+    lottery_traffic_gb: 10,
+    lottery_days: 7,
+    lottery_plan_id: null,
+    lottery_entries: 'order',
+    lottery_exclude_agents: true,
+    hold_minutes: 60,
     ...overrides,
   }
 }
 
-/** A service as the subscriptions screen lists it: active on server 1 «آلمان», what an active one may do allowed. */
+/** A term's whole days as the API says them beside its hours: rounded up — 0 only for none. */
+const daysOf = (hours: number): number => Math.ceil(hours / 24)
+
+/**
+ * A service as the subscriptions screen lists it: active on server 1 «آلمان», its 30-day term running (`duration_hours`,
+ * its days beside them as the API says them), what an active one may do allowed.
+ */
 export function subscriptionRow(overrides: Partial<SubscriptionRow> = {}): SubscriptionRow {
+  const hours = overrides.duration_hours ?? 30 * 24
   return {
     id: 1,
     status: 'active',
@@ -68,7 +120,8 @@ export function subscriptionRow(overrides: Partial<SubscriptionRow> = {}): Subsc
     server: { id: 1, name: 'آلمان' },
     traffic: { limit: 30 * 1024 ** 3, used: 5 * 1024 ** 3 },
     ip_limit: 2,
-    duration_days: 30,
+    duration_days: daysOf(hours),
+    duration_hours: hours,
     auto_renew: false,
     next_period: null,
     starts_at: '2026-09-20T10:00:00Z',
@@ -95,7 +148,20 @@ export function paymentRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
     reference: null,
     description: null,
     user: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null },
-    order: { id: 12, type: 'wallet_topup', status: 'pending', plan: null, server: null, subscription_id: null, notes: null },
+    order: {
+      id: 12,
+      type: 'wallet_topup',
+      status: 'pending',
+      plan: null,
+      server: null,
+      subscription_id: null,
+      traffic_bytes: null,
+      days: null,
+      notes: null,
+      discount_amount: '0.00',
+      discounts: [],
+      discount_code: null,
+    },
     receipt: { name: null, note: null, sent_at: '2026-10-06T09:00:00Z' },
     auto_approved: false,
     reviewer: null,
@@ -114,10 +180,16 @@ export function orderRow(overrides: Partial<OrderRow> = {}): OrderRow {
     type: 'wallet_topup',
     status: 'pending',
     amount: '50000.00',
+    pricing: 'regular',
+    discount_amount: '0.00',
+    discounts: [],
+    discount_code: null,
     user: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null },
     plan: null,
     server: null,
     subscription: null,
+    traffic_bytes: null,
+    days: null,
     notes: null,
     payments: [{ id: 7, status: 'awaiting_review', amount: '50000.00', gateway: 'manual', method: 'کارت به کارت (ملت)', paid_at: null, created_at: '2026-10-06T08:55:00Z' }],
     paid_at: null,
@@ -140,6 +212,7 @@ export function userRow(overrides: Partial<UserRow> = {}): UserRow {
     status: 'active',
     role: 'customer',
     balance: '25000.00',
+    discount_percent: 0,
     counts: { orders: 1, subscriptions: 1, active_subscriptions: 1 },
     groups: [{ id: 3, name: 'VIP' }],
     created_at: '2026-09-01T10:00:00Z',
@@ -159,6 +232,11 @@ export function customerAccount(overrides: Partial<CustomerAccount> = {}): Custo
     merges: [],
     ...overrides,
   }
+}
+
+/** Where a customer stands among the shop's loyalty tiers as their page reads it: a shop with no tier, nothing spent. */
+export function loyaltyStanding(overrides: Partial<LoyaltyStanding> = {}): LoyaltyStanding {
+  return { tier: null, spent: '0.00', next: null, ...overrides }
 }
 
 /** Server 1 «آلمان», a 3x-ui panel signed into with a token, checked and selling. */
@@ -267,17 +345,30 @@ function serverField(name: string, overrides: Partial<FieldDescription>): FieldD
   }
 }
 
-/** Plan 3 «طلایی», sold whole on server 1 and shown in the bot — with history, so it is not deleted. */
+/**
+ * Plan 3 «طلایی», 120٬000 Toman for everyone — no first-purchase price, no agent price —, 30 days (`duration_hours`, its
+ * days beside them as the API says them), sold whole on server 1 and shown in the bot — with history, so it is not
+ * deleted —, its extras at the shop's prices; no checkout note, its button in the bot the client's own look, a row of
+ * its own.
+ */
 export function planRow(overrides: Partial<PlanRow> = {}): PlanRow {
+  const hours = overrides.duration_hours ?? 30 * 24
   return {
     id: 3,
     category: null,
     name: 'طلایی',
     description: null,
     price: '120000.00',
-    duration_days: 30,
+    first_purchase_price: null,
+    agent_price: null,
+    checkout_note: null,
+    button_style: null,
+    button_row: 1,
+    duration_days: daysOf(hours),
+    duration_hours: hours,
     traffic_gb: 30,
     ip_limit: 1,
+    extras: null,
     servers: [{ server: { id: 1, name: 'آلمان', is_active: true, serves_subscriptions: true }, all_inbounds: true, inbounds: [], unsellable_reason: null }],
     unsellable_reason: null,
     is_active: true,
@@ -287,6 +378,11 @@ export function planRow(overrides: Partial<PlanRow> = {}): PlanRow {
     updated_at: '2026-10-06T09:00:00Z',
     ...overrides,
   }
+}
+
+/** One of the admin's groups of customers: group 1 «VIP», its customers paying plans' own prices, three of them in it. */
+export function groupRow(overrides: Partial<CustomerGroupRow> = {}): CustomerGroupRow {
+  return { id: 1, name: 'VIP', agent_pricing: false, sort: 1, counts: { users: 3 }, created_at: '2026-10-01T10:00:00Z', ...overrides }
 }
 
 /** Category 1 «ماهانه», on, two plans under it. */
@@ -436,6 +532,90 @@ export function reviewRow(overrides: Partial<ReviewRow> = {}): ReviewRow {
     decided_at: null,
     created_at: '2026-10-06T09:00:00Z',
     actions: { approve: true, reject: true },
+    ...overrides,
+  }
+}
+
+/** Gift code 31 as its screen lists it: «NOWRUZ7K3M9QXAPT» of the batch «نوروز», 50٬000 Toman for the wallet, nobody's yet, for ever. */
+export function giftCodeRow(overrides: Partial<GiftCodeRow> = {}): GiftCodeRow {
+  return {
+    id: 31,
+    code: 'NOWRUZ7K3M9QXAPT',
+    batch: 'نوروز',
+    kind: 'wallet',
+    amount: '50000.00',
+    plan: null,
+    expires_at: null,
+    status: 'unused',
+    redeemed_by: null,
+    redeemed_at: null,
+    order: null,
+    created_at: '2026-10-06T09:00:00Z',
+    ...overrides,
+  }
+}
+
+/** Slice 5 of the lucky wheel: «۱۰ هزار تومان», 10٬000 Toman for the wallet, weight 1, on. */
+export function wheelPrizeRow(overrides: Partial<WheelPrizeRow> = {}): WheelPrizeRow {
+  return { id: 5, label: '۱۰ هزار تومان', kind: 'wallet', amount: '10000.00', plan: null, weight: 1, enabled: true, sort: 1, ...overrides }
+}
+
+/** Spin 41 of customer 10's, landed on «۱۰ هزار تومان» and given. */
+export function wheelSpinRow(overrides: Partial<WheelSpinRow> = {}): WheelSpinRow {
+  return {
+    id: 41,
+    customer: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null },
+    label: '۱۰ هزار تومان',
+    kind: 'wallet',
+    amount: '10000.00',
+    given: true,
+    outcome: null,
+    order: null,
+    subscription: null,
+    created_at: '2026-10-06T09:00:00Z',
+    ...overrides,
+  }
+}
+
+/** Code 21 of the shop: NOWRUZ, 20% off anything a code takes, for anyone, no window, used once of a hundred. */
+export function discountCodeRow(overrides: Partial<DiscountCodeRow> = {}): DiscountCodeRow {
+  return {
+    id: 21,
+    code: 'NOWRUZ',
+    note: null,
+    type: 'percent',
+    value: '20.00',
+    max_discount: null,
+    min_amount: null,
+    order_types: null,
+    plans: null,
+    servers: null,
+    first_purchase_only: false,
+    starts_at: null,
+    ends_at: null,
+    max_uses: 100,
+    per_user: null,
+    enabled: true,
+    uses: 1,
+    state: 'active',
+    created_at: '2026-10-06T09:00:00Z',
+    ...overrides,
+  }
+}
+
+/** Sale 4 of the shop: «فروش ویژه نوروز», 20% off every plan, running with no window. */
+export function saleRow(overrides: Partial<SaleRow> = {}): SaleRow {
+  return {
+    id: 4,
+    name: 'فروش ویژه نوروز',
+    percent: 20,
+    order_types: null,
+    plans: null,
+    starts_at: null,
+    ends_at: null,
+    enabled: true,
+    state: 'active',
+    created_at: '2026-10-06T09:00:00Z',
     ...overrides,
   }
 }

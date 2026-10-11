@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * A short-lived secret of a sign-in flow, kept by Services\AuthChallenges: the sha256 of what the browser holds, what
- * it was issued for and until when, and what the flow needs back when it is spent (encrypted). One use.
+ * A short-lived, one-use secret of a sign-in flow (Services\AuthChallenges): the sha256 of what the browser holds, its
+ * purpose and expiry, and the encrypted payload the flow gets back when it is spent.
  *
  * @property int $id
  * @property ChallengePurpose $purpose

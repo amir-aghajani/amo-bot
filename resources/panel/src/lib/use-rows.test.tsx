@@ -100,7 +100,7 @@ describe('a field flipped in a row', () => {
     await until(() => expect(rows.current.rows[0]?.is_active).toBe(true))
   })
 
-  it('is put back when the server refuses it, the list read again and the admin told why', async () => {
+  it('is put back when the server refuses it, with the list read again and the reason shown', async () => {
     const rows = await plansList()
     server().on('PATCH', '/api/admin/plans/1', refusal(422, 'این پلن فروش دارد.', { is_active: ['این پلن فروش دارد.'] }))
 

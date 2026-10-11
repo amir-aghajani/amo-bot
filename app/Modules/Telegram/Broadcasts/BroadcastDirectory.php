@@ -14,10 +14,9 @@ use App\Modules\Telegram\Models\Broadcast;
 use App\Modules\Users\Services\UserDirectory;
 
 /**
- * The panel's view of «ارسال همگانی»: every run — messages a bot admin sent with /broadcast and the «لغو پین» runs —
- * newest first, with how far each got and what its state allows; and the same controls the bot's progress message has
- * (BroadcastService does the work, the bot's message follows). A message is composed in the bot only: it is the
- * admin's own Telegram message that goes out.
+ * The panel's «ارسال همگانی» page: every run, newest first, with its progress and allowed actions, and the same
+ * controls the bot's progress message has. Messages are composed in the bot only (it is the admin's own message that
+ * goes out).
  */
 final class BroadcastDirectory
 {
@@ -26,6 +25,7 @@ final class BroadcastDirectory
         private readonly Reviewers $reviewers,
     ) {}
 
+    /** A page of every run, newest first. */
     public function page(PageRequest $request): Page
     {
         // Each group's or server's name is looked up once for the page, however many runs name it.
@@ -38,7 +38,7 @@ final class BroadcastDirectory
     }
 
     /**
-     * Pause, resume or cancel a run from the panel — the bot's progress message follows.
+     * Pause, resume or cancel a run from the panel.
      *
      * @throws ValidationException on `status` when its state does not allow it (moved on meanwhile)
      */
@@ -50,7 +50,7 @@ final class BroadcastDirectory
     }
 
     /**
-     * Take a finished pinned run's pins off again, under the name of whoever asked; the scheduler works it through.
+     * Take a finished pinned run's pins off, recorded under whoever asked; the scheduler works it through.
      *
      * @throws ValidationException on `status`
      */

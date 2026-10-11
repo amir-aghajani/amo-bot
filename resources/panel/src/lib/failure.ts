@@ -6,13 +6,13 @@ import { formatDate, shownTimeZone } from '@/lib/format'
 import { isStaleBuildError, reloadedLately } from '@/lib/stale-build'
 
 /*
- * The one reading of a failure, whatever shows it — a screen, a page, a card, a form's line, a toast (components/
- * error-state): what kind it was, the words the admin reads, whether asking again may help, and the technical details
- * support needs. The server's own message wins where it is the admin's words (a refusal, a sign-in's answer, a panel
- * out of reach); the kind's words stand in for a message that is missing or the server's generic one.
+ * The one reading of a failure, whatever draws it (components/error-state, a form's line, a toast): its kind, the words
+ * the admin reads, whether asking again may help, and the technical details support needs. For the kinds where the
+ * server words its refusal for the admin (a 4xx, a 502 about a panel), the server's message is shown; otherwise — or
+ * when it sent none — the kind's own words are.
  */
 
-/** What kind of failure it was: what the admin is told, and what they can do about it. */
+/** What kind of failure it was: decides the words, the icon and the ways on. */
 export type FailureKind =
   /** No answer, the browser offline. */
   | 'offline'
@@ -43,13 +43,13 @@ export type FailureKind =
 
 interface KindSpec {
   title: string
-  /** The kind's own words: what happened and what to do, a sentence or two that stand alone (a form's line, a toast). */
+  /** What happened and what to do, in a sentence or two that stand alone (a form's line, a toast). */
   description: string
-  /** The API's message is the admin's words for this kind: it is said instead of `description`. */
+  /** The API's message for this kind is meant for the admin: it replaces `description`. */
   serverWords: boolean
   /** Asking again may help. */
   retry: boolean
-  /** Loading the page again is the way on — what its words say to do: the panel's own code, its files, an answer it cannot read. */
+  /** Reloading the page is the way on (the panel's own code, its files, an answer it cannot read). */
   reload: boolean
   tone: 'danger' | 'warning' | 'info'
 }
@@ -177,7 +177,7 @@ export const FAILURE_KINDS: Record<FailureKind, KindSpec> = {
   },
 }
 
-/** The stale build's words once the one reload it gets did not help (lib/stale-build): the files are not there at all. */
+/** A stale build's words once its one reload did not help (lib/stale-build): the build's files are missing on the host. */
 const STALE_GAVE_UP =
   'پنل یک بار برای نسخه تازه دوباره بارگذاری شد ولی فایل‌های این صفحه هنوز پیدا نمی‌شوند. اگر پنل همین الان به‌روز شده، چند دقیقه بعد دوباره امتحان کنید؛ وگرنه فایل‌های build روی هاست کامل آپلود نشده است.'
 
@@ -185,17 +185,17 @@ const STALE_GAVE_UP =
 export interface Failure {
   kind: FailureKind
   title: string
-  /** What the admin reads: the server's words where they win, else the kind's. */
+  /** What the admin reads: the server's message where it is meant for them, else the kind's description. */
   message: string
-  /** `message` is the server's own words. */
+  /** `message` is the server's. */
   worded: boolean
-  /** A request of the panel's failed (an ApiError) — not the panel's own code: what it got back, or that nothing came, is a fact of it. */
+  /** A request failed (an ApiError), as opposed to the panel's own code. */
   requested: boolean
   /** The answer's HTTP status; null when none came, or for no request at all. */
   status: number | null
-  /** A short name of what it was, for support: the kind, or the name of what the panel's code threw. */
+  /** A short name for support: the kind, or the name of the error the panel's code threw. */
   code: string
-  /** The server's id of the request («کد پیگیری»): its log's lines carry it. */
+  /** The server's id of the request («کد پیگیری»): its log lines carry it. */
   requestId: string | null
   /** A 429's wait, in seconds, counted from `at`. */
   retryAfter: number | null
@@ -207,12 +207,12 @@ export interface Failure {
   at: Date
 }
 
-/** When each failure the panel's code threw was first described: a crash on screen keeps its moment. */
+/** When each thrown error was first described, so a crash on screen keeps its moment. */
 const seenAt = new WeakMap<object, Date>()
 
 /**
- * Read a failure: an `ApiError` (an answer, or none), anything else the panel's code threw. `fields` are request fields
- * whose message says it best (an operation's note or state): the first the API put under one of them is the message.
+ * Describe a failure: an `ApiError` (an answer, or none) or anything the panel's code threw. When the API refused one of
+ * `fields` (an operation's `note` or `status`), that refusal is the message.
  */
 export function describeFailure(error: unknown, ...fields: string[]): Failure {
   const kind = kindOf(error)
@@ -263,7 +263,7 @@ export function describeFailure(error: unknown, ...fields: string[]): Failure {
 }
 
 function kindOf(error: unknown): FailureKind {
-  // The router's own answer about an address: one no route of it takes.
+  // The router's own answer: an address no route takes.
   if (isRouteErrorResponse(error)) return error.status === 404 ? 'not-found' : 'crash'
   if (!(error instanceof ApiError)) return isStaleBuildError(error) ? 'stale-build' : 'crash'
 
@@ -294,29 +294,25 @@ function kindOf(error: unknown): FailureKind {
 }
 
 /**
- * The server's words for a 404 that say no more than "not found" — a row the request names, missing or another shop's
- * (ErrorHandler::NOT_FOUND), an address no route has (ErrorHandler::MESSAGES[404]): after a lead that already says what
- * was not found they would say it again.
+ * The server's generic 404 messages (ErrorHandler's: a missing row, an unknown address). They only repeat "not found",
+ * which the lead before them already says.
  */
 const PLAIN_NOT_FOUND = ['مورد درخواستی پیدا نشد؛ ممکن است حذف شده باشد.', 'صفحه مورد نظر پیدا نشد.']
 
 /**
- * What follows a lead that says what was not found — a card's «سرور پیدا نشد.», a «پیدا نشد» heading —: the server's
- * own words when they say why (a receipt Telegram no longer has), else why it may be; never «پیدا نشد» a second time.
+ * The sentence after a lead that already says what was not found («سرور پیدا نشد.»): the server's reason when it gives
+ * one (a receipt Telegram no longer has), else a generic one — never "not found" twice.
  */
 export function notFoundReason(failure: Failure | null): string {
   return failure?.worded && !PLAIN_NOT_FOUND.includes(failure.message) ? failure.message : 'ممکن است حذف شده باشد، یا آدرسش درست نباشد.'
 }
 
-/** The code support finds the request by, when the failure is the server's own (a 500): «کد پیگیری: 3f9a…». */
+/** For a server error (a 500), the code support finds it in the log by: «کد پیگیری: 3f9a…». */
 function referenceOf(failure: Failure): string | null {
   return failure.kind === 'server' && failure.requestId !== null ? `کد پیگیری: ${failure.requestId}` : null
 }
 
-/**
- * A failure in one line — a form's, an operation's strip, a confirmation's: its words and, a failure of the server's
- * own, the code to find it in the log by.
- */
+/** A failure in one line (a form's, an operation strip's, a confirmation's), with the tracking code of a server error. */
 export function messageOf(error: unknown, ...fields: string[]): string {
   const failure = describeFailure(error, ...fields)
   const reference = referenceOf(failure)
@@ -325,9 +321,8 @@ export function messageOf(error: unknown, ...fields: string[]): string {
 }
 
 /**
- * A failure told in a toast: the server's words as the toast's title — or `what` failed («خروج انجام نشد») with the
- * words under it —, a generic failure by its kind's title with its words under it; the code of a server's own failure
- * last.
+ * A failure in a toast. The title is `what` failed («خروج انجام نشد») if given, else the server's message, else the
+ * kind's title; the message (when not already the title) and a server error's tracking code go under it.
  */
 export function toastFailure(error: unknown, what?: string): void {
   const failure = describeFailure(error)
@@ -338,9 +333,8 @@ export function toastFailure(error: unknown, what?: string): void {
 }
 
 /**
- * The technical details of a failure, as «جزئیات فنی» lists them: what support needs, a row each — the facts it has (a
- * status only for a request's), the moment in the zone the panel's dates read in, and which zone that is: the shop's,
- * or the browser's while the shop's is not known.
+ * The rows of «جزئیات فنی», what support needs: the status (requests only), codes, the request, the moment and the
+ * zone it is shown in (the shop's, or the browser's until /api/app has answered), the address, the build.
  */
 export function failureFacts(failure: Failure): { label: string; value: string }[] {
   const { zone, shop } = shownTimeZone()
@@ -359,7 +353,7 @@ export function failureFacts(failure: Failure): { label: string; value: string }
   return facts.filter((fact): fact is { label: string; value: string } => fact.value !== null && fact.value !== '')
 }
 
-/** The details as one text to paste to support: the words, then every fact — the moment in UTC too, as the server keeps it. */
+/** The details as one text to paste to support, with the moment in UTC too (as the server's log keeps it). */
 export function failureReport(failure: Failure): string {
   return [`${failure.title}: ${failure.message}`, ...failureFacts(failure).map((fact) => `${fact.label}: ${fact.value}`), `UTC: ${failure.at.toISOString()}`].join('\n')
 }

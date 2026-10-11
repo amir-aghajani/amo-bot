@@ -8,15 +8,9 @@ import { websiteCaptcha, websiteRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
- * The shop's website, «تنظیمات وب‌سایت» (pages/website-settings): six sections over one read — the connection, then
- * Telegram, Google and email sign-in, the reviews, then the shop's admins. Each card PATCHes its own fields alone — a
- * kept secret never sent back unless one is typed —, and what the server answers takes the read's place, nothing read
- * again; a refusal stays under its field. Email sign-up waits for the shop's email, which the owner's panel links to and
- * an agent's says the owner sets up. The captcha is none or a driver, its form drawn from the server's description, a
- * kept secret asked for again once its key moved, a refusal under its field by the server's `captcha.<field>`. The
- * reviews' card switches them, and says who writes them by the captcha asked. The admins' card sends its switches and
- * its grants whole, in the grants' own order, and says who the admins are — the users list narrowed to the role — and
- * how far the guards on them go. The API's address is copied whole, and a new key is asked for first.
+ * «تنظیمات وب‌سایت» (pages/website-settings): each card PATCHes only its own fields (a kept secret only when retyped) and
+ * the answer replaces the one read; email sign-up waiting on the shop's email, the captcha's driver form, the reviews
+ * switch, the admins' switches and grants, and the API address with its new-key confirmation.
  */
 
 const URL = '/api/admin/website'
@@ -293,7 +287,7 @@ describe('the email sign-up card', () => {
     expect(screen.queryByText(/مالک فروشگاه راه می‌اندازد/)).toBeNull()
   })
 
-  it('is held while no email goes out — an agent told the owner sets it up', async () => {
+  it('is held while no email can be sent, telling an agent that the owner sets it up', async () => {
     await show('/website-settings/email', websiteRow({ email: { enabled: false, mail_ready: false } }))
 
     expect(screen.getByRole('switch', SIGNUP_SWITCH).getAttribute('aria-disabled')).toBe('true')
@@ -461,7 +455,7 @@ describe('the reviews’ card', () => {
 const LET_IN = { name: 'کار مدیران از وب‌سایت' }
 const STRONG = { name: 'ورود امن مدیران' }
 
-/** A grant's switch on the admins' card, by its words. */
+/** A grant's switch on the admins' card, by its label. */
 const grant = (name: string) => screen.getByRole('switch', { name })
 
 describe('the shop’s admins’ card', () => {

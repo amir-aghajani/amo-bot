@@ -242,7 +242,7 @@ picture taken while the server's disk is too full or once the shop took its giga
 
 Support's answer makes the ticket `answered` and `unread`, and is told as every notice is
 ([notifications](Store-API-Notifications.md)): a `ticket_answered` notice whose `subject` is
-`{ "type": "ticket", "id": … }`, its words the answer cut to what a Telegram message holds — the whole is in the ticket
+`{ "type": "ticket", "id": … }`, its text the answer cut to what a Telegram message holds — the whole is in the ticket
 —, sent to their Telegram chat (support's picture with it, and buttons that reply or open the ticket in the bot) or —
 without a Telegram account, or having blocked the bot — by email, while the shop's email goes out. Support closing the
 ticket is a `ticket_closed` notice. Support opening it again, and what the customer does themselves, tell the customer

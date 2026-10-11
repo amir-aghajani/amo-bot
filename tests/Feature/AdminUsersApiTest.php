@@ -14,9 +14,8 @@ use App\Modules\Users\Services\WalletService;
 use Tests\HttpTestCase;
 
 /**
- * The users table: the bot's customers with their counts and balance — the three Telegram identifiers kept apart —,
- * one search box (name, handle, Telegram id, a phone by four digits or more, our own id), the status filter, paging,
- * banning and the bot's admin role in one edit, and the wallet: its ledger and a credit or debit by hand.
+ * The users table: identifiers kept apart, counts and balance, one search box (name, handle, Telegram id, phone, id), the
+ * filters, paging, banning and the admin role, and the wallet's ledger and manual adjustments.
  */
 final class AdminUsersApiTest extends HttpTestCase
 {

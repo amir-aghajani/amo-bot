@@ -10,10 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * The days a paged list is narrowed to, as PageRequest::dates() read them: whole days of the shop's calendar
- * (LocalTime), the first and the last both included, either alone. On a query they are the moments the database keeps
- * (UTC): from the shop's midnight that starts the first day up to the one that ends the last — the dashboard's way of
- * turning the shop's days into moments.
+ * A range of whole days in the shop's time zone (LocalTime), both ends included, either optional — applied to a query
+ * as UTC moments, from the midnight starting the first day to the one ending the last.
  */
 final class DateRange
 {

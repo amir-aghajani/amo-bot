@@ -7,10 +7,7 @@ import { pageTitle } from '@/components/shell/nav'
 import { useShell } from '@/components/shell/shell-context'
 import { useThemeSwitch } from '@/lib/theme'
 
-/**
- * The phone's bar above the page — the desktop has none, as the Console: the menu (the sidebar as a drawer, the button
- * saying whether it is open), the page's name — the not-found page's at an address no page has —, and the theme.
- */
+/** The phone's bar above the page (the desktop has none): the menu button that opens the drawer, the page's name, the theme. */
 export function Topbar() {
   const { pathname } = useLocation()
   const { panel, mobileOpen, setMobileOpen } = useShell()

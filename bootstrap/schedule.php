@@ -7,6 +7,7 @@ use App\Modules\Accounts\Tasks\PruneAccountsTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
+use App\Modules\Rewards\Tasks\NightlyDrawTask;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Subscriptions\Tasks\GrantsTask;
 use App\Modules\Subscriptions\Tasks\NextPeriodTask;
@@ -29,8 +30,9 @@ return static function (Scheduler $schedule): void {
     $schedule->everyMinutes(1, AutoApproveReceiptsTask::class, eachBot: true);
     // Paid orders a process that died left undelivered (never a failed delivery: that one waits for support).
     $schedule->everyMinutes(1, ResumeDeliveriesTask::class, eachBot: true);
-    // Checkouts the customer walked away from, dropped once nothing happened to them for two days.
-    $schedule->everyMinutes(60, ExpireOrdersTask::class, eachBot: true);
+    // Checkouts the customer walked away from, dropped once nothing happened to them for two days — one made with a
+    // discount code once the code's hold is over, its use given back.
+    $schedule->everyMinutes(ExpireOrdersTask::INTERVAL_MINUTES, ExpireOrdersTask::class, eachBot: true);
     // Broadcasts (/broadcast) the bot started, a batch per minute until everyone has it.
     $schedule->everyMinutes(1, SendBroadcastsTask::class, eachBot: true);
     // «تمدید خودکار»: services within the admin's days of their deadline, renewed from the wallet.
@@ -40,7 +42,7 @@ return static function (Scheduler $schedule): void {
     // «افزودن زمان و حجم» and «هدیه همگانی» no screen is working on: a batch per minute, and a panel that was out of reach tried again.
     $schedule->everyMinutes(1, GrantsTask::class);
     // Every running service read from its panel — one call per server — and then «یادآوری»: services near their
-    // end or their traffic's told so. In this order, so the reminders read what the sync just brought.
+    // end or low on traffic are reminded. In this order, so the reminders read what the sync just brought.
     $schedule->everyMinutes(15, SyncSubscriptionsTask::class);
     $schedule->everyMinutes(15, SendRemindersTask::class, eachBot: true);
     // The updates the bots took, remembered so one Telegram sends again is served once: forgotten once it cannot come again.
@@ -50,6 +52,8 @@ return static function (Scheduler $schedule): void {
     // The tickets' housekeeping, each shop's: the pictures uploaded to tickets closed a month ago, and the group's week-old
     // reports of tickets that are closed.
     $schedule->everyMinutes(60, PruneTicketsTask::class, eachBot: true);
+    // «قرعه‌کشی شبانه», each shop's: once its clock passed the hour of the draw, the day's draw among its buyers, once.
+    $schedule->everyMinutes(10, NightlyDrawTask::class, eachBot: true);
     // AmoBot's newest release read from GitHub once a day, so the owner's dashboard says when one is out.
     $schedule->everyMinutes(24 * 60, CheckReleasesTask::class);
     // The report groups: what the panel and the tasks above queued, at Telegram's pace. Last, so a tick's own reports go in them.

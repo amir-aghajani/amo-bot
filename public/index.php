@@ -3,10 +3,8 @@
 declare(strict_types=1);
 
 /*
- * HTTP front controller: the API, the Telegram webhooks, the cron URL. Point the web server's document root at this
- * folder; if you cannot (shared hosting), the .htaccess in the project root forwards here. The panels — admin/ (the
- * owner's), agent/ (an agent's) and the build files they share in assets/ — are static files the web server serves
- * itself.
+ * The front controller for everything PHP answers (the API, webhooks, cron). The document root should be this folder;
+ * on shared hosting the root .htaccess forwards here. The panels (admin/, agent/, assets/) are static files.
  */
 
 use App\Core\Http\ErrorHandler;
@@ -15,13 +13,13 @@ use App\Core\Http\RequestId;
 use App\Core\Logging\Redact;
 use App\Modules\Updates\Maintenance;
 
-// Nothing an answer carries tells what runs the shop: not PHP's banner header, and not — before the app is even loaded,
-// on a host that ships display_errors on — a warning with a path of the server's in it.
+// No answer names what runs the shop, and no warning (with a server path) prints — even before the app is loaded, on a
+// host that ships display_errors on.
 header_remove('X-Powered-By');
 ini_set('display_errors', '0');
 
-// `php -S host:port -t public public/index.php` does what the web server would: real files as they are, and any
-// other address under /admin or /agent that panel's own page.
+// Under `php -S … public/index.php`, do what public/.htaccess does: real files as they are, any other /admin or /agent
+// address that panel's page.
 if (PHP_SAPI === 'cli-server') {
     $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
     if ($path !== '/' && is_file(__DIR__ . $path)) {
@@ -51,8 +49,7 @@ if (PHP_SAPI === 'cli-server') {
 }
 
 /*
- * An answer of the front controller's own, made without the app: the one error shape and the request's id `$id`, no
- * details for the caller, the headers every answer of PHP's carries.
+ * An answer made without the app: the error shape with the request's id, and every answer's security headers.
  *
  * @param array<string, string> $headers
  */
@@ -68,10 +65,9 @@ $answer = static function (string $id, int $status, string $message, array $head
 };
 
 /*
- * The answer when the app could not give one — it did not start (a broken config.php, a database driver nobody has), or a
- * fatal error ended it (memory, the time limit): the generic 500, the whole story in PHP's error log
- * (storage/logs/php-errors.log), the id beside it. Without the app's classes (vendor/ not there: an upload cut short) it
- * has nothing to answer with, and PHP's bare 500 stands.
+ * The last resort when the app could not answer (it did not start, or a fatal error ended it): the generic 500, the
+ * details in storage/logs/php-errors.log under the request's id. Without vendor/ (an upload cut short) PHP's bare 500
+ * stands.
  */
 $lastResort = static function (string $why) use ($answer): void {
     if (!class_exists(RequestId::class)) {
@@ -84,8 +80,8 @@ $lastResort = static function (string $why) use ($answer): void {
     }
 };
 
-// A fatal error is no exception: it ends the request where it stands. The memory set aside here is what the answer is
-// made with when the request ran out of its own.
+// A fatal error is no exception and ends the request where it stands; the memory reserved here lets the answer be made
+// when the request ran out of its own.
 $reserved = str_repeat(' ', 32768);
 register_shutdown_function(static function () use (&$reserved, $lastResort): void {
     $reserved = null;
@@ -101,9 +97,8 @@ register_shutdown_function(static function () use (&$reserved, $lastResort): voi
 });
 
 try {
-    // An update being installed holds the shop a moment (Modules\Updates\Maintenance): every request but the one installing
-    // it is told to come back — before the app is loaded, since its files are what is being replaced. Without vendor/
-    // there is nothing to tell it with: the app's boot fails as it would.
+    // While an update installs (Maintenance), every other request is told to come back — before the app is loaded,
+    // since its files are being replaced.
     $autoload = dirname(__DIR__) . '/vendor/autoload.php';
     if (is_file($autoload)) {
         require_once $autoload;

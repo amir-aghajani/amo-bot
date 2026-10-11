@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * Two of a shop's customers merged into one (Services\AccountMerger): the account that stayed, the merged one's former
- * number — its row is gone — and how it was signed in and called, how much of what it owned moved, and who merged them.
+ * A record of two customers merged (Services\AccountMerger): the survivor, the merged account's former id (its row is
+ * gone) and how it was signed in and named, how much of what it owned moved, and who merged them.
  *
  * @property int $id
  * @property int $user_id The account that stayed

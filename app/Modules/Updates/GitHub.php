@@ -14,11 +14,9 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * GitHub as the updater speaks to it, through the shop's one outgoing client (its User-Agent names AmoBot and its
- * version): the repository's latest release from its API, and a release's files from github.com — followed through
- * GitHub's redirects to its storage, over https and to GitHub's own hosts alone, and read no further than the caller
- * allows. What comes back is believed by nobody here: the manifest is the release key's to vouch for, the zip the
- * manifest's (Updater).
+ * GitHub for the updater: the latest release from the API, and a release's files from github.com, following redirects
+ * by hand to https on GitHub's own hosts only and reading no more than allowed. Nothing it returns is trusted here: the
+ * release key vouches for the manifest, the manifest for the zip.
  */
 final class GitHub
 {
@@ -42,8 +40,7 @@ final class GitHub
     ) {}
 
     /**
-     * The repository's latest release — neither a draft nor a pre-release — as the API describes it; null while the
-     * repository has published none.
+     * The latest published release as the API describes it; null while there is none.
      *
      * @return array<string, mixed>|null
      * @throws UpdateRefusedException when GitHub does not answer, or answers no release
@@ -73,8 +70,7 @@ final class GitHub
     }
 
     /**
-     * A file of release `$version`, written to `$target` whole or not at all: no more than `$maxBytes` of it, within
-     * `$seconds`.
+     * Download a file of release `$version` to `$target`, whole or not at all, at most `$maxBytes` in `$seconds`.
      *
      * @throws UpdateRefusedException when it cannot be had, is bigger than allowed, or cannot be written
      */
@@ -120,7 +116,7 @@ final class GitHub
     }
 
     /**
-     * The answer at the end of GitHub's redirects from `$url`, each address on the way GitHub's own.
+     * Follow GitHub's redirects from `$url`, each address checked to be GitHub's.
      *
      * @throws UpdateRefusedException when a redirect leads elsewhere, or GitHub is out of reach
      */
@@ -167,7 +163,7 @@ final class GitHub
     }
 
     /**
-     * The body handed to `$take` a chunk at a time — no more than `$max` bytes of it.
+     * Hand the body to `$take` a chunk at a time, at most `$max` bytes.
      *
      * @param \Closure(string): void $take
      * @return bool Whether that was all of it: false when there was more
@@ -197,7 +193,7 @@ final class GitHub
         }
     }
 
-    /** What an answer that is not the one asked for says: GitHub limiting this host's calls, or not answering as it should. */
+    /** The refusal for an answer that is not the one asked for: GitHub's rate limit, or any other. */
     private function refusal(ResponseInterface $response, string $what): UpdateRefusedException
     {
         $status = $response->getStatusCode();

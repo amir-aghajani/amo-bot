@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Notifications\Enums\NoticeType;
+use App\Modules\Notifications\Models\Notification;
 use App\Modules\Notifications\Services\CustomerChats;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Payments\Services\PaymentActions;
@@ -17,11 +19,10 @@ use Tests\BotTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * What becomes of a notice the bot sends a customer on its own: it is composed and sent in the customer's own shop —
- * that bot's wording, from that bot —, whoever acted; a customer who turned the bot away — blocked it, or whose chat is
- * gone — is remembered and not written to again; Telegram out of reach costs the one message and a message Telegram
- * refuses is logged for the shop to see, the customer kept; a mistake of the code is no delivery problem and is never
- * swallowed as one.
+ * How a notice reaches a customer's chat: composed and sent in the customer's own shop (that bot's wording, from that bot)
+ * whoever acted, and kept in that shop; a customer who blocked the bot or whose chat is gone is remembered and not written
+ * to again; Telegram out of reach costs one message, and a message Telegram refuses is logged as an error; a bug in the
+ * code is never swallowed as a delivery problem.
  */
 final class CustomerNotifierTest extends BotTestCase
 {
@@ -99,7 +100,7 @@ final class CustomerNotifierTest extends BotTestCase
         ])], $this->said(), 'not the purchase wording: the charge went out of the wallet again');
     }
 
-    public function testAnAgentsCustomerHearsTheAgentsWordsFromTheAgentsBotWhoeverActs(): void
+    public function testAnAgentsCustomerHearsTheAgentsWordsFromTheAgentsBotWhoeverActsAndTheNoticeIsTheAgentsShops(): void
     {
         $bot = $this->agentBot();
         $server = $this->fakeServer('فرانسه');
@@ -109,7 +110,7 @@ final class CustomerNotifierTest extends BotTestCase
             return $this->subscription($this->customer(), $this->plan(['traffic_gb' => 10], $server), $server, 'reza_1');
         });
 
-        // Support acts from the shop's own panel, in the main bot's shop: each customer hears it from their own bot.
+        // Support acts from the owner's panel, in the main bot's shop: each customer hears it from their own bot.
         $this->notifier()->serviceEnabled($theirs);
         $this->notifier()->serviceEnabled($this->subscription);
 
@@ -118,6 +119,10 @@ final class CustomerNotifierTest extends BotTestCase
             '✅ <code>reza_1</code> دوباره روشن شد؛ خوش برگشتید!',
             self::text(BotText::ServiceEnabledBySupport, ['client' => 'ali_1']),
         ], $this->said(), "the agent's wording for theirs, the shop's for its own");
+
+        $notice = CurrentBot::run($bot, static fn(): Notification => Notification::query()->sole());
+        self::assertSame([$bot->id, $theirs->user_id, NoticeType::ServiceEnabled], [$notice->bot_id, $notice->user_id, $notice->type], "kept in the agent's shop");
+        self::assertSame([$this->subscription->user_id], Notification::query()->pluck('user_id')->all(), "the main shop keeps only its own customer's");
     }
 
     private function notifier(): CustomerNotifier

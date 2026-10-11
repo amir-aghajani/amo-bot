@@ -11,8 +11,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The admin's groups of customers, a section of the users page: a unique name each, in the admin's order. Who is in
- * which is set on a customer's row (UsersController::groups); a deleted group's customers just leave it.
+ * The admin's customer groups (a section of the users page), in the admin's order. Membership is set on a customer
+ * (UsersController::groups); deleting a group just takes its customers out of it.
  */
 final class CustomerGroupsController extends ApiController
 {

@@ -13,7 +13,7 @@ use Tests\Support\FakeTelegram;
 /**
  * The required-channels list of the bot settings screen: adding by link (the bot must be an admin
  * there), private channels by id with the invite link the bot makes, re-checking, ordering and removing —
- * and Telegram out of reach for a moment said so, with nothing changed.
+ * and Telegram out of reach for a moment reported as such, with nothing changed.
  */
 final class AdminBotChannelsApiTest extends HttpTestCase
 {

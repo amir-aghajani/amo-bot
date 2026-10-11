@@ -114,6 +114,21 @@ final class UpdateTest extends TestCase
         self::assertFalse($tapOn(['text' => 'screen'])->hasMedia());
     }
 
+    public function testThePictureAMessageCarriesIsAPhotoOrAFileJudgedOne(): void
+    {
+        $message = static fn(array $fields): Update => new Update(['update_id' => 1, 'message' => $fields + ['message_id' => 1, 'chat' => ['id' => 1, 'type' => 'private']]]);
+        $isPicture = static fn(array $document): bool => ($document['mime_type'] ?? null) === 'image/png';
+
+        self::assertSame(['file_id' => 'big', 'name' => null], $message(['photo' => [['file_id' => 'small'], ['file_id' => 'big']]])->picture($isPicture), 'the largest size');
+        self::assertSame(['file_id' => 'd', 'name' => 'receipt.png'], $message(['document' => ['file_id' => 'd', 'file_name' => 'receipt.png', 'mime_type' => 'image/png']])->picture($isPicture));
+        self::assertNull($message(['document' => ['file_id' => 'd', 'mime_type' => 'application/pdf']])->picture($isPicture), 'a file that is no picture');
+        self::assertNull($message(['animation' => ['file_id' => 'a'], 'document' => ['file_id' => 'a', 'mime_type' => 'image/png']])->picture($isPicture), 'a GIF is an animation, not a picture');
+        self::assertNull($message(['text' => 'hi'])->picture($isPicture));
+
+        self::assertSame('receipt', $message(['photo' => [['file_id' => 'p']], 'caption' => 'receipt'])->caption());
+        self::assertNull($message(['text' => 'hi'])->caption());
+    }
+
     public function testOnlyTheSendersOwnNumberIsTheirContact(): void
     {
         $card = static fn(array $fields): Update => new Update(['update_id' => 1, 'message' => [

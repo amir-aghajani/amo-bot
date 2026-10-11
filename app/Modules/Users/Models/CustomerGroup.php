@@ -10,11 +10,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 
 /**
- * One of the admin's own groups of customers («گروه» — VIP, a reseller's people, a campaign's): a name, in the admin's
- * order; a customer is in any number of them. See Services\CustomerGroups.
+ * An admin-made group of customers («گروه»: VIP, a campaign…); a customer may be in many. A group marked «همکار»
+ * (`agent_pricing`) gives its customers the plans' agent prices.
  *
  * @property int $id
  * @property string $name
+ * @property bool $agent_pricing Its customers pay plans' agent prices (User::paysAgentPrices())
  * @property int $sort
  * @property Carbon $created_at
  * @property Carbon $updated_at
@@ -26,10 +27,10 @@ class CustomerGroup extends Model
 
     protected $table = 'customer_groups';
 
-    protected $fillable = ['name', 'sort'];
+    protected $fillable = ['name', 'agent_pricing', 'sort'];
 
     /** @var array<string, string> */
-    protected $casts = ['sort' => 'integer'];
+    protected $casts = ['agent_pricing' => 'boolean', 'sort' => 'integer'];
 
     /** @return BelongsToMany<User, $this> */
     public function users(): BelongsToMany

@@ -14,17 +14,16 @@ use App\Modules\Users\Services\UserDirectory;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * The customers' reviews as they are read: the moderation screen («نظرات», both panels and the website's admin side) —
- * every review of the shop, the newest first, by status (the pending ones the queue waiting on support, counted),
- * searched by the name it is signed with, its words, the customer who wrote it or its number; who decided it (Reviewers —
- * the owner's login «پشتیبانی» to anyone but the owner) — and the shop's website: the approved ones, the newest first,
- * the writers' own words and nothing of support's, with how many there are and their average rating.
+ * The reviews as they are read: the moderation screen («نظرات», both panels and the website's admin API) — every review,
+ * newest first, by status (pending ones are support's queue, counted) and search, with who decided each (Reviewers: the
+ * owner's login reads «پشتیبانی» to anyone but the owner) — and the website: the approved ones, newest first, with their
+ * count and average rating, showing nothing of who wrote them or of support.
  */
 final class ReviewDirectory
 {
     public function __construct(private readonly Reviewers $reviewers) {}
 
-    /** One status (a tab) or all, searched — the newest first —; with the pending ones counted. */
+    /** A page of reviews by status (a tab) and search, newest first; with the pending ones counted. */
     public function search(PageRequest $list): Page
     {
         $query = Review::query();
@@ -63,8 +62,7 @@ final class ReviewDirectory
     }
 
     /**
-     * Every approved review, as one figure: how many, and their mean rating to two decimals (null while there is none) —
-     * read off the index alone.
+     * How many reviews are approved and their mean rating to two decimals (null while none) — read off the index alone.
      *
      * @return array{count: int, average: float|null}
      */
@@ -77,8 +75,8 @@ final class ReviewDirectory
     }
 
     /**
-     * A review as the website shows it: the writer's own words and choices — plain text, which the website escapes —,
-     * nothing of who wrote it nor of support's.
+     * A review as the website shows it: the writer's own words and choices (plain text the website escapes), nothing of
+     * who wrote it or of support.
      *
      * @return array<string, mixed>
      */
@@ -102,8 +100,8 @@ final class ReviewDirectory
     }
 
     /**
-     * By the customer who wrote it — name, handle, email, Telegram id, the way every list searches its customers —, the
-     * name it is signed with, its words, or a bare number. («#12» is the review numbered 12 alone: PageRequest::search().)
+     * Search by the customer who wrote it (User::idsMatching()), the name it is signed with, its text, or a bare number.
+     * «#12» alone is review 12: PageRequest::search().
      *
      * @param Builder<Review> $query
      */

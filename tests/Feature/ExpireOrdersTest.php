@@ -18,10 +18,9 @@ use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
 
 /**
- * Orders nobody finished paying: once nothing happened to an order nor to any of its payments for EXPIRE_HOURS, the
- * hourly task — in every shop — drops it with its unpaid payments, quietly. A receipt waiting for support keeps its
- * order whatever its age, and so does a payment that moved within the window (a receipt refused) — or a receipt that
- * landed after the task read the order as idle.
+ * Expiring unpaid orders: an order untouched (with its payments) for EXPIRE_HOURS is cancelled quietly with its unpaid
+ * payments, in every shop; a receipt waiting for support, a payment that moved within the window, or a receipt that
+ * arrived after the task read the order keeps it.
  */
 final class ExpireOrdersTest extends DatabaseTestCase
 {
@@ -40,10 +39,10 @@ final class ExpireOrdersTest extends DatabaseTestCase
         $this->card = $this->cardMethod();
     }
 
-    public function testTheTaskLooksHourlyInEveryShop(): void
+    public function testTheTaskLooksEveryTenMinutesInEveryShop(): void
     {
         self::assertSame(
-            ['task' => ExpireOrdersTask::class, 'interval' => 60 * 60, 'eachBot' => true],
+            ['task' => ExpireOrdersTask::class, 'interval' => 10 * 60, 'eachBot' => true],
             $this->service(Scheduler::class)->tasks()[ExpireOrdersTask::class],
         );
     }

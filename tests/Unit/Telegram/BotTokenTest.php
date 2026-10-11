@@ -13,7 +13,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * The one rule for a bot's token, wherever one is handed over — the settings screen, the installer, an agent in the
+ * The check of a bot's token, wherever one is handed over — the settings screen, the installer, an agent in the
  * main bot: its shape first, then Telegram asked whose it is, each failure in the same words.
  */
 final class BotTokenTest extends TestCase

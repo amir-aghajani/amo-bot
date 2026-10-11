@@ -11,10 +11,7 @@ use App\Modules\Telegram\Models\BotChannel;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
-/**
- * The "join these first" screen: one link button per channel still missing, then the button that asks
- * the bot to look again (`join:check`, answered by Handlers\JoinHandler).
- */
+/** The join screen: a link button per missing channel, then «عضو شدم» (`join:check`, JoinHandler). */
 final class JoinPrompt
 {
     public const CHECK = 'join:check';
@@ -22,8 +19,7 @@ final class JoinPrompt
     public function __construct(private readonly BotTexts $texts) {}
 
     /**
-     * The screen as a message of its own (the gate), or in place of the tapped one (a re-check that still
-     * finds some missing — trimmed to those).
+     * The screen as a new message (the gate), or in place of the tapped one (a re-check still missing some).
      *
      * @param list<BotChannel> $missing
      */

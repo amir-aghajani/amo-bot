@@ -22,16 +22,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * The numbers behind the shop's dashboard (both panels): the period's figures against the one before it, a point per
- * day for the chart, the queues that need a human — the services ending soon within the one window the subscriptions
- * screen uses too (SubscriptionDirectory::EXPIRING_DAYS) — and, in an agent's shop, traffic too short to sell anything
- * (ServerSelector::shortage()), and the latest orders and customers. Revenue is money that came in
- * (Payment::moneyIn()), never wallet spending. A figure and the one of the period before are one query.
+ * The numbers behind the dashboard (both panels): the period's figures against the one before (one query each), a point
+ * per day for the chart, what needs a human (Queues, plus services ending within SubscriptionDirectory::EXPIRING_DAYS and,
+ * in an agent's shop, traffic too short to sell anything), and the latest orders and customers. Revenue is money that came
+ * in (Payment::moneyIn()), never wallet spending. Days are the shop's (LocalTime); the database is asked in UTC.
  */
 final class DashboardStats
 {
-    public const RANGES = [7, 30, 90];
-    public const DEFAULT_RANGE = 30;
+    /** The ranges the screen offers, in days, and the one any other becomes. */
+    private const RANGES = [7, 30, 90];
+    private const DEFAULT_RANGE = 30;
     private const RECENT_LIMIT = 8;
 
     public function __construct(
@@ -40,13 +40,14 @@ final class DashboardStats
     ) {}
 
     /**
-     * Everything the screen shows for a range of `$days` (one of RANGES).
+     * Everything the screen shows for a range of `$days`; anything but one of RANGES is DEFAULT_RANGE.
      *
      * @return array<string, mixed>
      */
-    public function summary(int $days): array
+    public function summary(?int $days): array
     {
-        // The days are the shop's (its zone's midnights), the moments asked of the database UTC, as it keeps them.
+        $days = in_array($days, self::RANGES, true) ? $days : self::DEFAULT_RANGE;
+        // The days are the shop's (its zone's midnights); the moments asked of the database are UTC, as it keeps them.
         $now = now()->setTimezone(LocalTime::zone());
         $from = $now->copy()->subDays($days - 1)->startOfDay();
         $period = [$from->copy()->utc(), $now->copy()->utc()];
@@ -86,8 +87,8 @@ final class DashboardStats
     }
 
     /**
-     * A figure of the period and of the one before it, in one query: the rows counted — or their `$sum` added up — by
-     * when `$column` says they happened.
+     * A figure for the period and for the one before, in one query: rows counted (or `$sum` added up) by when `$column`
+     * says they happened.
      *
      * @template TModel of Model
      * @param Builder<TModel> $query
@@ -111,7 +112,7 @@ final class DashboardStats
     }
 
     /**
-     * One row per day for the whole range, zero-filled.
+     * One point per day of the range, days without rows at zero.
      *
      * @return list<array{date: string, revenue: string, orders: int, users: int}>
      */
@@ -139,12 +140,12 @@ final class DashboardStats
     /**
      * @template TModel of Model
      * @param Builder<TModel> $query
-     * @return array<string, mixed> The aggregate by the shop's day
+     * @return array<string, mixed> `$aggregate` by the shop's day (Y-m-d)
      */
     private function perDay(Builder $query, string $column, string $aggregate): array
     {
-        // The shop's day of a UTC moment: shifted by the zone's offset now (a zone with daylight saving may put a
-        // row of the hour around its change on the neighbouring day — a chart can live with that).
+        // The shop's day of a UTC moment, shifted by the zone's offset now. With daylight saving a row from the hour around
+        // the change may land on the neighbouring day — acceptable for a chart.
         $day = $this->database->driver()->localDate($query->getQuery()->getGrammar()->wrap($query->qualifyColumn($column)), LocalTime::offset());
 
         $result = [];
@@ -155,12 +156,12 @@ final class DashboardStats
         return $result;
     }
 
-    /** @return array<string, int> The shop's queues (Queues — the receipts to review, the orders stuck), then the rest. */
+    /** @return array<string, int> The shop's queues (Queues), then unpaid orders, failing servers and services ending soon. */
     private function attention(): array
     {
         return Queues::counts() + [
             'pending_orders' => Order::query()->where('status', OrderStatus::Pending->value)->count(),
-            // The servers are the shop's own: an agent's shop is not told about them.
+            // Servers are the installation's: an agent's shop is not told about them.
             'servers_with_errors' => CurrentBot::isMain() ? Server::query()->whereNotNull('last_error')->count() : 0,
             'expiring_soon' => Subscription::expiringWithin(SubscriptionDirectory::EXPIRING_DAYS)->count(),
         ];
@@ -203,7 +204,7 @@ final class DashboardStats
             ->all();
     }
 
-    /** An aggregate of amounts as the database answers it (a string, a number, nothing) in Money's terms. */
+    /** A database aggregate of amounts (a string, a number or null) as Money's decimal string. */
     private static function money(mixed $value): string
     {
         return Money::normalize(is_numeric($value) ? (string) $value : '0');

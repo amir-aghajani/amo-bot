@@ -24,25 +24,14 @@ use App\Modules\Users\Services\CustomerPictures;
 use App\Support\Text;
 
 /**
- * What the customer writes in a support ticket — the chat's state while a message is awaited, entered by TicketHandler's
- * prompts: `ticket.new` (a new ticket's first message, the service it is about in its scratch) or `ticket.reply.{id}`
- * (the ticket's next). A message is words — a text, or a picture's caption — and at most one picture: a Telegram photo,
- * or a picture sent as a file, judged by its bytes (CustomerPictures::isPicture(), the shop's one rule for a picture it is
- * sent), kept by Support as its Telegram file id. A picture without words is kept and its words asked for — the next
- * text goes with it, as the shop takes no picture without words (another picture of the same album is not asked about
- * again) —, and so is one whose words were refused (too short to open a ticket with, too long, too many messages a
- * while): kept for the next message, which the refusal says. Anything else (a voice, a video, a sticker, a file that is
- * no picture) is refused, the message still awaited.
+ * What the customer writes in a support ticket, while the chat is at `ticket.new` (a new ticket's first message) or
+ * `ticket.reply.{id}` (the ticket's next). A message is words — a text or a picture's caption — and at most one picture
+ * (a photo, or a picture sent as a file). The shop takes no picture without words, so a picture alone, or one whose words
+ * were refused, is kept in the session for the next message. The rules are Support\Services\Tickets'.
  *
- * The first message opens the ticket (Tickets::open(), channel bot: the report group hears of it as of one opened on the
- * website), its subject the message's first line cut to fit (subjectOf()); every later one is written in it
- * (Tickets::write(): a closed ticket opens again). Each is answered with what came of it and «🗂️ مشاهده تیکت». Taken,
- * the chat stays on the ticket — what the customer sends next is added to it, as one does in a chat — until they go
- * elsewhere (a command, the menu, any button of the bot's screens leaves the state), for REPLY_SECONDS after their last
- * message: a message after that is not the ticket's — the fallback answers it, the state left —, and a notice of
- * another of their tickets ends it at once (leaveOtherTicket()); «✍️ پاسخ» on a ticket's screen or under a notice is
- * the way back in. A refusal — the words too long, too many tickets or messages in too little time, the ticket full — is
- * the service's own words, the message still awaited.
+ * Once a message is taken the chat stays on that ticket, like a chat, until the customer goes elsewhere, REPLY_SECONDS
+ * pass, or a notice of another of their tickets arrives (leaveOtherTicket()) — so a later message never lands in the
+ * wrong ticket.
  */
 final class TicketMessageHandler implements Handler
 {
@@ -69,16 +58,15 @@ final class TicketMessageHandler implements Handler
         $session->enter(self::NEW, ['service' => $serviceId]);
     }
 
-    /** The ticket's next message awaited — `$from` the page of «تیکت‌های من» its screen goes back to —, REPLY_SECONDS from now. */
+    /** Await the ticket's next message for REPLY_SECONDS; `$from` is the page of «تیکت‌های من» its screen goes back to. */
     public static function awaitReply(ChatSession $session, Ticket $ticket, int $from): void
     {
         $session->enter(self::REPLY . $ticket->id, ['from' => $from, 'at' => now()->getTimestamp()]);
     }
 
     /**
-     * A notice of `$ticket` reached the customer's chat: a chat left on another of their tickets leaves it — what they
-     * type next is not that other ticket's (the notice's «✍️ پاسخ» takes them to this one). One conditional update: a
-     * step the chat moved to meanwhile is the customer's own.
+     * A notice of `$ticket` reached the customer's chat: a chat waiting on another of their tickets stops waiting, so
+     * what they type next does not land there. One conditional update, leaving any other step the chat is at alone.
      */
     public static function leaveOtherTicket(int $chatId, Ticket $ticket): void
     {
@@ -89,10 +77,8 @@ final class TicketMessageHandler implements Handler
     }
 
     /**
-     * A new ticket's subject, from its first message: the first line with words in it, cut to Tickets::SUBJECT_MAX — at a
-     * space near the end when there is one — with «…». A first line shorter than SUBJECT_MIN (a «hi» on a line of its own)
-     * takes the message's next words with it — the message on one line, cut the same way —; null for a message shorter
-     * than that whole: it says too little to be a ticket.
+     * A new ticket's subject: the message's first non-empty line, cut to Tickets::SUBJECT_MAX at a word. A first line
+     * shorter than SUBJECT_MIN (a «hi») takes the next words with it; null when the whole message is shorter than that.
      */
     private static function subjectOf(string $words): ?string
     {
@@ -113,7 +99,7 @@ final class TicketMessageHandler implements Handler
         $state = (string) $ctx->session->state();
         $replying = str_starts_with($state, self::REPLY);
         if ($replying && !self::lately($ctx->session)) {
-            // The chat was left on the ticket a while ago: what it says now is not taken as the ticket's.
+            // The chat stopped on the ticket a while ago: this message is not the ticket's.
             $ctx->session->clear();
             $this->fallback->handle($ctx);
 
@@ -145,7 +131,7 @@ final class TicketMessageHandler implements Handler
         }
     }
 
-    /** The first message: the ticket opened with it — about the service picked, if any —, the chat on it from now. */
+    /** The first message opens the ticket (about the service picked, if any); the chat stays on it from now. */
     private function open(Context $ctx, string $words, ?Attachment $picture): void
     {
         $subject = self::subjectOf($words);
@@ -169,8 +155,8 @@ final class TicketMessageHandler implements Handler
     }
 
     /**
-     * The ticket opened, about the service — one support deleted since it was picked is no reason to lose the customer's
-     * words: then it is opened about none.
+     * The ticket opened about the service — or about none when that service was deleted since it was picked: the
+     * customer's words are not lost over it.
      *
      * @param array<string, string> $input
      * @throws ValidationException
@@ -193,7 +179,7 @@ final class TicketMessageHandler implements Handler
         }
     }
 
-    /** A later message, written in the ticket — a closed one opens again —, the chat still on it. */
+    /** A later message written in the ticket (a closed one opens again); the chat stays on it. */
     private function write(Context $ctx, int $ticketId, string $words, ?Attachment $picture): void
     {
         $ticket = Ticket::of($ctx->user)->find($ticketId);
@@ -219,31 +205,26 @@ final class TicketMessageHandler implements Handler
     }
 
     /**
-     * What the customer sent, as a ticket's message takes it: its words — a text, or a picture's caption — and its picture;
-     * null for anything else.
+     * What the customer sent, as a ticket's message: its text (a message, or a picture's caption) and its picture; null for
+     * anything else (a voice, a sticker, a file that is no picture).
      *
      * @return array{string, Attachment|null}|null
      */
     private function sent(Context $ctx): ?array
     {
         $update = $ctx->update;
-        $caption = trim((string) (($update->message() ?? [])['caption'] ?? ''));
-        $document = $update->document();
+        if ($update->contentKind() === 'text') {
+            return [trim((string) $update->text()), null];
+        }
 
-        return match ($update->contentKind()) {
-            'text' => [trim((string) $update->text()), null],
-            'photo' => [$caption, Attachment::telegram((string) ($update->photo()['file_id'] ?? ''))],
-            'document' => $document !== null && $this->pictures->isPicture($document)
-                ? [$caption, Attachment::telegram((string) ($document['file_id'] ?? ''), CustomerPictures::cleanName(isset($document['file_name']) ? (string) $document['file_name'] : null))]
-                : null,
-            default => null,
-        };
+        $picture = $update->picture($this->pictures->isPicture(...));
+
+        return $picture === null ? null : [trim((string) $update->caption()), Attachment::telegram($picture['file_id'], CustomerPictures::cleanName($picture['name']))];
     }
 
     /**
-     * A picture without words: kept for the next text, which says what it is — and that asked for. Another picture of the
-     * album the kept one came in (Telegram sends an album a picture at a time) is not asked about again: one picture goes
-     * with a message, the first one kept.
+     * A picture without words: kept for the next text, which is asked for. Telegram sends an album a picture at a time;
+     * the album's later pictures are not asked about again — a message takes one picture, the first.
      */
     private function keep(Context $ctx, ?Attachment $picture): void
     {
@@ -271,7 +252,7 @@ final class TicketMessageHandler implements Handler
         return is_string($fileId) && $fileId !== '' ? Attachment::telegram($fileId, is_string($name) ? $name : null) : null;
     }
 
-    /** The picture held in the chat's scratch, for the next message's words — with the album it came in. */
+    /** Hold the picture in the chat's scratch for the next message's words, with the album it came in. */
     private function hold(Context $ctx, Attachment $picture): void
     {
         $ctx->session->put('picture', $picture->fileId);
@@ -288,8 +269,8 @@ final class TicketMessageHandler implements Handler
     }
 
     /**
-     * The message refused — too short to open a ticket with, or the shop's own refusal in its words —, the message still
-     * awaited; a picture that came with it is held for the next one, which the refusal says.
+     * The message refused (too short to open a ticket with, or the shop's refusal), the next one still awaited; a
+     * picture that came with it is held for the next one, which the refusal says.
      *
      * @param array<string, scalar|Html> $values
      */
@@ -301,13 +282,13 @@ final class TicketMessageHandler implements Handler
         $ctx->reply($this->texts->render($text, $values + ['kept' => $picture !== null ? $this->texts->part(BotText::TicketPictureKept) : '']));
     }
 
-    /** The shop's refusal — the words too long, the ticket full, too many tickets or messages a while —, in its words. */
+    /** The refusal's first message (words too long, the ticket full, too many messages a while). */
     private static function reason(ValidationException|TooManyAttemptsException $e): string
     {
         return $e instanceof ValidationException ? (array_values($e->errors())[0][0] ?? $e->getMessage()) : $e->getMessage();
     }
 
-    /** Whether the chat came to its ticket, or wrote in it, within REPLY_SECONDS. */
+    /** Whether the chat came to its ticket, or wrote in it, within the last REPLY_SECONDS. */
     private static function lately(ChatSession $session): bool
     {
         $at = $session->get('at');
@@ -315,7 +296,7 @@ final class TicketMessageHandler implements Handler
         return is_int($at) && now()->getTimestamp() - $at <= self::REPLY_SECONDS;
     }
 
-    /** @return array{inline_keyboard: list<list<array<string, mixed>>>} «🗂️ مشاهده تیکت» — the ticket's screen in place of the word. */
+    /** @return array{inline_keyboard: list<list<array<string, mixed>>>} «🗂️ مشاهده تیکت»: the ticket's screen. */
     private function view(Ticket $ticket, int $from): array
     {
         return InlineKeyboard::make()->row(InlineKeyboard::callback($this->texts->get(BotText::TicketView), TicketHandler::screenCallback($ticket->id, $from)))->build();

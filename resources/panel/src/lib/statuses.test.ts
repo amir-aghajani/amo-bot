@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentBot, Delivery } from '@/lib/api-types'
-import { agentBotStatus, EMAILED, isDelivered, NOT_DELIVERED, serverStatus } from '@/lib/statuses'
+import { agentBotStatus, EMAILED, isDelivered, NOT_DELIVERED, ORDER_TYPE, serverStatus } from '@/lib/statuses'
 
 /**
- * A server's and an agent's bot's state in a word (lib/statuses), in the order the reasons outrank each other; and what
- * came of a message the bot wrote someone of its own accord.
+ * A server's and an agent's bot's state in a word (lib/statuses), in the order the reasons outrank each other; what came
+ * of a message the bot wrote someone of its own accord; and what an order was for.
  */
+
+describe('an order', () => {
+  it('is for a plan, then what is bought for a service — its extra traffic and time too —, a top-up, an agent’s traffic', () => {
+    expect(Object.values(ORDER_TYPE)).toEqual(['خرید', 'تمدید', 'حجم اضافه', 'زمان اضافه', 'شارژ کیف پول', 'خرید حجم نمایندگی'])
+  })
+})
 
 describe('a server', () => {
   const server = { is_active: true, last_error: null, last_checked_at: '2026-10-06T09:00:00Z' }
@@ -38,15 +44,15 @@ describe('an agent’s bot', () => {
   })
 })
 
-describe('a message the bot wrote someone of its own accord', () => {
+describe('a notice the bot sent a customer', () => {
   const deliveries: Delivery[] = ['told', 'emailed', 'turned_away', 'unreachable', 'refused', 'no_telegram']
 
-  it('reached them by Telegram, or — they have none — by email, said so', () => {
+  it('counts Telegram and email as delivered, and says which', () => {
     expect(deliveries.filter(isDelivered)).toEqual(['told', 'emailed'])
     expect(`یادآوری ${EMAILED}`).toBe('یادآوری با ایمیل فرستاده شد')
   })
 
-  it('that did not says why, of whom, by the door it was to go through', () => {
+  it('that failed explains why, naming whom, for each channel', () => {
     expect(NOT_DELIVERED.unreachable('مشتری', true)).toBe('تلگرام در دسترس نبود')
     expect(NOT_DELIVERED.unreachable('مشتری', false)).toBe('سرور ایمیل در دسترس نبود')
     expect(NOT_DELIVERED.turned_away('نماینده', true)).toBe('نماینده ربات را مسدود کرده یا حسابش دیگر نیست')

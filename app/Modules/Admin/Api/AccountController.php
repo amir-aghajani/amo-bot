@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Http\ApiController;
 use App\Modules\Agency\Services\AgencyDirectory;
 use App\Modules\Agency\Services\TrafficPool;
@@ -14,9 +13,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * «حساب نمایندگی», the agent's own page of their panel: their bot (who it is, whether it runs, what keeps it from
- * running), the traffic it may still sell and every line of it — and whether it is too little to sell anything —, their
- * level and price per GB, their wallet and credit with the shop.
+ * «حساب نمایندگی», the agent's own page: their bot and its state, the traffic it may still sell (and whether that is too
+ * little to sell anything) with its ledger, their level, and their wallet and credit with the shop.
  */
 final class AccountController extends ApiController
 {
@@ -35,6 +33,6 @@ final class AccountController extends ApiController
     /** GET /account/traffic?page= — the traffic's lines, newest first. */
     public function traffic(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->pool->ledger(Principal::of($request)->shop, PageRequest::fromQuery($request->getQueryParams()))->toArray('lines'));
+        return $this->json($response, $this->pool->ledger(Principal::of($request)->shop, $this->pageRequest($request))->toArray('lines'));
     }
 }

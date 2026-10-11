@@ -33,9 +33,8 @@ const ROLES: Record<UserRole, string> = { admin: 'مدیران ربات', custom
 const SORTS: UserSort[] = ['joined', 'last_seen', 'balance', 'orders', 'services']
 
 /**
- * Everyone who ever talked to the bot or signed up on the website — searchable, paged, filterable by status, by role (the
- * bot's admins: the website's settings link here) and by one of the admin's groups — each name the way to the customer's
- * page; with ban/unban, the bot's admin role, the wallet and the groups each is in.
+ * Every customer of the bot or the website, searchable and filterable by status, role and group. Each name opens the
+ * customer's page; the row menu bans, gives the admin role, adjusts the wallet and sets the groups.
  */
 export function UsersList() {
   const list = usePagedList({

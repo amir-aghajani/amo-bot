@@ -12,9 +12,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * POST|DELETE /system/webhook (the owner's panel only) — how every bot the shop runs gets its updates, for a host
- * without a shell: on webhooks at APP_URL (bot:webhook:set's work), or off them, back to polling (bot:webhook:delete's).
- * The answer says what happened to each bot; the system's mode (GET /system) follows.
+ * POST|DELETE /system/webhook (the owner's panel): put every bot on webhooks at APP_URL, or take them off back to polling
+ * — bot:webhook:set/delete's work, for a host without a shell. The answer says what happened to each bot.
  */
 final class BotWebhooksController extends ApiController
 {
@@ -41,8 +40,8 @@ final class BotWebhooksController extends ApiController
     }
 
     /**
-     * Telegram is asked for each bot in turn: the session's other requests do not wait on that, and a caller who hangs
-     * up leaves no bot half-way.
+     * Telegram is asked for each bot in turn: release the session so the panel's other requests do not wait, and keep
+     * going if the caller hangs up so no bot is left half-way.
      */
     private function settle(): void
     {

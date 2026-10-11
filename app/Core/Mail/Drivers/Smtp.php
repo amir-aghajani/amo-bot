@@ -18,17 +18,16 @@ use Symfony\Component\Mailer\Transport\Smtp\Stream\SocketStream;
 use Symfony\Component\Mailer\Transport\TransportInterface;
 
 /**
- * An account on a mail server, over SMTP — one of the host's Email Accounts in cPanel, or any other: the server, its
- * port, how the connection is encrypted — STARTTLS required (`tls`), TLS from the first byte (`ssl`) or neither
- * (`none`) —, and the account signed in with. The password is kept with the account it was given for: moved to another
- * server or account, or to a connection less encrypted, it is typed again.
+ * An account on a mail server over SMTP (a cPanel Email Account, or any other): server, port, encryption — `tls`
+ * (STARTTLS, required), `ssl` (TLS from the first byte) or `none` — and the account. The password is bound to all four:
+ * change one and it must be typed again, so it never goes to another server or in clear text where it went encrypted.
  */
 final class Smtp implements MailDriver
 {
-    /** The password left blank while the account it was kept for moved — it never goes to another server, nor in clear text where it went encrypted. */
+    /** A blank password while the server, port, encryption or account changed. */
     public const PASSWORD_MOVED = 'سرور، رمزنگاری اتصال یا نام کاربری SMTP عوض شده است؛ رمز SMTP را دوباره وارد کنید.';
 
-    /** How a connection is encrypted, in the order the screen offers it, and its words there. */
+    /** The encryption choices, in the order the screen offers them, with their labels. */
     private const ENCRYPTIONS = ['tls' => 'STARTTLS (پیشنهادی)', 'ssl' => 'SSL', 'none' => 'بدون رمزنگاری'];
 
     /** How long a mail server may take to answer, connecting included: a customer's request waits for the mail it sends. */

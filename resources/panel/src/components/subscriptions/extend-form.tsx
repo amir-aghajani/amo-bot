@@ -28,9 +28,9 @@ interface ExtendFormProps {
 }
 
 /**
- * «افزایش زمان و حجم» on one service: days and traffic on top of what it has — what a grant gives it —, each worded for
- * this service, or off when it cannot take it (it never ends, it has no quota); the note its customer reads, and
- * whether they hear it. In an agent's shop the GB comes out of the bot's traffic; the days cost nothing.
+ * «افزایش زمان و حجم» for one service: days and GB on top of what it has (each field off when the service cannot take it
+ * — no end date, no quota), a note for the customer and whether to tell them. In an agent's shop the GB come out of the
+ * bot's traffic; days cost nothing.
  */
 export function ExtendForm({ subscription, traffic, invalidates, onCancel, onExtended, onStale }: ExtendFormProps) {
   const agentShop = !useMainShop()
@@ -72,7 +72,7 @@ function above(typed: string): boolean {
 /** What days do to the service — onto its deadline, or onto its term while it waits for its first connection —, or that it never ends. */
 function daysHint(subscription: SubscriptionRow): GrantAmountHint {
   if (subscription.expires_at !== null) return { hint: 'به تاریخ پایان سرویس اضافه می‌شود.' }
-  if (subscription.duration_days > 0) return { hint: 'به مدت سرویس اضافه می‌شود؛ زمانش از اولین اتصال مشتری شروع می‌شود.' }
+  if (subscription.duration_hours > 0) return { hint: 'به مدت سرویس اضافه می‌شود؛ زمانش از اولین اتصال مشتری شروع می‌شود.' }
   return { hint: 'این سرویس تاریخ پایان ندارد.', off: true }
 }
 

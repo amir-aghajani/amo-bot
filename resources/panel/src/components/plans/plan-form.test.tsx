@@ -1,19 +1,16 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Creating } from '@/components/form-footer'
 import { PlanForm } from '@/components/plans/plan-form'
-import type { PlanOptions } from '@/lib/api-types'
+import type { BotSettingsResponse, ExtraPrices, PlanOptions, PlanRow } from '@/lib/api-types'
 import { signedIn, until } from '@/test/render'
-import { planRow } from '@/test/rows'
+import { botSettingsRow, planRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
- * A plan's form (components/plans/plan-form, components/plans/server-entries): its three sections laid out in one place,
- * so the dialog keeps its height whichever is shown; every refusal about its servers listed, not the first alone, and
- * the servers counted among the fields to fix; a servers section that says why there is nothing to pick — the servers
- * not read (with a way to ask again), or none there: the owner is sent to add one, an agent is told whom to ask —, whose
- * «افزودن به پلن» keeps the focus it was pressed with, and which sends the owner to a server's page and an agent, who has
- * none, to support. The category's hint says the bot's rule: the step comes as soon as one category is active.
+ * A plan's form (plan-form, server-entries, plan-extras): its four tabs and where a refusal lands, the servers section
+ * when there is nothing to pick, the term in days or hours, the first-purchase and agent prices, the extras' price
+ * list, the checkout note and the bot button — and `dirty` reading every field as the server would.
  */
 
 const OPTIONS: PlanOptions = {
@@ -46,13 +43,13 @@ describe('a plan’s form', () => {
     showForm()
     await screen.findByRole('tab', { name: /مشخصات/ })
 
-    expect(panels()).toHaveLength(3)
+    expect(panels()).toHaveLength(4)
     expect(panels().some((panel) => panel.hasAttribute('hidden'))).toBe(false)
-    expect(panels().map((panel) => panel.hasAttribute('inert'))).toEqual([false, true, true])
+    expect(panels().map((panel) => panel.hasAttribute('inert'))).toEqual([false, true, true, true])
 
     await openServers()
-    expect(panels().map((panel) => panel.hasAttribute('inert'))).toEqual([true, true, false])
-    expect(panels().map((panel) => panel.classList.contains('invisible'))).toEqual([true, true, false])
+    expect(panels().map((panel) => panel.hasAttribute('inert'))).toEqual([true, true, false, true])
+    expect(panels().map((panel) => panel.classList.contains('invisible'))).toEqual([true, true, false, true])
   })
 
   it('lists every refusal about its servers, on the section that holds them', async () => {
@@ -172,7 +169,7 @@ describe('its servers section', () => {
     await openServers()
 
     expect(await screen.findByText(/از پشتیبانی بخواهید سروری اضافه کند/)).toBeTruthy()
-    expect(screen.queryByRole('link')).toBeNull()
+    expect(within(screen.getByRole('group', { name: 'سرورها' })).queryByRole('link')).toBeNull()
   })
 
   it('says why an entry’s server cannot sell, in one sentence', async () => {
@@ -182,5 +179,592 @@ describe('its servers section', () => {
     await openServers()
 
     expect(await screen.findByText('سرور غیرفعال است. تا درست نشود، مشتری این سرور را نمی‌بیند.')).toBeTruthy()
+  })
+})
+
+/** A plan's own prices of its extras: 3٬000 a GB, 10 GB offered at that; no time sold. */
+const OWN: ExtraPrices = {
+  traffic_price: '3000.00',
+  traffic_options: [{ quantity: 10, price: null }],
+  traffic_min: 1,
+  traffic_max: 100,
+  time_price: null,
+  time_options: [],
+  time_min: 1,
+  time_max: 30,
+}
+
+/** The form on `plan` (null: a new one, as its dialog opens it), the shop's extras switched on — or off. */
+function showPlan(plan: PlanRow | null, extrasEnabled = true) {
+  const settings: BotSettingsResponse = {
+    settings: botSettingsRow({ extras_enabled: extrasEnabled }),
+    qr_background: { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 182_000, updated_at: 1_759_000_000, max_bytes: 5 * 1024 * 1024 },
+  }
+  server().on('GET', '/api/admin/plans/options', json(OPTIONS)).on('GET', '/api/admin/bot/settings', json(settings))
+  render(
+    <Creating value={plan === null}>
+      <PlanForm plan={plan} onSaved={vi.fn()} onCancel={vi.fn()} />
+    </Creating>,
+    { wrapper: signedIn().wrapper },
+  )
+}
+
+async function openExtras() {
+  fireEvent.click(await screen.findByRole('tab', { name: /حجم و زمان اضافه/ }))
+}
+
+/** Where the plan's extras are priced, picked. */
+function pricing(name: 'قیمت‌های فروشگاه' | 'قیمت‌های این پلن') {
+  fireEvent.click(screen.getByRole('radio', { name }))
+}
+
+/** The extras the first save to `method path` sent. */
+function sentExtras(method: string, path: string): unknown {
+  return (server().sent(method, path)[0]?.body as { extras?: unknown } | undefined)?.extras
+}
+
+describe('its extra traffic and time', () => {
+  it('sell at the shop’s prices for a plan without its own — sent as none —, and say when the shop sells none at all', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showPlan(null, false)
+    await openExtras()
+
+    expect(screen.getByRole('radio', { name: 'قیمت‌های فروشگاه' }).getAttribute('aria-checked')).toBe('true')
+    expect(await screen.findByText(/خاموش است؛ تا روشن نشود، مشتری‌ها هیچ‌کدام را نمی‌خرند/)).toBeTruthy()
+    expect(screen.queryByLabelText('قیمت هر گیگابایت (تومان)')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentExtras('POST', '/api/admin/plans')).toBeNull()
+  })
+
+  it('at the plan’s own prices start from nothing priced, and are sent as typed', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showPlan(null)
+    await openExtras()
+
+    pricing('قیمت‌های این پلن')
+    expect(screen.getByText('با این قیمت‌ها حجم اضافه فروخته نمی‌شود.')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('قیمت هر روز (تومان)'), { target: { value: '2000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentExtras('POST', '/api/admin/plans')).toEqual({
+      traffic_price: '',
+      traffic_options: [],
+      traffic_min: '1',
+      traffic_max: '100',
+      time_price: '2000',
+      time_options: [],
+      time_min: '1',
+      time_max: '30',
+    })
+  })
+
+  it('of a plan with its own start from them, kept while the shop’s are chosen — which are then sent', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow({ extras: OWN }))
+    await openExtras()
+
+    expect(screen.getByRole('radio', { name: 'قیمت‌های این پلن' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByLabelText<HTMLInputElement>('قیمت هر گیگابایت (تومان)').value).toBe('3000')
+
+    pricing('قیمت‌های فروشگاه')
+    expect(screen.queryByLabelText('قیمت هر گیگابایت (تومان)')).toBeNull()
+    pricing('قیمت‌های این پلن')
+    expect(screen.getByLabelText<HTMLInputElement>('حجم پیشنهادی ۱ (گیگابایت)').value).toBe('10')
+
+    pricing('قیمت‌های فروشگاه')
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentExtras('PUT', '/api/admin/plans/3')).toBeNull()
+  })
+
+  it('changed only by what the server would keep: a blank row, or the shop’s prices chosen and the plan’s again, is none', async () => {
+    showPlan(planRow({ extras: OWN }))
+    await openExtras()
+    const save = screen.getByRole('button', { name: 'ذخیره تغییرات' })
+
+    fireEvent.click(within(screen.getByRole('group', { name: 'زمان اضافه' })).getByRole('button', { name: 'افزودن مقدار' }))
+    expect(save.getAttribute('aria-disabled')).toBe('true')
+    pricing('قیمت‌های فروشگاه')
+    expect(save.getAttribute('aria-disabled')).toBeNull()
+    pricing('قیمت‌های این پلن')
+    expect(save.getAttribute('aria-disabled')).toBe('true')
+
+    fireEvent.change(screen.getByLabelText('قیمت هر گیگابایت (تومان)'), { target: { value: '۳٬۰۰۰' } })
+    expect(save.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.change(screen.getByLabelText('قیمت هر گیگابایت (تومان)'), { target: { value: '3500' } })
+    expect(save.getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('refused, open their section — the field the refusal names marked and focused —, which goes as it is typed', async () => {
+    const tooMuch = 'قیمت هر گیگابایت باید مبلغی بین ۱ تومان تا ۱۰۰٬۰۰۰٬۰۰۰ تومان باشد، یا خالی بماند.'
+    server().on('POST', '/api/admin/plans', refusal(422, tooMuch, { 'extras.traffic_price': [tooMuch] }))
+    showPlan(null)
+    await openExtras()
+    pricing('قیمت‌های این پلن')
+    fireEvent.change(screen.getByLabelText('قیمت هر گیگابایت (تومان)'), { target: { value: '999999999999' } })
+    fireEvent.click(screen.getByRole('tab', { name: /مشخصات/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(screen.getByRole('tab', { name: /حجم و زمان اضافه/ }).getAttribute('aria-selected')).toBe('true'))
+    const price = screen.getByLabelText('قیمت هر گیگابایت (تومان)')
+    expect(screen.getByRole('tab', { name: /حجم و زمان اضافه.*دارای خطا/ })).toBeTruthy()
+    expect(price.getAttribute('aria-invalid')).toBe('true')
+    expect(screen.getByText(tooMuch)).toBeTruthy()
+    await until(() => expect(document.activeElement).toBe(price))
+
+    fireEvent.change(price, { target: { value: '5000' } })
+    expect(screen.queryByText(tooMuch)).toBeNull()
+    expect(screen.queryByRole('tab', { name: /دارای خطا/ })).toBeNull()
+  })
+
+  it('refused, mark their tab only while the plan’s own prices are on the form', async () => {
+    const twice = '۱۰ گیگابایت دو بار آمده است.'
+    server().on('PUT', '/api/admin/plans/3', refusal(422, twice, { 'extras.traffic_options': [twice] }))
+    showPlan(planRow({ extras: OWN }))
+    await openExtras()
+    fireEvent.change(screen.getByLabelText('قیمت هر گیگابایت (تومان)'), { target: { value: '3500' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(screen.getByRole('tab', { name: /حجم و زمان اضافه.*دارای خطا/ })).toBeTruthy())
+    pricing('قیمت‌های فروشگاه')
+    expect(screen.queryByRole('tab', { name: /دارای خطا/ })).toBeNull()
+    pricing('قیمت‌های این پلن')
+    expect(screen.getByRole('tab', { name: /حجم و زمان اضافه.*دارای خطا/ })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'حجم‌های پیشنهادی' }).hasAttribute('data-invalid')).toBe(true)
+  })
+})
+
+async function openQuota() {
+  fireEvent.click(await screen.findByRole('tab', { name: /قیمت و سهمیه/ }))
+}
+
+/** The term's amount field. */
+const termField = () => screen.getByLabelText<HTMLInputElement>('مدت اعتبار')
+
+/** The term as the form shows it: its amount, and the unit picked. */
+function shownTerm(): [string, string | null] {
+  const unit = within(screen.getByRole('radiogroup', { name: 'واحد مدت اعتبار' })).getByRole('radio', { checked: true })
+  return [termField().value, unit.textContent]
+}
+
+/** The term's unit picked. */
+function pickUnit(name: 'روز' | 'ساعت') {
+  fireEvent.click(screen.getByRole('radio', { name }))
+}
+
+/** The body the first save to `method path` sent. */
+function sentPlan(method: string, path: string): Record<string, unknown> | undefined {
+  return server().sent(method, path)[0]?.body as Record<string, unknown> | undefined
+}
+
+describe('its term', () => {
+  it('is typed in days to start with, and goes in hours — never as days', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showForm()
+    await openQuota()
+
+    expect(shownTerm()).toEqual(['30', 'روز'])
+    expect(screen.getByText('0 = نامحدود؛ روزها از اولین اتصال مشتری شمرده می‌شوند.')).toBeTruthy()
+    fireEvent.change(termField(), { target: { value: '۳' } })
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentPlan('POST', '/api/admin/plans')?.duration_hours).toBe('72')
+    expect(sentPlan('POST', '/api/admin/plans')).not.toHaveProperty('duration_days')
+  })
+
+  it('goes as the hours typed for an hourly plan — a one-hour test —, counted from the first connection too', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showForm()
+    await openQuota()
+
+    pickUnit('ساعت')
+    fireEvent.change(termField(), { target: { value: '1' } })
+    expect(screen.getByText('0 = نامحدود؛ ساعت‌ها از اولین اتصال مشتری شمرده می‌شوند.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentPlan('POST', '/api/admin/plans')?.duration_hours).toBe('1')
+  })
+
+  it.each([
+    ['a daily plan', 30 * 24, ['30', 'روز']],
+    ['an hourly plan', 6, ['6', 'ساعت']],
+    ['a plan of a day and some hours', 30, ['30', 'ساعت']],
+    ['a plan that never ends', 0, ['0', 'روز']],
+  ] as const)('of %s opens in the unit it was made in', async (_plan, hours, shown) => {
+    showPlan(planRow({ duration_hours: hours }))
+    await openQuota()
+
+    expect(shownTerm()).toEqual(shown)
+  })
+
+  it('is measured in hours: «۱ روز» and «۲۴ ساعت» are no change, and a saved hourly plan goes in its hours', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow({ duration_hours: 24 }))
+    await openQuota()
+    const save = screen.getByRole('button', { name: 'ذخیره تغییرات' })
+    expect(shownTerm()).toEqual(['1', 'روز'])
+
+    pickUnit('ساعت')
+    expect(save.getAttribute('aria-disabled')).toBeNull()
+    fireEvent.change(termField(), { target: { value: '۲۴' } })
+    expect(save.getAttribute('aria-disabled')).toBe('true')
+
+    fireEvent.change(termField(), { target: { value: '12' } })
+    fireEvent.click(save)
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')?.duration_hours).toBe('12')
+  })
+
+  it('refused, opens its section — its field marked, focused and saying why, once —, which a change of its unit lets go of', async () => {
+    const tooLong = 'مدت اعتبار باید عددی بین 0 (بدون محدودیت) تا 87600 ساعت باشد.'
+    server().on('POST', '/api/admin/plans', refusal(422, tooLong, { duration_hours: [tooLong] }))
+    showForm()
+    await openQuota()
+    fireEvent.change(termField(), { target: { value: '5000' } })
+    fireEvent.click(screen.getByRole('tab', { name: /مشخصات/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(screen.getByRole('tab', { name: /قیمت و سهمیه/ }).getAttribute('aria-selected')).toBe('true'))
+    expect(screen.getByRole('tab', { name: /قیمت و سهمیه.*دارای خطا/ })).toBeTruthy()
+    expect(termField().getAttribute('aria-invalid')).toBe('true')
+    expect(document.getElementById(termField().getAttribute('aria-describedby') ?? '')?.textContent).toBe(tooLong)
+    expect(screen.getAllByText(tooLong)).toHaveLength(1)
+    await until(() => expect(document.activeElement).toBe(termField()))
+
+    pickUnit('ساعت')
+    expect(termField().getAttribute('aria-invalid')).toBe('false')
+    expect(screen.queryByText(tooLong)).toBeNull()
+    expect(screen.queryByRole('tab', { name: /دارای خطا/ })).toBeNull()
+  })
+})
+
+describe('its price', () => {
+  it('is measured by its digits: typed again with its thousands set apart, it is no change', async () => {
+    showPlan(planRow())
+    await openQuota()
+    const price = screen.getByLabelText('قیمت (تومان)')
+    const save = screen.getByRole('button', { name: 'ذخیره تغییرات' })
+
+    fireEvent.change(price, { target: { value: '۱۲۰٬۰۰۰' } })
+    expect(save.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.change(price, { target: { value: '125000' } })
+    expect(save.getAttribute('aria-disabled')).toBeNull()
+  })
+})
+
+/* Optional: its label carries «(اختیاری)» after the name. */
+const FIRST_PURCHASE = /^قیمت خرید اول/
+
+/** The first-purchase price's field. */
+const firstPurchaseField = () => screen.getByLabelText<HTMLInputElement>(FIRST_PURCHASE)
+
+describe('its first-purchase price', () => {
+  it('is blank for a new plan — none —, beside its price, says what it is, and goes as none', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showForm()
+    await openQuota()
+    const quota = within(screen.getByRole('tabpanel', { name: /قیمت و سهمیه/ }))
+
+    expect(quota.getByLabelText<HTMLInputElement>(FIRST_PURCHASE).value).toBe('')
+    expect(quota.getByLabelText('قیمت (تومان)')).toBeTruthy()
+    expect(screen.getByText(/مشتری‌ای که هنوز سرویسی از فروشگاه نخریده، اولین بار این پلن را با این قیمت می‌خرد/)).toBeTruthy()
+    expect(screen.getByText(/0 = خرید اول رایگان/)).toBeTruthy()
+    expect(screen.getByText(/تمدید همیشه با قیمت عادی است/)).toBeTruthy()
+    fireEvent.change(firstPurchaseField(), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentPlan('POST', '/api/admin/plans')).toHaveProperty('first_purchase_price', null)
+  })
+
+  it.each([
+    ['a price', '50000.00', '50000'],
+    ['a free first purchase', '0.00', '0'],
+    ['none', null, ''],
+  ] as const)('of a plan with %s opens as the form shows amounts', async (_price, kept, shown) => {
+    showPlan(planRow({ first_purchase_price: kept }))
+    await openQuota()
+
+    expect(firstPurchaseField().value).toBe(shown)
+  })
+
+  it('typed, goes as typed — Persian digits too', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow())
+    await openQuota()
+
+    fireEvent.change(firstPurchaseField(), { target: { value: '۹۰۰۰۰' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toHaveProperty('first_purchase_price', '۹۰۰۰۰')
+  })
+
+  it('emptied, goes as none: everyone pays the plan’s price', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow({ first_purchase_price: '0.00' }))
+    await openQuota()
+
+    fireEvent.change(firstPurchaseField(), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toHaveProperty('first_purchase_price', null)
+  })
+
+  it('of a plan without one is no change left blank — spaces too —, but 0, a free first purchase, is one', async () => {
+    showPlan(planRow())
+    await openQuota()
+    const save = screen.getByRole('button', { name: 'ذخیره تغییرات' })
+    const unchanged = () => expect(save.getAttribute('aria-disabled')).toBe('true')
+    const changed = () => expect(save.getAttribute('aria-disabled')).toBeNull()
+
+    unchanged()
+    fireEvent.change(firstPurchaseField(), { target: { value: '  ' } })
+    unchanged()
+    fireEvent.change(firstPurchaseField(), { target: { value: '0' } })
+    changed()
+    fireEvent.change(firstPurchaseField(), { target: { value: '' } })
+    unchanged()
+  })
+
+  it('kept, is no change typed again in Persian digits or with its thousands set apart — another price, or none, is', async () => {
+    showPlan(planRow({ first_purchase_price: '50000.00' }))
+    await openQuota()
+    const save = screen.getByRole('button', { name: 'ذخیره تغییرات' })
+
+    for (const same of ['۵۰۰۰۰', '۵۰٬۰۰۰', '50,000', '50000']) {
+      fireEvent.change(firstPurchaseField(), { target: { value: same } })
+      expect(save.getAttribute('aria-disabled')).toBe('true')
+    }
+    fireEvent.change(firstPurchaseField(), { target: { value: '45000' } })
+    expect(save.getAttribute('aria-disabled')).toBeNull()
+    fireEvent.change(firstPurchaseField(), { target: { value: '' } })
+    expect(save.getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('refused, opens its section — its field marked, focused and saying why —, which a change lets go of', async () => {
+    const notBelow = 'قیمت خرید اول باید کمتر از قیمت پلن باشد.'
+    server().on('POST', '/api/admin/plans', refusal(422, notBelow, { first_purchase_price: [notBelow] }))
+    showForm()
+    await openQuota()
+    fireEvent.change(firstPurchaseField(), { target: { value: '200000' } })
+    fireEvent.click(screen.getByRole('tab', { name: /مشخصات/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(screen.getByRole('tab', { name: /قیمت و سهمیه/ }).getAttribute('aria-selected')).toBe('true'))
+    expect(screen.getByRole('tab', { name: /قیمت و سهمیه.*دارای خطا/ })).toBeTruthy()
+    expect(firstPurchaseField().getAttribute('aria-invalid')).toBe('true')
+    expect(document.getElementById(firstPurchaseField().getAttribute('aria-describedby') ?? '')?.textContent).toBe(notBelow)
+    await until(() => expect(document.activeElement).toBe(firstPurchaseField()))
+
+    fireEvent.change(firstPurchaseField(), { target: { value: '90000' } })
+    expect(firstPurchaseField().getAttribute('aria-invalid')).toBe('false')
+    expect(screen.queryByText(notBelow)).toBeNull()
+    expect(screen.queryByRole('tab', { name: /دارای خطا/ })).toBeNull()
+  })
+})
+
+/* Optional: its label carries «(اختیاری)» after the name. */
+const AGENT_PRICE = /^قیمت نماینده/
+
+/** The agent price's field. */
+const agentPriceField = () => screen.getByLabelText<HTMLInputElement>(AGENT_PRICE)
+
+describe('its agent price', () => {
+  it('is blank for a new plan — none —, beside its other prices, says who pays it, and goes as none', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showForm()
+    await openQuota()
+    const quota = within(screen.getByRole('tabpanel', { name: /قیمت و سهمیه/ }))
+
+    expect(quota.getByLabelText<HTMLInputElement>(AGENT_PRICE).value).toBe('')
+    expect(screen.getByText('نماینده‌ها و مشتری‌های گروه‌های همکار این قیمت را می‌پردازند، در خرید و تمدید؛ باید کمتر از قیمت باشد. خالی یعنی ندارد.')).toBeTruthy()
+    fireEvent.change(agentPriceField(), { target: { value: '  ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentPlan('POST', '/api/admin/plans')).toHaveProperty('agent_price', null)
+  })
+
+  it.each([
+    ['a price', '90000.00', '90000'],
+    ['none', null, ''],
+  ] as const)('of a plan with %s opens as the form shows amounts', async (_price, kept, shown) => {
+    showPlan(planRow({ agent_price: kept }))
+    await openQuota()
+
+    expect(agentPriceField().value).toBe(shown)
+  })
+
+  it('typed, goes as typed — Persian digits too', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow())
+    await openQuota()
+
+    fireEvent.change(agentPriceField(), { target: { value: '۹۰۰۰۰' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toHaveProperty('agent_price', '۹۰۰۰۰')
+  })
+
+  it('kept, emptied goes as none: agents pay the plan’s price', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow({ agent_price: '90000.00' }))
+    await openQuota()
+
+    fireEvent.change(agentPriceField(), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toHaveProperty('agent_price', null)
+  })
+
+  it('kept, is no change typed again with its thousands set apart — another price is', async () => {
+    showPlan(planRow({ agent_price: '90000.00' }))
+    await openQuota()
+    const save = screen.getByRole('button', { name: 'ذخیره تغییرات' })
+
+    fireEvent.change(agentPriceField(), { target: { value: '۹۰٬۰۰۰' } })
+    expect(save.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.change(agentPriceField(), { target: { value: '85000' } })
+    expect(save.getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('refused, opens its section — its field marked, focused and saying why —, which a change lets go of', async () => {
+    const notBelow = 'قیمت نماینده باید کمتر از قیمت پلن باشد.'
+    server().on('POST', '/api/admin/plans', refusal(422, notBelow, { agent_price: [notBelow] }))
+    showForm()
+    await openQuota()
+    fireEvent.change(agentPriceField(), { target: { value: '200000' } })
+    fireEvent.click(screen.getByRole('tab', { name: /مشخصات/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(screen.getByRole('tab', { name: /قیمت و سهمیه/ }).getAttribute('aria-selected')).toBe('true'))
+    expect(agentPriceField().getAttribute('aria-invalid')).toBe('true')
+    expect(document.getElementById(agentPriceField().getAttribute('aria-describedby') ?? '')?.textContent).toBe(notBelow)
+    await until(() => expect(document.activeElement).toBe(agentPriceField()))
+
+    fireEvent.change(agentPriceField(), { target: { value: '90000' } })
+    expect(screen.queryByText(notBelow)).toBeNull()
+    expect(screen.queryByRole('tab', { name: /دارای خطا/ })).toBeNull()
+  })
+})
+
+/* Optional: its label carries «(اختیاری)» after the name. */
+const checkoutNoteField = () => screen.getByLabelText<HTMLTextAreaElement>(/^یادداشت پیش‌فاکتور/)
+
+describe('its checkout note', () => {
+  it('is held to what the server keeps, counted as it is typed, and goes as typed', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showForm()
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    expect(checkoutNoteField().maxLength).toBe(500)
+    expect(screen.getByText('زیر پیش‌فاکتور خرید و تمدید این پلن در ربات نشان داده می‌شود.')).toBeTruthy()
+    fireEvent.change(checkoutNoteField(), { target: { value: 'تحویل فوری' } })
+    expect(screen.getByText('۱۰ از ۵۰۰ کاراکتر')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentPlan('POST', '/api/admin/plans')).toHaveProperty('checkout_note', 'تحویل فوری')
+  })
+
+  it('kept, opens with the plan, and emptied — spaces too — goes as none', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow({ checkout_note: 'تحویل فوری' }))
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    expect(checkoutNoteField().value).toBe('تحویل فوری')
+    fireEvent.change(checkoutNoteField(), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toHaveProperty('checkout_note', null)
+  })
+})
+
+/** The colour picked for the plan's button, and its width, as the radios read. */
+const pickedColour = () => within(screen.getByRole('radiogroup', { name: 'رنگ' })).getByRole('radio', { checked: true }).textContent
+const pickedWidth = () => within(screen.getByRole('radiogroup', { name: 'پهنای دکمه' })).getByRole('radio', { checked: true }).textContent
+
+describe('its button in the bot', () => {
+  it('of a new plan is the client’s own look in a row of its own — sent as none and 1', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showForm()
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    expect(pickedColour()).toMatch(/^پیش‌فرض/)
+    expect(pickedWidth()).toBe('یک ردیف کامل')
+    expect(screen.getByText('دکمه پلن‌های پشت سر هم با پهنای یکسان، در یک ردیف کنار هم می‌آیند.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentPlan('POST', '/api/admin/plans')).toMatchObject({ button_style: null, button_row: 1 })
+  })
+
+  it('takes one of Telegram’s colours and a width, sent as they are', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow())
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    fireEvent.click(screen.getByRole('radio', { name: /سبز/ }))
+    fireEvent.click(screen.getByRole('radio', { name: 'دو در ردیف' }))
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toMatchObject({ button_style: 'success', button_row: 2 })
+  })
+
+  it('kept, opens as it is, and the client’s own look picked again goes as none', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow({ button_style: 'danger', button_row: 3 }))
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    expect(pickedColour()).toMatch(/قرمز/)
+    expect(pickedWidth()).toBe('سه در ردیف')
+    fireEvent.click(screen.getByRole('radio', { name: /^پیش‌فرض/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toMatchObject({ button_style: null, button_row: 3 })
+  })
+
+  it('refused, opens its section and marks its group, saying why under it', async () => {
+    const tooWide = 'تعداد دکمه در هر ردیف باید ۱ تا ۳ باشد.'
+    server().on('POST', '/api/admin/plans', refusal(422, tooWide, { button_row: [tooWide] }))
+    showForm()
+    await openQuota()
+
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(screen.getByRole('tab', { name: /مشخصات/ }).getAttribute('aria-selected')).toBe('true'))
+    const group = screen.getByRole('group', { name: 'دکمه در ربات' })
+    expect(group.hasAttribute('data-invalid')).toBe(true)
+    expect(document.getElementById(group.getAttribute('aria-describedby') ?? '')?.textContent).toBe(tooWide)
+  })
+})
+
+describe('a saved plan opened again', () => {
+  it('is no change, whatever it holds — its agent price, its checkout note, its button', async () => {
+    showPlan(planRow({ first_purchase_price: '0.00', agent_price: '90000.00', checkout_note: 'تحویل فوری', button_style: 'primary', button_row: 2, extras: OWN }))
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    expect(screen.getByRole('button', { name: 'ذخیره تغییرات' }).getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByRole('button', { name: 'بازگردانی تغییرات' }).getAttribute('aria-disabled')).toBe('true')
   })
 })

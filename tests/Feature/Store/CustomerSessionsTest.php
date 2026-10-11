@@ -26,13 +26,9 @@ use Tests\Support\FakeGoogleLogin;
 use Tests\Support\FakeTelegramLogin;
 
 /**
- * A customer signed in on the shop's website: their bearer token opens their session — in that shop alone — until it
- * has gone CustomerSessions::IDLE_DAYS unused or LIFETIME_DAYS have passed since the sign-in, or they end it; they read
- * their account and the devices they are signed in on, end any of them (never another customer's), and sign this one
- * out. A banned customer is refused. Each session keeps how it was signed in — Telegram, Google, a password alone, or a
- * password and its second step —, which the shop's admins are judged by on its website. A session's use and the
- * customer's presence are written as they come due — a visit alone moves no panel's lists —, and what ended is forgotten
- * by the hourly housekeeping, every shop's.
+ * Website sessions: a bearer token opens its session in its own shop until idle or past its lifetime; the device list
+ * and ending sessions; banned customers refused; how each session was signed in; quiet presence writes; the hourly
+ * housekeeping.
  */
 final class CustomerSessionsTest extends HttpTestCase
 {
@@ -65,7 +61,7 @@ final class CustomerSessionsTest extends HttpTestCase
             'phone' => '+989121234567',
             'balance' => '50000.00',
             'created_at' => '2026-10-07T12:00:00+00:00',
-        ], 'unread_notifications' => 0, 'staff' => null], $this->decode($this->get($this->storeApi($this->website, '/me'))));
+        ], 'unread_notifications' => 0, 'staff' => null, 'loyalty' => ['tier' => null, 'spent' => '0.00', 'next' => null]], $this->decode($this->get($this->storeApi($this->website, '/me'))));
     }
 
     public function testNoTokenAWrongOneOrAnotherShopsSignsNobodyIn(): void

@@ -10,9 +10,8 @@ import { MAIN_SHOP } from '@/lib/config'
 import { queryKeys } from '@/lib/query-keys'
 
 /*
- * A panel's session, the same in both panels: who is signed in, in the shop the panel shows (`GET /auth/me` of the
- * panel's own API, which answers in the shop the tab's requests name — lib/config). How one signs in is the panel's own
- * — the owner's password, an agent's link — and goes through `enter()`.
+ * A panel's session, shared by both panels: who is signed in, in the shop the tab's requests name (`GET /auth/me`).
+ * How one signs in is each panel's own (the owner's password, an agent's link); both go through `enter()`.
  */
 
 interface SessionState {
@@ -20,7 +19,7 @@ interface SessionState {
   session: Session | null
   /** True until the first `/auth/me` has answered. */
   loading: boolean
-  /** What came instead of a usable answer to that question (the network, the server down) — not "signed out"; else null. */
+  /** Why `/auth/me` got no usable answer (the network, the server down) — not "signed out"; else null. */
   failure: unknown
   /** The session ended while the panel was open (a 401 mid-work): the login page says so. */
   expired: boolean
@@ -35,8 +34,7 @@ type SessionEvent =
   | { type: 'entered'; session: Session }
   | { type: 'left' }
 
-// Every event but `unreachable` is the server's answer, so whatever went unanswered before is over: a shop installed
-// since the first question (its 503 then), a server back up.
+// Every event but `unreachable` is an answer of the server's, so it clears an earlier failure.
 function next(state: SessionState, event: SessionEvent): SessionState {
   switch (event.type) {
     case 'asking':
@@ -55,13 +53,13 @@ function next(state: SessionState, event: SessionEvent): SessionState {
 }
 
 interface AuthState extends SessionState {
-  /** Ask who is signed in again (after a `failure`). */
+  /** Ask `/auth/me` again (after a `failure`). */
   retry: () => void
-  /** Open a session — a sign-in: nothing read under the last one stays. */
+  /** Open a session (a sign-in): everything cached under the last one is dropped. */
   enter: (open: () => Promise<SessionResponse>) => Promise<Session>
-  /** The open session renewed in its shop (the owner's login changed): who is signed in, as the server answers it now — everything read stays. */
+  /** Take the renewed session the server answered (the owner's login changed); the cache stays. */
   renew: (change: () => Promise<SessionResponse>) => Promise<Session>
-  /** End the session; refused by the server (it could not be reached), it stays open and the failure is thrown. */
+  /** Sign out; when the server cannot be reached the session stays open and the failure is thrown. */
   logout: () => Promise<void>
 }
 
@@ -71,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const [state, dispatch] = useReducer(next, { session: null, loading: true, failure: null, expired: false })
 
-  /** Who is signed in, asked of the server; only a 401 says nobody — anything else is the server or the network. */
+  /** Ask who is signed in. Only a 401 means nobody; any other failure is the network's or the server's. */
   const ask = useCallback((cancelled: () => boolean = () => false) => {
     dispatch({ type: 'asking' })
     api.get<SessionResponse>('/auth/me').then(
@@ -92,12 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [ask])
 
-  // Any 401 from the API means the session is gone: the login screen comes (saying so, when one was open).
+  // Any 401 from the API ends the session: the login screen comes (saying so when one was open).
   useEffect(() => onUnauthorized(() => dispatch({ type: 'refused' })), [])
 
-  // Every list, count and form belongs to the session; the shop's name (/api/app) stays. What showed them goes with the
-  // session — behind RequireAuth — and another shop is opened by loading the panel afresh (owner.ts), so nothing drawn
-  // is left holding what is forgotten here.
+  // Everything read belongs to the session, except /api/app (the shop's name). The screens that showed it are behind
+  // RequireAuth and go with the session, so nothing on screen keeps what is dropped here.
   const forget = useCallback(() => queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.app[0] }), [queryClient])
 
   const enter = useCallback(
@@ -145,15 +142,14 @@ export function useSession(): Session {
   return session
 }
 
-/** Whether the shop the panel shows is the main bot's — the owner's own (behind `RequireAuth`). */
+/** Whether the shop the panel shows is the main bot's (behind `RequireAuth`). */
 export function useMainShop(): boolean {
   return useSession().shop.id === MAIN_SHOP
 }
 
 /**
- * The name the panel goes by — its brand, the tab's: the shop it shows. An agent's shop goes by its own name (its bot's
- * title); the main bot's by the name the shop has (/api/app's — the session calls it «فروشگاه اصلی», which is what tells
- * it apart in the owner's shop picker, not its name), and so does the panel before anyone signs in.
+ * The name the panel goes by — the brand and the tab's title: an agent's shop by its own name, the main shop (and the
+ * panel before anyone signs in) by the shop's name from /api/app.
  */
 export function useShopName(): string {
   const { session } = useAuth()
@@ -161,7 +157,20 @@ export function useShopName(): string {
   return session && session.shop.id !== MAIN_SHOP ? session.shop.name : appName
 }
 
-/** Route guard: renders child routes for a signed-in panel, otherwise redirects to /login. */
+/** What `RequireAuth` leaves in the history entry when it sends a visitor to /login. */
+export interface LoginArrival {
+  /** The address they were on, its query too. */
+  from?: string
+  /** Their session ended while the panel was open. */
+  expired?: boolean
+}
+
+/** Where a sign-in leads: back to the page the visitor came from, never to the login page itself. */
+export function afterSignIn(from: string | undefined): string {
+  return from && from !== '/login' ? from : '/'
+}
+
+/** Route guard: the child routes for a signed-in panel, else a redirect to /login (or the failure, with a retry). */
 export function RequireAuth() {
   const { session, loading, failure, retry, expired } = useAuth()
   const location = useLocation()
@@ -175,8 +184,8 @@ export function RequireAuth() {
   }
 
   if (!session) {
-    // The whole address — a list's ?status= and ?search= too — so signing in again lands where the panel was.
-    return <Navigate to="/login" replace state={{ from: location.pathname + location.search, expired }} />
+    const arrival: LoginArrival = { from: location.pathname + location.search, expired }
+    return <Navigate to="/login" replace state={arrival} />
   }
 
   return <Outlet />

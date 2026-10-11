@@ -11,11 +11,7 @@ use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 
-/**
- * A card-to-card method's gateway (made by ManualDriver): the customer is shown the card, sends a receipt, and a person
- * — or the method's review window — accepts it. The shop's code names a card method by its key, and reads how long its
- * receipts may wait here.
- */
+/** A card-to-card method's gateway: shows the card; settling it is support's (or the review window's) approval. */
 final class ManualGateway implements GatewayInterface
 {
     public function __construct(private readonly CardTransfer $transfer) {}

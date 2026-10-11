@@ -9,12 +9,9 @@ use App\Core\Config\ConfigFile;
 use App\Core\Database\DatabaseManager;
 
 /**
- * What a host must have before the shop runs: the one list the web installer shows — each with its name (`ext-curl`,
- * its key in the list) and its label in the installer's words —, so it forgets no extension composer.json requires
- * (bcmath for money, fileinfo for the receipts' content type) nor the one the database driver needs. PHP's version is
- * not among them: Composer's platform check stops an older PHP before any of this runs. Last, what the shop runs without
- * (`optional`) — the extensions the owner's panel updates the shop with (composer.json's `suggest`): shown, holding
- * nothing up.
+ * What a host must have before the shop runs — the one list the installer shows, matching composer.json's required
+ * extensions plus the database driver's. PHP's version is not listed: Composer's platform check stops an older PHP
+ * first. The `optional` ones (sodium, zip: the panel's own update) are shown but hold nothing up.
  */
 final class Requirements
 {
@@ -53,7 +50,7 @@ final class Requirements
     }
 
     /**
-     * Whether the host has what the shop runs on: every requirement of `$checks` (check()'s) met but the optional ones.
+     * Whether every non-optional requirement of `$checks` is met.
      *
      * @param list<array{name: string, label: string, ok: bool, optional: bool}> $checks
      */
@@ -68,20 +65,11 @@ final class Requirements
         return ['name' => $name, 'label' => $label, 'ok' => $ok, 'optional' => $optional];
     }
 
-    /** PHP's memory_limit in bytes; -1 for none — what a picture decoded whole may take (Users\Services\CustomerPictures). */
+    /** PHP's memory_limit in bytes; -1 for none. */
     public static function memoryLimit(): int
     {
         $raw = trim((string) ini_get('memory_limit'));
-        if ($raw === '' || $raw === '-1') {
-            return -1;
-        }
-        $value = (int) $raw;
 
-        return match (strtolower(substr($raw, -1))) {
-            'g' => $value * 1024 ** 3,
-            'm' => $value * 1024 ** 2,
-            'k' => $value * 1024,
-            default => $value,
-        };
+        return $raw === '' || $raw === '-1' ? -1 : ini_parse_quantity($raw);
     }
 }

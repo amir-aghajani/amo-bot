@@ -5,15 +5,13 @@ import { Slot } from 'radix-ui'
 import { cn } from '@/lib/utils'
 
 /*
- * The panel's buttons, drawn like the Console's: 32px tall, 8px corners, medium weight. `default` is the one inverted
- * primary per surface (black on light, near-white on dark); `secondary` is the everyday button (a hairline box on
- * light, a soft fill on dark); `ghost` sits inside toolbars and rows; `destructive` is the solid red of a deletion and
- * `danger` its quiet form (a red label that tints on hover — `danger-outline` with a red hairline, among other
- * operations' buttons); `link` is a button that reads as a link.
- * Three of the panel's own: `icon` (drawn before the label), `busy` (a request runs: the icon turns into a spinner and
- * the button waits) and a button held with `aria-disabled` — busy, or by its owner — that keeps the focus it has and
- * ignores presses, where `disabled` would drop the keyboard on the document (the submit just pressed, «صفحه آخر») —
- * re-apply them if the component is reinstalled with the shadcn CLI.
+ * The panel's buttons, as the Console's: 32px tall, 8px corners. `default` is the one inverted primary (black on light,
+ * near-white on dark); `secondary` the everyday button; `ghost` for toolbars and rows; `quiet` an icon alone;
+ * `destructive` the solid red of a deletion, `danger` its quiet form (`danger-outline` with a red hairline); `link` a
+ * button that reads as a link.
+ * Local additions to re-apply after a shadcn reinstall: `icon` (drawn before the label), `busy` (the icon becomes a
+ * spinner and the button is held), and holding by `aria-disabled` — the button keeps the focus and ignores presses,
+ * where `disabled` would drop the keyboard on the document.
  */
 const buttonVariants = cva(
   "relative inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap select-none transition-[background-color,color,box-shadow,opacity] duration-150 outline-none focus-visible:focus-ring disabled:pointer-events-none disabled:opacity-45 aria-disabled:pointer-events-none aria-disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",

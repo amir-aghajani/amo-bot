@@ -20,10 +20,9 @@ use Psr\Log\NullLogger;
 use Tests\Support\FakePanel;
 
 /**
- * The shop's half of the 3x-ui contract: every request the connector sends — each ThreeXuiApi call, and the client's
- * sign-in handshake — is an operation the panel's own description (tests/Fixtures/3x-ui-openapi.json, 3x-ui v3) has:
- * that path with that method, a JSON body where the panel takes one and only fields it documents, no body where it
- * takes none. The connector wraps nothing else (a reflection guard keeps one case per ThreeXuiApi method).
+ * Every request the 3x-ui connector sends — each ThreeXuiApi call and the sign-in handshake — is an operation of the
+ * panel's own description (tests/Fixtures/3x-ui-openapi.json): that method and path, a JSON body only where one is taken
+ * and only with documented fields. A reflection guard keeps one case per ThreeXuiApi method.
  */
 final class ThreeXuiContractTest extends TestCase
 {

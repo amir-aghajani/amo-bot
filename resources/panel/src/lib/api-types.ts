@@ -4,15 +4,15 @@
  * it again. The PHP tests check every request and every response against the same file, and so do the panels' tests.
  */
 
-/** Every refusal and failure — a controller's, a middleware's, the error handler's, the front controller's last resort. A 429 says its wait in `Retry-After` (seconds) too. */
+/** The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`. */
 export interface ErrorResponse {
-  /** In the reader's words: the admin's on the panels, the customer's on the Store API. */
+  /** A message for the reader: the admin on the panels, the customer on the Store API. */
   message: string
-  /** What to fix, under the field it is about */
+  /** Field errors, keyed by the field they are about */
   errors?: Record<string, string[]>
-  /** The request's id, as its `X-Request-Id` header says it and every log line of it carries it — what the panel shows on a failure of the server's own («کد پیگیری»), to find the request in the log. */
+  /** The request's id, the same as the `X-Request-Id` header and the id on every log line of the request. The panel shows it on a server failure («کد پیگیری») so the request can be found in the log. */
   request_id: string
-  /** Only for a failure of the server's (a 500, never a refusal), with APP_DEBUG on, and only to a request straight from the server's own machine — never one a proxy or a tunnel forwarded. Paths are told from the app's folder; no call's arguments. */
+  /** Debug details. Only on a server failure (a 500, never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included. */
   debug?: {
     exception: string
     detail: string
@@ -20,7 +20,7 @@ export interface ErrorResponse {
   }
 }
 
-/** Where a paged list is. A sorted list's meta says its order beside these (`sort`, `dir`). */
+/** A paged list's position. A sorted list's meta also has its order (`sort`, `dir`). */
 export interface PageMeta {
   page: number
   per_page: number
@@ -28,47 +28,47 @@ export interface PageMeta {
   last_page: number
 }
 
-/** Which way a sorted list runs — asc (the oldest, the smallest, the soonest first) or desc. */
+/** The sort direction. `asc` puts the oldest, smallest or soonest first; `desc` the reverse. */
 export type SortDirection = 'asc' | 'desc'
 
-/** The customer as every screen points at them — the three Telegram identifiers, kept apart (a customer who signed up on the website has none but a name), their email, plus our id. */
+/** A reference to a customer, as every screen shows one: their id, the three Telegram identifiers kept separate (a customer who signed up on the website has only a name), and their email. */
 export interface UserRef {
   id: number
-  /** "first last" as Telegram has it, or as they signed up with; null when the account shows none. */
+  /** "first last" from Telegram, or as they signed up with; null when the account has none. */
   name: string | null
-  /** Bare Telegram handle without "@"; null when the account has none. */
+  /** Telegram handle without "@"; null when the account has none. */
   username: string | null
-  /** Their Telegram account; null for one who signed up on the website — the bot cannot write to them. */
+  /** Their Telegram user id; null for a customer who signed up on the website (the bot cannot message them). */
   telegram_id: number | null
-  /** Their email (lower case, proven); null while they have none. */
+  /** Their verified email, in lower case; null when they have none. */
   email: string | null
 }
 
-/** A whole number as a form sends it: a JSON number, or its text — Persian or Arabic digits too. */
+/** A whole number as a form sends it: a JSON number, or text (Persian or Arabic digits accepted). */
 export type WholeNumberInput = number | string
 
-/** An amount as a form sends it: a JSON number, or its text — Persian or Arabic digits and thousands separators too. Toman are whole (the form this API answers them in, "120000.00" — a fraction of zero —, is taken; any other fraction is refused); gigabytes may have up to two decimals. */
+/** An amount as a form sends it: a JSON number, or text (Persian or Arabic digits and thousands separators accepted). Toman are whole numbers: the API's own output form "120000.00" is accepted, any other fraction is refused. Gigabytes may have up to two decimals. */
 export type AmountInput = number | string
 
-/** A short list of whole numbers — the amounts a screen offers as buttons —: a list, or the text an admin types ("50, 100, 200", or a space between; a comma between groups of three digits sets a number's thousands apart: "50,000, 100,000" is two numbers); kept without repeats, smallest first. */
+/** A short list of whole numbers, such as the amounts a screen offers as buttons. A list, or text as the admin types it ("50, 100, 200", or separated by spaces; a comma between groups of three digits is a thousands separator, so "50,000, 100,000" is two numbers). Stored without repeats, smallest first. */
 export type NumbersInput = WholeNumberInput[] | string
 
-/** Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none. */
+/** Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none. */
 export interface NoteRequest {
   note?: string
 }
 
-/** Support's word on a refund: its own line of the message the customer gets, and the note of the wallet line the refund writes — 190 characters at most, a ledger line's (Ledger::NOTE_MAX); blank for none. */
+/** Support's note on a refund. It is a line of the message the customer gets and the description of the wallet line the refund writes, so at most 190 characters (a ledger line's limit). Blank for none. */
 export interface RefundRequest {
   note?: string
 }
 
-/** An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have. */
+/** The rows of an admin-ordered list in their new order, by id. At most 1000. */
 export interface ReorderRequest {
   ids: number[]
 }
 
-/** The on/off switch of a row in its list (a plan, a category): true or false, nothing else. */
+/** A row's on/off switch (a plan, a category). A JSON boolean only. */
 export interface ActivationRequest {
   is_active: boolean
 }
@@ -77,99 +77,99 @@ export interface Health {
   status: 'ok' | 'degraded'
   version: string
   installed: boolean
-  /** Never why: the log has that. */
+  /** Never the reason; that is in the log. */
   database: 'ok' | 'unavailable'
 }
 
-/** GET /api/app — asked before anything else. */
+/** The answer of `GET /api/app`, which the panels call first. */
 export interface AppInfo {
-  /** The shop's name (APP_NAME), as the brand shows it. */
+  /** The shop's name (APP_NAME). */
   name: string
-  /** False until the web installer has finished: the panel then opens it. */
+  /** False until the web installer has finished; the panel then shows the installer. */
   installed: boolean
-  /** The shop's time zone (APP_TIMEZONE, an IANA name such as Asia/Tehran): the panels show every date and time in it, as the bot words its dates. */
+  /** The shop's time zone (APP_TIMEZONE, an IANA name such as Asia/Tehran). The panels show every date and time in it, as the bot does. */
   timezone: string
 }
 
-/** What a field holds, as a generic form draws it: a line of text, a whole number, an amount of Toman, a short list of numbers typed as text, an on/off switch, one of a few values, a secret, an email address, a web address, a file's path, a few lines of text, or a bank card's number (drawn in groups of four, as it is printed, and sent as its digits). */
+/** A field's kind, which decides how a generic form draws it: a line of text, a whole number, an amount of Toman, a short list of numbers typed as text, an on/off switch, one of a few values, a secret, an email address, a web address, a file path, a few lines of text, or a bank card number (drawn in groups of four and sent as digits). */
 export type FieldType = 'text' | 'number' | 'amount' | 'list' | 'toggle' | 'choice' | 'secret' | 'email' | 'url' | 'path' | 'textarea' | 'card'
 
-/** One field of a driver's form as a generic form draws it (Field::describe()): the screens hold no driver's code. */
+/** One field of a driver's form, described for a generic form (`Field::describe()`), so the screens need no driver-specific code. */
 export interface FieldDescription {
-  /** The key it is sent under, and the one a 422 names. */
+  /** The key the value is sent under, and the field a 422 names. */
   name: string
   type: FieldType
   label: string
-  /** The line under it. */
+  /** The help line under the field. */
   hint: string | null
   placeholder: string | null
-  /** A form that leaves it empty is refused — a secret's: one must end up kept, the stored one staying while it is left blank. */
+  /** The form is refused when it is empty. For a secret: a value must end up stored, and a blank one keeps the stored value. */
   required: boolean
-  /** Never sent back — its value is a SecretState —: left blank or left out it keeps the stored one, `clear_<name>: true` empties it. */
+  /** Never sent back (its value is a SecretState). Left blank or out, the stored value stays; `clear_<name>: true` empties it. */
   secret: boolean
-  /** A secret's: the fields it belongs with. While one of them moves a blank one is refused (in `moved`'s words), to be typed again or cleared. */
+  /** For a secret: the fields it belongs with. When one of them changes, a blank secret is refused (with the `moved` message) and must be typed again or cleared. */
   bound_to: string[]
-  /** What the server says of a blank secret while a field it belongs with moved — the hint to show before it is asked. */
+  /** The server's message for a blank secret after a field it belongs with changed; show it as a hint before saving. */
   moved: string | null
   /** Drawn under «تنظیمات پیشرفته». */
   advanced: boolean
-  /** A choice's values and their words, in order. */
+  /** A choice's values and their labels, in order. */
   options: {
     value: string
     label: string
   }[]
-  /** Shown — and read, and required when it is — only while each named field (one before it) holds one of these values: a switch as "true" or "false", a number as its digits. Hidden, what is kept of it stays. */
+  /** The field is shown (and read, and required if it is) only while each named earlier field holds one of these values: a switch as "true" or "false", a number as its digits. While hidden, its stored value is kept. */
   when: Record<string, string[]>
-  /** Said after a number: «ثانیه». */
+  /** Shown after a number, such as «ثانیه». */
   unit: string | null
-  /** The least a number may be — each of a list's, an amount's. */
+  /** The smallest value of a number, an amount, or each item of a list. */
   min: number | null
-  /** The most. */
+  /** The largest value. */
   max: number | null
-  /** Latin content (a host, a username): drawn left to right, as a number, a secret, an email, a web address and a path are. */
+  /** Latin content (a host, a username), drawn left to right like numbers, secrets, emails, web addresses and paths. */
   ltr: boolean
-  /** What it holds while nothing is kept; null for a secret. */
+  /** The value while nothing is stored; null for a secret. */
   default: string | number | boolean | number[] | null
 }
 
-/** A driver — one way of doing a thing through someone else: a database, a way email goes out — as the panels show it (Descriptor::toArray()): its name and words, and its form, every field described. */
+/** A driver (a database, a mail transport, a panel connector, a payment gateway, a captcha) as the panels show it (`Descriptor::toArray()`): its key, label and description, and its form with every field described. */
 export interface DriverDescription {
-  /** What config.php, a row or a request names it by. */
+  /** The name config.php, a database row or a request uses for it. */
   key: string
   label: string
   description: string
-  /** Short lines under the description: the versions it needs, its caveats. */
+  /** Short notes under the description, such as required versions and caveats. */
   notes: string[]
   fields: FieldDescription[]
-  /** What its family says of it beyond this: a database driver's `installable` (the installer offers it); a mail driver's `sender` (who it can send from, in words); a payment gateway's `kind` (instant — it settles at once, the wallet —, or manual — a card transfer whose receipt a person accepts) and `builtin` (part of the shop itself: never added nor deleted); a panel connector's `mark` (the two letters its card draws), `vendor`, `docs` (its project's address) and what its panel can do — `inbounds` (services sold on inbounds the owner picks; without, a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. */
+  /** Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet, or `manual`, a card transfer whose receipt a person approves) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. */
   traits: Record<string, string | number | boolean | (string | number | boolean)[] | null>
 }
 
-/** A driver's fields by name as a screen shows them (Form::present()): as config.php holds them, else their defaults — a secret as its SecretState, never the secret. */
+/** A driver's field values by name, as a screen shows them (`Form::present()`): the stored values, else the defaults. A secret is a SecretState, never the secret itself. */
 export type DriverValues = Record<string, string | number | boolean | number[] | SecretState>
 
-/** The database part of config.php: the driver DB_CONNECTION names, the drivers the admin may pick — each described, its form —, and the driver's fields as config.php holds them. */
+/** The database settings in config.php: the driver DB_CONNECTION names, the drivers the admin may pick (each described with its form), and the chosen driver's stored values. */
 export interface DatabaseSettings {
-  /** The DriverDescription.key config.php names. */
+  /** The chosen driver (`DriverDescription.key`) named in config.php. */
   driver: string
-  /** The installable drivers, and the one the shop runs on */
+  /** The installable drivers, plus the one the shop runs on */
   drivers: DriverDescription[]
   values: DriverValues
 }
 
-/** The database part of config.php as a form sends it — the installer's step, the settings screen's save and its test: the driver (one of `drivers`) and its form's fields under their names, as typed. A secret left blank or left out keeps the stored one while the address it was given for stays — in the installer there is none: it is empty —, and `clear_<name>: true` empties it. A closed shape per driver. */
+/** The database settings as a form sends them (the installer's step, and the settings screen's save and test): the driver (one of `drivers`) and its form's fields by name, as typed. A secret left blank or out keeps the stored one while the address it was given for stays the same (the installer has nothing stored, so it is empty); `clear_<name>: true` empties it. One closed shape per driver. */
 export type DatabaseRequest = DatabaseMysqlRequest | DatabaseSqliteRequest
 
-/** MySQL or MariaDB: where the database is, the account on it, its tables' prefix. */
+/** MySQL or MariaDB: the server, the account, the database and an optional table prefix. */
 export interface DatabaseMysqlRequest {
   driver: 'mysql'
   host: string
   port: WholeNumberInput
   database: string
   username: string
-  /** Left out or blank: the one kept stays — while the host, the port and the socket stay. */
+  /** Left out or blank: the stored password stays, as long as the host, port and socket stay the same. */
   password?: string
-  /** True: the kept password is emptied. */
+  /** True empties the stored password. */
   clear_password?: boolean
   /** Blank for none. */
   socket?: string
@@ -177,36 +177,36 @@ export interface DatabaseMysqlRequest {
   prefix?: string
 }
 
-/** SQLite: a file of the shop's own. */
+/** SQLite: a database file. */
 export interface DatabaseSqliteRequest {
   driver: 'sqlite'
-  /** The file, relative to the application or absolute; never under public/. */
+  /** The file's path, relative to the application folder or absolute; never under public/. */
   path: string
 }
 
-/** GET /api/install, and every installer step's answer — where the installation stands. */
+/** The installation's progress. The answer of `GET /api/install` and of every installer step. */
 export interface InstallStatus {
   requirements: {
     name: string
-    /** In the installer's words */
+    /** The installer's label for it */
     label: string
     ok: boolean
-    /** What the shop runs without — the owner's panel updating it itself needs it: shown, and holding nothing up. */
+    /** Not needed to run the shop (only the panel's self-update needs it). Shown, but blocks nothing. */
     optional: boolean
   }[]
-  /** Every requirement that is not optional is met. */
+  /** Every non-optional requirement is met. */
   ready: boolean
-  /** The database step's settings, and whether a database answers to what config.php names (not asked before the step wrote one). */
+  /** The database step's settings, and whether the database config.php names answers (not checked before the step has written one). */
   database: {
-    /** The DriverDescription.key config.php names. */
+    /** The chosen driver (`DriverDescription.key`) named in config.php. */
     driver: string
-    /** The installable drivers, and the one the shop runs on */
+    /** The installable drivers, plus the one the shop runs on */
     drivers: DriverDescription[]
     values: DriverValues
     connected: boolean
-    /** Every table of database/schema.php is there. */
+    /** Every table of database/schema.php exists. */
     tables: boolean
-    /** Why it does not answer, in the admin's words */
+    /** Why the database does not answer, for the admin */
     error: string | null
   }
   admin: {
@@ -227,26 +227,26 @@ export interface InstallFinished {
   installed: boolean
 }
 
-/** The panel's login by its one rule (Auth's Credentials): a username of 2 to 64 letters, digits, `.`, `_`, `@` or `-`, and a password of 8 characters at least and 72 bytes at most, typed twice alike. */
+/** The panel's login: a username of 2 to 64 letters, digits, `.`, `_`, `@` or `-`, and a password of at least 8 characters and at most 72 bytes, typed twice. */
 export interface InstallAdminRequest {
   username: string
-  /** As typed — a space at either end is part of it. */
+  /** As typed; spaces at either end are part of it. */
   password: string
   password_confirmation: string
 }
 
-/** The shop's name and the address it is reached at (APP_NAME, APP_URL), and the main bot's token when the owner has it now — written once Telegram says whose it is. */
+/** The shop's name and public address (APP_NAME, APP_URL), and optionally the main bot's token, which is saved once Telegram confirms which bot it belongs to. */
 export interface InstallSiteRequest {
   name: string
-  /** http(s), its sub-folder included. */
+  /** An http(s) address, including any sub-folder. */
   url: string
-  /** From @BotFather; blank or left out — later, from the settings screen. */
+  /** From @BotFather. Blank or left out to set it later on the settings screen. */
   token?: string
 }
 
-/** Who is signed in to a panel and the shop the request was worked in: on the owner's panel the one login config.php keeps and the shop the request named (X-Shop), on an agent's their bot and its shop. */
+/** Who is signed in to a panel, and the shop the request worked in. On the owner's panel: the login from config.php and the shop the request named (`X-Shop`). On an agent's panel: their bot and its shop. */
 export interface Session {
-  /** The owner's login, or the agent's bot (@username) — what their decisions are recorded under. */
+  /** The owner's login, or the agent's bot (@username). Their decisions are recorded under this name. */
   name: string
   shop: ShopRef
 }
@@ -256,70 +256,70 @@ export interface SessionResponse {
 }
 
 export interface ShopsResponse {
-  /** Every shop the owner may open — the main bot's first. */
+  /** Every shop the owner may open, the main bot's first. */
   shops: ShopRef[]
 }
 
 /** A bot's shop: the main bot's, or an agent's. */
 export interface ShopRef {
-  /** The bot's id — 1 is the main bot. */
+  /** The bot's id; 1 is the main bot. */
   id: number
-  /** The main bot's «فروشگاه اصلی»; an agent's bot's title, else — not handed over yet — «نماینده: » and the agent's name. */
+  /** «فروشگاه اصلی» for the main bot; an agent's bot's title, or «نماینده: » and the agent's name while the agent has not connected a bot yet. */
   name: string
-  /** The bot's @username, without the @. */
+  /** The bot's username, without the @. */
   username: string | null
-  /** disabled: an agent whose agency ended — the shop is kept, its bot does not run. */
+  /** `disabled`: an agent whose agency ended. The shop is kept, but its bot does not run. */
   status: 'active' | 'disabled'
 }
 
-/** The owner signs in with the panel's login (config.php keeps it). */
+/** The owner's panel login (kept in config.php). */
 export interface LoginRequest {
   username: string
-  /** As typed — a space at either end is part of it. */
+  /** As typed; spaces at either end are part of it. */
   password: string
 }
 
-/** The owner changes the panel's login: their current password first, then the new login by the installer's rule (InstallAdminRequest) — a password left blank, its confirmation too, keeps the one kept; a change that changes nothing is refused. */
+/** A new panel login: the current password, then the new login with the installer's rules (InstallAdminRequest). Leaving the password and its confirmation blank keeps the current password. A request that changes nothing is refused. */
 export interface CredentialsRequest {
   current_password: string
   username: string
-  /** As typed — a space at either end is part of it. */
+  /** As typed; spaces at either end are part of it. */
   password?: string
   password_confirmation?: string
 }
 
-/** A new panel login set without the old one: the key the panel wrote to the host's files (RecoveryKeyResponse.file), then the login by the installer's rule (InstallAdminRequest). */
+/** A new panel login set without the old one: the recovery key from the host's files (`RecoveryKeyResponse.file`), then the login with the installer's rules (InstallAdminRequest). */
 export interface RecoveryRequest {
-  /** As the file holds it; case and the spaces around it do not matter. */
+  /** As written in the file; case and surrounding spaces do not matter. */
   key: string
   username: string
-  /** As typed — a space at either end is part of it. */
+  /** As typed; spaces at either end are part of it. */
   password: string
   password_confirmation: string
 }
 
 export interface RecoveryKeyResponse {
-  /** Where the key is, from the shop's own folder: storage/recovery-key.txt. */
+  /** The key file, relative to the app folder: storage/recovery-key.txt. */
   file: string
-  /** When it stops opening anything — an hour after it was made. */
+  /** When the key expires: an hour after it was made. */
   expires_at: string
 }
 
-/** The code of the one-time link the main bot gave the agent («ورود به پنل»), read off the address's fragment (`#code=`). */
+/** The code from the agent's one-time sign-in link (the main bot's «ورود به پنل»), read from the address's fragment (`#code=`). */
 export interface AgentLinkRequest {
   code: string
-  /** Sign in even though another agent's session is open in this browser — it ends. Left out: refused with a 409 on `replace`, the link not spent. */
+  /** Sign in even if another agent is signed in in this browser; that session ends. Without it, such a request gets a 409 on `replace` and the link stays unused. */
   replace?: boolean
 }
 
-/** Each area's number (Core\Database\ChangeFeed::AREAS); an area nothing was written to yet is absent. */
+/** Each area's version number from the change feed. An area nothing was written to yet is absent. */
 export interface ChangesResponse {
   versions: {
-    /** The customers, their wallets and their groups. */
+    /** Customers, their wallets and their groups. */
     users?: number
     /** The servers and their inbounds. */
     servers?: number
-    /** The grants and their parts on each server — a running one's cursor moves every second. */
+    /** Grants and their per-server parts. A running grant's cursor moves every second. */
     grants?: number
     /** The plans, their categories and their server entries. */
     plans?: number
@@ -327,7 +327,7 @@ export interface ChangesResponse {
     orders?: number
     payments?: number
     subscriptions?: number
-    /** The commissions paid out. */
+    /** Referral commissions, bonuses, rewards and alerts. */
     referrals?: number
     /** The agency's levels and requests, the agents' bots and their traffic. */
     agency?: number
@@ -343,34 +343,38 @@ export interface ChangesResponse {
     tickets?: number
     /** The customers' reviews of the shop. */
     reviews?: number
+    /** Gift codes, the lucky wheel's slices and spins, loyalty tiers, cashback rules, and the nightly draws with their winners. */
+    rewards?: number
+    /** Discount codes and timed sales. A code's use count changes with orders. */
+    discounts?: number
   }
 }
 
-/** A failure of the panel's own code, as its page reports it (ClientErrors): one error line of the shop's log with the shop's version, never kept anywhere else. Each part is cut to its length and taken out of any secret, the body is refused past 16 KB (413), and a principal or an address sends 20 in ten minutes and 100 in a day (429, `Retry-After`). */
+/** An error in the panel's own code, reported by the page. It becomes one error line in the server log (with the app's version) and is stored nowhere else. Each part is truncated and stripped of secrets. A body over 16 KB is a 413; each user or address may send 20 reports in ten minutes and 100 a day (then a 429 with `Retry-After`). */
 export interface ClientErrorRequest {
-  /** `render` a page it could not draw (an error boundary, the router's error screen); `unhandled` an error a press or a promise left unhandled. */
+  /** `render`: a page failed to render (an error boundary or the router's error screen). `unhandled`: an error from a click handler or a promise that nothing handled. */
   kind: 'render' | 'unhandled'
-  /** What was thrown: the error's name and its message. */
+  /** The error's name and message. */
   message: string
   /** The top of the error's stack. */
   stack?: string | null
-  /** Where in the page's components it was drawing (a render failure's). */
+  /** For a render failure: the React component stack. */
   component_stack?: string | null
-  /** The panel's address it happened at — its path and query, never the fragment (a sign-in link's code). */
+  /** The panel address where it happened: its path and query, never the fragment (which may hold a sign-in code). */
   address: string
-  /** The panel build the page runs: when `vite build` made it. */
+  /** The panel build: when `vite build` made it. */
   build: string
 }
 
-/** How many wait on a human in the shop — the sidebar's numbers, the first rows of the dashboard's attention card. */
+/** What waits for support: the sidebar's counts, and the first rows of the dashboard's attention card. */
 export interface QueueCounts {
-  /** Receipts waiting for a review. */
+  /** Receipts waiting for review. */
   payments_to_review: number
-  /** Orders paid and not delivered: the delivery failed, or nobody is delivering it (the orders list's stuck tab). */
+  /** Paid orders not delivered because the delivery failed or stalled (the orders list's `stuck` tab). */
   stuck_orders: number
-  /** Support tickets waiting on an answer (the tickets list's open tab). */
+  /** Support tickets waiting for an answer (the tickets list's `open` tab). */
   open_tickets: number
-  /** Customers' reviews waiting on support (the reviews list's pending tab). */
+  /** Reviews waiting for approval (the reviews list's `pending` tab). */
   pending_reviews: number
 }
 
@@ -380,37 +384,39 @@ export interface QueuesResponse {
 
 export type UserStatus = 'active' | 'banned'
 
-/** admin = the shop's people inside the bot — /broadcast, exempt from the bot's rules — and on its website (its admin API, while the website lets them in). Not the panel login. */
+/** `admin`: a bot admin. They can use /broadcast, are exempt from the bot's gates, and can use the website's admin API while the website lets admins in. Unrelated to the panel login. */
 export type UserRole = 'customer' | 'admin'
 
-/** One row of the users table: a customer of the bot (the panel's own login is not one). */
+/** A customer, as a row of the users table. (The panel login is not a customer.) */
 export interface UserRow {
   id: number
-  /** "first last" as Telegram has it, or as they signed up with; null when the account shows none. */
+  /** "first last" from Telegram, or as they signed up with; null when the account has none. */
   name: string | null
-  /** Bare Telegram handle without "@"; null when the account has none. */
+  /** Telegram handle without "@"; null when the account has none. */
   username: string | null
-  /** Their Telegram account; null for one who signed up on the website — the bot cannot write to them. */
+  /** Their Telegram user id; null for a customer who signed up on the website (the bot cannot message them). */
   telegram_id: number | null
-  /** Their email (lower case, proven); null while they have none. */
+  /** Their verified email, in lower case; null when they have none. */
   email: string | null
-  /** E.164, once shared with the bot. */
+  /** In E.164 form, once shared with the bot. */
   phone: string | null
   status: UserStatus
   role: UserRole
   balance: string
+  /** Their personal discount («تخفیف اختصاصی»): a percent off what they buy for themselves. It is one of the automatic discounts, of which the largest applies. 0 for none. */
+  discount_percent: number
   counts: {
     orders: number
     subscriptions: number
     active_subscriptions: number
   }
-  /** The admin's groups the customer is in, in the admin's order. */
+  /** The customer groups they are in, in the groups' order. */
   groups: CustomerGroupRef[]
   created_at: string
   last_seen_at: string | null
 }
 
-/** What the users table sorts by: when each joined (the list's own order), was last seen, the balance (no ledger is 0), the orders, the running services. */
+/** The users table's sort keys: sign-up time (the default), last seen, balance (no ledger counts as 0), orders, active services. */
 export type UserSort = 'joined' | 'last_seen' | 'balance' | 'orders' | 'services'
 
 export interface UsersResponse {
@@ -429,44 +435,45 @@ export interface UserResponse {
   user: UserRow
 }
 
-/** GET /users/{id} — one customer, as their page shows them; their services, orders and payments are those lists' own, narrowed to them (`user=`). */
+/** One customer, as their page shows them. Their services, orders and payments come from those lists, filtered with `user=`. */
 export interface UserDetailResponse {
   user: UserRow
   referral: CustomerReferral
-  /** The customer as an agent of the main bot, as the agents list shows them — their level and credit, their bot and what it sold; null for anyone who is not one (so in every agent's shop). */
+  /** The customer as an agent of the main bot, as the agents list shows them (level and credit, their bot and its sales); null for anyone who is not an agent, and always in an agent's shop. */
   agency: AgentRow | null
   account: CustomerAccount
+  loyalty: LoyaltyStanding
 }
 
-/** The customer's account on the shop's website, as support reads it: its ways in, whether its password sign-in asks a second step, the devices signed in, and the accounts merged into it. */
+/** The customer's website account, as support sees it: how they sign in, whether password sign-in has a second step, the signed-in devices, and the accounts merged into it. */
 export interface CustomerAccount {
-  /** Their email — proven; null without one. */
+  /** Their verified email; null without one. */
   email: string | null
-  /** A Google account signs them in. */
+  /** They can sign in with a Google account. */
   google: boolean
-  /** Their email and a password sign them in. */
+  /** They can sign in with their email and a password. */
   has_password: boolean
-  /** Their password sign-in asks the code of their authenticator app. */
+  /** Password sign-in also asks for their authenticator app's code. */
   two_factor: boolean
-  /** The devices signed in on the website — the sessions that have not ended. */
+  /** The number of devices signed in on the website (sessions not ended). */
   sessions: number
   /** The accounts merged into this one, newest first. */
   merges: CustomerMerge[]
 }
 
-/** An account of the shop merged into this customer's — its row gone since —: how it was signed in and called, and when the customer merged them (from their website: the one way two accounts are made one). */
+/** An account merged into this customer's account (its row no longer exists): how it signed in, its name, and when the customer merged them. Accounts are only merged by the customer, from the website. */
 export interface CustomerMerge {
-  /** Its former number in the shop. */
+  /** Its former customer id. */
   merged_user_id: number
   merged: {
-    /** The Telegram account it had; null for none. */
+    /** Its Telegram user id; null for none. */
     telegram_id: number | null
     /** Its Telegram handle, without the @. */
     username: string | null
     email: string | null
-    /** A Google account signed it in. */
+    /** It could sign in with a Google account. */
     google: boolean
-    /** "first last", as it was; null without one. */
+    /** Its "first last" name; null without one. */
     name: string | null
   }
   created_at: string
@@ -481,37 +488,45 @@ export interface UserStatusRequest {
   status: UserStatus
 }
 
-/** Make a customer the bot's admin, or take it back. */
+/** Make a customer a bot admin, or take the role back. */
 export interface UserRoleRequest {
   role: UserRole
 }
 
-/** The admin's groups the customer is in: every one listed, no other — an empty list takes them out of all. */
+/** A customer's personal discount («تخفیف اختصاصی»), until changed: a percent off everything they buy for themselves. */
+export interface UserDiscountRequest {
+  /** 0 to 100; 0 removes it. */
+  percent: WholeNumberInput
+}
+
+/** The customer's groups: exactly the ones listed. An empty list removes them from all groups. */
 export interface UserGroupsRequest {
-  /** CustomerGroupRow ids. */
+  /** Group ids (`CustomerGroupRow.id`). */
   group_ids: number[]
 }
 
-/** The referral program's facts about a customer: whose link brought them, how many their own link brought and what those earned them. */
+/** A customer's referral details: who referred them, how many customers they referred, and what that earned them. */
 export interface CustomerReferral {
-  /** The customer whose link brought them; null when none did. */
+  /** The customer whose link brought them; null if none. */
   referrer: UserRef | null
-  /** The customers their link brought. */
+  /** How many customers their link brought. */
   referrals: number
-  /** What the commissions credited to them add up to, in Toman — each kept as theirs when it was earned, two accounts merged since or not. */
+  /** The total of the commissions credited to them, in Toman. A commission stays with whoever earned it, even if accounts were merged since. */
   earned: string
 }
 
-/** One of the admin's groups of customers, as a customer's row carries it. */
+/** A customer group, as a customer's row lists it. */
 export interface CustomerGroupRef {
   id: number
   name: string
 }
 
-/** One of the admin's groups of customers («گروه»): a name, in the admin's order; a broadcast can go to one. */
+/** A customer group («گروه»), in the admin's order. A broadcast can target one. */
 export interface CustomerGroupRow {
   id: number
   name: string
+  /** Its members pay the plans' agent prices («قیمت نماینده»), as agents do (a «همکار» group). */
+  agent_pricing: boolean
   sort: number
   counts: {
     users: number
@@ -527,10 +542,12 @@ export interface CustomerGroupResponse {
   group: CustomerGroupRow
 }
 
-/** A group added or renamed. */
+/** A customer group to add or update. */
 export interface CustomerGroupRequest {
-  /** Unique in the shop. */
+  /** Unique within the shop. */
   name: string
+  /** Its members pay the plans' agent prices. Left out: off for a new group, unchanged for an existing one. */
+  agent_pricing?: boolean
 }
 
 export type WalletTransactionType = 'credit' | 'debit'
@@ -542,7 +559,7 @@ export interface WalletTransactionRow {
   amount: string
   balance_after: string
   description: string | null
-  /** Who wrote it by hand — a panel's principal, or one of the shop's admins on its website — as its reader may see it (anyone but the owner reads the owner's login as «پشتیبانی»); null for the lines the shop writes itself. */
+  /** Who added the line by hand: a panel user or a website admin. Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically. */
   reviewer: string | null
   created_at: string
 }
@@ -558,12 +575,12 @@ export interface WalletAdjustmentResponse {
   transactions: WalletTransactionRow[]
 }
 
-/** A credit or a debit by hand — a debit no further than the balance —, with the line the customer reads in their ledger. */
+/** A manual credit or debit, with the line the customer sees in their ledger. A debit cannot exceed the balance. */
 export interface WalletAdjustmentRequest {
   type: WalletTransactionType
   /** Whole Toman, above zero. */
   amount: AmountInput
-  /** The ledger line, 190 characters at most; blank for support's default wording. */
+  /** The ledger line, at most 190 characters. Blank for the default wording. */
   description?: string
 }
 
@@ -577,7 +594,7 @@ export interface DashboardResponse {
   }
   generated_at: string
   kpis: {
-    /** Money that came in (Toman): paid payments not made from the wallet, and refunded ones but a wallet top-up's. */
+    /** Money received, in Toman: paid payments not made from the wallet, plus refunded ones except wallet top-ups. */
     revenue: {
       value: string
       previous: string
@@ -589,23 +606,23 @@ export interface DashboardResponse {
   }
   series: SeriesPoint[]
   attention: {
-    /** Receipts waiting for a review. */
+    /** Receipts waiting for review. */
     payments_to_review: number
-    /** Orders paid and not delivered: the delivery failed, or nobody is delivering it (the orders list's stuck tab). */
+    /** Paid orders not delivered because the delivery failed or stalled (the orders list's `stuck` tab). */
     stuck_orders: number
-    /** Support tickets waiting on an answer (the tickets list's open tab). */
+    /** Support tickets waiting for an answer (the tickets list's `open` tab). */
     open_tickets: number
-    /** Customers' reviews waiting on support (the reviews list's pending tab). */
+    /** Reviews waiting for approval (the reviews list's `pending` tab). */
     pending_reviews: number
     pending_orders: number
-    /** The shop's servers whose panel failed its last read — 0 in an agent's shop. */
+    /** Servers whose panel failed its last check. Always 0 in an agent's shop. */
     servers_with_errors: number
     /** Active services ending within `expiring_days`. */
     expiring_soon: number
   }
-  /** An agent's shop whose traffic sells nothing; null while it sells, and in the main bot's shop. */
+  /** Set when an agent's shop has too little traffic to sell anything; null otherwise, and always null in the main shop. */
   traffic_shortage: TrafficShortage | null
-  /** The one "ending soon" window, in days — the subscriptions screen's too. */
+  /** The "ending soon" window in days, the same as on the subscriptions screen. */
   expiring_days: number
   recent_orders: RecentOrder[]
   recent_users: RecentUser[]
@@ -625,7 +642,11 @@ export interface SeriesPoint {
 
 export type OrderStatus = 'pending' | 'paid' | 'processing' | 'fulfilled' | 'cancelled' | 'failed' | 'refunded'
 
-export type OrderType = 'purchase' | 'renewal' | 'wallet_topup' | 'traffic'
+/** Which price a purchase or renewal was made at: `regular`, the plan's price (also used for every other order type); `first_purchase`, its first-purchase price («قیمت خرید اول», for a customer who had bought no service); `agent`, its agent price («قیمت نماینده», for an agent or a member of a group with agent prices); or `gift`, free (a prize, or a service from a gift code or referral reward). */
+export type OrderPricing = 'regular' | 'first_purchase' | 'agent' | 'gift'
+
+/** What an order buys: a plan (`purchase`), a service's `renewal`, a `wallet_topup`, `traffic` for an agent's bot (main bot only), or `extra_traffic` or `extra_time` for an existing service. */
+export type OrderType = 'purchase' | 'renewal' | 'wallet_topup' | 'traffic' | 'extra_traffic' | 'extra_time'
 
 export interface RecentOrder {
   id: number
@@ -639,46 +660,46 @@ export interface RecentOrder {
 
 export interface RecentUser {
   id: number
-  /** "first last" as Telegram has it, or as they signed up with; null when the account shows none. */
+  /** "first last" from Telegram, or as they signed up with; null when the account has none. */
   name: string | null
-  /** Bare Telegram handle without "@"; null when the account has none. */
+  /** Telegram handle without "@"; null when the account has none. */
   username: string | null
-  /** Their Telegram account; null for one who signed up on the website — the bot cannot write to them. */
+  /** Their Telegram user id; null for a customer who signed up on the website (the bot cannot message them). */
   telegram_id: number | null
-  /** Their email (lower case, proven); null while they have none. */
+  /** Their verified email, in lower case; null when they have none. */
   email: string | null
   balance: string
   created_at: string
 }
 
-/** How a bot runs. The main bot's is the installation's: every bot gets its updates its way (on webhooks, or polling — they are put on webhooks and taken off together), and its token is config.php's. */
+/** How a bot runs. The main bot's mode applies to the whole installation: every bot gets updates the same way (all on webhooks, or all polling), and the main bot's token is in config.php. */
 export interface BotRuntime {
-  /** It has a token to run on. */
+  /** It has a token. */
   configured: boolean
-  /** Its shop's master switch (تنظیمات ربات), independent of whether the process is running. */
+  /** The shop's master switch (bot settings), whether or not the process is running. */
   enabled: boolean
-  /** Its @username, without the @; null while unknown. */
+  /** Its username, without the @; null while unknown. */
   username: string | null
   mode: BotMode
   last_update_at: string | null
 }
 
-/** How a bot gets its updates: a webhook Telegram calls, a poller (bot:poll) whose heartbeat is fresh, or none of them. */
+/** How a bot gets its updates: `webhook` (Telegram calls it), `polling` (a `bot:poll` process with a fresh heartbeat), or `offline` (neither). */
 export type BotMode = 'webhook' | 'polling' | 'offline'
 
-/** Whether the machinery behind the shop is alive — the owner's alone. */
+/** The system's health: the version, PHP, the bots and the scheduler. Owner only. */
 export interface SystemStatus {
   version: string
   php: string
-  /** The bot of the shop the request names (the dashboard's): the main bot, or an agent's. */
+  /** The bot of the shop the request names (the dashboard's shop): the main bot or an agent's. */
   bot: {
-    /** The bot's id — 1 is the main bot. */
+    /** The bot's id; 1 is the main bot. */
     id: number
-    /** It has a token to run on. */
+    /** It has a token. */
     configured: boolean
-    /** Its shop's master switch (تنظیمات ربات), independent of whether the process is running. */
+    /** The shop's master switch (bot settings), whether or not the process is running. */
     enabled: boolean
-    /** Its @username, without the @; null while unknown. */
+    /** Its username, without the @; null while unknown. */
     username: string | null
     mode: BotMode
     last_update_at: string | null
@@ -694,69 +715,69 @@ export interface SystemResponse {
   system: SystemStatus
 }
 
-/** What putting the bots on webhooks, or taking them off, did for one of them — in the owner's words, never a token nor the secret a webhook's address ends with. */
+/** The result of setting or deleting the webhook for one bot. The message never contains a token or the webhook address's secret. */
 export interface WebhookOutcome {
   bot: {
-    /** The bot's id — 1 is the main bot. */
+    /** The bot's id; 1 is the main bot. */
     id: number
-    /** Its @username, without the @; null while unknown. */
+    /** Its username, without the @; null while unknown. */
     username: string | null
   }
   done: boolean
-  /** What happened, or why it did not. */
+  /** What happened, or why it failed. */
   message: string
 }
 
 export interface WebhooksResponse {
-  /** Every bot the shop runs, the main one first; none while no bot has a token. */
+  /** Every running bot, the main one first. Empty while no bot has a token. */
   bots: WebhookOutcome[]
 }
 
-/** AmoBot's own update: the version the shop runs, the newest release GitHub publishes, and the update under way or the last one. The shop installs only a release the key built into it signed. */
+/** AmoBot's update status: the running version, the newest release on GitHub, and the current or last update. Only releases signed with the release key built into the app are installed. */
 export interface UpdateStatus {
-  /** The version the shop runs. */
+  /** The running version. */
   current: string
-  /** The newest release, as last read; null while GitHub publishes none, or before it was first read. */
+  /** The newest release, as last read; null when GitHub has none, or before the first check. */
   latest: ReleaseInfo | null
-  /** When GitHub was last read; null before it ever was. */
+  /** When GitHub was last checked; null before the first check. */
   checked_at: string | null
-  /** The newest release is newer than the version the shop runs, and no update is under way — nor has just installed it. */
+  /** The newest release is newer than the running version, and no update is running or has just installed it. */
   available: boolean
-  /** What keeps the shop from updating itself — no release key to check a release with, PHP without its sodium or zip extension, PHP that may not change the app's files, a release without its signed files — in the owner's words, with the way out (an update by hand: docs/Upgrading.md); null when nothing does. */
+  /** Why the shop cannot update itself (no release key, PHP without the sodium or zip extension, PHP not allowed to change the app's files, or a release without its signed files), with the alternative: a manual update (docs/Upgrading.md). Null when nothing blocks it. */
   blocker: string | null
-  /** The update under way, or the last one; null when there is none. */
+  /** The current or last update; null when there is none. */
   run: UpdateRun | null
 }
 
 /** A release as GitHub lists it. */
 export interface ReleaseInfo {
-  /** Its version (its tag, without the v). */
+  /** Its version (the tag without the v). */
   version: string
   published_at: string | null
-  /** Its notes, as plain text: shown as they are, line breaks kept — never as HTML. */
+  /** Its release notes as plain text, line breaks kept. Never render them as HTML. */
   notes: string
   /** Its page on GitHub. */
   url: string
 }
 
-/** Where an update stands: its files fetched and checked (download), unpacked (extract), the host checked (preflight), installed (install) — then done, or taken back once installed (rolled_back). An install that failed was taken back by itself and stays at install, its error said. */
+/** An update's step: `download` (fetch and verify the files), `extract` (unpack), `preflight` (check the host), `install`, then `done`, or `rolled_back` after a rollback. A failed install is rolled back automatically and stays at `install` with its error. */
 export type UpdateStep = 'download' | 'extract' | 'preflight' | 'install' | 'done' | 'rolled_back'
 
 export interface UpdateRun {
-  /** The version it installs. */
+  /** The version being installed. */
   version: string
-  /** The version the shop ran when it began — the one a rollback puts back. */
+  /** The version running when it started; a rollback restores it. */
   from: string
   step: UpdateStep
-  /** How far into its step, in percent. */
+  /** Progress of the current step, in percent. */
   progress: number
-  /** Why its step was last refused, in the owner's words; null while nothing stands in its way. */
+  /** Why the step last failed; null when nothing is wrong. */
   error: string | null
-  /** It may still be given up: nothing of the app's was replaced yet. */
+  /** It can still be cancelled: none of the app's files were replaced yet. */
   cancel: boolean
-  /** It may be taken back: installed, the version it replaced kept, and the database not changed by it. */
+  /** It can be rolled back: it is installed, the replaced version is kept, and it did not change the database. */
   rollback: boolean
-  /** When it was installed or taken back; null while under way. */
+  /** When it was installed or rolled back; null while running. */
   finished_at: string | null
 }
 
@@ -765,31 +786,31 @@ export interface UpdateResponse {
 }
 
 export interface UpdateStartRequest {
-  /** The newest release — `latest.version`: an update is to it, and nothing else. */
+  /** The newest release (`latest.version`). Updating to any other version is refused. */
   version: string
 }
 
 export type PaymentStatus = 'pending' | 'awaiting_review' | 'paid' | 'failed' | 'cancelled' | 'refunded'
 
-/** How a gateway settles: at once (the wallet), or once a person — or the method's review window — accepts the receipt (a card transfer). */
+/** How a gateway settles: `instant` (at once, like the wallet), or `manual` (once a person, or the method's automatic approval window, accepts the receipt of a card transfer). */
 export type GatewayKind = 'instant' | 'manual'
 
-/** One row of the payments screen. */
+/** A payment, as a row of the payments screen. */
 export interface PaymentRow {
   id: number
   status: PaymentStatus
   amount: string
   /** Driver key ("manual", "wallet"). */
   gateway: string
-  /** How the driver settles; null once the driver is no longer registered. */
+  /** How the driver settles; null when the driver is no longer installed. */
   kind: GatewayKind | null
-  /** The method row's label ("کارت به کارت (ملت)") — a method payments were made with is never deleted. */
+  /** The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. */
   method: string
-  /** What the customer was told to pay to, as the driver words it (the masked card and its holder); null for a driver without one (the wallet). */
+  /** What the customer was told to pay to, from the driver (the masked card number and holder); null for a driver without one (the wallet). */
   summary: string | null
-  /** The gateway's own id of the payment (the wallet's ledger line); null when it has none (a card transfer). */
+  /** The gateway's own id for the payment (the wallet's ledger line); null when it has none (a card transfer). */
   reference: string | null
-  /** The word on its latest verdict: why it failed or was cancelled — the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid — or a refund's note (refund_note too). */
+  /** The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid), or a refund's note (also in `refund_note`). */
   description: string | null
   user: UserRef
   order: {
@@ -799,22 +820,32 @@ export interface PaymentRow {
     plan: string | null
     server: string | null
     subscription_id: number | null
-    /** Why its delivery failed (null unless it did) — the owner reads the diagnosis of a panel that failed it, anyone else that panel's failure in a word. */
+    /** The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise. */
+    traffic_bytes: number | null
+    /** The days it adds to a service (extra time); null otherwise. */
+    days: number | null
+    /** Why its delivery failed; null unless it did. The owner sees the panel's full diagnosis, anyone else a short summary. */
     notes: string | null
+    /** The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. */
+    discount_amount: string
+    /** The discounts applied, the automatic one first. */
+    discounts: DiscountLine[]
+    /** The discount code used; it counts as one of the code's uses unless the order is cancelled. Null for none. */
+    discount_code: OrderDiscountCode | null
   }
-  /** The customer's receipt — always a picture: sent in the bot (it takes nothing else), or uploaded from the shop's website; null before it is sent. GET …/receipt serves either. */
+  /** The customer's receipt, always a picture: sent in the bot (which accepts only pictures) or uploaded on the website. Null until sent. `GET …/receipt` serves either. */
   receipt: {
     name: string | null
     note: string | null
     sent_at: string | null
   } | null
   auto_approved: boolean
-  /** Who decided it by hand: the agent's @bot, a bot admin's @username / tg:<id> / user#<id> (in the report group or on the shop's website), or the owner's login — «پشتیبانی» to anyone but the owner (Auth\Services\Reviewers). */
+  /** Who decided it by hand: the agent's @bot, a bot admin's @username, tg:<id> or user#<id> (in the report group or on the website), or the owner's login, which anyone but the owner sees as «پشتیبانی». */
   reviewer: string | null
   refund_note: string | null
   paid_at: string | null
   created_at: string
-  /** What the modal may do with it right now (the server's rules). */
+  /** Which operations its current state allows (the server decides). */
   actions: {
     approve: boolean
     reject: boolean
@@ -825,7 +856,7 @@ export interface PaymentRow {
   }
 }
 
-/** What the payments list sorts by: when each was made (the list's own order), the amount. */
+/** The payments list's sort keys: creation time (the default) or amount. */
 export type PaymentSort = 'created' | 'amount'
 
 export interface PaymentsResponse {
@@ -837,11 +868,11 @@ export interface PaymentsResponse {
     last_page: number
     sort: PaymentSort
     dir: SortDirection
-    /** The review queue, whatever the list shows. */
+    /** Receipts waiting for review, regardless of the filters. */
     awaiting_review: number
-    /** The payments of the list (its tab, search and days) that are paid. */
+    /** How many of the listed payments (tab, search and dates) are paid. */
     paid: number
-    /** What those add up to (Toman). */
+    /** Their total, in Toman. */
     paid_amount: string
   }
 }
@@ -850,7 +881,7 @@ export interface PaymentResponse {
   payment: PaymentRow
 }
 
-/** What came of a message the bot wrote a customer of its own accord: told; emailed — Telegram could not take it to them (no Telegram account, or they turned the bot away), and the shop's email took it to their address; they turned the bot away (blocked it, or their account is gone) and no email went; Telegram (or, for an email, the mail server) was out of reach; Telegram refused it; they have no Telegram account (they signed up on the website) and no email went to them — nothing was sent. Whichever, the notice is kept for their website. */
+/** What happened to a notice the bot sent a customer: `told` (delivered in Telegram); `emailed` (Telegram could not reach them, because they have no Telegram account or blocked the bot, so it was emailed); `turned_away` (they blocked the bot or their account is gone, and no email went); `unreachable` (Telegram, or the mail server for an email, could not be reached); `refused` (Telegram refused it); `no_telegram` (no Telegram account and no email went, so nothing was sent). Either way the notice is kept for their website. */
 export type Delivery = 'told' | 'emailed' | 'turned_away' | 'unreachable' | 'refused' | 'no_telegram'
 
 export interface ReminderResponse {
@@ -858,25 +889,37 @@ export interface ReminderResponse {
   delivery: Delivery
 }
 
-/** One row of the orders screen: what the customer asked for, and how far it got. */
+/** An order, as a row of the orders screen: what the customer asked for, and how far it got. */
 export interface OrderRow {
   id: number
   type: OrderType
   status: OrderStatus
   amount: string
+  pricing: OrderPricing
+  /** The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. */
+  discount_amount: string
+  /** The discounts applied, the automatic one first. */
+  discounts: DiscountLine[]
+  /** The discount code used; it counts as one of the code's uses unless the order is cancelled. Null for none. */
+  discount_code: OrderDiscountCode | null
   user: UserRef
+  /** The plan of a purchase or renewal; for extras, the service's plan. */
   plan: NamedRef | null
-  /** The server the customer chose — for a renewal, where its service is. */
+  /** The server the customer chose; for a renewal or extras, the service's server. */
   server: NamedRef | null
-  /** The service it bought or renewed; null for a top-up, or once the service was deleted. */
+  /** The service it bought, renewed or extended; null for a top-up, or once the service was deleted. */
   subscription: {
     id: number
     name: string
     status: SubscriptionStatus
   } | null
-  /** Why it failed, or why it was cancelled — a failed delivery as its reader may read it: the owner the diagnosis of a panel that failed it, anyone else (an agent, the shop's admins on its website) that panel's failure in a word. */
+  /** The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise. */
+  traffic_bytes: number | null
+  /** The days it adds to a service (extra time); null otherwise. */
+  days: number | null
+  /** Why it failed or was cancelled. For a failed delivery, the owner sees the panel's full diagnosis; anyone else (an agent, a website admin) a short summary. */
   notes: string | null
-  /** The attempts to pay it, the newest first. */
+  /** The payment attempts, newest first. */
   payments: OrderPayment[]
   paid_at: string | null
   fulfilled_at: string | null
@@ -887,7 +930,7 @@ export interface OrderRow {
   }
 }
 
-/** Something pointed at by its id and name (a plan, a server). */
+/** A reference by id and name (a plan, a server). */
 export interface NamedRef {
   id: number
   name: string
@@ -899,13 +942,13 @@ export interface OrderPayment {
   amount: string
   /** Driver key ("manual", "wallet"). */
   gateway: string
-  /** The method row's label — a method payments were made with is never deleted. */
+  /** The payment method's label. A method with payments is never deleted. */
   method: string
   paid_at: string | null
   created_at: string
 }
 
-/** What the orders list sorts by: when each was placed (the list's own order), the amount. */
+/** The orders list's sort keys: creation time (the default) or amount. */
 export type OrderSort = 'created' | 'amount'
 
 export interface OrdersResponse {
@@ -917,11 +960,11 @@ export interface OrdersResponse {
     last_page: number
     sort: OrderSort
     dir: SortDirection
-    /** The stuck tab — paid and not delivered —, whatever the list shows. */
+    /** Stuck orders (paid but not delivered), regardless of the filters. */
     stuck: number
-    /** The orders of the list (its tab, type, search and days) that are sales: paid, being delivered or delivered. */
+    /** How many of the listed orders (tab, type, search and dates) are sales: paid, being delivered or delivered. */
     sold: number
-    /** What those add up to (Toman). */
+    /** Their total, in Toman. */
     sold_amount: string
   }
 }
@@ -932,86 +975,88 @@ export interface OrderResponse {
 
 export type SubscriptionStatus = 'active' | 'expired' | 'disabled' | 'deleted'
 
-/** One row of the subscriptions screen: a client on a panel, as the shop last saw it there. */
+/** A service, as a row of the subscriptions screen: a client on a panel, as last read from it. */
 export interface SubscriptionRow {
   id: number
   status: SubscriptionStatus
   /** The client's name on the panel ("amir_2", "USER_7"). */
   name: string
-  /** The one link the customer got. */
+  /** The customer's subscription link. */
   link: string
   user: UserRef
-  /** Null once the plan was deleted. */
+  /** Null once the plan is deleted. */
   plan: NamedRef | null
   server: NamedRef
-  /** Bytes; a limit of 0 is no limit. */
+  /** In bytes; a limit of 0 means unlimited. */
   traffic: {
     limit: number
     used: number
   }
-  /** Devices at once; 0 is no limit. */
+  /** Devices allowed at once; 0 means unlimited. */
   ip_limit: number
-  /** The term in days, counted from the first connection; 0 never expires. */
+  /** The term in whole days, rounded up; 0 only when it never expires. `duration_hours` is exact. */
   duration_days: number
-  /** The customer's «تمدید خودکار»: renewed from their wallet before the deadline. */
+  /** The term in hours, counted from the first connection; 0 never expires. */
+  duration_hours: number
+  /** The customer's auto-renewal («تمدید خودکار»): renewed from their wallet before the deadline. */
   auto_renew: boolean
-  /** A renewal queued behind the period in use (what that period leaves unused is not carried): when it begins, and the most it leaves then (bytes). */
+  /** A renewal queued after the current period (unused traffic of the current period is not carried over): when it starts, and the most traffic left then, in bytes. */
   next_period: {
     starts_at: string
     traffic: number
   } | null
-  /** When the first connection started the clock; null until then. */
+  /** When the first connection started the term; null until then. */
   starts_at: string | null
   /** Null while waiting for the first connection, or without a term. */
   expires_at: string | null
-  /** Active, its deadline within the expiring window (the list's `meta.expiring_days`). */
+  /** Active, and ending within the list's `meta.expiring_days`. */
   expiring_soon: boolean
-  /** The moment the panel was last read for it — what the numbers are from. */
+  /** When the panel was last read for it; the numbers are from then. */
   last_synced_at: string | null
   disabled_at: string | null
   created_at: string
-  /** What the modal may do with it right now (the server's rules). */
+  /** Which operations its current state allows (the server decides). */
   actions: {
     sync: boolean
     disable: boolean
     enable: boolean
     move: boolean
     delete: boolean
-    /** Days and traffic on top: an active service that ends some day or has a quota. */
+    /** Adding days and traffic: for an active service with an end date or a quota. */
     extend: boolean
   }
 }
 
-/** What «افزایش زمان و حجم» gives one service on top of what it has — what a grant gives it —: at least one amount above zero, days only to a service that ends some day, traffic only to one with a quota. In an agent's shop the traffic comes out of the bot's (refused under `traffic_gb` when it is short); the days cost nothing. */
+/** Days and traffic to add to one service («افزایش زمان و حجم»), as a grant adds them. At least one amount must be above zero; days only for a service with an end date, traffic only for one with a quota. In an agent's shop the traffic is taken from the agent's bot (refused on `traffic_gb` when it is short); days cost nothing. */
 export interface SubscriptionExtensionRequest {
-  /** Whole days, 0 to 365; blank is none. */
+  /** Whole days, 0 to 365; blank for none. */
   days?: WholeNumberInput
-  /** Gigabytes, 0 to 10000; blank is none. */
+  /** Gigabytes, 0 to 10000; blank for none. */
   traffic_gb?: AmountInput
-  /** Support's word to the customer, on its own line of the message; 300 characters at most. */
+  /** Support's note to the customer, a separate line of the message; at most 300 characters. */
   note?: string
-  /** Whether the customer is told; they are unless it is false. */
+  /** Whether to notify the customer; default true. */
   notify?: boolean
 }
 
-/** A running service moved to another server with what is left of it. `leave_previous` moves it without asking its previous panel, out of reach — the old client stays there for the owner to remove (in an agent's shop only while that panel is out of reach). */
+/** Move an active service to another server, keeping its remaining days and traffic. `leave_previous` moves it without contacting the previous panel (when it is unreachable); the old client stays there for the owner to remove. In an agent's shop this is allowed only while that panel is unreachable. */
 export interface SubscriptionMoveRequest {
   server_id: number
   leave_previous?: boolean
 }
 
-/** A service deleted from its panel and the shop for good; the note goes to the customer when they hear at all (a service still active). `leave_panel` deletes it without asking its panel, out of reach — the client stays there (in an agent's shop only while that panel is out of reach). */
+/** Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable. */
 export interface SubscriptionDeleteRequest {
   note?: string
   leave_panel?: boolean
 }
 
-/** What the services list sorts by: when each was bought (the list's own order), when it ends — one that never does, or has not started, after every deadline —, the traffic used. */
+/** The services list's sort keys: creation time (the default), end date (services that never end or have not started come after every deadline), or traffic used. */
 export type SubscriptionSort = 'created' | 'expires' | 'used'
 
 export interface SubscriptionsResponse {
   subscriptions: SubscriptionRow[]
-  /** `expiring`: active services ending within `expiring_days` (the tab's count; the dashboard's window too). */
+  /** `expiring` counts active services ending within `expiring_days` (the tab's count; the dashboard uses the same window). */
   meta: {
     page: number
     per_page: number
@@ -1028,20 +1073,20 @@ export interface SubscriptionResponse {
   subscription: SubscriptionRow
 }
 
-/** Where a support ticket stands: open — waiting on support —, answered — support wrote last, waiting on the customer —, closed. A customer's message opens a ticket (again), support's answers it; either side closes it, support reopens it. */
+/** A ticket's status: `open` (waiting for support), `answered` (support wrote last; waiting for the customer) or `closed`. A customer's message makes it open (reopening a closed one); support's answer makes it answered. Either side can close it; support can reopen it. */
 export type TicketStatus = 'open' | 'answered' | 'closed'
 
-/** Who wrote a ticket's message: the customer, or support. */
+/** Who wrote a ticket message: the customer or support. */
 export type TicketAuthor = 'customer' | 'support'
 
-/** Where a ticket's message was written: the shop's website or its bot (the customer's), a panel, the website's admin side (one of the shop's admins on it) or the report group (support's). */
+/** Where a ticket message was written. The customer writes on the website (`web`) or in the bot (`bot`); support in a panel (`panel`), the website's admin API (`staff`) or the report group (`group`). */
 export type TicketChannel = 'web' | 'bot' | 'panel' | 'staff' | 'group'
 
-/** A message's picture — its bytes are the message's attachment address (…/messages/{message}/attachment). */
+/** A message's picture. Its bytes are at the message's attachment address (`…/messages/{message}/attachment`). */
 export interface TicketAttachment {
-  /** Its name, as its sender's device gave it or one made up. */
+  /** Its file name, from the sender's device or generated. */
   name: string
-  /** Whether the shop keeps it still: a picture uploaded to a ticket goes 30 days after the ticket closed (one opened again keeps the pictures it still has; one already gone does not come back) — false then, the message saying it had one, its address a 404. */
+  /** Whether the file is still stored. Uploaded pictures are deleted 30 days after the ticket closes (reopening keeps the pictures still there; deleted ones do not come back). When false, the message still shows it had a picture, and its address is a 404. */
   kept: boolean
 }
 
@@ -1051,23 +1096,23 @@ export interface TicketRow {
   subject: string
   status: TicketStatus
   customer: UserRef
-  /** The customer's service it is about, by its name on the panel; null for none — or one deleted since. */
+  /** The customer's service it is about, by its panel name; null for none, or when the service was deleted. */
   subscription: NamedRef | null
-  /** When its latest message was written: the list's order. */
+  /** When its latest message was written; the list is sorted by it. */
   last_message_at: string
   messages_count: number
-  /** 1 to 5: the customer's word on it once it was closed; null for none. */
+  /** The customer's rating after it closed, 1 to 5; null for none. */
   rating: number | null
   created_at: string
-  /** When it was closed; null while it is not — a ticket opened again leaves its end behind. */
+  /** When it was closed; null while open (reopening clears it). */
   closed_at: string | null
 }
 
-/** One message of a ticket. */
+/** A ticket message. */
 export interface TicketMessageRow {
   id: number
   author: TicketAuthor
-  /** Who of support wrote it: a panel's principal, a bot admin's @username, tg:<id> or user#<id> (in the report group or on the shop's website) — the owner's login reads «پشتیبانی» to anyone but the owner; null for the customer's. */
+  /** Which support person wrote it: a panel user, or a bot admin's @username, tg:<id> or user#<id> (in the report group or on the website). Anyone but the owner sees the owner's login as «پشتیبانی». Null for the customer's messages. */
   reviewer: string | null
   body: string
   /** Its picture; null for none. */
@@ -1076,23 +1121,23 @@ export interface TicketMessageRow {
   created_at: string
 }
 
-/** A support ticket with its whole conversation, the first message first. */
+/** A support ticket with its whole conversation, oldest message first. */
 export interface TicketDetail {
   id: number
   subject: string
   status: TicketStatus
   customer: UserRef
-  /** The customer's service it is about, by its name on the panel; null for none — or one deleted since. */
+  /** The customer's service it is about, by its panel name; null for none, or when the service was deleted. */
   subscription: NamedRef | null
-  /** When its latest message was written: the list's order. */
+  /** When its latest message was written; the list is sorted by it. */
   last_message_at: string
   messages_count: number
-  /** 1 to 5: the customer's word on it once it was closed; null for none. */
+  /** The customer's rating after it closed, 1 to 5; null for none. */
   rating: number | null
   created_at: string
-  /** When it was closed; null while it is not — a ticket opened again leaves its end behind. */
+  /** When it was closed; null while open (reopening clears it). */
   closed_at: string | null
-  /** What the customer said with their rating. */
+  /** The note the customer left with their rating. */
   rating_note: string | null
   messages: TicketMessageRow[]
 }
@@ -1104,7 +1149,7 @@ export interface TicketsResponse {
     per_page: number
     total: number
     last_page: number
-    /** The tickets waiting on an answer, whatever the list shows (the queue). */
+    /** Tickets waiting for an answer, regardless of the filters. */
     open: number
   }
 }
@@ -1113,43 +1158,43 @@ export interface TicketResponse {
   ticket: TicketDetail
 }
 
-/** A ticket's message — support's answer on a panel, the customer's on their website —: its words. One with a picture comes as a form (TicketMessageUploadRequest). */
+/** A ticket message's text: support's answer on a panel, or the customer's message on the website. To attach a picture, send a form instead (TicketMessageUploadRequest). */
 export interface TicketMessageRequest {
-  /** 1 to 4000 characters, its line breaks kept. */
+  /** 1 to 4000 characters; line breaks are kept. */
   body: string
 }
 
-/** A ticket's message with its picture, as a browser form uploads it — a form without one is a message without a picture. */
+/** A ticket message with a picture, as a browser form uploads it. A form without a file is a message without a picture. */
 export interface TicketMessageUploadRequest {
-  /** 1 to 4000 characters, its line breaks kept. */
+  /** 1 to 4000 characters; line breaks are kept. */
   body: string
-  /** The picture: a JPEG, a PNG or a WebP, judged by its bytes — 10 MB at most; left out, none. */
+  /** The picture: a JPEG, PNG or WebP (checked by its content), at most 10 MB. Optional. */
   file?: Blob
 }
 
-/** Where a customer's review stands: pending — waiting on support —, approved — the website shows it —, rejected — kept, never shown. Support moves it either way, at any time. */
+/** A review's status: `pending` (waiting for support), `approved` (shown on the website) or `rejected` (kept but not shown). Support can change it either way at any time. */
 export type ReviewStatus = 'pending' | 'approved' | 'rejected'
 
-/** A review written on the shop's website, as the moderation screen lists it — the writer's own words. */
+/** A review written on the website, as the moderation screen lists it. */
 export interface ReviewRow {
   id: number
   /** The name it is signed with. */
   name: string
   /** 1 to 5. */
   rating: number
-  /** Its words, line breaks as written. */
+  /** Its text, with line breaks as written. */
   body: string
-  /** A line of where they use the service from («ایرانسل · اندروید · Happ»); null for none. */
+  /** A line on where the service is used («ایرانسل · اندروید · Happ»); null for none. */
   context: string | null
   status: ReviewStatus
-  /** The customer who wrote it, signed in on the website; null for a guest's — or one whose account is gone. */
+  /** The signed-in customer who wrote it; null for a guest, or when the account is gone. */
   customer: UserRef | null
-  /** Who of support decided it last: a panel's principal, or one of the shop's admins on its website (@username, tg:<id> or user#<id>) — the owner's login reads «پشتیبانی» to anyone but the owner; null while it waits. */
+  /** Who last approved or rejected it: a panel user, or a website admin (@username, tg:<id> or user#<id>). Anyone but the owner sees the owner's login as «پشتیبانی». Null while pending. */
   reviewer: string | null
-  /** When it was last approved or rejected; null while it waits. */
+  /** When it was last approved or rejected; null while pending. */
   decided_at: string | null
   created_at: string
-  /** What its state allows support to decide (a delete, always). */
+  /** Which decisions its status allows (deleting is always allowed). */
   actions: {
     approve: boolean
     reject: boolean
@@ -1163,7 +1208,7 @@ export interface ReviewsResponse {
     per_page: number
     total: number
     last_page: number
-    /** The reviews waiting on support, whatever the list shows (the queue). */
+    /** Reviews waiting for support, regardless of the filters. */
     pending: number
   }
 }
@@ -1172,7 +1217,7 @@ export interface ReviewResponse {
   review: ReviewRow
 }
 
-/** The panel connectors a server is added with, in their order (each a PanelDriver): each one's words and the versions it needs (`notes`), what the add-server picker draws it by (`traits`: `mark`, two letters; `vendor`; `docs_url`) and what its panels can do (`inbounds`, `link_rotation`) — and a server's form on it: its name, the connector's connection, then the server's own columns. */
+/** The panel connectors a server can use, in order. Each has its description and required versions (`notes`), what the add-server picker shows (`traits`: `mark`, two letters; `vendor`; `docs_url`), what its panels support (`inbounds`, `link_rotation`), and the whole server form for it: the name, the connector's connection fields, then the server's own fields. */
 export interface ServerDriversResponse {
   drivers: DriverDescription[]
 }
@@ -1183,7 +1228,7 @@ export interface ServerRow {
   driver: string
   driver_label: string
   base_url: string
-  /** Its form — the fields its connector's description (ServerDriversResponse) lists — as the server keeps it: how the shop signs in to the panel (`auth_mode`, and each secret as its SecretState: whether one is kept, never the secret), the connection's options, the server's own columns; null while this installation has not its connector. */
+  /** The server's stored form values, with the fields its connector lists (ServerDriversResponse): how the shop signs in to the panel (`auth_mode`, and each secret as a SecretState that says whether one is stored, never the secret), the connection options, and the server's own fields. Null when this installation does not have its connector. */
   form: DriverValues | null
   is_active: boolean
   capacity: number | null
@@ -1191,30 +1236,30 @@ export interface ServerRow {
   notes: string | null
   last_checked_at: string | null
   last_error: string | null
-  /** Whether the panel hands out subscription links as of the last check; null = never asked. A server without them cannot be sold. */
+  /** Whether the panel served subscription links at the last check; null if never checked. A server without them cannot be sold. */
   serves_subscriptions: boolean | null
-  /** Why nothing can be sold or moved onto the server now (switched off, without subscription links, full, its connector missing…); null when it can. */
+  /** Why nothing can be sold on or moved to the server now (switched off, no subscription links, full, connector missing…); null when it can. */
   unsellable_reason: string | null
   counts: {
     inbounds: number
     selectable_inbounds: number
-    /** Its services running now, every shop's — the main bot's and the agents' bots': what its capacity counts. */
+    /** Its active services across all shops (the main bot's and the agents'); this is what its capacity counts. */
     active_subscriptions: number
-    /** Of them, the shop's the panel has open — the ones its subscriptions screen lists (`?server=`); the rest are other shops'. */
+    /** Of those, the ones in the shop the panel has open: what its subscriptions screen lists with `?server=`. */
     shop_active_subscriptions: number
   }
   created_at: string
   updated_at: string
 }
 
-/** An inbound as the panel reports it — from a probe, or the cached copy in server_inbounds. */
+/** An inbound as the panel reports it, from a probe or from the stored copy. */
 export interface ProbeInbound {
-  /** The panel's own identifier, opaque. */
+  /** The panel's own identifier (opaque). */
   remote_key: string
   tag: string
-  /** Null for what is not one protocol (a PasarGuard group). */
+  /** Null when it is not a single protocol (a PasarGuard group). */
   protocol: string | null
-  /** Null for what has no port of its own (a PasarGuard group). */
+  /** Null when it has no port of its own (a PasarGuard group). */
   port: number | null
   remark: string
   enabled: boolean
@@ -1224,12 +1269,12 @@ export interface ProbeInbound {
 }
 
 export interface ServerInboundRow {
-  /** The panel's own identifier, opaque. */
+  /** The panel's own identifier (opaque). */
   remote_key: string
   tag: string
-  /** Null for what is not one protocol (a PasarGuard group). */
+  /** Null when it is not a single protocol (a PasarGuard group). */
   protocol: string | null
-  /** Null for what has no port of its own (a PasarGuard group). */
+  /** Null when it has no port of its own (a PasarGuard group). */
   port: number | null
   remark: string
   enabled: boolean
@@ -1242,7 +1287,7 @@ export interface ServerInboundRow {
 }
 
 export interface PanelStatusInfo {
-  /** What the panel calls its core ("Xray"); null when it has no named one. */
+  /** The name of the panel's core ("Xray"); null when it has none. */
   core_name: string | null
   core_state: 'running' | 'stopped' | 'error' | 'unknown'
   core_version: string
@@ -1256,19 +1301,19 @@ export interface PanelStatusInfo {
   connections: number
 }
 
-/** Outcome of talking to a panel. */
+/** The result of contacting a panel. */
 export interface Probe {
   ok: boolean
-  /** Persian sentence: what went wrong and what to change. */
+  /** A Persian sentence: what went wrong and what to change. */
   error: string | null
-  /** Technical detail behind it (panel wording, cURL text), Latin. */
+  /** The technical detail behind it (the panel's message, cURL text), in English. */
   error_detail: string | null
   status: PanelStatusInfo | null
-  /** Null when the panel could not list them — a check then leaves the stored ones as they were. */
+  /** Null when the panel could not list them; a check then leaves the stored ones unchanged. */
   inbounds: ProbeInbound[] | null
-  /** Whether the panel serves subscription links; null when that could not be asked. */
+  /** Whether the panel serves subscription links; null when that could not be checked. */
   serves_subscriptions: boolean | null
-  /** False when the connection worked but the subscription question failed. */
+  /** False when the connection worked but the subscription check failed. */
   subscription_probed: boolean
 }
 
@@ -1300,157 +1345,173 @@ export interface ProbeResponse {
   probe: Probe
 }
 
-/** A server added or changed with its form, whole: its connector (`driver` — a saved server's own: a server's connector does not change) and the fields its description lists (ServerDriversResponse), by name, as typed — its name; the panel's address and the way in, an API token or an admin's username and password, one at a time (the other way's credentials are emptied); the connection's options; its own columns. A secret left blank or left out keeps the stored one while the panel's address stays on its host — moved to another, it is typed again —, and `clear_<name>: true` empties it. A closed shape per connector: tests/Unit/Drivers/DriverFormsTest holds each to its connector's form. */
+/** A server's whole form, to add or update it: its connector (`driver`; a saved server keeps its connector) and the fields the connector lists (ServerDriversResponse), by name, as typed. That is: the name; the panel's address and one way in, an API token or an admin's username and password (the other way's credentials are cleared); the connection options; and the server's own fields. A secret left blank or out keeps the stored one while the panel's address stays on the same host (after a host change it must be typed again); `clear_<name>: true` empties it. One closed shape per connector, checked against the connector's form by tests/Unit/Drivers/DriverFormsTest. */
 export type ServerRequest = ServerThreeXuiRequest | ServerPasarGuardRequest
 
-/** A 3X-UI panel's server: its API token, or an admin's username and password with the secret of the two-factor login the panel may ask a code of. */
+/** A server on a 3X-UI panel: its API token, or an admin's username and password plus the two-factor secret when the panel asks for a code. */
 export interface ServerThreeXuiRequest {
   driver: '3x-ui'
-  /** Seen in the panels alone; 100 characters at most. */
+  /** Shown only in the panels; at most 100 characters. */
   name: string
-  /** The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). */
+  /** The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). */
   base_url: string
-  /** The way in: an API token, or an admin's username and password. */
+  /** How to sign in: an API token, or an admin's username and password. */
   auth_mode: 'token' | 'password'
-  /** With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. */
+  /** For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. */
   api_token?: string
-  /** True: the kept token is emptied. */
+  /** True empties the stored token. */
   clear_api_token?: boolean
-  /** With a username and password: an admin of the panel. */
+  /** For `password`: a panel admin's username. */
   username?: string
-  /** With a username and password. Left out or blank: the one kept stays. */
+  /** For `password`. Left out or blank: the stored password stays. */
   password?: string
-  /** True: the kept password is emptied. */
+  /** True empties the stored password. */
   clear_password?: boolean
-  /** Whether the panel's TLS certificate is checked — off for a self-signed one. */
+  /** Whether to verify the panel's TLS certificate; off for a self-signed one. */
   verify_tls: boolean
-  /** Seconds a request may take, 5 to 120. */
+  /** Request timeout in seconds, 5 to 120. */
   timeout: WholeNumberInput
-  /** What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. */
+  /** A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. */
   subscription_url?: string
-  /** The running services it takes; blank — no limit, 0 — full. */
+  /** How many active services it takes. Blank for no limit; 0 for full. */
   capacity?: WholeNumberInput
-  /** The owner's own, 1000 characters at most. */
+  /** The owner's notes, at most 1000 characters. */
   notes?: string
-  /** Off: no new service goes on it. */
+  /** Off: no new service is placed on it. */
   is_active: boolean
-  /** With a username and password: the two-factor login's secret (Base32), whose codes the shop signs in with — as an authenticator app shows it, spaces, dashes and lower case taken. Left out or blank: the one kept stays. */
+  /** The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. */
+  button_style?: '' | 'primary' | 'success' | 'danger'
+  /** How many location buttons share its row in the bot. Left out: a row of its own. */
+  button_row?: '1' | '2' | '3'
+  /** For `password`: the two-factor secret (Base32) the shop makes sign-in codes from, as an authenticator app shows it (spaces, dashes and lower case accepted). Left out or blank: the stored secret stays. */
   totp_secret?: string
-  /** True: the kept two-factor secret is emptied — the login asks no code any more. */
+  /** True empties the stored two-factor secret; the sign-in then asks for no code. */
   clear_totp_secret?: boolean
 }
 
-/** A PasarGuard panel's server: its API key, or an admin's username and password. */
+/** A server on a PasarGuard panel: its API key, or an admin's username and password. */
 export interface ServerPasarGuardRequest {
   driver: 'pasarguard'
-  /** Seen in the panels alone; 100 characters at most. */
+  /** Shown only in the panels; at most 100 characters. */
   name: string
-  /** The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). */
+  /** The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). */
   base_url: string
-  /** The way in: an API token, or an admin's username and password. */
+  /** How to sign in: an API token, or an admin's username and password. */
   auth_mode: 'token' | 'password'
-  /** With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. */
+  /** For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. */
   api_token?: string
-  /** True: the kept token is emptied. */
+  /** True empties the stored token. */
   clear_api_token?: boolean
-  /** With a username and password: an admin of the panel. */
+  /** For `password`: a panel admin's username. */
   username?: string
-  /** With a username and password. Left out or blank: the one kept stays. */
+  /** For `password`. Left out or blank: the stored password stays. */
   password?: string
-  /** True: the kept password is emptied. */
+  /** True empties the stored password. */
   clear_password?: boolean
-  /** Whether the panel's TLS certificate is checked — off for a self-signed one. */
+  /** Whether to verify the panel's TLS certificate; off for a self-signed one. */
   verify_tls: boolean
-  /** Seconds a request may take, 5 to 120. */
+  /** Request timeout in seconds, 5 to 120. */
   timeout: WholeNumberInput
-  /** What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. */
+  /** A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. */
   subscription_url?: string
-  /** The running services it takes; blank — no limit, 0 — full. */
+  /** How many active services it takes. Blank for no limit; 0 for full. */
   capacity?: WholeNumberInput
-  /** The owner's own, 1000 characters at most. */
+  /** The owner's notes, at most 1000 characters. */
   notes?: string
-  /** Off: no new service goes on it. */
+  /** Off: no new service is placed on it. */
   is_active: boolean
+  /** The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. */
+  button_style?: '' | 'primary' | 'success' | 'danger'
+  /** How many location buttons share its row in the bot. Left out: a row of its own. */
+  button_row?: '1' | '2' | '3'
 }
 
-/** A connection tried before it is saved: a new server's form (ServerRequest), or a saved server's under its `id` — whose stored secrets the blank ones stand for, while the address stays on its host. A closed shape per connector. */
+/** A connection to test before saving: a new server's form (ServerRequest), or a saved server's form with its `id`, whose stored secrets fill in blank ones while the address stays on the same host. One closed shape per connector. */
 export type ServerTestRequest = ServerThreeXuiTestRequest | ServerPasarGuardTestRequest
 
-/** A 3X-UI panel's server, tried. */
+/** A 3X-UI server to test. */
 export interface ServerThreeXuiTestRequest {
-  /** The saved server whose form it is. */
+  /** The saved server this form belongs to. */
   id?: number
   driver: '3x-ui'
-  /** Seen in the panels alone; 100 characters at most. */
+  /** Shown only in the panels; at most 100 characters. */
   name: string
-  /** The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). */
+  /** The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). */
   base_url: string
-  /** The way in: an API token, or an admin's username and password. */
+  /** How to sign in: an API token, or an admin's username and password. */
   auth_mode: 'token' | 'password'
-  /** With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. */
+  /** For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. */
   api_token?: string
-  /** True: the kept token is emptied. */
+  /** True empties the stored token. */
   clear_api_token?: boolean
-  /** With a username and password: an admin of the panel. */
+  /** For `password`: a panel admin's username. */
   username?: string
-  /** With a username and password. Left out or blank: the one kept stays. */
+  /** For `password`. Left out or blank: the stored password stays. */
   password?: string
-  /** True: the kept password is emptied. */
+  /** True empties the stored password. */
   clear_password?: boolean
-  /** Whether the panel's TLS certificate is checked — off for a self-signed one. */
+  /** Whether to verify the panel's TLS certificate; off for a self-signed one. */
   verify_tls: boolean
-  /** Seconds a request may take, 5 to 120. */
+  /** Request timeout in seconds, 5 to 120. */
   timeout: WholeNumberInput
-  /** What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. */
+  /** A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. */
   subscription_url?: string
-  /** The running services it takes; blank — no limit, 0 — full. */
+  /** How many active services it takes. Blank for no limit; 0 for full. */
   capacity?: WholeNumberInput
-  /** The owner's own, 1000 characters at most. */
+  /** The owner's notes, at most 1000 characters. */
   notes?: string
-  /** Off: no new service goes on it. */
+  /** Off: no new service is placed on it. */
   is_active: boolean
-  /** With a username and password: the two-factor login's secret (Base32), whose codes the shop signs in with — as an authenticator app shows it, spaces, dashes and lower case taken. Left out or blank: the one kept stays. */
+  /** The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. */
+  button_style?: '' | 'primary' | 'success' | 'danger'
+  /** How many location buttons share its row in the bot. Left out: a row of its own. */
+  button_row?: '1' | '2' | '3'
+  /** For `password`: the two-factor secret (Base32) the shop makes sign-in codes from, as an authenticator app shows it (spaces, dashes and lower case accepted). Left out or blank: the stored secret stays. */
   totp_secret?: string
-  /** True: the kept two-factor secret is emptied — the login asks no code any more. */
+  /** True empties the stored two-factor secret; the sign-in then asks for no code. */
   clear_totp_secret?: boolean
 }
 
-/** A PasarGuard panel's server, tried. */
+/** A PasarGuard server to test. */
 export interface ServerPasarGuardTestRequest {
-  /** The saved server whose form it is. */
+  /** The saved server this form belongs to. */
   id?: number
   driver: 'pasarguard'
-  /** Seen in the panels alone; 100 characters at most. */
+  /** Shown only in the panels; at most 100 characters. */
   name: string
-  /** The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). */
+  /** The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). */
   base_url: string
-  /** The way in: an API token, or an admin's username and password. */
+  /** How to sign in: an API token, or an admin's username and password. */
   auth_mode: 'token' | 'password'
-  /** With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. */
+  /** For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. */
   api_token?: string
-  /** True: the kept token is emptied. */
+  /** True empties the stored token. */
   clear_api_token?: boolean
-  /** With a username and password: an admin of the panel. */
+  /** For `password`: a panel admin's username. */
   username?: string
-  /** With a username and password. Left out or blank: the one kept stays. */
+  /** For `password`. Left out or blank: the stored password stays. */
   password?: string
-  /** True: the kept password is emptied. */
+  /** True empties the stored password. */
   clear_password?: boolean
-  /** Whether the panel's TLS certificate is checked — off for a self-signed one. */
+  /** Whether to verify the panel's TLS certificate; off for a self-signed one. */
   verify_tls: boolean
-  /** Seconds a request may take, 5 to 120. */
+  /** Request timeout in seconds, 5 to 120. */
   timeout: WholeNumberInput
-  /** What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. */
+  /** A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. */
   subscription_url?: string
-  /** The running services it takes; blank — no limit, 0 — full. */
+  /** How many active services it takes. Blank for no limit; 0 for full. */
   capacity?: WholeNumberInput
-  /** The owner's own, 1000 characters at most. */
+  /** The owner's notes, at most 1000 characters. */
   notes?: string
-  /** Off: no new service goes on it. */
+  /** Off: no new service is placed on it. */
   is_active: boolean
+  /** The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. */
+  button_style?: '' | 'primary' | 'success' | 'danger'
+  /** How many location buttons share its row in the bot. Left out: a row of its own. */
+  button_row?: '1' | '2' | '3'
 }
 
-/** Whether an inbound is sold — on the plans that sell the whole server. */
+/** Whether an inbound is sold on plans that sell the whole server. */
 export interface InboundSellableRequest {
   is_selectable: boolean
 }
@@ -1461,39 +1522,39 @@ export interface InboundsResponse {
 
 export type ServerGrantStatus = 'running' | 'done' | 'cancelled'
 
-/** «افزودن زمان و حجم»: a grant's part on a server — the grant's terms, and how far it got there, worked through a batch at a time. */
+/** A grant's part on one server («افزودن زمان و حجم»): the grant's terms and its progress there. It is applied a batch at a time. */
 export interface ServerGrantRow {
-  /** The part's: what /servers/{id}/grants/{grant} names. */
+  /** The part's id, as used in `/servers/{id}/grants/{grant}`. */
   id: number
-  /** The grant (a «هدیه همگانی») it is this server's part of, when it reaches beyond this server; null for a grant for this server alone. */
+  /** The mass gift («هدیه همگانی») this is a part of, when the grant covers more than this server; null for a grant for this server only. */
   mass_grant_id: number | null
-  /** Only the agents' services (a mass gift for the agents). */
+  /** Only the agents' services (a mass gift for agents). */
   agents_only: boolean
   days: number
   traffic_bytes: number
-  /** What the customers read with it. */
+  /** The reason the customers read with it. */
   reason: string | null
-  /** Whether the customers are told in the bot. */
+  /** Whether customers are notified in the bot. */
   notify: boolean
-  /** The admin's tick: services still waiting for their first connection get it too, not only running ones. */
+  /** Services still waiting for their first connection get it too, not only running ones. */
   include_unstarted: boolean
   status: ServerGrantStatus
-  /** Every active service it goes through, as issued — which of them takes it is the panel's word as each one's turn comes; granted + skipped + failed is how far it got. */
+  /** The active services it goes through, counted when issued. The panel decides for each one, at its turn, whether it takes the grant. granted + skipped + failed is the progress. */
   total: number
   granted: number
-  /** Services it was not for when their turn came (switched off, gone, ended beyond what it gives, still waiting for their first connection without the tick). */
+  /** Services it did not apply to when their turn came (switched off, gone, ended, or still waiting for their first connection without `include_unstarted`). */
   skipped: number
   failed: number
-  /** Why it waits at the service it was on, in the owner's words — what keeps the shop from working with the panel (ProviderErrorPresenter::describe(): out of reach, a credential refused or missing…); tried again by itself. Null while it moves on. */
+  /** Why it is paused at its current service: what keeps the shop from using the panel (unreachable, a credential refused or missing…). It retries by itself. Null while it is moving. */
   waiting_reason: string | null
-  /** The latest service the panel refused, and why. */
+  /** The last service the panel refused, and why. */
   last_failure: string | null
   reviewer: string | null
   created_at: string
   finished_at: string | null
 }
 
-/** A server's grants card: its latest grants, and whom a new one would reach by what the shop last knew. */
+/** A server's grants card: its latest grants, and how many services a new grant would reach (from the stored data). */
 export interface ServerGrantsResponse {
   grants: ServerGrantRow[]
   audience: {
@@ -1506,28 +1567,28 @@ export interface ServerGrantResponse {
   grant: ServerGrantRow
 }
 
-/** Days and traffic for the services on a server — an outage made good, a gift —: at least one amount above zero. It reaches the services running when it is issued, and those still waiting for their first connection only with `include_unstarted`; the reason goes to the customers, who hear it unless `notify` is false. */
+/** Days and traffic for the services on a server, to make up for an outage or as a gift. At least one amount must be above zero. It reaches the services running when it is issued, and those still waiting for their first connection only with `include_unstarted`. Customers are notified with the reason unless `notify` is false. */
 export interface ServerGrantRequest {
-  /** Whole days, 0 to 365; blank is none. */
+  /** Whole days, 0 to 365; blank for none. */
   days?: WholeNumberInput
-  /** Gigabytes, 0 to 10000; blank is none. */
+  /** Gigabytes, 0 to 10000; blank for none. */
   traffic_gb?: AmountInput
-  /** Its own line of the message; 300 characters at most. */
+  /** A separate line of the message; at most 300 characters. */
   reason?: string
   notify?: boolean
   include_unstarted?: boolean
 }
 
-/** Whom a grant would reach by what the shop last knew: running services, and those still waiting for their first connection. */
+/** How many services a grant would reach, from the stored data: running ones, and ones still waiting for their first connection. */
 export interface GrantReach {
   running: number
   unstarted: number
 }
 
-/** Every service, the agents' only, or one server's. */
-export type MassGrantAudience = 'all' | 'agents' | 'server'
+/** Who a mass gift reaches: `all` services, only the `agents`' services, one `server`'s, or one customer `group`'s (a group of the main shop). */
+export type MassGrantAudience = 'all' | 'agents' | 'server' | 'group'
 
-/** A mass gift's part on one server: a server grant, worked through on its own. */
+/** A mass gift's part on one server: a server grant, applied separately. */
 export interface MassGrantPart {
   id: number
   server: NamedRef
@@ -1536,12 +1597,12 @@ export interface MassGrantPart {
   granted: number
   skipped: number
   failed: number
-  /** As a server grant's (ServerGrantRow.waiting_reason). */
+  /** Same as `ServerGrantRow.waiting_reason`. */
   waiting_reason: string | null
   last_failure: string | null
 }
 
-/** A grant: days and traffic for the running services on every server (or the agents' only, or one server's — a server page's too), a part per server; its numbers are the parts' added up, its status and end its parts'. */
+/** A grant: days and traffic for the running services on every server, or only the agents', one customer group's, or one server's (including grants made on a server's page). It has one part per server; its numbers are the parts' totals, and its status and end come from its parts. */
 export interface MassGrantRow {
   id: number
   days: number
@@ -1550,8 +1611,10 @@ export interface MassGrantRow {
   notify: boolean
   include_unstarted: boolean
   audience: MassGrantAudience
-  /** The one server, for audience server. */
+  /** The server, for the `server` audience. */
   server: NamedRef | null
+  /** The customer group, for the `group` audience; also null once the group is deleted, after which the gift reaches no one else. */
+  group: NamedRef | null
   status: ServerGrantStatus
   total: number
   granted: number
@@ -1563,13 +1626,20 @@ export interface MassGrantRow {
   finished_at: string | null
 }
 
-/** The mass gift card: the latest grants — the servers' pages' too —, and whom a new one would reach — everyone, the agents, on each server. */
+/** The mass gift card: the latest grants (including those made on servers' pages), and how many services a new one would reach for each audience: everyone, the agents, each server, and each customer group of the main shop. */
 export interface MassGrantsResponse {
   grants: MassGrantRow[]
   audience: {
     all: GrantReach
     agents: GrantReach
     servers: {
+      id: number
+      name: string
+      running: number
+      unstarted: number
+    }[]
+    /** The main shop's customer groups, in the admin's order, including groups with no running services. */
+    groups: {
       id: number
       name: string
       running: number
@@ -1582,24 +1652,26 @@ export interface MassGrantResponse {
   grant: MassGrantRow
 }
 
-/** A server grant's terms (ServerGrantRequest) for every server at once — or the agents' services alone (what the bots of agents whose agency stands sold), or one server's. */
+/** A server grant's terms (ServerGrantRequest) for every server at once, or only for the agents' services (sold by the bots of agents with an active agency), one customer group's, or one server's. */
 export interface MassGrantRequest {
-  /** Whole days, 0 to 365; blank is none. */
+  /** Whole days, 0 to 365; blank for none. */
   days?: WholeNumberInput
-  /** Gigabytes, 0 to 10000; blank is none. */
+  /** Gigabytes, 0 to 10000; blank for none. */
   traffic_gb?: AmountInput
-  /** Its own line of the message; 300 characters at most. */
+  /** A separate line of the message; at most 300 characters. */
   reason?: string
   notify?: boolean
   include_unstarted?: boolean
   audience: MassGrantAudience
-  /** For audience server, the server (a ServerRow.id); blank for the others. */
+  /** For the `server` audience: the server's id (`ServerRow.id`). Blank otherwise. */
   server_id?: WholeNumberInput
+  /** For the `group` audience: a customer group of the main shop (`CustomerGroupRow.id`). Blank otherwise. */
+  group_id?: WholeNumberInput
 }
 
 export type BroadcastStatus = 'sending' | 'paused' | 'done' | 'cancelled'
 
-/** Whom it goes to: everyone, buyers, non-buyers, the inactive (no service running), a customer group, agents, one server's customers. */
+/** Who a broadcast goes to: everyone, buyers, non-buyers, the inactive (no running service), a customer group, agents, or one server's customers. */
 export type BroadcastAudience = 'all' | 'buyers' | 'non_buyers' | 'inactive' | 'group' | 'agents' | 'server'
 
 export interface BroadcastButton {
@@ -1607,32 +1679,32 @@ export interface BroadcastButton {
   url: string
 }
 
-/** «ارسال همگانی»: a message a bot admin sent with /broadcast — copied or forwarded to an audience — or (kind unpin) the pins of one taken off again. */
+/** A broadcast run («ارسال همگانی»): a message a bot admin sent with /broadcast, copied or forwarded to an audience; or (kind `unpin`) a run that removes an earlier broadcast's pins. */
 export interface BroadcastRow {
   id: number
   kind: 'message' | 'unpin'
-  /** An unpin run: the broadcast whose pins it takes off. */
+  /** For an unpin run: the broadcast whose pins it removes. */
   source_id: number | null
-  /** Copied from the bot (with the link buttons), or forwarded from its first sender. */
+  /** Copied by the bot (with the link buttons), or forwarded from its original sender. */
   mode: 'copy' | 'forward'
   audience: {
     key: BroadcastAudience
-    /** The group or the server the audience names. */
+    /** The group or server the audience names. */
     id: number | null
     label: string
   }
-  /** Each message pinned in its chat. */
+  /** Each message is pinned in its chat. */
   pin: boolean
-  /** Chats where its message is pinned still (what «لغو پین» would take off). */
+  /** Chats where its message is still pinned (what unpin, «لغو پین», would remove). */
   pinned: number
-  /** The admin's link buttons under a copy, rows in reading order. */
+  /** The link buttons under a copied message, as rows in reading order. */
   buttons: BroadcastButton[][]
-  /** What the message is: text, photo, video, animation, document, audio, voice, video_note, sticker, poll, other. */
+  /** The message type: text, photo, video, animation, document, audio, voice, video_note, sticker, poll, other. */
   content: string | null
-  /** Its text or caption, cut short. */
+  /** Its text or caption, shortened. */
   excerpt: string | null
   status: BroadcastStatus
-  /** Recipients when it started; sent + blocked + failed is how far it got. */
+  /** Recipients when it started; sent + blocked + failed is the progress. */
   total: number
   sent: number
   /** Recipients who blocked the bot. */
@@ -1640,7 +1712,7 @@ export interface BroadcastRow {
   failed: number
   /** The bot admin who sent it; null for a run started from the panel. */
   admin: UserRef | null
-  /** Who started it — from a panel or the shop's website: the agent's @bot, a bot admin's @username / tg:<id> / user#<id>, or the owner's login — «پشتیبانی» to anyone but the owner. */
+  /** Who started it from a panel or the website: the agent's @bot, a bot admin's @username, tg:<id> or user#<id>, or the owner's login (which anyone but the owner sees as «پشتیبانی»). */
   reviewer: string | null
   created_at: string
   finished_at: string | null
@@ -1661,7 +1733,7 @@ export interface BroadcastResponse {
   broadcast: BroadcastRow
 }
 
-/** A secret as the settings screen sees it: never the value, only whether one is stored and a recognisable hint. */
+/** A secret as a settings screen sees it: never the value, only whether one is stored and a short hint to recognise it. */
 export interface SecretState {
   set: boolean
   hint: string
@@ -1671,7 +1743,7 @@ export type ConfigGroup = 'app' | 'database' | 'telegram' | 'mail' | 'advanced'
 
 export interface ConfigAppSettings {
   name: string
-  /** APP_URL: the address the shop is reached at, its sub-folder included — every address the shop hands out is built on it. */
+  /** APP_URL: the shop's public address, including any sub-folder. Every address the shop gives out is built on it. */
   url: string
   debug: boolean
   timezone: string
@@ -1686,22 +1758,22 @@ export interface ConfigTelegramSettings {
   webhook_secret: SecretState
 }
 
-/** How the shop's email goes out: none, or a mail driver's key (DriverDescription.key) — smtp, an account on a mail server; native, the host's own mail, as PHP's mail() sends it (php.ini's sendmail_path); resend, Resend's API (resend.com), with its API key and the sender's domain verified there. */
+/** How the shop sends email: `none`, or a mail driver's key (`DriverDescription.key`): `smtp`, an account on a mail server; `native`, the host's own mail through PHP's mail() (php.ini's sendmail_path); `resend`, Resend's API (resend.com), with an API key and the sender's domain verified there. */
 export type MailTransport = 'none' | 'smtp' | 'native' | 'resend'
 
-/** An SMTP connection: tls — STARTTLS, required; ssl — TLS from the first byte; none. */
+/** An SMTP connection's encryption: `tls` (STARTTLS, required), `ssl` (TLS from the first byte) or `none`. */
 export type MailEncryption = 'tls' | 'ssl' | 'none'
 
-/** The shop's email (MAIL_* in config.php) — a website's sign-up codes and password resets, and the notices to a customer Telegram cannot reach, go out by it: how, every mail driver described with its settings, and who the emails come from. */
+/** The shop's email settings (MAIL_* in config.php), used for the website's sign-up and password reset codes and for notices to customers Telegram cannot reach: the transport, every mail driver described with its settings, and the sender. */
 export interface ConfigMailSettings {
   transport: MailTransport
-  /** The address the shop's emails come from; empty: no email goes out. */
+  /** The sender address of the shop's emails; empty means no email is sent. */
   from_address: string
-  /** The name they come from; empty: the shop's name. */
+  /** The sender name; empty means the shop's name. */
   from_name: string
-  /** Every mail driver, its form described; its `sender` trait says which address its emails may come from. */
+  /** Every mail driver with its form. Its `sender` trait says which sender address it can use. */
   drivers: DriverDescription[]
-  /** Each driver's settings by its key — as config.php holds them, else their defaults; a secret as its SecretState. */
+  /** Each driver's settings, keyed by driver: the stored values, else the defaults. A secret is a SecretState. */
   values: Record<string, DriverValues>
 }
 
@@ -1715,7 +1787,7 @@ export interface ConfigAdvancedSettings {
   cron_token: SecretState
 }
 
-/** The panel's own configuration, read from config.php. */
+/** The installation's configuration, read from config.php. */
 export interface ConfigSettingsResponse {
   file: {
     path: string
@@ -1736,15 +1808,15 @@ export interface ConfigSettingsResponse {
       label: string
     }[]
     log_levels: string[]
-    /** The cron trigger with its token masked, like the token; null without one. The whole address is GET /api/admin/settings/config/cron-url. */
+    /** The cron trigger address with its token masked; null without a token. The full address is at `GET /api/admin/settings/config/cron-url`. */
     cron_url: string | null
-    /** The main bot's webhook, its secret masked. */
+    /** The main bot's webhook address, with its secret masked. */
     webhook_url: string
   }
 }
 
 export interface CronUrlResponse {
-  /** The cron trigger, token and all — for the screen's copy action; null without a token. */
+  /** The full cron trigger address, token included, for the copy button; null without a token. */
   url: string | null
 }
 
@@ -1758,11 +1830,11 @@ export interface BotIdentityResponse {
   bot: BotIdentity
 }
 
-/** What answered a database probe. */
+/** The database server a probe reached. */
 export interface DatabaseCheck {
   /** The server and its version: "MariaDB 10.4.32", "SQLite 3.45.1" */
   version: string
-  /** How many tables its database holds */
+  /** The number of tables in the database */
   tables: number
 }
 
@@ -1770,26 +1842,26 @@ export interface DatabaseCheckResponse {
   database: DatabaseCheck
 }
 
-/** One group of the config.php settings, saved whole (PUT /settings/config/{group}) — the group's fields as ConfigSettingsResponse.groups names them. A secret left blank or left out keeps the stored one, `clear_<name>: true` empties it. */
+/** One group of the config.php settings, saved whole (`PUT /settings/config/{group}`), with the fields `ConfigSettingsResponse.groups` lists for it. A secret left blank or out keeps the stored one; `clear_<name>: true` empties it. */
 export type ConfigSettingsRequest = ConfigAppRequest | ConfigTelegramRequest | ConfigMailRequest | ConfigAdvancedRequest | DatabaseRequest
 
 export interface ConfigAppRequest {
   name: string
   url: string
   debug: boolean
-  /** An IANA zone id (one of meta.timezones). */
+  /** An IANA time zone id (one of `meta.timezones`). */
   timezone: string
 }
 
 export interface ConfigTelegramRequest {
-  /** Left out or blank: the one kept stays — while the Bot API's address (`api_url`) stays on its host. */
+  /** Left out or blank: the stored token stays, as long as the Bot API address (`api_url`) stays on the same host. */
   token?: string
   clear_token?: boolean
-  /** The bot's @username, the @ optional; blank for none. */
+  /** The bot's username, with or without the @; blank for none. */
   username?: string
-  /** The Bot API's address — http(s), a host, no credentials, ? or #. Moved to another origin (scheme, host or port), every bot's token goes there, agents' too: the save asks `current_password`. */
+  /** The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password`. */
   api_url: string
-  /** The owner's current panel password, asked only while `api_url` moves to another origin (else not read): blank, or a wrong one — a failed sign-in, counted with the login's —, is a 422 on it and nothing is saved. */
+  /** The owner's current panel password. Read only when `api_url` moves to another origin: blank or wrong (a wrong one counts as a failed sign-in) is a 422 on it, and nothing is saved. */
   current_password?: string
   /** Seconds, 1 to 60. */
   poll_timeout: WholeNumberInput
@@ -1797,10 +1869,10 @@ export interface ConfigTelegramRequest {
   clear_webhook_secret?: boolean
 }
 
-/** The shop's email, saved whole: the way out, and — for a mail driver — its settings by its form and who the emails come from. A closed shape per way out; what the other drivers keep stays as it is. */
+/** The shop's email settings, saved whole: the transport and, for a mail driver, its settings and the sender. One closed shape per transport; the other drivers' stored settings are not changed. */
 export type ConfigMailRequest = MailNoneRequest | MailSmtpRequest | MailNativeRequest | MailResendRequest
 
-/** No email at all: what the drivers keep stays, for a way back. */
+/** No email. The drivers' stored settings are kept, so they can be switched back on. */
 export interface MailNoneRequest {
   transport: 'none'
 }
@@ -1808,58 +1880,58 @@ export interface MailNoneRequest {
 /** An account on a mail server, over SMTP. */
 export interface MailSmtpRequest {
   transport: 'smtp'
-  /** mail.example.com — no scheme, no port. */
+  /** Such as mail.example.com, without scheme or port. */
   host: string
-  /** 1 to 65535: 587 with tls, 465 with ssl, 25 without. */
+  /** 1 to 65535: usually 587 with tls, 465 with ssl, 25 without. */
   port: WholeNumberInput
   encryption: MailEncryption
   /** Blank for none. */
   username?: string
-  /** Left out or blank: the one kept stays — while the server, its port, the encryption and the username stay. */
+  /** Left out or blank: the stored password stays, as long as the host, port, encryption and username stay the same. */
   password?: string
-  /** True: the kept password is emptied. */
+  /** True empties the stored password. */
   clear_password?: boolean
-  /** An email address (kept in lower case). */
+  /** An email address (stored in lower case). */
   from_address: string
-  /** 64 characters at most; blank: the shop's name. */
+  /** At most 64 characters; blank for the shop's name. */
   from_name?: string
 }
 
-/** The host's own mail, as PHP's mail() sends it. */
+/** The host's own mail, sent with PHP's mail(). */
 export interface MailNativeRequest {
   transport: 'native'
-  /** An email address (kept in lower case). */
+  /** An email address (stored in lower case). */
   from_address: string
-  /** 64 characters at most; blank: the shop's name. */
+  /** At most 64 characters; blank for the shop's name. */
   from_name?: string
 }
 
 /** Resend's API. */
 export interface MailResendRequest {
   transport: 'resend'
-  /** Resend's API key, re_… as resend.com › API Keys shows it; left out or blank: the one kept stays — one is needed. */
+  /** Resend's API key (re_…, from resend.com › API Keys). Left out or blank: the stored key stays. A key is required. */
   resend_key?: string
-  /** True: the kept key is emptied. */
+  /** True empties the stored key. */
   clear_resend_key?: boolean
-  /** An email address (kept in lower case). */
+  /** An email address (stored in lower case). */
   from_address: string
-  /** 64 characters at most; blank: the shop's name. */
+  /** At most 64 characters; blank for the shop's name. */
   from_name?: string
 }
 
-/** Where the test email goes. */
+/** Where to send the test email. */
 export interface MailTestRequest {
   /** An email address. */
   to: string
 }
 
 export interface MailTestResponse {
-  /** True: the transport took it — whether it lands in the inbox is the mail server's. */
+  /** True: the transport accepted it. Whether it reaches the inbox is up to the mail server. */
   sent: boolean
 }
 
 export interface ConfigAdvancedRequest {
-  /** One of meta.log_levels — any other is refused, as a time zone is. */
+  /** One of `meta.log_levels`; anything else is refused. */
   log_level: string
   /** Minutes, 5 to 43200. */
   session_lifetime: WholeNumberInput
@@ -1870,37 +1942,37 @@ export interface ConfigAdvancedRequest {
   clear_cron_token?: boolean
 }
 
-/** A token to ask Telegram about; blank or left out — the stored one. */
+/** A token to check with Telegram. Blank or left out: the stored token. */
 export interface TelegramTestRequest {
   token?: string
 }
 
-/** The server as the plan form and the plans table know it. */
+/** A server, as the plan form and the plans table show it. */
 export interface PlanServerRef {
   id: number
   name: string
   is_active: boolean
-  /** As on the servers screen: null = never checked, false = no subscription links — either way the customer is not shown the entry. */
+  /** As on the servers screen: null if never checked, false if it serves no subscription links. Either way customers are not offered the entry. */
   serves_subscriptions: boolean | null
 }
 
 export interface PlanInboundRef {
   id: number
   remark: string | null
-  /** Null for what is not one protocol (a PasarGuard group). */
+  /** Null when it is not a single protocol (a PasarGuard group). */
   protocol: string | null
-  /** Null for what has no port of its own (a PasarGuard group). */
+  /** Null when it has no port of its own (a PasarGuard group). */
   port: number | null
   enabled: boolean
   is_selectable: boolean
 }
 
-/** One server a plan is sold on; `inbounds` is what a purchase gets today (resolved for whole-server entries). */
+/** A server a plan is sold on. `inbounds` is what a purchase gets today (resolved for whole-server entries). */
 export interface PlanServerEntry {
   server: PlanServerRef
   all_inbounds: boolean
   inbounds: PlanInboundRef[]
-  /** Why customers are not offered this entry now (the server switched off, without subscription links, full, without a sellable inbound…); null when they are. */
+  /** Why customers are not offered this entry now (the server is switched off, serves no subscription links, is full, has no sellable inbound…); null when they are. */
   unsellable_reason: string | null
 }
 
@@ -1910,7 +1982,7 @@ export interface PlanCategoryRef {
   is_active: boolean
 }
 
-/** A group plans are filed under. */
+/** A plan category. */
 export interface PlanCategoryRow {
   id: number
   name: string
@@ -1923,33 +1995,47 @@ export interface PlanCategoryRow {
   updated_at: string
 }
 
-/** A plan as the list shows it. */
+/** A plan, as the list shows it. */
 export interface PlanRow {
   id: number
-  /** Null = uncategorised (sold under "سایر پلن‌ها" when the shop has categories). */
+  /** Null when uncategorised (listed under "سایر پلن‌ها" when the shop has categories). */
   category: PlanCategoryRef | null
   name: string
   description: string | null
   price: string
-  /** 0 = no time limit */
+  /** The price of a customer's first purchase in the shop («قیمت خرید اول»), below `price`; "0.00" makes the first purchase free. Null for none: everyone pays `price`. Renewals are always at `price`. */
+  first_purchase_price: string | null
+  /** The price for agents and members of groups with agent prices («همکار») («قیمت نماینده»), below `price`, for purchases and renewals. Null for none. */
+  agent_price: string | null
+  /** A note shown under the bot's checkout for this plan («یادداشت پیش‌فاکتور»), for purchases and renewals; null for none. */
+  checkout_note: string | null
+  /** The colour of its button in the bot's plan list; null for the client's default. */
+  button_style: ButtonStyle | null
+  /** How many buttons share its row there: 1 for a row of its own, or 2 or 3 (consecutive buttons with the same number share rows). */
+  button_row: number
+  /** The term in whole days, rounded up; 0 only for no time limit. `duration_hours` is exact. */
   duration_days: number
-  /** Gigabytes, decimals allowed; 0 = unlimited */
+  /** The term in hours from the first connection (a daily plan's is days × 24); 0 for no time limit. */
+  duration_hours: number
+  /** Gigabytes, decimals allowed; 0 for unlimited */
   traffic_gb: number
-  /** 0 = unlimited */
+  /** Devices at once; 0 for unlimited */
   ip_limit: number
+  /** The plan's own prices for extra traffic and time; null to use the shop's (the bot settings' `extra_…`). */
+  extras: ExtraPrices | null
   servers: PlanServerEntry[]
-  /** Why the bot does not show the plan now, its switch aside (ServerSelector::judge(), the bot's own judgement): no server on it, none that can sell (each entry says why), or traffic of an agent's shop that does not cover it; null when it does. */
+  /** Why the bot does not offer the plan now, apart from its switch: it has no server, none of its servers can sell (each entry says why), or an agent's traffic does not cover it. Null when it is offered. */
   unsellable_reason: string | null
   is_active: boolean
   sort: number
   counts: {
-    /** Its services running now. */
+    /** Its active services. */
     active_subscriptions: number
-    /** Its orders sold: paid, being delivered or delivered. */
+    /** Its sold orders: paid, being delivered or delivered. */
     sales: number
-    /** Every order placed for it, whatever came of it; a plan that has any — or any service — is not deleted (switched off instead). */
+    /** All orders placed for it, whatever their status. A plan with any orders or services cannot be deleted (switch it off instead). */
     orders: number
-    /** Every service sold on it, ended ones too. */
+    /** All services sold on it, ended ones included. */
     subscriptions: number
   }
   created_at: string
@@ -1960,15 +2046,15 @@ export interface PlanOptionServer {
   id: number
   name: string
   is_active: boolean
-  /** As on the servers screen: null = never checked, false = no subscription links — either way the customer is not shown the entry. */
+  /** As on the servers screen: null if never checked, false if it serves no subscription links. Either way customers are not offered the entry. */
   serves_subscriptions: boolean | null
   driver_label: string
   inbounds: PlanInboundRef[]
-  /** Why nothing can be sold on the server now (switched off, without subscription links, full…); null when it can. */
+  /** Why nothing can be sold on the server now (switched off, no subscription links, full…); null when it can. */
   unsellable_reason: string | null
 }
 
-/** The servers and inbounds the plan form can build entries from, and the categories. */
+/** The servers, inbounds and categories the plan form can use. */
 export interface PlanOptions {
   categories: PlanCategoryRef[]
   servers: PlanOptionServer[]
@@ -1990,50 +2076,97 @@ export interface PlanCategoryResponse {
   category: PlanCategoryRow
 }
 
-/** A plan as its form sends it, added or changed whole: its words, its price and what it gives — 0 is no limit for the term, the traffic and the devices —, its category, and the servers it is sold on (the set is replaced). */
+/** A plan's whole form, to add or update it: its texts, its price, what it gives (0 means no limit for the term, the traffic and the devices), its category, and the servers it is sold on (the list replaces the current one). */
 export interface PlanRequest {
   name: string
   /** Shown with the plan in the bot; blank for none. */
   description?: string
   /** Whole Toman; 0 for a free plan. */
   price: AmountInput
-  /** The term in days, from the first connection; 0 — it never ends. */
-  duration_days: WholeNumberInput
-  /** Gigabytes; 0 — unlimited, which an agent's shop refuses (its traffic is prepaid). */
+  /** The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. */
+  duration_hours?: WholeNumberInput
+  /** The term in whole days (the older alternative to `duration_hours`); 0 never ends. */
+  duration_days?: WholeNumberInput
+  /** Gigabytes; 0 for unlimited, which an agent's shop refuses (its traffic is prepaid). */
   traffic_gb: AmountInput
-  /** Devices at once; 0 — unlimited. */
+  /** Devices at once; 0 for unlimited. */
   ip_limit: WholeNumberInput
-  /** A PlanCategoryRow.id; blank or 0 — none. */
+  /** The price of a customer's first purchase in the shop («قیمت خرید اول»), whole Toman below `price`; 0 makes it free. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. */
+  first_purchase_price?: AmountInput | null
+  /** The price for agents and members of groups with agent prices («قیمت نماینده»), whole Toman below `price`. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. */
+  agent_price?: AmountInput | null
+  /** A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. */
+  checkout_note?: string | null
+  /** The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. */
+  button_style?: '' | 'primary' | 'success' | 'danger' | null
+  /** How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. */
+  button_row?: WholeNumberInput
+  /** The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. */
+  extras?: ExtraPricesRequest | null
+  /** A category id (`PlanCategoryRow.id`); blank or 0 for none. */
   category_id?: WholeNumberInput
   /** At least one, each server once. */
   servers: PlanServerEntryInput[]
-  /** Absent: a new plan starts on, a changed one keeps its switch. */
+  /** Left out: on for a new plan, unchanged for an existing one. */
   is_active?: boolean
 }
 
-/** A server the plan is sold on: the whole of it — every inbound the server marks sellable, at purchase time — or the inbounds picked; a driver without inbounds sells the whole server. */
+/** A bulk change of several plans' prices: raise or lower the named prices by a percent or a number of Toman, rounding each new price to the nearest step. A plan without one of the named prices still has none afterwards. */
+export interface PlanPricesRequest {
+  /** The plans to change; at least one. */
+  plan_ids: number[]
+  direction: 'increase' | 'decrease'
+  /** A percent of each price (at most 1000, or 100 for a decrease), or a number of Toman. */
+  mode: 'percent' | 'amount'
+  /** The percent (decimals allowed) or whole Toman; above zero. */
+  value: AmountInput
+  /** Each new price is rounded to the nearest multiple of this; 1 means whole Toman. */
+  round_to: 1 | 100 | 1000 | 10000
+  /** Which prices change: the price, the first-purchase price, the agent price. */
+  prices: ('price' | 'first_purchase_price' | 'agent_price')[]
+}
+
+export interface PlanPrices {
+  price: string
+  first_purchase_price: string | null
+  agent_price: string | null
+}
+
+export interface PlanPricesPreviewResponse {
+  /** Every plan named, in the plans list's order. */
+  changes: {
+    id: number
+    name: string
+    before: PlanPrices
+    after: PlanPrices
+    /** Why the plan cannot take the change: a price below zero or above the maximum, or a first-purchase or agent price no longer below the price. Null when it can. */
+    problem: string | null
+  }[]
+}
+
+/** A server the plan is sold on: the whole server (every inbound marked sellable at purchase time) or the picked inbounds. A connector without inbounds always sells the whole server. */
 export interface PlanServerEntryInput {
   server_id: number
-  /** Absent: the inbounds picked. */
+  /** Left out: only the picked inbounds. */
   all_inbounds?: boolean
-  /** The server's own enabled inbounds (PlanInboundRef.id); empty for the whole server. */
+  /** Enabled inbounds of this server (`PlanInboundRef.id`); empty for the whole server. */
   inbound_ids?: number[]
 }
 
-/** A category added or changed. */
+/** A plan category to add or update. */
 export interface PlanCategoryRequest {
   /** Unique in the shop. */
   name: string
-  /** Absent: a new category starts on, a changed one keeps its switch. */
+  /** Left out: on for a new category, unchanged for an existing one. */
   is_active?: boolean
 }
 
-/** The gateway drivers a method is made from, in the order they are registered: each described with its form — a method's settings — and its traits: `kind`, how it settles (a GatewayKind), and `builtin`, part of the shop itself (the wallet: one row in every shop, never added or deleted, nothing to set). */
+/** The gateway drivers a payment method can use, in registration order. Each has its form (the method's settings) and its traits: `kind`, how it settles (a GatewayKind), and `builtin`, part of every shop (the wallet: one row per shop, never added or deleted, with no settings). */
 export interface PaymentDriversResponse {
   drivers: DriverDescription[]
 }
 
-/** One row per method the customer may pick, in checkout order — as its driver describes it: `config` is its driver's form, each field as the row keeps it (a closed shape per driver). */
+/** A payment method, in checkout order, as its driver describes it. `config` holds the driver's form values as stored (one closed shape per driver). */
 export type PaymentMethodRow = ManualMethodRow | WalletMethodRow | UnregisteredMethodRow
 
 /** A card-to-card method. */
@@ -2043,75 +2176,75 @@ export interface ManualMethodRow {
   driver_label: string
   kind: GatewayKind
   builtin: boolean
-  /** What the customer sees on the button: "کارت به کارت (ملت)". */
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one line about the method (its masked card and holder), as the payments screen shows it; null when it has none. */
+  /** The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. */
   summary: string | null
   config: ManualGatewayConfig
   enabled: boolean
   sort: number
   counts: {
-    /** The payments made with it; a method that has any is not deleted. */
+    /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
   created_at: string
   updated_at: string
 }
 
-/** The wallet, the shop's own method. */
+/** The wallet, the built-in method. */
 export interface WalletMethodRow {
   id: number
   driver: 'wallet'
   driver_label: string
   kind: GatewayKind
   builtin: boolean
-  /** What the customer sees on the button: "کارت به کارت (ملت)". */
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one line about the method (its masked card and holder), as the payments screen shows it; null when it has none. */
+  /** The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. */
   summary: string | null
   /** Nothing to configure. */
   config: Record<string, never>
   enabled: boolean
   sort: number
   counts: {
-    /** The payments made with it; a method that has any is not deleted. */
+    /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
   created_at: string
   updated_at: string
 }
 
-/** A method whose driver is no longer installed — no checkout offers it, switched on or not —; it can only be switched off or deleted. */
+/** A method whose driver is no longer installed. No checkout offers it, even when switched on; it can only be switched off or deleted. */
 export interface UnregisteredMethodRow {
   id: number
   driver: string
   driver_label: string
-  /** No driver says how it settles. */
+  /** Unknown without the driver. */
   kind: null
   builtin: boolean
-  /** What the customer sees on the button: "کارت به کارت (ملت)". */
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one line about the method (its masked card and holder), as the payments screen shows it; null when it has none. */
+  /** The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. */
   summary: string | null
-  /** Not shown — no driver says which of its settings are secrets. */
+  /** Not shown, since without the driver it is unknown which settings are secrets. */
   config: Record<string, never>
   enabled: boolean
   sort: number
   counts: {
-    /** The payments made with it; a method that has any is not deleted. */
+    /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
   created_at: string
   updated_at: string
 }
 
-/** A card-to-card method's settings (ManualMethodRow.config): the manual driver's form, each field as the row keeps it — one kept before the field existed at its default. */
+/** A card-to-card method's settings (`ManualMethodRow.config`): the manual driver's form values as stored. A field added after the method was saved shows its default. */
 export interface ManualGatewayConfig {
-  /** Bare 16 digits. */
+  /** 16 digits, no separators. */
   card_number: string
   card_holder: string
   instructions: string
-  /** Minutes a receipt may wait for an admin before it is accepted on its own; 0 = only by hand. */
+  /** Minutes a receipt sent in the bot may wait for review before it is approved automatically; 0 for manual approval only. */
   auto_approve_after: number
 }
 
@@ -2123,71 +2256,71 @@ export interface PaymentMethodResponse {
   method: PaymentMethodRow
 }
 
-/** A card-to-card method's form: the label the customer picks it by, its switch, and the manual driver's form — the card and its holder the bot shows, the note under them, and how long a receipt may wait for a review. */
+/** A card-to-card method's form: the label customers pick it by, its switch, and the manual driver's form (the card number and holder the bot shows, the note under them, and how long a receipt may wait for review). */
 export interface ManualMethodRequest {
-  /** What the checkout's button says: «کارت به کارت (ملت)». Absent on a change: the one it has. */
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
   label?: string
-  /** Absent: a new method starts on, a changed one keeps its switch. */
+  /** Left out: on for a new method, unchanged for an existing one. */
   enabled?: boolean
-  /** 16 digits; Persian ones, and spaces or dashes between them, too. */
+  /** 16 digits; Persian digits, and spaces or dashes between them, are accepted. */
   card_number: string
   card_holder: string
   /** Shown to the customer with the card; blank for none. */
   instructions?: string
-  /** Minutes a receipt may wait for a review before it is accepted on its own; blank or 0 — only by hand. */
+  /** Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. */
   auto_approve_after?: WholeNumberInput
 }
 
-/** The wallet, the shop's own method: nothing to configure but its label and its switch. */
+/** The wallet, the built-in method: only its label and switch can be set. */
 export interface WalletMethodRequest {
   label?: string
   enabled?: boolean
 }
 
-/** A new card-to-card method: its driver, and its form (ManualMethodRequest) with the label required. */
+/** A new card-to-card method: its driver and its form (ManualMethodRequest), with the label required. */
 export interface ManualMethodCreateRequest {
-  /** A DriverDescription.key of GET /payment-methods/drivers. */
+  /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
   driver: 'manual'
-  /** What the checkout's button says: «کارت به کارت (ملت)». Absent on a change: the one it has. */
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
   label: string
-  /** Absent: a new method starts on, a changed one keeps its switch. */
+  /** Left out: on for a new method, unchanged for an existing one. */
   enabled?: boolean
-  /** 16 digits; Persian ones, and spaces or dashes between them, too. */
+  /** 16 digits; Persian digits, and spaces or dashes between them, are accepted. */
   card_number: string
   card_holder: string
   /** Shown to the customer with the card; blank for none. */
   instructions?: string
-  /** Minutes a receipt may wait for a review before it is accepted on its own; blank or 0 — only by hand. */
+  /** Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. */
   auto_approve_after?: WholeNumberInput
 }
 
-/** A new method of a driver that is not built in: the driver's key, the label the customer picks it by, the switch and the driver's form (DriverDescription.fields) — a closed shape per driver, held to its form by tests/Unit/Drivers/DriverFormsTest. */
+/** A new payment method for a driver that is not built in: the driver's key, the label customers pick it by, the switch and the driver's form (`DriverDescription.fields`). One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest. */
 export type PaymentMethodCreateRequest = ManualMethodCreateRequest
 
-/** A method's form again, as its driver takes it — a closed shape per driver, held to its form by tests/Unit/Drivers/DriverFormsTest; a method whose driver is gone takes none (switch it off or delete it). */
+/** A payment method's form, as its driver takes it. One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest. A method whose driver is no longer installed cannot be updated (switch it off or delete it). */
 export type PaymentMethodUpdateRequest = ManualMethodRequest | WalletMethodRequest
 
-/** A method's switch in the list: true or false, nothing else. */
+/** A payment method's on/off switch. A JSON boolean only. */
 export interface PaymentMethodSwitchRequest {
   enabled: boolean
 }
 
-/** Telegram's button styles (`style` on KeyboardButton / InlineKeyboardButton); null = the client's default look. */
+/** Telegram's button colours (`style` on KeyboardButton and InlineKeyboardButton). Null means the client's default look. */
 export type ButtonStyle = 'primary' | 'success' | 'danger'
 
 export interface KeyboardButtonSpec {
-  /** An action of the bot (see KeyboardAction.key). */
+  /** A bot action (`KeyboardAction.key`). */
   action: string
-  /** What the button says; for a reply keyboard also what the tap sends. */
+  /** The button text; on a reply keyboard, also what a tap sends. */
   label: string
   style: ButtonStyle | null
-  /** A premium emoji's id (see CustomEmojiRow), drawn before the label — Telegram's `icon_custom_emoji_id`, shown only while the bot's owner has Telegram Premium; null = none. */
+  /** A premium emoji's id (see CustomEmojiRow), shown before the label (Telegram's `icon_custom_emoji_id`). It shows only while the bot's owner has Telegram Premium. Null for none. */
   icon: string | null
 }
 
 export type KeyboardType = 'reply' | 'inline'
 
-/** One of the bot's keyboards as the admin laid it out; rows are in reading order (first = rightmost). */
+/** One of the bot's keyboards as laid out. Rows are in reading order (the first button is the rightmost). */
 export interface KeyboardLayoutData {
   name: string
   title: string
@@ -2196,19 +2329,19 @@ export interface KeyboardLayoutData {
   rows: KeyboardButtonSpec[][]
 }
 
-/** Something a menu button can stand for. */
+/** An action a menu button can trigger. */
 export interface KeyboardAction {
   key: string
   title: string
-  /** The default label (emoji + title). */
+  /** The default label (emoji and title). */
   label: string
-  /** The `menu:*` callback an inline button carries. */
+  /** The `menu:*` callback data an inline button carries. */
   screen: string
 }
 
 export interface KeyboardsResponse {
   keyboards: KeyboardLayoutData[]
-  /** What a button of this shop's menu can do — an agent's bot has no «نمایندگی», which its layouts never show and a save refuses. */
+  /** The actions this shop's menu buttons can have. An agent's bot has no «نمایندگی»: its layouts never show it, and saving it is refused. */
   actions: KeyboardAction[]
   styles: ButtonStyle[]
   limits: {
@@ -2222,51 +2355,51 @@ export interface KeyboardResponse {
   keyboard: KeyboardLayoutData
 }
 
-/** A keyboard laid out anew: its type and its rows in reading order (first = rightmost) — a row left empty is dropped. */
+/** A new keyboard layout: its type and its rows in reading order (the first button is the rightmost). Empty rows are dropped. */
 export interface KeyboardRequest {
   type: KeyboardType
   rows: KeyboardButtonInput[][]
 }
 
-/** A button as the editor sends it back (a KeyboardButtonSpec): each action once a keyboard, each label once. */
+/** A button as the editor sends it (a KeyboardButtonSpec). Each action and each label may appear only once per keyboard. */
 export interface KeyboardButtonInput {
-  /** A KeyboardAction.key. */
+  /** An action key (`KeyboardAction.key`). */
   action: string
-  /** Plain text — a premium emoji goes in `icon`. */
+  /** Plain text; a premium emoji goes in `icon`. */
   label: string
   style?: ButtonStyle | null
-  /** A premium emoji's id; null — none. */
+  /** A premium emoji's id; null for none. */
   icon?: string | null
 }
 
-/** Where a text ends up: a message or the QR card's caption (Telegram HTML), a callback popup or a button (shown as typed), or a part another text takes in. */
+/** Where a text is used: a `message` or the QR card's `caption` (Telegram HTML), a callback `popup` or a `button` (plain text), or a `part` included in other texts. */
 export type BotTextKind = 'message' | 'caption' | 'popup' | 'button' | 'part'
 
-/** A `%name%` the bot fills in when it sends the text. */
+/** A `%name%` placeholder the bot fills in when it sends the text. */
 export interface BotTextVariable {
   name: string
   description: string
-  /** What the screen's preview puts in its place. */
+  /** The sample value the screen's preview uses. */
   sample: string
-  /** The text cannot do without it (a delivery without its link). */
+  /** The wording must contain it (a delivery message needs its link). */
   required: boolean
 }
 
-/** One text the bot sends a customer, with the shop's wording and the admin's. */
+/** A text the bot sends customers, with its default wording and the current one. */
 export interface BotTextRow {
   key: string
   group: string
   kind: BotTextKind
-  /** Telegram reads it as HTML (a message, a caption, a part). */
+  /** Telegram reads it as HTML (a message, a caption or a part). */
   html: boolean
-  /** The longest the wording may be, in characters. */
+  /** The maximum length of the wording, in characters. */
   limit: number
   title: string
-  /** Where the customer meets it. */
+  /** Where the customer sees it. */
   description: string
   variables: BotTextVariable[]
   default: string
-  /** The wording in use: the admin's, or the default. */
+  /** The wording in use: the custom one, or the default. */
   value: string
   customized: boolean
 }
@@ -2278,7 +2411,7 @@ export interface BotTextGroup {
 }
 
 export interface BotTextsResponse {
-  /** The groups the shop's bot says, in the screen's order — an agent's has no «نمایندگی». */
+  /** The text groups of the shop's bot, in the screen's order. An agent's bot has no «نمایندگی» group. */
   groups: BotTextGroup[]
 }
 
@@ -2286,93 +2419,622 @@ export interface BotTextResponse {
   text: BotTextRow
 }
 
-/** A text reworded: Telegram HTML for a message, a caption or a part, plain text for a popup or a button, with its required variables; the shop's own wording puts the default back. */
+/** A new wording: Telegram HTML for a message, a caption or a part, plain text for a popup or a button, with all its required variables. Sending the default wording restores the default. */
 export interface BotTextRequest {
   value: string
 }
 
-/** A premium emoji an admin showed the bot (/emoji), offered by the bot texts and keyboards editors. */
+/** A premium emoji an admin sent the bot with /emoji, offered by the bot texts and keyboards editors. */
 export interface CustomEmojiRow {
-  /** Telegram's custom emoji id — digits, kept as a string. */
+  /** Telegram's custom emoji id: digits, as a string. */
   id: string
-  /** The plain emoji it stands for: what goes inside its <tg-emoji>. */
+  /** The plain emoji it stands for, which goes inside its <tg-emoji> tag. */
   emoji: string
-  /** How Telegram draws it: a still picture, a Lottie animation or a WebM video (see …/animation); null = not known yet. */
+  /** How Telegram draws it: a still picture, a Lottie animation or a WebM video (see `…/animation`); null while unknown. */
   format: 'static' | 'animated' | 'video' | null
-  /** Telegram paints it in the colour of the text around it (its needs_repainting). */
+  /** Telegram paints it in the colour of the surrounding text (`needs_repainting`). */
   repaint: boolean
   updated_at: string
 }
 
 export interface CustomEmojisResponse {
-  /** The latest seen first. */
+  /** Most recently seen first. */
   emojis: CustomEmojiRow[]
-  /** Whether the bot's own premium emoji came through, as the last /emoji found; null before the first. */
+  /** Whether the bot can send premium emoji, as the last /emoji check found; null before the first check. */
   status: {
     ok: boolean
     checked_at: string
   } | null
 }
 
+/** What a gift code gives: Toman in the wallet, or a free service of a plan. */
+export type GiftCodeKind = 'wallet' | 'plan'
+
+/** A gift code's status: `unused`, `redeemed` by a customer, or `expired` without being redeemed. */
+export type GiftCodeStatus = 'unused' | 'redeemed' | 'expired'
+
+/** A gift code («کد هدیه»), redeemable once by one customer of the shop. */
+export interface GiftCodeRow {
+  id: number
+  /** Upper-case Latin letters and digits, as stored and matched. Customers may type it in any case, with dashes and spaces. */
+  code: string
+  /** Its batch label. */
+  batch: string | null
+  kind: GiftCodeKind
+  /** Toman, for the wallet; null for a plan. */
+  amount: string | null
+  /** The plan it gives; null for a Toman code, or when the plan was deleted (then nobody can redeem it). */
+  plan: RewardPlanRef | null
+  /** When it expires (the first moment it can no longer be redeemed); null for never. */
+  expires_at: string | null
+  status: GiftCodeStatus
+  /** Who redeemed it; null while unredeemed, or once their account is gone. */
+  redeemed_by: UserRef | null
+  redeemed_at: string | null
+  /** For a redeemed plan code: the order that delivered its service. */
+  order: RewardOrderRef | null
+  created_at: string
+}
+
+export interface RewardPlanRef {
+  id: number
+  name: string
+}
+
+export interface RewardOrderRef {
+  id: number
+  status: OrderStatus
+}
+
+export interface GiftCodesResponse {
+  codes: GiftCodeRow[]
+  meta: PageMeta
+}
+
+/** A batch of gift codes to create. Every refusal is returned at once, under its field. */
+export interface GiftCodeBatchRequest {
+  /** How many codes, 1 to 500. */
+  count: WholeNumberInput
+  kind: GiftCodeKind
+  /** For `wallet` codes (required): whole Toman each code adds to the wallet, 1,000 to 500,000,000. */
+  amount?: AmountInput
+  /** For `plan` codes (required): the plan whose service each code gives. Any plan of the shop, even one that is switched off. */
+  plan_id?: number
+  /** The batch label (at most 64 characters). A batch is listed, copied and deleted by its label. */
+  batch: string
+  /** A prefix for every code: Latin letters and digits, at most 12 (dashes and spaces are dropped, letters upper-cased). Blank for none. */
+  prefix?: string
+  /** The last day the codes can be redeemed, in the shop's time zone (YYYY-MM-DD, today or later). Blank or left out: never expires. */
+  expires_on?: string
+}
+
+export interface GiftCodeBatchResponse {
+  batch: string
+  /** The new codes, for copying. */
+  codes: string[]
+}
+
+export interface GiftCodeBatch {
+  batch: string | null
+  total: number
+  redeemed: number
+  /** Expired without being redeemed. */
+  expired: number
+  /** Not yet redeemed. */
+  unused: number
+  /** When its newest codes were created. */
+  created_at: string
+}
+
+export interface GiftCodeBatchesResponse {
+  batches: GiftCodeBatch[]
+}
+
+export interface GiftCodesUnusedResponse {
+  codes: string[]
+}
+
+export interface GiftCodeDiscardRequest {
+  /** The batch's label. */
+  batch: string
+}
+
+export interface GiftCodesDeletedResponse {
+  deleted: number
+}
+
+/** What a lucky wheel slice gives: `nothing` («پوچ»), Toman in the wallet (`wallet`), GB of `traffic` or `days` on one of the customer's running services, or a free service of a `plan`. */
+export type WheelPrizeKind = 'nothing' | 'wallet' | 'traffic' | 'days' | 'plan'
+
+/** A lucky wheel («گردونه شانس») slice. Its chance is its weight divided by the total weight of the enabled slices the customer can receive at the moment of the spin. */
+export interface WheelPrizeRow {
+  id: number
+  /** The text the wheel shows. */
+  label: string
+  kind: WheelPrizeKind
+  /** Toman (wallet), GB (traffic) or days (days); null for nothing and plan. */
+  amount: string | null
+  /** For a plan slice: the plan; null once the plan is deleted (then nobody can win it). */
+  plan: RewardPlanRef | null
+  weight: number
+  enabled: boolean
+  sort: number
+}
+
+export interface WheelPrizesResponse {
+  prizes: WheelPrizeRow[]
+}
+
+export interface WheelPrizeResponse {
+  prize: WheelPrizeRow
+}
+
+/** A wheel slice to add or update. Every refusal is returned at once, under its field. */
+export interface WheelPrizeRequest {
+  /** The text the wheel shows, at most 32 characters. */
+  label: string
+  kind: WheelPrizeKind
+  /** For wallet: whole Toman, at least 1,000. For traffic: GB above zero, up to two decimals, at most 10000. For days: whole days, 1 to 3650. Ignored for nothing and plan. */
+  amount?: AmountInput
+  /** For a plan slice: the plan whose service it gives. */
+  plan_id?: number
+  /** 1 to 10000. */
+  weight: WholeNumberInput
+  /** Left out: on for a new slice, unchanged for an existing one. */
+  enabled?: boolean
+}
+
+export interface WheelPrizeSwitchRequest {
+  enabled: boolean
+}
+
+/** A lucky wheel spin: the slice it landed on (as the slice was then) and the result. */
+export interface WheelSpinRow {
+  id: number
+  customer: UserRef
+  label: string
+  kind: WheelPrizeKind
+  amount: string | null
+  /** The prize was given (for a plan: ordered). False when it could not be: the cost was refunded and the spin does not count for the cooldown. */
+  given: boolean
+  /** Why it was not given; null when it was. */
+  outcome: string | null
+  /** For a plan slice: the order that delivered its service. */
+  order: RewardOrderRef | null
+  /** The service that got the traffic or days, or the plan's new service. */
+  subscription: RewardServiceRef | null
+  created_at: string
+}
+
+export interface RewardServiceRef {
+  id: number
+  /** The client's name on the panel. */
+  name: string
+}
+
+export interface WheelSpinsResponse {
+  spins: WheelSpinRow[]
+  meta: PageMeta
+}
+
+/** A loyalty tier («سطح وفاداری»). A customer is on the highest tier whose `min_spent` they reached; it gives them a discount on purchases and extra cashback on payments. */
+export interface LoyaltyTierRow {
+  id: number
+  name: string
+  /** Toman a customer must have spent: paid and unrefunded purchases, renewals and extras. */
+  min_spent: string
+  /** 0 to 100; 0 for none. At checkout the largest automatic discount applies (a sale, the personal discount, or this). */
+  discount_percent: number
+  /** 0 to 100; 0 for none. Added to the cashback rules' percent while cashback is on. */
+  cashback_percent: number
+  /** How many customers are on it now. */
+  customers: number
+}
+
+export interface LoyaltyTiersResponse {
+  /** Lowest threshold first. */
+  tiers: LoyaltyTierRow[]
+}
+
+export interface LoyaltyTierResponse {
+  tier: LoyaltyTierRow
+}
+
+/** A loyalty tier to add or update. Every refusal is returned at once, under its field. */
+export interface LoyaltyTierRequest {
+  /** At most 32 characters, unique within the shop. */
+  name: string
+  /** Whole Toman, 0 or more; no two tiers may share a threshold. 0 puts every customer on it from the start. */
+  min_spent: AmountInput
+  /** 0 to 100. */
+  discount_percent: WholeNumberInput
+  /** 0 to 100. */
+  cashback_percent: WholeNumberInput
+}
+
+/** A customer's loyalty standing: their tier, what they spent, and the next tier. */
+export interface LoyaltyStanding {
+  /** Their tier; null when below the first tier, or when the shop has no tiers. */
+  tier: {
+    id: number
+    name: string
+    discount_percent: number
+    cashback_percent: number
+  } | null
+  /** Toman spent: paid and unrefunded purchases, renewals and extras. */
+  spent: string
+  /** The next tier above their spending; null at the top, or when the shop has no tiers. */
+  next: {
+    name: string
+    /** Toman. */
+    min_spent: string
+    /** Toman still to spend to reach it. */
+    missing: string
+  } | null
+}
+
+/** An order type a cashback rule can apply to: things a customer buys for themselves. */
+export type CashbackOrderType = 'purchase' | 'renewal' | 'extra_traffic' | 'extra_time'
+
+/** A cashback rule («کش‌بک»): this percent of what a delivered order paid goes back to the customer's wallet, for the listed order types, for members of its customer group (null: anyone) who paid with its payment method (null: any). Of the enabled rules matching an order, the highest percent applies; the customer's loyalty tier adds its own. */
+export interface CashbackRuleRow {
+  id: number
+  percent: number
+  order_types: CashbackOrderType[]
+  customer_group: {
+    id: number
+    name: string
+  } | null
+  payment_method: {
+    id: number
+    label: string
+  } | null
+  enabled: boolean
+}
+
+export interface CashbackRulesResponse {
+  rules: CashbackRuleRow[]
+}
+
+export interface CashbackRuleResponse {
+  rule: CashbackRuleRow
+}
+
+/** A cashback rule to add or update. Every refusal is returned at once, under its field. */
+export interface CashbackRuleRequest {
+  /** 1 to 100. */
+  percent: WholeNumberInput
+  /** At least one. */
+  order_types: CashbackOrderType[]
+  /** A customer group of the shop; null or left out for anyone. */
+  customer_group_id?: number | null
+  /** The payment method the order must be paid with; null or left out for any. */
+  payment_method_id?: number | null
+  /** Left out: on for a new rule, unchanged for an existing one. */
+  enabled?: boolean
+}
+
+export interface CashbackRuleSwitchRequest {
+  enabled: boolean
+}
+
+/** What the nightly draw gives each winner: Toman in the wallet (`wallet`), GB of `traffic` or `days` on one of their running services, or a free service of a `plan`. */
+export type LotteryPrizeKind = 'wallet' | 'traffic' | 'days' | 'plan'
+
+/** One nightly draw among buyers («قرعه‌کشی شبانه»): its day, its entries, its prize (as it was then), and its winners in the order drawn. */
+export interface LotteryDrawRow {
+  id: number
+  /** The day it was drawn for, in the shop's time zone. */
+  day: string
+  /** Its entries: the paid orders of the previous 24 hours, or the buyers (one entry each). */
+  entries: number
+  prize: {
+    kind: LotteryPrizeKind
+    /** Toman (wallet), GB (traffic) or days (days); null for a plan. */
+    amount: string | null
+    /** For a plan prize: the plan; null once it is deleted. */
+    plan: RewardPlanRef | null
+    /** What it gives, as the customer reads it. */
+    words: string
+  }
+  winners: LotteryWinnerRow[]
+  created_at: string
+}
+
+export interface LotteryWinnerRow {
+  id: number
+  customer: UserRef
+  /** What they were given, as they read it. */
+  outcome: string | null
+  /** For a plan prize: the order that delivered its service. */
+  order_id: number | null
+  /** The service that got the traffic or days, or the plan's new service. */
+  subscription_id: number | null
+}
+
+export interface LotteryDrawsResponse {
+  draws: LotteryDrawRow[]
+  meta: PageMeta
+}
+
+/** The order types a discount can apply to: things a customer buys for themselves, never a wallet top-up or an agent's traffic. */
+export type DiscountKind = 'purchase' | 'renewal' | 'extra_traffic' | 'extra_time'
+
+/** What a discount code takes off: a `percent` of the amount (capped at `max_discount` Toman when set), a `fixed` number of Toman (never more than the amount), or the whole amount (`free`). */
+export type DiscountType = 'percent' | 'fixed' | 'free'
+
+/** A code's or sale's current state: `active`, switched `off`, `scheduled` (not started), `ended`, or (codes only) `used_up`. */
+export type DiscountState = 'active' | 'off' | 'scheduled' | 'ended' | 'used_up'
+
+/** Where a discount came from: a timed `sale` («فروش ویژه»), the customer's `personal` percent («تخفیف اختصاصی») or their loyalty `tier` (only the largest of these three applies, never two together), or the `code` they typed, applied to the remaining amount. */
+export type DiscountSource = 'sale' | 'personal' | 'tier' | 'code'
+
+/** One discount applied to a price, labelled for the customer («فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪», «کد NOWRUZ»). */
+export interface DiscountLine {
+  source: DiscountSource
+  label: string
+  /** Toman taken off. */
+  amount: string
+  /** The percent; null for a fixed or free code. */
+  percent: number | null
+}
+
+/** The discount code used for an order. */
+export interface OrderDiscountCode {
+  /** Null once the code is deleted. */
+  id: number | null
+  code: string
+}
+
+/** A discount code («کد تخفیف») a customer types at checkout, in the bot or on the website. Stored and matched in upper case. */
+export interface DiscountCodeRow {
+  id: number
+  code: string
+  /** The admin's private note about it. */
+  note: string | null
+  type: DiscountType
+  /** For `percent`: the whole percent; for `fixed`: Toman; null for `free`. */
+  value: string | null
+  /** For `percent`: the most Toman it takes off; null for no cap. */
+  max_discount: string | null
+  /** The minimum order amount (after the automatic discount) for the code to apply; null for none. */
+  min_amount: string | null
+  /** The order types it applies to; null for every type a discount can apply to. */
+  order_types: DiscountKind[] | null
+  /** The plans it applies to (for a renewal or extra, the service's plan); null for any. */
+  plans: NamedRef[] | null
+  /** The servers it applies to (for a purchase, the chosen server; for a renewal or extra, the service's); null for any. */
+  servers: NamedRef[] | null
+  /** Only for customers who have not bought a service yet. */
+  first_purchase_only: boolean
+  starts_at: string | null
+  /** When it stops applying; it may end at any hour of the day. */
+  ends_at: string | null
+  /** Total uses allowed; null for no limit. */
+  max_uses: number | null
+  /** Uses allowed per customer; null for no limit. */
+  per_user: number | null
+  enabled: boolean
+  /** Orders made with it that are not cancelled. An unpaid order frees its use when it is cancelled or expires (see the `hold_minutes` bot setting). */
+  uses: number
+  state: DiscountState
+  created_at: string
+}
+
+export interface DiscountCodesResponse {
+  codes: DiscountCodeRow[]
+  meta: PageMeta
+}
+
+export interface DiscountCodeResponse {
+  code: DiscountCodeRow
+}
+
+/** A discount code's whole form. Every refusal is returned at once, under its field. A field left out, null or blank means what its description says. */
+export interface DiscountCodeRequest {
+  /** 3 to 32 letters, digits, `-` and `_`, unique within the shop. Stored in upper case, with Persian digits converted. */
+  code: string
+  /** At most 191 characters. */
+  note?: string | null
+  type: DiscountType
+  /** For `percent`: 1 to 100. For `fixed`: whole Toman above zero. Ignored for `free`. */
+  value?: AmountInput | null
+  /** For `percent`: the cap, whole Toman above zero; blank or null for none. Ignored for other types. */
+  max_discount?: AmountInput | null
+  /** Whole Toman; blank or null for none. */
+  min_amount?: AmountInput | null
+  /** At least one; null (or all of them) for every type. */
+  order_types?: DiscountKind[] | null
+  /** Plan ids; null or empty for any. */
+  plan_ids?: number[] | null
+  /** Server ids; null or empty for any. */
+  server_ids?: number[] | null
+  first_purchase_only: boolean
+  /** A local date and time in the shop's time zone (not the browser's), such as 2026-03-20T18:00. Blank or null: from now. */
+  starts_at?: string | null
+  /** The same format, after `starts_at`. Blank or null: no end. */
+  ends_at?: string | null
+  /** 1 or more; blank or null for no limit. */
+  max_uses?: WholeNumberInput | null
+  /** 1 or more; blank or null for no limit. */
+  per_user?: WholeNumberInput | null
+  enabled: boolean
+}
+
+export interface DiscountSwitchRequest {
+  enabled: boolean
+}
+
+/** A timed sale («فروش ویژه»): a percent off the listed plans, for the listed order types, between its start and end. It is one of the automatic discounts; at checkout the largest applies. */
+export interface SaleRow {
+  id: number
+  /** The name customers see, such as «فروش ویژه نوروز». */
+  name: string
+  percent: number
+  /** Null for every type a discount can apply to. */
+  order_types: DiscountKind[] | null
+  /** Null for every plan (for an extra, the service's plan counts). */
+  plans: NamedRef[] | null
+  starts_at: string | null
+  ends_at: string | null
+  enabled: boolean
+  state: DiscountState
+  created_at: string
+}
+
+export interface SalesResponse {
+  sales: SaleRow[]
+}
+
+export interface SaleResponse {
+  sale: SaleRow
+}
+
+/** A sale's whole form. Every refusal is returned at once, under its field. */
+export interface SaleRequest {
+  /** At most 64 characters. */
+  name: string
+  /** 1 to 100. */
+  percent: WholeNumberInput
+  /** At least one; null (or all of them) for every type. */
+  order_types?: DiscountKind[] | null
+  /** Plan ids; null or empty for every plan. */
+  plan_ids?: number[] | null
+  /** A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. */
+  starts_at?: string | null
+  /** The same format, after `starts_at`. Blank or null: no end. */
+  ends_at?: string | null
+  enabled: boolean
+}
+
 export interface BotSettingsData {
+  /** «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days). */
+  hold_minutes: number
   enabled: boolean
   phone_required: boolean
   join_required: boolean
-  /** The Telegram id or link the bot's "پشتیبانی" screen shows; may be empty. */
+  /** The Telegram id or link the bot's «پشتیبانی» screen shows; may be empty. */
   support_contact: string
-  /** Smallest top-up, Toman. */
+  /** The smallest top-up, in Toman. */
   topup_min: number
   /** The amounts offered as buttons, ascending. */
   topup_presets: number[]
   /** Whether a delivered service comes with a QR code of its link. */
   qr_enabled: boolean
-  /** «تمدید سرویس»: whether the traffic a period leaves unused is added to the renewed one (else it goes when the period ends). */
+  /** «تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends). */
   carry_traffic: boolean
-  /** «تمدید خودکار»: how many days before its deadline a service is renewed from the wallet. */
+  /** «تمدید خودکار»: how many days before its end a service is renewed from the wallet. */
   auto_renew_days: number
-  /** Whether a new service starts with the customer's switch on. */
+  /** Whether a new service starts with auto-renewal on. */
   auto_renew_default: boolean
-  /** «یادآوری»: the customer is told a service ends soon — this many days before its deadline. */
+  /** «حجم و زمان اضافه»: whether customers can buy extra traffic and time for their services, at these prices or a plan's own (`PlanRow.extras`). When off, none is sold. */
+  extras_enabled: boolean
+  /** The shop's price per GB of extra traffic, in Toman; null when only the preset amounts with their own prices are sold (no custom amount). */
+  extra_traffic_price: string | null
+  /** The GB amounts offered as buttons, smallest first. */
+  extra_traffic_options: ExtraOption[]
+  /** The smallest custom GB amount (needs a price per GB). */
+  extra_traffic_min: number
+  /** The largest custom GB amount. */
+  extra_traffic_max: number
+  /** The shop's price per day of extra time, in Toman; null when only the preset periods with their own prices are sold (no custom amount). */
+  extra_time_price: string | null
+  /** The day counts offered as buttons, fewest first. */
+  extra_time_options: ExtraOption[]
+  /** The fewest custom days (needs a price per day). */
+  extra_time_min: number
+  /** The most custom days. */
+  extra_time_max: number
+  /** «یادآوری»: remind the customer `expiry_reminder_days` days before a service ends. */
   expiry_reminder: boolean
   expiry_reminder_days: number
-  /** …and that its traffic runs low — once this share of its quota is used. */
+  /** Remind the customer once `traffic_reminder_percent` of a service's quota is used. */
   traffic_reminder: boolean
   traffic_reminder_percent: number
-  /** «زیرمجموعه‌گیری»: links bring referrals and payments earn their referrers this percent… */
+  /** «زیرمجموعه‌گیری»: the referral program. Referral links bring new customers, and their payments earn the referrer `referral_rate` percent. */
   referral_enabled: boolean
   referral_rate: number
-  /** …of only the first payment of each referred customer. */
+  /** The percent a referred customer's renewal earns instead (0: renewals earn nothing). */
+  referral_renewal_rate: number
+  /** Only the first payment of each referred customer earns a commission. */
   referral_first_only: boolean
-  /** «گروه گزارش‌ها»: which topics of the admins' report group get reports — every one on until switched off. */
+  /** «هدیه شروع»: Toman added to the referrer's wallet for each new customer their link brings (0: none). */
+  referral_start_referrer: string
+  /** Toman added to the new customer's own wallet (0: none). */
+  referral_start_invitee: string
+  referral_start_when: ReferralStartTrigger
+  /** «جایزه دعوت»: each time this many more of a referrer's referrals have bought, the referrer gets a free service of `referral_reward_plan_id` (0: never). */
+  referral_reward_every: number
+  /** The reward's plan (`PlanRow.id`); null for none. Required while the reward is on. */
+  referral_reward_plan_id: number | null
+  /** «هشدار زیرمجموعه‌گیری فیک»: raise an alert when this many customers join through one link within `referral_alert_minutes` (0: never). */
+  referral_alert_burst: number
+  /** The window for `referral_alert_burst`, in minutes. Each kind of alert is raised at most once per window. */
+  referral_alert_minutes: number
+  /** Raise an alert when a referrer has this many referrals and none of them bought, and again at each further multiple (0: never). While an alert stands, the referrer earns no start gift and no plan reward. */
+  referral_alert_idle: number
+  /** «گروه گزارش‌ها»: the `report_…` switches choose which report group topics get reports. All are on until switched off. */
   report_purchases: boolean
   report_renewals: boolean
   report_wallet: boolean
   report_receipts: boolean
   report_users: boolean
   report_errors: boolean
-  /** The main bot's shop only: agency requests and traffic purchases are reported to the shop's own group, so an agent's bot has no such switch. */
+  /** Main shop only: agency requests and traffic purchases are reported to the main shop's group, so an agent's bot has no such switch. */
   report_agency?: boolean
-  /** The support tickets and their conversation — every shop's. */
+  /** Support tickets and their messages (in every shop). */
   report_tickets: boolean
-  /** The reviews written on the shop's website — every shop's. */
+  /** Reviews written on the website (in every shop). */
   report_reviews: boolean
+  /** «کد هدیه»: customers can redeem gift codes, with the bot's «🎁 کد هدیه» button or on the website. Codes can be created either way. */
+  gift_codes_enabled: boolean
+  /** «گردونه شانس»: customers can spin the lucky wheel with the bot's «🎡 گردونه شانس» button. */
+  wheel_enabled: boolean
+  /** Hours a customer waits between two spins that gave a prize. */
+  wheel_cooldown_hours: number
+  /** Only customers who have bought a service can spin (bot admins always can). */
+  wheel_buyers_only: boolean
+  /** The cost of a spin from the wallet, in whole Toman; 0 for free. */
+  wheel_cost: number
+  /** «کش‌بک»: whether delivered orders earn cashback, from the cashback rules (`GET /cashback/rules`) and the customer's loyalty tier. When off, none is earned. */
+  cashback_enabled: boolean
+  /** «قرعه‌کشی شبانه»: whether a draw among buyers runs every night. */
+  lottery_enabled: boolean
+  /** The hour (0 to 23, in the shop's time zone) from which the night's draw runs. */
+  lottery_hour: number
+  /** Winners per draw, 1 to 20. */
+  lottery_winners: number
+  lottery_prize: LotteryPrizeKind
+  /** The prize in Toman, for a wallet prize. */
+  lottery_wallet: string
+  /** The prize in GB, for a traffic prize. */
+  lottery_traffic_gb: number
+  /** The prize in days, for a days prize. */
+  lottery_days: number
+  /** For a plan prize: the plan whose service it gives; null while none is chosen. */
+  lottery_plan_id: number | null
+  /** One entry per paid order, or one per buyer. */
+  lottery_entries: 'order' | 'buyer'
+  /** Leave agents out of the draw (bot admins and banned customers are always left out). */
+  lottery_exclude_agents: boolean
 }
 
-/** The picture QR codes are drawn on. */
+/** The background picture QR cards are drawn on. */
 export interface QrBackgroundInfo {
-  /** False = the shipped picture. */
+  /** False for the default picture. */
   custom: boolean
   mime: string
   width: number
   height: number
   size: number
-  /** File mtime (unix seconds) — a cache-buster for the preview. */
+  /** The file's modification time (unix seconds), used to bust the preview's cache. */
   updated_at: number
-  /** The largest upload taken. */
+  /** The largest upload accepted. */
   max_bytes: number
 }
 
-export type BotSettingsGroup = 'general' | 'channels' | 'wallet' | 'renewal' | 'auto_renew' | 'reminders' | 'referral' | 'reports' | 'qr'
+export type BotSettingsGroup =
+  'general' | 'channels' | 'wallet' | 'renewal' | 'auto_renew' | 'extras' | 'reminders' | 'referral' | 'reports' | 'qr' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts'
 
 export interface BotSettingsResponse {
   settings: BotSettingsData
@@ -2387,27 +3049,75 @@ export interface QrBackgroundResponse {
   qr_background: QrBackgroundInfo
 }
 
-/** The admin's own picture for the QR card, as a browser form uploads it: PNG, JPEG or WebP, judged by its bytes, up to QrBackgroundInfo.max_bytes. */
+/** A custom QR card background, as a browser form uploads it: a PNG, JPEG or WebP (checked by its content), up to `QrBackgroundInfo.max_bytes`. */
 export interface QrBackgroundRequest {
   file: Blob
 }
 
-/** One group of the bot's settings, saved whole (PUT /bot/settings/{group}) — the group's fields as BotSettingsData names them: every switch and number is sent (one left out is refused), a text or a list left out is blank. */
+/** One group of the bot's settings, saved whole (`PUT /bot/settings/{group}`), with the fields named as in BotSettingsData. Every switch and number must be sent (a missing one is refused); a text or list left out counts as blank. */
 export type BotSettingsRequest =
   | BotGeneralSettingsRequest
   | BotChannelsSettingsRequest
   | BotWalletSettingsRequest
   | BotRenewalSettingsRequest
   | BotAutoRenewSettingsRequest
+  | BotExtrasSettingsRequest
   | BotRemindersSettingsRequest
   | BotReferralSettingsRequest
   | BotReportsSettingsRequest
   | BotQrSettingsRequest
+  | BotGiftCodesSettingsRequest
+  | BotWheelSettingsRequest
+  | BotCashbackSettingsRequest
+  | BotLotterySettingsRequest
+  | BotDiscountsSettingsRequest
+
+export interface BotDiscountsSettingsRequest {
+  /** 0 to 1440 minutes. */
+  hold_minutes: WholeNumberInput
+}
+
+export interface BotCashbackSettingsRequest {
+  cashback_enabled: boolean
+}
+
+/** «قرعه‌کشی شبانه»: only the amount field of the chosen prize kind is read; the other prize fields keep their values. */
+export interface BotLotterySettingsRequest {
+  lottery_enabled: boolean
+  /** 0 to 23. */
+  lottery_hour: WholeNumberInput
+  /** 1 to 20. */
+  lottery_winners: WholeNumberInput
+  lottery_prize: LotteryPrizeKind
+  /** Whole Toman, 1,000 to 100,000,000. Read for a wallet prize. */
+  lottery_wallet?: AmountInput
+  /** 1 to 10000 GB. Read for a traffic prize. */
+  lottery_traffic_gb?: WholeNumberInput
+  /** 1 to 365 days. Read for a days prize. */
+  lottery_days?: WholeNumberInput
+  /** A plan id. Read for a plan prize. */
+  lottery_plan_id?: WholeNumberInput | null
+  lottery_entries: 'order' | 'buyer'
+  lottery_exclude_agents: boolean
+}
+
+export interface BotGiftCodesSettingsRequest {
+  gift_codes_enabled: boolean
+}
+
+export interface BotWheelSettingsRequest {
+  wheel_enabled: boolean
+  /** 1 to 720. */
+  wheel_cooldown_hours: WholeNumberInput
+  wheel_buyers_only: boolean
+  /** Whole Toman, 0 to 10,000,000. Thousands separators are accepted only between groups of three digits ("10,000"). */
+  wheel_cost: WholeNumberInput
+}
 
 export interface BotGeneralSettingsRequest {
   enabled: boolean
   phone_required: boolean
-  /** 190 characters at most. */
+  /** At most 190 characters. */
   support_contact?: string
 }
 
@@ -2416,9 +3126,9 @@ export interface BotChannelsSettingsRequest {
 }
 
 export interface BotWalletSettingsRequest {
-  /** Toman — its thousands set apart as typed too, only between groups of three ("10,000"). */
+  /** Toman. Thousands separators are accepted only between groups of three digits ("10,000"). */
   topup_min: WholeNumberInput
-  /** Toman, none below topup_min, 8 at most. */
+  /** Toman, none below `topup_min`, at most 8. */
   topup_presets?: NumbersInput
 }
 
@@ -2430,6 +3140,78 @@ export interface BotAutoRenewSettingsRequest {
   /** 1 to 30. */
   auto_renew_days: WholeNumberInput
   auto_renew_default: boolean
+}
+
+/** «حجم و زمان اضافه»: the switch and the shop's price list (ExtraPricesRequest's fields, each prefixed `extra_`). */
+export interface BotExtrasSettingsRequest {
+  extras_enabled: boolean
+  /** Whole Toman per GB, above zero. Blank, null or left out for none: only the preset amounts with their own prices are sold. */
+  extra_traffic_price?: AmountInput | null
+  /** GB amounts, 1 to 10000, each once, at most 8. Left out for none. */
+  extra_traffic_options?: ExtraOptionInput[]
+  /** 1 to 10000 GB. */
+  extra_traffic_min: WholeNumberInput
+  /** `extra_traffic_min` to 10000 GB. */
+  extra_traffic_max: WholeNumberInput
+  /** Whole Toman per day, above zero. Blank, null or left out for none: only the preset periods with their own prices are sold. */
+  extra_time_price?: AmountInput | null
+  /** Day counts, 1 to 365, each once, at most 8. Left out for none. */
+  extra_time_options?: ExtraOptionInput[]
+  /** 1 to 365 days. */
+  extra_time_min: WholeNumberInput
+  /** `extra_time_min` to 365 days. */
+  extra_time_max: WholeNumberInput
+}
+
+/** An amount of extra traffic (GB) or time (days) offered as a button, at its own price or at the price per GB or day. */
+export interface ExtraOption {
+  quantity: number
+  /** Toman; null to charge the price per GB or day times the quantity. */
+  price: string | null
+}
+
+/** An amount offered as a button, as a form sends it. A row with both quantity and price blank is ignored. */
+export interface ExtraOptionInput {
+  /** GB or days. */
+  quantity: WholeNumberInput | null
+  /** Whole Toman, above zero. Blank or null to use the price per GB or day (which must then be set). */
+  price: AmountInput | null
+}
+
+/** A plan's own price list for extra traffic and time (the shop's list is BotSettingsData's `extra_…` fields). For each kind: the unit price, the preset amounts, and the smallest and largest custom amount. */
+export interface ExtraPrices {
+  /** Toman per GB; null when only the preset amounts with their own prices are sold (no custom amount). */
+  traffic_price: string | null
+  /** Smallest first. */
+  traffic_options: ExtraOption[]
+  traffic_min: number
+  traffic_max: number
+  /** Toman per day; null when only the preset periods with their own prices are sold (no custom amount). */
+  time_price: string | null
+  /** Fewest days first. */
+  time_options: ExtraOption[]
+  time_min: number
+  time_max: number
+}
+
+/** A plan's own price list for extras, as a form sends it. Refusals are reported under `extras.<field>`. */
+export interface ExtraPricesRequest {
+  /** Whole Toman per GB, above zero. Blank, null or left out for none. */
+  traffic_price?: AmountInput | null
+  /** GB amounts, 1 to 10000, each once, at most 8. Left out for none. */
+  traffic_options?: ExtraOptionInput[]
+  /** 1 to 10000 GB. */
+  traffic_min: WholeNumberInput
+  /** `traffic_min` to 10000 GB. */
+  traffic_max: WholeNumberInput
+  /** Whole Toman per day, above zero. Blank, null or left out for none. */
+  time_price?: AmountInput | null
+  /** Day counts, 1 to 365, each once, at most 8. Left out for none. */
+  time_options?: ExtraOptionInput[]
+  /** 1 to 365 days. */
+  time_min: WholeNumberInput
+  /** `time_min` to 365 days. */
+  time_max: WholeNumberInput
 }
 
 export interface BotRemindersSettingsRequest {
@@ -2445,8 +3227,28 @@ export interface BotReferralSettingsRequest {
   referral_enabled: boolean
   /** Percent, 1 to 100. */
   referral_rate: WholeNumberInput
+  /** Percent, 0 to 100: what a renewal earns instead of `referral_rate`. */
+  referral_renewal_rate: WholeNumberInput
   referral_first_only: boolean
+  /** Whole Toman, 0 to 10,000,000. */
+  referral_start_referrer: AmountInput
+  /** Whole Toman, 0 to 10,000,000. */
+  referral_start_invitee: AmountInput
+  referral_start_when: ReferralStartTrigger
+  /** 0 to 1000; 0 for no reward. */
+  referral_reward_every: WholeNumberInput
+  /** A plan id; null, blank or 0 for none, which is refused while `referral_reward_every` is above 0. */
+  referral_reward_plan_id: WholeNumberInput | null
+  /** 0 to 10000; 0 turns this alert off. */
+  referral_alert_burst: WholeNumberInput
+  /** 1 to 10080 minutes (a week). */
+  referral_alert_minutes: WholeNumberInput
+  /** 0 to 100000; 0 turns this alert off. */
+  referral_alert_idle: WholeNumberInput
 }
+
+/** When the referral start gift («هدیه شروع») is paid: when the new customer `join`s through the link, or when their first `purchase` is paid (by any method, but never a free service). */
+export type ReferralStartTrigger = 'join' | 'purchase'
 
 export interface BotReportsSettingsRequest {
   report_purchases: boolean
@@ -2455,7 +3257,7 @@ export interface BotReportsSettingsRequest {
   report_receipts: boolean
   report_users: boolean
   report_errors: boolean
-  /** The main bot's shop only, where it is required; an agent's bot has no such switch. */
+  /** Main shop only, where it is required; an agent's bot has no such switch. */
   report_agency?: boolean
   report_tickets: boolean
   report_reviews: boolean
@@ -2465,17 +3267,17 @@ export interface BotQrSettingsRequest {
   qr_enabled: boolean
 }
 
-/** A channel or group the customer must join first. */
+/** A channel or group customers must join before using the bot. */
 export interface BotChannelRow {
   id: number
   chat_id: number
   type: 'channel' | 'supergroup'
   title: string
-  /** Public handle without "@"; null for private ones. */
+  /** Public handle without "@"; null for a private chat. */
   username: string | null
-  /** Where the customer is sent to join. */
+  /** The link customers follow to join. */
   link: string
-  /** What the last check found; the bot needs admin rights to see the members. */
+  /** Whether the bot was an admin at the last check; it needs admin rights to see the members. */
   bot_is_admin: boolean
   checked_at: string | null
   sort: number
@@ -2489,53 +3291,53 @@ export interface BotChannelResponse {
   channel: BotChannelRow
 }
 
-/** A channel or group the customers must join, as the admin pasted it: t.me/name, @name, or a private chat's numeric id (-100…) — the bot an admin there already. */
+/** A channel or group customers must join, as the admin pasted it: t.me/name, @name, or a private chat's numeric id (-100…). The bot must already be an admin there. */
 export interface BotChannelRequest {
   link: string
 }
 
 export type ReportTopicKey = 'purchases' | 'renewals' | 'wallet' | 'receipts' | 'users' | 'errors' | 'agency' | 'tickets' | 'reviews'
 
-/** One topic of the report group, in the group's order. */
+/** A topic of the report group, in the group's order. */
 export interface ReportTopicInfo {
   key: ReportTopicKey
-  /** Its name in the group, and its switch's label. */
+  /** Its name in the group, and the label of its switch. */
   title: string
-  /** What comes to it. */
+  /** What it reports. */
   about: string
-  /** Whether the bot has made it in the connected group. */
+  /** Whether the bot has created it in the connected group. */
   ready: boolean
-  /** Whether the admin wants its reports (`report_<key>` of the bot settings). */
+  /** Whether its reports are on (the bot setting `report_<key>`). */
   enabled: boolean
 }
 
-/** The admins' report group. */
+/** The report group, where the bot reports to the shop's admins. */
 export interface ReportGroupData {
   connected: boolean
-  /** -100… — a Telegram id, shown as is. */
+  /** A Telegram chat id (-100…), shown as is. */
   chat_id: number | null
   title: string | null
   connected_at: string | null
-  /** What keeps reports from reaching the group, in the admin's words; null when nothing does. */
+  /** What keeps reports from reaching the group; null when nothing does. */
   problem: string | null
-  /** Sending waits until then: a flood limit, an unreachable Telegram, the group's problem. */
+  /** Sending is paused until then (a flood limit, Telegram unreachable, or a problem with the group). */
   paused_until: string | null
-  /** Reports queued and not sent yet. */
+  /** Reports queued but not sent yet. */
   waiting: number
   topics: ReportTopicInfo[]
-  /** The connect link outstanding: Telegram's add-to-group link, the command that does the same typed into the group, when both stop working. */
+  /** The pending connect link: Telegram's add-to-group link, the equivalent command to type in the group, and when both expire. */
   link: {
     url: string
     command: string
     expires_at: string
   } | null
-  /** The last group offered with that link and refused, and why. */
+  /** The last group that tried that link and was refused, and why. */
   attempt: {
     title: string
     message: string
     at: string
   } | null
-  /** The bot's @username without "@"; null until the bot has run once. */
+  /** The bot's username without "@"; null until the bot has run once. */
   bot_username: string | null
 }
 
@@ -2543,25 +3345,29 @@ export interface ReportGroupResponse {
   group: ReportGroupData
 }
 
-/** Messages queued, and how many went out right away. */
+/** How many test messages were queued, and how many were sent right away. */
 export interface ReportGroupTestResponse {
   group: ReportGroupData
   queued: number
   sent: number
 }
 
-/** The program's rules and numbers. */
+/** The referral program's settings and numbers. */
 export interface ReferralSummary {
   enabled: boolean
   rate: number
+  /** The rate for renewals, used instead of `rate`; 0: renewals earn nothing. */
+  renewal_rate: number
   first_only: boolean
   /** Customers whose link brought someone. */
   referrers: number
-  /** Customers who came through a link. */
+  /** Customers who joined through a link. */
   referred: number
   commissions: number
-  /** Everything paid out, in Toman. */
+  /** The total paid out, in Toman. */
   paid: string
+  /** Open alerts on referrers (`GET /referrals/alerts`). Their start gifts and plan rewards are withheld until support clears each alert. */
+  alerts: number
 }
 
 export interface ReferralSummaryResponse {
@@ -2575,27 +3381,29 @@ export interface ReferrerRow {
   user: UserRef
   status: UserStatus
   referrals: number
-  /** What the commissions credited to them add up to. */
+  /** The total of the commissions credited to them. */
   earned: string
   last_referral_at: string | null
+  /** Open alerts on them (0: none). Their start gifts and plan rewards are withheld meanwhile. */
+  alerts: number
 }
 
-/** A customer who came through someone's link. */
+/** A customer who joined through someone's link. */
 export interface InviteeRow {
   /** The customer's id. */
   id: number
   user: UserRef
   status: UserStatus
   referrer: UserRef | null
-  /** What this customer's payments earned the referrer they have — the commissions credited to that one. */
+  /** What this customer's payments earned their current referrer (the commissions credited to that referrer). */
   earned: string
   joined_at: string
 }
 
-/** A commission paid out. */
+/** A referral commission paid out. */
 export interface ReferralCommissionRow {
   id: number
-  /** Whom it was credited to, kept as it was earned. */
+  /** Who it was credited to, as recorded when it was earned. */
   referrer: UserRef
   customer: UserRef
   payment: {
@@ -2606,13 +3414,13 @@ export interface ReferralCommissionRow {
     id: number
     type: OrderType
   }
-  /** The percent then in force. */
+  /** The percent in force at the time. */
   rate: number
   commission: string
   created_at: string
 }
 
-/** What the referrers list sorts by: how many each brought (the list's own order), what it earned them, when the last one came. */
+/** The referrers list's sort keys: number of referrals (the default), amount earned, or time of the latest referral. */
 export type ReferrerSort = 'referrals' | 'earned' | 'last_referral'
 
 export interface ReferrersResponse {
@@ -2627,7 +3435,7 @@ export interface ReferrersResponse {
   }
 }
 
-/** What the invitees list sorts by: when each joined (the list's own order), what their payments earned their referrer. */
+/** The invitees list's sort keys: sign-up time (the default), or what their payments earned their referrer. */
 export type InviteeSort = 'joined' | 'earned'
 
 export interface InviteesResponse {
@@ -2642,7 +3450,7 @@ export interface InviteesResponse {
   }
 }
 
-/** What the commissions list sorts by: when each was paid out (the list's own order), the amount. */
+/** The commissions list's sort keys: creation time (the default) or amount. */
 export type ReferralCommissionSort = 'created' | 'commission'
 
 export interface ReferralCommissionsResponse {
@@ -2657,15 +3465,35 @@ export interface ReferralCommissionsResponse {
   }
 }
 
-/** The agency program's rules — the shop's own (the main bot's settings), on the owner's agents page. */
+/** Why a referrer's referrals look fake. `burst`: the set number of them joined through the link within `referral_alert_minutes`. `idle`: the set number of them (or a further multiple) joined and none ever bought. */
+export type ReferralAlertReason = 'burst' | 'idle'
+
+/** An alert on a referrer whose referrals look fake («هشدار زیرمجموعه‌گیری فیک»). While it is open, they earn no start gifts or plan rewards (commissions continue). Support clears it; what was withheld meanwhile is not paid later. */
+export interface ReferralAlertRow {
+  id: number
+  referrer: UserRef
+  /** The referrer's status. */
+  status: UserStatus
+  reason: ReferralAlertReason
+  /** The number of referrals when it was raised: those in the window, or those who never bought. */
+  count: number
+  created_at: string
+}
+
+export interface ReferralAlertsResponse {
+  alerts: ReferralAlertRow[]
+  meta: PageMeta
+}
+
+/** The agency program's settings (stored with the main bot's settings), set on the owner's agents page. */
 export interface AgencySettings {
-  /** Requests are taken and customers see the menu's button (agents keep their account and bots either way). */
+  /** Requests are accepted and customers see the menu button. Existing agents keep their accounts and bots either way. */
   enabled: boolean
-  /** The credit an approved agent starts with, in Toman. */
+  /** The credit a newly approved agent gets, in Toman. */
   default_credit: string
-  /** The GB an agent may buy with one tap, smallest first. */
+  /** The GB amounts an agent can buy with one tap, smallest first. */
   traffic_presets: number[]
-  /** The least GB an agent may type. */
+  /** The smallest GB amount an agent can type. */
   traffic_min: number
 }
 
@@ -2673,22 +3501,22 @@ export interface AgencySettingsResponse {
   settings: AgencySettings
 }
 
-/** The program's rules saved whole, as AgencySettings names them: the switch and the numbers are sent (one left out is refused), the presets left out are none. */
+/** The agency settings, saved whole, with the fields named as in AgencySettings. The switch and the numbers must be sent (a missing one is refused); presets left out means none. */
 export interface AgencySettingsRequest {
   enabled: boolean
   /** Whole Toman. */
   default_credit: AmountInput
-  /** Gigabytes, none below traffic_min, 8 at most. */
+  /** Gigabytes, none below `traffic_min`, at most 8. */
   traffic_presets?: NumbersInput
   /** Gigabytes. */
   traffic_min: WholeNumberInput
 }
 
-/** The program's numbers, above the lists (its rules are AgencySettings, on their own section). */
+/** The agency program's numbers, shown above the lists (its settings are AgencySettings). */
 export interface AgencySummary {
   levels: number
   agents: number
-  /** Agents' bots that run (handed over and switched on). */
+  /** Agents' bots that are running (connected and switched on). */
   bots: number
   /** Requests waiting for a decision. */
   pending: number
@@ -2698,19 +3526,19 @@ export interface AgencySummaryResponse {
   summary: AgencySummary
 }
 
-/** A level as another list carries it. */
+/** An agency level, as other lists reference it. */
 export interface AgencyLevelRef {
   id: number
   name: string
-  /** What a GB of the traffic their bots sell costs its agents, in Toman. */
+  /** What agents on this level pay per GB of traffic for their bots, in Toman. */
   price_per_gb: string
 }
 
-/** A level of the shop's agents. */
+/** An agency level. */
 export interface AgencyLevelRow {
   id: number
   name: string
-  /** What a GB of the traffic their bots sell costs its agents, in Toman. */
+  /** What agents on this level pay per GB of traffic for their bots, in Toman. */
   price_per_gb: string
   sort: number
   counts: {
@@ -2728,17 +3556,17 @@ export interface AgencyLevelResponse {
   level: AgencyLevelRow
 }
 
-/** A level added or changed. */
+/** An agency level to add or update. */
 export interface AgencyLevelRequest {
-  /** Unique. */
+  /** Must be unique. */
   name: string
-  /** Whole Toman: what its agents pay for a gigabyte of their bot's traffic. */
+  /** Whole Toman that agents on this level pay per GB of their bot's traffic. */
   price_per_gb: AmountInput
 }
 
 export type AgencyRequestStatus = 'pending' | 'approved' | 'rejected'
 
-/** A customer asking to become an agent. */
+/** A customer's request to become an agent. */
 export interface AgencyRequestRow {
   id: number
   user: UserRef
@@ -2752,7 +3580,7 @@ export interface AgencyRequestRow {
   level: AgencyLevelRef | null
   /** Support's note on a rejection. */
   reason: string | null
-  /** Who decided: the panel login, or a bot admin (@username / tg:<id>). */
+  /** Who decided it: the panel login, or a bot admin (@username or tg:<id>). */
   reviewer: string | null
   decided_at: string | null
   created_at: string
@@ -2762,7 +3590,7 @@ export interface AgencyRequestRow {
   }
 }
 
-/** What the agency requests sort by: when each was sent (the list's own order). */
+/** The agency requests list's sort key: creation time. */
 export type AgencyRequestSort = 'created'
 
 export interface AgencyRequestsResponse {
@@ -2781,15 +3609,15 @@ export interface AgencyRequestResponse {
   request: AgencyRequestRow
 }
 
-/** An agent's terms — approving a request, or changing an agent's: their level, and how far below zero their wallet may go. */
+/** An agent's terms, when approving a request or changing an agent: their level, and how far below zero their wallet may go. */
 export interface AgencyTermsRequest {
-  /** An AgencyLevelRow.id. */
+  /** A level id (`AgencyLevelRow.id`). */
   level_id: WholeNumberInput
-  /** Whole Toman; 0 — none. */
+  /** Whole Toman; 0 for none. */
   credit_limit: AmountInput
 }
 
-/** An agent — a customer of the main bot on a level — with their bot. */
+/** An agent (a main-bot customer on an agency level), with their bot. */
 export interface AgentRow {
   /** The customer's id. */
   id: number
@@ -2798,73 +3626,73 @@ export interface AgentRow {
   level: AgencyLevelRef
   /** How far below zero their wallet may go, in Toman. */
   credit_limit: string
-  /** The wallet, in Toman — below zero while their credit is in use. */
+  /** Their wallet balance in Toman; below zero while they use their credit. */
   balance: string
-  /** Their bot — its shop opened when they were approved. */
+  /** Their bot (its shop is created when they are approved). */
   bot: AgentBot | null
   counts: {
     /** Their bot's customers. */
     customers: number
-    /** Services their bot sold (purchases delivered). */
+    /** Services their bot sold (delivered purchases). */
     sold: number
-    /** Their bot's services that run. */
+    /** Their bot's active services. */
     active: number
   }
 }
 
-/** An agent's bot: who it is, whether it runs, what keeps it from running, the traffic it may still sell. */
+/** An agent's bot: its identity, whether it runs and why not, and the traffic it can still sell. */
 export interface AgentBot {
   id: number
-  /** Its @username, without the @ — null until its token is handed over. */
+  /** Its username without the @; null until the agent connects its token. */
   username: string | null
   /** The name Telegram shows for it. */
   title: string | null
-  /** disabled: the agency ended. */
+  /** `disabled`: the agency ended. */
   status: 'active' | 'disabled'
-  /** Whether it has a token to run on: handed over, and still readable. */
+  /** Whether it has a usable token: connected, and still decryptable. */
   connected: boolean
   /** What keeps it from running (Telegram refused its token…). */
   problem: string | null
-  /** The traffic it may still sell, in bytes. */
+  /** The traffic it can still sell, in bytes. */
   traffic_balance: number
-  /** When its token was first handed over — a new token handed over later keeps it; null before. */
+  /** When its token was first connected (a later new token keeps this time); null before. */
   connected_at: string | null
 }
 
-/** An agent's bot whose traffic cannot cover even its smallest plan on sale — or is used up: the bot offers no plan and renews no service until the agent buys traffic in the main bot. */
+/** An agent's bot whose traffic is used up or cannot cover even its smallest plan on sale. The bot offers no plan and renews no service until the agent buys traffic in the main bot. */
 export interface TrafficShortage {
-  /** The traffic it may still sell, in bytes. */
+  /** The traffic it can still sell, in bytes. */
   balance: number
-  /** What its smallest plan on sale needs, in bytes; null while none is on sale. */
+  /** The traffic its smallest plan on sale needs, in bytes; null while no plan is on sale. */
   smallest_plan: number | null
 }
 
 export interface AccountResponse {
-  /** Whether their traffic sells nothing; null while it sells. */
+  /** Set when their traffic is too low to sell anything; null otherwise. */
   traffic_shortage: TrafficShortage | null
   account: {
     bot: AgentBot
     agent: UserRef
     /** Their level; null once the agency ended. */
     level: AgencyLevelRef | null
-    /** How far below zero their wallet with the shop may go, in Toman. */
+    /** How far below zero their main-bot wallet may go, in Toman. */
     credit_limit: string
-    /** Their wallet with the shop (in the main bot), in Toman. */
+    /** Their wallet balance in the main bot, in Toman. */
     balance: string
   }
 }
 
-/** One line of an agent's traffic. */
+/** One line of an agent's traffic ledger. */
 export interface TrafficLine {
   id: number
-  /** Bought, drawn by a sale or a renewal of their bot or by the traffic the shop gave one of its services, given back (a failed delivery or extension), or set right by the shop. */
+  /** `purchase`: bought. `sale`, `renewal`, `extension`: used by a sale or renewal of their bot, or by traffic the shop added to one of its services. `refund`: returned after a failed delivery or extension. `adjust`: corrected by the shop. */
   type: 'purchase' | 'sale' | 'renewal' | 'extension' | 'refund' | 'adjust'
-  /** Signed: in (+) or out (-). */
+  /** Signed: added (+) or used (-). */
   bytes: number
   balance_after: number
   description: string | null
   order_id: number | null
-  /** Who moved it — an adjustment, an extension: the agent's bot, the owner's login (which anyone but the owner reads as «پشتیبانی»), or one of the shop's admins on its website. */
+  /** Who made the change, for an adjustment or extension: the agent's bot, the owner's login (which anyone but the owner sees as «پشتیبانی»), or a website admin. */
   reviewer: string | null
   created_at: string | null
 }
@@ -2874,7 +3702,7 @@ export interface TrafficLinesResponse {
   meta: PageMeta
 }
 
-/** What the agents list sorts by: when each joined the bot (the list's own order), the wallet, the bot's traffic, what it sold (none is 0). */
+/** The agents list's sort keys: sign-up time (the default), wallet balance, the bot's traffic, or its sales (none counts as 0). */
 export type AgentSort = 'joined' | 'balance' | 'traffic' | 'sold'
 
 export interface AgentsResponse {
@@ -2893,145 +3721,145 @@ export interface AgentResponse {
   agent: AgentRow
 }
 
-/** An agent's traffic set right by hand, never below zero — the note on their ledger. */
+/** A manual adjustment of an agent's traffic (never below zero), with the note for their ledger. */
 export interface TrafficAdjustmentRequest {
-  /** Gigabytes added; a negative number (or text after a minus sign) takes them away. */
+  /** Gigabytes to add; a negative number (or text after a minus sign) takes them away. */
   gb: AmountInput
-  /** The ledger line's note, 190 characters at most (Ledger::NOTE_MAX); blank for none. */
+  /** The ledger line's note, at most 190 characters; blank for none. */
   note?: string
 }
 
 export interface AgentChangedResponse {
   agent: AgentRow
-  /** Whether the agent was told their new terms; null when the terms sent are the ones they had — nothing changed, nobody told. */
+  /** Whether the agent was notified of their new terms; null when the terms did not change (no notice was sent). */
   delivery: Delivery | null
 }
 
-/** The shop's website as its panel shows it — never a secret, only whether one is kept. */
+/** The website's settings, as the panel shows them. Secrets are never included, only whether one is stored. */
 export interface Website {
-  /** Off: the Store API answers its key with a 404. */
+  /** When off, the Store API answers 404 for its key. */
   enabled: boolean
-  /** The store key, which names the shop in the API's address — no secret; a new one ends the old address. */
+  /** The store key, which names the shop in the API's address. Not a secret; a new key ends the old address. */
   key: string
-  /** What the site's developer is handed: APP_URL, then /api/store/v1/ and the key — every endpoint under it. */
+  /** The base address for the site's developer: APP_URL, then /api/store/v1/ and the key. Every endpoint is under it. */
   base_url: string
-  /** The site's address, without a trailing slash: its origin may call the API from a browser. */
+  /** The site's address, without a trailing slash. Its origin may call the API from a browser. */
   url: string | null
-  /** The other origins that may (scheme://host[:port]) — a site being built on http://localhost:3000. */
+  /** Other origins allowed to call it (scheme://host[:port]), such as a site in development on http://localhost:3000. */
   origins: string[]
   telegram: {
-    /** Customers sign in with their Telegram account. */
+    /** Customers can sign in with Telegram. */
     enabled: boolean
-    /** The Client ID @BotFather shows for the site (Bot Settings › Login Widget), digits; null while none is set. */
+    /** The Client ID @BotFather shows for the site (Bot Settings › Login Widget), as digits; null while none is set. */
     client_id: string | null
-    /** The shop's bot's own Telegram id, a hint beside the Client ID; null while the bot has none. */
+    /** The shop's bot's own Telegram id, shown as a hint beside the Client ID; null while unknown. */
     bot_id: number | null
-    /** A client secret is kept: the redirect flow can exchange a code. The popup needs none. */
+    /** A client secret is stored, so the redirect flow can exchange a code. The popup does not need one. */
     has_secret: boolean
   }
   email: {
-    /** Customers sign up with their email and a password. */
+    /** Customers can sign up with an email and a password. */
     enabled: boolean
-    /** Whether the installation's email goes out (the owner's «تنظیمات پنل › ایمیل»): email sign-up is not switched on, and answers nobody, without it. */
+    /** Whether the installation can send email (the owner's «تنظیمات پنل › ایمیل»). Without it, email sign-up cannot be switched on and does not work. */
     mail_ready: boolean
   }
   google: {
-    /** The site's OAuth client id in Google Cloud (….apps.googleusercontent.com); null: Google sign-in off. */
+    /** The site's OAuth client id in Google Cloud (….apps.googleusercontent.com); null when Google sign-in is off. */
     client_id: string | null
   }
-  /** The captcha the website's forms ask — a sign-up, a sign-in with a password, a password reset, a review, and any of the site's own (the Store API's POST /captcha/verify) —: its driver, every captcha described (its form), and each one's fields as the website keeps them, else their defaults (a secret as its SecretState). */
+  /** The captcha the website's forms use (sign-up, password sign-in, password reset, reviews, and the site's own forms through the Store API's `POST /captcha/verify`): the chosen driver, every captcha driver with its form, and each driver's stored values or defaults (a secret as a SecretState). */
   captcha: {
-    /** The captcha asked — a CaptchaDriver —, or none. */
+    /** The chosen captcha (a CaptchaDriver), or `none`. */
     driver: 'none' | 'turnstile' | 'altcha'
     drivers: DriverDescription[]
-    /** Each captcha driver's fields by its key. */
+    /** Each captcha driver's values, keyed by driver. */
     values: Record<string, DriverValues>
   }
   reviews: {
-    /** The website shows the reviews support approved and takes new ones (the Store API's GET and POST /reviews, a 404 while off) — a guest's only while it asks a captcha. Off at first. */
+    /** The website shows approved reviews and accepts new ones (the Store API's `GET` and `POST /reviews`, which answer 404 while off). Guests can write only while a captcha is set. Off by default. */
     enabled: boolean
   }
-  /** The door the website opens to the shop's admins (its customers whose role is admin): its admin API, /api/store/v1/{store}/admin/* — the panels' operations of the shop's daily work. */
+  /** Access for the shop's admins (customers whose role is admin) to the website's admin API, `/api/store/v1/{store}/admin/*`: the panels' daily-work operations. */
   staff: {
-    /** The shop's admins work the shop from the website. Off at first. */
+    /** Admins can use the admin API. Off by default. */
     enabled: boolean
-    /** They must have signed in strongly — Telegram, Google, or a password with its second step. On at first. */
+    /** Admins must sign in strongly: Telegram, Google, or a password with its second step. On by default. */
     strong_sign_in: boolean
-    /** What it lets them do beyond the shop's daily work, in the grants' order. None at first. */
+    /** What admins may do beyond the daily work, in the grants' order. None by default. */
     grants: StaffGrant[]
   }
 }
 
-/** What a shop lets its admins do on its website beyond its daily work: the catalogue's plans and categories (catalog), a customer's wallet credited or debited (wallet), a payment given back (refunds), a service given days and traffic (extend), a service deleted for good (delete), a customer's website account taken in hand — two-factor sign-in turned off, every device signed out (account_security). */
+/** What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device). */
 export type StaffGrant = 'catalog' | 'wallet' | 'refunds' | 'extend' | 'delete' | 'account_security'
 
 export interface WebsiteResponse {
   website: Website
 }
 
-/** A change of the website as its panel makes it — each card sends its own fields. Every field is optional: one sent is changed, one left out stays as it is kept; an empty object changes nothing. What a website needs is asked of the website as it would stand after the change (switched on, an address — the one sent or the one kept), every refusal at once, under its field. A secret sent blank keeps the one kept too; `clear_<secret>` empties it. */
+/** A partial update of the website's settings; each panel card sends its own fields. Every field is optional: a field sent changes, one left out keeps its value, and an empty object changes nothing. Requirements are checked against the settings as they would be after the change (for example, switched on needs an address, sent now or already stored), with every refusal returned at once under its field. A secret sent blank keeps the stored one; `clear_<secret>` empties it. */
 export interface WebsiteRequest {
-  /** On needs an address: the one sent, or the one kept. */
+  /** Switching on needs an address, sent now or already stored. */
   enabled?: boolean
-  /** The site's address — http(s), a host, no ? or #, 255 characters at most. Blank: none — refused while the website is on. */
+  /** The site's address: http(s) with a host, no ? or #, at most 255 characters. Blank for none, which is refused while the website is on. */
   url?: string
-  /** The other origins: a list, or the text an admin types (one a line, or apart by commas) — 10 at most, each http(s) with a host and a port at most, nothing after it. Empty: none. */
+  /** Other allowed origins: a list, or text as the admin types it (one per line, or comma-separated). At most 10, each http(s) with a host and optionally a port, nothing after it. Empty for none. */
   origins?: string[] | string
-  /** On needs a Client ID: the one sent, or the one kept. */
+  /** Switching on needs a Client ID, sent now or already stored. */
   telegram_login?: boolean
-  /** Digits, as @BotFather shows them (Persian digits too). Blank: none — refused while Telegram sign-in is on. */
+  /** Digits, as @BotFather shows them (Persian digits accepted). Blank for none, which is refused while Telegram sign-in is on. */
   telegram_client_id?: string
-  /** Blank: the one kept stays. */
+  /** Blank: the stored secret stays. */
   telegram_client_secret?: string
-  /** True: the kept secret is emptied. */
+  /** True empties the stored secret. */
   clear_telegram_client_secret?: boolean
-  /** Customers sign up with their email — not switched on while the installation's email does not go out. */
+  /** Customers can sign up with an email. Cannot be switched on while the installation cannot send email. */
   email_signup?: boolean
-  /** The OAuth client id Google Cloud shows (<digits>-<letters and digits>.apps.googleusercontent.com). Blank: Google sign-in off. */
+  /** The OAuth client id Google Cloud shows (<digits>-<letters and digits>.apps.googleusercontent.com). Blank turns Google sign-in off. */
   google_client_id?: string
   captcha?: WebsiteCaptchaRequest
-  /** Whether it shows the reviews support approved and takes new ones. */
+  /** Whether the website shows approved reviews and accepts new ones. */
   reviews_enabled?: boolean
-  /** Whether the shop's admins work it from the website. */
+  /** Whether the shop's admins can use the admin API. */
   staff_enabled?: boolean
-  /** Whether they must have signed in strongly: Telegram, Google, or a password with its second step. */
+  /** Whether admins must sign in strongly: Telegram, Google, or a password with its second step. */
   staff_strong_sign_in?: boolean
-  /** What it lets them do beyond the shop's daily work — the whole list: what is left out is not granted. */
+  /** The full list of grants beyond the daily work; any grant left out is not given. */
   staff_grants?: StaffGrant[]
 }
 
-/** The captcha the website's forms ask, as its card sends it: its driver — `none` for none — and the driver's form whole, checked by it; a secret left blank or left out keeps the one kept while the driver and the fields it belongs with stay (`clear_<name>: true` empties it). Refused under `captcha.<field>`. A closed shape per driver. */
+/** The website's captcha, as its settings card sends it: the driver (`none` for none) and the driver's whole form, validated by the driver. A secret left blank or out keeps the stored one while the driver and the fields it belongs with stay the same; `clear_<name>: true` empties it. Refusals are reported under `captcha.<field>`. One closed shape per driver. */
 export type WebsiteCaptchaRequest = WebsiteCaptchaOffRequest | WebsiteTurnstileRequest | WebsiteAltchaRequest
 
-/** No captcha: the forms ask none. */
+/** No captcha. */
 export interface WebsiteCaptchaOffRequest {
   driver: 'none'
 }
 
-/** Cloudflare Turnstile: the widget's keys, as the Cloudflare dashboard shows them. */
+/** Cloudflare Turnstile: the widget's keys from the Cloudflare dashboard. */
 export interface WebsiteTurnstileRequest {
   driver: 'turnstile'
-  /** Public — the widget is drawn with it. 64 characters at most, printable Latin. */
+  /** Public; the widget is drawn with it. At most 64 printable Latin characters. */
   site_key: string
-  /** Blank: the one kept stays — while the site key stays. */
+  /** Blank: the stored secret stays, as long as the site key stays the same. */
   secret_key?: string
-  /** True: the kept secret is emptied. */
+  /** True empties the stored secret. */
   clear_secret_key?: boolean
 }
 
-/** ALTCHA: no keys — the shop issues and checks its challenges itself. */
+/** ALTCHA: no keys; the shop issues and checks the challenges itself. */
 export interface WebsiteAltchaRequest {
   driver: 'altcha'
 }
 
-/** GET / of the Store API: the shop as its website introduces it — what the site asks first. */
+/** The Store API's `GET /`: the shop's public profile, which a website asks for first. */
 export interface StoreResponse {
   shop: {
-    /** The main shop's name (APP_NAME); an agent's, their bot's title (else its @username). */
+    /** The main shop's name (APP_NAME); for an agent's shop, their bot's title (else its username). */
     name: string
-    /** Whether the shop takes orders now — its bot switched on. False: a purchase, a renewal, a top-up and a receipt are refused (503); what it sells is still read, and customers still sign in. */
+    /** Whether the shop takes orders now (its bot is switched on). When false, purchases, renewals, top-ups and receipts are refused (503); the catalogue can still be read and customers can still sign in. */
     taking_orders: boolean
-    /** The shop's Telegram bot; null while its @username is not known. */
+    /** The shop's Telegram bot; null while its username is unknown. */
     bot: {
       /** Without the @. */
       username: string
@@ -3039,51 +3867,51 @@ export interface StoreResponse {
       url: string
     } | null
   }
-  /** How to reach support — the bot's «پشتیبانی» contact as a link: an @handle's t.me address, a web address, a tel: number. Null when none is set, or it is no link. */
+  /** How to reach support: the bot's «پشتیبانی» contact as a link (an @handle's t.me address, a web address, or a tel: number). Null when none is set or it is not a link. */
   support: {
     url: string
   } | null
   sign_in: {
     /** Telegram sign-in while it is on; null when it is off. */
     telegram: {
-      /** The Client ID the site signs in under — telegram-login.js's client_id. */
+      /** The Client ID for the site's sign-in (telegram-login.js's client_id). */
       client_id: string
-      /** The redirect flow is set up too (a client secret is kept): POST /auth/telegram/authorize answers. */
+      /** The redirect flow is also available (a client secret is stored), so `POST /auth/telegram/authorize` works. */
       redirect: boolean
     } | null
     /** Google sign-in while it is on; null when it is off. */
     google: {
-      /** The OAuth client id the site signs in under — Google Identity Services' client_id. */
+      /** The OAuth client id for the site's sign-in (Google Identity Services' client_id). */
       client_id: string
     } | null
-    /** Signing up with an email and a password is on — and the shop's email goes out (its codes reach the customer). A customer who signed up before signs in with their password whatever this says. */
+    /** Email sign-up is on and the shop can send email (so the codes reach the customer). Customers who already signed up can sign in with their password either way. */
     email: boolean
   }
-  /** The captcha the website's forms ask, while it asks one (null: none): what a page draws its widget with. A sign-up, a sign-in with a password, a password reset and a review carry its token (`captcha`), the widget naming the operation's action (`x-captcha`: Turnstile's data-action, ALTCHA's challenge asked with ?action=); a form of the site's own is judged by its backend (POST /captcha/verify). */
+  /** The website's captcha, for drawing the widget; null when none is set. Sign-up, password sign-in, password reset and reviews send its token in `captcha`, solved for the operation's action (`x-captcha`: Turnstile's data-action, or ALTCHA's challenge requested with ?action=). For the site's own forms, its backend checks the token with `POST /captcha/verify`. */
   captcha: {
     driver: CaptchaDriver
-    /** The widget's public key — Turnstile's site key; null for ALTCHA, which has none. */
+    /** The widget's public key (Turnstile's site key); null for ALTCHA, which has none. */
     site_key: string | null
-    /** Where the widget fetches its challenge — ALTCHA's challengeurl (GET /captcha/challenge, ?action= naming the form's action); null for Turnstile, which draws its own. */
+    /** Where the widget fetches its challenge: ALTCHA's challengeurl (`GET /captcha/challenge`, with ?action= naming the form's action). Null for Turnstile, which makes its own. */
     challenge_url: string | null
   } | null
-  /** The referral program's terms: a newcomer who signs in with an invite code (`referral_code`) earns its owner a share of what they pay. */
+  /** The referral program's terms: a new customer who signs in with an invite code (`referral_code`) earns the code's owner a share of their payments. */
   referral: {
     enabled: boolean
-    /** The share, in percent, of a referred customer's payment. */
+    /** The share of a referred customer's payment, in percent. */
     rate: number
-    /** Only each referred customer's first payment earns it. */
+    /** Only each referred customer's first payment earns a share. */
     first_only: boolean
   }
 }
 
-/** A captcha a website's forms may ask: turnstile — Cloudflare Turnstile, its widget drawn with the site's key, its token checked with Cloudflare; altcha — ALTCHA, open source, no third party and no keys: the visitor's browser solves a challenge the shop issues, which the shop checks itself. */
+/** A captcha a website can use: `turnstile`, Cloudflare Turnstile (its widget is drawn with the site key and its token is checked with Cloudflare); or `altcha`, ALTCHA (open source, with no third party and no keys: the visitor's browser solves a challenge the shop issues and checks itself). */
 export type CaptchaDriver = 'turnstile' | 'altcha'
 
-/** The action a captcha's widget names for a form — the shop's own sign_up, sign_in, password_reset and review (each operation's `x-captcha`), or a site's own (`contact`): a token solved for one passes no form of another. 1 to 32 of A-Z, a-z, 0-9, - and _ (Turnstile's data-action). */
+/** The action a captcha widget names for a form: the shop's `sign_up`, `sign_in`, `password_reset` and `review` (each operation's `x-captcha`), or the site's own (such as `contact`). A token solved for one action does not pass a form of another. 1 to 32 of A-Z, a-z, 0-9, - and _ (Turnstile's data-action). */
 export type CaptchaAction = string
 
-/** ALTCHA's challenge, in its widget's own shape: a salt carrying when it expires (and the action it was asked for), the SHA-256 of the salt and a number up to `maxnumber`, and the shop's signature on it — the widget finds the number and hands the form the payload (as base64 JSON), which the form sends as its `captcha`. */
+/** An ALTCHA challenge, in the widget's own format: a salt that carries its expiry (and the requested action), the SHA-256 of the salt plus a number up to `maxnumber`, and the shop's signature. The widget finds the number and gives the form the payload (base64 JSON), which the form sends as `captcha`. */
 export interface StoreCaptchaChallengeResponse {
   algorithm: 'SHA-256'
   challenge: string
@@ -3092,158 +3920,158 @@ export interface StoreCaptchaChallengeResponse {
   signature: string
 }
 
-/** A token a form of the website's own carried, which its backend asks the shop to judge — as the visitor's browser posted it to the site. */
+/** A captcha token from one of the site's own forms, which the site's backend asks the shop to check, as the visitor's browser sent it. */
 export interface StoreCaptchaVerifyRequest {
-  /** What the widget handed the form: Turnstile's cf-turnstile-response, ALTCHA's payload. 4096 characters at most. */
+  /** The token the widget gave the form: Turnstile's cf-turnstile-response, or ALTCHA's payload. At most 4096 characters. */
   token: string
   action?: CaptchaAction
-  /** The visitor's address (IPv4 or IPv6) as the site's backend saw it — their tokens refused are counted against their network, not against the backend's, which is every visitor's —, handed to the captcha's provider too (Turnstile's remoteip). Optional: blank or left out, the backend's own network is counted. */
+  /** The visitor's IPv4 or IPv6 address, as the site's backend saw it. Refused tokens then count against the visitor's network instead of the backend's (which all visitors share); it is also passed to the captcha provider (Turnstile's remoteip). Optional: when blank or left out, the backend's own network is counted. */
   remoteip?: string
 }
 
-/** What came of a token: whether it passed, the action and the host it was solved for — as far as the captcha says —, when the shop judged it, and why it did not pass. */
+/** The result of a token check: whether it passed, the action and host it was solved for (as far as the captcha reports), when it was checked, and why it failed. */
 export interface StoreCaptchaVerdict {
   passed: boolean
-  /** The action it was solved for, as the widget named it; null: none. */
+  /** The action it was solved for, as the widget named it; null for none. */
   action: string | null
-  /** The host it was solved on (Turnstile says it); null when the captcha does not say (ALTCHA). */
+  /** The host it was solved on (Turnstile reports it); null when the captcha does not report it (ALTCHA). */
   hostname: string | null
   verified_at: string
-  /** Why it did not pass, empty when it did: hostname-mismatch (solved on none of the website's hosts — its address and its origins), action-mismatch (for another action than `action`), timeout-or-duplicate (expired, or taken before), invalid-input-response (no token of the captcha's, or tampered with), missing-input-response — and Cloudflare's own codes as it says them. */
+  /** Why it failed; empty when it passed. `hostname-mismatch` (not solved on one of the website's hosts: its address and origins), `action-mismatch` (solved for another action than `action`), `timeout-or-duplicate` (expired, or already used), `invalid-input-response` (not a valid token, or tampered with), `missing-input-response`, and Cloudflare's own error codes. */
   reasons: string[]
 }
 
 export interface StoreNonceResponse {
-  /** Handed to the provider's sign-in (telegram-login.js's nonce), and posted back with its id_token — once. */
+  /** Pass it to the provider's sign-in (telegram-login.js's nonce), then send it back once, with the id_token. */
   nonce: string
-  /** Seconds it waits for its token. */
+  /** Seconds until it expires. */
   expires_in: number
 }
 
-/** A redirect sign-in begun in this browser: where Telegram sends it back to with its code and state, and the PKCE challenge of the verifier the site made for it and keeps (sessionStorage) — the shop keeps no verifier, so a code and state another browser brings back open nothing. */
+/** Start a redirect sign-in in this browser: where Telegram sends the browser back (with the code and state), and the PKCE challenge of the verifier the site made and keeps (in sessionStorage). The shop keeps no verifier, so a code and state brought back to another browser sign nobody in. */
 export interface StoreTelegramAuthorizeRequest {
-  /** An http(s) address on the website's own origin or one it lists, without #. */
+  /** An http(s) address on the website's origin or one of its listed origins, without #. */
   redirect_uri: string
-  /** S256: the SHA-256 of the verifier (43 to 128 of A-Z, a-z, 0-9 and -._~, random), in base64url without padding. */
+  /** S256: the SHA-256 of the verifier (43 to 128 random characters of A-Z, a-z, 0-9 and -._~), in base64url without padding. */
   code_challenge: string
 }
 
 export interface StoreAuthorizeResponse {
-  /** Telegram's authorization address, to send the browser to: client_id, redirect_uri, scope, state, the PKCE challenge (S256) and a nonce on it. */
+  /** Telegram's authorization address to send the browser to, with client_id, redirect_uri, scope, state, the PKCE challenge (S256) and a nonce. */
   url: string
 }
 
-/** A Telegram sign-in: the popup's id_token with the nonce it was opened with, or the redirect's code with its state. */
+/** A Telegram sign-in: the popup's id_token with its nonce, or the redirect's code with its state and verifier. */
 export type StoreTelegramSignInRequest = StoreTelegramPopupRequest | StoreTelegramCodeRequest
 
 export interface StoreTelegramPopupRequest {
-  /** What telegram-login.js handed the page. */
+  /** The id_token telegram-login.js gave the page. */
   id_token: string
-  /** The nonce POST /auth/nonce answered, which the popup was opened with. */
+  /** The nonce from `POST /auth/nonce` that the popup was opened with. */
   nonce: string
-  /** An invite code the visitor came with: a newcomer becomes its owner's referral. Nothing for a customer the shop knows already. */
+  /** The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. */
   referral_code?: string
 }
 
 export interface StoreTelegramCodeRequest {
-  /** What Telegram sent the browser back with. */
+  /** The code Telegram sent the browser back with. */
   code: string
-  /** The state it came back with: the one POST /auth/telegram/authorize put on the address — a sign-in's (a signed-in customer's own signs nobody in). */
+  /** The state it came back with, from `POST /auth/telegram/authorize` (a signed-in customer's state signs nobody in). */
   state: string
-  /** The PKCE verifier this browser made and kept when it began the sign-in — the one whose challenge it sent: another's opens nothing. */
+  /** The PKCE verifier this browser made and kept when it started the sign-in, whose challenge it sent. Any other verifier signs nobody in. */
   code_verifier: string
-  /** An invite code the visitor came with: a newcomer becomes its owner's referral. Nothing for a customer the shop knows already. */
+  /** The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. */
   referral_code?: string
 }
 
-/** A Google sign-in: the id_token Google Identity Services handed the page (its `credential`), with the nonce it was asked for. */
+/** A Google sign-in: the id_token Google Identity Services gave the page (its `credential`), with the nonce it was requested with. */
 export interface StoreGoogleSignInRequest {
-  /** What Google handed the page. */
+  /** The id_token Google gave the page. */
   id_token: string
-  /** The nonce POST /auth/nonce answered, which the sign-in was asked for with. */
+  /** The nonce from `POST /auth/nonce` that the sign-in was requested with. */
   nonce: string
-  /** An invite code the visitor came with: a newcomer becomes its owner's referral. Nothing for a customer the shop knows already. */
+  /** The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. */
   referral_code?: string
 }
 
-/** A sign-up's first step. Every refusal at once, under its field. */
+/** The first step of signing up. Every refusal is returned at once, under its field. */
 export interface StoreRegisterRequest {
   /** 1 to 64 characters. */
   first_name: string
-  /** 64 characters at most; blank for none. */
+  /** At most 64 characters; blank for none. */
   last_name?: string
-  /** An email address, 191 characters at most — kept in lower case. */
+  /** An email address, at most 191 characters; stored in lower case. */
   email: string
-  /** 8 characters at least, 72 bytes at most (a Persian letter is two) — taken as typed, spaces and all. */
+  /** At least 8 characters and at most 72 bytes (a Persian letter is two bytes), taken exactly as typed, spaces included. */
   password: string
-  /** An invite code the visitor came with: a newcomer becomes its owner's referral. Nothing for a customer the shop knows already. */
+  /** The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. */
   referral_code?: string
-  /** The captcha widget's token, while the website asks one (GET / says which, and how to draw it), solved for the operation's action (its `x-captcha`). */
+  /** The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). */
   captcha?: string
 }
 
-/** A sign-up's last step: the code the email carried. */
+/** The last step of signing up: the emailed code. */
 export interface StoreVerifyRequest {
   email: string
-  /** Six digits (Persian digits too). */
+  /** Six digits (Persian digits accepted). */
   code: string
 }
 
 export interface StoreLoginRequest {
   email: string
   password: string
-  /** The captcha widget's token, while the website asks one (GET / says which, and how to draw it), solved for the operation's action (its `x-captcha`). */
+  /** The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). */
   captcha?: string
 }
 
 export interface StoreForgotRequest {
   email: string
-  /** The captcha widget's token, while the website asks one (GET / says which, and how to draw it), solved for the operation's action (its `x-captcha`). */
+  /** The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). */
   captcha?: string
 }
 
 export interface StoreResetRequest {
   email: string
-  /** Six digits (Persian digits too): what the email carried. */
+  /** The six-digit emailed code (Persian digits accepted). */
   code: string
-  /** The new one: 8 characters at least, 72 bytes at most. */
+  /** The new password: at least 8 characters and at most 72 bytes. */
   password: string
 }
 
 export interface StoreCodeSentResponse {
-  /** Seconds the code waits to be typed back (it takes five tries). */
+  /** Seconds until the code expires (it allows five tries). */
   expires_in: number
 }
 
 export interface StoreSignInResponse {
-  /** The customer's bearer token on this device, shown this once — the site keeps it (`Authorization: Bearer …`). */
+  /** The customer's bearer token for this device, shown only this once. The site keeps it and sends it as `Authorization: Bearer …`. */
   token: string
   customer: StoreCustomer
 }
 
-/** The signed-in customer's account as their website shows it. */
+/** The signed-in customer's account. */
 export interface StoreCustomer {
   id: number
   first_name: string | null
   last_name: string | null
-  /** Their Telegram account: its numeric id, and its handle (without the @; null without one). Null for one who signed up on the website. */
+  /** Their Telegram account: its numeric id and handle (without the @; null if none). Null for a customer who signed up on the website. */
   telegram: {
     id: number
     username: string | null
   } | null
-  /** Their email — proven: a code sent to it typed back, or Google vouching for it; null without one. */
+  /** Their verified email (confirmed with an emailed code, or vouched for by Google); null if none. */
   email: string | null
-  /** A Google account signs them in. */
+  /** They can sign in with a Google account. */
   google: boolean
-  /** Their email and a password sign them in. */
+  /** They can sign in with their email and a password. */
   has_password: boolean
-  /** Their password sign-in asks a second step: the code of their authenticator app (or a recovery code). */
+  /** Password sign-in also asks for their authenticator app's code (or a recovery code). */
   two_factor: boolean
-  /** E.164 (+98912…), the number they shared with the bot. */
+  /** The number they shared with the bot, in E.164 form (+98912…). */
   phone: string | null
-  /** The wallet, in Toman (a decimal string, '120000.00'); below zero an agent's debt. */
+  /** Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt. */
   balance: string
-  /** Since when they are the shop's customer. */
+  /** When they became a customer of the shop. */
   created_at: string
 }
 
@@ -3251,41 +4079,43 @@ export interface StoreMeResponse {
   customer: StoreCustomer
 }
 
-/** GET /me and PATCH /me: the account, the count a site's bell shows, and — one of the shop's admins — what its admin API lets them do. */
+/** The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), and their loyalty standing. */
 export interface StoreAccountResponse {
   customer: StoreCustomer
-  /** How many of the notices the shop told them they have not read (GET /notifications). */
+  /** How many of their notifications are unread (`GET /notifications`). */
   unread_notifications: number
-  /** Null for a customer who is no admin of the shop, and while the website lets no admin in. */
+  /** Null for a customer who is not an admin of the shop, and while the website lets no admins in. */
   staff: StoreStaff | null
+  /** Their loyalty tier («سطح وفاداری»), what they spent and the next tier. The tier's discount applies at checkout and its cashback adds to the shop's. In a shop with no tiers, `tier` and `next` are null. */
+  loyalty: LoyaltyStanding
 }
 
-/** The customer as one of the shop's admins on its website: what its admin API (/admin/*: the panels' operations this file marks x-staff) answers them. */
+/** What the website's admin API (`/admin/*`, the panel operations marked `x-staff`) allows this customer as an admin of the shop. */
 export interface StoreStaff {
-  /** What the website lets its admins do beyond the shop's daily work: an operation marked with a grant answers only while it is here. */
+  /** What the website lets admins do beyond the daily work. An operation that needs a grant works only while the grant is listed here. */
   grants: StaffGrant[]
-  /** The website asks its admins a strong sign-in: Telegram, Google, or a password with its second step. */
+  /** The website requires admins to sign in strongly: Telegram, Google, or a password with its second step. */
   strong_sign_in: boolean
-  /** This session was signed in so — or a strong way was proven on it since (POST /me/reauthenticate). */
+  /** This session was signed in strongly, or a strong way in was proven on it since (`POST /me/reauthenticate`). */
   signed_in_strongly: boolean
-  /** Until when this session's sign-in lets it work the admin API at all — 12 hours after a way in was last proven on it; null: prove a way in again first (POST /me/reauthenticate). */
+  /** Until when this session may use the admin API at all: 12 hours after a way in was last proven on it. Null: prove a way in again first (`POST /me/reauthenticate`). */
   signed_in_until: string | null
-  /** Until when this session's sign-in counts as recent — what a granted operation, and approving a payment (x-staff-recent), asks too; null: prove a way in again first (POST /me/reauthenticate). */
+  /** Until when this session's sign-in counts as recent, which granted operations and payment approval (`x-staff-recent`) also need. Null: prove a way in again first (`POST /me/reauthenticate`). */
   recent_until: string | null
 }
 
 /** A device the customer is signed in on. */
 export interface StoreSession {
   id: number
-  /** What its browser said it is, in words: «Chrome در Windows». */
+  /** The device as its browser describes it, in words: «Chrome در Windows». */
   device: string | null
-  /** The address it signed in from. */
+  /** The IP address it signed in from. */
   ip: string | null
   /** When it signed in. */
   created_at: string
-  /** Its last request — written every few minutes, not on each. */
+  /** Its last request (updated every few minutes, not on every request). */
   last_used_at: string | null
-  /** The one this request came with. */
+  /** The session this request was made with. */
   current: boolean
 }
 
@@ -3293,55 +4123,55 @@ export interface StoreSessionsResponse {
   sessions: StoreSession[]
 }
 
-/** The password was right for an account whose sign-in asks a second step: the challenge its code is posted with (POST /auth/login/2fa) — no session opened yet. */
+/** The password is right, but the account needs a second step: the challenge to send with the code (`POST /auth/login/2fa`). No session is opened yet. */
 export interface StoreTwoFactorResponse {
   two_factor: {
-    /** Posted back with the code; it takes five wrong codes. */
+    /** Send it back with the code; it allows five wrong codes. */
     challenge: string
-    /** Seconds it waits for the code. */
+    /** Seconds until it expires. */
     expires_in: number
   }
 }
 
-/** A password sign-in's second step. */
+/** The second step of a password sign-in. */
 export interface StoreTwoFactorRequest {
-  /** The challenge POST /auth/login (or /auth/password/reset) answered. */
+  /** The challenge from `POST /auth/login` (or `/auth/password/reset`). */
   challenge: string
-  /** The six-digit code the account's authenticator app shows now (Persian digits and spaces too), or one of its recovery codes (dashes and spaces, any case). */
+  /** The current six-digit code from the account's authenticator app (Persian digits and spaces accepted), or one of its recovery codes (any case, dashes and spaces accepted). */
   code: string
 }
 
-/** The customer's names: a field sent is changed, one left out stays. A Telegram account's names are Telegram's. */
+/** The customer's names. Only the fields sent change. An account with Telegram takes its names from Telegram and cannot change them. */
 export interface StoreProfileRequest {
   /** 1 to 64 characters. */
   first_name?: string
-  /** 64 characters at most; blank for none. */
+  /** At most 64 characters; blank for none. */
   last_name?: string
 }
 
 export interface StorePasswordRequest {
-  /** The password now — required while the account has one. */
+  /** The current password; required when the account has one. */
   current_password?: string
-  /** The new one: 8 characters at least, 72 bytes at most (a Persian letter is two) — taken as typed. */
+  /** The new password: at least 8 characters and at most 72 bytes (a Persian letter is two bytes), taken exactly as typed. */
   password: string
 }
 
-/** A new secret for the customer's authenticator app, waiting for its first code. */
+/** A new secret for the customer's authenticator app, waiting for the app's first code. */
 export interface StoreTwoFactorSetupResponse {
-  /** Base32 (160 bits): what the app takes when it is typed in by hand. */
+  /** Base32 (160 bits), for typing into the app by hand. */
   secret: string
-  /** The otpauth:// address the app takes it by — for a QR code, or a tap on the phone: the shop's name its issuer, the account's email its name. */
+  /** The otpauth:// address for the app, as a QR code or a link on the phone. Its issuer is the shop's name and its account name is the email. */
   uri: string
 }
 
 export interface StoreTwoFactorEnableRequest {
-  /** The six digits the app shows now for the secret POST /me/2fa/setup gave (Persian digits too). */
+  /** The app's current six-digit code for the secret from `POST /me/2fa/setup` (Persian digits accepted). */
   code: string
 }
 
-/** Two-factor sign-in on: its recovery codes — each signs in once in place of the app's code —, shown this once (the shop keeps their keyed hashes only). */
+/** Two-factor sign-in is on. Its recovery codes, each usable once instead of the app's code, are shown only this once (the shop stores only their hashes). */
 export interface StoreRecoveryCodesResponse {
-  /** Ten codes, each 10 capital letters and digits without look-alikes (no 0/O, 1/I/L). */
+  /** Ten codes, each 10 upper-case letters and digits without look-alikes (no 0/O, 1/I/L). */
   recovery_codes: string[]
 }
 
@@ -3350,150 +4180,171 @@ export interface StoreTwoFactorDisableRequest {
   password: string
 }
 
-/** A Telegram account proven as its sign-in proves one: the popup's id_token with the nonce it was opened with, or the redirect's code with its state. */
+/** Proof of a Telegram account, as for a sign-in: the popup's id_token with its nonce, or the redirect's code with its state and verifier. */
 export type StoreTelegramLinkRequest = StoreTelegramLinkPopupRequest | StoreTelegramLinkCodeRequest
 
 export interface StoreTelegramLinkPopupRequest {
-  /** What telegram-login.js handed the page. */
+  /** The id_token telegram-login.js gave the page. */
   id_token: string
-  /** The nonce POST /auth/nonce answered, which the popup was opened with. */
+  /** The nonce from `POST /auth/nonce` that the popup was opened with. */
   nonce: string
 }
 
 export interface StoreTelegramLinkCodeRequest {
-  /** What Telegram sent the browser back with. */
+  /** The code Telegram sent the browser back with. */
   code: string
-  /** The state it came back with: the one POST /me/telegram/authorize gave this customer (a sign-in's, or another customer's, proves nothing). */
+  /** The state it came back with, from `POST /me/telegram/authorize` for this customer (a sign-in's or another customer's state proves nothing). */
   state: string
-  /** The PKCE verifier this browser made and kept when it began the sign-in — the one whose challenge it sent: another's opens nothing. */
+  /** The PKCE verifier this browser made and kept when it started the sign-in, whose challenge it sent. Any other verifier signs nobody in. */
   code_verifier: string
 }
 
-/** A Google account proven as its sign-in proves one: the id_token Google Identity Services handed the page, with the nonce it was asked for. */
+/** Proof of a Google account, as for a sign-in: the id_token Google Identity Services gave the page, with the nonce it was requested with. */
 export interface StoreGoogleLinkRequest {
-  /** What Google handed the page. */
+  /** The id_token Google gave the page. */
   id_token: string
-  /** The nonce POST /auth/nonce answered. */
+  /** The nonce from `POST /auth/nonce`. */
   nonce: string
 }
 
-/** An email for the account, and the password chosen to sign in by it. Every refusal at once, under its field. */
+/** An email to add to the account, with the password to sign in with. Every refusal is returned at once, under its field. */
 export interface StoreEmailLinkRequest {
-  /** An email address, 191 characters at most — kept in lower case. */
+  /** An email address, at most 191 characters; stored in lower case. */
   email: string
-  /** 8 characters at least, 72 bytes at most — taken as typed. */
+  /** At least 8 characters and at most 72 bytes, taken exactly as typed. */
   password: string
 }
 
 export interface StoreEmailLinkVerifyRequest {
   email: string
-  /** Six digits (Persian digits too): what the email carried. */
+  /** The six-digit emailed code (Persian digits accepted). */
   code: string
 }
 
-/** A kind of way in: a Telegram account, a Google account, an email (with its password). */
+/** A way to sign in: a Telegram account, a Google account, or an email (with its password). */
 export type StoreIdentityKind = 'telegram' | 'google' | 'email'
 
-/** The way in being added is another account's of the shop: that account, for the customer to judge it is theirs too, which of the two stays, and the ticket that makes them one (POST /me/merge). */
+/** The way in being added belongs to another account of the shop. Shows that account (so the customer can confirm it is theirs too), which of the two would remain, and the ticket that merges them (`POST /me/merge`). */
 export interface StoreMergeOfferResponse {
   merge: {
-    /** The merge ticket — this account's alone, once. */
+    /** The merge ticket, usable once and only by this account. */
     token: string
-    /** Seconds it waits for the customer. */
+    /** Seconds until it expires. */
     expires_in: number
     /** The other account. */
     account: {
-      /** "first last"; null without one. */
+      /** "first last"; null if none. */
       name: string | null
-      /** Since when it is the shop's customer. */
+      /** When it became a customer of the shop. */
       created_at: string
-      /** Its running services. */
+      /** Its active services. */
       services: number
       orders: number
-      /** Its wallet, in Toman. */
+      /** Its wallet balance, in Toman. */
       balance: string
-      /** A Telegram account signs it in. */
+      /** It can sign in with Telegram. */
       telegram: boolean
-      /** An email signs it in. */
+      /** It can sign in with an email. */
       email: boolean
-      /** A Google account signs it in. */
+      /** It can sign in with Google. */
       google: boolean
     }
-    /** The account that stays — the older: this one, or the other. Everything the other owns becomes its own; its ways in fill the empty slots. */
+    /** The account that remains, the older one: `this` or the `other`. It takes over everything the other owns, and the other's ways in fill its empty slots. */
     keeps: 'this' | 'other'
   }
 }
 
 export interface StoreMergeRequest {
-  /** The ticket the merge offer carried. */
+  /** The ticket from the merge offer. */
   token: string
 }
 
-/** A way into this account proven again: its password (and its second step's code while it asks one), its Telegram account — the popup's or the redirect's —, or its Google account. */
+/** Proof of a way into this account: its password (with the second step's code while two-factor sign-in is on), its Telegram account (popup or redirect), or its Google account. */
 export type StoreReauthenticateRequest = StoreReauthenticatePasswordRequest | StoreReauthenticateTelegramPopupRequest | StoreReauthenticateTelegramCodeRequest | StoreReauthenticateGoogleRequest
 
 export interface StoreReauthenticatePasswordRequest {
   method: 'password'
   /** The account's password. */
   password: string
-  /** While two-factor sign-in is on: the six-digit code the account's authenticator app shows now, or one of its recovery codes (spent) — as POST /auth/login/2fa takes it. */
+  /** While two-factor sign-in is on: the current six-digit code from the account's authenticator app, or one of its recovery codes (which is used up), as `POST /auth/login/2fa` accepts them. */
   code?: string
 }
 
 export interface StoreReauthenticateTelegramPopupRequest {
   method: 'telegram'
-  /** What telegram-login.js handed the page. */
+  /** The id_token telegram-login.js gave the page. */
   id_token: string
-  /** The nonce POST /auth/nonce answered, which the popup was opened with. */
+  /** The nonce from `POST /auth/nonce` that the popup was opened with. */
   nonce: string
 }
 
 export interface StoreReauthenticateTelegramCodeRequest {
   method: 'telegram'
-  /** What Telegram sent the browser back with. */
+  /** The code Telegram sent the browser back with. */
   code: string
-  /** The state it came back with: the one POST /me/telegram/authorize gave this customer. */
+  /** The state it came back with, from `POST /me/telegram/authorize` for this customer. */
   state: string
-  /** The PKCE verifier this browser made and kept when it began the sign-in — the one whose challenge it sent: another's opens nothing. */
+  /** The PKCE verifier this browser made and kept when it started the sign-in, whose challenge it sent. Any other verifier signs nobody in. */
   code_verifier: string
 }
 
 export interface StoreReauthenticateGoogleRequest {
   method: 'google'
-  /** What Google handed the page. */
+  /** The id_token Google gave the page. */
   id_token: string
-  /** The nonce POST /auth/nonce answered. */
+  /** The nonce from `POST /auth/nonce`. */
   nonce: string
 }
 
 export interface StoreReauthenticatedResponse {
-  /** Seconds this session may change how the account is signed in to before it is asked again (15 minutes). */
+  /** Seconds this session may change how the account signs in before it must prove a way in again (15 minutes). */
   expires_in: number
 }
 
-/** A plan as the shop offers it now: what it gives and costs, the category it is filed under, the servers a customer may pick it on today. */
+/** A plan on sale now: what it gives and costs, its category, and the servers a customer can pick today. */
 export interface StorePlan {
   id: number
   name: string
   description: string | null
-  /** Toman, a decimal string ('120000.00'). */
+  /** Toman, as a decimal string ('120000.00'). */
   price: string
-  /** Gigabytes, decimals allowed; 0 = unlimited. */
+  /** The price of a customer's first purchase in the shop («قیمت خرید اول»), in Toman, below `price` ('0.00' makes it free). `POST /orders` charges it while the customer has bought no service. Null when there is none, or (with a customer's token) when that customer has already bought. Renewals are at `price`. */
+  first_purchase_price: string | null
+  /** The price for the shop's agents and members of groups with agent prices («قیمت نماینده»), in Toman, below `price`, for purchases and renewals. Null when there is none, or when the reader is a guest or a customer who gets no agent price. The checkout charges the customer's lowest price. */
+  agent_price: string | null
+  /** What the reader pays today, in Toman: the lowest price that applies to them (`price`, `first_purchase_price`, `agent_price`) minus their largest automatic discount (`discount`). Equal to `price` when nothing applies. A discount code is applied on top of this at checkout. */
+  offer_price: string
+  /** The automatic discount in `offer_price`: a sale on the plan, the reader's personal percent or their loyalty tier's, whichever is largest (never two together). Null for none. */
+  discount: StorePlanDiscount | null
+  /** A note to show at checkout («یادداشت پیش‌فاکتور»: apps it was tested with, a caveat), as plain text the site must escape. Null for none. */
+  checkout_note: string | null
+  /** Gigabytes, decimals allowed; 0 for unlimited. */
   traffic_gb: number
-  /** The term, counted from the first connection; 0 = it never ends. */
+  /** The term in whole days, rounded up (a 6-hour plan says 1), counted from the first connection; 0 never ends. `duration_hours` is exact. */
   duration_days: number
-  /** Devices at once; 0 = no limit. */
+  /** The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. */
+  duration_hours: number
+  /** Devices at once; 0 for no limit. */
   devices: number
-  /** The category it is offered under (its group's); null for the group of the rest — no category, or one switched off. */
+  /** The category it is listed under; null for the group without a category (no category, or a switched-off one). */
   category_id: number | null
-  /** The servers a customer may pick it on today («لوکیشن» in the bot), in the plan's order — at least one. */
+  /** The servers a customer can pick today («لوکیشن» in the bot), in the plan's order; at least one. */
   locations: NamedRef[]
 }
 
+/** The automatic discount on a plan for this reader: its source, its label («فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪»), its percent and, for a sale, when it ends. */
+export interface StorePlanDiscount {
+  source: 'sale' | 'personal' | 'tier'
+  label: string
+  percent: number | null
+  /** When the sale ends; null for no end, or another source. */
+  ends_at: string | null
+}
+
 export interface StorePlansResponse {
-  /** Every active category in its order — an empty one too —, then, last, the plans of none (or of one switched off): without a category the shop has but this one group, or none when it sells nothing now. */
+  /** Every active category in order (empty ones too), then last the plans without a category (or in a switched-off one). A shop without categories has only this last group, or no group when it sells nothing now. */
   groups: {
-    /** Null for the group of the rest («سایر پلن‌ها» in the bot). */
+    /** Null for the group without a category («سایر پلن‌ها» in the bot). */
     category: NamedRef | null
     plans: StorePlan[]
   }[]
@@ -3507,76 +4358,83 @@ export interface StoreStatusResponse {
   servers: {
     id: number
     name: string
-    /** It takes a new customer now: switched on, serving subscription links, with room. */
+    /** It takes new customers now: switched on, serving subscription links, and not full. */
     available: boolean
-    /** When the shop last talked to it; null — never. */
+    /** When the shop last reached it; null if never. */
     checked_at: string | null
   }[]
 }
 
-/** One of the customer's services, as the shop last saw it on its panel (`synced_at`), with what they may do with it now. */
+/** One of the customer's services, as last read from its panel (`synced_at`), with what the customer can do with it now. */
 export interface StoreSubscription {
   id: number
   /** Its name on the panel ("amir_2", "USER_7"). */
   name: string
   status: SubscriptionStatus
-  /** The plan it was sold or last renewed on; null once that plan was deleted. */
+  /** The plan it was sold or last renewed on; null once that plan is deleted. */
   plan: NamedRef | null
   /** The server it is on («لوکیشن» in the bot). */
   server: NamedRef
-  /** The one link the customer subscribes to; null once the panel no longer has the service (deleted). */
+  /** The subscription link; null once the panel no longer has the service (deleted). */
   link: string | null
   traffic: StoreServiceTraffic
   term: StoreServiceTerm
-  /** «تمدید خودکار»: renewed from the wallet before its end, on its plan at its price. */
+  /** Auto-renewal («تمدید خودکار»): the service is renewed from the wallet before it ends, on its plan at the plan's price. */
   auto_renew: {
     /** The customer's switch. */
     on: boolean
-    /** The switch may be set (PATCH): it runs, it ends some day, it has its plan, and the wallet is on. */
+    /** The switch can be set (`PATCH`): the service is active, has an end date and still has its plan, and the wallet payment method is on. */
     offered: boolean
-    /** How many days before its end it is renewed, its switch on — the shop's rule, one for every service (1 to 30). */
+    /** How many days before its end it is renewed when the switch is on. A shop-wide setting, 1 to 30. */
     days_before: number
   }
-  /** Its customer may renew it now, on its plan: it is active or ended, its plan still there, renewing something — and in an agent's shop covered by their traffic. */
+  /** The customer can renew it now on its plan: it is active or ended, its plan still exists and the renewal adds something, and in an agent's shop the agent's traffic covers it. */
   renewable: boolean
-  /** Its link may be changed now (POST …/rotate-link): it runs, and its server can give it a new one. */
+  /** Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel). Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. */
+  extras: {
+    traffic: boolean
+    time: boolean
+  }
+  /** Its link can be changed now (`POST …/rotate-link`): it is active and its server can rotate links. */
   link_rotation: boolean
-  /** Null while no renewal is queued behind the period in use. */
+  /** Null while no renewal is queued after the current period. */
   next_period: StoreNextPeriod | null
-  /** Whether it is connected — only when its panel was just asked (POST …/refresh) and has it; null otherwise. */
+  /** Whether it is connected. Only set right after the panel was read (`POST …/refresh`) and still has it; null otherwise. */
   presence: {
     /** Connected right now; null when the panel cannot tell. */
     online: boolean | null
-    /** Its last connection; null — never, or the panel cannot tell. */
+    /** Its last connection; null if never, or when the panel cannot tell. */
     last_online_at: string | null
   } | null
-  /** When its panel was last read for it — what the numbers are from. */
+  /** When the panel was last read for it; the numbers are from then. */
   synced_at: string | null
   created_at: string
 }
 
-/** A service's quota and what of it is used and left, in bytes. */
+/** A service's quota, and how much is used and left, in bytes. */
 export interface StoreServiceTraffic {
-  /** 0 = unlimited. */
+  /** 0 for unlimited. */
   limit_bytes: number
   used_bytes: number
   /** Null when unlimited. */
   remaining_bytes: number | null
 }
 
-/** A service's term: how long, when its clock started and when it ends — or that it waits for the first connection. */
+/** A service's term: its length, when it started and when it ends, or that it waits for the first connection. */
 export interface StoreServiceTerm {
-  /** The term in days, counted from the first connection; 0 = it never ends. */
+  /** The term in whole days, rounded up, counted from the first connection; 0 never ends. `duration_hours` is exact. */
   duration_days: number
-  /** When the first connection started the clock; null until then. */
+  /** The term in hours, counted from the first connection; 0 never ends. */
+  duration_hours: number
+  /** When the first connection started the term; null until then. */
   starts_at: string | null
   /** Null while it waits for the first connection, or without a term. */
   expires_at: string | null
-  /** Its term has not started: it starts at the first connection. */
+  /** The term has not started yet; it starts at the first connection. */
   awaits_first_use: boolean
 }
 
-/** A renewal queued behind the period in use, what that period leaves unused not carried: when the period ends, and the most that is left then (bytes). */
+/** A renewal queued after the current period (whose unused traffic is not carried over): when the current period ends, and the most traffic left then, in bytes. */
 export interface StoreNextPeriod {
   ends_at: string
   bytes: number
@@ -3592,43 +4450,54 @@ export interface StoreSubscriptionResponse {
 }
 
 export interface StoreSubscriptionRequest {
-  /** Its «تمدید خودکار», on or off. */
+  /** Auto-renewal («تمدید خودکار») on or off. */
   auto_renew: boolean
 }
 
-/** One attempt to pay an order. */
+/** A payment attempt for an order. */
 export interface StorePayment {
   id: number
-  /** The way it was paid. */
+  /** The payment method. */
   method: StorePaymentMethod
   status: PaymentStatus
   /** Toman. */
   amount: string
   created_at: string
   paid_at: string | null
-  /** The receipt the customer sent for it — in the bot, or from the website; null — none sent. */
+  /** The receipt the customer sent for it, in the bot or on the website; null if none was sent. */
   receipt: {
     sent_at: string
   } | null
-  /** Support's word on its latest verdict — a rejection's reason, a cancellation's or a refund's note — as the bot tells the customer; null without one. */
+  /** Support's note on its latest decision (a rejection's reason, or a cancellation or refund note), as the bot shows it to the customer; null if none. */
   note: string | null
 }
 
-/** An order of the customer's: what it was for, how far it got, its payments (the newest first). */
+/** One of the customer's orders: what it was for, its status, and its payments (newest first). */
 export interface StoreOrder {
   id: number
   type: OrderType
   status: OrderStatus
   /** Toman. */
   amount: string
+  pricing: OrderPricing
+  /** The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. `amount` is after discounts. */
+  discount_amount: string
+  /** The discounts applied, the automatic one first. */
+  discounts: DiscountLine[]
+  /** The discount code used; null for none. */
+  discount_code: OrderDiscountCode | null
   created_at: string
   fulfilled_at: string | null
-  /** A purchase's or a renewal's plan; null for a wallet top-up, or once the plan was deleted. */
+  /** The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, or once the plan is deleted. */
   plan: NamedRef | null
-  /** Where a purchase was bought — a renewal's, where its service is; null for none. */
+  /** Where a purchase was bought; for a renewal or extras, the service's server. Null for none. */
   server: NamedRef | null
-  /** The service it is about, by its name on the panel — a renewal's from the order's start, a purchase's once it is delivered — as a ticket names the service it is about; null for none, or once it was deleted. */
+  /** The service it is about, by its panel name (for a renewal or extras from the start, for a purchase once delivered); null for none, or once the service is deleted. */
   subscription: NamedRef | null
+  /** The traffic it adds, in bytes: a service's extra traffic, or an agent's traffic for their bot (`traffic` orders); null otherwise. */
+  traffic_bytes: number | null
+  /** The extra days it adds to its service; null otherwise. */
+  days: number | null
   payments: StorePayment[]
 }
 
@@ -3641,71 +4510,150 @@ export interface StoreOrderResponse {
   order: StoreOrder
 }
 
-/** A way to pay, as the checkout names it. */
+/** A payment method, as the checkout shows it. */
 export interface StorePaymentMethod {
   id: number
-  /** What its button says ("کارت به کارت (ملت)"). */
+  /** Its button text ("کارت به کارت (ملت)"). */
   label: string
-  /** instant — the wallet, paid at once; manual — a card transfer and its receipt; null for a way of paying no longer installed. */
+  /** `instant`: the wallet, paid at once. `manual`: a card transfer with a receipt. Null for a method whose driver is no longer installed. */
   kind: GatewayKind | null
 }
 
 export interface StorePaymentMethodsResponse {
-  /** In checkout order; none while the shop takes no way to pay that kind of order. */
+  /** In checkout order; empty when no method can pay this kind of order. */
   methods: StorePaymentMethod[]
 }
 
-/** A purchase: the plan, the location it is bought on, and the way to pay it. */
+/** A purchase: the plan, the location to buy it on, and the payment method. */
 export interface StoreOrderRequest {
-  /** A plan the shop sells now (GET /plans). */
+  /** A plan on sale now (`GET /plans`). */
   plan_id: number
   /** One of the plan's `locations`. */
   server_id: number
-  /** A way to pay a purchase (GET /payment-methods?for=purchase). */
+  /** A payment method for purchases (`GET /payment-methods?for=purchase`). */
   method_id: number
+  /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
+  discount_code?: string | null
 }
 
-/** A service's renewal: the way to pay it. */
+/** A discount code and what the customer wants to buy with it, named as in the checkout's own request. */
+export interface StoreDiscountCheckRequest {
+  /** As the customer typed it (any case, Persian digits accepted). */
+  code: string
+  for: DiscountKind
+  /** For a purchase: a plan on sale now (`GET /plans`). */
+  plan_id?: number
+  /** For a purchase: one of the plan's `locations`. A code limited to certain servers is refused until one is picked. */
+  server_id?: number
+  /** For a renewal or extra: the customer's service. */
+  subscription_id?: number
+  /** For extra traffic: how many GB. */
+  gb?: WholeNumberInput
+  /** For extra time: how many days. */
+  days?: WholeNumberInput
+}
+
+export interface StoreDiscountQuoteResponse {
+  quote: {
+    /** Toman before discounts: the customer's price for the plan (its price, first-purchase price or agent price), or the cost of the extra amount. */
+    base: string
+    /** The automatic discount, if any, then the code. */
+    discounts: DiscountLine[]
+    /** Toman left to pay, never below zero; 0 means free. */
+    amount: string
+  }
+}
+
+/** A service's renewal: the payment method. */
 export interface StoreRenewalRequest {
-  /** A way to pay a renewal (GET /payment-methods?for=renewal). */
+  /** A payment method for renewals (`GET /payment-methods?for=renewal`). */
   method_id: number
+  /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
+  discount_code?: string | null
 }
 
-/** A wallet top-up: how much, and the way to pay it. */
+/** Extra traffic for a service: how much, and the payment method. */
+export interface StoreExtraTrafficRequest {
+  /** Whole GB, as `GET …/extras` offers: one of its amounts, or within its `custom` range. */
+  gb: WholeNumberInput
+  /** A payment method for extra traffic (`GET /payment-methods?for=extra_traffic`). */
+  method_id: number
+  /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
+  discount_code?: string | null
+}
+
+/** Extra time for a service: how many days, and the payment method. */
+export interface StoreExtraTimeRequest {
+  /** Whole days, as `GET …/extras` offers: one of its amounts, or within its `custom` range. */
+  days: WholeNumberInput
+  /** A payment method for extra time (`GET /payment-methods?for=extra_time`). */
+  method_id: number
+  /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
+  discount_code?: string | null
+}
+
+export interface StoreExtrasResponse {
+  extras: {
+    /** Extra traffic in GB; null when none can be bought now. */
+    traffic: StoreExtraOffer | null
+    /** Extra time in days; null when none can be bought now. */
+    time: StoreExtraOffer | null
+  }
+}
+
+/** What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`. */
+export interface StoreExtraOffer {
+  /** Toman per GB or per day; null when only the preset amounts are sold. */
+  price: string | null
+  /** The preset amounts, smallest first. */
+  options: {
+    /** GB or days. */
+    quantity: number
+    /** Its price in Toman. */
+    price: string
+  }[]
+  /** Any amount in this range can be bought at `price` per unit; null when only the preset amounts are sold. */
+  custom: {
+    min: number
+    max: number
+  } | null
+}
+
+/** A wallet top-up: how much, and the payment method. */
 export interface StoreTopUpRequest {
-  /** Toman, whole, as a customer types it — a JSON number or its text: Persian digits, thousands separators and «تومان» too — or as this API answers amounts (GET /wallet's "50000.00": a fraction of zero), within GET /wallet's `top_up` bounds. */
+  /** Whole Toman, within the `top_up` limits of `GET /wallet`. As a customer types it (a JSON number or text; Persian digits, thousands separators and «تومان» accepted), or in the API's own amount format ("50000.00", with a zero fraction). */
   amount: WholeNumberInput
-  /** A way to pay a top-up — any but the wallet itself (GET /payment-methods?for=wallet_topup). */
+  /** A payment method for top-ups, any but the wallet itself (`GET /payment-methods?for=wallet_topup`). */
   method_id: number
 }
 
 /** A card transfer's receipt, as a browser form uploads it. */
 export interface StoreReceiptRequest {
-  /** The picture: a JPEG, a PNG or a WebP, judged by its bytes — 10 MB at most. */
+  /** The picture: a JPEG, PNG or WebP (checked by its content), at most 10 MB. */
   file: Blob
-  /** The customer's words with it, as support reads them — 1024 characters at most; blank for none. */
+  /** An optional note for support, at most 1024 characters; blank for none. */
   note?: string
 }
 
-/** What a checkout came to — a purchase, a renewal, a top-up. One that paid nothing is no answer but a refusal: the wallet short of the price (422 on `method_id`, what is missing), the order paid or closed elsewhere in the same moment (409). */
+/** The outcome of a checkout (a purchase, renewal, extra traffic or time, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409). */
 export interface StoreCheckout {
-  /** settled — paid at once (the wallet): the order as it ended, `fulfilled` (a purchase's or a renewal's service in `subscription`) or `failed` (support finishes it, the money in: the order's own notes are support's, never shown) — and a request made again with its key whose order was paid since (by card too) and is done with: delivered, failed, or `refunded`; transfer — a card to transfer to (`transfer`), then the receipt (POST /payments/{id}/receipt): the payment awaits it, or has it with support; processing — paid, its delivery under way. */
+  /** `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `processing`: paid, and the delivery is in progress. */
   outcome: 'settled' | 'transfer' | 'processing'
   order: StoreOrder
-  /** Where to transfer the money, and the payment the receipt is for — a transfer's; null for the rest. */
+  /** For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. */
   transfer: {
-    /** The payment its receipt is sent for. */
+    /** The payment to upload the receipt for. */
     payment_id: number
-    /** Toman: what to transfer. */
+    /** The amount to transfer, in Toman. */
     amount: string
-    /** The card's number, its 16 digits alone. */
+    /** The card number: 16 digits, no separators. */
     card: string
-    /** Whose card it is. */
+    /** The card holder's name. */
     holder: string
-    /** The shop's note on paying with it; null without one. */
+    /** The shop's payment instructions; null if none. */
     instructions: string | null
   } | null
-  /** The service a purchase delivered or a renewal renewed, once delivered; null for the rest. */
+  /** Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise. */
   subscription: StoreSubscription | null
 }
 
@@ -3713,26 +4661,32 @@ export interface StoreCheckoutResponse {
   checkout: StoreCheckout
 }
 
-/** A service's renewal before it is paid: on its own plan, at that plan's price today, and the service as the renewal would leave it — by the shop's last copy of its panel's numbers (the renewal reads the panel as it is paid). */
+/** A preview of a service's renewal: on its own plan, at that plan's price today, and the service as the renewal would leave it. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid. */
 export interface StoreRenewal {
-  /** The plan it is renewed on — its own: what a renewal on it gives. */
+  /** The service's own plan, which the renewal uses: what a renewal gives. */
   plan: {
     id: number
     name: string
     /** Toman. */
     price: string
-    /** Gigabytes, decimals allowed; 0 = unlimited. */
+    /** Gigabytes, decimals allowed; 0 for unlimited. */
     traffic_gb: number
-    /** 0 = it never ends. */
+    /** Whole days, rounded up; 0 never ends. */
     duration_days: number
+    /** Hours; 0 never ends. */
+    duration_hours: number
+    /** A note to show at checkout, as plain text; null for none. */
+    checkout_note: string | null
   }
-  /** What the renewal costs: Toman. */
+  /** What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). */
   price: string
-  /** The service as the renewal would leave it — as StoreSubscription has them: the days left always carry; the traffic a period leaves unused goes when it ends unless the shop carries it (`next_period`). */
+  /** The automatic discount in `price`: none, or one. */
+  discounts: DiscountLine[]
+  /** The service as the renewal would leave it, in StoreSubscription's shapes. Remaining days always carry over; a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`). */
   after: {
     term: StoreServiceTerm
     traffic: StoreServiceTraffic
-    /** The period in use, its unused traffic going when it ends; null when nothing goes. */
+    /** The current period, whose unused traffic expires when it ends; null when nothing expires. */
     next_period: StoreNextPeriod | null
   }
 }
@@ -3743,32 +4697,32 @@ export interface StoreRenewalResponse {
 
 /** The customer's wallet. Amounts in Toman, as decimal strings. */
 export interface StoreWalletResponse {
-  /** Below zero an agent's debt. */
+  /** Below zero is an agent's debt. */
   balance: string
-  /** How far below zero an agent's wallet may go; '0.00' for anyone else. */
+  /** How far below zero an agent's wallet may go; '0.00' for everyone else. */
   credit: string
-  /** What the wallet can pay now: the balance and the credit. */
+  /** What the wallet can pay now: the balance plus the credit. */
   spendable: string
-  /** What a top-up may be, as the bot's «افزایش موجودی» offers it — POST /wallet/top-up takes these amounts as they are written here. */
+  /** The top-up limits and presets, as the bot's «افزایش موجودی» offers them. `POST /wallet/top-up` accepts these amounts exactly as written here. */
   top_up: {
-    /** The smallest top-up the shop takes. */
+    /** The smallest top-up allowed. */
     min: string
-    /** The largest top-up the shop takes. */
+    /** The largest top-up allowed. */
     max: string
     /** The amounts offered as buttons, ascending. */
     presets: string[]
   }
 }
 
-/** One line of the customer's wallet ledger. */
+/** A line of the customer's wallet ledger. */
 export interface StoreWalletTransaction {
   id: number
   type: WalletTransactionType
   /** Toman. */
   amount: string
-  /** The balance from then on. */
+  /** The balance after this line. */
   balance_after: string
-  /** What it was for, in words («شارژ کیف پول (سفارش #12)»). */
+  /** What it was for («شارژ کیف پول (سفارش #12)»). */
   description: string | null
   created_at: string
 }
@@ -3778,25 +4732,62 @@ export interface StoreWalletTransactionsResponse {
   meta: PageMeta
 }
 
-/** The customer's part in the referral program. */
+export interface StoreGiftCodeRequest {
+  /** The gift code as the customer typed it. */
+  code: string
+}
+
+export interface StoreGiftCodeResponse {
+  /** What the code gave the customer. */
+  gift: {
+    kind: GiftCodeKind
+    /** What it gave, as the customer reads it: «۵۰٬۰۰۰ تومان شارژ کیف پول», «سرویس «یک‌ماهه»». */
+    words: string
+    /** The new wallet balance in Toman; null for a plan code. */
+    balance: string | null
+    /** For a plan code: the order that delivers its service (delivered, or failed and waiting for support's retry, like any order). Null for a Toman code. */
+    order: StoreOrder | null
+    /** For a plan code: the service, once delivered. */
+    subscription: StoreSubscription | null
+  }
+}
+
+/** The customer's referral details. */
 export interface StoreReferralResponse {
-  /** The program runs: a newcomer their code brings earns them a share of what that newcomer pays. */
+  /** The program is on: each new customer their code brings earns them a share of that customer's payments. */
   enabled: boolean
   /** The share, in percent. */
   rate: number
-  /** Only each newcomer's first payment earns it. */
+  /** The share for renewals, in percent, used instead of `rate`; 0: renewals earn nothing. */
+  renewal_rate: number
+  /** Only each referred customer's first payment earns a share. */
   first_only: boolean
-  /** Their invite code — what a sign-in takes as `referral_code` (the site makes its own invite link with it). */
+  /** «هدیه شروع»: Toman added to their wallet for each new customer their code brings, and to the new customer's wallet, once per new customer. Null when there is none. Nothing is given while support has an open alert on their referrals. */
+  start_gift: {
+    /** Toman for their wallet ("0.00": nothing). */
+    referrer: string
+    /** Toman for the new customer's wallet ("0.00": nothing). */
+    invitee: string
+    trigger: ReferralStartTrigger
+  } | null
+  /** «جایزه دعوت»: each time `every` more of the customers their code brought have bought, they get a free service of `plan`. Null when there is none. */
+  reward: {
+    every: number
+    plan: NamedRef
+  } | null
+  /** Their invite code, which sign-ins accept as `referral_code` (the site can build its own invite link with it). */
   code: string
-  /** The bot's invite link with their code (https://t.me/<bot>?start=ref_<code>); null while the bot's @username is not known. */
+  /** The bot's invite link with their code (https://t.me/<bot>?start=ref_<code>); null while the bot's username is unknown. */
   bot_link: string | null
-  /** The customers their code brought. */
+  /** How many customers their code brought. */
   invited: number
-  /** What the commissions credited to them add up to, in Toman. */
+  /** The total of the commissions credited to them, in Toman. */
   earned: string
+  /** How many free services they got for their invitations («جایزه دعوت»). */
+  rewards: number
 }
 
-/** What a notice was — one for each thing the shop's bot tells a customer on its own: a payment approved (the service delivered, the wallet charged — or the delivery failed and support finishes it), a receipt refused, an order cancelled by support, a payment back in the wallet, a wallet top-up given back, a payment reminder; a service switched off, back on, deleted, moved (its new link), given days or traffic; «یادآوری» — a service ending soon, its traffic running low; «تمدید خودکار» done, short of money, a renewal paid but not delivered; a newcomer their invite link brought, a referral's commission; their request to become an agent approved or rejected, their agency changed or ended, their bot's traffic short of an order; how their account is signed in to changed — two-factor sign-in turned off (by support, or by them) or on, a way in added or taken away, a password set, another account of theirs made one with it, its second step failed until it waits, the codes emailed to its address failed until none goes for a while (told on every door they have: Telegram and email both); support's answer to their ticket, and its closing. */
+/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. Services: switched off, back on, deleted, moved (with its new link), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). */
 export type StoreNoticeType =
   | 'payment_settled'
   | 'payment_rejected'
@@ -3816,6 +4807,8 @@ export type StoreNoticeType =
   | 'renewal_failed'
   | 'referral_joined'
   | 'referral_commission'
+  | 'referral_start_gift'
+  | 'referral_reward'
   | 'agency_approved'
   | 'agency_rejected'
   | 'agency_changed'
@@ -3831,21 +4824,24 @@ export type StoreNoticeType =
   | 'email_codes_failed'
   | 'ticket_answered'
   | 'ticket_closed'
+  | 'loyalty_tier_up'
+  | 'cashback_earned'
+  | 'lottery_won'
 
-/** A notice the shop told the customer — the words its bot wrote them (the admin's, as Telegram got them, or would have). */
+/** A notification the bot sent the customer, with the same text as the Telegram message (sent, or that would have been sent). */
 export interface StoreNotification {
   id: number
   type: StoreNoticeType
-  /** Its words as plain text: no markup, line breaks as they are, a premium emoji its plain emoji. */
+  /** The text without markup: line breaks kept, a premium emoji as its plain emoji. */
   text: string
-  /** Its words as safe HTML — only b/strong, i/em, u/ins, s/strike/del, code, pre, blockquote, a spoiler as <span class="tg-spoiler">, a link to an http(s) address (<a href> and no other attribute) and <br> for a line break; every text escaped. Safe to put in a page as it is. */
+  /** The text as safe HTML: only b/strong, i/em, u/ins, s/strike/del, code, pre, blockquote, a spoiler as <span class="tg-spoiler">, links to http(s) addresses (<a href> with no other attribute) and <br> for line breaks; all text is escaped. Safe to insert into a page as is. */
   html: string
-  /** What it is about, for a link: one of their orders (GET /orders/{id} — a notice about a payment is about its order), of their services (GET /subscriptions/{id}) or of their tickets (GET /tickets/{id}); null for none — their account, a service deleted, someone else's row. Only a service may be gone since (a 404): support deleted it. An order stays — one nobody paid expires as `cancelled` —, and so does a ticket. */
+  /** What it is about, for linking: one of their orders (`GET /orders/{id}`; a payment notice points to its order), services (`GET /subscriptions/{id}`) or tickets (`GET /tickets/{id}`). Null for notices about their account, a deleted service, or someone else's row. Only a service may be gone since (a 404, when support deleted it); orders and tickets stay (an unpaid order expires as `cancelled`). */
   subject: {
     type: 'order' | 'subscription' | 'ticket'
     id: number
   } | null
-  /** They marked it read (POST /notifications/read). */
+  /** Marked as read (`POST /notifications/read`). */
   read: boolean
   created_at: string
 }
@@ -3857,18 +4853,18 @@ export interface StoreNotificationsResponse {
     per_page: number
     total: number
     last_page: number
-    /** How many of their notices they have not read, whatever the page shows. */
+    /** How many of their notifications are unread, regardless of the page. */
     unread: number
   }
 }
 
-/** The notices to mark read, by their numbers (at most 100); none sent (`{}`): every one. */
+/** The notifications to mark as read, by id (at most 100). Without `ids` (`{}`), all of them. */
 export interface StoreNotificationsReadRequest {
   ids?: number[]
 }
 
 export interface StoreUnreadResponse {
-  /** How many of their notices they have not read now. */
+  /** How many of their notifications are still unread. */
   unread: number
 }
 
@@ -3877,47 +4873,47 @@ export interface StoreTicket {
   id: number
   subject: string
   status: TicketStatus
-  /** The service of theirs it is about, by its name; null for none — or one deleted since. */
+  /** Their service it is about, by its name; null for none, or when the service was deleted. */
   subscription: NamedRef | null
-  /** When its latest message was written: the list's order. */
+  /** When its latest message was written; the list is sorted by it. */
   last_message_at: string
-  /** Support wrote since they last read it (POST /tickets/{id}/read reads it, as the bot reads it once shown there). */
+  /** Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot). */
   unread: boolean
-  /** Their rating of it, 1 to 5, once it was closed; null for none — and once it opened again. */
+  /** Their rating after it closed, 1 to 5; null for none, and after it is reopened. */
   rating: number | null
   created_at: string
-  /** When it was closed; null unless it is closed — a ticket opened again leaves its end behind. */
+  /** When it was closed; null unless it is closed (reopening clears it). */
   closed_at: string | null
 }
 
-/** One message of their ticket — theirs, or support's (who of support wrote it is never said: «پشتیبانی»). */
+/** A message in their ticket, from them or from support (the support person is never named; it shows as «پشتیبانی»). */
 export interface StoreTicketMessage {
   id: number
   author: TicketAuthor
-  /** Its words, line breaks as they are — plain text. */
+  /** Its text as plain text, with line breaks kept. */
   body: string
-  /** Its picture (GET /tickets/{id}/messages/{message}/attachment); null for none. */
+  /** Its picture (`GET /tickets/{id}/messages/{message}/attachment`); null for none. */
   attachment: TicketAttachment | null
   created_at: string
 }
 
-/** One of the customer's support tickets with its whole conversation, the first message first. */
+/** One of the customer's support tickets, with its whole conversation, oldest message first. */
 export interface StoreTicketDetail {
   id: number
   subject: string
   status: TicketStatus
-  /** The service of theirs it is about, by its name; null for none — or one deleted since. */
+  /** Their service it is about, by its name; null for none, or when the service was deleted. */
   subscription: NamedRef | null
-  /** When its latest message was written: the list's order. */
+  /** When its latest message was written; the list is sorted by it. */
   last_message_at: string
-  /** Support wrote since they last read it (POST /tickets/{id}/read reads it, as the bot reads it once shown there). */
+  /** Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot). */
   unread: boolean
-  /** Their rating of it, 1 to 5, once it was closed; null for none — and once it opened again. */
+  /** Their rating after it closed, 1 to 5; null for none, and after it is reopened. */
   rating: number | null
   created_at: string
-  /** When it was closed; null unless it is closed — a ticket opened again leaves its end behind. */
+  /** When it was closed; null unless it is closed (reopening clears it). */
   closed_at: string | null
-  /** What they said with their rating. */
+  /** The note they left with their rating. */
   rating_note: string | null
   messages: StoreTicketMessage[]
 }
@@ -3929,7 +4925,7 @@ export interface StoreTicketsResponse {
     per_page: number
     total: number
     last_page: number
-    /** How many of all of their tickets hold support's words they have not read, whatever the list shows (a badge). */
+    /** How many of all their tickets have unread messages from support, regardless of the filters (for a badge). */
     unread: number
   }
 }
@@ -3938,48 +4934,48 @@ export interface StoreTicketResponse {
   ticket: StoreTicketDetail
 }
 
-/** A ticket opened: what it is about, its first message, and the service of theirs it is about. One with a picture comes as a form (StoreTicketUploadRequest). */
+/** A new ticket: its subject, its first message, and optionally the customer's service it is about. To attach a picture, send a form instead (StoreTicketUploadRequest). */
 export interface StoreTicketRequest {
   /** 3 to 120 characters. */
   subject: string
-  /** 1 to 4000 characters, its line breaks kept. */
+  /** 1 to 4000 characters; line breaks are kept. */
   body: string
-  /** One of their services (GET /subscriptions); left out, null or blank — about none. */
+  /** One of the customer's services (`GET /subscriptions`). Left out, null or blank: about no service. */
   subscription_id?: WholeNumberInput | null
 }
 
-/** A ticket opened with a picture in its first message, as a browser form uploads it — a form without one opens it without a picture. */
+/** A new ticket with a picture in its first message, as a browser form uploads it. A form without a file opens it without a picture. */
 export interface StoreTicketUploadRequest {
   /** 3 to 120 characters. */
   subject: string
-  /** 1 to 4000 characters, its line breaks kept. */
+  /** 1 to 4000 characters; line breaks are kept. */
   body: string
-  /** One of their services (GET /subscriptions); left out, null or blank — about none. */
+  /** One of the customer's services (`GET /subscriptions`). Left out, null or blank: about no service. */
   subscription_id?: WholeNumberInput | null
-  /** The picture: a JPEG, a PNG or a WebP, judged by its bytes — 10 MB at most; left out, none. */
+  /** The picture: a JPEG, PNG or WebP (checked by its content), at most 10 MB. Optional. */
   file?: Blob
 }
 
-/** Their rating of a closed ticket — a rating given before is replaced. */
+/** The customer's rating of a closed ticket. It replaces any earlier rating. */
 export interface StoreTicketRatingRequest {
   /** 1 to 5. */
   rating: WholeNumberInput
-  /** What they say with it — 500 characters at most; blank for none. */
+  /** An optional note, at most 500 characters; blank for none. */
   note?: string
 }
 
-/** A review the shop shows: approved by support. Its writer's own words and choices — plain text, which the website escapes —, nothing of who wrote it nor of support's. */
+/** An approved review, as the website shows it: the writer's text and choices as plain text (the website must escape it), with nothing about who wrote it or who approved it. */
 export interface StoreReview {
   id: number
   /** The name it is signed with. */
   name: string
   /** 1 to 5. */
   rating: number
-  /** Its words, line breaks as written. */
+  /** Its text, with line breaks as written. */
   body: string
-  /** A line of where they use the service from («ایرانسل · اندروید · Happ»); null for none. */
+  /** A line on where the service is used («ایرانسل · اندروید · Happ»); null for none. */
   context: string | null
-  /** The key of the website's own avatar they picked; null for none — the website draws its own default. */
+  /** The key of the avatar they picked from the website's own set; null for none (the website shows its default). */
   avatar: string | null
   /** When it was written. */
   created_at: string
@@ -3992,354 +4988,416 @@ export interface StoreReviewsResponse {
     per_page: number
     total: number
     last_page: number
-    /** Every review the shop shows, as one figure — whatever page this is. */
+    /** Totals over all approved reviews, regardless of the page. */
     summary: {
       count: number
-      /** Their mean rating, to two decimals; null while there is none. */
+      /** The average rating, to two decimals; null while there are no reviews. */
       average: number | null
     }
   }
 }
 
-/** A review written on the website. Every refusal at once, under its field. */
+/** A review written on the website. Every refusal is returned at once, under its field. */
 export interface StoreReviewRequest {
-  /** 2 to 64 characters, on one line: the name it is signed with, shown with it. */
+  /** The name to sign it with, shown with the review: 2 to 64 characters, one line. */
   name: string
   /** 1 to 5. */
   rating: WholeNumberInput
-  /** 10 to 600 characters, its line breaks kept. */
+  /** 10 to 600 characters; line breaks are kept. */
   body: string
-  /** A line of where they use the service from — «ایرانسل · اندروید · Happ» —, 100 characters at most; blank for none. */
+  /** A line on where the service is used, such as «ایرانسل · اندروید · Happ»; at most 100 characters, blank for none. */
   context?: string
-  /** The key of one of the website's own avatars — 1 to 32 of a-z, 0-9, - and _, never an address —; blank for none. */
+  /** The key of one of the website's own avatars (1 to 32 of a-z, 0-9, - and _, never an address); blank for none. */
   avatar?: string
-  /** The captcha widget's token, while the website asks one (GET / says which, and how to draw it), solved for the operation's action (its `x-captcha`). */
+  /** The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). */
   captcha?: string
 }
 
 export interface StoreReviewWrittenResponse {
   review: {
     id: number
-    /** pending: waiting on support until it is approved. */
+    /** `pending`: waiting for support's approval. */
     status: ReviewStatus
   }
 }
 
-/** Every write of a panel's own API — the owner's `/api/admin`, an agent's `/api/agent`; what both have is described under `/api/{panel}` —: its method, its path under the panel's API (a path parameter as the type of its value: `/plans/${number}`), the body it takes (`undefined`: none) and its answer (`void`: none). lib/api types each POST, PUT, PATCH and DELETE by it. */
+/** Every write of a panel's API (the owner's `/api/admin`, an agent's `/api/agent`, and `/api/{panel}` for what both have): its method, its path under the panel's API (a path parameter typed as its value: `/plans/${number}`), the body it takes (`undefined`: none) and its answer (`void`: none). lib/api types every POST, PUT, PATCH and DELETE with it. */
 export type PanelWrite =
-  /** The owner signs in with the panel's login, in the shop the request names (`X-Shop`): the right credentials at the address of a shop that is not there open nothing (404) */
+  /** Sign the owner in. The session works in the shop named by `X-Shop`; if that shop does not exist, even the right credentials get a 404. */
   | { method: 'POST'; path: '/auth/login'; body: LoginRequest; answer: SessionResponse }
-  /** A lost login's way back in begins: a one-time key written to the host's files, where only someone who can read them finds it — the same key while it still opens */
+  /** Start recovering a lost login. Writes a one-time key into the host's files, where only someone with access to them can read it. Asking again while the key is still valid returns the same key. */
   | { method: 'POST'; path: '/auth/recovery/key'; body: undefined; answer: RecoveryKeyResponse }
-  /** A new panel login, set with that key: signed in under it, in the shop the request names, every other session out (a wrong key counts as a failed sign-in) */
+  /** Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends. A wrong key counts as a failed sign-in. */
   | { method: 'POST'; path: '/auth/recovery'; body: RecoveryRequest; answer: SessionResponse }
-  /** An agent signs in with the code of the one-time link the main bot gave them, in their bot's shop — in place of another agent's session open in this browser only with `replace` (else a 409 on `replace`, the link not spent: the panel asks first) */
+  /** Sign an agent in with the code from their one-time link. The main bot gives the link; the session works in the agent's own shop. If another agent is signed in in this browser, the request needs `replace: true`; without it the answer is a 409 on `replace` and the link stays unused, so the panel can ask first. */
   | { method: 'POST'; path: '/auth/link'; body: AgentLinkRequest; answer: SessionResponse }
-  /** Sign out of this panel (the other's session in the same browser stays) */
+  /** Sign out of this panel. A session of the other panel in the same browser stays signed in. */
   | { method: 'POST'; path: '/auth/logout'; body: undefined; answer: void }
-  /** The agent signs out of every other browser signed in to their panel — this one stays (its sign-in held under the new epoch); a session ended meanwhile by another of theirs is a 401 */
+  /** Sign the agent out of every other browser. This browser stays signed in. If this session was itself ended meanwhile from another browser, the answer is a 401. */
   | { method: 'POST'; path: '/auth/sessions/end'; body: undefined; answer: void }
-  /** The owner changes the panel's login: every other session ends, this one stays */
+  /** Change the panel's login. Every other session ends; this one stays signed in. */
   | { method: 'PUT'; path: '/auth/credentials'; body: CredentialsRequest; answer: SessionResponse }
-  /** Report a failure of the panel's own code — a page it could not draw, an error left unhandled — to the shop's log */
+  /** Report a panel error to the server log. For errors in the panel's own code, such as a page that failed to render or an unhandled error. */
   | { method: 'POST'; path: '/client-errors'; body: ClientErrorRequest; answer: void }
-  /** Put every bot the shop runs on its webhook under APP_URL — which Telegram calls only over HTTPS, else a 422 and no bot is touched — as bot:webhook:set does: one bot failing keeps it from none of the others */
+  /** Set the webhook of every bot. Each webhook is under APP_URL, which must be HTTPS (else a 422 and no bot is changed). Same as `bot:webhook:set`: a bot that fails does not stop the others. */
   | { method: 'POST'; path: '/system/webhook'; body: undefined; answer: WebhooksResponse }
-  /** Take every bot the shop runs off its webhook, back to polling — bot:poll must run then —, as bot:webhook:delete does */
+  /** Delete the webhook of every bot. The bots go back to polling, so `bot:poll` must run. Same as `bot:webhook:delete`. */
   | { method: 'DELETE'; path: '/system/webhook'; body: undefined; answer: WebhooksResponse }
-  /** Read the newest release from GitHub now (a 502 while GitHub does not answer: the release read last stands) */
+  /** Check GitHub for the newest release now. A 502 when GitHub does not answer; the release read before is kept. */
   | { method: 'POST'; path: '/system/update/check'; body: undefined; answer: UpdateResponse }
-  /** Begin updating to the newest release — a 422 on `version` when it is not that, or not newer than the shop's; a 409 while an update is under way; a 422 with what keeps the shop from updating itself */
+  /** Start updating to the newest release. A 422 on `version` when it is not the newest release or not newer than the running one; a 409 while an update is already running; a 422 naming what blocks a self-update. */
   | { method: 'POST'; path: '/system/update/start'; body: UpdateStartRequest; answer: UpdateResponse }
-  /** Take the update's next step, or as much of it as a request has time for — the release's files fetched and checked against the release key, unpacked, the host checked, then installed in one request while every other request is told to come back (a 503 with Retry-After). A refusal is kept with the run (`run.error`); a 409 while another request works the update, or a scheduled run does not end in time; a 502 while GitHub does not answer */
+  /** Run the update's next step. Does as much of the step as one request has time for: download the release and check its signature, unpack it, check the host, then install it in one request while every other request gets a 503 with `Retry-After`. A refusal is kept on the run (`run.error`). A 409 while another request is working on the update or a scheduled run does not finish in time; a 502 when GitHub does not answer. */
   | { method: 'POST'; path: '/system/update/step'; body: undefined; answer: UpdateResponse }
-  /** Give the update up before its install began (`run.cancel`): what it fetched and unpacked goes */
+  /** Cancel the update before installing starts (`run.cancel`). The downloaded and unpacked files are deleted. */
   | { method: 'POST'; path: '/system/update/cancel'; body: undefined; answer: UpdateResponse }
-  /** Take the update installed last back (`run.rollback`): the version it replaced in its place again — refused once it changed the database, which only a backup takes back */
+  /** Roll back the last update (`run.rollback`). Puts the replaced version back. Refused once the update changed the database: only a backup can undo that. */
   | { method: 'POST'; path: '/system/update/rollback'; body: undefined; answer: UpdateResponse }
-  /** Add a server; its panel is asked at once */
+  /** Add a server. Its panel is checked right away. */
   | { method: 'POST'; path: '/servers'; body: ServerRequest; answer: ServerCreatedResponse }
-  /** Try a connection before it is saved (`id` reuses a saved server's secrets) */
+  /** Test a connection before saving it. With `id`, blank secrets are taken from that saved server. */
   | { method: 'POST'; path: '/servers/test'; body: ServerTestRequest; answer: ProbeResponse }
-  /** Change a server */
+  /** Update a server. */
   | { method: 'PUT'; path: `/servers/${number}`; body: ServerRequest; answer: ServerResponse }
-  /** Delete a server nothing was sold on */
+  /** Delete a server. Only a server nothing was sold on. */
   | { method: 'DELETE'; path: `/servers/${number}`; body: undefined; answer: void }
-  /** Check a saved server's panel (and learn whether it serves subscription links) */
+  /** Check a saved server's panel. Also records whether it serves subscription links. */
   | { method: 'POST'; path: `/servers/${number}/test`; body: undefined; answer: ServerCheckResponse }
-  /** Read the panel's inbounds again */
+  /** Read the panel's inbounds again. */
   | { method: 'POST'; path: `/servers/${number}/inbounds/sync`; body: undefined; answer: ServerDetailResponse }
-  /** Whether an inbound is sold */
+  /** Switch whether an inbound is sold. */
   | { method: 'PATCH'; path: `/servers/${number}/inbounds/${number}`; body: InboundSellableRequest; answer: InboundsResponse }
-  /** Give days and traffic to the services on a server */
+  /** Give days and traffic to the services on a server. */
   | { method: 'POST'; path: `/servers/${number}/grants`; body: ServerGrantRequest; answer: ServerGrantResponse }
-  /** Work a grant through a few services */
+  /** Apply a grant to the next few services. */
   | { method: 'POST'; path: `/servers/${number}/grants/${number}/run`; body: undefined; answer: ServerGrantResponse }
-  /** Stop a grant; the services reached keep what they got */
+  /** Stop a grant. Services already given it keep it. */
   | { method: 'POST'; path: `/servers/${number}/grants/${number}/cancel`; body: undefined; answer: ServerGrantResponse }
-  /** Give days and traffic to the running services on every server — or the agents', or one server's */
+  /** Give days and traffic to running services. On every server, or only the agents' services, one customer group's, or one server's. */
   | { method: 'POST'; path: '/mass-grants'; body: MassGrantRequest; answer: MassGrantResponse }
-  /** Work on a mass gift's parts for a few seconds (the screen keeps asking while it is open) */
+  /** Apply a mass gift for a few seconds. The screen keeps calling this while it is open. */
   | { method: 'POST'; path: `/mass-grants/${number}/run`; body: undefined; answer: MassGrantResponse }
-  /** Stop a mass gift; what was given stays */
+  /** Stop a mass gift. What was already given stays. */
   | { method: 'POST'; path: `/mass-grants/${number}/cancel`; body: undefined; answer: MassGrantResponse }
-  /** Pause a run that is sending */
+  /** Pause a broadcast that is sending. */
   | { method: 'POST'; path: `/broadcasts/${number}/pause`; body: undefined; answer: BroadcastResponse }
-  /** Let a paused run go on (the scheduler carries on with it) */
+  /** Resume a paused broadcast. The scheduler continues sending it. */
   | { method: 'POST'; path: `/broadcasts/${number}/resume`; body: undefined; answer: BroadcastResponse }
-  /** Stop a run for good; those who got it keep it */
+  /** Cancel a broadcast. Messages already sent stay. */
   | { method: 'POST'; path: `/broadcasts/${number}/cancel`; body: undefined; answer: BroadcastResponse }
-  /** Take a finished pinned run's pins off again — answers with the new «لغو پین» run */
+  /** Unpin a finished pinned broadcast. Starts and returns a new unpin («لغو پین») run. */
   | { method: 'POST'; path: `/broadcasts/${number}/unpin`; body: undefined; answer: BroadcastResponse }
-  /** Add a plan */
+  /** Add a plan. */
   | { method: 'POST'; path: '/plans'; body: PlanRequest; answer: PlanResponse }
-  /** Put the plans in a new order */
+  /** Reorder the plans. */
   | { method: 'POST'; path: '/plans/reorder'; body: ReorderRequest; answer: PlansResponse }
-  /** Change a plan */
+  /** Preview a bulk price change. Nothing is saved: returns each plan's prices before and after, and why a plan cannot take the change. A 422 lists every invalid field of the change at once. */
+  | { method: 'POST'; path: '/plans/prices/preview'; body: PlanPricesRequest; answer: PlanPricesPreviewResponse }
+  /** Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price), nothing changes and a 422 on `plan_ids` names each such plan. */
+  | { method: 'POST'; path: '/plans/prices'; body: PlanPricesRequest; answer: PlansResponse }
+  /** Update a plan. */
   | { method: 'PUT'; path: `/plans/${number}`; body: PlanRequest; answer: PlanResponse }
-  /** Switch a plan on or off */
+  /** Switch a plan on or off. */
   | { method: 'PATCH'; path: `/plans/${number}`; body: ActivationRequest; answer: PlanResponse }
-  /** Delete a plan nothing was sold with */
+  /** Delete a plan. Only a plan nothing was sold with. */
   | { method: 'DELETE'; path: `/plans/${number}`; body: undefined; answer: void }
-  /** A copy of a plan, switched off */
+  /** Duplicate a plan. The copy starts switched off. */
   | { method: 'POST'; path: `/plans/${number}/duplicate`; body: undefined; answer: PlanResponse }
-  /** Add a category */
+  /** Add a plan category. */
   | { method: 'POST'; path: '/plans/categories'; body: PlanCategoryRequest; answer: PlanCategoryResponse }
-  /** Put the categories in a new order */
+  /** Reorder the categories. */
   | { method: 'POST'; path: '/plans/categories/reorder'; body: ReorderRequest; answer: PlanCategoriesResponse }
-  /** Change a category */
+  /** Update a category. */
   | { method: 'PUT'; path: `/plans/categories/${number}`; body: PlanCategoryRequest; answer: PlanCategoryResponse }
-  /** Switch a category on or off */
+  /** Switch a category on or off. */
   | { method: 'PATCH'; path: `/plans/categories/${number}`; body: ActivationRequest; answer: PlanCategoryResponse }
-  /** Delete a category; its plans become uncategorised */
+  /** Delete a category. Its plans become uncategorised. */
   | { method: 'DELETE'; path: `/plans/categories/${number}`; body: undefined; answer: void }
-  /** Ban or unban a customer. On the shop's website, an admin's account — another's or their own — and an agent's are the panels' (403). */
+  /** Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403). */
   | { method: 'PATCH'; path: `/users/${number}`; body: UserStatusRequest; answer: UserResponse }
-  /** Make a customer the bot's admin — /broadcast, the report group's buttons, the shop's website's admin side while it lets its admins in — or take it back */
+  /** Make a customer a bot admin, or take the role back. An admin can use /broadcast, the report group's buttons and, while the website lets admins in, its admin API. */
   | { method: 'PUT'; path: `/users/${number}/role`; body: UserRoleRequest; answer: UserResponse }
-  /** Credit or debit a customer's wallet */
+  /** Set a customer's personal discount («تخفیف اختصاصی»). It lasts until changed; 0 removes it. Logged with who set it. Panels only. */
+  | { method: 'PUT'; path: `/users/${number}/discount`; body: UserDiscountRequest; answer: UserResponse }
+  /** Credit or debit a customer's wallet. */
   | { method: 'POST'; path: `/users/${number}/wallet`; body: WalletAdjustmentRequest; answer: WalletAdjustmentResponse }
-  /** The admin's groups a customer is in: every one listed, no other */
+  /** Set a customer's groups. Replaces their groups with the ones listed. */
   | { method: 'PUT'; path: `/users/${number}/groups`; body: UserGroupsRequest; answer: UserResponse }
-  /** Turn off the two-factor sign-in of the customer's account on the website — the phone it was on lost: the password alone signs them in. The customer is told (in Telegram, when they have it), the log says who did it. 422 when it is not on. */
+  /** Turn off a customer's two-factor sign-in on the website. For a customer who lost the phone it was on: afterwards the password alone signs them in. The customer is notified and the log records who did it. A 422 when it is not on. */
   | { method: 'POST'; path: `/users/${number}/two-factor/disable`; body: undefined; answer: CustomerAccountResponse }
-  /** Sign the customer out of the website on every device: every session of theirs ends (the log says who did it) */
+  /** Sign a customer out of the website on every device. All their sessions end; the log records who did it. */
   | { method: 'POST'; path: `/users/${number}/sessions/end`; body: undefined; answer: void }
-  /** Add a group */
+  /** Add a customer group. */
   | { method: 'POST'; path: '/customer-groups'; body: CustomerGroupRequest; answer: CustomerGroupResponse }
-  /** Put the groups in a new order */
+  /** Reorder the customer groups. */
   | { method: 'POST'; path: '/customer-groups/reorder'; body: ReorderRequest; answer: CustomerGroupsResponse }
-  /** Rename a group */
+  /** Update a customer group. */
   | { method: 'PUT'; path: `/customer-groups/${number}`; body: CustomerGroupRequest; answer: CustomerGroupResponse }
-  /** Delete a group — its customers just leave it */
+  /** Delete a customer group. Its members just leave it. */
   | { method: 'DELETE'; path: `/customer-groups/${number}`; body: undefined; answer: void }
-  /** Deliver a paid order whose delivery failed */
+  /** Retry delivering a paid order whose delivery failed or stalled. */
   | { method: 'POST'; path: `/orders/${number}/retry`; body: undefined; answer: OrderResponse }
-  /** Cancel an order nobody paid, with its open payments — a receipt waiting for review among them */
+  /** Cancel an unpaid order. Its open payments are cancelled with it, including one whose receipt waits for review. */
   | { method: 'POST'; path: `/orders/${number}/cancel`; body: NoteRequest; answer: OrderResponse }
-  /** Accept a payment (a receipt, or by hand) and deliver what it paid for */
+  /** Approve a payment and deliver what it paid for. With a receipt in review, or by hand without one. */
   | { method: 'POST'; path: `/payments/${number}/approve`; body: undefined; answer: PaymentResponse }
-  /** Refuse a receipt */
+  /** Reject a receipt. */
   | { method: 'POST'; path: `/payments/${number}/reject`; body: NoteRequest; answer: PaymentResponse }
-  /** Cancel an unpaid payment and its open order — the payment alone while another of the order's payments waits on its receipt's review: that one stays support's to decide */
+  /** Cancel an unpaid payment and its open order. If another payment of the order has a receipt waiting for review, only this payment is cancelled and the order stays open for that review. */
   | { method: 'POST'; path: `/payments/${number}/cancel`; body: NoteRequest; answer: PaymentResponse }
-  /** Remind the customer in the bot — the answer says whether they were told */
+  /** Remind the customer to pay. The answer says whether the reminder reached them. */
   | { method: 'POST'; path: `/payments/${number}/remind`; body: undefined; answer: ReminderResponse }
-  /** Deliver again what a paid payment bought */
+  /** Retry the delivery of what a paid payment bought. */
   | { method: 'POST'; path: `/payments/${number}/retry`; body: undefined; answer: PaymentResponse }
-  /** Give a paid payment back, by what it bought: a purchase's, a renewal's or an agent's traffic's amount to the customer's wallet, a top-up's back out of it. 422 on `note` past the 190 characters of the wallet line it is written on, or on `status`; 422 too once what the order put in the shop is no longer there (a top-up spent, an agent's traffic sold). */
+  /** Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone (a top-up already spent, an agent's traffic already sold). */
   | { method: 'POST'; path: `/payments/${number}/refund`; body: RefundRequest; answer: PaymentResponse }
-  /** Read the service's numbers from its panel again */
+  /** Refresh a service's usage and term from its panel. */
   | { method: 'POST'; path: `/subscriptions/${number}/sync`; body: undefined; answer: SubscriptionResponse }
-  /** Give the service days and traffic on top of what it has */
+  /** Add days and traffic to a service, on top of what it has. */
   | { method: 'POST'; path: `/subscriptions/${number}/extend`; body: SubscriptionExtensionRequest; answer: SubscriptionResponse }
-  /** Switch a service off on its panel */
+  /** Switch a service off on its panel. */
   | { method: 'POST'; path: `/subscriptions/${number}/disable`; body: NoteRequest; answer: SubscriptionResponse }
-  /** Switch a service back on */
+  /** Switch a service back on. */
   | { method: 'POST'; path: `/subscriptions/${number}/enable`; body: undefined; answer: SubscriptionResponse }
-  /** Move a service to another server with what is left of it */
+  /** Move a service to another server. It keeps its remaining days and traffic. */
   | { method: 'POST'; path: `/subscriptions/${number}/move`; body: SubscriptionMoveRequest; answer: SubscriptionResponse }
-  /** Delete a service from its panel and the shop */
+  /** Delete a service from its panel and from the shop. */
   | { method: 'POST'; path: `/subscriptions/${number}/delete`; body: SubscriptionDeleteRequest; answer: void }
-  /** Support's answer — its words, and a picture as a form — under the panel's principal: the ticket answered, waiting on the customer (a closed one opens again so), the customer told on every door they have (in Telegram, the picture with it), the report group under the ticket. 422 on `body` (1 to 4000 characters) or `file` (a JPEG, a PNG or a WebP by its bytes, 10 MB at most), or on `status` once the ticket holds 200 messages; 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB; a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it. */
+  /** Answer a ticket as support. Send JSON, or a form to attach a picture. The ticket becomes answered (a closed ticket reopens), the customer is notified (in Telegram with the picture, else by email) and the report group gets the answer. A 422 on `body` (1 to 4000 characters), on `file` (a JPEG, PNG or WebP, at most 10 MB) or on `status` once the ticket has 200 messages. A 503 while the host has less than 200 MB of free disk, or once the shop's uploads for the day reach 1024 MB. A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: `/tickets/${number}/messages`; body: TicketMessageRequest | TicketMessageUploadRequest; answer: TicketResponse }
-  /** Close the ticket — the customer told, the report group under the ticket; 422 on `status` when it is closed already */
+  /** Close a ticket. The customer and the report group are notified. A 422 on `status` when it is already closed. */
   | { method: 'POST'; path: `/tickets/${number}/close`; body: undefined; answer: TicketResponse }
-  /** Open a closed ticket again, waiting on support (its rating left behind); 422 on `status` when it is not closed */
+  /** Reopen a closed ticket. It waits for support again, and its rating is cleared. A 422 on `status` when it is not closed. */
   | { method: 'POST'; path: `/tickets/${number}/reopen`; body: undefined; answer: TicketResponse }
-  /** Approve the review — waiting, or rejected before —: the website shows it from now on (GET /reviews of the Store API), under the request's principal; 403 the shop's admin's own review, 422 on `status` when it is approved already */
+  /** Approve a pending or rejected review. The website shows it from now on (the Store API's `GET /reviews`). A 403 for an admin's own review; a 422 on `status` when it is already approved. */
   | { method: 'POST'; path: `/reviews/${number}/approve`; body: undefined; answer: ReviewResponse }
-  /** Reject the review — waiting, or shown before (hidden again) —: kept, never shown on the website; 403 the shop's admin's own review, 422 on `status` when it is rejected already */
+  /** Reject a pending or approved review. It is kept but no longer shown on the website. A 403 for an admin's own review; a 422 on `status` when it is already rejected. */
   | { method: 'POST'; path: `/reviews/${number}/reject`; body: undefined; answer: ReviewResponse }
-  /** Delete the review, whatever it stood at — shown on the website no more; 403 the shop's admin's own review */
+  /** Delete a review, whatever its status. A 403 for an admin's own review. */
   | { method: 'DELETE'; path: `/reviews/${number}`; body: undefined; answer: void }
-  /** Add a method from a driver, with that driver's form */
+  /** Add a payment method. Names a driver and fills in that driver's form. */
   | { method: 'POST'; path: '/payment-methods'; body: PaymentMethodCreateRequest; answer: PaymentMethodResponse }
-  /** Put the methods in a new checkout order */
+  /** Reorder the payment methods. */
   | { method: 'POST'; path: '/payment-methods/reorder'; body: ReorderRequest; answer: PaymentMethodsResponse }
-  /** Change a method — its driver's form again */
+  /** Update a payment method. Sends its driver's form again. */
   | { method: 'PUT'; path: `/payment-methods/${number}`; body: PaymentMethodUpdateRequest; answer: PaymentMethodResponse }
-  /** Switch a method on or off */
+  /** Switch a payment method on or off. */
   | { method: 'PATCH'; path: `/payment-methods/${number}`; body: PaymentMethodSwitchRequest; answer: PaymentMethodResponse }
-  /** Delete a method (never the wallet) */
+  /** Delete a payment method. The wallet cannot be deleted. */
   | { method: 'DELETE'; path: `/payment-methods/${number}`; body: undefined; answer: void }
-  /** Save one group of the bot's settings */
+  /** Save one group of the bot's settings. */
   | { method: 'PUT'; path: `/bot/settings/${BotSettingsGroup}`; body: BotSettingsRequest; answer: BotSettingsSaved }
-  /** Upload a picture of the admin's own */
+  /** Upload a custom QR background. */
   | { method: 'POST'; path: '/bot/qr-background'; body: QrBackgroundRequest; answer: QrBackgroundResponse }
-  /** Go back to the shipped picture */
+  /** Reset the QR background to the default picture. */
   | { method: 'DELETE'; path: '/bot/qr-background'; body: undefined; answer: QrBackgroundResponse }
-  /** Add a channel by its link, @handle or id */
+  /** Add a required channel by its link, @handle or id. */
   | { method: 'POST'; path: '/bot/channels'; body: BotChannelRequest; answer: BotChannelResponse }
-  /** Put the channels in a new order */
+  /** Reorder the required channels. */
   | { method: 'POST'; path: '/bot/channels/reorder'; body: ReorderRequest; answer: BotChannelsResponse }
-  /** Ask Telegram about a channel again */
+  /** Check a channel with Telegram again. */
   | { method: 'POST'; path: `/bot/channels/${number}/check`; body: undefined; answer: BotChannelResponse }
-  /** Stop asking customers to join a channel */
+  /** Remove a required channel. */
   | { method: 'DELETE'; path: `/bot/channels/${number}`; body: undefined; answer: void }
-  /** Disconnect the group (the bot stays in it) */
+  /** Disconnect the report group. The bot stays in the group. */
   | { method: 'DELETE'; path: '/bot/report-group'; body: undefined; answer: ReportGroupResponse }
-  /** A one-time link that adds the bot to a group with topics */
+  /** Make a one-time link that adds the bot to a group with topics. */
   | { method: 'POST'; path: '/bot/report-group/link'; body: undefined; answer: ReportGroupResponse }
-  /** Ask Telegram about the group again */
+  /** Check the report group with Telegram again. */
   | { method: 'POST'; path: '/bot/report-group/check'; body: undefined; answer: ReportGroupResponse }
-  /** A test message in every topic */
+  /** Send a test message to every topic. */
   | { method: 'POST'; path: '/bot/report-group/test'; body: undefined; answer: ReportGroupTestResponse }
-  /** Save a keyboard */
+  /** Save a keyboard. */
   | { method: 'PUT'; path: `/keyboards/${string}`; body: KeyboardRequest; answer: KeyboardResponse }
-  /** Back to the built-in layout */
+  /** Reset a keyboard to the default layout. */
   | { method: 'POST'; path: `/keyboards/${string}/reset`; body: undefined; answer: KeyboardResponse }
-  /** Save the rules */
+  /** Clear a referral alert. The referrer earns start gifts and plan rewards again from now on; rewards withheld meanwhile are not paid later. An admin cannot clear an alert on themselves (403). An alert already cleared is a 422 on `status`. */
+  | { method: 'POST'; path: `/referrals/alerts/${number}/clear`; body: undefined; answer: void }
+  /** Save the agency program's settings. */
   | { method: 'PUT'; path: '/agency/settings'; body: AgencySettingsRequest; answer: AgencySettingsResponse }
-  /** Approve a request on a level, with the credit the agent starts with; the customer is told */
+  /** Approve an agency request. Sets the level and the starting credit; the customer is notified. */
   | { method: 'POST'; path: `/agency/requests/${number}/approve`; body: AgencyTermsRequest; answer: AgencyRequestResponse }
-  /** Reject a request; the customer is told, with the note */
+  /** Reject an agency request. The customer is notified, with the note. */
   | { method: 'POST'; path: `/agency/requests/${number}/reject`; body: NoteRequest; answer: AgencyRequestResponse }
-  /** An agent's level and credit (the id is the customer's); the agent is told of a change, and the answer says whether they were */
+  /** Change an agent's level and credit. The id is the agent's customer id. The agent is notified of a change, and the answer says whether the notice reached them. */
   | { method: 'PUT'; path: `/agency/agents/${number}`; body: AgencyTermsRequest; answer: AgentChangedResponse }
-  /** End the agency: their bot goes off; the customer is told, with the note */
+  /** End an agency. The agent's bot stops; the agent is notified, with the note. */
   | { method: 'POST'; path: `/agency/agents/${number}/revoke`; body: NoteRequest; answer: void }
-  /** Set an agent's traffic right — a negative gb takes it away */
+  /** Adjust an agent's traffic. A negative `gb` takes traffic away. */
   | { method: 'POST'; path: `/agency/agents/${number}/traffic`; body: TrafficAdjustmentRequest; answer: AgentResponse }
-  /** Add a level */
+  /** Add an agency level. */
   | { method: 'POST'; path: '/agency/levels'; body: AgencyLevelRequest; answer: AgencyLevelResponse }
-  /** Put the levels in a new order */
+  /** Reorder the agency levels. */
   | { method: 'POST'; path: '/agency/levels/reorder'; body: ReorderRequest; answer: AgencyLevelsResponse }
-  /** Change a level */
+  /** Update an agency level. */
   | { method: 'PUT'; path: `/agency/levels/${number}`; body: AgencyLevelRequest; answer: AgencyLevelResponse }
-  /** Delete a level — refused (409) while agents are on it */
+  /** Delete an agency level. Refused (409) while agents are on it. */
   | { method: 'DELETE'; path: `/agency/levels/${number}`; body: undefined; answer: void }
-  /** Take a premium emoji off the picker */
+  /** Remove a premium emoji from the picker. */
   | { method: 'DELETE'; path: `/bot/custom-emojis/${string}`; body: undefined; answer: void }
-  /** Reword a text */
+  /** Save a text's wording. */
   | { method: 'PUT'; path: `/bot/texts/${string}`; body: BotTextRequest; answer: BotTextResponse }
-  /** Back to the shop's wording */
+  /** Reset a text to its default wording. */
   | { method: 'POST'; path: `/bot/texts/${string}/reset`; body: undefined; answer: BotTextResponse }
-  /** Change the website — the fields sent, the rest as kept: judged as the website would stand after it, every refusal at once, under its field */
+  /** Update the website's settings. Only the fields sent change. The result is validated as a whole, and every refusal is returned at once under its field. */
   | { method: 'PATCH'; path: '/website'; body: WebsiteRequest; answer: WebsiteResponse }
-  /** A new store key — the old base address stops working at once */
+  /** Make a new store key. The old base address stops working at once. */
   | { method: 'POST'; path: '/website/key'; body: undefined; answer: WebsiteResponse }
-  /** Ask Telegram who a token belongs to — the stored one when none is typed */
+  /** Create a discount code. Every refusal is returned at once, under its field. */
+  | { method: 'POST'; path: '/discount-codes'; body: DiscountCodeRequest; answer: DiscountCodeResponse }
+  /** Update a discount code. Send the whole form; its past uses stay. */
+  | { method: 'PUT'; path: `/discount-codes/${number}`; body: DiscountCodeRequest; answer: DiscountCodeResponse }
+  /** Switch a discount code on or off. */
+  | { method: 'PATCH'; path: `/discount-codes/${number}`; body: DiscountSwitchRequest; answer: DiscountCodeResponse }
+  /** Delete an unused discount code. A code with uses (orders made with it and not cancelled) is a 409: switch it off instead. */
+  | { method: 'DELETE'; path: `/discount-codes/${number}`; body: undefined; answer: void }
+  /** Create a sale. Every refusal is returned at once, under its field. */
+  | { method: 'POST'; path: '/sales'; body: SaleRequest; answer: SaleResponse }
+  /** Update a sale. Send the whole form. */
+  | { method: 'PUT'; path: `/sales/${number}`; body: SaleRequest; answer: SaleResponse }
+  /** Switch a sale on or off. */
+  | { method: 'PATCH'; path: `/sales/${number}`; body: DiscountSwitchRequest; answer: SaleResponse }
+  /** Delete a sale. Orders it discounted keep their discount lines. */
+  | { method: 'DELETE'; path: `/sales/${number}`; body: undefined; answer: void }
+  /** Create a batch of gift codes. Every refusal is returned at once, under its field. */
+  | { method: 'POST'; path: '/gift-codes'; body: GiftCodeBatchRequest; answer: GiftCodeBatchResponse }
+  /** Delete a batch's unredeemed codes, including expired ones. Redeemed codes stay, for the record. A 422 on `batch` when none is named. */
+  | { method: 'POST'; path: '/gift-codes/discard'; body: GiftCodeDiscardRequest; answer: GiftCodesDeletedResponse }
+  /** Delete an unredeemed gift code. A redeemed code stays (a 422 on `status`). */
+  | { method: 'DELETE'; path: `/gift-codes/${number}`; body: undefined; answer: void }
+  /** Add a wheel slice. */
+  | { method: 'POST'; path: '/wheel/prizes'; body: WheelPrizeRequest; answer: WheelPrizeResponse }
+  /** Reorder the wheel slices. */
+  | { method: 'POST'; path: '/wheel/prizes/reorder'; body: ReorderRequest; answer: WheelPrizesResponse }
+  /** Update a wheel slice. */
+  | { method: 'PUT'; path: `/wheel/prizes/${number}`; body: WheelPrizeRequest; answer: WheelPrizeResponse }
+  /** Switch a wheel slice on or off. */
+  | { method: 'PATCH'; path: `/wheel/prizes/${number}`; body: WheelPrizeSwitchRequest; answer: WheelPrizeResponse }
+  /** Delete a wheel slice. Spins that landed on it keep a copy of it. */
+  | { method: 'DELETE'; path: `/wheel/prizes/${number}`; body: undefined; answer: void }
+  /** Add a loyalty tier. Every refusal is returned at once, under its field. */
+  | { method: 'POST'; path: '/loyalty/tiers'; body: LoyaltyTierRequest; answer: LoyaltyTierResponse }
+  /** Update a loyalty tier. */
+  | { method: 'PUT'; path: `/loyalty/tiers/${number}`; body: LoyaltyTierRequest; answer: LoyaltyTierResponse }
+  /** Delete a loyalty tier. Its customers drop to the tier below; their past orders do not change. */
+  | { method: 'DELETE'; path: `/loyalty/tiers/${number}`; body: undefined; answer: void }
+  /** Add a cashback rule. Every refusal is returned at once, under its field. */
+  | { method: 'POST'; path: '/cashback/rules'; body: CashbackRuleRequest; answer: CashbackRuleResponse }
+  /** Update a cashback rule. */
+  | { method: 'PUT'; path: `/cashback/rules/${number}`; body: CashbackRuleRequest; answer: CashbackRuleResponse }
+  /** Switch a cashback rule on or off. */
+  | { method: 'PATCH'; path: `/cashback/rules/${number}`; body: CashbackRuleSwitchRequest; answer: CashbackRuleResponse }
+  /** Delete a cashback rule. Cashback it already credited stays with the customers. */
+  | { method: 'DELETE'; path: `/cashback/rules/${number}`; body: undefined; answer: void }
+  /** Ask Telegram which bot a token belongs to. Uses the stored token when none is given. */
   | { method: 'POST'; path: '/settings/config/telegram/test'; body: TelegramTestRequest; answer: BotIdentityResponse }
-  /** Try database settings without saving them */
+  /** Test database settings without saving them. */
   | { method: 'POST'; path: '/settings/config/database/test'; body: DatabaseRequest; answer: DatabaseCheckResponse }
-  /** A short email by the mail settings as saved — 422 while none goes out (no transport, or no address to send from, saved), 502 with the transport's reason when it did not take it */
+  /** Send a test email with the saved mail settings. A 422 while no email can go out (no transport or no sender address saved); a 502 with the transport's reason when it refused the email. */
   | { method: 'POST'; path: '/settings/config/mail/test'; body: MailTestRequest; answer: MailTestResponse }
-  /** Save one group of the config.php settings */
+  /** Save one group of the config.php settings. */
   | { method: 'PUT'; path: `/settings/config/${ConfigGroup}`; body: ConfigSettingsRequest; answer: ConfigSettingsResponse }
 
-/** Every write of the web installer's API (`/api/install`), as PanelWrite has the panel's. */
+/** Every write of the web installer's API (`/api/install`), in the same form as PanelWrite. */
 export type InstallWrite =
-  /** The database, written to config.php once its driver's probe answers (a blank secret is empty: nothing is stored yet) */
+  /** Save the database settings. They are written to config.php only after the driver's probe connects. A blank secret means empty here, since nothing is stored yet. */
   | { method: 'POST'; path: '/database'; body: DatabaseRequest; answer: InstallStatus }
-  /** The shop's tables, on the database the previous step wrote — the ones it does not have */
+  /** Create the shop's tables. Creates the tables missing from the database the previous step saved. */
   | { method: 'POST'; path: '/tables'; body: undefined; answer: InstallStatus }
-  /** The panel's login */
+  /** Set the panel's login. */
   | { method: 'POST'; path: '/admin'; body: InstallAdminRequest; answer: InstallStatus }
-  /** The shop's name and address, and the bot's token if given */
+  /** Set the shop's name and address, and the bot's token when one is given. */
   | { method: 'POST'; path: '/site'; body: InstallSiteRequest; answer: InstallStatus }
-  /** End the installation */
+  /** Finish the installation. */
   | { method: 'POST'; path: '/finish'; body: undefined; answer: InstallFinished }
 
-/** Every write of the Store API — a shop's website's, under its store key (`/api/store/v1/{store}`) —, as PanelWrite has the panel's. */
+/** Every write of the Store API, a shop website's API under its store key (`/api/store/v1/{store}`), in the same form as PanelWrite. */
 export type StoreWrite =
-  /** A nonce for an id_token sign-in (Telegram's popup, Google) — a sign-in's, or a signed-in customer's adding or proving a way in: the site opens the provider's sign-in with it, and posts it back with the token — once. 429 once this address network asked for 120 nonces, states and codes in 10 minutes (one address is many customers on a mobile network); 503 while the shop keeps as many sign-ins begun as it takes (5000 nonces in their half hour). */
+  /** Get a nonce for an id_token sign-in. For Telegram's popup or Google, when signing in, adding a way in or proving one again: the site opens the provider's sign-in with the nonce and sends it back once, with the token. A 429 once this address network asked for 120 nonces, states and codes in 10 minutes (one address can be many customers on a mobile network). A 503 while the shop already holds its maximum of open sign-ins (5000 nonces, each valid for half an hour). */
   | { method: 'POST'; path: '/auth/nonce'; body: undefined; answer: StoreNonceResponse }
-  /** Telegram's sign-in by redirect, begun in this browser: where to send it — the site makes the PKCE verifier and keeps it, sending the challenge; the state (keeping the challenge) and the nonce are the shop's — the state a sign-in's: POST /auth/telegram alone takes it back, with the verifier (a signed-in customer's own is POST /me/telegram/authorize's). 422 while the website keeps no client secret, or on `redirect_uri` or `code_challenge`; 429 once this address network asked for 120 nonces, states and codes in 10 minutes; 503 while the shop keeps as many sign-ins begun as it takes. */
+  /** Start a Telegram sign-in by redirect. Returns the address to send the browser to. The site makes the PKCE verifier, keeps it in this browser and sends only its challenge; the shop makes the state (which keeps the challenge) and the nonce. Only `POST /auth/telegram` accepts this state back, together with the verifier (a signed-in customer uses `POST /me/telegram/authorize` instead). A 422 while the website has no client secret, or on `redirect_uri` or `code_challenge`; a 429 once this address network asked for 120 nonces, states and codes in 10 minutes; a 503 while the shop holds its maximum of open sign-ins. */
   | { method: 'POST'; path: '/auth/telegram/authorize'; body: StoreTelegramAuthorizeRequest; answer: StoreAuthorizeResponse }
-  /** Sign in with Telegram — the popup's id_token, or the redirect's code with the state POST /auth/telegram/authorize gave and the verifier of the challenge it was given (a signed-in customer's state, or a code and state brought back to another browser, signs nobody in): the shop's customer with that Telegram account, or a newcomer made as the bot makes one. 401 when it does not sign anyone in, 403 banned, 422 Telegram sign-in off or a field missing, 429 too many failures from this address network (30 in 15 minutes), 502 Telegram out of reach. */
+  /** Sign in with Telegram. Send the popup's id_token, or the redirect's code with the state from `POST /auth/telegram/authorize` and the verifier of its challenge. A signed-in customer's state, or a code and state brought back to another browser, signs nobody in. Signs in the shop's customer with that Telegram account, or registers a new customer as the bot does. A 401 when the proof does not hold; a 403 when banned; a 422 when Telegram sign-in is off or a field is missing; a 429 after too many failures from this address network (30 in 15 minutes); a 502 when Telegram cannot be reached. */
   | { method: 'POST'; path: '/auth/telegram'; body: StoreTelegramSignInRequest; answer: StoreSignInResponse }
-  /** Sign in with Google — the id_token Google Identity Services handed the page, with the nonce it was asked for: the shop's customer with that Google account, else the one with the address Google speaks for (which signs in with Google from then on, its customer told), else a newcomer. The address counts only where Google is its own authority — `email_verified`, and an @gmail.com address or a Google Workspace account's (`hd`); any other address finds, takes on and keeps no account. 401 when it does not sign anyone in, 403 banned, 409 the address is an account's that takes no Google account on by it — one with two-factor sign-in on, or another Google account's: signed in its own way, the customer adds Google from their account —, 422 Google sign-in off, 429 too many failures from this address network, 502 Google out of reach. */
+  /** Sign in with Google. Send the id_token Google Identity Services gave the page, with the nonce it was requested with. Signs in the customer with that Google account; else the customer with the email address Google vouches for (that account can sign in with Google from then on, and the customer is notified); else registers a new customer. Google vouches for an address only when `email_verified` is true and it is an @gmail.com or Google Workspace (`hd`) address; any other address is ignored. A 401 when the proof does not hold; a 403 when banned; a 409 when the address belongs to an account that cannot be linked this way (two-factor sign-in is on, or another Google account is linked): the customer signs in their usual way and adds Google from their account. A 422 when Google sign-in is off; a 429 after too many failures from this address network; a 502 when Google cannot be reached. */
   | { method: 'POST'; path: '/auth/google'; body: StoreGoogleSignInRequest; answer: StoreSignInResponse }
-  /** Sign up with an email: a six-digit code to the address (POST /auth/register/verify takes it back) — or, when the address has an account, an email saying so; the answer is the same either way. Again: a new code in the last one's place. 422 email sign-up off, or a field (the captcha's too), 429 a code went to the address a minute ago, the address had its ten emails today (from every shop), this address network its twenty an hour (or asked too much), or the codes sent to the address were failed until it waits (ten wrong an hour, twenty a day); 502 the email did not go; 503 the shop's email does not go out, or the shop's (or every shop's) budget of emails is spent — sixty an hour, three hundred a day a shop —, or the captcha could not be judged. */
+  /** Sign up with an email. Emails a six-digit code to the address (finish with `POST /auth/register/verify`); if the address already has an account, the email says so instead. The answer is the same either way. Asking again sends a new code that replaces the last one. A 422 when email sign-up is off or a field (the captcha included) is invalid. A 429 when a code went to the address in the last minute, the address got its 10 emails today (counted across all shops), this address network sent its 20 an hour or asked too often, or the address is locked after failed codes (10 wrong an hour, 20 a day). A 502 when the email could not be sent. A 503 when the shop sends no email, the shop's or the installation's email budget is spent (60 an hour and 300 a day per shop), or the captcha could not be checked. */
   | { method: 'POST'; path: '/auth/register'; body: StoreRegisterRequest; answer: StoreCodeSentResponse }
-  /** Finish signing up with the code the email carried: the account made — reported, its invite code's owner told — and signed in. 409 the address took an account meanwhile, 422 the code is wrong, expired, spent or tried five times (or email sign-up off), 429 too many failures — or the address's budget of wrong codes spent: ten an hour, twenty a day, each counted before it is checked, whatever codes were sent. */
+  /** Finish signing up with the emailed code. Creates the account and signs it in; the referrer, if any, is notified. A 409 when the address got an account meanwhile; a 422 when the code is wrong, expired, used or tried five times (or email sign-up is off); a 429 after too many failures, or when the address's budget of wrong codes is spent (10 an hour, 20 a day, each counted before it is checked). */
   | { method: 'POST'; path: '/auth/register/verify'; body: StoreVerifyRequest; answer: StoreSignInResponse }
-  /** Sign in with an email and its password — an account with two-factor sign-in on answers its second step's challenge instead (202; POST /auth/login/2fa finishes it). 401 for either wrong (one answer: which addresses have an account is told nobody), 403 banned, 422 a field (the captcha's too), 429 too many failures from this address network (30 in 15 minutes) or for this account (50, from every address), 503 the captcha could not be judged. */
+  /** Sign in with an email and password. If the account has two-factor sign-in on, the answer is a 202 with a challenge instead (finish with `POST /auth/login/2fa`). A 401 for a wrong email or password (one answer for both, so it never reveals which addresses have an account); a 403 when banned; a 422 on an invalid field (the captcha included); a 429 after too many failures from this address network (30 in 15 minutes) or on this account (50, from all addresses); a 503 when the captcha could not be checked. */
   | { method: 'POST'; path: '/auth/login'; body: StoreLoginRequest; answer: StoreSignInResponse | StoreTwoFactorResponse }
-  /** A password sign-in's second step: the challenge it answered, with the six-digit code of the account's authenticator app (Persian digits too; a code opens once) or one of its recovery codes (spent). A reset's new password the challenge keeps is set now, every other session of the account ended. 401 the challenge opens nothing any more (expired, five wrong codes, two-factor turned off since — sign in again), 403 banned, 422 a field missing or the code wrong, 429 too many failures from this address network or for this account — or the account's second-step codes spent: 10 an hour and 20 a day, counted before each is checked, whoever tries them (the customer is told once a day). */
+  /** Finish a password sign-in with its second step. Send the challenge with the six-digit code from the account's authenticator app (Persian digits accepted; each code works once) or one of its recovery codes (used up). If the challenge came from a password reset, the new password is set now and every other session of the account ends. A 401 when the challenge is no longer valid (expired, five wrong codes, or two-factor turned off since): sign in again. A 403 when banned; a 422 when a field is missing or the code is wrong. A 429 after too many failures from this address network or on this account, or when the account's second-step budget is spent: 10 codes an hour and 20 a day, counted before each is checked, whoever tries them (the customer is notified once a day). */
   | { method: 'POST'; path: '/auth/login/2fa'; body: StoreTwoFactorRequest; answer: StoreSignInResponse }
-  /** A forgotten password: a six-digit code to the address when it has an account — and to one without, an email saying it has none, once a day (asked again that day, nothing goes); the answer the same either way. 422 the address or the captcha, 429 a code went to the address a minute ago, the address had its ten emails today (from every shop), this address network its twenty an hour (or asked too much), or the codes sent to the address were failed until it waits (ten wrong an hour, twenty a day); 502 the email did not go; 503 the shop's email does not go out, or the shop's (or every shop's) budget of emails is spent, or the captcha could not be judged. */
+  /** Start a password reset. Emails a six-digit code when the address has an account; an address without one gets an email saying so, at most once a day (a second request that day sends nothing). The answer is the same either way. A 422 on the address or the captcha. A 429 when a code went to the address in the last minute, the address got its 10 emails today (counted across all shops), this address network sent its 20 an hour or asked too often, or the address is locked after failed codes (10 wrong an hour, 20 a day). A 502 when the email could not be sent. A 503 when the shop sends no email, the shop's or the installation's email budget is spent, or the captcha could not be checked. */
   | { method: 'POST'; path: '/auth/password/forgot'; body: StoreForgotRequest; answer: StoreCodeSentResponse }
-  /** A new password with the code POST /auth/password/forgot emailed: kept, every session of the account ended, this device signed in, the customer told — or, two-factor sign-in on (a reset leaves it on), its second step's challenge (202), nothing changed yet: the new password waits in it, and POST /auth/login/2fa sets it. 403 banned, 422 a field — the code wrong, expired, spent or tried five times —, 429 too many failures — or the address's budget of wrong codes spent: ten an hour, twenty a day, each counted before it is checked (its account told once a day). */
+  /** Set a new password with the code from `POST /auth/password/forgot`. The password is saved, every session of the account ends, this device is signed in and the customer is notified. If two-factor sign-in is on (a reset does not turn it off), the answer is a 202 with a challenge and nothing changes yet: `POST /auth/login/2fa` sets the new password. A 403 when banned; a 422 on an invalid field, or a code that is wrong, expired, used or tried five times; a 429 after too many failures, or when the address's budget of wrong codes is spent (10 an hour, 20 a day, each counted before it is checked; the account is notified once a day). */
   | { method: 'POST'; path: '/auth/password/reset'; body: StoreResetRequest; answer: StoreSignInResponse | StoreTwoFactorResponse }
-  /** A token of the website's captcha judged for its own backend — a form of the site's own (a review, a contact form), the shop holding the captcha's secret: whether it passed, for the action the backend names (the widget's), solved where (Turnstile says the host; the website's address and origins are held to), and why not. Server to server: a browser's word that it passed proves nothing. A token is taken once (an ALTCHA solution, for the quarter of an hour its challenge lives). 200 either way; 409 while the website asks no captcha; 422 on `token`, `action` or `remoteip`; 429 past the website's 3000 checks in 10 minutes — a backend is one address for all its visitors —, or past 120 refused tokens in them from the visitor's network, the one `remoteip` names (else the backend's own: name the visitor, so a bot behind the site's forms spends its own network's refusals, not everyone's), its next token not judged; never the sign-ins' budget; 503 while it could not be judged (Cloudflare out of reach). */
+  /** Check a captcha token for the site's own backend. For the site's own forms (a contact form): the shop holds the captcha's secret and says whether the token passed for the action the backend names, where it was solved (Turnstile reports the host, which must be the website's address or one of its origins) and why it failed. Call it server to server: a browser's claim that it passed proves nothing. Each token is accepted once (an ALTCHA solution, for the 15 minutes its challenge lives). A 200 whether or not it passed; a 409 while the website asks for no captcha; a 422 on `token`, `action` or `remoteip`. A 429 past the website's 3000 checks in 10 minutes (the backend is one address for all its visitors), or past 120 refused tokens in that time from the visitor's network: the one `remoteip` names, else the backend's own. So pass the visitor's address, and a bot behind the site's forms uses up only its own network's allowance. This budget is separate from sign-ins. A 503 when the token could not be checked (Cloudflare cannot be reached). */
   | { method: 'POST'; path: '/captcha/verify'; body: StoreCaptchaVerifyRequest; answer: StoreCaptchaVerdict }
-  /** Sign this device out — its token opens nothing from now on */
+  /** Sign this device out. Its token stops working. */
   | { method: 'POST'; path: '/auth/logout'; body: undefined; answer: void }
-  /** The customer's names — the ones sent, the rest as they are; answered as GET /me answers. 422 under the field: a first name blank or past 64 characters, a last name past 64 — and an account with Telegram, whose names are Telegram's. */
+  /** Change the customer's names. Only the names sent change; the answer is the same as `GET /me`. A 422 on the field: a blank first name, a name over 64 characters, or any name on an account with Telegram (its names come from Telegram). */
   | { method: 'PATCH'; path: '/me'; body: StoreProfileRequest; answer: StoreAccountResponse }
-  /** A way into this account proven again — what changing how it is signed in to asks of a session whose sign-in is older than 15 minutes (their 403): the account's password — with its authenticator app's code or a recovery code while two-factor sign-in is on —, its Telegram account (the popup's id_token with a nonce of POST /auth/nonce, or the redirect's code with the state POST /me/telegram/authorize gave this session and the verifier of its challenge), or its Google account. This session may change the account's ways in for the next 15 minutes. 422 on `method` for none of password, telegram and google; 422 (no field) while the website has that way's sign-in off — Telegram's, or Google's; 422 on `password` for an account without a password (prove another way); 422 under the fields: missing, the proof does not hold (on `password`, `code` or `id_token`), or it proves another account; 429 too many failures — counted as sign-ins are, a code against the account's second-step budget too; 502 the provider out of reach. */
+  /** Prove a way into this account again. Changing how the account signs in needs a sign-in from the last 15 minutes; an older session gets a 403 and calls this first. Prove the account's password (with the authenticator app's code or a recovery code while two-factor sign-in is on), its Telegram account (the popup's id_token with a nonce from `POST /auth/nonce`, or the redirect's code with the state from `POST /me/telegram/authorize` for this session and the verifier of its challenge), or its Google account. The session may then change the account's ways in for 15 minutes. A 422 on `method` for anything but password, telegram or google; a 422 (no field) while the website has that sign-in method off; a 422 on `password` for an account without a password (prove another way); a 422 on the field when it is missing, the proof does not hold (`password`, `code` or `id_token`) or it proves another account. A 429 after too many failures (counted like sign-ins; a code also counts against the account's second-step budget); a 502 when the provider cannot be reached. */
   | { method: 'POST'; path: '/me/reauthenticate'; body: StoreReauthenticateRequest; answer: StoreReauthenticatedResponse }
-  /** Telegram's redirect sign-in begun for the signed-in customer themselves — to add their Telegram account (POST /me/identities/telegram) or prove it again (POST /me/reauthenticate): where to send the browser — the site makes the PKCE verifier and keeps it, sending the challenge —, the state this session's alone — no sign-in, no other customer, and no other device of theirs takes it back, and none without the verifier. 422 while the website keeps no client secret, or on `redirect_uri` or `code_challenge`; 429 once this address network asked for 120 nonces, states and codes in 10 minutes; 503 while the shop keeps as many sign-ins begun as it takes. */
+  /** Start a Telegram redirect for the signed-in customer. Used to add their Telegram account (`POST /me/identities/telegram`) or prove it again (`POST /me/reauthenticate`). Returns the address to send the browser to. The site makes the PKCE verifier, keeps it and sends only its challenge. The state belongs to this session alone: a sign-in, another customer or another device of theirs cannot use it, and nothing can without the verifier. A 422 while the website has no client secret, or on `redirect_uri` or `code_challenge`; a 429 once this address network asked for 120 nonces, states and codes in 10 minutes; a 503 while the shop holds its maximum of open sign-ins. */
   | { method: 'POST'; path: '/me/telegram/authorize'; body: StoreTelegramAuthorizeRequest; answer: StoreAuthorizeResponse }
-  /** The customer's password, set or changed — it signs in with their email: every other session of theirs ends, this one stays, the customer told. 403 the session's sign-in is not recent (POST /me/reauthenticate first); 422 the account has no email, or under the fields: the current password (when there is one) missing or wrong — a wrong one counted as a failed sign-in —, the new one by the password rule; 429 too many failures. */
+  /** Set or change the customer's password. The password signs in with their email. Every other session ends, this one stays, and the customer is notified. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first); a 422 when the account has no email, the current password (if the account has one) is missing or wrong (a wrong one counts as a failed sign-in), or the new one breaks the password rule; a 429 after too many failures. */
   | { method: 'PUT'; path: '/me/password'; body: StorePasswordRequest; answer: StoreMeResponse }
-  /** End one of the customer's sessions (this one too) — another's is not there (404) */
+  /** End one of the customer's sessions, this one included. Another customer's session is a 404. */
   | { method: 'DELETE'; path: `/me/sessions/${number}`; body: undefined; answer: void }
-  /** A new secret for the customer's authenticator app (two-factor sign-in, RFC 6238): it waits 15 minutes for the app's first code (POST /me/2fa/enable), any earlier one gone. 403 the session's sign-in is not recent; 422 the account does not sign in with an email and a password, or two-factor sign-in is on already. */
+  /** Start setting up two-factor sign-in. Returns a new secret for the customer's authenticator app (RFC 6238). It waits 15 minutes for the app's first code (`POST /me/2fa/enable`) and replaces any earlier one. A 403 when the session's sign-in is not recent; a 422 when the account has no email and password, or two-factor sign-in is already on. */
   | { method: 'POST'; path: '/me/2fa/setup'; body: undefined; answer: StoreTwoFactorSetupResponse }
-  /** Two-factor sign-in turned on by the app's first code for the secret POST /me/2fa/setup gave (five tries): its ten recovery codes, shown this once; the customer told. 403 the session's sign-in is not recent; 422 no email and password, on already, or on `code` — wrong, or no secret waiting for it (set it up again). */
+  /** Turn two-factor sign-in on. Send the app's first code for the secret from `POST /me/2fa/setup` (five tries). Returns ten recovery codes, shown only this once; the customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no email and password, two-factor sign-in is already on, or on `code` when it is wrong or no secret is waiting (start the setup again). */
   | { method: 'POST'; path: '/me/2fa/enable'; body: StoreTwoFactorEnableRequest; answer: StoreRecoveryCodesResponse }
-  /** Two-factor sign-in turned off, with the account's password; the customer told. 403 the session's sign-in is not recent; 422 it is not on, or on `password` — missing or wrong, a wrong one counted as a failed sign-in; 429 too many failures. */
+  /** Turn two-factor sign-in off. Needs the account's password; the customer is notified. A 403 when the session's sign-in is not recent; a 422 when it is not on, or on `password` when it is missing or wrong (a wrong one counts as a failed sign-in); a 429 after too many failures. */
   | { method: 'POST'; path: '/me/2fa/disable'; body: StoreTwoFactorDisableRequest; answer: StoreMeResponse }
-  /** Add a Telegram account to the customer's — proven as Telegram's sign-in proves one: the popup's id_token with its nonce, or the redirect's code with the state POST /me/telegram/authorize gave this customer and the verifier of its challenge (a sign-in's state, or another customer's, proves nothing here). This account's already, or nobody's (now this account's, its handle and names Telegram's; the customer told): the account. Another account's of the shop: a merge offered (202). 403 the session's sign-in is not recent; 422 the proof does not hold (on `id_token`, or the redirect's `code`), the account has another Telegram account (or a merge the rules refuse, or Telegram sign-in off); 429 too many failures; 502 Telegram out of reach. */
+  /** Add a Telegram account to the customer's account. Prove it as a Telegram sign-in does: the popup's id_token with its nonce, or the redirect's code with the state from `POST /me/telegram/authorize` for this customer and the verifier of its challenge (a sign-in's state or another customer's proves nothing here). If the Telegram account is already this account's or nobody's, the answer is the account (a new link takes its handle and names from Telegram, and the customer is notified). If another account of the shop has it, a merge is offered (202). A 403 when the session's sign-in is not recent; a 422 when the proof does not hold (on `id_token` or the redirect's `code`), the account already has another Telegram account, the merge is not allowed, or Telegram sign-in is off; a 429 after too many failures; a 502 when Telegram cannot be reached. */
   | { method: 'POST'; path: '/me/identities/telegram'; body: StoreTelegramLinkRequest; answer: StoreMeResponse | StoreMergeOfferResponse }
-  /** Add a Google account to the customer's — the id_token Google Identity Services handed the page, with its nonce. This account's already, or nobody's (now this account's, with the address Google speaks for — an @gmail.com or Workspace address — when the account has none and no other account has it; the customer told): the account. Another account's of the shop — by the Google account, or by the address Google speaks for —: a merge offered (202). 403 the session's sign-in is not recent; 422 the proof does not hold (on `id_token`), the account has another Google account (or a merge the rules refuse, or Google sign-in off); 429 too many failures; 502 Google out of reach. */
+  /** Add a Google account to the customer's account. Send the id_token Google Identity Services gave the page, with its nonce. If the Google account is already this account's or nobody's, the answer is the account; a new link also takes the email address Google vouches for (an @gmail.com or Workspace address) when the account has no email and no other account has it, and the customer is notified. If another account of the shop has the Google account or that address, a merge is offered (202). A 403 when the session's sign-in is not recent; a 422 when the proof does not hold (on `id_token`), the account already has another Google account, the merge is not allowed, or Google sign-in is off; a 429 after too many failures; a 502 when Google cannot be reached. */
   | { method: 'POST'; path: '/me/identities/google'; body: StoreGoogleLinkRequest; answer: StoreMeResponse | StoreMergeOfferResponse }
-  /** Add an email to the customer's account, with the password chosen to sign in by it: a six-digit code to the address (POST /me/identities/email/verify takes it back) — whether or not another account has it: it is proven first. Another customer's code for the same address stays as it is. 403 the session's sign-in is not recent; 422 the account has an email, or a field; 429 a code went to the address a minute ago, the address had its ten emails today (from every shop), this address network its twenty an hour (or asked too much), or the codes sent to the address were failed until it waits (ten wrong an hour, twenty a day), or this account asked five codes today; 502 the email did not go; 503 the shop's email does not go out, or its budget of emails is spent. */
+  /** Add an email and password to the customer's account. Emails a six-digit code to the address (finish with `POST /me/identities/email/verify`), whether or not another account has the address: it is proven first. Another customer's pending code for the same address is not affected. A 403 when the session's sign-in is not recent; a 422 when the account already has an email or a field is invalid. A 429 when a code went to the address in the last minute, the address got its 10 emails today (counted across all shops), this address network sent its 20 an hour or asked too often, the address is locked after failed codes (10 wrong an hour, 20 a day), or this account asked for 5 codes today. A 502 when the email could not be sent; a 503 when the shop sends no email or its email budget is spent. */
   | { method: 'POST'; path: '/me/identities/email'; body: StoreEmailLinkRequest; answer: StoreCodeSentResponse }
-  /** The code the email carried, typed back by the account it was sent for: the address and its password this account's (the customer told) — or, the address another account's of the shop, a merge offered (202; once merged, the account that stays has the address and the password chosen). 403 the session's sign-in is not recent; 422 the account has an email, a merge the rules refuse, or on `code` — wrong, expired, spent, tried five times or another account's —; 429 too many failures, or the budget of wrong codes of the address or of this account spent (ten an hour, twenty a day). */
+  /** Finish adding an email with the emailed code. Only the account the code was sent for can use it. The address and its password become this account's and the customer is notified. If another account of the shop has the address, a merge is offered (202); after the merge, the remaining account has the address and the chosen password. A 403 when the session's sign-in is not recent; a 422 when the account already has an email, the merge is not allowed, or on `code` when it is wrong, expired, used, tried five times or another account's; a 429 after too many failures, or when the budget of wrong codes for the address or this account is spent (10 an hour, 20 a day). */
   | { method: 'POST'; path: '/me/identities/email/verify'; body: StoreEmailLinkVerifyRequest; answer: StoreMeResponse | StoreMergeOfferResponse }
-  /** Take a way in off the customer's account — never the last one: an email goes with its password and two-factor sign-in (the address is emailed that it is no way in any more), a Telegram account with its handle; the customer told. 403 the session's sign-in is not recent; 422 the account has none of that kind, or it is its last way in. */
+  /** Remove a way in from the customer's account. Never the last one. Removing the email also removes the password and two-factor sign-in, and the address gets an email saying so; removing Telegram also removes the handle. The customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no way in of that kind, or it is the last one. */
   | { method: 'DELETE'; path: `/me/identities/${StoreIdentityKind}`; body: undefined; answer: StoreMeResponse }
-  /** Yes to a merge offered (a 202 of POST /me/identities/…): the two accounts one — the older stays, everything the other owned its own —, then what the offer carried (the way in being added) its own too — a password set by it ends every other session of the account. This session signs in the account that stays; the customer told. 403 the session's sign-in is not recent; 422 the ticket is not this account's, spent, expired, or the other account no longer has that way in; or the merge the rules refuse now. */
+  /** Accept a merge offer (the 202 of a `POST /me/identities/…`). The two accounts become one: the older account stays and takes over everything the other owned, then also gets the way in being added. A password set this way ends every other session of the account. This session is signed in to the remaining account, and the customer is notified. A 403 when the session's sign-in is not recent; a 422 when the ticket is not this account's, is used or expired, the other account no longer has that way in, or the merge is no longer allowed. */
   | { method: 'POST'; path: '/me/merge'; body: StoreMergeRequest; answer: StoreMeResponse }
-  /** Write a review of the shop — the name it is signed with, 1 to 5 stars, the words, a line of where they use the service from, one of the website's own avatars —: kept waiting on support, which approves it (GET /reviews shows it then) or rejects it; the report group hears of it. Anyone may, while the website asks a captcha — without one, a guest's is a 403 (sign in first) —: a customer's bearer token with it makes it theirs (their account beside it in the panels) — one that opens no session is a 401, never a guest's review in its place, and a banned customer's a 403. A 404 while the website takes no reviews (its `reviews_enabled`, off at first). 422 on `name` (2 to 64 characters), `rating` (1 to 5), `body` (10 to 600), `context` (100 at most) or `avatar` (1 to 32 of a-z, 0-9, - and _: a key of the website's own set, never an address), every one at once — then on `captcha` while the website asks one; 429 (`Retry-After`) past 20 reviews an hour from one address network (an IPv6 one by its /48; a refused captcha among them), 3 a day from one customer, or 20 an hour from every guest together (a refused captcha not among them); 503 while 200 reviews wait on support (the shop takes no new one until it decides some), or while the captcha could not be judged. */
+  /** Write a review. Send the signed name, 1 to 5 stars, the text, an optional line on where the service is used, and an optional avatar from the website's own set. It waits for support to approve it (then `GET /reviews` shows it) or reject it; the report group is notified. Guests may write while the website asks for a captcha; without one, a guest gets a 403 (sign in first). With a bearer token the review is that customer's; a token that is not valid is a 401 (never a guest review instead), and a banned customer gets a 403. A 404 while the website takes no reviews (`reviews_enabled`, off by default). A 422 lists every invalid field at once: `name` (2 to 64 characters), `rating` (1 to 5), `body` (10 to 600), `context` (at most 100) or `avatar` (1 to 32 of a-z, 0-9, - and _: a key, never an address); then `captcha` while the website asks for one. A 429 with `Retry-After` past 20 reviews an hour from one address network (IPv6 counted by /48; refused captchas included), 3 a day from one customer, or 20 an hour from all guests together (refused captchas not included). A 503 while 200 reviews wait for support (no new review is accepted until support decides some), or when the captcha could not be checked. */
   | { method: 'POST'; path: '/reviews'; body: StoreReviewRequest; answer: StoreReviewWrittenResponse }
-  /** Its «تمدید خودکار» on or off: renewed from the wallet before its end. 422 on `auto_renew` while it is not offered (`auto_renew.offered`) — or for anything but a boolean. */
+  /** Switch the service's auto-renewal («تمدید خودکار») on or off. When on, the service is renewed from the wallet before it ends. A 422 on `auto_renew` while auto-renewal is not offered (`auto_renew.offered`), or for anything but a boolean. */
   | { method: 'PATCH'; path: `/subscriptions/${number}`; body: StoreSubscriptionRequest; answer: StoreSubscriptionResponse }
-  /** Read from its panel now, with whether it is connected (`presence`) — a client the panel no longer has comes back deleted. 502 when its panel cannot be read now (out of reach, or left alone a while after it failed): the shop's copy is no answer to it. A customer reads 10 a minute at most: then a 429 with `Retry-After`. */
+  /** Read the service from its panel now, with whether it is connected (`presence`). A client the panel no longer has comes back as deleted. A 502 when the panel cannot be read now (unreachable, or skipped for a while after a failure); the shop's stored copy is not returned instead. At most 10 reads a minute per customer, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: `/subscriptions/${number}/refresh`; body: undefined; answer: StoreSubscriptionResponse }
-  /** A new link for it (`link_rotation`): every device on the old one drops, the bot says nothing of it. 422 on `status` when it does not run or its server cannot give it a new link, 409 another change of it under way, 502 its server failed it. A customer asks for 5 an hour at most: then a 429 with `Retry-After`. */
+  /** Change the service's subscription link (`link_rotation`). Every device on the old link is disconnected; the bot sends no message about it. A 422 on `status` when the service is not active or its server cannot rotate links; a 409 while another change to it is running; a 502 when the server failed. At most 5 an hour per customer, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: `/subscriptions/${number}/rotate-link`; body: undefined; answer: StoreSubscriptionResponse }
-  /** Renew it — paid with `method_id`, as GET says: the wallet renews it at once, a card waits for its receipt (POST /payments/{id}/receipt). Refused as GET is, and as POST /orders is (the wallet short: 422 on `method_id`; too many unpaid orders open: 422; 409 paid or closed elsewhere in the same moment; 429 past the checkout's pace; 503 while the shop takes no orders); made again with its Idempotency-Key, the renewal that key came to, as it stands. */
+  /** Renew a service, paid with `method_id`, as the GET previews it. The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key`, it returns the renewal that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/renewal`; body: StoreRenewalRequest; answer: StoreCheckoutResponse }
-  /** Buy a plan — on one of its locations, paid with `method_id` — through the checkout the bot's purchases go through: nothing is ordered until the way to pay is picked; the wallet pays at once (the service delivered, or the order failed and waiting for support), a card waits for its receipt (POST /payments/{id}/receipt). 422 on `plan_id` for a plan the shop does not sell now (switched off, on no location that can deliver it now, or — an agent's shop — more traffic than the agent's bot has left to sell), on `server_id` for a server it is not sold on now while another of its locations is, on `method_id` for a way that may not pay it — or a wallet short of the price (what is missing) —, on `idempotency_key` for a key that came to an order of something else or was first sent with another `method_id`; 422 (no field) while the customer has 5 unpaid orders open — paid, or expired, they make room; 409 when the order was paid or closed elsewhere in the same moment — or, the request made again, was cancelled since (by support, or unpaid in its time: its own words); 429 past 30 ordering requests (purchases, renewals and top-ups together, made again or not) in 10 minutes, with `Retry-After`; 503 while the shop takes no orders — its bot switched off (GET /'s `shop.taking_orders`), a request made again too. Made again with its Idempotency-Key, the order that key came to, as it stands — never a second order or a second charge. */
+  /** Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  | { method: 'POST'; path: `/subscriptions/${number}/extra-traffic`; body: StoreExtraTrafficRequest; answer: StoreCheckoutResponse }
+  /** Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  | { method: 'POST'; path: `/subscriptions/${number}/extra-time`; body: StoreExtraTimeRequest; answer: StoreCheckoutResponse }
+  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
   | { method: 'POST'; path: '/orders'; body: StoreOrderRequest; answer: StoreCheckoutResponse }
-  /** The receipt of a card transfer the checkout answered (`transfer.payment_id`): a picture, with the customer's words — taken as the bot takes one, and reviewed by support (their screen, the report group), always: the method's review window, which accepts a receipt sent in the bot nobody looked at, never takes one uploaded here. Its order is the answer, the payment awaiting review. 404 for a payment that is not theirs; 422 on `status` while it awaits no receipt (one sent already, refused, paid, cancelled; not a card transfer), on `file` for no picture — JPEG, PNG or WebP by its bytes, 10 MB at most —, on `note` past its length; 429 past 10 pictures uploaded in an hour — their receipts and their tickets' pictures together, one budget —, with `Retry-After`; 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB, or while the shop takes no orders (its bot switched off); a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it. */
+  /** Upload the receipt of a card transfer. For the payment the checkout returned (`transfer.payment_id`): a picture, with an optional note from the customer. Support always reviews it (in the panel or the report group): a card method's automatic approval window applies only to receipts sent in the bot, never to uploads. Returns the order, with the payment awaiting review. A 404 for another customer's payment; a 422 on `status` while the payment awaits no receipt (one was already sent, or it was rejected, paid, cancelled, or is not a card transfer), on `file` when it is not a JPEG, PNG or WebP of at most 10 MB, or on `note` when it is too long. A 429 with `Retry-After` past 10 pictures in an hour (receipts and ticket pictures share this budget). A 503 while the host has less than 200 MB of free disk, once the shop's uploads for the day reach 1024 MB, or while the shop takes no orders (its bot is switched off). A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: `/payments/${number}/receipt`; body: StoreReceiptRequest; answer: StoreOrderResponse }
-  /** Charge the wallet by `amount` — within GET /wallet's `top_up` bounds (422 on `amount`, saying them) —, paid with `method_id`: any way but the wallet itself (422 on `method_id`); a card waits for its receipt (POST /payments/{id}/receipt), and once paid the amount lands on the balance. Refused as POST /orders is for too many unpaid orders open (422), past the checkout's pace (429) and while the shop takes no orders (503). Made again with its Idempotency-Key, the top-up that key came to, as it stands. */
+  /** Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now. */
   | { method: 'POST'; path: '/wallet/top-up'; body: StoreTopUpRequest; answer: StoreCheckoutResponse }
-  /** Mark the customer's notices read: those numbered `ids` — a number that is not one of theirs marks nothing, it is no error —, or every one without `ids` (`{}`); one read before keeps when it was. How many are left unread is the answer. 422 on `ids` for anything but a list of at most 100 numbers. */
+  /** Check a discount code before paying. Returns the quote the order would be made at: the base price (the customer's price for the plan, or the cost of that much extra), the automatic discount and the code's discount as lines, and the total. Nothing is ordered. A 422 on `code` when it does not apply: unknown in this shop, switched off, outside its dates, for another type of order, plan or server, only for a first purchase, for a larger order, or used up. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's `discount_code`), then a 429 with `Retry-After`. */
+  | { method: 'POST'; path: '/discount-codes/check'; body: StoreDiscountCheckRequest; answer: StoreDiscountQuoteResponse }
+  /** Redeem a gift code, as the bot's «🎁 کد هدیه» does. The code may be typed in any case, with dashes and spaces anywhere and Persian digits. Toman are added to the wallet; a plan code delivers a free service (the answer has its order and, once delivered, the service; nothing is sent in Telegram). A 422 on `code` when the shop takes no codes now, the code does not exist, is already redeemed (by them or someone else) or expired, or its service cannot be delivered now (the code stays theirs to try again). Every try that names no code of the shop counts against the customer and their address network: 10 wrong tries an hour per customer and 30 per network, then a 429 with `Retry-After`. */
+  | { method: 'POST'; path: '/gift-codes/redeem'; body: StoreGiftCodeRequest; answer: StoreGiftCodeResponse }
+  /** Mark notifications as read. Those listed in `ids` (an id that is not the customer's is ignored, not an error), or all of them when `ids` is left out (`{}`). A notice read before keeps its first read time. Returns how many are still unread. A 422 on `ids` for anything but a list of at most 100 numbers. */
   | { method: 'POST'; path: '/notifications/read'; body: StoreNotificationsReadRequest; answer: StoreUnreadResponse }
-  /** Open a ticket — its subject, its first message, the service of theirs it is about, and a picture as a form —: waiting on support, which the report group hears of at once. 422 on `subject` (3 to 120 characters), `body` (1 to 4000), `subscription_id` (not one of theirs) or `file` (a JPEG, a PNG or a WebP by its bytes, 10 MB at most); 429 (`Retry-After`) past 10 tickets in an hour, 30 messages in 10 minutes, or 10 pictures in an hour (their receipts and their tickets' together); 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB; a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it. */
+  /** Open a support ticket. Send the subject, the first message, optionally the customer's service it is about, and optionally a picture (as a form). It waits for support, and the report group is notified at once. A 422 on `subject` (3 to 120 characters), `body` (1 to 4000), `subscription_id` (not the customer's) or `file` (a JPEG, PNG or WebP of at most 10 MB). A 429 with `Retry-After` past 10 tickets in an hour, 30 messages in 10 minutes, or 10 pictures in an hour (receipts and ticket pictures together). A 503 while the host has less than 200 MB of free disk, or once the shop's uploads for the day reach 1024 MB. A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: '/tickets'; body: StoreTicketRequest | StoreTicketUploadRequest; answer: StoreTicketResponse }
-  /** The website showed the customer the ticket: support's latest words read (`unread` false), and the notices about it in their feed read too — the ticket as it stands. Another customer's is not there (404). */
+  /** Mark a ticket as read. Call it once the website has shown the ticket: support's latest messages become read (`unread` false), and so do the notifications about it. Returns the ticket. Another customer's ticket is a 404. */
   | { method: 'POST'; path: `/tickets/${number}/read`; body: undefined; answer: StoreTicketResponse }
-  /** Write in the ticket — its words, and a picture as a form —: waiting on support again (a closed one opens again, its rating left behind), the report group under the ticket. 422 on `body` or `file`, on `file` too once the ticket keeps 20 pictures they uploaded, or on `status` once it holds 200 messages (a new ticket is the way on); 429 (`Retry-After`) past 30 messages in 10 minutes, or 10 pictures in an hour (their receipts and their tickets' together); 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB; a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it. */
+  /** Write a message in a ticket. Send the text, and optionally a picture (as a form). The ticket waits for support again (a closed ticket reopens and its rating is cleared), and the report group gets the message. A 422 on `body` or `file`; on `file` also once the ticket has 20 pictures the customer uploaded; on `status` once it has 200 messages (open a new ticket instead). A 429 with `Retry-After` past 30 messages in 10 minutes, or 10 pictures in an hour (receipts and ticket pictures together). A 503 while the host has less than 200 MB of free disk, or once the shop's uploads for the day reach 1024 MB. A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: `/tickets/${number}/messages`; body: TicketMessageRequest | TicketMessageUploadRequest; answer: StoreTicketResponse }
-  /** Close the ticket (the report group hears it); 422 on `status` when it is closed already */
+  /** Close a ticket. The report group is notified. A 422 on `status` when it is already closed. */
   | { method: 'POST'; path: `/tickets/${number}/close`; body: undefined; answer: StoreTicketResponse }
-  /** Rate a closed ticket — 1 to 5, and a note —, a rating given before replaced; the report group hears a first rating, or one that changed. 422 on `rating` or `note` (500 characters at most), then on `status` while it is not closed; 429 (`Retry-After`): each rating is one of their 30 messages in 10 minutes. */
+  /** Rate a closed ticket, 1 to 5 with an optional note. A new rating replaces the previous one; the report group hears of a first or changed rating. A 422 on `rating` or `note` (at most 500 characters), then on `status` while the ticket is not closed. A 429 with `Retry-After`: each rating counts as one of the customer's 30 messages per 10 minutes. */
   | { method: 'POST'; path: `/tickets/${number}/rating`; body: StoreTicketRatingRequest; answer: StoreTicketResponse }

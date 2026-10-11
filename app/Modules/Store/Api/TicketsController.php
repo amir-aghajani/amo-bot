@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Store\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
@@ -16,18 +15,14 @@ use App\Modules\Support\Exceptions\AttachmentUnavailableException;
 use App\Modules\Support\Services\TicketAttachments;
 use App\Modules\Support\Services\Tickets;
 use App\Modules\Telegram\Api\TelegramUnreachableException;
-use App\Support\Input;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * A signed-in customer's support tickets on the shop's website (Store\Services\CustomerTickets — their own only) and
- * what they write in them (Support\Services\Tickets, the bot's and the panels' one service): open one, write, read it —
- * and say they read it —, see a picture, close it, rate it. A message comes as JSON, or as a form with its picture
- * (`file`): a picture is held to the customer's one budget of uploads, and none is taken while the host's disk is full
- * (a 503).
+ * A signed-in customer's support tickets (Store\Services\CustomerTickets, their own only), worked through the one ticket
+ * service the bot and the panels use (Support\Services\Tickets): open, write, read and mark read, see a picture, close,
+ * rate. A message comes as JSON, or as a multipart form with its picture (`file`).
  */
 final class TicketsController extends ApiController
 {
@@ -40,7 +35,7 @@ final class TicketsController extends ApiController
     /** GET /tickets — ?status=&page=, the latest activity first; how many hold support's unread words in `meta.unread`. */
     public function index(Request $request, Response $response): Response
     {
-        $page = $this->tickets->page(Customer::of($request)->user, PageRequest::fromQuery($request->getQueryParams()));
+        $page = $this->tickets->page(Customer::of($request)->user, $this->pageRequest($request));
 
         return $this->json($response, $page->toArray('tickets'));
     }
@@ -54,14 +49,13 @@ final class TicketsController extends ApiController
     public function open(Request $request, Response $response): Response
     {
         $customer = Customer::of($request)->user;
-        $ticket = $this->support->open($customer, $this->input($request), $this->file($request), TicketChannel::Web);
+        $ticket = $this->support->open($customer, $this->input($request), $this->uploadedFile($request), TicketChannel::Web);
 
         return $this->json($response, ['ticket' => TicketPresenter::detail($this->tickets->find($customer, $ticket->id))], 201);
     }
 
     /**
-     * GET /tickets/{id} — the ticket with its conversation, as it stands: reading it changes nothing (POST …/read says
-     * the customer read it).
+     * GET /tickets/{id} — the ticket with its conversation. Reading changes nothing: POST …/read marks it read.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
@@ -72,15 +66,14 @@ final class TicketsController extends ApiController
     }
 
     /**
-     * POST /tickets/{id}/read — the website showed the customer the ticket: support's latest words read, and the notices
-     * about it in their feed.
+     * POST /tickets/{id}/read — the customer saw the ticket: support's words and the ticket's notices are marked read.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
      */
     public function read(Request $request, Response $response, array $args): Response
     {
-        $this->support->markRead($this->tickets->find(Customer::of($request)->user, self::id($args), messages: false));
+        $this->support->markRead($this->tickets->find(Customer::of($request)->user, $this->routeId($args), messages: false));
 
         return $this->ticket($request, $response, $args);
     }
@@ -96,7 +89,7 @@ final class TicketsController extends ApiController
     public function write(Request $request, Response $response, array $args): Response
     {
         $customer = Customer::of($request)->user;
-        $this->support->write($this->tickets->find($customer, self::id($args), messages: false), $this->input($request), $this->file($request), TicketChannel::Web);
+        $this->support->write($this->tickets->find($customer, $this->routeId($args), messages: false), $this->input($request), $this->uploadedFile($request), TicketChannel::Web);
 
         return $this->ticket($request, $response, $args);
     }
@@ -112,7 +105,7 @@ final class TicketsController extends ApiController
      */
     public function attachment(Request $request, Response $response, array $args): Response
     {
-        $message = $this->tickets->picture(Customer::of($request)->user, self::id($args), Input::integerOf($args['message'] ?? null) ?? 0);
+        $message = $this->tickets->picture(Customer::of($request)->user, $this->routeId($args), $this->routeId($args, 'message'));
         $file = $this->attachments->fetch($message);
 
         return $this->bytes($response, $file['body'], $file['mime'], 'private, max-age=300', $file['name']);
@@ -127,7 +120,7 @@ final class TicketsController extends ApiController
      */
     public function close(Request $request, Response $response, array $args): Response
     {
-        $this->support->close($this->tickets->find(Customer::of($request)->user, self::id($args), messages: false), null);
+        $this->support->close($this->tickets->find(Customer::of($request)->user, $this->routeId($args), messages: false), null);
 
         return $this->ticket($request, $response, $args);
     }
@@ -141,32 +134,18 @@ final class TicketsController extends ApiController
      */
     public function rate(Request $request, Response $response, array $args): Response
     {
-        $this->support->rate($this->tickets->find(Customer::of($request)->user, self::id($args), messages: false), $this->input($request));
+        $this->support->rate($this->tickets->find(Customer::of($request)->user, $this->routeId($args), messages: false), $this->input($request));
 
         return $this->ticket($request, $response, $args);
     }
 
     /**
-     * The ticket as it stands now, read again with its conversation.
+     * The ticket as it stands now, read again with its conversation: what every route answers.
      *
      * @param array<string, string> $args
      */
     private function ticket(Request $request, Response $response, array $args): Response
     {
-        return $this->json($response, ['ticket' => TicketPresenter::detail($this->tickets->find(Customer::of($request)->user, self::id($args)))]);
-    }
-
-    /** The picture a form carried (`file`); none for JSON. */
-    private function file(Request $request): ?UploadedFileInterface
-    {
-        $file = $request->getUploadedFiles()['file'] ?? null;
-
-        return $file instanceof UploadedFileInterface ? $file : null;
-    }
-
-    /** @param array<string, string> $args */
-    private static function id(array $args): int
-    {
-        return Input::integerOf($args['id'] ?? null) ?? 0;
+        return $this->json($response, ['ticket' => TicketPresenter::detail($this->tickets->find(Customer::of($request)->user, $this->routeId($args)))]);
     }
 }

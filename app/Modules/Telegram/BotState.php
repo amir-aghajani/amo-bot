@@ -9,9 +9,8 @@ use App\Modules\Telegram\Update\ReceivedUpdates;
 use Illuminate\Support\Carbon;
 
 /**
- * What the current bot is up to, as runtime state (not configuration — that is config.php): the webhook it registered, when
- * the poller last came round (the poller writes it every few rounds), when the last update arrived (the newest one it
- * took, ReceivedUpdates). The commands write it; the dashboard reads it to say "webhook", "polling" or "silent".
+ * The current bot's runtime state, which the dashboard reads to say "webhook", "polling" or "offline": the webhook it
+ * registered, the poller's heartbeat, and when the last update arrived.
  */
 final class BotState
 {
@@ -23,11 +22,13 @@ final class BotState
         private readonly ReceivedUpdates $updates,
     ) {}
 
+    /** The bot was put on its webhook at `$url`. */
     public function webhookSet(string $url): void
     {
         $this->settings->set(self::WEBHOOK_URL, $url);
     }
 
+    /** The bot was taken off its webhook. */
     public function webhookCleared(): void
     {
         $this->settings->forget(self::WEBHOOK_URL);
@@ -47,6 +48,7 @@ final class BotState
         return is_string($url) && $url !== '' ? $url : null;
     }
 
+    /** When the poller last said it is alive; null when it never did. */
     public function heartbeatAt(): ?Carbon
     {
         $value = $this->settings->get(self::POLL_HEARTBEAT_AT);
@@ -54,6 +56,7 @@ final class BotState
         return is_string($value) && $value !== '' ? Carbon::parse($value) : null;
     }
 
+    /** When the bot last got an update, by webhook or poll. */
     public function lastUpdateAt(): ?Carbon
     {
         return $this->updates->lastAt();

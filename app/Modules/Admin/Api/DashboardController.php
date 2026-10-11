@@ -10,21 +10,13 @@ use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-/**
- * GET /dashboard?range=7|30|90 (both panels) — the period's figures against the one before it; an
- * unknown range falls back to the default one.
- */
+/** GET /dashboard?range=7|30|90 (both panels): the period's figures against the one before; any other range is the default. */
 final class DashboardController extends ApiController
 {
     public function __construct(private readonly DashboardStats $stats) {}
 
     public function __invoke(Request $request, Response $response): Response
     {
-        $days = Input::integer($request->getQueryParams(), 'range');
-        if (!in_array($days, DashboardStats::RANGES, true)) {
-            $days = DashboardStats::DEFAULT_RANGE;
-        }
-
-        return $this->json($response, $this->stats->summary($days));
+        return $this->json($response, $this->stats->summary(Input::integer($request->getQueryParams(), 'range')));
     }
 }

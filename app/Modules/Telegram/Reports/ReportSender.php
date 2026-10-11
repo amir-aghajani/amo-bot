@@ -18,19 +18,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
 
 /**
- * Delivers the queued reports (ShopReports) to their topics in the report group: what support must act on first (a
- * receipt, a delivery that failed — Topic::priority()), the rest after it, each oldest first. Telegram takes 20
- * messages a minute in a group, so a round sends no more than the minute has room for and the rest waits; a flood limit,
- * an unreachable Telegram or trouble with the group itself holds every report back for a while (ReportGroup::hold() —
- * the group's trouble is the screen's problem): nothing is lost, and the bot never sleeps on a report. A topic an admin
- * deleted is made again and one they closed opened again, and the report goes in after all. A receipt — or a ticket's
- * message with a picture — is the picture with the report as its caption and its buttons under it (ReceiptReview,
- * TicketClose) — a copy of the customer's message in the bot, or a picture uploaded from a website or a panel sent by its
- * bytes (CustomerPictures) —; one that cannot be copied or sent goes as text, buttons and all; what settles it, once
- * sent, takes the buttons off. Markup Telegram cannot parse goes as plain words. Each row is leased while it is sent —
- * for longer than its send can take (leaseSeconds()), and marked sent only while still held —, so two senders (the
- * poller, a cron run, a webhook request) never send it twice. Called after every update the bot handles and by
- * SendReportsTask.
+ * Sends the queued reports to their topics in the report group: the lowest Topic::priority() first, each oldest first,
+ * no more than Telegram's 20 a minute per group. A flood limit, an unreachable Telegram or trouble with the group holds
+ * every report back for a while (ReportGroup::hold()) — nothing is lost and nothing sleeps. A deleted topic is made
+ * again, a closed one reopened. A report with a picture goes as the photo with the report as caption, or as text when the
+ * picture cannot go; markup Telegram cannot parse goes as plain words.
+ *
+ * Each row is leased while it is sent (longer than a send can take) and marked sent only while still held, so the
+ * poller, a cron run and a webhook request never send one twice. Called after every update and by SendReportsTask.
  */
 final class ReportSender
 {
@@ -38,9 +33,8 @@ final class ReportSender
     public const PER_MINUTE = Limits::GROUP_PER_MINUTE - 2;
 
     /**
-     * The most Telegram calls one send makes: its topic made (Telegram's icons asked, the topic made, made again without
-     * the icon Telegram refused), the report posted (its picture, its words, its words as plain text), the topic made
-     * again — or opened again — and the report posted once more, and the buttons taken off the report it settles.
+     * The most Telegram calls one send makes: making its topic (3), posting (3: picture, words, plain words), making or
+     * reopening the topic again and posting once more (3 + 3), and taking the settled report's buttons off (1).
      */
     private const CALLS_A_SEND = 3 + 3 + 3 + 3 + 1;
 
@@ -50,7 +44,7 @@ final class ReportSender
     /** Rows looked at for one nobody holds. */
     private const CANDIDATES = 5;
 
-    /** Days a sent or abandoned row is kept (a receipt's verdict replies to its report), and hours one may wait to be sent. */
+    /** Days a sent or given-up row is kept (a later report may reply to it), and hours a row may wait to be sent. */
     private const KEEP_DAYS = 7;
     private const EXPIRE_HOURS = 24;
 
@@ -75,9 +69,8 @@ final class ReportSender
     ) {}
 
     /**
-     * Send what waits, oldest first, for up to `$seconds` and as many as this minute has room for. Returns how many went
-     * out. What Telegram refuses is held back or given up on, and logged. It runs after every batch the bot serves, so
-     * with nothing waiting it costs two reads: the group, and the queue.
+     * Send what waits for up to `$seconds`, as many as this minute has room for; returns how many went out. With nothing
+     * waiting it costs two reads (the group's row and the queue), since it runs after every update.
      */
     public function flush(float $seconds = 3.0): int
     {
@@ -120,10 +113,8 @@ final class ReportSender
     }
 
     /**
-     * Forget what was sent or given up on long enough ago — but a ticket's reports, which pruneTickets() lets go of —, and
-     * give up on what waited too long. A row is sent or given up on, never both: the two halves are two ranges of the
-     * bot's pruning index under a null ticket, so a run that finds nothing old reads nothing — not the whole queue's
-     * history, nor the reports kept for the tickets still open, every minute.
+     * Forget rows sent or given up on KEEP_DAYS ago (but tickets' reports: pruneTickets()) and give up on rows waiting
+     * too long. Both halves are ranges of the pruning index under a null ticket, so a run with nothing old reads nothing.
      */
     public function prune(): void
     {
@@ -132,9 +123,8 @@ final class ReportSender
     }
 
     /**
-     * Forget a ticket's reports sent or given up on long enough ago once the ticket is closed — or gone. Those of a ticket
-     * not closed stay, however old: a bot admin's reply to any of them is support's answer (TicketReplies). Hourly, with
-     * the tickets' housekeeping: each run reads the tickets' reports, the kept ones among them.
+     * Forget old reports of closed (or deleted) tickets. Those of an open ticket stay however old: a reply to any of them
+     * still answers the ticket (TicketReplies). Runs hourly with the tickets' housekeeping.
      */
     public function pruneTickets(): void
     {
@@ -165,10 +155,9 @@ final class ReportSender
     }
 
     /**
-     * The first waiting row nobody holds — by priority, then the oldest —, now held by this sender and read as it is held
-     * (a ticket's next message folded into it until then goes with it: ShopReports) — counted as an attempt when its last
-     * sender went quiet holding it — or null when there is none to take, or this minute has no room left (asked only once
-     * one waits). One whose senders kept going quiet is given up on.
+     * Take the first waiting row nobody holds (by priority, then oldest), read again once held (a folded ticket message
+     * goes with it). A row whose sender went quiet holding it counts an attempt, and is given up on after MAX_ATTEMPTS.
+     * Null when nothing waits or this minute has no room left.
      *
      * @return array{ReportMessage, Lease}|null
      */
@@ -202,19 +191,15 @@ final class ReportSender
         return null;
     }
 
-    /**
-     * How long a sender holds a row it is sending: longer than the send can take — CALLS_A_SEND calls, each as long as
-     * one can be (BotApi::longestCall()) —, so no other sender takes it over while it is still going out.
-     */
+    /** How long a sender holds a row: CALLS_A_SEND calls at their longest, so nobody takes it over mid-send. */
     private function leaseSeconds(): int
     {
         return self::CALLS_A_SEND * BotApi::longestCall((float) $this->config->get('app.http_timeout', 30));
     }
 
     /**
-     * Post the report in its topic — making the topic first when the group lacks it, again when an admin deleted it,
-     * opening it when they closed it —, mark it sent while this sender still holds it, and take the buttons off the
-     * report it settles. Returns the message's id, or null when the topic is being made by someone else.
+     * Post the report in its topic (made or reopened as needed), mark it sent while still held, and take the buttons off
+     * the report it settles. Returns the message's id, or null while another process is making the topic.
      *
      * @throws TelegramApiException
      */
@@ -245,7 +230,7 @@ final class ReportSender
         }
 
         if (!$lease->finish(['sent_at' => now(), 'chat_id' => $chatId, 'message_id' => $sentId])) {
-            // Taken over meanwhile: the sender that took it marks it, and takes the buttons off what it settles.
+            // Taken over meanwhile: the new holder marks it and settles the buttons.
             $this->logger->warning('Report {id} went out as message {message}, but another sender holds it now: it may show twice in the group', ['id' => $message->id, 'message' => $sentId]);
 
             return $sentId;
@@ -258,9 +243,8 @@ final class ReportSender
     }
 
     /**
-     * The message itself, with its buttons: the picture with the report as its caption — a copy of the customer's message,
-     * or a picture uploaded to the shop sent by its bytes; the report as text when the picture is refused for a reason of
-     * its own, or gone — or the text.
+     * Post the message with its buttons: the picture captioned with the report (a copy of the customer's message, or an
+     * upload sent by its bytes), or the text when there is no picture or it cannot go.
      *
      * @throws TelegramApiException
      */
@@ -307,8 +291,8 @@ final class ReportSender
     }
 
     /**
-     * A picture Telegram refused — a copy, an upload —: the group's, the topic's or Telegram's own trouble is everyone's,
-     * and goes up; the picture's is its own, and the report goes as text.
+     * A refused picture: trouble with Telegram, the group or the topic goes up (it would refuse the text too); a refusal
+     * of the picture itself lets the report go as text.
      *
      * @throws TelegramApiException
      */
@@ -320,7 +304,7 @@ final class ReportSender
     }
 
     /**
-     * The report as a message — as plain words when Telegram cannot parse its markup: a report is never lost to it.
+     * The report as a message — as plain words when Telegram cannot parse its markup.
      *
      * @param array<string, mixed> $options
      * @throws TelegramApiException
@@ -342,7 +326,7 @@ final class ReportSender
         return (int) ($sent['message_id'] ?? 0);
     }
 
-    /** The message a report about an earlier one (a receipt's verdict) replies to: that one's, when it went to this group. */
+    /** The message a follow-up report (a receipt's verdict) replies to, when that one went to this group. */
     private function replyTarget(ReportMessage $message, int $chatId): ?int
     {
         if ($message->reply_ref === null) {

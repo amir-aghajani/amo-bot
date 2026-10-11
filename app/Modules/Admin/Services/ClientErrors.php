@@ -17,13 +17,14 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * The panels' own failures, as their pages report them (POST /client-errors): a page they could not draw (`render`), an
- * error a press or a promise left unhandled (`unhandled`). A report is one error line in the app's log — what was thrown
- * and where, the top of its stack, the panel's build and the shop's version, who and which browser — and nothing is kept
- * anywhere else. It is the browser's word, so it is held short: the body is capped (MAX_BYTES), each part cut to its
- * length, the secrets taken out (Redact), nothing in it can begin a line of the log (a forged line) or carry a terminal's
- * control codes, and a principal or an address sends MAX_REPORTS in a window and MAX_REPORTS_A_DAY in a day — a page
- * failing in a loop, or an agent filling the owner's log, waits.
+ * The panels' own failures as their pages report them (POST /client-errors): a page that could not draw (`render`) or an
+ * unhandled error (`unhandled`). A report becomes one error line in the log — what failed and where, the stack's top,
+ * the build and version, who and which browser — and is kept nowhere else.
+ *
+ * It is the browser's word, so it is held short: the body is capped (MAX_BYTES), each part cut, secrets removed (Redact),
+ * control codes stripped and every stack line indented so nothing can forge a log line; and a principal or an address
+ * sends MAX_REPORTS per window and MAX_REPORTS_A_DAY per day, so a page failing in a loop, or an agent, cannot flood the
+ * owner's log.
  */
 final class ClientErrors
 {
@@ -50,8 +51,11 @@ final class ClientErrors
     /** What a part of a report keeps, in characters. */
     private const LIMITS = ['message' => 500, 'address' => 300, 'build' => 40, 'stack' => 4000, 'component_stack' => 2000, 'agent' => 200];
 
-    /** How a reported block's lines start in the log: never where a line of the log's own does. */
+    /** How a reported block's lines start in the log, so none can pass for a line of the log's own. */
     private const INDENT = '    ';
+
+    /** Control codes, format characters and line separators: what a line of the browser's must not carry. */
+    private const CONTROL = '/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/u';
 
     public function __construct(
         private readonly RateLimiter $limiter,
@@ -60,7 +64,7 @@ final class ClientErrors
     ) {}
 
     /**
-     * Log one report of `$principal`'s page.
+     * Log one report of `$principal`'s page, after the size and rate limits.
      *
      * @throws TooLargeException 413: a body over MAX_BYTES
      * @throws TooManyAttemptsException 429: the principal, or the address, sent its reports for the window
@@ -97,7 +101,7 @@ final class ClientErrors
         }
         ValidationException::ifAny($errors);
 
-        // The address is the panel's own (…/admin/…, …/agent/…): which panel, and where in it.
+        // The address says which panel, and where in it.
         $this->logger->error('A panel page failed ({kind}) at {address}: {error}', [
             'kind' => $kind,
             'address' => self::line(self::address(Input::text($input, 'address')), 'address'),
@@ -114,9 +118,9 @@ final class ClientErrors
     }
 
     /**
-     * The page's address as a report keeps it: its path, and of its query the parameters' names alone — never a value (a
-     * search may hold a customer's name, a phone, an email) nor the fragment (an agent's sign-in link carries its code
-     * there). The panel sends it so already; a page that would not is held to it all the same.
+     * The page's address as a report keeps it: its path and its query's parameter names, never a value (a search may hold
+     * a customer's name or phone) nor the fragment (an agent's sign-in link carries its code there). The panel strips them
+     * already; this holds any page to it.
      */
     private static function address(string $address): string
     {
@@ -127,25 +131,25 @@ final class ClientErrors
         return $names === [] ? $path : $path . '?' . implode('&', $names);
     }
 
-    /** One line of the browser's: no secret, no control code, no line break — cut to what `$part` keeps. */
+    /** One line of the browser's: no secret, no control code, no line break, cut to `$part`'s length. */
     private static function line(string $text, string $part): string
     {
-        return trim(mb_substr((string) preg_replace('/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/u', ' ', Redact::text($text)), 0, self::LIMITS[$part]));
+        return trim(mb_substr((string) preg_replace(self::CONTROL, ' ', Redact::text($text)), 0, self::LIMITS[$part]));
     }
 
     /**
-     * Lines of the browser's (a stack): no secret, no control code but the line breaks, each line indented so none
-     * begins where a line of the log does — cut to what `$part` keeps; null for none.
+     * Lines of the browser's (a stack): no secret, no control code but the line breaks, each line indented, cut to
+     * `$part`'s length; null for none.
      */
     private static function block(string $text, string $part): ?string
     {
         $text = mb_substr(str_replace(["\r\n", "\r"], "\n", Redact::text($text)), 0, self::LIMITS[$part]);
-        $lines = array_filter(array_map(static fn(string $line): string => rtrim((string) preg_replace('/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/u', ' ', $line)), explode("\n", $text)), static fn(string $line): bool => trim($line) !== '');
+        $lines = array_filter(array_map(static fn(string $line): string => rtrim((string) preg_replace(self::CONTROL, ' ', $line)), explode("\n", $text)), static fn(string $line): bool => trim($line) !== '');
 
         return $lines === [] ? null : self::INDENT . implode("\n" . self::INDENT, $lines);
     }
 
-    /** @param array<string, mixed> $input A text part as sent, line breaks and all; anything that is no text is none. */
+    /** @param array<string, mixed> $input A text part as sent, line breaks kept; anything but text is empty. */
     private static function string(array $input, string $field): string
     {
         $value = $input[$field] ?? '';

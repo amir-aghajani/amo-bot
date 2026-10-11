@@ -18,9 +18,8 @@ import { useProbe } from '@/lib/use-probe'
 import { originOf } from '@/lib/utils'
 
 /**
- * When what is saved here reaches the main bot, by how the bots run (config.php is read once per process): a webhook's
- * next request reads it — a new bot or secret needs the webhook registered again —; a developer's poller (bot:poll)
- * reads it once it starts again.
+ * When a save here reaches the main bot (config.php is read once per process): on webhooks, the next request (a new bot
+ * or secret needs the webhook set again); with bot:poll, once it restarts.
  */
 const AFTER_SAVE: Record<BotMode, string> = {
   webhook: 'ربات روی Webhook است و مقادیر تازه از پیام بعدی به کار می‌روند؛ اگر توکن ربات دیگری را گذاشتید یا رمز Webhook را عوض کردید، Webhook را پایین‌تر دوباره ثبت کنید.',
@@ -28,7 +27,7 @@ const AFTER_SAVE: Record<BotMode, string> = {
   offline: 'ربات الان پیامی نمی‌گیرد: Webhook را پایین‌تر ثبت کنید.',
 }
 
-/** A kept token whose Bot API address moved elsewhere: said before the save, in the server's words (ConfigSettings::TOKEN_MOVED). */
+/** A kept token whose Bot API address moved elsewhere: shown before the save, with the server's message (ConfigSettings::TOKEN_MOVED). */
 const TOKEN_MOVED = 'آدرس API تلگرام عوض شده است؛ توکن ربات اصلی را دوباره وارد کنید: توکن ذخیره‌شده به آدرس دیگری فرستاده نمی‌شود.'
 
 /** The group as its form holds it: the request whole, the timeout as typed, the secrets and the owner's password blank until one is typed. */
@@ -44,10 +43,9 @@ function originOrNull(address: string): string | null {
 }
 
 /**
- * The main bot — named so, whichever shop is open: an agent's bot has its own settings —: its BotFather token (checked
- * with Telegram before saving; a kept one said to be typed again while the Bot API's address moves away from it, before
- * the server refuses the save), its @username, and the rarely changed rest — the Bot API's address among it, every
- * bot's token going there: moved to another origin, the save asks the owner's current password with it.
+ * The main bot's Telegram settings: its token (checked with Telegram before saving), its @username and the advanced rest.
+ * Moving the Bot API address to another origin sends every bot's token there, so the token must be typed again and the
+ * save asks for the owner's password.
  */
 export function TelegramSection({ settings, meta, disabled }: { settings: ConfigTelegramSettings; meta: ConfigSettingsResponse['meta']; disabled: boolean }) {
   const mode = useQuery(systemQuery).data?.system.main_bot.mode

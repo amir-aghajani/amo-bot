@@ -12,12 +12,9 @@ export function keptSecret(kept: boolean): SecretState {
 }
 
 /**
- * One card of the website's settings as a form (a SectionCard's): its save PATCHes the card's own fields (`request`) —
- * the server keeps the rest as it is, whatever another card saves meanwhile —, and what is unsaved is what that PATCH
- * would say (a driver's fields out of sight, a secret left blank are none of it). What the server answers — the website
- * whole — goes into the page's read in place of it, where the other cards find it without a read, and the card starts
- * again from the website as it is now kept (`draftOf`): in the server's own form, a secret typed gone with the save. The
- * draft follows the card's own values only — another card's save, a new key, leave it as it is.
+ * One website-settings card as a form: its save PATCHes the card's own fields (`request`), and `dirty` is whatever that
+ * PATCH would change. The answered website replaces the page's read, and the card restarts from it (`draftOf`); another
+ * card's save leaves this draft alone.
  */
 export function useWebsiteGroup<T extends object>(website: Website, draftOf: (website: Website) => T, request: (values: T) => WebsiteRequest): SettingsGroup<T> {
   const queryClient = useQueryClient()

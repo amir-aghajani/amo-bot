@@ -10,13 +10,10 @@ use App\Core\Forms\Fields\FieldRefused;
 use App\Core\Forms\Fields\Secret;
 
 /**
- * A named set of fields saved together — a settings card (its key the group a screen saves, `PUT …/{group}`), a
- * driver's form —: its key and its fields. Where the values are kept is the caller's (the settings table, config.php):
- * it hands over what is kept under a field's key, and keeps what a save checked. A save checks every field, then what
- * the fields say about each other, and is refused as a whole — every refusal at once, each under its field — before
- * anything is kept. A field shown only while one before it holds a value (FieldSpec::$when) is neither read nor refused
- * otherwise, and what is kept of it stays; a secret left blank keeps the one stored only while the fields it belongs
- * with stay (Secret::$boundTo). Described (describe()), a generic form draws it.
+ * A named set of fields saved together: a settings card (its key is the group `PUT …/{group}` saves) or a driver's
+ * form. The caller keeps the values (the settings table, config.php) and hands over what is kept under each key. A save
+ * reads every field, then checks the fields against each other, and refuses as a whole — every error at once, each
+ * under its field — before anything is kept. A field hidden by its `when` is neither read nor refused and keeps its value.
  */
 final class Form
 {
@@ -47,9 +44,8 @@ final class Form
     }
 
     /**
-     * What a driver's form reads as kept (check()'s `$kept`) — `$values`, kept for the driver `$keptFor` — while the
-     * driver chosen, `$driver`, is that one; nothing for another, which starts with nothing kept: what one driver keeps
-     * — a secret among it — never stands in for another's field of the same name.
+     * The `$kept` reader for a driver's form: `$values` (kept for driver `$keptFor`) while `$driver` is that driver,
+     * nothing otherwise — so one driver's kept secret never stands in for another driver's field of the same name.
      *
      * @param array<string, mixed> $values By key
      * @return \Closure(Field<mixed>): mixed
@@ -61,14 +57,14 @@ final class Form
         return static fn(Field $field): mixed => $kept[$field->key] ?? null;
     }
 
-    /** The form narrowed to these fields, for a step that sets part of it (the installer's: the shop's name and address). */
+    /** The form narrowed to these fields, for a step that sets part of it (the installer's site step). */
     public function only(string ...$names): self
     {
         return new self($this->key, array_values(array_filter($this->fields, static fn(Field $field): bool => in_array($field->name, $names, true))));
     }
 
     /**
-     * Every field as a generic form draws it (Field::describe()).
+     * Every field as a generic form draws it.
      *
      * @return list<array<string, mixed>>
      * @throws \LogicException for a field without a spec: the code's mistake
@@ -79,7 +75,7 @@ final class Form
     }
 
     /**
-     * Every field's value as it reads what is kept — what a driver works with.
+     * Every field's value as read from what is kept — what a driver works with.
      *
      * @param \Closure(Field<mixed>): mixed $kept What is kept under a field's key (null: nothing)
      * @return array<string, mixed> By field name
@@ -111,7 +107,7 @@ final class Form
     }
 
     /**
-     * The form, checked: the values to keep, by key — every field read but one not shown, whose kept value stays.
+     * Check a whole save: the values to keep, by key (a hidden field is not among them: its kept value stays).
      *
      * @param array<string, mixed> $input
      * @param \Closure(Field<mixed>): mixed $kept What is kept under a field's key (null: nothing)
@@ -124,9 +120,8 @@ final class Form
     }
 
     /**
-     * A partial save — a PATCH that sends only what it changes —, checked: only the fields the input names (or their
-     * `clear_<name>`) are read, the rest keep what is kept; every refusal at once, and what the fields say about each
-     * other judged on the whole form as the save would leave it. The values to keep, by key: the fields read.
+     * Check a partial save (a PATCH): only the fields the input names, or their `clear_<name>`, are read; the rest keep
+     * their value, and the cross-field checks see the whole form as the save would leave it. Returns the fields read.
      *
      * @param array<string, mixed> $input
      * @param \Closure(Field<mixed>): mixed $kept What is kept under a field's key (null: nothing)
@@ -193,8 +188,8 @@ final class Form
     }
 
     /**
-     * Whether the field is shown: each field its spec names (FieldSpec::$when) holds one of the values listed — a switch
-     * spelled "true" or "false", a number its digits.
+     * Whether the field is shown: every field its `when` names holds one of the listed values (a switch spelled "true"
+     * or "false", a number as its digits).
      *
      * @param Field<mixed> $field
      * @param array<string, mixed> $values The fields before it, as the save would leave them

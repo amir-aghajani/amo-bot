@@ -24,18 +24,14 @@ use App\Modules\Users\Services\CustomerGroups;
 use App\Support\Persian;
 
 /**
- * /broadcast — a bot admin's «ارسال همگانی» (routes/bot.php serves it to the bot's admins only). The admin sends the
- * message (any kind: it is copied as it is, so photos and formatting survive; a channel post forwarded here can go on as
- * a forward), and the bot answers with a draft card:
- *   broadcast:mode            copy (from the bot, the admin's link buttons under it) or forward (from its first sender)
- *   broadcast:aud[:key[:id]]  the audience: everyone, buyers, non-buyers, the inactive, a customer group, agents, one
- *                             server's customers — each with its size
+ * /broadcast (bot admins only): the admin sends any message, and the bot answers with a draft card kept in the session:
+ *   broadcast:mode            copy (from the bot, with link buttons) or forward (from its first sender)
+ *   broadcast:aud[:key[:id]]  the audience (Broadcasts\Audience), each option with its size
  *   broadcast:pin             pin each message in its chat
- *   broadcast:btn[:clear]     the link buttons: typed a row a line (state broadcast.buttons), or taken off
- *   broadcast:send / drop     start it (claimed once) / drop the draft
- * Sent, the card becomes the run's live progress message, its buttons the run's controls: broadcast:pause|resume|cancel:<id>
- * and, once a pinned one is over, broadcast:unpin:<id>. Delivery starts right here for the first few customers and the
- * scheduler carries on.
+ *   broadcast:btn[:clear]     link buttons typed a row a line (state broadcast.buttons), or removed
+ *   broadcast:send / drop     start it (the draft claimed once, so a double tap sends once) / drop it
+ * Once sent, the card is the run's live progress message with its controls (pause, resume, cancel, and «لغو پین» once a
+ * pinned run is over). The first INLINE_LIMIT customers are sent here; SendBroadcastsTask carries on.
  */
 final class BroadcastHandler implements Handler
 {
@@ -118,10 +114,7 @@ final class BroadcastHandler implements Handler
         $ctx->reply(Messages::BROADCAST_ASK, ['reply_markup' => InlineKeyboard::make()->row($this->dropButton())->build()]);
     }
 
-    /**
-     * The admin sent the message to broadcast — or another in place of the one on the draft card, which keeps its
-     * settings: the card comes again, under it.
-     */
+    /** The admin sent the message to broadcast (or a new one in place of the draft's, keeping its settings): a fresh card. */
     private function capture(Context $ctx): void
     {
         $messageId = $ctx->update->messageId();
@@ -149,7 +142,7 @@ final class BroadcastHandler implements Handler
         ]);
     }
 
-    /** State broadcast.buttons: the admin's link buttons, typed — kept, or the line that is not right said. */
+    /** State broadcast.buttons: the link buttons typed — kept on a fresh card, or the bad line said. */
     private function typedButtons(Context $ctx): void
     {
         $draft = $this->draft($ctx);
@@ -180,7 +173,7 @@ final class BroadcastHandler implements Handler
     }
 
     /**
-     * The draft card under everything in the chat — the old one taken away — and the draft waiting on it.
+     * The draft card sent again at the bottom of the chat (the old one deleted), the draft waiting on it.
      *
      * @param array<string, mixed> $draft
      */
@@ -208,8 +201,8 @@ final class BroadcastHandler implements Handler
     }
 
     /**
-     * broadcast:aud — the picker (each audience with its size); …:group / …:server — the groups or servers to pick from;
-     * any other — that audience, back on the card.
+     * broadcast:aud: the audience picker with each one's size; `group` or `server` without an id lists what to pick;
+     * anything else sets that audience and goes back to the card.
      *
      * @param array<string, mixed> $draft
      */
@@ -248,9 +241,8 @@ final class BroadcastHandler implements Handler
         $choices = $key === Audience::GROUP
             ? $this->groups->ordered()->map(static fn(CustomerGroup $group): int => $group->id)->all()
             : Audience::servers()->modelKeys();
-        $back = InlineKeyboard::make()->row($this->buttons->back(self::callback('aud')));
         if ($choices === []) {
-            $ctx->edit($key === Audience::GROUP ? Messages::BROADCAST_NO_GROUPS : Messages::BROADCAST_NO_SERVERS, ['reply_markup' => $back->build()]);
+            $ctx->edit($key === Audience::GROUP ? Messages::BROADCAST_NO_GROUPS : Messages::BROADCAST_NO_SERVERS, ['reply_markup' => $this->buttons->backOnly(self::callback('aud'))]);
 
             return;
         }
@@ -279,8 +271,8 @@ final class BroadcastHandler implements Handler
     }
 
     /**
-     * «ارسال»: the draft becomes a run — once, though the button be pressed twice — and the card its progress message;
-     * the first customers get it now.
+     * «ارسال»: the draft becomes a run — once, though pressed twice — and the card its progress message; the first
+     * INLINE_LIMIT customers get it now.
      *
      * @param array<string, mixed> $draft
      */
@@ -330,7 +322,7 @@ final class BroadcastHandler implements Handler
         $ctx->edit(Messages::BROADCAST_CANCELLED);
     }
 
-    /** A run's button on its progress message: pause, resume, cancel it — or (`$control` null) take a finished one's pins off. */
+    /** A run's control on its progress message: pause, resume, cancel — or (`$control` null) take its pins off. */
     private function control(Context $ctx, ?BroadcastControl $control, int $id): void
     {
         $broadcast = Broadcast::query()->find($id);
@@ -362,7 +354,7 @@ final class BroadcastHandler implements Handler
         }
     }
 
-    /** «لغو پین»: a run that takes the pins off, its own progress message under everything. */
+    /** «لغو پین»: starts a run that takes the pins off, with a progress message of its own. */
     private function unpin(Context $ctx, Broadcast $broadcast): void
     {
         try {
@@ -383,7 +375,7 @@ final class BroadcastHandler implements Handler
     }
 
     /**
-     * Run a draft step with the draft waiting for it, or say it is gone (a menu tap, a draft sent or dropped).
+     * Run a step of the draft card, or say the draft is gone (the chat left it, or it was sent or dropped).
      *
      * @param \Closure(array<string, mixed>): void $step
      */
@@ -408,8 +400,8 @@ final class BroadcastHandler implements Handler
     }
 
     /**
-     * The draft card: what goes, how, to whom (and how many), pinned or not, with which buttons — and its settings as
-     * buttons; «ارسال» only while the audience reaches someone.
+     * The draft card: what goes, how, to whom (and how many), pinned or not, with which buttons; «ارسال» only while the
+     * audience reaches someone.
      *
      * @param array<string, mixed> $draft
      * @return array{string, array<string, mixed>}

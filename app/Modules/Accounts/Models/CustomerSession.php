@@ -12,17 +12,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * A customer signed in on the shop's website, on one device — the bearer token it was handed is known only by its
- * sha256. See Services\CustomerSessions.
+ * A customer signed in on the website on one device; its bearer token is known only by its sha256 (Services\CustomerSessions).
  *
  * @property int $id
  * @property int $user_id
  * @property string $token_hash
  * @property string|null $device What the browser said it is, in words: «Chrome در Windows»
  * @property string|null $ip The address it signed in from
- * @property SignInMethod|null $method How it was signed in — or a stronger way proven on it since; null: opened before the shop kept it (a password alone)
+ * @property SignInMethod|null $method How it was signed in, or a stronger way proven since; null for a session older than the column (counts as a password alone)
  * @property Carbon|null $last_used_at
- * @property Carbon|null $authenticated_at When a way into the account was last proven on it: the sign-in, or one asked again since
+ * @property Carbon|null $authenticated_at When a way in was last proven on it: the sign-in, or a reauthentication since
  * @property Carbon $expires_at The end whatever its use: 180 days after the sign-in
  * @property Carbon $created_at
  * @property-read User $user

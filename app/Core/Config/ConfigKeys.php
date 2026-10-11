@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace App\Core\Config;
 
 /**
- * Every setting config.php may hold — the shop's own configuration, as WordPress keeps its own in wp-config.php —, by
- * section: each with its default (what the shop runs with while the file does not set it; its type is the setting's)
- * and the words the file says about it. config/*.php read them through ConfigValues; ConfigFile writes the file in this
- * order. A driver's own settings are its form's (Core\Drivers), not listed here — a database driver's DB_* follow
- * DB_CONNECTION in the file, a mail driver's MAIL_* end the mail's section.
+ * Every setting config.php may hold, by section, with its default (whose type is the setting's) and the comment the
+ * file shows above it — also the source of docs/Config-Reference.md. A driver's own settings (DB_HOST, MAIL_PASSWORD…)
+ * belong to its form and are not listed; PREFIXES places them in their section.
  */
 final class ConfigKeys
 {

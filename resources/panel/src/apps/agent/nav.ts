@@ -4,6 +4,8 @@ import {
   BOT_GROUP,
   BOT_SETTINGS,
   DASHBOARD,
+  DISCOUNT_SECTIONS,
+  MARKETING_GROUP,
   panelSettings,
   REFERRAL_SECTIONS,
   REVIEWS,
@@ -13,6 +15,7 @@ import {
   SUPPORT,
   USER_SECTIONS,
   WEBSITE_SETTINGS,
+  WHEEL_SECTIONS,
   type PanelNav,
 } from '@/components/shell/nav'
 
@@ -21,7 +24,7 @@ import {
  * main bot, and the panel's look.
  */
 export const AGENT_NAV: PanelNav = {
-  menu: [DASHBOARD, SUPPORT, REVIEWS, { id: 'account', title: 'حساب نمایندگی', to: '/account', icon: BadgeCheck }, SHOP_GROUP, SALES_GROUP, BOT_GROUP],
-  sections: { users: USER_SECTIONS, referrals: REFERRAL_SECTIONS },
+  menu: [DASHBOARD, SUPPORT, REVIEWS, { id: 'account', title: 'حساب نمایندگی', to: '/account', icon: BadgeCheck }, SHOP_GROUP, SALES_GROUP, MARKETING_GROUP, BOT_GROUP],
+  sections: { users: USER_SECTIONS, referrals: REFERRAL_SECTIONS, wheel: WHEEL_SECTIONS, discounts: DISCOUNT_SECTIONS },
   settings: { item: SETTINGS, groups: [BOT_SETTINGS, WEBSITE_SETTINGS, panelSettings([APPEARANCE_SECTION])] },
 }

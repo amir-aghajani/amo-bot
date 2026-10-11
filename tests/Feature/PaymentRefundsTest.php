@@ -24,12 +24,9 @@ use App\Support\Traffic;
 use Tests\HttpTestCase;
 
 /**
- * Refunds from the payments screen, by what the order bought: a purchase or a renewal goes to the customer's wallet and
- * what it delivered stays; an agent's traffic goes to their wallet and its GB come back out of their pool — refused
- * once sold; a wallet top-up is given back outside the shop, so it comes back out of the wallet — refused once spent,
- * an agent's credit counting. What was never delivered has nothing to take back. A failed delivery is refunded and its
- * order closed; one under way is not refunded under it. The customer hears it, as a reply to their receipt. Support's
- * note is held to the room of the wallet line it is written on.
+ * Refunds by what the order bought: a service's money to the wallet (the service stays); an agent's traffic out of their
+ * pool (refused once sold); a top-up out of the wallet (refused once spent). Failed deliveries are refundable, running ones
+ * are not; the customer is notified; the note fits a ledger line.
  */
 final class PaymentRefundsTest extends HttpTestCase
 {
@@ -77,16 +74,16 @@ final class PaymentRefundsTest extends HttpTestCase
     public function testARenewalIsRefundedToTheWalletAndWhatItGaveTheServiceStays(): void
     {
         $server = $this->sellingServer('Berlin');
-        $plan = $this->plan(['price' => '50000.00', 'duration_days' => 30], $server);
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
         $subscription = $this->buy($this->ali, $plan, $server)->subscription ?? self::fail('nothing delivered');
         $renewal = $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $subscription, $plan), $this->card);
-        self::assertSame([OrderStatus::Fulfilled, 60], [$renewal->order->status, $subscription->refresh()->duration_days], 'renewed: a term not started yet runs longer');
+        self::assertSame([OrderStatus::Fulfilled, 60 * 24], [$renewal->order->status, $subscription->refresh()->duration_hours], 'renewed: a term not started yet runs longer');
 
         $row = $this->decode($this->postJson("/api/admin/payments/{$renewal->id}/refund", []))['payment'];
 
         self::assertSame(['refunded', 'refunded'], [$row['status'], $row['order']['status']]);
         self::assertSame('50000.00', $this->ali->balance(), 'the amount went to the wallet');
-        self::assertSame([SubscriptionStatus::Active, 60], [$subscription->refresh()->status, $subscription->duration_days], 'the renewed term stays');
+        self::assertSame([SubscriptionStatus::Active, 60 * 24], [$subscription->refresh()->status, $subscription->duration_hours], 'the renewed term stays');
     }
 
     public function testATopUpRefundTakesTheTopUpBackOutOfTheWalletWhileItIsThere(): void

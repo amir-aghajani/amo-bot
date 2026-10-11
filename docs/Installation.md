@@ -1,6 +1,6 @@
 # Installation
 
-AmoBot installs from a release zip on shared hosting — cPanel, DirectAdmin and the like —, the one way it is supported.
+AmoBot installs from a release zip on shared hosting — cPanel, DirectAdmin and the like —, the only way it is supported.
 A web installer sets it up from the browser: no shell, no Composer, no Node on the host. Once it is installed,
 [Running in production](Running-In-Production.md) keeps it running and the [Owner's guide](Owners-Guide.md) sets the
 shop up.

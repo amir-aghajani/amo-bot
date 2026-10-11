@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Api;
 
 /**
- * What kind of "no" a Bot API call got — the one reading of Telegram's error codes and descriptions, so a caller asks
- * `$e->is(Refusal::FloodWait)` instead of matching words itself. Telegram describes a 400 only in its description, so
- * the bad requests the shop reacts to are told apart by it here and nowhere else.
+ * What kind of "no" a Bot API call got: the one place Telegram's error codes and descriptions are read, so callers ask
+ * `$e->is(Refusal::FloodWait)` instead of matching words. A 400 is distinguished by its description only.
  */
 enum Refusal
 {

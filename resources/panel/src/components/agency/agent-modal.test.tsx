@@ -46,12 +46,12 @@ beforeEach(() => {
 })
 
 describe('an agent’s terms saved', () => {
-  it('say the agent was told', async () => {
+  it('say the agent was notified', async () => {
     save('500000', 'told')
     await until(() => expect(toast.success).toHaveBeenCalledWith('نمایندگی به‌روز شد و به نماینده خبر داده شد'))
   })
 
-  it('as the server finds they were, say nothing changed — the agent was told nothing', async () => {
+  it('unchanged by the server’s reading, say nothing changed and no notice was sent', async () => {
     // Typed in the API's own form: other text to the panel, the same credit to the server.
     save('0.00', null)
     await until(() => expect(toast.success).toHaveBeenCalledWith('سطح و اعتبار تغییری نکرد'))

@@ -26,11 +26,9 @@ interface PremiumEmojiProps {
 }
 
 /**
- * A premium emoji as the panel shows it — as Telegram draws it: moving when it is an animated (Lottie) or a video one,
- * while it is on screen and unless the system asks for reduced motion; in the colour of the text around it when Telegram
- * paints it so (`repaint`); otherwise Telegram's still picture of it — or the plain emoji it stands for when there is no
- * picture (Telegram cannot be asked, the id is unknown), as Telegram itself does where a premium emoji cannot be shown.
- * How it is drawn comes from the kept list (/emoji); one the list does not keep shows its still picture.
+ * A premium emoji drawn as Telegram draws it: animated (Lottie or video) while on screen and motion is allowed, tinted
+ * with the text colour when Telegram repaints it, else its still picture — or the plain emoji when there is no picture.
+ * How it is drawn comes from the kept list; an emoji not on it shows its still picture.
  */
 export function PremiumEmoji({ id, fallback, className }: PremiumEmojiProps) {
   const kept = useCustomEmoji(id)
@@ -86,9 +84,8 @@ const maskOf = (src: string): CSSProperties => ({
 })
 
 /**
- * An animated one: its still picture until the animation is ready, then the animation — loaded the first time it comes
- * on screen, playing only while it is there (a picker of a hundred plays the dozen in sight). The Lottie player is
- * fetched with the first one; a repainted one has every fill and stroke in the text's colour (`.emoji-repaint`).
+ * A Lottie emoji: its still picture until the animation (loaded on first sight, with the player itself) is ready, then
+ * playing only while on screen. A repainted one is tinted by `.emoji-repaint`.
  */
 function LottieEmoji({ id, fallback, repaint, className }: PremiumEmojiProps & { repaint: boolean }) {
   const box = useRef<HTMLSpanElement>(null)
@@ -152,10 +149,7 @@ function VideoEmoji({ id, fallback, className }: PremiumEmojiProps) {
   return <LoopingVideo id={id} fallback={fallback} onError={() => setFailed(true)} className={className} />
 }
 
-/**
- * The video itself: nothing of it fetched until it first comes on screen (`preload="none"`, its still picture as the
- * poster), playing only while it is there — a picker of a hundred plays the dozen in sight —, as the Lottie ones do.
- */
+/** A video emoji: nothing fetched until first on screen (the still picture is the poster), playing only while visible. */
 function LoopingVideo({ id, fallback, onError, className }: PremiumEmojiProps & { onError: () => void }) {
   const video = useRef<HTMLVideoElement>(null)
 

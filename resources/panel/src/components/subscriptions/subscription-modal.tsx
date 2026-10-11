@@ -16,7 +16,7 @@ import type { SubscriptionRow } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
 import { copyText } from '@/lib/clipboard'
 import { idLabel } from '@/lib/direction'
-import { formatBytes, formatDate, formatDays, formatDevices, timeAgo } from '@/lib/format'
+import { formatBytes, formatDate, formatDevices, formatDuration, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { SUBSCRIPTION_STATUS } from '@/lib/statuses'
 import { cn } from '@/lib/utils'
@@ -90,10 +90,7 @@ interface SubscriptionBodyProps {
   traffic?: number
 }
 
-/**
- * What a service's operation changes beside the service: its servers' counts and room (the subscriptions screen's server
- * pills, the move's targets), the dashboard's counts, and the customer's page — their counts.
- */
+/** Reads a service's operation changes besides the service: the servers' counts and room, the dashboard and the customer's page. */
 const CHANGES = [queryKeys.serverChoices, queryKeys.dashboards, queryKeys.everyUser]
 
 /** An extension, besides: in an agent's shop its GB come out of the bot's traffic, which the agent's panel shows (the account). */
@@ -199,9 +196,8 @@ function SubscriptionBody({ subscription, onClose, onChanged, onDeleted, onStale
 }
 
 /**
- * The link the customer got — a click selects it, the button copies it. A link that no longer works (its client gone
- * from the panel, or the service from the shop) is kept for what it was — a customer may paste it to support —, said
- * dead, with nothing to copy.
+ * The customer's subscription link: a click selects it, the button copies it. A dead link (client or service gone) is
+ * still shown — a customer may paste it to support — but marked dead and not copyable.
  */
 function LinkBox({ link, dead }: { link: string; dead: boolean }) {
   return (
@@ -239,8 +235,8 @@ function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; se
       <Fact label="پایان">
         <ServiceExpiry subscription={subscription} />
       </Fact>
-      <Fact label="مدت">{formatDays(subscription.duration_days)}</Fact>
-      {subscription.duration_days > 0 && <Fact label="تمدید خودکار">{subscription.auto_renew ? 'روشن' : <span className="text-muted-foreground">خاموش</span>}</Fact>}
+      <Fact label="مدت">{formatDuration(subscription.duration_hours)}</Fact>
+      {subscription.duration_hours > 0 && <Fact label="تمدید خودکار">{subscription.auto_renew ? 'روشن' : <span className="text-muted-foreground">خاموش</span>}</Fact>}
       {subscription.next_period && (
         <Fact label="دوره بعدی">
           از {formatDate(subscription.next_period.starts_at, { dateStyle: 'medium' })}، حداکثر {formatBytes(subscription.next_period.traffic)}

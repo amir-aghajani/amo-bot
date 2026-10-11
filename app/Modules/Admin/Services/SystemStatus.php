@@ -13,12 +13,9 @@ use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\BotState;
 
 /**
- * Whether the machinery behind the shop is alive — the owner's alone: an agent is not told about the installation.
- * The version the shop runs and PHP's; the bot of the shop the request is worked in, by its id (whether it has a token,
- * the admin's master switch, how it receives its updates and when the last one came); the main bot's the same way —
- * how every bot of the installation gets its updates is the main bot's way (BotWebhooks puts them all on webhooks or
- * takes them all off), and its token is the installation's —; and the scheduler (when it last ran, how many tasks it
- * has).
+ * Whether the machinery behind the shop is alive (the owner's dashboard card; agents are not told about the installation):
+ * the versions, the open shop's bot and the main bot (token, master switch, how updates arrive, the last one), and the
+ * scheduler. The main bot is shown too because its mode is every bot's (BotWebhooks switches them all together).
  */
 final class SystemStatus
 {
@@ -50,7 +47,7 @@ final class SystemStatus
     }
 
     /**
-     * How the current bot runs.
+     * How the current bot runs: `mode` is webhook, polling (a heartbeat within HEARTBEAT_MINUTES) or offline.
      *
      * @return array{configured: bool, enabled: bool, username: string|null, mode: string, last_update_at: string|null}
      */

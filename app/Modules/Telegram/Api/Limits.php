@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Api;
 
 /**
- * What Telegram takes, in one place: past these it refuses the call (or cuts what it shows). Lengths are characters as
- * Telegram counts them — UTF-16 code units (length()): a Persian or Latin letter is one, an emoji beyond the basic plane
- * (😀, 👍) two — of what it shows: tags in an HTML text cost nothing (Texts\TelegramHtml::visibleLength()).
+ * Telegram's limits in one place. Lengths are counted as Telegram counts them: UTF-16 code units of what is shown (an
+ * emoji beyond the basic plane is two; tags cost nothing — Texts\TelegramHtml::visibleLength()).
  */
 final class Limits
 {
@@ -29,19 +28,13 @@ final class Limits
     /** Messages a minute to one group. */
     public const GROUP_PER_MINUTE = 20;
 
-    /**
-     * How long a plain text is as Telegram counts it against these limits: in UTF-16 code units — what mb_strlen() counts
-     * as one character, an emoji beyond the basic plane, is two.
-     */
+    /** A plain text's length as Telegram counts it: UTF-16 code units. */
     public static function length(string $text): int
     {
         return intdiv(strlen((string) mb_convert_encoding($text, 'UTF-16LE', 'UTF-8')), 2);
     }
 
-    /**
-     * The longest start of a plain text Telegram counts as `$units` at most (length()) — a character never cut in two:
-     * an emoji whose second half would be past the room is left out whole.
-     */
+    /** The longest start of a text within `$units` UTF-16 units, never cutting a character (an emoji) in two. */
     public static function cut(string $text, int $units): string
     {
         $utf16 = (string) mb_convert_encoding($text, 'UTF-16LE', 'UTF-8');
@@ -59,11 +52,7 @@ final class Limits
         return (string) mb_convert_encoding($kept, 'UTF-8', 'UTF-16LE');
     }
 
-    /**
-     * A plain text as it is when Telegram counts it `$units` at most (length()), else cut short with «…» ending it —
-     * `$units` at most, the ellipsis among them, no character cut in two (cut()): the words of a notice, a report or a
-     * screen of the bot fitted to Telegram's room. (A text cut by its characters — a ticket's subject — is App\Support\Text's.)
-     */
+    /** A text as it is when it fits `$units`, else cut with «…» to `$units` at most (the ellipsis included). */
     public static function fit(string $text, int $units): string
     {
         return self::length($text) <= $units ? $text : rtrim(self::cut($text, $units - 1)) . '…';

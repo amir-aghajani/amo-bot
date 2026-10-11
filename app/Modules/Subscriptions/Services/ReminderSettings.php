@@ -11,9 +11,8 @@ use App\Modules\Settings\DeclaresSettings;
 use App\Modules\Settings\Services\Settings;
 
 /**
- * The admin's reminders («یادآوری», the `reminders` group of the bot settings): whether a customer is told in the bot
- * that a service ends soon — how many days before its deadline — and that its traffic runs low — once how much of its
- * quota is used. Both off until the admin turns them on.
+ * The admin's reminders («یادآوری», the `reminders` group of the bot settings): a service ending soon (how many days
+ * before its deadline) and its traffic running low (what share of its quota used). Both off by default.
  */
 final class ReminderSettings implements DeclaresSettings
 {

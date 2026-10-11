@@ -2,18 +2,14 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 
 /*
- * Tables sit on the page itself, as in the Console: no box around them, a header row of secondary text over one
- * hairline, and rows that light up on hover with a rounded fill reaching a little past the column edges. The first
- * and last cells have no outer padding, so the text lines up with the page title above; the container keeps that
- * overhang visible (and scrolls sideways on a narrow screen). One of the panel's own: a table takes its accessible name
- * from what it lists (`TableName`, ListView's noun) — re-apply it if the component is reinstalled with the shadcn CLI.
+ * Tables sit on the page itself, as in the Console: no box, a header of secondary text over one hairline, rows lit on
+ * hover with a rounded fill reaching past the column edges. The first and last cells have no outer padding, so text
+ * lines up with the page title. Local change to re-apply after a shadcn reinstall: `TableName`, which names a table
+ * after what it lists (ListView's noun).
  *
- * What a cell holds and how it lays out, by rule: a cell keeps to one line — identifiers, numbers, amounts, dates,
- * badges, the row's controls —, while a name (ListView's RowTitleButton / RowTitleLink) and free text (a note, a
- * description: `whitespace-normal` in a measure of its own) wrap, or are cut short with the whole of them a press away
- * (the row's dialog, the customer's page), never in a `title`. The last column — the row's controls, ⋮ or «جزئیات» —
- * stays in sight however wide the table: when it scrolls sideways, that column sticks to the scroll's end (index.css,
- * `[data-slot='table']`, over `--table-surface`, the surface the table sits on — a card's inside a card).
+ * Cell rules: a cell keeps to one line (identifiers, numbers, amounts, dates, badges, controls); a name and free text
+ * wrap, or are cut short with the whole a press away — never only in a `title`. The last column (the row's controls)
+ * stays in sight: when the table scrolls sideways it sticks to the scroll's end (index.css, over `--table-surface`).
  */
 
 /** The accessible name of the tables inside, unless one says its own: what they list. */

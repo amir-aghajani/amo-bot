@@ -6,6 +6,7 @@ namespace App\Modules\Catalog\Services;
 
 use App\Core\Database\Sorting;
 use App\Core\Exceptions\ValidationException;
+use App\Core\Forms\Fields\Field;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Exceptions\PlanInUseException;
 use App\Modules\Catalog\Models\Plan;
@@ -17,6 +18,9 @@ use App\Modules\Providers\Models\ServerInbound;
 use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\ExtrasSettings;
+use App\Modules\Subscriptions\Services\ServiceTerms;
+use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Support\Input;
 use App\Support\Money;
 use App\Support\Persian;
@@ -27,20 +31,31 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
- * Everything the admin does with plans: validation with Persian messages, create/update/duplicate, ordering, deletion
- * guarded by history, and the presentation the screen consumes.
+ * Plans as the panels keep them: validation, create/update/duplicate, ordering, deletion (refused once orders or
+ * services point at it), presentation, and changing several plans' prices at once (previewPrices(), changePrices()).
  *
- * A plan is sold on one or more servers (PlanServer entries): the whole server — every inbound it marks selectable,
- * resolved at purchase time — or a hand-picked set of its inbounds. The customer chooses the server when buying and gets
- * one client on all of that entry's inbounds. The admin may attach any server; an entry customers are not offered now
- * says why (`unsellable_reason`, ServerSelector::problem()), and so does a plan the bot does not show at all
- * (ServerSelector::judge(), the judgement the bot's shop makes).
+ * A plan is sold on one or more servers (PlanServer): the whole server or chosen inbounds. The admin may attach any
+ * server; what customers are not offered now says why (`unsellable_reason`, ServerSelector). Beside its price a plan may
+ * have a first-purchase and an agent price (Orders\Services\Pricing decides who pays which), its own extras prices, a
+ * checkout note and its button's look in the bot.
  */
 final class PlanService
 {
     private const NAME_MAX = 128;
     private const DESCRIPTION_MAX = 2000;
+    private const CHECKOUT_NOTE_MAX = 500;
+    /** The most a plan's price may be: what its column keeps. */
+    private const PRICE_MAX = '999999999999';
+
+    /** The prices a change of several plans' prices may move: the plan's own, and the ones a customer may pay instead. */
+    private const PRICES = ['price', 'first_purchase_price', 'agent_price'];
+    /** The steps a changed price is rounded to (1: whole Toman). */
+    private const ROUNDINGS = [1, 100, 1000, 10000];
+    private const PERCENT_MAX = 1000;
+
+    private const PRICE_WORDS = ['price' => 'قیمت', 'first_purchase_price' => 'قیمت خرید اول', 'agent_price' => 'قیمت نماینده'];
     private const MAX_DAYS = 3650;
+    private const MAX_HOURS = self::MAX_DAYS * ServiceTerms::HOURS_A_DAY;
     private const MAX_GB = 100000;
     private const MAX_DEVICES = 1000;
 
@@ -190,10 +205,17 @@ final class PlanService
             'category' => $plan->category === null ? null : ['id' => $plan->category->id, 'name' => $plan->category->name, 'is_active' => $plan->category->is_active],
             'name' => $plan->name,
             'description' => $plan->description,
+            'checkout_note' => $plan->checkout_note,
             'price' => $plan->price,
-            'duration_days' => $plan->duration_days,
+            'duration_days' => ServiceTerms::daysOf($plan->duration_hours),
+            'duration_hours' => $plan->duration_hours,
             'traffic_gb' => $plan->traffic_gb,
             'ip_limit' => $plan->ip_limit,
+            'first_purchase_price' => $plan->first_purchase_price,
+            'agent_price' => $plan->agent_price,
+            'extras' => self::presentExtras($plan),
+            'button_style' => $plan->button_style,
+            'button_row' => $plan->button_row,
             'servers' => $plan->servers->map($this->presentEntry(...))->values()->all(),
             'unsellable_reason' => $unsellable,
             'is_active' => $plan->is_active,
@@ -202,6 +224,18 @@ final class PlanService
             'created_at' => $plan->created_at->toIso8601String(),
             'updated_at' => $plan->updated_at->toIso8601String(),
         ];
+    }
+
+    /**
+     * The plan's own prices of the extras, as its form shows them; null — it sells them at the shop's.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function presentExtras(Plan $plan): ?array
+    {
+        $own = $plan->extras;
+
+        return $own === null ? null : ExtrasSettings::planForm()->present(static fn(Field $field): mixed => $own[$field->key] ?? null);
     }
 
     /**
@@ -267,10 +301,7 @@ final class PlanService
             $errors['price'][] = 'قیمت را به تومان و بدون اعشار وارد کنید؛ برای پلن رایگان 0 بگذارید.';
         }
 
-        $duration = Input::integer($input, 'duration_days');
-        if ($duration === null || $duration > self::MAX_DAYS) {
-            $errors['duration_days'][] = sprintf('مدت اعتبار باید عددی بین 0 (بدون محدودیت) تا %d روز باشد.', self::MAX_DAYS);
-        }
+        $duration = self::term($input, $errors);
 
         // An agent's bot sells from their prepaid traffic: a plan of unlimited traffic is nothing it could pay for, so
         // there 0 is no "unlimited" either.
@@ -296,6 +327,12 @@ final class PlanService
         }
 
         $entries = $this->validateServers($input['servers'] ?? [], $errors);
+        // Left out, a plan keeps its own prices — a form made before them sends none —; a new one sells at the shop's.
+        $extras = array_key_exists('extras', $input) ? self::validateExtras($input['extras'], $errors) : $existing?->extras;
+        $firstPrice = self::otherPrice($input, 'first_purchase_price', $existing?->first_purchase_price, $price, $errors, 'قیمت خرید اول', 'برای خرید اول رایگان 0 بگذارید');
+        $agentPrice = self::otherPrice($input, 'agent_price', $existing?->agent_price, $price, $errors, 'قیمت نماینده', 'برای نماینده رایگان 0 بگذارید');
+        $note = self::checkoutNote($input, $existing, $errors);
+        [$style, $row] = self::button($input, $existing, $errors);
 
         ValidationException::ifAny($errors);
 
@@ -303,12 +340,330 @@ final class PlanService
             'category_id' => $categoryId > 0 ? $categoryId : null,
             'name' => $name,
             'description' => $description !== '' ? $description : null,
+            'checkout_note' => $note,
             'price' => Money::normalize((int) $price),
-            'duration_days' => $duration,
+            'duration_hours' => $duration,
             'traffic_gb' => round((float) $traffic, 2),
             'ip_limit' => $devices,
+            'extras' => $extras,
+            'first_purchase_price' => $firstPrice,
+            'agent_price' => $agentPrice,
+            'button_style' => $style,
+            'button_row' => $row,
             'is_active' => Input::active($input, $existing?->is_active),
         ], $entries];
+    }
+
+    /**
+     * A first-purchase or agent price: whole Toman below the price (0: free), blank or null for none; left out, the plan
+     * keeps its own (a new one has none).
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, list<string>> $errors
+     */
+    private static function otherPrice(array $input, string $field, ?string $kept, ?int $price, array &$errors, string $words, string $free): ?string
+    {
+        $amount = $kept;
+        if (array_key_exists($field, $input)) {
+            $amount = null;
+            if (Input::text($input, $field) !== '') {
+                $typed = Input::amount($input, $field);
+                if ($typed === null) {
+                    $errors[$field][] = "{$words} را به تومان و بدون اعشار وارد کنید؛ {$free}، و برای هیچ، خالی.";
+
+                    return null;
+                }
+                $amount = Money::normalize($typed);
+            }
+        }
+        if ($amount !== null && $price !== null && Money::compare($amount, $price) >= 0) {
+            $errors[$field][] = "{$words} باید کمتر از قیمت پلن باشد.";
+        }
+
+        return $amount;
+    }
+
+    /**
+     * The checkout note («یادداشت پیش‌فاکتور»), line breaks kept, blank for none; left out, the plan keeps its own.
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, list<string>> $errors
+     */
+    private static function checkoutNote(array $input, ?Plan $existing, array &$errors): ?string
+    {
+        if (!array_key_exists('checkout_note', $input)) {
+            return $existing?->checkout_note;
+        }
+        $note = str_replace("\r\n", "\n", Input::text($input, 'checkout_note'));
+        if (mb_strlen($note) > self::CHECKOUT_NOTE_MAX) {
+            $errors['checkout_note'][] = Validation::tooLong('یادداشت پیش‌فاکتور', self::CHECKOUT_NOTE_MAX);
+        }
+
+        return $note === '' ? null : $note;
+    }
+
+    /**
+     * The plan's button in the bot: its colour (KeyboardLayout::STYLES, blank for the client's default) and how many
+     * buttons share its row; each left out keeps the plan's own.
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, list<string>> $errors
+     * @return array{string|null, int}
+     */
+    private static function button(array $input, ?Plan $existing, array &$errors): array
+    {
+        $style = $existing?->button_style;
+        if (array_key_exists('button_style', $input)) {
+            $style = Input::text($input, 'button_style');
+            if ($style === '') {
+                $style = null;
+            } elseif (!in_array($style, KeyboardLayout::STYLES, true)) {
+                $errors['button_style'][] = 'رنگ دکمه را از میان آبی، سبز و قرمز انتخاب کنید، یا پیش‌فرض تلگرام.';
+            }
+        }
+
+        $row = $existing !== null ? $existing->button_row : 1;
+        if (array_key_exists('button_row', $input)) {
+            $row = Input::integerOf($input['button_row']) ?? 0;
+            if ($row < 1 || $row > KeyboardLayout::ROW_MOST) {
+                $errors['button_row'][] = 'جای دکمه یک ردیف کامل، دو یا سه دکمه در ردیف است.';
+            }
+        }
+
+        return [$style, $row];
+    }
+
+    /**
+     * Previews a change of several plans' prices as the screen shows it, saving nothing: each plan with its prices before
+     * and after, and the problem that keeps it from the change.
+     *
+     * @param array<string, mixed> $input
+     * @return list<array{id: int, name: string, before: array<string, string|null>, after: array<string, string|null>, problem: string|null}>
+     * @throws ValidationException every refusal of the change at once
+     */
+    public function previewPrices(array $input): array
+    {
+        return array_map(static fn(array $change): array => [
+            'id' => $change['plan']->id,
+            'name' => $change['plan']->name,
+            'before' => $change['before'],
+            'after' => $change['after'],
+            'problem' => $change['problem'],
+        ], $this->priceChanges($input));
+    }
+
+    /**
+     * Applies priceChanges() to every plan in one transaction — or to none while any plan has a problem (each refused
+     * under `plan_ids`).
+     *
+     * @param array<string, mixed> $input
+     * @throws ValidationException
+     */
+    public function changePrices(array $input): void
+    {
+        $changes = $this->priceChanges($input);
+        $problems = array_values(array_filter(array_map(static fn(array $change): ?string => $change['problem'] === null ? null : "پلن «{$change['plan']->name}»: {$change['problem']}", $changes)));
+        ValidationException::ifAny($problems === [] ? [] : ['plan_ids' => $problems]);
+
+        $this->db->transaction(static function () use ($changes): void {
+            foreach ($changes as $change) {
+                $change['plan']->forceFill($change['after'])->save();
+            }
+        });
+    }
+
+    /**
+     * A change of several plans' prices, saving nothing: each plan's prices before and after, and the problem that keeps
+     * it from the change (a price below zero or too large, a special price no longer below the price). The change is
+     * `direction` by `mode` (percent or whole Toman) of `value`, rounded to `round_to`, on the `prices` named.
+     *
+     * @param array<string, mixed> $input
+     * @return list<array{plan: Plan, before: array<string, string|null>, after: array<string, string|null>, problem: string|null}>
+     * @throws ValidationException every refusal of the change at once
+     */
+    private function priceChanges(array $input): array
+    {
+        ['plans' => $plans, 'change' => $change, 'prices' => $prices] = self::priceChange($input);
+
+        $changes = [];
+        foreach ($plans as $plan) {
+            $before = [];
+            foreach (self::PRICES as $field) {
+                $kept = $plan->getAttribute($field);
+                $before[$field] = $kept === null ? null : Money::normalize($kept);
+            }
+            $after = $before;
+            foreach ($prices as $field) {
+                if ($before[$field] !== null) {
+                    $after[$field] = $change($before[$field]);
+                }
+            }
+            $changes[] = ['plan' => $plan, 'before' => $before, 'after' => $after, 'problem' => self::priceProblem($after)];
+        }
+
+        return $changes;
+    }
+
+    /**
+     * Reads a price change, every refusal at once: the plans named, the change as a function of a price, and the prices
+     * it moves.
+     *
+     * @param array<string, mixed> $input
+     * @return array{plans: list<Plan>, change: \Closure(string): string, prices: list<string>}
+     * @throws ValidationException
+     */
+    private static function priceChange(array $input): array
+    {
+        $errors = [];
+
+        $ids = is_array($input['plan_ids'] ?? null) ? array_values(array_unique(array_map(static fn(mixed $id): int => Input::integerOf($id) ?? 0, $input['plan_ids']))) : [];
+        $plans = [];
+        if ($ids === []) {
+            $errors['plan_ids'][] = 'دست‌کم یک پلن انتخاب کنید.';
+        } elseif (count($ids) > Sorting::MAX_IDS || in_array(0, $ids, true)) {
+            $errors['plan_ids'][] = 'یکی از پلن‌ها پیدا نشد؛ صفحه را دوباره باز کنید.';
+        } else {
+            $plans = Plan::query()->whereIn('id', $ids)->oldest('sort')->oldest('id')->get()->all();
+            if (count($plans) !== count($ids)) {
+                $errors['plan_ids'][] = 'یکی از پلن‌ها پیدا نشد؛ صفحه را دوباره باز کنید.';
+            }
+        }
+
+        $direction = Input::text($input, 'direction');
+        if (!in_array($direction, ['increase', 'decrease'], true)) {
+            $errors['direction'][] = 'افزایش یا کاهش قیمت را انتخاب کنید.';
+        }
+
+        $mode = Input::text($input, 'mode');
+        $value = null;
+        if ($mode === 'percent') {
+            $value = Input::decimal($input, 'value');
+            $most = $direction === 'decrease' ? 100 : self::PERCENT_MAX;
+            if ($value === null || bccomp($value, '0', 4) <= 0 || bccomp($value, (string) $most, 4) > 0) {
+                $errors['value'][] = sprintf('درصد تغییر را عددی بیشتر از 0 و حداکثر %d وارد کنید.', $most);
+                $value = null;
+            }
+        } elseif ($mode === 'amount') {
+            $amount = Input::amount($input, 'value');
+            if ($amount === null || $amount <= 0) {
+                $errors['value'][] = 'مبلغ تغییر را به تومان و بدون اعشار، بیشتر از 0 وارد کنید.';
+            } else {
+                $value = (string) $amount;
+            }
+        } else {
+            $errors['mode'][] = 'تغییر درصدی یا مبلغ ثابت را انتخاب کنید.';
+        }
+
+        $step = Input::integerOf($input['round_to'] ?? null);
+        if (!in_array($step, self::ROUNDINGS, true)) {
+            $errors['round_to'][] = 'گرد کردن را انتخاب کنید.';
+        }
+
+        $prices = is_array($input['prices'] ?? null) ? array_values(array_unique(array_filter($input['prices'], 'is_string'))) : [];
+        if ($prices === [] || array_diff($prices, self::PRICES) !== []) {
+            $errors['prices'][] = 'دست‌کم یکی از قیمت‌ها را برای تغییر انتخاب کنید.';
+        }
+
+        ValidationException::ifAny($errors);
+        if ($value === null || $step === null) {
+            throw new \LogicException('A change of prices without its value or its rounding passed its checks.');
+        }
+
+        $change = static function (string $amount) use ($direction, $mode, $value, $step): string {
+            $delta = $mode === 'percent' ? bcdiv(bcmul($amount, $value, 6), '100', 6) : $value;
+            $moved = $direction === 'increase' ? bcadd($amount, $delta, 6) : bcsub($amount, $delta, 6);
+            $units = bcdiv($moved, (string) $step, 6);
+            // The nearest step, a half going away from zero.
+            $whole = bccomp($units, '0', 6) >= 0 ? bcadd($units, '0.5', 0) : bcsub($units, '0.5', 0);
+
+            return Money::normalize(bcmul($whole, (string) $step, 0));
+        };
+
+        return ['plans' => $plans, 'change' => $change, 'prices' => array_values(array_intersect(self::PRICES, $prices))];
+    }
+
+    /**
+     * Why a plan cannot take its prices as a change leaves them; null when it can.
+     *
+     * @param array<string, string|null> $prices
+     */
+    private static function priceProblem(array $prices): ?string
+    {
+        foreach (self::PRICES as $field) {
+            $amount = $prices[$field];
+            if ($amount === null) {
+                continue;
+            }
+            if (Money::compare($amount, 0) < 0) {
+                return self::PRICE_WORDS[$field] . ' کمتر از صفر می‌شود.';
+            }
+            if (Money::compare($amount, self::PRICE_MAX) > 0) {
+                return self::PRICE_WORDS[$field] . ' بیشتر از حد مجاز می‌شود.';
+            }
+            if ($field !== 'price' && Money::compare($amount, (string) $prices['price']) >= 0) {
+                return self::PRICE_WORDS[$field] . ' دیگر کمتر از قیمت پلن نمی‌ماند؛ آن را هم تغییر دهید یا خالی کنید.';
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The plan's term in hours (0: never ends), from `duration_hours`, else `duration_days` × 24 (older clients send
+     * days); each refused under its own name.
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, list<string>> $errors
+     */
+    private static function term(array $input, array &$errors): ?int
+    {
+        if (!array_key_exists('duration_hours', $input) && array_key_exists('duration_days', $input)) {
+            $days = Input::integer($input, 'duration_days');
+            if ($days === null || $days > self::MAX_DAYS) {
+                $errors['duration_days'][] = sprintf('مدت اعتبار باید عددی بین 0 (بدون محدودیت) تا %d روز باشد.', self::MAX_DAYS);
+
+                return null;
+            }
+
+            return $days * ServiceTerms::HOURS_A_DAY;
+        }
+
+        $hours = Input::integer($input, 'duration_hours');
+        if ($hours === null || $hours > self::MAX_HOURS) {
+            $errors['duration_hours'][] = sprintf('مدت اعتبار باید عددی بین 0 (بدون محدودیت) تا %d ساعت (%d روز) باشد.', self::MAX_HOURS, self::MAX_DAYS);
+
+            return null;
+        }
+
+        return $hours;
+    }
+
+    /**
+     * The plan's own extras price list (ExtrasSettings::planForm()), refused under `extras.<field>`; null: the shop's.
+     *
+     * @param array<string, list<string>> $errors
+     * @return array<string, mixed>|null
+     */
+    private static function validateExtras(mixed $input, array &$errors): ?array
+    {
+        if ($input === null) {
+            return null;
+        }
+        if (!is_array($input)) {
+            $errors['extras'][] = 'قیمت‌های حجم و زمان اضافه این پلن خوانده نشد.';
+
+            return null;
+        }
+
+        try {
+            return ExtrasSettings::planForm()->check($input, static fn(): mixed => null);
+        } catch (ValidationException $refused) {
+            foreach ($refused->errors() as $field => $messages) {
+                $errors["extras.{$field}"] = $messages;
+            }
+
+            return null;
+        }
     }
 
     /**
@@ -371,8 +726,8 @@ final class PlanService
     }
 
     /**
-     * Plans read with what their presentation needs: the category, the entries with their servers (their active services
-     * counted, for the capacity, and their inbounds, for what a whole-server entry sells) and pinned inbounds.
+     * Plans read with what their presentation needs: the category, and the entries with their servers (active services
+     * counted, inbounds loaded) and pinned inbounds.
      *
      * @param Builder<Plan> $query
      * @return Builder<Plan>
@@ -383,11 +738,8 @@ final class PlanService
     }
 
     /**
-     * Each plan's figures, one query a table for every plan asked: its services — every one, and the running ones —
-     * and its orders — every one, and those sold (Order::SOLD). Every id asked for gets an entry, zeros included. Any
-     * order or service at all keeps a plan from being deleted (delete()). The plans are the shop's, and so are their
-     * services and orders: without the shop's own filter on top, each count is read off the index on (plan_id, status)
-     * alone.
+     * Each plan's figures in one grouped query per table: its services (all, running) and orders (all, sold). The shop
+     * scope is left off — the plans are the shop's already — so each count is read off the (plan_id, status) index alone.
      *
      * @param array<int> $planIds
      * @return array<int, array{active_subscriptions: int, sales: int, orders: int, subscriptions: int}>
@@ -437,8 +789,7 @@ final class PlanService
     }
 
     /**
-     * One server entry as the screen shows it: which inbounds a purchase gets today, and why customers are not offered
-     * it now, if they are not.
+     * One server entry as the screen shows it: the inbounds a purchase gets today, and why customers are not offered it.
      *
      * @return array<string, mixed>
      */
@@ -455,8 +806,7 @@ final class PlanService
     }
 
     /**
-     * The server as the plan form and the plans table know it: `serves_subscriptions` as the servers screen shows it
-     * (null = never checked, false = the panel gives no links).
+     * A server as the plan form shows it (`serves_subscriptions`: null never checked, false no links).
      *
      * @return array{id: int, name: string, is_active: bool, serves_subscriptions: bool|null}
      */

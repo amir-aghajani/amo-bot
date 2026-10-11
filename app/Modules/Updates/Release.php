@@ -7,17 +7,16 @@ namespace App\Modules\Updates;
 use App\Core\Application;
 
 /**
- * A release of AmoBot as GitHub lists it (Releases): its version — its tag, v1.2.3 —, when it was published, its notes
- * and the files attached to it. Nothing of it is trusted for the install: what the updater installs is what the release
- * key signed (Manifest). Its page is on GitHub under the repository, whatever the answer says it is.
+ * A release as GitHub lists it: version (from the tag), publish date, notes and attached files. Only informational —
+ * what is installed is what the release key signed (Manifest).
  */
 final class Release
 {
-    /** The files the updater needs of a release: the zip, its manifest and the manifest's signature. */
+    /** The manifest and signature file names; the zip is zip(). */
     public const MANIFEST = 'release.json';
     public const SIGNATURE = 'release.json.sig';
 
-    /** The most of its notes a screen shows: a release's notes are a few paragraphs. */
+    /** The most of its notes kept. */
     private const NOTES_MAX = 20000;
 
     /** @param list<string> $files The files attached to it, by name */
@@ -29,8 +28,7 @@ final class Release
     ) {}
 
     /**
-     * The release GitHub's API describes (`GET /repos/{repository}/releases/latest`); null for one the shop does not take:
-     * a draft, a pre-release, or a tag that names no version.
+     * The release the API describes; null for a draft, a pre-release, or a tag that names no version.
      *
      * @param array<string, mixed> $answer
      */
@@ -53,7 +51,7 @@ final class Release
     }
 
     /**
-     * The release as the shop keeps it between two reads (fromKept()).
+     * The release as kept between reads.
      *
      * @return array{version: string, published_at: string|null, notes: string, files: list<string>}
      */
@@ -78,7 +76,7 @@ final class Release
         return version_compare($this->version, Application::VERSION, '>');
     }
 
-    /** Whether it carries what the updater installs from: its zip, its manifest and the manifest's signature. */
+    /** Whether it carries the zip, the manifest and its signature. */
     public function isInstallable(): bool
     {
         return array_diff([$this->zip(), self::MANIFEST, self::SIGNATURE], $this->files) === [];

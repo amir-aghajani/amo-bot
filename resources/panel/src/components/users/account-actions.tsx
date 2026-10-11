@@ -22,9 +22,8 @@ const BOT_ADMIN = 'مدیر ربات دستور /broadcast را دارد، رس�
 type AccountChange = { user: UserRow; status: UserStatus } | { user: UserRow; role: UserRole }
 
 /**
- * A screen's changes of customers' accounts: a reinstatement at once, a ban or a role after a second look
- * (`AccountChangeConfirm`); the row as the server handed it back goes to `onChanged`, and the screen's other copy of the
- * customer (`invalidates`: the users table, under their page) is read again.
+ * Changes to a customer's account from any screen: an unban at once, a ban or a role change after AccountChangeConfirm.
+ * The returned row goes to `onChanged`; the screen's other copies of the customer (`invalidates`) are read again.
  */
 export function useAccountChange(onChanged: (user: UserRow) => void, invalidates?: readonly QueryKey[]) {
   const [asking, setAsking] = useState<AccountChange | null>(null)

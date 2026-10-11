@@ -44,7 +44,7 @@ describe('the Telegram card', () => {
     expect(screen.queryByText(/ربات الان پیامی نمی‌گیرد/)).toBeNull()
   })
 
-  it('drops what the token check said along with the token reverted', async () => {
+  it('clears the token check’s result when the token is reverted', async () => {
     server()
       .on('GET', '/api/admin/system', SYSTEM)
       .on('POST', '/api/admin/settings/config/telegram/test', refusal(422, REFUSED, { token: [REFUSED] }))

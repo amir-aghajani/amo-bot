@@ -9,10 +9,8 @@ use App\Modules\Telegram\Channels\JoinPrompt;
 use App\Modules\Telegram\Context;
 
 /**
- * Required channels ("عضویت اجباری در کانال"): a customer who is not a member of every listed channel gets
- * the join screen instead of an answer, whatever they sent. The "عضو شدم" button is let through to
- * Handlers\JoinHandler, which re-checks and opens the menu. Who the rule holds for, and how long a confirmed
- * membership is trusted, is ChannelMembership's.
+ * Required channels: a customer missing one gets the join screen instead of an answer. «عضو شدم» passes through to
+ * JoinHandler. Who the rule holds for, and how long a membership is trusted, is ChannelMembership's.
  */
 final class ChannelGate implements Gate
 {

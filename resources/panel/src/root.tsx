@@ -21,24 +21,19 @@ import './fonts/vazirmatn/vazirmatn.css'
 import './index.css'
 
 /**
- * What both panels stand on — the owner's (apps/admin) and an agent's (apps/agent) mount their routes here: the theme,
- * right-to-left Radix, react-query, tooltips, the session of the panel's own API, the toasts, the last error boundary,
- * and a data router at the panel's folder (so any sub-folder install, any deep link) whose root route holds what every
- * route stands in.
+ * Mount a panel (apps/admin/main.tsx, apps/agent/main.tsx) with its routes: the theme, right-to-left Radix,
+ * react-query, tooltips, the session, the toasts, the outermost error boundary, and a data router based at the panel's
+ * folder whose root route holds what every route needs.
  */
 export function mount(routes: RouteObject[]) {
   const queryClient = createQueryClient()
   const router = createBrowserRouter([{ element: <Root />, errorElement: <RouteError />, children: routes }], { basename: routerBasename })
 
-  // The panel's own failures reach the shop's log, and what nothing handled is told to the admin too.
   startErrorReporting()
-
-  // The page the panel opens on loads beside its first questions to the server, not after them; any other as its link is
-  // about to be followed (lib/prefetch).
   startPrefetching(routes, routerBasename)
 
-  // A file a page needs from an older build is gone after an upgrade: one reload brings the new build — or, when the
-  // reload did not help, the failure goes on to the screen that says so. A page loaded ahead of need waits for its turn.
+  // A chunk of an older build is gone after an upgrade: one reload brings the new build (a reload that did not help lets
+  // the failure through to the screen that says so). A chunk loaded ahead of need is left to the load that needs it.
   window.addEventListener('vite:preloadError', (event) => {
     if (!loadingAhead() && reloadForNewBuild()) event.preventDefault()
   })
@@ -64,12 +59,12 @@ export function mount(routes: RouteObject[]) {
   )
 }
 
-/** A failure the router caught while drawing (its root's error element shows it): told to the log as the boundaries tell theirs. */
+/** A failure the router caught while drawing (RouteError shows it): reported as the error boundaries report theirs. */
 const failed: ClientOnErrorFunction = (error, { errorInfo }) => reportFailure(error, errorInfo)
 
 /**
- * The root of every route: the unsaved-changes guard's hold on every navigation (while a draft is unsaved) and its
- * question, and the loading screen while a page outside the shell (the sign-in, the installer) fetches its chunk.
+ * The root of every route: the unsaved-changes guard and its question, and the loading screen while a page outside the
+ * shell (the sign-in, the installer) fetches its chunk.
  */
 function Root() {
   return (

@@ -15,9 +15,9 @@ use App\Modules\Providers\Support\PanelCredentials;
 use App\Modules\Providers\Support\PanelHttp;
 
 /**
- * PasarGuard panels, 3.1 and later (the users API this connector speaks): the server's connection is the panel's address
- * — the dashboard's, without /dashboard —, an API key (5.1 and later; `api_token`) or an admin's username and password,
- * and the options every connection takes; its client is PasarGuardProvider.
+ * The PasarGuard connector (3.1 and later). A server's connection is the panel's address (the dashboard's, without
+ * /dashboard), an API key (5.1 and later, kept in `api_token`) or an admin's username and password, and the shared
+ * options. Its client is PasarGuardProvider.
  */
 final class PasarGuardDriver implements PanelDriver
 {
@@ -38,7 +38,7 @@ final class PasarGuardDriver implements PanelDriver
             label: 'PasarGuard',
             description: 'پنل مدیریت Xray و WireGuard با نودهای جداگانه، از نسل Marzban. کاربرها با گروه‌های پنل به اینباندها وصل می‌شوند؛ اینجا هر گروه پنل یک اینباند قابل فروش است.',
             form: new Form(self::KEY, [
-                // The panel's paths set apart (U+2068…U+2069, isolates): in a right-to-left line «/dashboard» reads «dashboard/».
+                // Paths are wrapped in Unicode isolates (U+2068…U+2069): in a right-to-left line «/dashboard» reads «dashboard/».
                 PanelConnection::address(
                     hint: "همان آدرس داشبورد، بدون \u{2068}/dashboard\u{2069}.",
                     placeholder: 'https://panel.example.com:8000',
@@ -67,7 +67,7 @@ final class PasarGuardDriver implements PanelDriver
         );
     }
 
-    /** Groups are what a plan picks from; a revoked subscription gives the user new secrets and a new link. */
+    /** Groups are what a plan picks from (inbounds); revoking a subscription gives new secrets and a new link (rotation). */
     public function capabilities(): Capabilities
     {
         return new Capabilities(inbounds: true, linkRotation: true);

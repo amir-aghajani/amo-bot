@@ -15,9 +15,8 @@ use Tests\Support\FakePanel;
 use Tests\TestCase;
 
 /**
- * A server's client is kept and handed out again while its connection stays the same — the session it signed in for
- * serves the calls that follow — and built afresh by its connector once anything it was built from changes, or after a
- * while; a connector is registered once.
+ * A server's client is reused while its connection stays the same (its session serves the calls that follow) and built
+ * afresh once anything it was built from changes, or after a while; a connector key is registered once.
  */
 final class ProviderRegistryTest extends TestCase
 {

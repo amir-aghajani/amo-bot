@@ -23,10 +23,8 @@ use App\Support\Money;
 use Tests\BotTestCase;
 
 /**
- * What a referred customer's payment earns the one who brought them: the admin's rate of money that came in — a card
- * payment of a purchase, a top-up or an agent's traffic, never a purchase from the wallet — credited to the referrer's
- * wallet once per payment, told to them once, and only for the first money in when the admin says so. One level only;
- * a refund leaves it standing; a commission that fails never stands in the payment's way.
+ * Referral commissions: the rate of money that came in (never a wallet purchase), credited once per payment and announced once,
+ * the first-payment-only rule, one level only, standing after a refund, never in the payment's way when it fails.
  */
 final class ReferralCommissionTest extends BotTestCase
 {

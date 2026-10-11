@@ -24,9 +24,8 @@ interface MoveDialogProps {
 }
 
 /**
- * Move services to another server, one request each, so the admin watches every one of them go (or
- * fail, and why). A previous server that does not answer pauses the batch with a question: carry on
- * without deleting from it, or cancel. The dialog stays while the batch runs.
+ * Moves services to another server, one request each so the admin sees each one go or fail. The batch itself lives in
+ * useMoveBatch; the dialog cannot be closed while it runs.
  */
 export function MoveDialog({ subscriptions, servers, onClose, onMoved }: MoveDialogProps) {
   const batch = useMoveBatch(subscriptions, onMoved)
@@ -84,7 +83,7 @@ function MoveBody({ subscriptions, batch, servers: readServers, onClose }: { sub
             </SelectTrigger>
             <SelectContent>
               {options.map((server) => (
-                // A server that cannot take a service now says why — its own words.
+                // A server that cannot take a service now shows the server's reason.
                 <SelectItem
                   key={server.id}
                   value={String(server.id)}

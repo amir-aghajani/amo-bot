@@ -16,14 +16,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * A provisioned client on a panel — what the customer actually connects with. `remote_name` is the client's identifier
- * on the panel and `subscription_url` the one link the customer gets, as the panel last served it. The counters, the
- * quota and the term mirror the panel (Services\ProvisioningService writes them from what it answered, and when:
- * `last_synced_at`); `status` is the shop's.
+ * A customer's service: one client on a panel. `remote_name` is the client's name on the panel and `subscription_url`
+ * the one link the customer gets. The counters, quota and term mirror the panel (Services\ProvisioningService writes
+ * them, stamped `last_synced_at`); `status` is the shop's.
  *
- * The term (`duration_days`) starts counting at the customer's first connection: `expires_at` (and `starts_at`) stay
- * null until the panel has started the clock — see awaitsFirstUse(). A change made on the panel through the shop holds
- * the row for its length (`lease_token`, `leased_until` — Core\Database\Lease), so two of them never interleave.
+ * The term (`duration_hours`) starts at the customer's first connection: `expires_at` and `starts_at` stay null until
+ * the panel starts the clock (awaitsFirstUse()). A change made on the panel holds the row with a lease (`lease_token`,
+ * `leased_until` — Core\Database\Lease), so two changes never interleave.
  *
  * @property int $id
  * @property int $user_id
@@ -36,17 +35,18 @@ use Illuminate\Support\Carbon;
  * @property int $upload_bytes
  * @property int $download_bytes
  * @property int $ip_limit
- * @property int $duration_days the term, counted from the first connection; 0 = never expires
+ * @property int $duration_hours the term in hours (an hourly plan's, or days × 24), counted from the first connection;
+ *                               0 = never expires
  * @property Carbon|null $starts_at when the clock started (the first connection); null until then
  * @property Carbon|null $expires_at null = never, or not started yet (awaitsFirstUse())
- * @property Carbon|null $last_synced_at when the panel was last read for it — the moment the numbers above are from
+ * @property Carbon|null $last_synced_at when the panel was last read for it: the moment the numbers above are from
  * @property Carbon|null $disabled_at when support switched it off (status disabled)
  * @property bool $auto_renew the customer's «تمدید خودکار»: renewed from the wallet before the deadline (AutoRenewal)
  * @property Carbon|null $renewal_notified_at when the customer was last told the wallet could not pay an automatic renewal
  * @property Carbon|null $expiry_reminded_at when the customer was reminded that it ends soon (ServiceReminders); null = not while it is near
  * @property Carbon|null $traffic_reminded_at when the customer was reminded that its traffic runs low; null = not while it is low
- * @property Carbon|null $period_ends_at the paid period a renewal was queued behind ends then (the shop caps what is left)
- * @property int|null $next_period_bytes from period_ends_at on, at most this remains: the renewed traffic
+ * @property Carbon|null $period_ends_at when the paid period a renewal was queued behind ends (what is left is capped then)
+ * @property int|null $next_period_bytes the most traffic left from period_ends_at on: the renewed traffic
  * @property string|null $lease_token
  * @property Carbon|null $leased_until
  * @property Carbon $created_at
@@ -59,8 +59,8 @@ class Subscription extends Model
 {
     use BelongsToBot;
 
-    /** What an active row in use is (runningCount()): its clock runs (the panel set its deadline), or it never ends. */
-    private const RUNS = 'expires_at IS NOT NULL OR duration_days = 0';
+    /** An active row in use (runningCount()): its clock runs (the panel set its deadline), or it never ends. */
+    private const RUNS = 'expires_at IS NOT NULL OR duration_hours = 0';
 
     protected $table = 'subscriptions';
 
@@ -75,7 +75,7 @@ class Subscription extends Model
         'upload_bytes',
         'download_bytes',
         'ip_limit',
-        'duration_days',
+        'duration_hours',
         'starts_at',
         'expires_at',
         'last_synced_at',
@@ -95,7 +95,7 @@ class Subscription extends Model
         'upload_bytes' => 'integer',
         'download_bytes' => 'integer',
         'ip_limit' => 'integer',
-        'duration_days' => 'integer',
+        'duration_hours' => 'integer',
         'starts_at' => 'datetime',
         'expires_at' => 'datetime',
         'last_synced_at' => 'datetime',
@@ -121,8 +121,8 @@ class Subscription extends Model
     }
 
     /**
-     * What of the traffic left belongs to the paid period a renewal was queued behind: usable until `period_ends_at`,
-     * gone then (the shop does not carry it). 0 when no such period is pending.
+     * The part of the traffic left that belongs to the paid period a renewal was queued behind: usable until
+     * `period_ends_at`, lost then. 0 when no period is queued.
      */
     public function expiringBytes(): int
     {
@@ -141,13 +141,13 @@ class Subscription extends Model
     /** The term has not started: the panel starts counting at the customer's first connection. */
     public function awaitsFirstUse(): bool
     {
-        return $this->expires_at === null && $this->duration_days > 0;
+        return $this->expires_at === null && $this->duration_hours > 0;
     }
 
     /** The service ends at some point: it has a deadline, or a term waiting for the first connection. */
     public function hasTerm(): bool
     {
-        return $this->expires_at !== null || $this->duration_days > 0;
+        return $this->expires_at !== null || $this->duration_hours > 0;
     }
 
     public function isExpiredByTime(): bool
@@ -169,8 +169,8 @@ class Subscription extends Model
     }
 
     /**
-     * Every bot's subscriptions, whatever shop the code works in: what the shop's servers serve as a whole — a panel's
-     * names, the grants, the periodic sync.
+     * Every bot's subscriptions, whatever shop the code works in: for work on the servers as a whole (a panel's names,
+     * the grants, the sync).
      *
      * @return Builder<static>
      */
@@ -180,7 +180,7 @@ class Subscription extends Model
     }
 
     /**
-     * Subscriptions that are usable now — the shop's, or of `$query` (acrossShops(), a server's).
+     * Active subscriptions — the current shop's, or narrowing `$query` (acrossShops(), a server's).
      *
      * @param Builder<static>|null $query
      * @return Builder<static>
@@ -191,8 +191,8 @@ class Subscription extends Model
     }
 
     /**
-     * How many of the active rows a grouped read counts are in use — their clock runs, or they never end —, not still
-     * waiting for their first connection (awaitsFirstUse()): a tally of every server's services in one read.
+     * SQL counting, in a grouped read of active rows, those in use (their clock runs, or they never end) rather than
+     * waiting for their first connection.
      */
     public static function runningCount(): string
     {
@@ -212,7 +212,7 @@ class Subscription extends Model
         return static::active()->whereBetween('expires_at', [$now, $now->copy()->addDays($days)]);
     }
 
-    /** @return BelongsTo<User, $this> The customer — the subscription's own shop's, whatever shop the code works in. */
+    /** @return BelongsTo<User, $this> The customer, in the subscription's own shop whatever shop the code works in. */
     public function user(): BelongsTo
     {
         $user = $this->belongsTo(User::class);
@@ -221,7 +221,7 @@ class Subscription extends Model
         return $user;
     }
 
-    /** @return BelongsTo<Plan, $this> The plan it was sold or last renewed on — its own shop's, whatever shop the code works in. */
+    /** @return BelongsTo<Plan, $this> The plan it was sold or last renewed on, in its own shop whatever shop the code works in. */
     public function plan(): BelongsTo
     {
         $plan = $this->belongsTo(Plan::class);

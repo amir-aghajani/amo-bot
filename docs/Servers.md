@@ -41,6 +41,8 @@ Under «تنظیمات پیشرفته»:
 | «ظرفیت» | How many **active** services it may hold — every shop's together. Blank is unlimited; **`0` is full** |
 | «یادداشت» | Your own note, 1000 characters at most; shown nowhere but this form |
 | «فعال» | Off, nothing new is sold on it or moved to it |
+| «رنگ دکمه در ربات» | Its button among a plan's locations in the bot: blue, green, red, or «پیش‌فرض تلگرام». Every shop's bot shows it so |
+| «جای دکمه در ربات» | A row of its own, or two or three to a row: locations of the same width that follow each other in a plan's order share rows |
 
 **«تست اتصال»** tries the form as it is and stores nothing: whether the panel answers and accepts the credentials, its
 status (the core, CPU, RAM, disk), its inbounds, and whether it serves subscription links. It needs the whole form

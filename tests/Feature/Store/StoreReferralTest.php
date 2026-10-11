@@ -9,11 +9,7 @@ use App\Modules\Store\Models\Website;
 use App\Modules\Users\Models\User;
 use Tests\HttpTestCase;
 
-/**
- * A customer's part in the referral program on the shop's website, as the bot's «👥 زیرمجموعه‌گیری» has it: the
- * program's terms, their invite code — made the first time it is asked, and theirs from then on, the program on or not —
- * with their bot's link, and what the customers it brought earned them.
- */
+/** A customer's referral page: the program's terms, their invite code and bot link, and what their referrals earned. */
 final class StoreReferralTest extends HttpTestCase
 {
     private Website $website;
@@ -48,13 +44,36 @@ final class StoreReferralTest extends HttpTestCase
         self::assertSame([
             'enabled' => true,
             'rate' => 15,
+            'renewal_rate' => 15,
             'first_only' => true,
+            'start_gift' => null,
+            'reward' => null,
             'code' => $code,
             'bot_link' => "https://t.me/amo_shop_bot?start=ref_{$code}",
             'invited' => 2,
             'earned' => '18000.00',
+            'rewards' => 0,
         ], $referral, '15% of the 120,000 their friend paid');
         self::assertSame($code, $this->decode($this->get($this->storeApi($this->website, '/referral')))['code'], 'the same code on every ask');
+    }
+
+    public function testTheTermsSayTheRenewalRateTheStartGiftAndThePlanRewardAndWhatTheirsBroughtThem(): void
+    {
+        $server = $this->sellingServer();
+        $prize = $this->plan(['name' => 'جایزه'], $server);
+        $this->referralProgram(overrides: [
+            'referral_renewal_rate' => 4,
+            'referral_start_invitee' => 10_000,
+            'referral_start_when' => 'join',
+            'referral_reward_every' => 1,
+            'referral_reward_plan_id' => $prize->id,
+        ]);
+        $friend = $this->customer(['telegram_id' => 7272, 'referred_by' => $this->customer->id]);
+        $this->buy($friend, $this->plan([], $server), $server);
+
+        $referral = $this->decode($this->get($this->storeApi($this->website, '/referral')));
+
+        self::assertSame([4, ['referrer' => '0.00', 'invitee' => '10000.00', 'trigger' => 'join'], ['every' => 1, 'plan' => ['id' => $prize->id, 'name' => 'جایزه']], 1], [$referral['renewal_rate'], $referral['start_gift'], $referral['reward'], $referral['rewards']], 'a service given them for their friend\'s first purchase');
     }
 
     public function testWithTheProgramOffTheirCodeStillStands(): void

@@ -31,12 +31,11 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * The subscriptions screen: the list with its tabs (the "expiring" one the dashboard links to), server
- * filter and search, and the modal's operations — read the panel again, switch the client off or on, move
- * it to another server with what is left of it, delete it (a panel out of reach may be left out of a
- * delete or a move, on the admin's word). The customer hears about a switch, gets the new link after a
- * move, and hears about a delete only when it took away a service they could use. A service another change
- * holds is busy (409); a panel that fails is a 502 in words for whoever reads the screen.
+ * The subscriptions screen: the list (tabs, the "expiring" one, server filter, search) and the modal's operations — sync,
+ * switch off and on, move to another server with what is left, delete (leaving the client on an unreachable panel when
+ * allowed). The customer is told of a switch, gets the new link after a move, and hears of a delete only when it took a
+ * running service. A service another change holds is a 409; a panel failure is a 502 worded for the reader; an agent's
+ * shop is rate-limited on the owner's panels.
  */
 final class AdminSubscriptionsApiTest extends HttpTestCase
 {
@@ -517,7 +516,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
             'client' => 'ali_r_1',
             'plan' => $this->plan->name,
             'server' => 'هلند',
-            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-10 12:00:00'), 30),
+            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-10 12:00:00'), 30 * 24),
             'traffic' => Messages::traffic(18 * Traffic::GIGABYTE),
             'subscription' => 'https://fake.test/sub/sub-1',
         ])], $this->telegram()->sentTo(1001), 'the new link, with what is left');

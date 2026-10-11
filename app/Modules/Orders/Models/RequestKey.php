@@ -9,13 +9,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * A request of the website that ordered — by its key (its `Idempotency-Key`, one a customer) — and the order it came to:
- * the one it made, the open one of the same thing it found, or the one its key had made before (OrderService::open()) —,
- * with the way to pay it asked for. The same request made again is answered by that order, never a second one
- * (OrderService::keyed()), and never paid another way: a key is one checkout attempt, its way to pay part of it (another
- * is refused). Several keys may name one order — two checkout attempts that paid the same open order. Kept KEEP_DAYS
- * (ExpireOrdersTask): a request made again after that is a new one. Its key is the pair (customer, key): rows are only
- * made and then deleted by query, never saved again as models.
+ * The order a website request's Idempotency-Key came to (OrderService::open()), with the payment method it asked for:
+ * the same request made again is answered by that order. Several keys may name one order. Kept KEEP_DAYS
+ * (ExpireOrdersTask). The primary key is (user_id, key): rows are created and deleted by query, never saved as models.
  *
  * @property int $user_id
  * @property string $key

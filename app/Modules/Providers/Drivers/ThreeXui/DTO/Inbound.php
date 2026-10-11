@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Providers\Drivers\ThreeXui\DTO;
 
-use App\Modules\Providers\Drivers\ThreeXui\Support\Raw;
+use App\Modules\Providers\Support\Raw;
 
 /**
  * An Xray inbound as GET /panel/api/inbounds/list/slim gives it — the slim list strips every client to its email and

@@ -12,18 +12,16 @@ use App\Support\Input;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * The captcha a site asks, in one place for every form it guards: the widget a page draws (widget()), a challenge for a
- * widget that asks the shop for one (challenge()), a token judged for an action (verify() — a site's own backend asking
- * of a form of its own) or a form's token held to it (check() — the shop's own forms: a sign-up, a sign-in with a
- * password, a reset). Each in the driver the site names, with what its form keeps for the site (CaptchaSite), against
- * the site's hosts. A site that asks none is asked nothing.
+ * Every check of a website's captcha goes through here: what a page draws (widget()), a challenge (challenge()), a
+ * token judged for the site's backend (verify()), and the `captcha` field of the shop's own forms (check()). A site that
+ * asks no captcha is asked nothing.
  */
 final class Verifier
 {
     /** A form's token that is none, or did not pass: under `captcha`. */
     public const REFUSED = 'تایید امنیتی انجام نشد؛ دوباره تلاش کنید.';
 
-    /** The longest token judged: a widget's is a few hundred characters, Turnstile's 2048 at most. */
+    /** The longest token judged (Turnstile's are 2048 at most); longer is refused without asking. */
     public const TOKEN_MAX = 4096;
 
     /** @param Registry<CaptchaDriver> $drivers */
@@ -51,8 +49,8 @@ final class Verifier
     }
 
     /**
-     * What a page of the site draws the widget with — the driver, its public key (null for one without), and whether
-     * the widget asks the shop for its challenge —; null while the site asks no captcha.
+     * What a page draws the widget with: the driver, its public key, and whether it fetches its challenge from the
+     * shop; null while the site asks no captcha.
      *
      * @return array{driver: string, site_key: string|null, challenges: bool}|null
      */
@@ -68,8 +66,7 @@ final class Verifier
     }
 
     /**
-     * A challenge for the site's widget, bound to `$action` when one is named; null while it asks no captcha, or one
-     * whose widget asks the shop for none.
+     * A challenge for the site's widget, bound to `$action` when named; null when its captcha issues none.
      *
      * @return array<string, mixed>|null
      */
@@ -81,9 +78,7 @@ final class Verifier
     }
 
     /**
-     * A token judged for the site — for `$action` when one is named —, `$visitor` the address it came from when that is
-     * known (the token came with them, or the site's backend names them); null while the site asks no captcha. A token
-     * past TOKEN_MAX is refused unasked.
+     * Judge a token for the site (and `$action`, when named); null while the site asks no captcha.
      *
      * @throws CaptchaUnavailableException 503: it could not be judged
      */
@@ -101,8 +96,7 @@ final class Verifier
     }
 
     /**
-     * A form of the shop's own that the site's captcha guards: its `captcha` — the widget's token — judged for `$action`
-     * from the visitor the request came from; nothing while the site asks none.
+     * Judge a shop form's `captcha` field for `$action`, from the request's visitor; nothing while the site asks none.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `captcha`: none, or not passed
@@ -123,7 +117,7 @@ final class Verifier
         return $key === null ? null : $this->drivers->get($key);
     }
 
-    /** @return array<string, mixed> The driver's form's values, as the site keeps them */
+    /** @return array<string, mixed> The driver's form values, read from what the site keeps */
     private function values(CaptchaDriver $driver, CaptchaSite $site): array
     {
         $config = $site->captchaConfig();

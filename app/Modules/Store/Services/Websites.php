@@ -26,22 +26,20 @@ use App\Support\Input;
 use App\Support\Persian;
 
 /**
- * A shop's website as its panel sets it («وب‌سایت», both panels — an agent's shop has one too): the switch, the site's
- * address and the other origins a browser may call the API from, the store key — the base address the site's developer
- * is handed —, Telegram sign-in with the Client ID and secret @BotFather shows for the site, email sign-up (it takes the
- * installation's mail: not switched on while no email goes out), Google sign-in with the site's OAuth client id, the
- * captcha its forms ask — a driver of Core\Captcha (Cloudflare Turnstile, ALTCHA) and its form, or none —, whether it
- * shows its customers' reviews and takes new ones, and the door it opens to the shop's admins (Http\StaffMiddleware):
- * whether it lets them in, whether it asks them a strong sign-in, what it grants them beyond the shop's daily work. Each of the panel's cards changes its own fields and leaves the rest
- * as they are kept. The row is made, switched off with a key of its own, the first time the panel asks; a new key ends
- * the old address at once.
+ * A shop's website as both panels set it («تنظیمات وب‌سایت»): the switch, its address and other allowed origins, the
+ * store key, the ways to sign in, the captcha, reviews, and the door for the shop's admins (Http\StaffMiddleware).
+ *
+ * The row is made, switched off with a random key, the first time a panel asks (current()). Each settings card sends only
+ * its own fields (update(): a partial save on the field engine), and a website's needs are judged on the row as the save
+ * would leave it — switched on needs an address, Telegram sign-in a Client ID, switching email sign-up on a working mail
+ * setup. A new key ends the old address at once.
  */
 final class Websites
 {
     /** The most origins a website lists besides its own address. */
     public const ORIGINS_MAX = 10;
 
-    /** Said of email sign-up switched on while no email goes out: the owner's to set up, in their panel's settings. */
+    /** The refusal of email sign-up switched on while no email goes out: the owner sets mail up in their panel. */
     public const MAIL_OFF = 'ارسال ایمیل در این نصب راه نیفتاده است؛ مالک فروشگاه باید آن را در تنظیمات پنل › ایمیل راه بیندازد.';
 
     /** The captcha card's driver while the forms ask none. */
@@ -55,7 +53,7 @@ final class Websites
     /** What a Google client id is: the number of its project, a dash, and Google's own name for it. */
     private const GOOGLE_CLIENT_ID = '/^[0-9]+-[0-9a-z]+\.apps\.googleusercontent\.com$/';
 
-    /** The longest address, Client ID and Client Secret kept. */
+    /** The longest address, Telegram Client ID and Google client id kept. */
     private const URL_MAX = 255;
     private const CLIENT_ID_MAX = 32;
     private const GOOGLE_CLIENT_ID_MAX = 191;
@@ -67,7 +65,7 @@ final class Websites
         private readonly Verifier $captchas,
     ) {}
 
-    /** The current shop's website — made, switched off, the first time it is asked for. */
+    /** The current shop's website, made switched off the first time it is asked for. */
     public function current(): Website
     {
         // Of two first asks at once, one makes the row (one a shop: its unique bot_id) and the other finds it.
@@ -75,8 +73,8 @@ final class Websites
     }
 
     /**
-     * The website the Store API answers under this key, whichever shop is being worked in: switched on, its shop's bot
-     * running (an agent's whose agency ended is closed with it, as their panel is) — null for any other key.
+     * The website the Store API answers under `$key`, looked up across shops: switched on and its bot running (an agent's
+     * whose agency ended is closed with their panel). Null otherwise.
      */
     public function open(string $key): ?Website
     {
@@ -86,13 +84,9 @@ final class Websites
     }
 
     /**
-     * A change of the website as its panel makes it — each card sends its own fields: a field sent is changed, one left
-     * out stays as it is kept (Form::checkSent()); a secret sent blank is kept too, and `clear_<secret>` empties it. What
-     * is sent is checked as it is typed, and what a website needs is asked of the website as it would stand after the
-     * change — switched on, an address: the one sent, or the one kept —; the captcha (`captcha`: a driver, or `none`, and
-     * its form's fields) by its driver's form, a secret left blank keeping the one kept while the driver and the fields
-     * it belongs with stay (refused under `captcha.<field>`); every refusal at once, under its field, before anything is
-     * kept. Nothing sent, nothing changes.
+     * Save what a panel's card sends: a field sent is changed, one left out is kept (Form::checkSent()); a secret sent
+     * blank is kept, `clear_<secret>` empties it. The captcha (`captcha`: a driver or `none`, with its form's fields) is
+     * checked by its driver's form, refused under `captcha.<field>`. Every refusal comes at once, before anything is kept.
      *
      * @param array<string, mixed> $input any of {enabled, url, origins, telegram_login, telegram_client_id, telegram_client_secret, clear_telegram_client_secret, email_signup, google_client_id, captcha, reviews_enabled, staff_enabled, staff_strong_sign_in, staff_grants}
      * @throws ValidationException
@@ -117,7 +111,7 @@ final class Websites
         ValidationException::ifAny($errors);
 
         foreach ($values as $key => $value) {
-            // A secret only when it changes: encrypted afresh, the one kept would be written again for nothing.
+            // The secret only when it changes: it is encrypted afresh, so an unchanged one would be rewritten for nothing.
             if ($key === 'telegram_client_secret' && $value === (string) $website->telegram_client_secret) {
                 continue;
             }
@@ -141,13 +135,9 @@ final class Websites
     }
 
     /**
-     * The website as its panel shows it — never a secret, only whether one is kept. `base_url` is what the site's
-     * developer is handed; `telegram.bot_id` the shop's bot's own id, a hint beside the Client ID @BotFather shows;
-     * `email.mail_ready` whether the installation's email goes out (email sign-up answers nobody without it); `captcha`
-     * the driver its forms ask (`none`), every captcha described — its form — and each one's fields as the website keeps
-     * them, else their defaults (a secret as whether one is kept, Form::present()); `reviews` whether it shows its
-     * customers' reviews and takes new ones; `staff` whether the shop's admins work it from the website, the strong
-     * sign-in asked of them and what it grants them.
+     * The website as its panel shows it, never a secret (only whether one is kept). `base_url` is what the site's
+     * developer is handed, `telegram.bot_id` a hint beside the Client ID, `email.mail_ready` whether mail goes out, and
+     * `captcha` every driver described with each one's values as kept (else defaults).
      *
      * @return array{enabled: bool, key: string, base_url: string, url: string|null, origins: list<string>, telegram: array{enabled: bool, client_id: string|null, bot_id: int|null, has_secret: bool}, email: array{enabled: bool, mail_ready: bool}, google: array{client_id: string|null}, captcha: array{driver: string, drivers: list<array<string, mixed>>, values: object}, reviews: array{enabled: bool}, staff: array{enabled: bool, strong_sign_in: bool, grants: list<string>}}
      */
@@ -189,14 +179,14 @@ final class Websites
     }
 
     /**
-     * The website's own fields, each its rule — and what one needs of another: the website on, its address; Telegram
-     * sign-in on, its Client ID; email sign-up switched on (not kept on), the installation's email going out.
+     * The website's fields and the rules between them (Ruled): switched on needs an address, Telegram sign-in a Client ID,
+     * and switching email sign-up on (not keeping it on) needs mail going out.
      */
     private function form(Website $website): Form
     {
         return new Form('website', [
             new Toggle('enabled', 'enabled', false),
-            // The site's own address: its origin is the first a browser may call the Store API from.
+            // The site's address: its origin is the first one allowed to call the Store API from a browser.
             new Ruled(
                 new Url('url', 'url', '', label: 'آدرس وب‌سایت', refusal: 'آدرس وب‌سایت باید با http:// یا https:// شروع شود و شامل نام دامنه باشد، بدون نام کاربری و رمز.', required: false, max: self::URL_MAX),
                 static fn(array $values): ?string => ($values['enabled'] ?? false) === true && $values['url'] === '' ? self::URL_NEEDED : null,
@@ -209,7 +199,7 @@ final class Websites
             ),
             // It goes to Telegram as HTTP Basic: printable Latin characters, as @BotFather shows it.
             new Secret('telegram_client_secret', 'telegram_client_secret', '', pattern: '/^[\x21-\x7e]{1,255}$/', mismatch: 'Client Secret را همان‌طور که BotFather نشان می‌دهد کپی کنید؛ فاصله و حروف فارسی ندارد.'),
-            // Only switching it on asks for the email: kept on, it is not turned down because the email stopped going out since.
+            // Only switching it on asks for mail: one already on is not refused because mail stopped going out since.
             new Ruled(new Toggle('email_signup', 'email_signup', false), fn(array $values): ?string => $values['email_signup'] === true && !$website->email_signup && !$this->mailer->ready() ? self::MAIL_OFF : null),
             new Text('google_client_id', 'google_client_id', '', label: 'Client ID گوگل', max: self::GOOGLE_CLIENT_ID_MAX, pattern: self::GOOGLE_CLIENT_ID, mismatch: 'Client ID گوگل را همان‌طور که Google Cloud نشان می‌دهد کپی کنید؛ مثل 1234567890-abc123.apps.googleusercontent.com.'),
             new Toggle('reviews_enabled', 'reviews_enabled', false),
@@ -220,9 +210,8 @@ final class Websites
     }
 
     /**
-     * The captcha the card sends — its `driver` (NO_CAPTCHA: none asked) and the driver's form's fields —, checked by
-     * the driver's own form: what it keeps for the website stands in for a secret left blank while the driver stays.
-     * The driver's key and its settings; null and nothing for none.
+     * The captcha the card sends — `driver` (NO_CAPTCHA: none) and that driver's fields — checked by the driver's form;
+     * a secret left blank keeps the one kept while the driver stays. Answers the driver's key and settings; null for none.
      *
      * @return array{string|null, array<string, mixed>}
      * @throws ValidationException under `captcha.<field>`

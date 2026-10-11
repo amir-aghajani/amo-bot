@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Users\Enums;
 
 /**
- * What a customer may do inside the bot. Admins get the privileged commands (/broadcast) and are exempt
- * from the bot's rules (bot off, phone, channels). This has nothing to do with the panel's login.
+ * A customer's role in the shop: admins get the bot's privileged commands, pass its gates (bot off, phone, channels),
+ * press the report group's buttons and may work the website's admin side. Unrelated to the panel's login.
  */
 enum UserRole: string
 {

@@ -29,12 +29,8 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * A customer's services on the shop's website — their own alone, another's a 404 by the query itself — as the shop last
- * saw them on their panels, with what they may do with each now by the bot's own rules: read one from its panel now
- * (with whether it is connected; a panel out of reach, or one the shop leaves alone a while, is a 502 and the row stays
- * as it was), switch its «تمدید خودکار» while it is offered, give it a new link — refused for a service that does not run
- * or a panel that cannot, a panel's failure in the customer's words, a service another change holds busy; and the bot
- * says nothing of what the customer did on the site.
+ * A customer's own services as last synced, with what they may do: refresh from the panel (502 while it cannot be read),
+ * «تمدید خودکار» while offered, a new link (refusals, panel failures summarised, busy services), with the bot silent.
  */
 final class StoreSubscriptionsTest extends HttpTestCase
 {
@@ -96,9 +92,10 @@ final class StoreSubscriptionsTest extends HttpTestCase
             'server' => ['id' => $this->server->id, 'name' => 'Berlin'],
             'link' => 'https://fake.test/sub/ali_1',
             'traffic' => ['limit_bytes' => 30 * Traffic::GIGABYTE, 'used_bytes' => 3 * Traffic::GIGABYTE, 'remaining_bytes' => 27 * Traffic::GIGABYTE],
-            'term' => ['duration_days' => 30, 'starts_at' => '2026-10-07T12:00:00+00:00', 'expires_at' => '2026-11-06T12:00:00+00:00', 'awaits_first_use' => false],
+            'term' => ['duration_days' => 30, 'duration_hours' => 720, 'starts_at' => '2026-10-07T12:00:00+00:00', 'expires_at' => '2026-11-06T12:00:00+00:00', 'awaits_first_use' => false],
             'auto_renew' => ['on' => true, 'offered' => true, 'days_before' => 2],
             'renewable' => true,
+            'extras' => ['traffic' => false, 'time' => false],
             'link_rotation' => true,
             'next_period' => null,
             'presence' => null,
@@ -110,7 +107,7 @@ final class StoreSubscriptionsTest extends HttpTestCase
     public function testATermWaitingForTheFirstConnectionAnUnlimitedOneAndAQueuedPeriod(): void
     {
         $waiting = $this->subscription($this->customer, $this->plan, $this->server, 'ali_1', ['starts_at' => null, 'expires_at' => null]);
-        $forever = $this->plan(['name' => 'نامحدود', 'traffic_gb' => 0, 'duration_days' => 0], $this->server);
+        $forever = $this->plan(['name' => 'نامحدود', 'traffic_gb' => 0, 'duration_hours' => 0], $this->server);
         $unlimited = $this->subscription($this->customer, $forever, $this->server, 'ali_2');
         $renewed = $this->subscription($this->customer, $this->plan, $this->server, 'ali_3', [
             'period_ends_at' => now()->addDays(5),
@@ -119,11 +116,11 @@ final class StoreSubscriptionsTest extends HttpTestCase
 
         $one = fn(Subscription $subscription): array => $this->decode($this->get($this->storeApi($this->website, "/subscriptions/{$subscription->id}")))['subscription'];
 
-        self::assertSame(['duration_days' => 30, 'starts_at' => null, 'expires_at' => null, 'awaits_first_use' => true], $one($waiting)['term'], 'its clock starts at the first connection');
+        self::assertSame(['duration_days' => 30, 'duration_hours' => 720, 'starts_at' => null, 'expires_at' => null, 'awaits_first_use' => true], $one($waiting)['term'], 'its clock starts at the first connection');
 
         $row = $one($unlimited);
         self::assertSame(['limit_bytes' => 0, 'used_bytes' => 0, 'remaining_bytes' => null], $row['traffic']);
-        self::assertSame(['duration_days' => 0, 'starts_at' => '2026-10-07T12:00:00+00:00', 'expires_at' => null, 'awaits_first_use' => false], $row['term']);
+        self::assertSame(['duration_days' => 0, 'duration_hours' => 0, 'starts_at' => '2026-10-07T12:00:00+00:00', 'expires_at' => null, 'awaits_first_use' => false], $row['term']);
         self::assertSame([['on' => false, 'offered' => false, 'days_before' => 2], false], [$row['auto_renew'], $row['renewable']], 'it never ends, and its plan renews nothing');
 
         self::assertSame(['ends_at' => '2026-10-12T12:00:00+00:00', 'bytes' => 30 * Traffic::GIGABYTE], $one($renewed)['next_period']);
@@ -293,7 +290,7 @@ final class StoreSubscriptionsTest extends HttpTestCase
 
     public function testAutoRenewIsRefusedWhileItIsNotOffered(): void
     {
-        $forever = $this->subscription($this->customer, $this->plan(['duration_days' => 0], $this->server), $this->server, 'ali_1');
+        $forever = $this->subscription($this->customer, $this->plan(['duration_hours' => 0], $this->server), $this->server, 'ali_1');
         $refused = new AutoRenewUnavailableException();
 
         $response = $this->patchJson($this->storeApi($this->website, "/subscriptions/{$forever->id}"), ['auto_renew' => true]);

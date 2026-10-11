@@ -7,14 +7,10 @@ namespace App\Core\Database;
 use Illuminate\Database\Connection;
 
 /**
- * The database's way from one release to the next. Before the first release there were no migrations — database/
- * schema.php was the database, and `db:rebuild` followed it —; from it on, a release that changes database/schema.php
- * ships the same change as an upgrade: database/upgrades/<version>.php, returning
- * `static function (Builder $schema, Connection $db): void`, which brings a database of the release before it up to it.
- * A shop runs, in version order, the upgrades newer than the version its database is at (the installation's lock,
- * Core\Installation) and not newer than its code's; the version moves after each, so an upgrade that fails is where the
- * next try starts. A fresh install makes schema.php's tables as they stand and records its code's version: it has no
- * upgrade to run.
+ * Runs database/upgrades/<version>.php files: each returns `static function (Builder $schema, Connection $db): void`
+ * and brings a database of the release before up to that version. A shop runs, in version order, the upgrades newer
+ * than its database (the version Installation records) and not newer than its code; the caller records the version
+ * after each, so a failed upgrade is where the next try starts. A fresh install runs none.
  */
 final class Upgrades
 {
@@ -24,7 +20,7 @@ final class Upgrades
     public function __construct(private readonly Connection $db) {}
 
     /**
-     * The upgrades in `$folder` newer than `$from` and not newer than `$to`, in version order: each file by its version.
+     * The upgrade files in `$folder` newer than `$from` and not newer than `$to`, by version, in version order.
      *
      * @return array<string, string>
      * @throws \UnexpectedValueException for a PHP file there that no version names: an upgrade that would never run
@@ -46,8 +42,7 @@ final class Upgrades
     }
 
     /**
-     * Run the pending upgrades in order, each on the schema builder of the shop's connection; `$ran` hears each version
-     * as soon as its upgrade is done — where the database is now.
+     * Run the pending upgrades in order; `$ran` is called with each version as soon as its upgrade is done.
      *
      * @param \Closure(string): void $ran
      * @throws UpgradeFailedException naming the upgrade that failed: the ones before it are done

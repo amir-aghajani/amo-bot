@@ -13,11 +13,9 @@ use Illuminate\Database\Eloquent\Collection;
 use Psr\Log\LoggerInterface;
 
 /**
- * Whether a customer has joined the channels the bot requires (RequiredChannels' list), asked of Telegram per channel
- * — and trusted for RECHECK_AFTER seconds once every one checked out, a mark in the chat's session keyed on the list,
- * so a busy flow does not ask on every tap. The rule holds while the admin has it on, for everyone but the bot's
- * admins. A channel Telegram cannot answer for (the bot lost its admin rights, the channel is gone) counts as joined
- * and is flagged for the admin: a broken channel must not lock the whole shop.
+ * Whether a customer has joined the required channels, asked of Telegram per channel and trusted for RECHECK_AFTER
+ * seconds (a session mark keyed on the list). The rule holds while on, for everyone but bot admins. A channel Telegram
+ * cannot answer for counts as joined and is flagged for the admin: a broken channel must not lock the shop.
  */
 final class ChannelMembership
 {
@@ -59,8 +57,8 @@ final class ChannelMembership
     }
 
     /**
-     * One channel, asked of Telegram. One it cannot answer for counts as joined; when the channel is the reason (the
-     * bot lost its rights there, the channel is gone) — not Telegram out of reach for a moment — the admin sees it flagged.
+     * One channel asked of Telegram. Unanswered counts as joined; when the channel itself is the reason (not a moment's
+     * outage), it is flagged for the admin.
      */
     private function isMember(BotChannel $channel, int $telegramId): bool
     {

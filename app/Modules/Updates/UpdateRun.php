@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Updates;
 
 /**
- * One update, from the version the shop ran to the one it installs: the step it is at and how far into it, the last
- * refusal, and what its install did — the app's paths it replaced (the release's top-level ones), the database upgrades
- * it ran. Kept between requests in storage/updates/state.json (Workspace), which the next version's updater reads too —
- * an install a crash cut short is finished by the code it put in place —: its shape (FORMAT) changes only with a reader
- * of the old one.
+ * One update's state between requests (storage/updates/state.json): its step and progress, the last refusal, and what
+ * its install did (paths replaced, upgrades run). The next version's updater reads it too — a crashed install is
+ * finished by the code it put in place — so FORMAT changes only together with a reader of the old one.
  */
 final class UpdateRun
 {
@@ -27,7 +25,7 @@ final class UpdateRun
         public readonly UpdateStep $step,
         /** How far into its step, in percent. */
         public readonly int $progress = 0,
-        /** Why its step was last refused, in the owner's words; null while nothing stands in its way. */
+        /** Why its step was last refused, worded for the owner; null while nothing stands in its way. */
         public readonly ?string $error = null,
         /** The next entry of the zip its unpacking takes. */
         public readonly int $entry = 0,
@@ -45,15 +43,14 @@ final class UpdateRun
     }
 
     /**
-     * The run of files someone put in place by hand, whose database waits for its upgrades: what an install does once
-     * the swap is behind it — the upgrades, the version recorded —, nothing to swap and nothing to take back.
+     * The run for files put in place by hand whose database waits for its upgrades: an install with nothing to swap.
      */
     public static function upgrading(string $version, string $from): self
     {
         return new self($version, $from, UpdateStep::Install, installing: true);
     }
 
-    /** The run state.json holds; null for none, or for one of a shape this code does not read. */
+    /** The run state.json holds; null for none, or for another FORMAT. */
     public static function fromKept(mixed $kept): ?self
     {
         $step = is_array($kept) && is_string($kept['step'] ?? null) ? UpdateStep::tryFrom($kept['step']) : null;
@@ -112,7 +109,7 @@ final class UpdateRun
     }
 
     /**
-     * Its install begun — or no longer under way (`$installing` false: taken back) — on the app's paths `$paths`.
+     * Its install begun on `$paths` — or, with `$installing` false, taken back.
      *
      * @param list<string> $paths
      */
@@ -133,14 +130,14 @@ final class UpdateRun
         return new self($this->version, $this->from, $step, 100, null, $this->entry, false, $this->paths, $this->upgraded, now()->getTimestamp());
     }
 
-    /** Whether it may still be cancelled: under way, and nothing of the app's replaced yet. */
+    /** Whether it may still be cancelled: under way, and nothing replaced yet. */
     public function isCancellable(): bool
     {
         return $this->step->isUnderWay() && !$this->installing;
     }
 
     /**
-     * As the update screen shows it; `$rollback` whether it may be taken back now (Updater).
+     * As the update screen shows it; `$rollback` says whether it may be taken back now.
      *
      * @return array{version: string, from: string, step: string, progress: int, error: string|null, cancel: bool, rollback: bool, finished_at: string|null}
      */

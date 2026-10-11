@@ -5,21 +5,17 @@ declare(strict_types=1);
 namespace App\Core\Scheduling;
 
 /**
- * A scheduler run in a process of its own (`bin/console schedule:run`), started and left to itself: for bot:poll, which
- * is the shop's timer while it polls — and whose bots would answer nobody while a run inline talks to the panels (up to
- * Scheduler::RUN_SECONDS; a panel out of reach alone costs its connect timeout), with every poll left open meanwhile.
- * One run at a time from here (the scheduler's own lock keeps a cron's out of it too); what a run printed is read once
- * it is over, its process reaped then.
+ * A scheduler run in a process of its own (`bin/console schedule:run`), for bot:poll: run inline, the bots would answer
+ * nobody for up to Scheduler::RUN_SECONDS while the tasks talk to panels. One run at a time; its output is read and its
+ * process reaped once it ends.
  *
- * Only the command line starts one: under a web server PHP_BINARY is the server's PHP (php-cgi, php-fpm), not one that
- * runs a console command — the cron address and the webhooks run the scheduler themselves. Where PHP may start no
- * process at all (proc_open disabled, as shared hosts do) there is none (available()); and one that cannot be started
- * after all — proc_open refused at the time, or a PHP that would not run (its exit code the shell's 126 or 127) — says
- * why (failure()) and is not tried again: the poller runs the scheduler itself from then on.
+ * Only the CLI can start one (under a web server PHP_BINARY is php-cgi or php-fpm). Where proc_open is disabled, refused,
+ * or the PHP does not run (exit code 126 or 127), failure() says why and none is tried again: the poller runs the
+ * scheduler inline from then on.
  */
 final class BackgroundRun
 {
-    /** Exit codes of a process whose program could not be run: the shell's, and an exec PHP's child failed exits with 127. */
+    /** Exit codes of a process whose program could not be run. */
     private const NOT_RUN = [126, 127];
 
     /** @var resource|null The run under way */
@@ -34,7 +30,7 @@ final class BackgroundRun
     /** @param list<string> $command The run: PHP and the console's schedule:run (the container's `schedule.background`) */
     public function __construct(private readonly array $command) {}
 
-    /** Whether this PHP may start a run at all: the command line's, allowed to start a process. */
+    /** Whether this PHP may start a run at all: the CLI, with proc_open allowed. */
     public static function available(): bool
     {
         return PHP_SAPI === 'cli' && function_exists('proc_open');
@@ -47,8 +43,8 @@ final class BackgroundRun
     }
 
     /**
-     * Start a run; false while one is under way, and when none could be started — then never again (failure() says why):
-     * the caller runs the scheduler itself.
+     * Start a run; false while one is under way, or when none could be started — then never again (failure() says why)
+     * and the caller runs the scheduler itself.
      */
     public function start(): bool
     {
@@ -86,8 +82,8 @@ final class BackgroundRun
     }
 
     /**
-     * The run that ended since the last call — its exit code and what it printed —, after which another may start; null
-     * while one runs, or when none ended. A run whose PHP could not be run ends the runs from here (failure()).
+     * The run that ended since the last call — exit code and output — after which another may start; null while one
+     * runs or none ended. A run whose PHP could not run stops all further runs (failure()).
      *
      * @return array{code: int, output: string}|null
      */
@@ -114,7 +110,7 @@ final class BackgroundRun
         return ['code' => $status['exitcode'], 'output' => $output];
     }
 
-    /** Why no run can be started here (none ever will be from then on); null while they can. */
+    /** Why no run can be started here any more; null while they can. */
     public function failure(): ?string
     {
         return $this->failure;

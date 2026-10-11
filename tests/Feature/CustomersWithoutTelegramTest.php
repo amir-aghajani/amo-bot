@@ -14,10 +14,8 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * A customer who signed up on the shop's website has no Telegram account: the bot writes them nothing — a notice says
- * so (`no_telegram`) and asks Telegram nothing —, no broadcast counts or reaches them, their service's client on a panel
- * points back at their account by their number in the shop, the report group names them by their email and that number,
- * and the panels find them by their email and show it where the Telegram identifiers would be.
+ * Customers who signed up on the website: the bot sends them nothing (`no_telegram`), broadcasts skip them, their panel
+ * client points back at their account, and reports and panels show their email in place of the Telegram identifiers.
  */
 final class CustomersWithoutTelegramTest extends HttpTestCase
 {

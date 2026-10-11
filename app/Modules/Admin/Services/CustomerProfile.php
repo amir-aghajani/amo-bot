@@ -7,17 +7,15 @@ namespace App\Modules\Admin\Services;
 use App\Modules\Accounts\Models\AccountMerge;
 use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Agency\Services\AgencyDirectory;
+use App\Modules\Discounts\Services\Loyalty;
 use App\Modules\Referrals\Services\ReferralService;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
 
 /**
- * One customer as their page in either panel shows them (`GET /users/{id}`, the shop's own customer): their row as the
- * users table has it, the referral program's facts about them — whose link brought them, how many their own link brought
- * and what those earned them —, an agent of the main bot's agency as the agents list shows it (their level and credit,
- * their bot and what it sold), and their account on the shop's website (account()): their ways in, whether its password
- * sign-in asks a second step, the devices signed in, and the accounts merged into it. Their services, orders and payments
- * are those lists' own, narrowed to them (`user=`).
+ * A customer's page in either panel (`GET /users/{id}`): their row as the users table has it, their referral facts, their
+ * agency (an agent of the main bot's), their website account (account()) and their loyalty standing. Their services,
+ * orders and payments are those lists' own, narrowed with `user=`.
  */
 final class CustomerProfile
 {
@@ -26,9 +24,10 @@ final class CustomerProfile
         private readonly ReferralService $referrals,
         private readonly AgencyDirectory $agency,
         private readonly CustomerSessions $sessions,
+        private readonly Loyalty $loyalty,
     ) {}
 
-    /** @return array{user: array<string, mixed>, referral: array{referrer: array<string, mixed>|null, referrals: int, earned: string}, agency: array<string, mixed>|null, account: array<string, mixed>} */
+    /** @return array{user: array<string, mixed>, referral: array{referrer: array<string, mixed>|null, referrals: int, earned: string}, agency: array<string, mixed>|null, account: array<string, mixed>, loyalty: array<string, mixed>} */
     public function present(User $user): array
     {
         $referrer = $user->referrer;
@@ -36,17 +35,16 @@ final class CustomerProfile
         return [
             'user' => $this->users->presentWithCounts($user),
             'referral' => ['referrer' => $referrer === null ? null : UserDirectory::presentRef($referrer)] + $this->referrals->statsFor($user),
-            // Agents are the main bot's customers: in another shop no customer is one.
+            // Agents are the main bot's customers: in an agent's shop nobody is one.
             'agency' => $user->isAgent() ? $this->agency->presentAgent($this->agency->agent($user->id)) : null,
             'account' => $this->account($user),
+            'loyalty' => $this->loyalty->standing($user),
         ];
     }
 
     /**
-     * The customer's account on the shop's website, as support reads it: its email, whether a Google account and a
-     * password sign it in, whether the password sign-in asks a second step, how many devices are signed in, and the
-     * accounts merged into it, newest first — each as it was signed in and called, and when the customer merged it (the
-     * one way two accounts are made one: from their website).
+     * The customer's website account as support reads it: its ways in, two-factor sign-in, the devices signed in, and the
+     * accounts merged into it, newest first.
      *
      * @return array{email: string|null, google: bool, has_password: bool, two_factor: bool, sessions: int, merges: list<array{merged_user_id: int, merged: array{telegram_id: int|null, username: string|null, email: string|null, google: bool, name: string|null}, created_at: string}>}
      */

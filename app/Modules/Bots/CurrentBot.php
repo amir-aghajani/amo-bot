@@ -7,15 +7,13 @@ namespace App\Modules\Bots;
 use App\Modules\Bots\Models\Bot;
 
 /**
- * Whose shop the code is working in: the bot an update came to, the shop the panel shows, the bot a scheduled task is
- * going through. Every row of a shop carries its `bot_id` (Models\Concerns\BelongsToBot), and a query sees the rows of
- * the current bot only, so an agent's shop never shows another's — a customer, a plan or a payment of another bot is
- * simply not there. Nothing set, it is the main bot's shop: the CLI, the tasks and the tests start there. The work
- * that is the shop's as a whole — a server's services, its grants, the periodic sync — runs everywhere(): no rows are
- * hidden then, and a row made there must say whose it is.
+ * Whose shop the code is working in: the bot an update came to, the shop a panel request names, the shop a scheduled
+ * task is going through. Every row of a shop carries its `bot_id` (Models\Concerns\BelongsToBot) and a query sees the
+ * current bot's rows only, so another shop's customer, plan or payment is simply not there. With nothing set it is the
+ * main bot's shop (the CLI, the tasks and the tests start there). Work on the installation as a whole — servers, their
+ * services and grants, the sync — runs everywhere(): no rows are hidden, and a new row must say whose it is.
  *
- * The state is the process's (a request, a poll round, a task), so it is always set for a piece of work and put back
- * after it — run() and everywhere() do both.
+ * The state is static, per process, so run() and everywhere() set it for a piece of work and always put it back.
  */
 final class CurrentBot
 {
@@ -50,7 +48,7 @@ final class CurrentBot
         return self::$everywhere ? null : self::id();
     }
 
-    /** The `bot_id` a new row gets when it does not say. */
+    /** The `bot_id` a new row gets when it does not say; refused while working everywhere(). */
     public static function forNewRow(): int
     {
         if (self::$everywhere) {
@@ -61,7 +59,7 @@ final class CurrentBot
     }
 
     /**
-     * Do the work in this bot's shop, and come back to where we were after it (even when it throws).
+     * Do the work in this bot's shop, then come back to where we were (even when it throws).
      *
      * @template T
      * @param \Closure(): T $work
@@ -82,7 +80,7 @@ final class CurrentBot
     }
 
     /**
-     * Do the work across every bot's shop — the shop's own business: its servers, their services, their grants.
+     * Do the work with no shop's rows hidden: the installation's own business (servers, their services, grants).
      *
      * @template T
      * @param \Closure(): T $work
@@ -109,8 +107,8 @@ final class CurrentBot
     }
 
     /**
-     * The main bot. It has a row of its own (#1, every shop starts with it); what the code needs of it — its id, that it
-     * runs — does not need the database, which may not exist yet (the web installer).
+     * The main bot. It has a row (#1, made with the database), but what the code needs of it — its id, that it runs —
+     * is answered without the database, which may not exist yet (the web installer).
      */
     public static function main(): Bot
     {

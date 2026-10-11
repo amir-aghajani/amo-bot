@@ -2,55 +2,55 @@
 
 # Store API reference
 
-Every operation of a shop's website's API as its description says it — who may call it, its parameters, its
-body field by field and its answers —, then the shapes its answers are made of. How to use them — signing in,
-buying, the checkout's keys, the errors worth telling apart — is told on the [Store API](Store-API.md)'s pages;
-what the shop's admins have on the website is the [admin API reference](Store-Admin-API-Reference.md). The
-description is `resources/api/openapi.yaml`, and the same as one JSON file — for Swagger UI, Redoc or a client
-generator — is `docs/openapi.json` ([on GitHub](https://github.com/amir-aghajani/amo-bot/blob/main/docs/openapi.json)).
+Every operation of the Store API, the API of a shop's website: who may call it, its parameters, its body field
+by field and its answers, followed by the schemas its answers use. How to use it (signing in, buying,
+idempotency keys, which errors to handle) is explained on the [Store API](Store-API.md) pages; the operations
+for the shop's admins are in the [admin API reference](Store-Admin-API-Reference.md). The source is
+`resources/api/openapi.yaml`; the same description as one JSON file, for Swagger UI, Redoc or a client
+generator, is `docs/openapi.json` ([on GitHub](https://github.com/amir-aghajani/amo-bot/blob/main/docs/openapi.json)).
 
-Paths are under the website's base address, `{APP_URL}/api/store/v1/{store}`
+Paths are relative to the website's base address, `{APP_URL}/api/store/v1/{store}`
 ([the base address](Store-API.md#the-base-address)):
 
 | Parameter | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `store` | path | string matching `^[0-9a-f]{24}$` | yes | The website's store key, which names the shop — no secret; the panel shows it (and its base address) and turns it over |
+| `store` | path | string matching `^[0-9a-f]{24}$` | yes | The website's store key, which names the shop. Not a secret; the panel shows it with the base address and can replace it |
 
-Every operation may also answer the one error shape ([errors](Store-API.md#errors)). Objects are closed
+Every operation may also return the common error shape ([errors](Store-API.md#errors)). Objects are closed
 ([API schemas](API-Schemas.md)).
 
 ## The customer scheme
 
-A website's customer: `Authorization: Bearer <token>`, the token their sign-in answered (64 hex characters) — one per device. A session ends — every request with its token a 401 from then on, `WWW-Authenticate: Bearer`: sign in again — when the customer signs that device out (POST /auth/logout) or ends it from another (DELETE /me/sessions/{id}); when their password is changed (PUT /me/password, or set by a merge: every session but the one that changed it) or reset (POST /auth/password/reset, or its second step: every session); when support signs them out of every device from a panel; when a twenty-first session opens (the oldest ends — twenty a customer at most); after 30 days unused; and 180 days after its sign-in. A banned customer's token is a 403. What changes how the account is signed in to asks the token's sign-in to be recent too — within 15 minutes, or a way in proven again since (POST /me/reauthenticate) —, else a 403 whose `WWW-Authenticate` says so (`Bearer error="insufficient_user_authentication", max_age=900`).
+A website customer's session: `Authorization: Bearer <token>`, with the token from their sign-in (64 hex characters), one per device. Once the session ends, every request with its token is a 401 with `WWW-Authenticate: Bearer`, and the customer signs in again. A session ends when the customer signs that device out (`POST /auth/logout`) or ends it from another device (`DELETE /me/sessions/{id}`); when their password is changed (`PUT /me/password`, or set by a merge: every session except the one that changed it) or reset (`POST /auth/password/reset` or its second step: every session); when support signs them out of every device from a panel; when a 21st session opens (the oldest ends: at most 20 per customer); after 30 days unused; and 180 days after the sign-in. A banned customer's token gets a 403. Changing how the account signs in also needs a recent sign-in: within 15 minutes, or a way in proven again since (`POST /me/reauthenticate`). Otherwise the answer is a 403 whose `WWW-Authenticate` says so (`Bearer error="insufficient_user_authentication", max_age=900`).
 
 ## Public
 
-Anyone may call these: the store key alone.
+Anyone can call these; only the store key is needed.
 
 | Operation | What it does |
 |---|---|
-| [`GET /`](#get-) | The shop as its website introduces it |
-| [`POST /auth/nonce`](#post-authnonce) | A nonce for an id_token sign-in (Telegram's popup, Google) |
-| [`POST /auth/telegram/authorize`](#post-authtelegramauthorize) | Telegram's sign-in by redirect, begun in this browser |
+| [`GET /`](#get-) | The shop's public profile |
+| [`POST /auth/nonce`](#post-authnonce) | Get a nonce for an id_token sign-in |
+| [`POST /auth/telegram/authorize`](#post-authtelegramauthorize) | Start a Telegram sign-in by redirect |
 | [`POST /auth/telegram`](#post-authtelegram) | Sign in with Telegram |
 | [`POST /auth/google`](#post-authgoogle) | Sign in with Google |
 | [`POST /auth/register`](#post-authregister) | Sign up with an email |
-| [`POST /auth/register/verify`](#post-authregisterverify) | Finish signing up with the code the email carried |
-| [`POST /auth/login`](#post-authlogin) | Sign in with an email and its password |
-| [`POST /auth/login/2fa`](#post-authlogin2fa) | A password sign-in's second step |
-| [`POST /auth/password/forgot`](#post-authpasswordforgot) | A forgotten password |
-| [`POST /auth/password/reset`](#post-authpasswordreset) | A new password with the code POST /auth/password/forgot emailed |
-| [`GET /captcha/challenge`](#get-captchachallenge) | A challenge for the website's captcha widget, while it asks the shop for one |
-| [`POST /captcha/verify`](#post-captchaverify) | A token of the website's captcha judged for its own backend |
-| [`GET /plans`](#get-plans) | What the shop sells now, exactly as its bot's «خرید اشتراک» offers it |
-| [`GET /plans/{id}`](#get-plansid) | One plan as the shop offers it now (GET /plans) |
-| [`GET /status`](#get-status) | The servers the shop's plans on sale are on, in the servers' order |
-| [`GET /reviews`](#get-reviews) | The reviews the shop shows |
-| [`POST /reviews`](#post-reviews) | Write a review of the shop |
+| [`POST /auth/register/verify`](#post-authregisterverify) | Finish signing up with the emailed code |
+| [`POST /auth/login`](#post-authlogin) | Sign in with an email and password |
+| [`POST /auth/login/2fa`](#post-authlogin2fa) | Finish a password sign-in with its second step |
+| [`POST /auth/password/forgot`](#post-authpasswordforgot) | Start a password reset |
+| [`POST /auth/password/reset`](#post-authpasswordreset) | Set a new password with the code from `POST /auth/password/forgot` |
+| [`GET /captcha/challenge`](#get-captchachallenge) | Get a challenge for the captcha widget |
+| [`POST /captcha/verify`](#post-captchaverify) | Check a captcha token for the site's own backend |
+| [`GET /plans`](#get-plans) | What the shop sells now, as the bot's «خرید اشتراک» offers it |
+| [`GET /plans/{id}`](#get-plansid) | One plan, as `GET /plans` shows it |
+| [`GET /status`](#get-status) | Server status |
+| [`GET /reviews`](#get-reviews) | The approved reviews, newest first, a page at a time |
+| [`POST /reviews`](#post-reviews) | Write a review |
 
 ### GET /
 
-The shop as its website introduces it: its name and bot, support, the ways to sign in, the referral program's terms
+The shop's public profile. Its name and bot, support contact, sign-in options and referral terms.
 
 - **Who:** anyone.
 
@@ -63,7 +63,7 @@ The shop as its website introduces it: its name and bot, support, the ways to si
 
 ### POST /auth/nonce
 
-A nonce for an id_token sign-in (Telegram's popup, Google) — a sign-in's, or a signed-in customer's adding or proving a way in: the site opens the provider's sign-in with it, and posts it back with the token — once. 429 once this address network asked for 120 nonces, states and codes in 10 minutes (one address is many customers on a mobile network); 503 while the shop keeps as many sign-ins begun as it takes (5000 nonces in their half hour).
+Get a nonce for an id_token sign-in. For Telegram's popup or Google, when signing in, adding a way in or proving one again: the site opens the provider's sign-in with the nonce and sends it back once, with the token. A 429 once this address network asked for 120 nonces, states and codes in 10 minutes (one address can be many customers on a mobile network). A 503 while the shop already holds its maximum of open sign-ins (5000 nonces, each valid for half an hour).
 
 - **Who:** anyone.
 
@@ -78,18 +78,18 @@ A nonce for an id_token sign-in (Telegram's popup, Google) — a sign-in's, or a
 
 ### POST /auth/telegram/authorize
 
-Telegram's sign-in by redirect, begun in this browser: where to send it — the site makes the PKCE verifier and keeps it, sending the challenge; the state (keeping the challenge) and the nonce are the shop's — the state a sign-in's: POST /auth/telegram alone takes it back, with the verifier (a signed-in customer's own is POST /me/telegram/authorize's). 422 while the website keeps no client secret, or on `redirect_uri` or `code_challenge`; 429 once this address network asked for 120 nonces, states and codes in 10 minutes; 503 while the shop keeps as many sign-ins begun as it takes.
+Start a Telegram sign-in by redirect. Returns the address to send the browser to. The site makes the PKCE verifier, keeps it in this browser and sends only its challenge; the shop makes the state (which keeps the challenge) and the nonce. Only `POST /auth/telegram` accepts this state back, together with the verifier (a signed-in customer uses `POST /me/telegram/authorize` instead). A 422 while the website has no client secret, or on `redirect_uri` or `code_challenge`; a 429 once this address network asked for 120 nonces, states and codes in 10 minutes; a 503 while the shop holds its maximum of open sign-ins.
 
 - **Who:** anyone.
 
 **Body**, as JSON:
 
-A redirect sign-in begun in this browser: where Telegram sends it back to with its code and state, and the PKCE challenge of the verifier the site made for it and keeps (sessionStorage) — the shop keeps no verifier, so a code and state another browser brings back open nothing.
+Start a redirect sign-in in this browser: where Telegram sends the browser back (with the code and state), and the PKCE challenge of the verifier the site made and keeps (in sessionStorage). The shop keeps no verifier, so a code and state brought back to another browser sign nobody in.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `redirect_uri` | string | yes | An http(s) address on the website's own origin or one it lists, without #. |
-| `code_challenge` | string matching `^[A-Za-z0-9_-]{43}$` | yes | S256: the SHA-256 of the verifier (43 to 128 of A-Z, a-z, 0-9 and -._~, random), in base64url without padding. |
+| `redirect_uri` | string | yes | An http(s) address on the website's origin or one of its listed origins, without #. |
+| `code_challenge` | string matching `^[A-Za-z0-9_-]{43}$` | yes | S256: the SHA-256 of the verifier (43 to 128 random characters of A-Z, a-z, 0-9 and -._~), in base64url without padding. |
 
 **Answers**
 
@@ -100,13 +100,13 @@ A redirect sign-in begun in this browser: where Telegram sends it back to with i
 
 ### POST /auth/telegram
 
-Sign in with Telegram — the popup's id_token, or the redirect's code with the state POST /auth/telegram/authorize gave and the verifier of the challenge it was given (a signed-in customer's state, or a code and state brought back to another browser, signs nobody in): the shop's customer with that Telegram account, or a newcomer made as the bot makes one. 401 when it does not sign anyone in, 403 banned, 422 Telegram sign-in off or a field missing, 429 too many failures from this address network (30 in 15 minutes), 502 Telegram out of reach.
+Sign in with Telegram. Send the popup's id_token, or the redirect's code with the state from `POST /auth/telegram/authorize` and the verifier of its challenge. A signed-in customer's state, or a code and state brought back to another browser, signs nobody in. Signs in the shop's customer with that Telegram account, or registers a new customer as the bot does. A 401 when the proof does not hold; a 403 when banned; a 422 when Telegram sign-in is off or a field is missing; a 429 after too many failures from this address network (30 in 15 minutes); a 502 when Telegram cannot be reached.
 
 - **Who:** anyone.
 
 **Body**, as JSON:
 
-A Telegram sign-in: the popup's id_token with the nonce it was opened with, or the redirect's code with its state.
+A Telegram sign-in: the popup's id_token with its nonce, or the redirect's code with its state and verifier.
 
 One of:
 
@@ -114,104 +114,104 @@ One of:
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id_token` | string | yes | What telegram-login.js handed the page. |
-| `nonce` | string | yes | The nonce POST /auth/nonce answered, which the popup was opened with. |
-| `referral_code` | string | no | An invite code the visitor came with: a newcomer becomes its owner's referral. Nothing for a customer the shop knows already. |
+| `id_token` | string | yes | The id_token telegram-login.js gave the page. |
+| `nonce` | string | yes | The nonce from `POST /auth/nonce` that the popup was opened with. |
+| `referral_code` | string | no | The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. |
 
 **`StoreTelegramCodeRequest`**
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `code` | string | yes | What Telegram sent the browser back with. |
-| `state` | string | yes | The state it came back with: the one POST /auth/telegram/authorize put on the address — a sign-in's (a signed-in customer's own signs nobody in). |
-| `code_verifier` | string matching `^[A-Za-z0-9._~-]{43,128}$` | yes | The PKCE verifier this browser made and kept when it began the sign-in — the one whose challenge it sent: another's opens nothing. |
-| `referral_code` | string | no | An invite code the visitor came with: a newcomer becomes its owner's referral. Nothing for a customer the shop knows already. |
+| `code` | string | yes | The code Telegram sent the browser back with. |
+| `state` | string | yes | The state it came back with, from `POST /auth/telegram/authorize` (a signed-in customer's state signs nobody in). |
+| `code_verifier` | string matching `^[A-Za-z0-9._~-]{43,128}$` | yes | The PKCE verifier this browser made and kept when it started the sign-in, whose challenge it sent. Any other verifier signs nobody in. |
+| `referral_code` | string | no | The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Signed in — the bearer token, shown this once | [StoreSignInResponse](#storesigninresponse) |
+| `200` | Signed in; the bearer token is shown only this once | [StoreSignInResponse](#storesigninresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /auth/google
 
-Sign in with Google — the id_token Google Identity Services handed the page, with the nonce it was asked for: the shop's customer with that Google account, else the one with the address Google speaks for (which signs in with Google from then on, its customer told), else a newcomer. The address counts only where Google is its own authority — `email_verified`, and an @gmail.com address or a Google Workspace account's (`hd`); any other address finds, takes on and keeps no account. 401 when it does not sign anyone in, 403 banned, 409 the address is an account's that takes no Google account on by it — one with two-factor sign-in on, or another Google account's: signed in its own way, the customer adds Google from their account —, 422 Google sign-in off, 429 too many failures from this address network, 502 Google out of reach.
+Sign in with Google. Send the id_token Google Identity Services gave the page, with the nonce it was requested with. Signs in the customer with that Google account; else the customer with the email address Google vouches for (that account can sign in with Google from then on, and the customer is notified); else registers a new customer. Google vouches for an address only when `email_verified` is true and it is an @gmail.com or Google Workspace (`hd`) address; any other address is ignored. A 401 when the proof does not hold; a 403 when banned; a 409 when the address belongs to an account that cannot be linked this way (two-factor sign-in is on, or another Google account is linked): the customer signs in their usual way and adds Google from their account. A 422 when Google sign-in is off; a 429 after too many failures from this address network; a 502 when Google cannot be reached.
 
 - **Who:** anyone.
 
 **Body**, as JSON:
 
-A Google sign-in: the id_token Google Identity Services handed the page (its `credential`), with the nonce it was asked for.
+A Google sign-in: the id_token Google Identity Services gave the page (its `credential`), with the nonce it was requested with.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id_token` | string | yes | What Google handed the page. |
-| `nonce` | string | yes | The nonce POST /auth/nonce answered, which the sign-in was asked for with. |
-| `referral_code` | string | no | An invite code the visitor came with: a newcomer becomes its owner's referral. Nothing for a customer the shop knows already. |
+| `id_token` | string | yes | The id_token Google gave the page. |
+| `nonce` | string | yes | The nonce from `POST /auth/nonce` that the sign-in was requested with. |
+| `referral_code` | string | no | The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Signed in — the bearer token, shown this once | [StoreSignInResponse](#storesigninresponse) |
+| `200` | Signed in; the bearer token is shown only this once | [StoreSignInResponse](#storesigninresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /auth/register
 
-Sign up with an email: a six-digit code to the address (POST /auth/register/verify takes it back) — or, when the address has an account, an email saying so; the answer is the same either way. Again: a new code in the last one's place. 422 email sign-up off, or a field (the captcha's too), 429 a code went to the address a minute ago, the address had its ten emails today (from every shop), this address network its twenty an hour (or asked too much), or the codes sent to the address were failed until it waits (ten wrong an hour, twenty a day); 502 the email did not go; 503 the shop's email does not go out, or the shop's (or every shop's) budget of emails is spent — sixty an hour, three hundred a day a shop —, or the captcha could not be judged.
+Sign up with an email. Emails a six-digit code to the address (finish with `POST /auth/register/verify`); if the address already has an account, the email says so instead. The answer is the same either way. Asking again sends a new code that replaces the last one. A 422 when email sign-up is off or a field (the captcha included) is invalid. A 429 when a code went to the address in the last minute, the address got its 10 emails today (counted across all shops), this address network sent its 20 an hour or asked too often, or the address is locked after failed codes (10 wrong an hour, 20 a day). A 502 when the email could not be sent. A 503 when the shop sends no email, the shop's or the installation's email budget is spent (60 an hour and 300 a day per shop), or the captcha could not be checked.
 
 - **Who:** anyone.
-- **Captcha:** the website's, for the action `sign_up` — the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
+- **Captcha:** the website's captcha, for the action `sign_up`: send the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
 
 **Body**, as JSON:
 
-A sign-up's first step. Every refusal at once, under its field.
+The first step of signing up. Every refusal is returned at once, under its field.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `first_name` | string | yes | 1 to 64 characters. |
-| `last_name` | string | no | 64 characters at most; blank for none. |
-| `email` | string | yes | An email address, 191 characters at most — kept in lower case. |
-| `password` | string | yes | 8 characters at least, 72 bytes at most (a Persian letter is two) — taken as typed, spaces and all. |
-| `referral_code` | string | no | An invite code the visitor came with: a newcomer becomes its owner's referral. Nothing for a customer the shop knows already. |
-| `captcha` | string | no | The captcha widget's token, while the website asks one (GET / says which, and how to draw it), solved for the operation's action (its `x-captcha`). |
+| `last_name` | string | no | At most 64 characters; blank for none. |
+| `email` | string | yes | An email address, at most 191 characters; stored in lower case. |
+| `password` | string | yes | At least 8 characters and at most 72 bytes (a Persian letter is two bytes), taken exactly as typed, spaces included. |
+| `referral_code` | string | no | The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. |
+| `captcha` | string | no | The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `202` | Emailed — a code, or that the address has an account | [StoreCodeSentResponse](#storecodesentresponse) |
+| `202` | Emailed: a code, or a notice that the address already has an account | [StoreCodeSentResponse](#storecodesentresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /auth/register/verify
 
-Finish signing up with the code the email carried: the account made — reported, its invite code's owner told — and signed in. 409 the address took an account meanwhile, 422 the code is wrong, expired, spent or tried five times (or email sign-up off), 429 too many failures — or the address's budget of wrong codes spent: ten an hour, twenty a day, each counted before it is checked, whatever codes were sent.
+Finish signing up with the emailed code. Creates the account and signs it in; the referrer, if any, is notified. A 409 when the address got an account meanwhile; a 422 when the code is wrong, expired, used or tried five times (or email sign-up is off); a 429 after too many failures, or when the address's budget of wrong codes is spent (10 an hour, 20 a day, each counted before it is checked).
 
 - **Who:** anyone.
 
 **Body**, as JSON:
 
-A sign-up's last step: the code the email carried.
+The last step of signing up: the emailed code.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `email` | string | yes |  |
-| `code` | string | yes | Six digits (Persian digits too). |
+| `code` | string | yes | Six digits (Persian digits accepted). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Signed up and in — the bearer token, shown this once | [StoreSignInResponse](#storesigninresponse) |
+| `200` | Signed up and signed in; the bearer token is shown only this once | [StoreSignInResponse](#storesigninresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /auth/login
 
-Sign in with an email and its password — an account with two-factor sign-in on answers its second step's challenge instead (202; POST /auth/login/2fa finishes it). 401 for either wrong (one answer: which addresses have an account is told nobody), 403 banned, 422 a field (the captcha's too), 429 too many failures from this address network (30 in 15 minutes) or for this account (50, from every address), 503 the captcha could not be judged.
+Sign in with an email and password. If the account has two-factor sign-in on, the answer is a 202 with a challenge instead (finish with `POST /auth/login/2fa`). A 401 for a wrong email or password (one answer for both, so it never reveals which addresses have an account); a 403 when banned; a 422 on an invalid field (the captcha included); a 429 after too many failures from this address network (30 in 15 minutes) or on this account (50, from all addresses); a 503 when the captcha could not be checked.
 
 - **Who:** anyone.
-- **Captcha:** the website's, for the action `sign_in` — the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
+- **Captcha:** the website's captcha, for the action `sign_in`: send the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
 
 **Body**, as JSON:
 
@@ -219,62 +219,62 @@ Sign in with an email and its password — an account with two-factor sign-in on
 |---|---|---|---|
 | `email` | string | yes |  |
 | `password` | string | yes |  |
-| `captcha` | string | no | The captcha widget's token, while the website asks one (GET / says which, and how to draw it), solved for the operation's action (its `x-captcha`). |
+| `captcha` | string | no | The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Signed in — the bearer token, shown this once | [StoreSignInResponse](#storesigninresponse) |
-| `202` | The password was right; the account asks the code of its authenticator app — no session yet | [StoreTwoFactorResponse](#storetwofactorresponse) |
+| `200` | Signed in; the bearer token is shown only this once | [StoreSignInResponse](#storesigninresponse) |
+| `202` | The password is right; the account needs its authenticator app's code. No session yet | [StoreTwoFactorResponse](#storetwofactorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /auth/login/2fa
 
-A password sign-in's second step: the challenge it answered, with the six-digit code of the account's authenticator app (Persian digits too; a code opens once) or one of its recovery codes (spent). A reset's new password the challenge keeps is set now, every other session of the account ended. 401 the challenge opens nothing any more (expired, five wrong codes, two-factor turned off since — sign in again), 403 banned, 422 a field missing or the code wrong, 429 too many failures from this address network or for this account — or the account's second-step codes spent: 10 an hour and 20 a day, counted before each is checked, whoever tries them (the customer is told once a day).
+Finish a password sign-in with its second step. Send the challenge with the six-digit code from the account's authenticator app (Persian digits accepted; each code works once) or one of its recovery codes (used up). If the challenge came from a password reset, the new password is set now and every other session of the account ends. A 401 when the challenge is no longer valid (expired, five wrong codes, or two-factor turned off since): sign in again. A 403 when banned; a 422 when a field is missing or the code is wrong. A 429 after too many failures from this address network or on this account, or when the account's second-step budget is spent: 10 codes an hour and 20 a day, counted before each is checked, whoever tries them (the customer is notified once a day).
 
 - **Who:** anyone.
 
 **Body**, as JSON:
 
-A password sign-in's second step.
+The second step of a password sign-in.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `challenge` | string | yes | The challenge POST /auth/login (or /auth/password/reset) answered. |
-| `code` | string | yes | The six-digit code the account's authenticator app shows now (Persian digits and spaces too), or one of its recovery codes (dashes and spaces, any case). |
+| `challenge` | string | yes | The challenge from `POST /auth/login` (or `/auth/password/reset`). |
+| `code` | string | yes | The current six-digit code from the account's authenticator app (Persian digits and spaces accepted), or one of its recovery codes (any case, dashes and spaces accepted). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Signed in — the bearer token, shown this once | [StoreSignInResponse](#storesigninresponse) |
+| `200` | Signed in; the bearer token is shown only this once | [StoreSignInResponse](#storesigninresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /auth/password/forgot
 
-A forgotten password: a six-digit code to the address when it has an account — and to one without, an email saying it has none, once a day (asked again that day, nothing goes); the answer the same either way. 422 the address or the captcha, 429 a code went to the address a minute ago, the address had its ten emails today (from every shop), this address network its twenty an hour (or asked too much), or the codes sent to the address were failed until it waits (ten wrong an hour, twenty a day); 502 the email did not go; 503 the shop's email does not go out, or the shop's (or every shop's) budget of emails is spent, or the captcha could not be judged.
+Start a password reset. Emails a six-digit code when the address has an account; an address without one gets an email saying so, at most once a day (a second request that day sends nothing). The answer is the same either way. A 422 on the address or the captcha. A 429 when a code went to the address in the last minute, the address got its 10 emails today (counted across all shops), this address network sent its 20 an hour or asked too often, or the address is locked after failed codes (10 wrong an hour, 20 a day). A 502 when the email could not be sent. A 503 when the shop sends no email, the shop's or the installation's email budget is spent, or the captcha could not be checked.
 
 - **Who:** anyone.
-- **Captcha:** the website's, for the action `password_reset` — the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
+- **Captcha:** the website's captcha, for the action `password_reset`: send the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
 
 **Body**, as JSON:
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `email` | string | yes |  |
-| `captcha` | string | no | The captcha widget's token, while the website asks one (GET / says which, and how to draw it), solved for the operation's action (its `x-captcha`). |
+| `captcha` | string | no | The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `202` | Taken — a code is on its way when the address has an account | [StoreCodeSentResponse](#storecodesentresponse) |
+| `202` | Accepted; a code is on its way if the address has an account | [StoreCodeSentResponse](#storecodesentresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /auth/password/reset
 
-A new password with the code POST /auth/password/forgot emailed: kept, every session of the account ended, this device signed in, the customer told — or, two-factor sign-in on (a reset leaves it on), its second step's challenge (202), nothing changed yet: the new password waits in it, and POST /auth/login/2fa sets it. 403 banned, 422 a field — the code wrong, expired, spent or tried five times —, 429 too many failures — or the address's budget of wrong codes spent: ten an hour, twenty a day, each counted before it is checked (its account told once a day).
+Set a new password with the code from `POST /auth/password/forgot`. The password is saved, every session of the account ends, this device is signed in and the customer is notified. If two-factor sign-in is on (a reset does not turn it off), the answer is a 202 with a challenge and nothing changes yet: `POST /auth/login/2fa` sets the new password. A 403 when banned; a 422 on an invalid field, or a code that is wrong, expired, used or tried five times; a 429 after too many failures, or when the address's budget of wrong codes is spent (10 an hour, 20 a day, each counted before it is checked; the account is notified once a day).
 
 - **Who:** anyone.
 
@@ -283,20 +283,20 @@ A new password with the code POST /auth/password/forgot emailed: kept, every ses
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `email` | string | yes |  |
-| `code` | string | yes | Six digits (Persian digits too): what the email carried. |
-| `password` | string | yes | The new one: 8 characters at least, 72 bytes at most. |
+| `code` | string | yes | The six-digit emailed code (Persian digits accepted). |
+| `password` | string | yes | The new password: at least 8 characters and at most 72 bytes. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Set, and signed in — the bearer token, shown this once | [StoreSignInResponse](#storesigninresponse) |
-| `202` | The code was right; the account asks the code of its authenticator app, which sets the new password and signs in — nothing changed yet | [StoreTwoFactorResponse](#storetwofactorresponse) |
+| `200` | Set and signed in; the bearer token is shown only this once | [StoreSignInResponse](#storesigninresponse) |
+| `202` | The code is right; the account needs its authenticator app's code, which sets the new password and signs in. Nothing changed yet | [StoreTwoFactorResponse](#storetwofactorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /captcha/challenge
 
-A challenge for the website's captcha widget, while it asks the shop for one — ALTCHA's (its challengeurl): a new one every time, never kept by a cache; solved and sent once, within 15 minutes. `action` binds it to a form: its solution passes no form of another action. 404 while the website asks no captcha, or one whose widget draws its own (Turnstile); 422 on `action`.
+Get a challenge for the captcha widget. For a widget that fetches its challenge from the shop: ALTCHA's `challengeurl`. A new challenge every time, never cached; it is solved and sent once, within 15 minutes. `action` binds it to a form, so its solution passes no form of another action. A 404 while the website asks for no captcha, or for one whose widget makes its own challenge (Turnstile); a 422 on `action`.
 
 - **Who:** anyone.
 
@@ -315,45 +315,46 @@ A challenge for the website's captcha widget, while it asks the shop for one —
 
 ### POST /captcha/verify
 
-A token of the website's captcha judged for its own backend — a form of the site's own (a review, a contact form), the shop holding the captcha's secret: whether it passed, for the action the backend names (the widget's), solved where (Turnstile says the host; the website's address and origins are held to), and why not. Server to server: a browser's word that it passed proves nothing. A token is taken once (an ALTCHA solution, for the quarter of an hour its challenge lives). 200 either way; 409 while the website asks no captcha; 422 on `token`, `action` or `remoteip`; 429 past the website's 3000 checks in 10 minutes — a backend is one address for all its visitors —, or past 120 refused tokens in them from the visitor's network, the one `remoteip` names (else the backend's own: name the visitor, so a bot behind the site's forms spends its own network's refusals, not everyone's), its next token not judged; never the sign-ins' budget; 503 while it could not be judged (Cloudflare out of reach).
+Check a captcha token for the site's own backend. For the site's own forms (a contact form): the shop holds the captcha's secret and says whether the token passed for the action the backend names, where it was solved (Turnstile reports the host, which must be the website's address or one of its origins) and why it failed. Call it server to server: a browser's claim that it passed proves nothing. Each token is accepted once (an ALTCHA solution, for the 15 minutes its challenge lives). A 200 whether or not it passed; a 409 while the website asks for no captcha; a 422 on `token`, `action` or `remoteip`. A 429 past the website's 3000 checks in 10 minutes (the backend is one address for all its visitors), or past 120 refused tokens in that time from the visitor's network: the one `remoteip` names, else the backend's own. So pass the visitor's address, and a bot behind the site's forms uses up only its own network's allowance. This budget is separate from sign-ins. A 503 when the token could not be checked (Cloudflare cannot be reached).
 
 - **Who:** anyone.
 
 **Body**, as JSON:
 
-A token a form of the website's own carried, which its backend asks the shop to judge — as the visitor's browser posted it to the site.
+A captcha token from one of the site's own forms, which the site's backend asks the shop to check, as the visitor's browser sent it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `token` | string | yes | What the widget handed the form: Turnstile's cf-turnstile-response, ALTCHA's payload. 4096 characters at most. |
+| `token` | string | yes | The token the widget gave the form: Turnstile's cf-turnstile-response, or ALTCHA's payload. At most 4096 characters. |
 | `action` | [CaptchaAction](#captchaaction) | no |  |
-| `remoteip` | string | no | The visitor's address (IPv4 or IPv6) as the site's backend saw it — their tokens refused are counted against their network, not against the backend's, which is every visitor's —, handed to the captcha's provider too (Turnstile's remoteip). Optional: blank or left out, the backend's own network is counted. |
+| `remoteip` | string | no | The visitor's IPv4 or IPv6 address, as the site's backend saw it. Refused tokens then count against the visitor's network instead of the backend's (which all visitors share); it is also passed to the captcha provider (Turnstile's remoteip). Optional: when blank or left out, the backend's own network is counted. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Judged | [StoreCaptchaVerdict](#storecaptchaverdict) |
+| `200` | Checked | [StoreCaptchaVerdict](#storecaptchaverdict) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /plans
 
-What the shop sells now, exactly as its bot's «خرید اشتراک» offers it: every active category in its order — an empty one too —, then the plans of none (or of one switched off) as a group without a category; a plan only while it can be delivered — switched on, on a server able to sell it, and in an agent's shop covered by the agent's traffic —, with the servers a customer may pick it on
+What the shop sells now, as the bot's «خرید اشتراک» offers it. Every active category in order (empty ones too), then the plans with no category (or a switched-off one) as a group without a category. A plan is listed only while it can be delivered: switched on, on a server that can sell it, and in an agent's shop covered by the agent's traffic. Each plan lists the servers a customer can pick. Anyone may read it. With a customer's bearer token it is priced for that customer: `first_purchase_price` is null once they have bought, and `agent_price` is set only for an agent or a member of a group with agent prices. A token that is not valid is a 401, never the guest catalogue.
 
-- **Who:** anyone.
+- **Who:** anyone; with a bearer token, the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [StorePlansResponse](#storeplansresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /plans/{id}
 
-One plan as the shop offers it now (GET /plans). 404 for one it does not sell now: switched off, on no server able to deliver it, or — an agent's shop — more than the agent's traffic covers.
+One plan, as `GET /plans` shows it. For a guest, or priced for the customer whose bearer token is sent. A 404 for a plan not on sale now: switched off, on no server able to deliver it, or (in an agent's shop) more than the agent's traffic covers.
 
-- **Who:** anyone.
+- **Who:** anyone; with a bearer token, the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Parameters**
 
@@ -366,11 +367,12 @@ One plan as the shop offers it now (GET /plans). 404 for one it does not sell no
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [StorePlanResponse](#storeplanresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /status
 
-The servers the shop's plans on sale are on, in the servers' order: whether each takes a new customer now, and when the shop last talked to it — nothing of their addresses, their connectors or what their panels said
+Server status. The servers of the plans on sale, in order: whether each takes new customers now and when the shop last reached it. Never their addresses, connectors or panel messages.
 
 - **Who:** anyone.
 
@@ -383,7 +385,7 @@ The servers the shop's plans on sale are on, in the servers' order: whether each
 
 ### GET /reviews
 
-The reviews the shop shows — its customers' own words, approved by support —, the newest first, a page at a time; `meta.summary` is every one of them: how many, and their average rating. A 404 while the website shows no reviews (its `reviews_enabled`, off at first).
+The approved reviews, newest first, a page at a time. `meta.summary` covers all of them: their count and average rating. A 404 while the website shows no reviews (`reviews_enabled`, off by default).
 
 - **Who:** anyone.
 
@@ -402,85 +404,90 @@ The reviews the shop shows — its customers' own words, approved by support —
 
 ### POST /reviews
 
-Write a review of the shop — the name it is signed with, 1 to 5 stars, the words, a line of where they use the service from, one of the website's own avatars —: kept waiting on support, which approves it (GET /reviews shows it then) or rejects it; the report group hears of it. Anyone may, while the website asks a captcha — without one, a guest's is a 403 (sign in first) —: a customer's bearer token with it makes it theirs (their account beside it in the panels) — one that opens no session is a 401, never a guest's review in its place, and a banned customer's a 403. A 404 while the website takes no reviews (its `reviews_enabled`, off at first). 422 on `name` (2 to 64 characters), `rating` (1 to 5), `body` (10 to 600), `context` (100 at most) or `avatar` (1 to 32 of a-z, 0-9, - and _: a key of the website's own set, never an address), every one at once — then on `captcha` while the website asks one; 429 (`Retry-After`) past 20 reviews an hour from one address network (an IPv6 one by its /48; a refused captcha among them), 3 a day from one customer, or 20 an hour from every guest together (a refused captcha not among them); 503 while 200 reviews wait on support (the shop takes no new one until it decides some), or while the captcha could not be judged.
+Write a review. Send the signed name, 1 to 5 stars, the text, an optional line on where the service is used, and an optional avatar from the website's own set. It waits for support to approve it (then `GET /reviews` shows it) or reject it; the report group is notified. Guests may write while the website asks for a captcha; without one, a guest gets a 403 (sign in first). With a bearer token the review is that customer's; a token that is not valid is a 401 (never a guest review instead), and a banned customer gets a 403. A 404 while the website takes no reviews (`reviews_enabled`, off by default). A 422 lists every invalid field at once: `name` (2 to 64 characters), `rating` (1 to 5), `body` (10 to 600), `context` (at most 100) or `avatar` (1 to 32 of a-z, 0-9, - and _: a key, never an address); then `captcha` while the website asks for one. A 429 with `Retry-After` past 20 reviews an hour from one address network (IPv6 counted by /48; refused captchas included), 3 a day from one customer, or 20 an hour from all guests together (refused captchas not included). A 503 while 200 reviews wait for support (no new review is accepted until support decides some), or when the captcha could not be checked.
 
-- **Who:** anyone — or the signed-in customer, their bearer token with it ([the customer scheme](#the-customer-scheme)).
-- **Captcha:** the website's, for the action `review` — the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
+- **Who:** anyone; with a bearer token, the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Captcha:** the website's captcha, for the action `review`: send the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
 
 **Body**, as JSON:
 
-A review written on the website. Every refusal at once, under its field.
+A review written on the website. Every refusal is returned at once, under its field.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | 2 to 64 characters, on one line: the name it is signed with, shown with it. |
+| `name` | string | yes | The name to sign it with, shown with the review: 2 to 64 characters, one line. |
 | `rating` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 5. |
-| `body` | string | yes | 10 to 600 characters, its line breaks kept. |
-| `context` | string | no | A line of where they use the service from — «ایرانسل · اندروید · Happ» —, 100 characters at most; blank for none. |
-| `avatar` | string | no | The key of one of the website's own avatars — 1 to 32 of a-z, 0-9, - and _, never an address —; blank for none. |
-| `captcha` | string | no | The captcha widget's token, while the website asks one (GET / says which, and how to draw it), solved for the operation's action (its `x-captcha`). |
+| `body` | string | yes | 10 to 600 characters; line breaks are kept. |
+| `context` | string | no | A line on where the service is used, such as «ایرانسل · اندروید · Happ»; at most 100 characters, blank for none. |
+| `avatar` | string | no | The key of one of the website's own avatars (1 to 32 of a-z, 0-9, - and _, never an address); blank for none. |
+| `captcha` | string | no | The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `201` | Written — waiting on support | [StoreReviewWrittenResponse](#storereviewwrittenresponse) |
+| `201` | Written; waiting for support's approval | [StoreReviewWrittenResponse](#storereviewwrittenresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ## Signed-in customer
 
-The signed-in customer's own, with their bearer token ([the customer scheme](#the-customer-scheme)).
+For the signed-in customer, with their bearer token ([the customer scheme](#the-customer-scheme)).
 
 | Operation | What it does |
 |---|---|
 | [`POST /auth/logout`](#post-authlogout) | Sign this device out |
-| [`GET /me`](#get-me) | The signed-in customer's account, and how many of the shop's notices they have not read |
-| [`PATCH /me`](#patch-me) | The customer's names |
-| [`POST /me/reauthenticate`](#post-mereauthenticate) | A way into this account proven again |
-| [`POST /me/telegram/authorize`](#post-metelegramauthorize) | Telegram's redirect sign-in begun for the signed-in customer themselves |
-| [`PUT /me/password`](#put-mepassword) | The customer's password, set or changed |
+| [`GET /me`](#get-me) | The signed-in customer's account, with their unread notification count |
+| [`PATCH /me`](#patch-me) | Change the customer's names |
+| [`POST /me/reauthenticate`](#post-mereauthenticate) | Prove a way into this account again |
+| [`POST /me/telegram/authorize`](#post-metelegramauthorize) | Start a Telegram redirect for the signed-in customer |
+| [`PUT /me/password`](#put-mepassword) | Set or change the customer's password |
 | [`GET /me/sessions`](#get-mesessions) | The devices the customer is signed in on, newest first |
-| [`DELETE /me/sessions/{id}`](#delete-mesessionsid) | End one of the customer's sessions (this one too) |
-| [`POST /me/2fa/setup`](#post-me2fasetup) | A new secret for the customer's authenticator app (two-factor sign-in, RFC 6238) |
-| [`POST /me/2fa/enable`](#post-me2faenable) | Two-factor sign-in turned on by the app's first code for the secret POST /me/2fa/setup gave (five tries) |
-| [`POST /me/2fa/disable`](#post-me2fadisable) | Two-factor sign-in turned off, with the account's password |
-| [`POST /me/identities/telegram`](#post-meidentitiestelegram) | Add a Telegram account to the customer's |
-| [`POST /me/identities/google`](#post-meidentitiesgoogle) | Add a Google account to the customer's |
-| [`POST /me/identities/email`](#post-meidentitiesemail) | Add an email to the customer's account, with the password chosen to sign in by it |
-| [`POST /me/identities/email/verify`](#post-meidentitiesemailverify) | The code the email carried, typed back by the account it was sent for |
-| [`DELETE /me/identities/{kind}`](#delete-meidentitieskind) | Take a way in off the customer's account |
-| [`POST /me/merge`](#post-memerge) | Yes to a merge offered (a 202 of POST /me/identities/…) |
+| [`DELETE /me/sessions/{id}`](#delete-mesessionsid) | End one of the customer's sessions, this one included |
+| [`POST /me/2fa/setup`](#post-me2fasetup) | Start setting up two-factor sign-in |
+| [`POST /me/2fa/enable`](#post-me2faenable) | Turn two-factor sign-in on |
+| [`POST /me/2fa/disable`](#post-me2fadisable) | Turn two-factor sign-in off |
+| [`POST /me/identities/telegram`](#post-meidentitiestelegram) | Add a Telegram account to the customer's account |
+| [`POST /me/identities/google`](#post-meidentitiesgoogle) | Add a Google account to the customer's account |
+| [`POST /me/identities/email`](#post-meidentitiesemail) | Add an email and password to the customer's account |
+| [`POST /me/identities/email/verify`](#post-meidentitiesemailverify) | Finish adding an email with the emailed code |
+| [`DELETE /me/identities/{kind}`](#delete-meidentitieskind) | Remove a way in from the customer's account |
+| [`POST /me/merge`](#post-memerge) | Accept a merge offer (the 202 of a `POST /me/identities/…`) |
 | [`GET /subscriptions`](#get-subscriptions) | The customer's services, newest first |
-| [`GET /subscriptions/{id}`](#get-subscriptionsid) | One of the customer's services, as the shop last saw it on its panel (`synced_at`) |
-| [`PATCH /subscriptions/{id}`](#patch-subscriptionsid) | Its «تمدید خودکار» on or off |
-| [`POST /subscriptions/{id}/refresh`](#post-subscriptionsidrefresh) | Read from its panel now, with whether it is connected (`presence`) |
-| [`POST /subscriptions/{id}/rotate-link`](#post-subscriptionsidrotate-link) | A new link for it (`link_rotation`) |
-| [`GET /subscriptions/{id}/renewal`](#get-subscriptionsidrenewal) | The renewal of one of the customer's services before it is paid, as the bot's «♻️ تمدید سرویس» shows it |
-| [`POST /subscriptions/{id}/renewal`](#post-subscriptionsidrenewal) | Renew it |
-| [`GET /payment-methods`](#get-payment-methods) | The ways to pay a kind of order, in checkout order |
+| [`GET /subscriptions/{id}`](#get-subscriptionsid) | One of the customer's services, as last read from its panel (`synced_at`) |
+| [`PATCH /subscriptions/{id}`](#patch-subscriptionsid) | Switch the service's auto-renewal («تمدید خودکار») on or off |
+| [`POST /subscriptions/{id}/refresh`](#post-subscriptionsidrefresh) | Read the service from its panel now, with whether it is connected (`presence`) |
+| [`POST /subscriptions/{id}/rotate-link`](#post-subscriptionsidrotate-link) | Change the service's subscription link (`link_rotation`) |
+| [`GET /subscriptions/{id}/renewal`](#get-subscriptionsidrenewal) | Preview a service's renewal |
+| [`POST /subscriptions/{id}/renewal`](#post-subscriptionsidrenewal) | Renew a service, paid with `method_id`, as the GET previews it |
+| [`GET /subscriptions/{id}/extras`](#get-subscriptionsidextras) | The extra traffic and time a service can buy now |
+| [`POST /subscriptions/{id}/extra-traffic`](#post-subscriptionsidextra-traffic) | Buy extra traffic for a service |
+| [`POST /subscriptions/{id}/extra-time`](#post-subscriptionsidextra-time) | Buy extra time for a service |
+| [`GET /payment-methods`](#get-payment-methods) | The payment methods for a kind of order, in checkout order |
 | [`GET /orders`](#get-orders) | The customer's orders, newest first, each with its payments |
-| [`POST /orders`](#post-orders) | Buy a plan |
+| [`POST /orders`](#post-orders) | Buy a plan on one of its locations, paid with `method_id` |
 | [`GET /orders/{id}`](#get-ordersid) | One of the customer's orders, with its payments |
-| [`POST /payments/{id}/receipt`](#post-paymentsidreceipt) | The receipt of a card transfer the checkout answered (`transfer.payment_id`) |
+| [`POST /payments/{id}/receipt`](#post-paymentsidreceipt) | Upload the receipt of a card transfer |
 | [`GET /wallet`](#get-wallet) | The customer's wallet |
-| [`POST /wallet/top-up`](#post-wallettop-up) | Charge the wallet by `amount` |
+| [`POST /wallet/top-up`](#post-wallettop-up) | Top up the wallet by `amount`, paid with `method_id` |
 | [`GET /wallet/transactions`](#get-wallettransactions) | The wallet's ledger, newest line first |
-| [`GET /referral`](#get-referral) | The customer's part in the referral program |
-| [`GET /notifications`](#get-notifications) | What the shop told the customer, newest first |
-| [`POST /notifications/read`](#post-notificationsread) | Mark the customer's notices read |
-| [`GET /tickets`](#get-tickets) | The customer's support tickets, the latest activity first |
-| [`POST /tickets`](#post-tickets) | Open a ticket |
-| [`GET /tickets/{id}`](#get-ticketsid) | One of the customer's tickets with its whole conversation, as it stands |
-| [`POST /tickets/{id}/read`](#post-ticketsidread) | The website showed the customer the ticket |
-| [`POST /tickets/{id}/messages`](#post-ticketsidmessages) | Write in the ticket |
-| [`GET /tickets/{id}/messages/{message}/attachment`](#get-ticketsidmessagesmessageattachment) | A message's picture, as its bytes |
-| [`POST /tickets/{id}/close`](#post-ticketsidclose) | Close the ticket (the report group hears it) |
-| [`POST /tickets/{id}/rating`](#post-ticketsidrating) | Rate a closed ticket |
+| [`POST /discount-codes/check`](#post-discount-codescheck) | Check a discount code before paying |
+| [`POST /gift-codes/redeem`](#post-gift-codesredeem) | Redeem a gift code, as the bot's «🎁 کد هدیه» does |
+| [`GET /referral`](#get-referral) | The customer's referral details |
+| [`GET /notifications`](#get-notifications) | The customer's notifications, newest first |
+| [`POST /notifications/read`](#post-notificationsread) | Mark notifications as read |
+| [`GET /tickets`](#get-tickets) | The customer's support tickets, latest activity first |
+| [`POST /tickets`](#post-tickets) | Open a support ticket |
+| [`GET /tickets/{id}`](#get-ticketsid) | One of the customer's tickets, with its whole conversation |
+| [`POST /tickets/{id}/read`](#post-ticketsidread) | Mark a ticket as read |
+| [`POST /tickets/{id}/messages`](#post-ticketsidmessages) | Write a message in a ticket |
+| [`GET /tickets/{id}/messages/{message}/attachment`](#get-ticketsidmessagesmessageattachment) | A ticket message's picture, as bytes |
+| [`POST /tickets/{id}/close`](#post-ticketsidclose) | Close a ticket |
+| [`POST /tickets/{id}/rating`](#post-ticketsidrating) | Rate a closed ticket, 1 to 5 with an optional note |
 
 ### POST /auth/logout
 
-Sign this device out — its token opens nothing from now on
+Sign this device out. Its token stops working.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -496,7 +503,7 @@ Sign this device out — its token opens nothing from now on
 
 ### GET /me
 
-The signed-in customer's account, and how many of the shop's notices they have not read
+The signed-in customer's account, with their unread notification count.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -510,18 +517,18 @@ The signed-in customer's account, and how many of the shop's notices they have n
 
 ### PATCH /me
 
-The customer's names — the ones sent, the rest as they are; answered as GET /me answers. 422 under the field: a first name blank or past 64 characters, a last name past 64 — and an account with Telegram, whose names are Telegram's.
+Change the customer's names. Only the names sent change; the answer is the same as `GET /me`. A 422 on the field: a blank first name, a name over 64 characters, or any name on an account with Telegram (its names come from Telegram).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-The customer's names: a field sent is changed, one left out stays. A Telegram account's names are Telegram's.
+The customer's names. Only the fields sent change. An account with Telegram takes its names from Telegram and cannot change them.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `first_name` | string | no | 1 to 64 characters. |
-| `last_name` | string | no | 64 characters at most; blank for none. |
+| `last_name` | string | no | At most 64 characters; blank for none. |
 
 **Answers**
 
@@ -533,13 +540,13 @@ The customer's names: a field sent is changed, one left out stays. A Telegram ac
 
 ### POST /me/reauthenticate
 
-A way into this account proven again — what changing how it is signed in to asks of a session whose sign-in is older than 15 minutes (their 403): the account's password — with its authenticator app's code or a recovery code while two-factor sign-in is on —, its Telegram account (the popup's id_token with a nonce of POST /auth/nonce, or the redirect's code with the state POST /me/telegram/authorize gave this session and the verifier of its challenge), or its Google account. This session may change the account's ways in for the next 15 minutes. 422 on `method` for none of password, telegram and google; 422 (no field) while the website has that way's sign-in off — Telegram's, or Google's; 422 on `password` for an account without a password (prove another way); 422 under the fields: missing, the proof does not hold (on `password`, `code` or `id_token`), or it proves another account; 429 too many failures — counted as sign-ins are, a code against the account's second-step budget too; 502 the provider out of reach.
+Prove a way into this account again. Changing how the account signs in needs a sign-in from the last 15 minutes; an older session gets a 403 and calls this first. Prove the account's password (with the authenticator app's code or a recovery code while two-factor sign-in is on), its Telegram account (the popup's id_token with a nonce from `POST /auth/nonce`, or the redirect's code with the state from `POST /me/telegram/authorize` for this session and the verifier of its challenge), or its Google account. The session may then change the account's ways in for 15 minutes. A 422 on `method` for anything but password, telegram or google; a 422 (no field) while the website has that sign-in method off; a 422 on `password` for an account without a password (prove another way); a 422 on the field when it is missing, the proof does not hold (`password`, `code` or `id_token`) or it proves another account. A 429 after too many failures (counted like sign-ins; a code also counts against the account's second-step budget); a 502 when the provider cannot be reached.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-A way into this account proven again: its password (and its second step's code while it asks one), its Telegram account — the popup's or the redirect's —, or its Google account.
+Proof of a way into this account: its password (with the second step's code while two-factor sign-in is on), its Telegram account (popup or redirect), or its Google account.
 
 One of:
 
@@ -549,55 +556,55 @@ One of:
 |---|---|---|---|
 | `method` | string: `password` | yes |  |
 | `password` | string | yes | The account's password. |
-| `code` | string | no | While two-factor sign-in is on: the six-digit code the account's authenticator app shows now, or one of its recovery codes (spent) — as POST /auth/login/2fa takes it. |
+| `code` | string | no | While two-factor sign-in is on: the current six-digit code from the account's authenticator app, or one of its recovery codes (which is used up), as `POST /auth/login/2fa` accepts them. |
 
 **`StoreReauthenticateTelegramPopupRequest`**
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `method` | string: `telegram` | yes |  |
-| `id_token` | string | yes | What telegram-login.js handed the page. |
-| `nonce` | string | yes | The nonce POST /auth/nonce answered, which the popup was opened with. |
+| `id_token` | string | yes | The id_token telegram-login.js gave the page. |
+| `nonce` | string | yes | The nonce from `POST /auth/nonce` that the popup was opened with. |
 
 **`StoreReauthenticateTelegramCodeRequest`**
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `method` | string: `telegram` | yes |  |
-| `code` | string | yes | What Telegram sent the browser back with. |
-| `state` | string | yes | The state it came back with: the one POST /me/telegram/authorize gave this customer. |
-| `code_verifier` | string matching `^[A-Za-z0-9._~-]{43,128}$` | yes | The PKCE verifier this browser made and kept when it began the sign-in — the one whose challenge it sent: another's opens nothing. |
+| `code` | string | yes | The code Telegram sent the browser back with. |
+| `state` | string | yes | The state it came back with, from `POST /me/telegram/authorize` for this customer. |
+| `code_verifier` | string matching `^[A-Za-z0-9._~-]{43,128}$` | yes | The PKCE verifier this browser made and kept when it started the sign-in, whose challenge it sent. Any other verifier signs nobody in. |
 
 **`StoreReauthenticateGoogleRequest`**
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `method` | string: `google` | yes |  |
-| `id_token` | string | yes | What Google handed the page. |
-| `nonce` | string | yes | The nonce POST /auth/nonce answered. |
+| `id_token` | string | yes | The id_token Google gave the page. |
+| `nonce` | string | yes | The nonce from `POST /auth/nonce`. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Proven | [StoreReauthenticatedResponse](#storereauthenticatedresponse) |
+| `200` | Proven; the session counts as recently signed in | [StoreReauthenticatedResponse](#storereauthenticatedresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /me/telegram/authorize
 
-Telegram's redirect sign-in begun for the signed-in customer themselves — to add their Telegram account (POST /me/identities/telegram) or prove it again (POST /me/reauthenticate): where to send the browser — the site makes the PKCE verifier and keeps it, sending the challenge —, the state this session's alone — no sign-in, no other customer, and no other device of theirs takes it back, and none without the verifier. 422 while the website keeps no client secret, or on `redirect_uri` or `code_challenge`; 429 once this address network asked for 120 nonces, states and codes in 10 minutes; 503 while the shop keeps as many sign-ins begun as it takes.
+Start a Telegram redirect for the signed-in customer. Used to add their Telegram account (`POST /me/identities/telegram`) or prove it again (`POST /me/reauthenticate`). Returns the address to send the browser to. The site makes the PKCE verifier, keeps it and sends only its challenge. The state belongs to this session alone: a sign-in, another customer or another device of theirs cannot use it, and nothing can without the verifier. A 422 while the website has no client secret, or on `redirect_uri` or `code_challenge`; a 429 once this address network asked for 120 nonces, states and codes in 10 minutes; a 503 while the shop holds its maximum of open sign-ins.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-A redirect sign-in begun in this browser: where Telegram sends it back to with its code and state, and the PKCE challenge of the verifier the site made for it and keeps (sessionStorage) — the shop keeps no verifier, so a code and state another browser brings back open nothing.
+Start a redirect sign-in in this browser: where Telegram sends the browser back (with the code and state), and the PKCE challenge of the verifier the site made and keeps (in sessionStorage). The shop keeps no verifier, so a code and state brought back to another browser sign nobody in.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `redirect_uri` | string | yes | An http(s) address on the website's own origin or one it lists, without #. |
-| `code_challenge` | string matching `^[A-Za-z0-9_-]{43}$` | yes | S256: the SHA-256 of the verifier (43 to 128 of A-Z, a-z, 0-9 and -._~, random), in base64url without padding. |
+| `redirect_uri` | string | yes | An http(s) address on the website's origin or one of its listed origins, without #. |
+| `code_challenge` | string matching `^[A-Za-z0-9_-]{43}$` | yes | S256: the SHA-256 of the verifier (43 to 128 random characters of A-Z, a-z, 0-9 and -._~), in base64url without padding. |
 
 **Answers**
 
@@ -609,7 +616,7 @@ A redirect sign-in begun in this browser: where Telegram sends it back to with i
 
 ### PUT /me/password
 
-The customer's password, set or changed — it signs in with their email: every other session of theirs ends, this one stays, the customer told. 403 the session's sign-in is not recent (POST /me/reauthenticate first); 422 the account has no email, or under the fields: the current password (when there is one) missing or wrong — a wrong one counted as a failed sign-in —, the new one by the password rule; 429 too many failures.
+Set or change the customer's password. The password signs in with their email. Every other session ends, this one stays, and the customer is notified. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first); a 422 when the account has no email, the current password (if the account has one) is missing or wrong (a wrong one counts as a failed sign-in), or the new one breaks the password rule; a 429 after too many failures.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -617,8 +624,8 @@ The customer's password, set or changed — it signs in with their email: every 
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `current_password` | string | no | The password now — required while the account has one. |
-| `password` | string | yes | The new one: 8 characters at least, 72 bytes at most (a Persian letter is two) — taken as typed. |
+| `current_password` | string | no | The current password; required when the account has one. |
+| `password` | string | yes | The new password: at least 8 characters and at most 72 bytes (a Persian letter is two bytes), taken exactly as typed. |
 
 **Answers**
 
@@ -631,7 +638,7 @@ The customer's password, set or changed — it signs in with their email: every 
 
 ### GET /me/sessions
 
-The devices the customer is signed in on, newest first — this one marked `current`
+The devices the customer is signed in on, newest first. This one is marked `current`.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -645,7 +652,7 @@ The devices the customer is signed in on, newest first — this one marked `curr
 
 ### DELETE /me/sessions/{id}
 
-End one of the customer's sessions (this one too) — another's is not there (404)
+End one of the customer's sessions, this one included. Another customer's session is a 404.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -665,7 +672,7 @@ End one of the customer's sessions (this one too) — another's is not there (40
 
 ### POST /me/2fa/setup
 
-A new secret for the customer's authenticator app (two-factor sign-in, RFC 6238): it waits 15 minutes for the app's first code (POST /me/2fa/enable), any earlier one gone. 403 the session's sign-in is not recent; 422 the account does not sign in with an email and a password, or two-factor sign-in is on already.
+Start setting up two-factor sign-in. Returns a new secret for the customer's authenticator app (RFC 6238). It waits 15 minutes for the app's first code (`POST /me/2fa/enable`) and replaces any earlier one. A 403 when the session's sign-in is not recent; a 422 when the account has no email and password, or two-factor sign-in is already on.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -675,14 +682,14 @@ A new secret for the customer's authenticator app (two-factor sign-in, RFC 6238)
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The secret, and the address the app takes it by | [StoreTwoFactorSetupResponse](#storetwofactorsetupresponse) |
+| `200` | The secret, and the otpauth address the app can scan | [StoreTwoFactorSetupResponse](#storetwofactorsetupresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /me/2fa/enable
 
-Two-factor sign-in turned on by the app's first code for the secret POST /me/2fa/setup gave (five tries): its ten recovery codes, shown this once; the customer told. 403 the session's sign-in is not recent; 422 no email and password, on already, or on `code` — wrong, or no secret waiting for it (set it up again).
+Turn two-factor sign-in on. Send the app's first code for the secret from `POST /me/2fa/setup` (five tries). Returns ten recovery codes, shown only this once; the customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no email and password, two-factor sign-in is already on, or on `code` when it is wrong or no secret is waiting (start the setup again).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -690,20 +697,20 @@ Two-factor sign-in turned on by the app's first code for the secret POST /me/2fa
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `code` | string | yes | The six digits the app shows now for the secret POST /me/2fa/setup gave (Persian digits too). |
+| `code` | string | yes | The app's current six-digit code for the secret from `POST /me/2fa/setup` (Persian digits accepted). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | On — the recovery codes, this once | [StoreRecoveryCodesResponse](#storerecoverycodesresponse) |
+| `200` | On; the recovery codes, shown only this once | [StoreRecoveryCodesResponse](#storerecoverycodesresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /me/2fa/disable
 
-Two-factor sign-in turned off, with the account's password; the customer told. 403 the session's sign-in is not recent; 422 it is not on, or on `password` — missing or wrong, a wrong one counted as a failed sign-in; 429 too many failures.
+Turn two-factor sign-in off. Needs the account's password; the customer is notified. A 403 when the session's sign-in is not recent; a 422 when it is not on, or on `password` when it is missing or wrong (a wrong one counts as a failed sign-in); a 429 after too many failures.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -724,13 +731,13 @@ Two-factor sign-in turned off, with the account's password; the customer told. 4
 
 ### POST /me/identities/telegram
 
-Add a Telegram account to the customer's — proven as Telegram's sign-in proves one: the popup's id_token with its nonce, or the redirect's code with the state POST /me/telegram/authorize gave this customer and the verifier of its challenge (a sign-in's state, or another customer's, proves nothing here). This account's already, or nobody's (now this account's, its handle and names Telegram's; the customer told): the account. Another account's of the shop: a merge offered (202). 403 the session's sign-in is not recent; 422 the proof does not hold (on `id_token`, or the redirect's `code`), the account has another Telegram account (or a merge the rules refuse, or Telegram sign-in off); 429 too many failures; 502 Telegram out of reach.
+Add a Telegram account to the customer's account. Prove it as a Telegram sign-in does: the popup's id_token with its nonce, or the redirect's code with the state from `POST /me/telegram/authorize` for this customer and the verifier of its challenge (a sign-in's state or another customer's proves nothing here). If the Telegram account is already this account's or nobody's, the answer is the account (a new link takes its handle and names from Telegram, and the customer is notified). If another account of the shop has it, a merge is offered (202). A 403 when the session's sign-in is not recent; a 422 when the proof does not hold (on `id_token` or the redirect's `code`), the account already has another Telegram account, the merge is not allowed, or Telegram sign-in is off; a 429 after too many failures; a 502 when Telegram cannot be reached.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-A Telegram account proven as its sign-in proves one: the popup's id_token with the nonce it was opened with, or the redirect's code with its state.
+Proof of a Telegram account, as for a sign-in: the popup's id_token with its nonce, or the redirect's code with its state and verifier.
 
 One of:
 
@@ -738,79 +745,79 @@ One of:
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id_token` | string | yes | What telegram-login.js handed the page. |
-| `nonce` | string | yes | The nonce POST /auth/nonce answered, which the popup was opened with. |
+| `id_token` | string | yes | The id_token telegram-login.js gave the page. |
+| `nonce` | string | yes | The nonce from `POST /auth/nonce` that the popup was opened with. |
 
 **`StoreTelegramLinkCodeRequest`**
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `code` | string | yes | What Telegram sent the browser back with. |
-| `state` | string | yes | The state it came back with: the one POST /me/telegram/authorize gave this customer (a sign-in's, or another customer's, proves nothing). |
-| `code_verifier` | string matching `^[A-Za-z0-9._~-]{43,128}$` | yes | The PKCE verifier this browser made and kept when it began the sign-in — the one whose challenge it sent: another's opens nothing. |
+| `code` | string | yes | The code Telegram sent the browser back with. |
+| `state` | string | yes | The state it came back with, from `POST /me/telegram/authorize` for this customer (a sign-in's or another customer's state proves nothing). |
+| `code_verifier` | string matching `^[A-Za-z0-9._~-]{43,128}$` | yes | The PKCE verifier this browser made and kept when it started the sign-in, whose challenge it sent. Any other verifier signs nobody in. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The account, the Telegram account its own | [StoreMeResponse](#storemeresponse) |
-| `202` | Another account's — a merge offered | [StoreMergeOfferResponse](#storemergeofferresponse) |
+| `200` | The account, with the Telegram account linked | [StoreMeResponse](#storemeresponse) |
+| `202` | Another account has it; a merge is offered | [StoreMergeOfferResponse](#storemergeofferresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /me/identities/google
 
-Add a Google account to the customer's — the id_token Google Identity Services handed the page, with its nonce. This account's already, or nobody's (now this account's, with the address Google speaks for — an @gmail.com or Workspace address — when the account has none and no other account has it; the customer told): the account. Another account's of the shop — by the Google account, or by the address Google speaks for —: a merge offered (202). 403 the session's sign-in is not recent; 422 the proof does not hold (on `id_token`), the account has another Google account (or a merge the rules refuse, or Google sign-in off); 429 too many failures; 502 Google out of reach.
+Add a Google account to the customer's account. Send the id_token Google Identity Services gave the page, with its nonce. If the Google account is already this account's or nobody's, the answer is the account; a new link also takes the email address Google vouches for (an @gmail.com or Workspace address) when the account has no email and no other account has it, and the customer is notified. If another account of the shop has the Google account or that address, a merge is offered (202). A 403 when the session's sign-in is not recent; a 422 when the proof does not hold (on `id_token`), the account already has another Google account, the merge is not allowed, or Google sign-in is off; a 429 after too many failures; a 502 when Google cannot be reached.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-A Google account proven as its sign-in proves one: the id_token Google Identity Services handed the page, with the nonce it was asked for.
+Proof of a Google account, as for a sign-in: the id_token Google Identity Services gave the page, with the nonce it was requested with.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id_token` | string | yes | What Google handed the page. |
-| `nonce` | string | yes | The nonce POST /auth/nonce answered. |
+| `id_token` | string | yes | The id_token Google gave the page. |
+| `nonce` | string | yes | The nonce from `POST /auth/nonce`. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The account, the Google account its own | [StoreMeResponse](#storemeresponse) |
-| `202` | Another account's — a merge offered | [StoreMergeOfferResponse](#storemergeofferresponse) |
+| `200` | The account, with the Google account linked | [StoreMeResponse](#storemeresponse) |
+| `202` | Another account has it; a merge is offered | [StoreMergeOfferResponse](#storemergeofferresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /me/identities/email
 
-Add an email to the customer's account, with the password chosen to sign in by it: a six-digit code to the address (POST /me/identities/email/verify takes it back) — whether or not another account has it: it is proven first. Another customer's code for the same address stays as it is. 403 the session's sign-in is not recent; 422 the account has an email, or a field; 429 a code went to the address a minute ago, the address had its ten emails today (from every shop), this address network its twenty an hour (or asked too much), or the codes sent to the address were failed until it waits (ten wrong an hour, twenty a day), or this account asked five codes today; 502 the email did not go; 503 the shop's email does not go out, or its budget of emails is spent.
+Add an email and password to the customer's account. Emails a six-digit code to the address (finish with `POST /me/identities/email/verify`), whether or not another account has the address: it is proven first. Another customer's pending code for the same address is not affected. A 403 when the session's sign-in is not recent; a 422 when the account already has an email or a field is invalid. A 429 when a code went to the address in the last minute, the address got its 10 emails today (counted across all shops), this address network sent its 20 an hour or asked too often, the address is locked after failed codes (10 wrong an hour, 20 a day), or this account asked for 5 codes today. A 502 when the email could not be sent; a 503 when the shop sends no email or its email budget is spent.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-An email for the account, and the password chosen to sign in by it. Every refusal at once, under its field.
+An email to add to the account, with the password to sign in with. Every refusal is returned at once, under its field.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `email` | string | yes | An email address, 191 characters at most — kept in lower case. |
-| `password` | string | yes | 8 characters at least, 72 bytes at most — taken as typed. |
+| `email` | string | yes | An email address, at most 191 characters; stored in lower case. |
+| `password` | string | yes | At least 8 characters and at most 72 bytes, taken exactly as typed. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `202` | Emailed — a code | [StoreCodeSentResponse](#storecodesentresponse) |
+| `202` | A code was emailed | [StoreCodeSentResponse](#storecodesentresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /me/identities/email/verify
 
-The code the email carried, typed back by the account it was sent for: the address and its password this account's (the customer told) — or, the address another account's of the shop, a merge offered (202; once merged, the account that stays has the address and the password chosen). 403 the session's sign-in is not recent; 422 the account has an email, a merge the rules refuse, or on `code` — wrong, expired, spent, tried five times or another account's —; 429 too many failures, or the budget of wrong codes of the address or of this account spent (ten an hour, twenty a day).
+Finish adding an email with the emailed code. Only the account the code was sent for can use it. The address and its password become this account's and the customer is notified. If another account of the shop has the address, a merge is offered (202); after the merge, the remaining account has the address and the chosen password. A 403 when the session's sign-in is not recent; a 422 when the account already has an email, the merge is not allowed, or on `code` when it is wrong, expired, used, tried five times or another account's; a 429 after too many failures, or when the budget of wrong codes for the address or this account is spent (10 an hour, 20 a day).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -819,21 +826,21 @@ The code the email carried, typed back by the account it was sent for: the addre
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `email` | string | yes |  |
-| `code` | string | yes | Six digits (Persian digits too): what the email carried. |
+| `code` | string | yes | The six-digit emailed code (Persian digits accepted). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The account, the email its own | [StoreMeResponse](#storemeresponse) |
-| `202` | Another account's — a merge offered | [StoreMergeOfferResponse](#storemergeofferresponse) |
+| `200` | The account, with the email added | [StoreMeResponse](#storemeresponse) |
+| `202` | Another account has it; a merge is offered | [StoreMergeOfferResponse](#storemergeofferresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### DELETE /me/identities/{kind}
 
-Take a way in off the customer's account — never the last one: an email goes with its password and two-factor sign-in (the address is emailed that it is no way in any more), a Telegram account with its handle; the customer told. 403 the session's sign-in is not recent; 422 the account has none of that kind, or it is its last way in.
+Remove a way in from the customer's account. Never the last one. Removing the email also removes the password and two-factor sign-in, and the address gets an email saying so; removing Telegram also removes the handle. The customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no way in of that kind, or it is the last one.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -841,20 +848,20 @@ Take a way in off the customer's account — never the last one: an email goes w
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `kind` | path | [StoreIdentityKind](#storeidentitykind) | yes | The way in taken away |
+| `kind` | path | [StoreIdentityKind](#storeidentitykind) | yes | The way in to remove |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Taken away | [StoreMeResponse](#storemeresponse) |
+| `200` | Removed | [StoreMeResponse](#storemeresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /me/merge
 
-Yes to a merge offered (a 202 of POST /me/identities/…): the two accounts one — the older stays, everything the other owned its own —, then what the offer carried (the way in being added) its own too — a password set by it ends every other session of the account. This session signs in the account that stays; the customer told. 403 the session's sign-in is not recent; 422 the ticket is not this account's, spent, expired, or the other account no longer has that way in; or the merge the rules refuse now.
+Accept a merge offer (the 202 of a `POST /me/identities/…`). The two accounts become one: the older account stays and takes over everything the other owned, then also gets the way in being added. A password set this way ends every other session of the account. This session is signed in to the remaining account, and the customer is notified. A 403 when the session's sign-in is not recent; a 422 when the ticket is not this account's, is used or expired, the other account no longer has that way in, or the merge is no longer allowed.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -862,20 +869,20 @@ Yes to a merge offered (a 202 of POST /me/identities/…): the two accounts one 
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `token` | string | yes | The ticket the merge offer carried. |
+| `token` | string | yes | The ticket from the merge offer. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Merged — the account that stays | [StoreMeResponse](#storemeresponse) |
+| `200` | Merged; the remaining account | [StoreMeResponse](#storemeresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /subscriptions
 
-The customer's services, newest first — in one state, or every one
+The customer's services, newest first. In one status, or all.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -883,7 +890,7 @@ The customer's services, newest first — in one state, or every one
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `status` | query | [SubscriptionStatus](API-Schemas.md#subscriptionstatus) | no | Only the services in this state; none — or anything else — is every one |
+| `status` | query | [SubscriptionStatus](API-Schemas.md#subscriptionstatus) | no | Only services with this status. None for all |
 | `page` | query | integer, at least 1 | no |  |
 
 **Answers**
@@ -896,7 +903,7 @@ The customer's services, newest first — in one state, or every one
 
 ### GET /subscriptions/{id}
 
-One of the customer's services, as the shop last saw it on its panel (`synced_at`) — another customer's is not there (404)
+One of the customer's services, as last read from its panel (`synced_at`). Another customer's service is a 404.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -916,7 +923,7 @@ One of the customer's services, as the shop last saw it on its panel (`synced_at
 
 ### PATCH /subscriptions/{id}
 
-Its «تمدید خودکار» on or off: renewed from the wallet before its end. 422 on `auto_renew` while it is not offered (`auto_renew.offered`) — or for anything but a boolean.
+Switch the service's auto-renewal («تمدید خودکار») on or off. When on, the service is renewed from the wallet before it ends. A 422 on `auto_renew` while auto-renewal is not offered (`auto_renew.offered`), or for anything but a boolean.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -930,7 +937,7 @@ Its «تمدید خودکار» on or off: renewed from the wallet before its en
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `auto_renew` | boolean | yes | Its «تمدید خودکار», on or off. |
+| `auto_renew` | boolean | yes | Auto-renewal («تمدید خودکار») on or off. |
 
 **Answers**
 
@@ -942,7 +949,7 @@ Its «تمدید خودکار» on or off: renewed from the wallet before its en
 
 ### POST /subscriptions/{id}/refresh
 
-Read from its panel now, with whether it is connected (`presence`) — a client the panel no longer has comes back deleted. 502 when its panel cannot be read now (out of reach, or left alone a while after it failed): the shop's copy is no answer to it. A customer reads 10 a minute at most: then a 429 with `Retry-After`.
+Read the service from its panel now, with whether it is connected (`presence`). A client the panel no longer has comes back as deleted. A 502 when the panel cannot be read now (unreachable, or skipped for a while after a failure); the shop's stored copy is not returned instead. At most 10 reads a minute per customer, then a 429 with `Retry-After`.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -958,13 +965,13 @@ Read from its panel now, with whether it is connected (`presence`) — a client 
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Read now | [StoreSubscriptionResponse](#storesubscriptionresponse) |
+| `200` | Read from the panel now | [StoreSubscriptionResponse](#storesubscriptionresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /subscriptions/{id}/rotate-link
 
-A new link for it (`link_rotation`): every device on the old one drops, the bot says nothing of it. 422 on `status` when it does not run or its server cannot give it a new link, 409 another change of it under way, 502 its server failed it. A customer asks for 5 an hour at most: then a 429 with `Retry-After`.
+Change the service's subscription link (`link_rotation`). Every device on the old link is disconnected; the bot sends no message about it. A 422 on `status` when the service is not active or its server cannot rotate links; a 409 while another change to it is running; a 502 when the server failed. At most 5 an hour per customer, then a 429 with `Retry-After`.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -980,13 +987,13 @@ A new link for it (`link_rotation`): every device on the old one drops, the bot 
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Its new link | [StoreSubscriptionResponse](#storesubscriptionresponse) |
+| `200` | The service, with its new link | [StoreSubscriptionResponse](#storesubscriptionresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /subscriptions/{id}/renewal
 
-The renewal of one of the customer's services before it is paid, as the bot's «♻️ تمدید سرویس» shows it: on its own plan, at that plan's price today, and the service as the renewal would leave it — its term, its traffic, and the traffic of the period in use that goes when that period ends. 422 on `status` while it may not be renewed now (switched off by support, gone from its panel, its plan deleted or renewing nothing — in an agent's shop, more than their traffic covers), or while a renewal of it is under way (its receipt with support, or paid and being delivered).
+Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, its plan deleted or renewing nothing, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1006,7 +1013,7 @@ The renewal of one of the customer's services before it is paid, as the bot's «
 
 ### POST /subscriptions/{id}/renewal
 
-Renew it — paid with `method_id`, as GET says: the wallet renews it at once, a card waits for its receipt (POST /payments/{id}/receipt). Refused as GET is, and as POST /orders is (the wallet short: 422 on `method_id`; too many unpaid orders open: 422; 409 paid or closed elsewhere in the same moment; 429 past the checkout's pace; 503 while the shop takes no orders); made again with its Idempotency-Key, the renewal that key came to, as it stands.
+Renew a service, paid with `method_id`, as the GET previews it. The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key`, it returns the renewal that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1015,27 +1022,28 @@ Renew it — paid with `method_id`, as GET says: the wallet renews it at once, a
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | integer | yes |  |
-| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID) — a new one when the customer picks another way to pay: 1 to 64 Latin letters, digits, `-` and `_`. The same request made again with it — a network's retry, the same `method_id` — is answered by the order it came to — the one it made, or the open one of the same thing it found and paid —, as it stands: never a second order or a second charge, whatever changed since (a price included: the order is the one made at the price then); two made in the same moment get one order and one answer. One whose order was cancelled since — by support, or left unpaid past its time, maybe days ago — is a 409 in words of its own («این سفارش لغو شده است…»; not the 409 of an order closed elsewhere a moment ago): buying it again is a new attempt, with a new key. A key that came to an order of something else (another type, plan, server or service — a top-up of another amount), or was first sent with another `method_id` (the order would be paid another way), is a 422 on `idempotency_key`, and so is none, or a malformed one. A key answers for its order a week; after that a request with it is a new one. |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID), and a new one when the customer picks another payment method: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key and `method_id` (a network retry) returns the order the key led to, either the one it created or the open order for the same thing it found and paid, as it is now. Never a second order or charge, whatever changed since: even after a price change it is the order made at the old price. Two identical requests at the same moment get one order and one answer. If the order was cancelled since (by support, or left unpaid past its deadline, maybe days ago), the answer is a 409 with its own message («این سفارش لغو شده است…»), unlike the 409 for an order closed elsewhere a moment ago: buying again is a new attempt with a new key. A key already used for a different order (another type, plan, server or service, or a top-up of another amount), or first sent with another `method_id`, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week; after that, a request with it counts as new. |
 
 **Body**, as JSON:
 
-A service's renewal: the way to pay it.
+A service's renewal: the payment method.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `method_id` | integer | yes | A way to pay a renewal (GET /payment-methods?for=renewal). |
+| `method_id` | integer | yes | A payment method for renewals (`GET /payment-methods?for=renewal`). |
+| `discount_code` | string or null | no | A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | What the checkout came to | [StoreCheckoutResponse](#storecheckoutresponse) |
+| `200` | The checkout's outcome | [StoreCheckoutResponse](#storecheckoutresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
-### GET /payment-methods
+### GET /subscriptions/{id}/extras
 
-The ways to pay a kind of order, in checkout order — what the bot's checkout offers it: every way switched on, but the wallet for a top-up (it does not charge itself)
+The extra traffic and time a service can buy now. As the bot's «🔋 حجم اضافه» and «⏳ زمان اضافه» offer them, at the plan's own prices or else the shop's: each kind's preset amounts with their prices and, when there is a price per GB or per day, any amount within `custom`. A kind is null when none can be bought: the shop does not sell it, or the service cannot take it. (`StoreSubscription.extras` gives the same answer as one flag per kind; a refused POST explains why.)
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1043,7 +1051,89 @@ The ways to pay a kind of order, in checkout order — what the bot's checkout o
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `for` | query | string: `purchase`, `renewal`, `wallet_topup` | yes | The kind of order: a purchase, a service's renewal, a wallet top-up. Anything else is a 422 on `for`. |
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreExtrasResponse](#storeextrasresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /subscriptions/{id}/extra-traffic
+
+Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID), and a new one when the customer picks another payment method: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key and `method_id` (a network retry) returns the order the key led to, either the one it created or the open order for the same thing it found and paid, as it is now. Never a second order or charge, whatever changed since: even after a price change it is the order made at the old price. Two identical requests at the same moment get one order and one answer. If the order was cancelled since (by support, or left unpaid past its deadline, maybe days ago), the answer is a 409 with its own message («این سفارش لغو شده است…»), unlike the 409 for an order closed elsewhere a moment ago: buying again is a new attempt with a new key. A key already used for a different order (another type, plan, server or service, or a top-up of another amount), or first sent with another `method_id`, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week; after that, a request with it counts as new. |
+
+**Body**, as JSON:
+
+Extra traffic for a service: how much, and the payment method.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Whole GB, as `GET …/extras` offers: one of its amounts, or within its `custom` range. |
+| `method_id` | integer | yes | A payment method for extra traffic (`GET /payment-methods?for=extra_traffic`). |
+| `discount_code` | string or null | no | A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The checkout's outcome | [StoreCheckoutResponse](#storecheckoutresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /subscriptions/{id}/extra-time
+
+Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID), and a new one when the customer picks another payment method: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key and `method_id` (a network retry) returns the order the key led to, either the one it created or the open order for the same thing it found and paid, as it is now. Never a second order or charge, whatever changed since: even after a price change it is the order made at the old price. Two identical requests at the same moment get one order and one answer. If the order was cancelled since (by support, or left unpaid past its deadline, maybe days ago), the answer is a 409 with its own message («این سفارش لغو شده است…»), unlike the 409 for an order closed elsewhere a moment ago: buying again is a new attempt with a new key. A key already used for a different order (another type, plan, server or service, or a top-up of another amount), or first sent with another `method_id`, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week; after that, a request with it counts as new. |
+
+**Body**, as JSON:
+
+Extra time for a service: how many days, and the payment method.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Whole days, as `GET …/extras` offers: one of its amounts, or within its `custom` range. |
+| `method_id` | integer | yes | A payment method for extra time (`GET /payment-methods?for=extra_time`). |
+| `discount_code` | string or null | no | A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The checkout's outcome | [StoreCheckoutResponse](#storecheckoutresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /payment-methods
+
+The payment methods for a kind of order, in checkout order. The same as the bot's checkout offers: every enabled method, except the wallet for a wallet top-up.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `for` | query | string: `purchase`, `renewal`, `wallet_topup`, `extra_traffic`, `extra_time` | yes | The kind of order: a purchase, a renewal, a wallet top-up, or a service's extra traffic or time. Anything else is a 422 on `for`. |
 
 **Answers**
 
@@ -1055,7 +1145,7 @@ The ways to pay a kind of order, in checkout order — what the bot's checkout o
 
 ### GET /orders
 
-The customer's orders, newest first, each with its payments — in one state and of one kind, or all
+The customer's orders, newest first, each with its payments. Filter by status and type.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1063,8 +1153,8 @@ The customer's orders, newest first, each with its payments — in one state and
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `status` | query | [OrderStatus](API-Schemas.md#orderstatus) | no | Only the orders in this state; none — or anything else — is every one |
-| `type` | query | [OrderType](API-Schemas.md#ordertype) | no | Only the orders of this kind; none — or anything else — is every one |
+| `status` | query | [OrderStatus](API-Schemas.md#orderstatus) | no | Only orders with this status. None for all |
+| `type` | query | [OrderType](API-Schemas.md#ordertype) | no | Only orders of this type. None for all |
 | `page` | query | integer, at least 1 | no |  |
 
 **Answers**
@@ -1077,7 +1167,7 @@ The customer's orders, newest first, each with its payments — in one state and
 
 ### POST /orders
 
-Buy a plan — on one of its locations, paid with `method_id` — through the checkout the bot's purchases go through: nothing is ordered until the way to pay is picked; the wallet pays at once (the service delivered, or the order failed and waiting for support), a card waits for its receipt (POST /payments/{id}/receipt). 422 on `plan_id` for a plan the shop does not sell now (switched off, on no location that can deliver it now, or — an agent's shop — more traffic than the agent's bot has left to sell), on `server_id` for a server it is not sold on now while another of its locations is, on `method_id` for a way that may not pay it — or a wallet short of the price (what is missing) —, on `idempotency_key` for a key that came to an order of something else or was first sent with another `method_id`; 422 (no field) while the customer has 5 unpaid orders open — paid, or expired, they make room; 409 when the order was paid or closed elsewhere in the same moment — or, the request made again, was cancelled since (by support, or unpaid in its time: its own words); 429 past 30 ordering requests (purchases, renewals and top-ups together, made again or not) in 10 minutes, with `Retry-After`; 503 while the shop takes no orders — its bot switched off (GET /'s `shop.taking_orders`), a request made again too. Made again with its Idempotency-Key, the order that key came to, as it stands — never a second order or a second charge.
+Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1085,29 +1175,30 @@ Buy a plan — on one of its locations, paid with `method_id` — through the ch
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID) — a new one when the customer picks another way to pay: 1 to 64 Latin letters, digits, `-` and `_`. The same request made again with it — a network's retry, the same `method_id` — is answered by the order it came to — the one it made, or the open one of the same thing it found and paid —, as it stands: never a second order or a second charge, whatever changed since (a price included: the order is the one made at the price then); two made in the same moment get one order and one answer. One whose order was cancelled since — by support, or left unpaid past its time, maybe days ago — is a 409 in words of its own («این سفارش لغو شده است…»; not the 409 of an order closed elsewhere a moment ago): buying it again is a new attempt, with a new key. A key that came to an order of something else (another type, plan, server or service — a top-up of another amount), or was first sent with another `method_id` (the order would be paid another way), is a 422 on `idempotency_key`, and so is none, or a malformed one. A key answers for its order a week; after that a request with it is a new one. |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID), and a new one when the customer picks another payment method: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key and `method_id` (a network retry) returns the order the key led to, either the one it created or the open order for the same thing it found and paid, as it is now. Never a second order or charge, whatever changed since: even after a price change it is the order made at the old price. Two identical requests at the same moment get one order and one answer. If the order was cancelled since (by support, or left unpaid past its deadline, maybe days ago), the answer is a 409 with its own message («این سفارش لغو شده است…»), unlike the 409 for an order closed elsewhere a moment ago: buying again is a new attempt with a new key. A key already used for a different order (another type, plan, server or service, or a top-up of another amount), or first sent with another `method_id`, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week; after that, a request with it counts as new. |
 
 **Body**, as JSON:
 
-A purchase: the plan, the location it is bought on, and the way to pay it.
+A purchase: the plan, the location to buy it on, and the payment method.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `plan_id` | integer | yes | A plan the shop sells now (GET /plans). |
+| `plan_id` | integer | yes | A plan on sale now (`GET /plans`). |
 | `server_id` | integer | yes | One of the plan's `locations`. |
-| `method_id` | integer | yes | A way to pay a purchase (GET /payment-methods?for=purchase). |
+| `method_id` | integer | yes | A payment method for purchases (`GET /payment-methods?for=purchase`). |
+| `discount_code` | string or null | no | A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | What the checkout came to | [StoreCheckoutResponse](#storecheckoutresponse) |
+| `200` | The checkout's outcome | [StoreCheckoutResponse](#storecheckoutresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /orders/{id}
 
-One of the customer's orders, with its payments — another customer's is not there (404)
+One of the customer's orders, with its payments. Another customer's order is a 404.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1127,7 +1218,7 @@ One of the customer's orders, with its payments — another customer's is not th
 
 ### POST /payments/{id}/receipt
 
-The receipt of a card transfer the checkout answered (`transfer.payment_id`): a picture, with the customer's words — taken as the bot takes one, and reviewed by support (their screen, the report group), always: the method's review window, which accepts a receipt sent in the bot nobody looked at, never takes one uploaded here. Its order is the answer, the payment awaiting review. 404 for a payment that is not theirs; 422 on `status` while it awaits no receipt (one sent already, refused, paid, cancelled; not a card transfer), on `file` for no picture — JPEG, PNG or WebP by its bytes, 10 MB at most —, on `note` past its length; 429 past 10 pictures uploaded in an hour — their receipts and their tickets' pictures together, one budget —, with `Retry-After`; 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB, or while the shop takes no orders (its bot switched off); a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it.
+Upload the receipt of a card transfer. For the payment the checkout returned (`transfer.payment_id`): a picture, with an optional note from the customer. Support always reviews it (in the panel or the report group): a card method's automatic approval window applies only to receipts sent in the bot, never to uploads. Returns the order, with the payment awaiting review. A 404 for another customer's payment; a 422 on `status` while the payment awaits no receipt (one was already sent, or it was rejected, paid, cancelled, or is not a card transfer), on `file` when it is not a JPEG, PNG or WebP of at most 10 MB, or on `note` when it is too long. A 429 with `Retry-After` past 10 pictures in an hour (receipts and ticket pictures share this budget). A 503 while the host has less than 200 MB of free disk, once the shop's uploads for the day reach 1024 MB, or while the shop takes no orders (its bot is switched off). A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1143,20 +1234,20 @@ A card transfer's receipt, as a browser form uploads it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `file` | file | yes | The picture: a JPEG, a PNG or a WebP, judged by its bytes — 10 MB at most. |
-| `note` | string | no | The customer's words with it, as support reads them — 1024 characters at most; blank for none. |
+| `file` | file | yes | The picture: a JPEG, PNG or WebP (checked by its content), at most 10 MB. |
+| `note` | string | no | An optional note for support, at most 1024 characters; blank for none. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Taken: its order, the payment awaiting review | [StoreOrderResponse](#storeorderresponse) |
+| `200` | Accepted; the order, with the payment awaiting review | [StoreOrderResponse](#storeorderresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /wallet
 
-The customer's wallet: its balance, an agent's credit, what they can pay now, and what a top-up may be
+The customer's wallet. Its balance, an agent's credit, what they can spend now, and the top-up limits.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1170,7 +1261,7 @@ The customer's wallet: its balance, an agent's credit, what they can pay now, an
 
 ### POST /wallet/top-up
 
-Charge the wallet by `amount` — within GET /wallet's `top_up` bounds (422 on `amount`, saying them) —, paid with `method_id`: any way but the wallet itself (422 on `method_id`); a card waits for its receipt (POST /payments/{id}/receipt), and once paid the amount lands on the balance. Refused as POST /orders is for too many unpaid orders open (422), past the checkout's pace (429) and while the shop takes no orders (503). Made again with its Idempotency-Key, the top-up that key came to, as it stands.
+Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1178,28 +1269,28 @@ Charge the wallet by `amount` — within GET /wallet's `top_up` bounds (422 on `
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID) — a new one when the customer picks another way to pay: 1 to 64 Latin letters, digits, `-` and `_`. The same request made again with it — a network's retry, the same `method_id` — is answered by the order it came to — the one it made, or the open one of the same thing it found and paid —, as it stands: never a second order or a second charge, whatever changed since (a price included: the order is the one made at the price then); two made in the same moment get one order and one answer. One whose order was cancelled since — by support, or left unpaid past its time, maybe days ago — is a 409 in words of its own («این سفارش لغو شده است…»; not the 409 of an order closed elsewhere a moment ago): buying it again is a new attempt, with a new key. A key that came to an order of something else (another type, plan, server or service — a top-up of another amount), or was first sent with another `method_id` (the order would be paid another way), is a 422 on `idempotency_key`, and so is none, or a malformed one. A key answers for its order a week; after that a request with it is a new one. |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID), and a new one when the customer picks another payment method: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key and `method_id` (a network retry) returns the order the key led to, either the one it created or the open order for the same thing it found and paid, as it is now. Never a second order or charge, whatever changed since: even after a price change it is the order made at the old price. Two identical requests at the same moment get one order and one answer. If the order was cancelled since (by support, or left unpaid past its deadline, maybe days ago), the answer is a 409 with its own message («این سفارش لغو شده است…»), unlike the 409 for an order closed elsewhere a moment ago: buying again is a new attempt with a new key. A key already used for a different order (another type, plan, server or service, or a top-up of another amount), or first sent with another `method_id`, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week; after that, a request with it counts as new. |
 
 **Body**, as JSON:
 
-A wallet top-up: how much, and the way to pay it.
+A wallet top-up: how much, and the payment method.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `amount` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman, whole, as a customer types it — a JSON number or its text: Persian digits, thousands separators and «تومان» too — or as this API answers amounts (GET /wallet's "50000.00": a fraction of zero), within GET /wallet's `top_up` bounds. |
-| `method_id` | integer | yes | A way to pay a top-up — any but the wallet itself (GET /payment-methods?for=wallet_topup). |
+| `amount` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Whole Toman, within the `top_up` limits of `GET /wallet`. As a customer types it (a JSON number or text; Persian digits, thousands separators and «تومان» accepted), or in the API's own amount format ("50000.00", with a zero fraction). |
+| `method_id` | integer | yes | A payment method for top-ups, any but the wallet itself (`GET /payment-methods?for=wallet_topup`). |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | What the checkout came to | [StoreCheckoutResponse](#storecheckoutresponse) |
+| `200` | The checkout's outcome | [StoreCheckoutResponse](#storecheckoutresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /wallet/transactions
 
-The wallet's ledger, newest line first — the lines the bot's «کیف پول» shows
+The wallet's ledger, newest line first. The same lines as the bot's «کیف پول».
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1217,9 +1308,57 @@ The wallet's ledger, newest line first — the lines the bot's «کیف پول»
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /discount-codes/check
+
+Check a discount code before paying. Returns the quote the order would be made at: the base price (the customer's price for the plan, or the cost of that much extra), the automatic discount and the code's discount as lines, and the total. Nothing is ordered. A 422 on `code` when it does not apply: unknown in this shop, switched off, outside its dates, for another type of order, plan or server, only for a first purchase, for a larger order, or used up. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's `discount_code`), then a 429 with `Retry-After`.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Body**, as JSON:
+
+A discount code and what the customer wants to buy with it, named as in the checkout's own request.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `code` | string | yes | As the customer typed it (any case, Persian digits accepted). |
+| `for` | [DiscountKind](API-Schemas.md#discountkind) | yes |  |
+| `plan_id` | integer | no | For a purchase: a plan on sale now (`GET /plans`). |
+| `server_id` | integer | no | For a purchase: one of the plan's `locations`. A code limited to certain servers is refused until one is picked. |
+| `subscription_id` | integer | no | For a renewal or extra: the customer's service. |
+| `gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For extra traffic: how many GB. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For extra time: how many days. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreDiscountQuoteResponse](#storediscountquoteresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /gift-codes/redeem
+
+Redeem a gift code, as the bot's «🎁 کد هدیه» does. The code may be typed in any case, with dashes and spaces anywhere and Persian digits. Toman are added to the wallet; a plan code delivers a free service (the answer has its order and, once delivered, the service; nothing is sent in Telegram). A 422 on `code` when the shop takes no codes now, the code does not exist, is already redeemed (by them or someone else) or expired, or its service cannot be delivered now (the code stays theirs to try again). Every try that names no code of the shop counts against the customer and their address network: 10 wrong tries an hour per customer and 30 per network, then a 429 with `Retry-After`.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `code` | string | yes | The gift code as the customer typed it. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Redeemed | [StoreGiftCodeResponse](#storegiftcoderesponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /referral
 
-The customer's part in the referral program: its terms, their invite code (made the first time it is asked) and their bot's link, what their referrals brought them
+The customer's referral details. The program's terms, their invite code (created on first request) and bot link, and what their referrals earned them.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1233,7 +1372,7 @@ The customer's part in the referral program: its terms, their invite code (made 
 
 ### GET /notifications
 
-What the shop told the customer, newest first — every notice its bot sends them on its own (a payment approved, a service ending soon, a gift…), kept here whether it reached them in Telegram, by email or not at all, for 180 days — in its words as plain text and as safe HTML; how many they have not read in `meta.unread`
+The customer's notifications, newest first. Every notice the bot sends them (a payment approved, a service ending soon, a gift…), kept for 180 days whether it reached them in Telegram, by email or not at all; as plain text and as safe HTML. `meta.unread` counts the unread ones.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1241,7 +1380,7 @@ What the shop told the customer, newest first — every notice its bot sends the
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `unread` | query | boolean | no | true: only the notices they have not read; anything else, every one |
+| `unread` | query | boolean | no | true: only unread notices. Otherwise all |
 | `page` | query | integer, at least 1 | no |  |
 
 **Answers**
@@ -1254,29 +1393,29 @@ What the shop told the customer, newest first — every notice its bot sends the
 
 ### POST /notifications/read
 
-Mark the customer's notices read: those numbered `ids` — a number that is not one of theirs marks nothing, it is no error —, or every one without `ids` (`{}`); one read before keeps when it was. How many are left unread is the answer. 422 on `ids` for anything but a list of at most 100 numbers.
+Mark notifications as read. Those listed in `ids` (an id that is not the customer's is ignored, not an error), or all of them when `ids` is left out (`{}`). A notice read before keeps its first read time. Returns how many are still unread. A 422 on `ids` for anything but a list of at most 100 numbers.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-The notices to mark read, by their numbers (at most 100); none sent (`{}`): every one.
+The notifications to mark as read, by id (at most 100). Without `ids` (`{}`), all of them.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, at least 1, 100 at most | no |  |
+| `ids` | list of integer, at least 1, at most 100 | no |  |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Read | [StoreUnreadResponse](#storeunreadresponse) |
+| `200` | Marked as read | [StoreUnreadResponse](#storeunreadresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /tickets
 
-The customer's support tickets, the latest activity first — in one state or all —, each saying whether support wrote since they last read it; how many of all of theirs do, `meta.unread` (a badge)
+The customer's support tickets, latest activity first. In one status or all; each says whether support wrote since the customer last read it. `meta.unread` counts such tickets across all of theirs (for a badge).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1284,7 +1423,7 @@ The customer's support tickets, the latest activity first — in one state or al
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `status` | query | [TicketStatus](API-Schemas.md#ticketstatus) | no | Only the tickets in this state; none — or anything else — is every one |
+| `status` | query | [TicketStatus](API-Schemas.md#ticketstatus) | no | Only tickets with this status. None for all |
 | `page` | query | integer, at least 1 | no |  |
 
 **Answers**
@@ -1297,30 +1436,30 @@ The customer's support tickets, the latest activity first — in one state or al
 
 ### POST /tickets
 
-Open a ticket — its subject, its first message, the service of theirs it is about, and a picture as a form —: waiting on support, which the report group hears of at once. 422 on `subject` (3 to 120 characters), `body` (1 to 4000), `subscription_id` (not one of theirs) or `file` (a JPEG, a PNG or a WebP by its bytes, 10 MB at most); 429 (`Retry-After`) past 10 tickets in an hour, 30 messages in 10 minutes, or 10 pictures in an hour (their receipts and their tickets' together); 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB; a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it.
+Open a support ticket. Send the subject, the first message, optionally the customer's service it is about, and optionally a picture (as a form). It waits for support, and the report group is notified at once. A 422 on `subject` (3 to 120 characters), `body` (1 to 4000), `subscription_id` (not the customer's) or `file` (a JPEG, PNG or WebP of at most 10 MB). A 429 with `Retry-After` past 10 tickets in an hour, 30 messages in 10 minutes, or 10 pictures in an hour (receipts and ticket pictures together). A 503 while the host has less than 200 MB of free disk, or once the shop's uploads for the day reach 1024 MB. A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-A ticket opened: what it is about, its first message, and the service of theirs it is about. One with a picture comes as a form (StoreTicketUploadRequest).
+A new ticket: its subject, its first message, and optionally the customer's service it is about. To attach a picture, send a form instead (StoreTicketUploadRequest).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `subject` | string | yes | 3 to 120 characters. |
-| `body` | string | yes | 1 to 4000 characters, its line breaks kept. |
-| `subscription_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | One of their services (GET /subscriptions); left out, null or blank — about none. |
+| `body` | string | yes | 1 to 4000 characters; line breaks are kept. |
+| `subscription_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | One of the customer's services (`GET /subscriptions`). Left out, null or blank: about no service. |
 
 **Body**, as a form (`multipart/form-data`):
 
-A ticket opened with a picture in its first message, as a browser form uploads it — a form without one opens it without a picture.
+A new ticket with a picture in its first message, as a browser form uploads it. A form without a file opens it without a picture.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `subject` | string | yes | 3 to 120 characters. |
-| `body` | string | yes | 1 to 4000 characters, its line breaks kept. |
-| `subscription_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | One of their services (GET /subscriptions); left out, null or blank — about none. |
-| `file` | file | no | The picture: a JPEG, a PNG or a WebP, judged by its bytes — 10 MB at most; left out, none. |
+| `body` | string | yes | 1 to 4000 characters; line breaks are kept. |
+| `subscription_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | One of the customer's services (`GET /subscriptions`). Left out, null or blank: about no service. |
+| `file` | file | no | The picture: a JPEG, PNG or WebP (checked by its content), at most 10 MB. Optional. |
 
 **Answers**
 
@@ -1332,7 +1471,7 @@ A ticket opened with a picture in its first message, as a browser form uploads i
 
 ### GET /tickets/{id}
 
-One of the customer's tickets with its whole conversation, as it stands — reading it changes nothing (POST /tickets/{id}/read says they read it). Another customer's is not there (404).
+One of the customer's tickets, with its whole conversation. Reading it does not mark it read (`POST /tickets/{id}/read` does). Another customer's ticket is a 404.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1352,7 +1491,7 @@ One of the customer's tickets with its whole conversation, as it stands — read
 
 ### POST /tickets/{id}/read
 
-The website showed the customer the ticket: support's latest words read (`unread` false), and the notices about it in their feed read too — the ticket as it stands. Another customer's is not there (404).
+Mark a ticket as read. Call it once the website has shown the ticket: support's latest messages become read (`unread` false), and so do the notifications about it. Returns the ticket. Another customer's ticket is a 404.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1368,13 +1507,13 @@ The website showed the customer the ticket: support's latest words read (`unread
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Read | [StoreTicketResponse](#storeticketresponse) |
+| `200` | Marked as read | [StoreTicketResponse](#storeticketresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /tickets/{id}/messages
 
-Write in the ticket — its words, and a picture as a form —: waiting on support again (a closed one opens again, its rating left behind), the report group under the ticket. 422 on `body` or `file`, on `file` too once the ticket keeps 20 pictures they uploaded, or on `status` once it holds 200 messages (a new ticket is the way on); 429 (`Retry-After`) past 30 messages in 10 minutes, or 10 pictures in an hour (their receipts and their tickets' together); 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB; a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it.
+Write a message in a ticket. Send the text, and optionally a picture (as a form). The ticket waits for support again (a closed ticket reopens and its rating is cleared), and the report group gets the message. A 422 on `body` or `file`; on `file` also once the ticket has 20 pictures the customer uploaded; on `status` once it has 200 messages (open a new ticket instead). A 429 with `Retry-After` past 30 messages in 10 minutes, or 10 pictures in an hour (receipts and ticket pictures together). A 503 while the host has less than 200 MB of free disk, or once the shop's uploads for the day reach 1024 MB. A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1386,20 +1525,20 @@ Write in the ticket — its words, and a picture as a form —: waiting on suppo
 
 **Body**, as JSON:
 
-A ticket's message — support's answer on a panel, the customer's on their website —: its words. One with a picture comes as a form (TicketMessageUploadRequest).
+A ticket message's text: support's answer on a panel, or the customer's message on the website. To attach a picture, send a form instead (TicketMessageUploadRequest).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `body` | string | yes | 1 to 4000 characters, its line breaks kept. |
+| `body` | string | yes | 1 to 4000 characters; line breaks are kept. |
 
 **Body**, as a form (`multipart/form-data`):
 
-A ticket's message with its picture, as a browser form uploads it — a form without one is a message without a picture.
+A ticket message with a picture, as a browser form uploads it. A form without a file is a message without a picture.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `body` | string | yes | 1 to 4000 characters, its line breaks kept. |
-| `file` | file | no | The picture: a JPEG, a PNG or a WebP, judged by its bytes — 10 MB at most; left out, none. |
+| `body` | string | yes | 1 to 4000 characters; line breaks are kept. |
+| `file` | file | no | The picture: a JPEG, PNG or WebP (checked by its content), at most 10 MB. Optional. |
 
 **Answers**
 
@@ -1411,7 +1550,7 @@ A ticket's message with its picture, as a browser form uploads it — a form wit
 
 ### GET /tickets/{id}/messages/{message}/attachment
 
-A message's picture, as its bytes; 404 when it has none or it is gone (`attachment.kept` false says so up front), 502 while Telegram is out of reach; 429 (`Retry-After`) past 120 reads an hour by the customer, every read counting — a refused one too. Another customer's ticket is not there (404)
+A ticket message's picture, as bytes. A 404 when the message has no picture or it is gone (`attachment.kept` false says so in advance), or for another customer's ticket. A 502 while Telegram cannot be reached. A 429 with `Retry-After` past 120 reads an hour per customer, refused reads included.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1420,7 +1559,7 @@ A message's picture, as its bytes; 404 when it has none or it is gone (`attachme
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | integer | yes |  |
-| `message` | path | integer | yes | A message of the ticket (TicketMessageRow.id) |
+| `message` | path | integer | yes | A message of the ticket (`TicketMessageRow.id`) |
 
 **Answers**
 
@@ -1432,7 +1571,7 @@ A message's picture, as its bytes; 404 when it has none or it is gone (`attachme
 
 ### POST /tickets/{id}/close
 
-Close the ticket (the report group hears it); 422 on `status` when it is closed already
+Close a ticket. The report group is notified. A 422 on `status` when it is already closed.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1454,7 +1593,7 @@ Close the ticket (the report group hears it); 422 on `status` when it is closed 
 
 ### POST /tickets/{id}/rating
 
-Rate a closed ticket — 1 to 5, and a note —, a rating given before replaced; the report group hears a first rating, or one that changed. 422 on `rating` or `note` (500 characters at most), then on `status` while it is not closed; 429 (`Retry-After`): each rating is one of their 30 messages in 10 minutes.
+Rate a closed ticket, 1 to 5 with an optional note. A new rating replaces the previous one; the report group hears of a first or changed rating. A 422 on `rating` or `note` (at most 500 characters), then on `status` while the ticket is not closed. A 429 with `Retry-After`: each rating counts as one of the customer's 30 messages per 10 minutes.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1466,12 +1605,12 @@ Rate a closed ticket — 1 to 5, and a note —, a rating given before replaced;
 
 **Body**, as JSON:
 
-Their rating of a closed ticket — a rating given before is replaced.
+The customer's rating of a closed ticket. It replaces any earlier rating.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `rating` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 5. |
-| `note` | string | no | What they say with it — 500 characters at most; blank for none. |
+| `note` | string | no | An optional note, at most 500 characters; blank for none. |
 
 **Answers**
 
@@ -1485,35 +1624,36 @@ Their rating of a closed ticket — a rating given before is replaced.
 
 ### CaptchaAction
 
-The action a captcha's widget names for a form — the shop's own sign_up, sign_in, password_reset and review (each operation's `x-captcha`), or a site's own (`contact`): a token solved for one passes no form of another. 1 to 32 of A-Z, a-z, 0-9, - and _ (Turnstile's data-action).
+The action a captcha widget names for a form: the shop's `sign_up`, `sign_in`, `password_reset` and `review` (each operation's `x-captcha`), or the site's own (such as `contact`). A token solved for one action does not pass a form of another. 1 to 32 of A-Z, a-z, 0-9, - and _ (Turnstile's data-action).
 
 String matching `^[A-Za-z0-9_-]{1,32}$`.
 
 ### CaptchaDriver
 
-A captcha a website's forms may ask: turnstile — Cloudflare Turnstile, its widget drawn with the site's key, its token checked with Cloudflare; altcha — ALTCHA, open source, no third party and no keys: the visitor's browser solves a challenge the shop issues, which the shop checks itself.
+A captcha a website can use: `turnstile`, Cloudflare Turnstile (its widget is drawn with the site key and its token is checked with Cloudflare); or `altcha`, ALTCHA (open source, with no third party and no keys: the visitor's browser solves a challenge the shop issues and checks itself).
 
 String: `turnstile`, `altcha`.
 
 ### StoreAccountResponse
 
-GET /me and PATCH /me: the account, the count a site's bell shows, and — one of the shop's admins — what its admin API lets them do.
+The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), and their loyalty standing.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `customer` | [StoreCustomer](#storecustomer) | yes |  |
-| `unread_notifications` | integer | yes | How many of the notices the shop told them they have not read (GET /notifications). |
-| `staff` | [StoreStaff](#storestaff) or null | yes | Null for a customer who is no admin of the shop, and while the website lets no admin in. |
+| `unread_notifications` | integer | yes | How many of their notifications are unread (`GET /notifications`). |
+| `staff` | [StoreStaff](#storestaff) or null | yes | Null for a customer who is not an admin of the shop, and while the website lets no admins in. |
+| `loyalty` | [LoyaltyStanding](API-Schemas.md#loyaltystanding) | yes | Their loyalty tier («سطح وفاداری»), what they spent and the next tier. The tier's discount applies at checkout and its cashback adds to the shop's. In a shop with no tiers, `tier` and `next` are null. |
 
 ### StoreAuthorizeResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `url` | string | yes | Telegram's authorization address, to send the browser to: client_id, redirect_uri, scope, state, the PKCE challenge (S256) and a nonce on it. |
+| `url` | string | yes | Telegram's authorization address to send the browser to, with client_id, redirect_uri, scope, state, the PKCE challenge (S256) and a nonce. |
 
 ### StoreCaptchaChallengeResponse
 
-ALTCHA's challenge, in its widget's own shape: a salt carrying when it expires (and the action it was asked for), the SHA-256 of the salt and a number up to `maxnumber`, and the shop's signature on it — the widget finds the number and hands the form the payload (as base64 JSON), which the form sends as its `captcha`.
+An ALTCHA challenge, in the widget's own format: a salt that carries its expiry (and the requested action), the SHA-256 of the salt plus a number up to `maxnumber`, and the shop's signature. The widget finds the number and gives the form the payload (base64 JSON), which the form sends as `captcha`.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1525,31 +1665,31 @@ ALTCHA's challenge, in its widget's own shape: a salt carrying when it expires (
 
 ### StoreCaptchaVerdict
 
-What came of a token: whether it passed, the action and the host it was solved for — as far as the captcha says —, when the shop judged it, and why it did not pass.
+The result of a token check: whether it passed, the action and host it was solved for (as far as the captcha reports), when it was checked, and why it failed.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `passed` | boolean | yes |  |
-| `action` | string or null | yes | The action it was solved for, as the widget named it; null: none. |
-| `hostname` | string or null | yes | The host it was solved on (Turnstile says it); null when the captcha does not say (ALTCHA). |
+| `action` | string or null | yes | The action it was solved for, as the widget named it; null for none. |
+| `hostname` | string or null | yes | The host it was solved on (Turnstile reports it); null when the captcha does not report it (ALTCHA). |
 | `verified_at` | string (date-time) | yes |  |
-| `reasons` | list of string | yes | Why it did not pass, empty when it did: hostname-mismatch (solved on none of the website's hosts — its address and its origins), action-mismatch (for another action than `action`), timeout-or-duplicate (expired, or taken before), invalid-input-response (no token of the captcha's, or tampered with), missing-input-response — and Cloudflare's own codes as it says them. |
+| `reasons` | list of string | yes | Why it failed; empty when it passed. `hostname-mismatch` (not solved on one of the website's hosts: its address and origins), `action-mismatch` (solved for another action than `action`), `timeout-or-duplicate` (expired, or already used), `invalid-input-response` (not a valid token, or tampered with), `missing-input-response`, and Cloudflare's own error codes. |
 
 ### StoreCheckout
 
-What a checkout came to — a purchase, a renewal, a top-up. One that paid nothing is no answer but a refusal: the wallet short of the price (422 on `method_id`, what is missing), the order paid or closed elsewhere in the same moment (409).
+The outcome of a checkout (a purchase, renewal, extra traffic or time, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `outcome` | string: `settled`, `transfer`, `processing` | yes | settled — paid at once (the wallet): the order as it ended, `fulfilled` (a purchase's or a renewal's service in `subscription`) or `failed` (support finishes it, the money in: the order's own notes are support's, never shown) — and a request made again with its key whose order was paid since (by card too) and is done with: delivered, failed, or `refunded`; transfer — a card to transfer to (`transfer`), then the receipt (POST /payments/{id}/receipt): the payment awaits it, or has it with support; processing — paid, its delivery under way. |
+| `outcome` | string: `settled`, `transfer`, `processing` | yes | `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `processing`: paid, and the delivery is in progress. |
 | `order` | [StoreOrder](#storeorder) | yes |  |
-| `transfer` | object or null | yes | Where to transfer the money, and the payment the receipt is for — a transfer's; null for the rest. |
-| `transfer.payment_id` | integer | yes | The payment its receipt is sent for. |
-| `transfer.amount` | string | yes | Toman: what to transfer. |
-| `transfer.card` | string | yes | The card's number, its 16 digits alone. |
-| `transfer.holder` | string | yes | Whose card it is. |
-| `transfer.instructions` | string or null | yes | The shop's note on paying with it; null without one. |
-| `subscription` | [StoreSubscription](#storesubscription) or null | yes | The service a purchase delivered or a renewal renewed, once delivered; null for the rest. |
+| `transfer` | object or null | yes | For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. |
+| `transfer.payment_id` | integer | yes | The payment to upload the receipt for. |
+| `transfer.amount` | string | yes | The amount to transfer, in Toman. |
+| `transfer.card` | string | yes | The card number: 16 digits, no separators. |
+| `transfer.holder` | string | yes | The card holder's name. |
+| `transfer.instructions` | string or null | yes | The shop's payment instructions; null if none. |
+| `subscription` | [StoreSubscription](#storesubscription) or null | yes | Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise. |
 
 ### StoreCheckoutResponse
 
@@ -1561,31 +1701,73 @@ What a checkout came to — a purchase, a renewal, a top-up. One that paid nothi
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `expires_in` | integer | yes | Seconds the code waits to be typed back (it takes five tries). |
+| `expires_in` | integer | yes | Seconds until the code expires (it allows five tries). |
 
 ### StoreCustomer
 
-The signed-in customer's account as their website shows it.
+The signed-in customer's account.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `first_name` | string or null | yes |  |
 | `last_name` | string or null | yes |  |
-| `telegram` | object or null | yes | Their Telegram account: its numeric id, and its handle (without the @; null without one). Null for one who signed up on the website. |
+| `telegram` | object or null | yes | Their Telegram account: its numeric id and handle (without the @; null if none). Null for a customer who signed up on the website. |
 | `telegram.id` | integer | yes |  |
 | `telegram.username` | string or null | yes |  |
-| `email` | string or null | yes | Their email — proven: a code sent to it typed back, or Google vouching for it; null without one. |
-| `google` | boolean | yes | A Google account signs them in. |
-| `has_password` | boolean | yes | Their email and a password sign them in. |
-| `two_factor` | boolean | yes | Their password sign-in asks a second step: the code of their authenticator app (or a recovery code). |
-| `phone` | string or null | yes | E.164 (+98912…), the number they shared with the bot. |
-| `balance` | string | yes | The wallet, in Toman (a decimal string, '120000.00'); below zero an agent's debt. |
-| `created_at` | string (date-time) | yes | Since when they are the shop's customer. |
+| `email` | string or null | yes | Their verified email (confirmed with an emailed code, or vouched for by Google); null if none. |
+| `google` | boolean | yes | They can sign in with a Google account. |
+| `has_password` | boolean | yes | They can sign in with their email and a password. |
+| `two_factor` | boolean | yes | Password sign-in also asks for their authenticator app's code (or a recovery code). |
+| `phone` | string or null | yes | The number they shared with the bot, in E.164 form (+98912…). |
+| `balance` | string | yes | Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt. |
+| `created_at` | string (date-time) | yes | When they became a customer of the shop. |
+
+### StoreDiscountQuoteResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `quote` | object | yes |  |
+| `quote.base` | string | yes | Toman before discounts: the customer's price for the plan (its price, first-purchase price or agent price), or the cost of the extra amount. |
+| `quote.discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The automatic discount, if any, then the code. |
+| `quote.amount` | string | yes | Toman left to pay, never below zero; 0 means free. |
+
+### StoreExtraOffer
+
+What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `price` | string or null | yes | Toman per GB or per day; null when only the preset amounts are sold. |
+| `options` | list of object | yes | The preset amounts, smallest first. |
+| `options[].quantity` | integer | yes | GB or days. |
+| `options[].price` | string | yes | Its price in Toman. |
+| `custom` | object or null | yes | Any amount in this range can be bought at `price` per unit; null when only the preset amounts are sold. |
+| `custom.min` | integer | yes |  |
+| `custom.max` | integer | yes |  |
+
+### StoreExtrasResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `extras` | object | yes |  |
+| `extras.traffic` | [StoreExtraOffer](#storeextraoffer) or null | yes | Extra traffic in GB; null when none can be bought now. |
+| `extras.time` | [StoreExtraOffer](#storeextraoffer) or null | yes | Extra time in days; null when none can be bought now. |
+
+### StoreGiftCodeResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `gift` | object | yes | What the code gave the customer. |
+| `gift.kind` | [GiftCodeKind](API-Schemas.md#giftcodekind) | yes |  |
+| `gift.words` | string | yes | What it gave, as the customer reads it: «۵۰٬۰۰۰ تومان شارژ کیف پول», «سرویس «یک‌ماهه»». |
+| `gift.balance` | string or null | yes | The new wallet balance in Toman; null for a plan code. |
+| `gift.order` | [StoreOrder](#storeorder) or null | yes | For a plan code: the order that delivers its service (delivered, or failed and waiting for support's retry, like any order). Null for a Toman code. |
+| `gift.subscription` | [StoreSubscription](#storesubscription) or null | yes | For a plan code: the service, once delivered. |
 
 ### StoreIdentityKind
 
-A kind of way in: a Telegram account, a Google account, an email (with its password).
+A way to sign in: a Telegram account, a Google account, or an email (with its password).
 
 String: `telegram`, `google`, `email`.
 
@@ -1597,27 +1779,27 @@ String: `telegram`, `google`, `email`.
 
 ### StoreMergeOfferResponse
 
-The way in being added is another account's of the shop: that account, for the customer to judge it is theirs too, which of the two stays, and the ticket that makes them one (POST /me/merge).
+The way in being added belongs to another account of the shop. Shows that account (so the customer can confirm it is theirs too), which of the two would remain, and the ticket that merges them (`POST /me/merge`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `merge` | object | yes |  |
-| `merge.token` | string | yes | The merge ticket — this account's alone, once. |
-| `merge.expires_in` | integer | yes | Seconds it waits for the customer. |
+| `merge.token` | string | yes | The merge ticket, usable once and only by this account. |
+| `merge.expires_in` | integer | yes | Seconds until it expires. |
 | `merge.account` | object | yes | The other account. |
-| `merge.account.name` | string or null | yes | "first last"; null without one. |
-| `merge.account.created_at` | string (date-time) | yes | Since when it is the shop's customer. |
-| `merge.account.services` | integer | yes | Its running services. |
+| `merge.account.name` | string or null | yes | "first last"; null if none. |
+| `merge.account.created_at` | string (date-time) | yes | When it became a customer of the shop. |
+| `merge.account.services` | integer | yes | Its active services. |
 | `merge.account.orders` | integer | yes |  |
-| `merge.account.balance` | string | yes | Its wallet, in Toman. |
-| `merge.account.telegram` | boolean | yes | A Telegram account signs it in. |
-| `merge.account.email` | boolean | yes | An email signs it in. |
-| `merge.account.google` | boolean | yes | A Google account signs it in. |
-| `merge.keeps` | string: `this`, `other` | yes | The account that stays — the older: this one, or the other. Everything the other owns becomes its own; its ways in fill the empty slots. |
+| `merge.account.balance` | string | yes | Its wallet balance, in Toman. |
+| `merge.account.telegram` | boolean | yes | It can sign in with Telegram. |
+| `merge.account.email` | boolean | yes | It can sign in with an email. |
+| `merge.account.google` | boolean | yes | It can sign in with Google. |
+| `merge.keeps` | string: `this`, `other` | yes | The account that remains, the older one: `this` or the `other`. It takes over everything the other owns, and the other's ways in fill its empty slots. |
 
 ### StoreNextPeriod
 
-A renewal queued behind the period in use, what that period leaves unused not carried: when the period ends, and the most that is left then (bytes).
+A renewal queued after the current period (whose unused traffic is not carried over): when the current period ends, and the most traffic left then, in bytes.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1628,29 +1810,29 @@ A renewal queued behind the period in use, what that period leaves unused not ca
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `nonce` | string | yes | Handed to the provider's sign-in (telegram-login.js's nonce), and posted back with its id_token — once. |
-| `expires_in` | integer | yes | Seconds it waits for its token. |
+| `nonce` | string | yes | Pass it to the provider's sign-in (telegram-login.js's nonce), then send it back once, with the id_token. |
+| `expires_in` | integer | yes | Seconds until it expires. |
 
 ### StoreNoticeType
 
-What a notice was — one for each thing the shop's bot tells a customer on its own: a payment approved (the service delivered, the wallet charged — or the delivery failed and support finishes it), a receipt refused, an order cancelled by support, a payment back in the wallet, a wallet top-up given back, a payment reminder; a service switched off, back on, deleted, moved (its new link), given days or traffic; «یادآوری» — a service ending soon, its traffic running low; «تمدید خودکار» done, short of money, a renewal paid but not delivered; a newcomer their invite link brought, a referral's commission; their request to become an agent approved or rejected, their agency changed or ended, their bot's traffic short of an order; how their account is signed in to changed — two-factor sign-in turned off (by support, or by them) or on, a way in added or taken away, a password set, another account of theirs made one with it, its second step failed until it waits, the codes emailed to its address failed until none goes for a while (told on every door they have: Telegram and email both); support's answer to their ticket, and its closing.
+The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. Services: switched off, back on, deleted, moved (with its new link), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»).
 
-String: `payment_settled`, `payment_rejected`, `order_cancelled`, `payment_refunded`, `topup_refunded`, `payment_reminder`, `service_disabled`, `service_enabled`, `service_deleted`, `service_moved`, `service_granted`, `expiry_reminder`, `traffic_reminder`, `auto_renewed`, `auto_renew_short`, `renewal_failed`, `referral_joined`, `referral_commission`, `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked`, `agency_traffic_short`, `two_factor_disabled`, `way_in_added`, `way_in_removed`, `password_changed`, `two_factor_enabled`, `account_merged`, `second_step_locked`, `email_codes_failed`, `ticket_answered`, `ticket_closed`.
+String: `payment_settled`, `payment_rejected`, `order_cancelled`, `payment_refunded`, `topup_refunded`, `payment_reminder`, `service_disabled`, `service_enabled`, `service_deleted`, `service_moved`, `service_granted`, `expiry_reminder`, `traffic_reminder`, `auto_renewed`, `auto_renew_short`, `renewal_failed`, `referral_joined`, `referral_commission`, `referral_start_gift`, `referral_reward`, `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked`, `agency_traffic_short`, `two_factor_disabled`, `way_in_added`, `way_in_removed`, `password_changed`, `two_factor_enabled`, `account_merged`, `second_step_locked`, `email_codes_failed`, `ticket_answered`, `ticket_closed`, `loyalty_tier_up`, `cashback_earned`, `lottery_won`.
 
 ### StoreNotification
 
-A notice the shop told the customer — the words its bot wrote them (the admin's, as Telegram got them, or would have).
+A notification the bot sent the customer, with the same text as the Telegram message (sent, or that would have been sent).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `type` | [StoreNoticeType](#storenoticetype) | yes |  |
-| `text` | string | yes | Its words as plain text: no markup, line breaks as they are, a premium emoji its plain emoji. |
-| `html` | string | yes | Its words as safe HTML — only b/strong, i/em, u/ins, s/strike/del, code, pre, blockquote, a spoiler as &lt;span class="tg-spoiler"&gt;, a link to an http(s) address (&lt;a href&gt; and no other attribute) and &lt;br&gt; for a line break; every text escaped. Safe to put in a page as it is. |
-| `subject` | object or null | yes | What it is about, for a link: one of their orders (GET /orders/{id} — a notice about a payment is about its order), of their services (GET /subscriptions/{id}) or of their tickets (GET /tickets/{id}); null for none — their account, a service deleted, someone else's row. Only a service may be gone since (a 404): support deleted it. An order stays — one nobody paid expires as `cancelled` —, and so does a ticket. |
+| `text` | string | yes | The text without markup: line breaks kept, a premium emoji as its plain emoji. |
+| `html` | string | yes | The text as safe HTML: only b/strong, i/em, u/ins, s/strike/del, code, pre, blockquote, a spoiler as &lt;span class="tg-spoiler"&gt;, links to http(s) addresses (&lt;a href&gt; with no other attribute) and &lt;br&gt; for line breaks; all text is escaped. Safe to insert into a page as is. |
+| `subject` | object or null | yes | What it is about, for linking: one of their orders (`GET /orders/{id}`; a payment notice points to its order), services (`GET /subscriptions/{id}`) or tickets (`GET /tickets/{id}`). Null for notices about their account, a deleted service, or someone else's row. Only a service may be gone since (a 404, when support deleted it); orders and tickets stay (an unpaid order expires as `cancelled`). |
 | `subject.type` | string: `order`, `subscription`, `ticket` | yes |  |
 | `subject.id` | integer | yes |  |
-| `read` | boolean | yes | They marked it read (POST /notifications/read). |
+| `read` | boolean | yes | Marked as read (`POST /notifications/read`). |
 | `created_at` | string (date-time) | yes |  |
 
 ### StoreNotificationsResponse
@@ -1663,11 +1845,11 @@ A notice the shop told the customer — the words its bot wrote them (the admin'
 | `meta.per_page` | integer | yes |  |
 | `meta.total` | integer | yes |  |
 | `meta.last_page` | integer | yes |  |
-| `meta.unread` | integer | yes | How many of their notices they have not read, whatever the page shows. |
+| `meta.unread` | integer | yes | How many of their notifications are unread, regardless of the page. |
 
 ### StoreOrder
 
-An order of the customer's: what it was for, how far it got, its payments (the newest first).
+One of the customer's orders: what it was for, its status, and its payments (newest first).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1675,11 +1857,17 @@ An order of the customer's: what it was for, how far it got, its payments (the n
 | `type` | [OrderType](API-Schemas.md#ordertype) | yes |  |
 | `status` | [OrderStatus](API-Schemas.md#orderstatus) | yes |  |
 | `amount` | string | yes | Toman. |
+| `pricing` | [OrderPricing](API-Schemas.md#orderpricing) | yes |  |
+| `discount_amount` | string | yes | The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. `amount` is after discounts. |
+| `discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The discounts applied, the automatic one first. |
+| `discount_code` | [OrderDiscountCode](API-Schemas.md#orderdiscountcode) or null | yes | The discount code used; null for none. |
 | `created_at` | string (date-time) | yes |  |
 | `fulfilled_at` | string (date-time) or null | yes |  |
-| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | A purchase's or a renewal's plan; null for a wallet top-up, or once the plan was deleted. |
-| `server` | [NamedRef](API-Schemas.md#namedref) or null | yes | Where a purchase was bought — a renewal's, where its service is; null for none. |
-| `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | The service it is about, by its name on the panel — a renewal's from the order's start, a purchase's once it is delivered — as a ticket names the service it is about; null for none, or once it was deleted. |
+| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, or once the plan is deleted. |
+| `server` | [NamedRef](API-Schemas.md#namedref) or null | yes | Where a purchase was bought; for a renewal or extras, the service's server. Null for none. |
+| `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | The service it is about, by its panel name (for a renewal or extras from the start, for a purchase once delivered); null for none, or once the service is deleted. |
+| `traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: a service's extra traffic, or an agent's traffic for their bot (`traffic` orders); null otherwise. |
+| `days` | integer or null | yes | The extra days it adds to its service; null otherwise. |
 | `payments` | list of [StorePayment](#storepayment) | yes |  |
 
 ### StoreOrderResponse
@@ -1697,51 +1885,68 @@ An order of the customer's: what it was for, how far it got, its payments (the n
 
 ### StorePayment
 
-One attempt to pay an order.
+A payment attempt for an order.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `method` | [StorePaymentMethod](#storepaymentmethod) | yes | The way it was paid. |
+| `method` | [StorePaymentMethod](#storepaymentmethod) | yes | The payment method. |
 | `status` | [PaymentStatus](API-Schemas.md#paymentstatus) | yes |  |
 | `amount` | string | yes | Toman. |
 | `created_at` | string (date-time) | yes |  |
 | `paid_at` | string (date-time) or null | yes |  |
-| `receipt` | object or null | yes | The receipt the customer sent for it — in the bot, or from the website; null — none sent. |
+| `receipt` | object or null | yes | The receipt the customer sent for it, in the bot or on the website; null if none was sent. |
 | `receipt.sent_at` | string (date-time) | yes |  |
-| `note` | string or null | yes | Support's word on its latest verdict — a rejection's reason, a cancellation's or a refund's note — as the bot tells the customer; null without one. |
+| `note` | string or null | yes | Support's note on its latest decision (a rejection's reason, or a cancellation or refund note), as the bot shows it to the customer; null if none. |
 
 ### StorePaymentMethod
 
-A way to pay, as the checkout names it.
+A payment method, as the checkout shows it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `label` | string | yes | What its button says ("کارت به کارت (ملت)"). |
-| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) or null | yes | instant — the wallet, paid at once; manual — a card transfer and its receipt; null for a way of paying no longer installed. |
+| `label` | string | yes | Its button text ("کارت به کارت (ملت)"). |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) or null | yes | `instant`: the wallet, paid at once. `manual`: a card transfer with a receipt. Null for a method whose driver is no longer installed. |
 
 ### StorePaymentMethodsResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `methods` | list of [StorePaymentMethod](#storepaymentmethod) | yes | In checkout order; none while the shop takes no way to pay that kind of order. |
+| `methods` | list of [StorePaymentMethod](#storepaymentmethod) | yes | In checkout order; empty when no method can pay this kind of order. |
 
 ### StorePlan
 
-A plan as the shop offers it now: what it gives and costs, the category it is filed under, the servers a customer may pick it on today.
+A plan on sale now: what it gives and costs, its category, and the servers a customer can pick today.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
 | `description` | string or null | yes |  |
-| `price` | string | yes | Toman, a decimal string ('120000.00'). |
-| `traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 = unlimited. |
-| `duration_days` | integer | yes | The term, counted from the first connection; 0 = it never ends. |
-| `devices` | integer | yes | Devices at once; 0 = no limit. |
-| `category_id` | integer or null | yes | The category it is offered under (its group's); null for the group of the rest — no category, or one switched off. |
-| `locations` | list of [NamedRef](API-Schemas.md#namedref) | yes | The servers a customer may pick it on today («لوکیشن» in the bot), in the plan's order — at least one. |
+| `price` | string | yes | Toman, as a decimal string ('120000.00'). |
+| `first_purchase_price` | string or null | yes | The price of a customer's first purchase in the shop («قیمت خرید اول»), in Toman, below `price` ('0.00' makes it free). `POST /orders` charges it while the customer has bought no service. Null when there is none, or (with a customer's token) when that customer has already bought. Renewals are at `price`. |
+| `agent_price` | string or null | yes | The price for the shop's agents and members of groups with agent prices («قیمت نماینده»), in Toman, below `price`, for purchases and renewals. Null when there is none, or when the reader is a guest or a customer who gets no agent price. The checkout charges the customer's lowest price. |
+| `offer_price` | string | yes | What the reader pays today, in Toman: the lowest price that applies to them (`price`, `first_purchase_price`, `agent_price`) minus their largest automatic discount (`discount`). Equal to `price` when nothing applies. A discount code is applied on top of this at checkout. |
+| `discount` | [StorePlanDiscount](#storeplandiscount) or null | yes | The automatic discount in `offer_price`: a sale on the plan, the reader's personal percent or their loyalty tier's, whichever is largest (never two together). Null for none. |
+| `checkout_note` | string or null | yes | A note to show at checkout («یادداشت پیش‌فاکتور»: apps it was tested with, a caveat), as plain text the site must escape. Null for none. |
+| `traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 for unlimited. |
+| `duration_days` | integer | yes | The term in whole days, rounded up (a 6-hour plan says 1), counted from the first connection; 0 never ends. `duration_hours` is exact. |
+| `duration_hours` | integer | yes | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. |
+| `devices` | integer | yes | Devices at once; 0 for no limit. |
+| `category_id` | integer or null | yes | The category it is listed under; null for the group without a category (no category, or a switched-off one). |
+| `locations` | list of [NamedRef](API-Schemas.md#namedref) | yes | The servers a customer can pick today («لوکیشن» in the bot), in the plan's order; at least one. |
+
+### StorePlanDiscount
+
+The automatic discount on a plan for this reader: its source, its label («فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪»), its percent and, for a sale, when it ends.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `source` | string: `sale`, `personal`, `tier` | yes |  |
+| `label` | string | yes |  |
+| `percent` | integer or null | yes |  |
+| `ends_at` | string (date-time) or null | yes | When the sale ends; null for no end, or another source. |
 
 ### StorePlanResponse
 
@@ -1753,55 +1958,67 @@ A plan as the shop offers it now: what it gives and costs, the category it is fi
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `groups` | list of object | yes | Every active category in its order — an empty one too —, then, last, the plans of none (or of one switched off): without a category the shop has but this one group, or none when it sells nothing now. |
-| `groups[].category` | [NamedRef](API-Schemas.md#namedref) or null | yes | Null for the group of the rest («سایر پلن‌ها» in the bot). |
+| `groups` | list of object | yes | Every active category in order (empty ones too), then last the plans without a category (or in a switched-off one). A shop without categories has only this last group, or no group when it sells nothing now. |
+| `groups[].category` | [NamedRef](API-Schemas.md#namedref) or null | yes | Null for the group without a category («سایر پلن‌ها» in the bot). |
 | `groups[].plans` | list of [StorePlan](#storeplan) | yes |  |
 
 ### StoreReauthenticatedResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `expires_in` | integer | yes | Seconds this session may change how the account is signed in to before it is asked again (15 minutes). |
+| `expires_in` | integer | yes | Seconds this session may change how the account signs in before it must prove a way in again (15 minutes). |
 
 ### StoreRecoveryCodesResponse
 
-Two-factor sign-in on: its recovery codes — each signs in once in place of the app's code —, shown this once (the shop keeps their keyed hashes only).
+Two-factor sign-in is on. Its recovery codes, each usable once instead of the app's code, are shown only this once (the shop stores only their hashes).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `recovery_codes` | list of string | yes | Ten codes, each 10 capital letters and digits without look-alikes (no 0/O, 1/I/L). |
+| `recovery_codes` | list of string | yes | Ten codes, each 10 upper-case letters and digits without look-alikes (no 0/O, 1/I/L). |
 
 ### StoreReferralResponse
 
-The customer's part in the referral program.
+The customer's referral details.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `enabled` | boolean | yes | The program runs: a newcomer their code brings earns them a share of what that newcomer pays. |
+| `enabled` | boolean | yes | The program is on: each new customer their code brings earns them a share of that customer's payments. |
 | `rate` | integer | yes | The share, in percent. |
-| `first_only` | boolean | yes | Only each newcomer's first payment earns it. |
-| `code` | string | yes | Their invite code — what a sign-in takes as `referral_code` (the site makes its own invite link with it). |
-| `bot_link` | string or null | yes | The bot's invite link with their code (https://t.me/&lt;bot&gt;?start=ref_&lt;code&gt;); null while the bot's @username is not known. |
-| `invited` | integer | yes | The customers their code brought. |
-| `earned` | string | yes | What the commissions credited to them add up to, in Toman. |
+| `renewal_rate` | integer | yes | The share for renewals, in percent, used instead of `rate`; 0: renewals earn nothing. |
+| `first_only` | boolean | yes | Only each referred customer's first payment earns a share. |
+| `start_gift` | object or null | yes | «هدیه شروع»: Toman added to their wallet for each new customer their code brings, and to the new customer's wallet, once per new customer. Null when there is none. Nothing is given while support has an open alert on their referrals. |
+| `start_gift.referrer` | string | yes | Toman for their wallet ("0.00": nothing). |
+| `start_gift.invitee` | string | yes | Toman for the new customer's wallet ("0.00": nothing). |
+| `start_gift.trigger` | [ReferralStartTrigger](API-Schemas.md#referralstarttrigger) | yes |  |
+| `reward` | object or null | yes | «جایزه دعوت»: each time `every` more of the customers their code brought have bought, they get a free service of `plan`. Null when there is none. |
+| `reward.every` | integer | yes |  |
+| `reward.plan` | [NamedRef](API-Schemas.md#namedref) | yes |  |
+| `code` | string | yes | Their invite code, which sign-ins accept as `referral_code` (the site can build its own invite link with it). |
+| `bot_link` | string or null | yes | The bot's invite link with their code (https://t.me/&lt;bot&gt;?start=ref_&lt;code&gt;); null while the bot's username is unknown. |
+| `invited` | integer | yes | How many customers their code brought. |
+| `earned` | string | yes | The total of the commissions credited to them, in Toman. |
+| `rewards` | integer | yes | How many free services they got for their invitations («جایزه دعوت»). |
 
 ### StoreRenewal
 
-A service's renewal before it is paid: on its own plan, at that plan's price today, and the service as the renewal would leave it — by the shop's last copy of its panel's numbers (the renewal reads the panel as it is paid).
+A preview of a service's renewal: on its own plan, at that plan's price today, and the service as the renewal would leave it. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `plan` | object | yes | The plan it is renewed on — its own: what a renewal on it gives. |
+| `plan` | object | yes | The service's own plan, which the renewal uses: what a renewal gives. |
 | `plan.id` | integer | yes |  |
 | `plan.name` | string | yes |  |
 | `plan.price` | string | yes | Toman. |
-| `plan.traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 = unlimited. |
-| `plan.duration_days` | integer | yes | 0 = it never ends. |
-| `price` | string | yes | What the renewal costs: Toman. |
-| `after` | object | yes | The service as the renewal would leave it — as StoreSubscription has them: the days left always carry; the traffic a period leaves unused goes when it ends unless the shop carries it (`next_period`). |
+| `plan.traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 for unlimited. |
+| `plan.duration_days` | integer | yes | Whole days, rounded up; 0 never ends. |
+| `plan.duration_hours` | integer | yes | Hours; 0 never ends. |
+| `plan.checkout_note` | string or null | yes | A note to show at checkout, as plain text; null for none. |
+| `price` | string | yes | What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). |
+| `discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The automatic discount in `price`: none, or one. |
+| `after` | object | yes | The service as the renewal would leave it, in StoreSubscription's shapes. Remaining days always carry over; a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`). |
 | `after.term` | [StoreServiceTerm](#storeserviceterm) | yes |  |
 | `after.traffic` | [StoreServiceTraffic](#storeservicetraffic) | yes |  |
-| `after.next_period` | [StoreNextPeriod](#storenextperiod) or null | yes | The period in use, its unused traffic going when it ends; null when nothing goes. |
+| `after.next_period` | [StoreNextPeriod](#storenextperiod) or null | yes | The current period, whose unused traffic expires when it ends; null when nothing expires. |
 
 ### StoreRenewalResponse
 
@@ -1811,46 +2028,46 @@ A service's renewal before it is paid: on its own plan, at that plan's price tod
 
 ### StoreResponse
 
-GET / of the Store API: the shop as its website introduces it — what the site asks first.
+The Store API's `GET /`: the shop's public profile, which a website asks for first.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `shop` | object | yes |  |
-| `shop.name` | string | yes | The main shop's name (APP_NAME); an agent's, their bot's title (else its @username). |
-| `shop.taking_orders` | boolean | yes | Whether the shop takes orders now — its bot switched on. False: a purchase, a renewal, a top-up and a receipt are refused (503); what it sells is still read, and customers still sign in. |
-| `shop.bot` | object or null | yes | The shop's Telegram bot; null while its @username is not known. |
+| `shop.name` | string | yes | The main shop's name (APP_NAME); for an agent's shop, their bot's title (else its username). |
+| `shop.taking_orders` | boolean | yes | Whether the shop takes orders now (its bot is switched on). When false, purchases, renewals, top-ups and receipts are refused (503); the catalogue can still be read and customers can still sign in. |
+| `shop.bot` | object or null | yes | The shop's Telegram bot; null while its username is unknown. |
 | `shop.bot.username` | string | yes | Without the @. |
 | `shop.bot.url` | string | yes | https://t.me/ and the username. |
-| `support` | object or null | yes | How to reach support — the bot's «پشتیبانی» contact as a link: an @handle's t.me address, a web address, a tel: number. Null when none is set, or it is no link. |
+| `support` | object or null | yes | How to reach support: the bot's «پشتیبانی» contact as a link (an @handle's t.me address, a web address, or a tel: number). Null when none is set or it is not a link. |
 | `support.url` | string | yes |  |
 | `sign_in` | object | yes |  |
 | `sign_in.telegram` | object or null | yes | Telegram sign-in while it is on; null when it is off. |
-| `sign_in.telegram.client_id` | string | yes | The Client ID the site signs in under — telegram-login.js's client_id. |
-| `sign_in.telegram.redirect` | boolean | yes | The redirect flow is set up too (a client secret is kept): POST /auth/telegram/authorize answers. |
+| `sign_in.telegram.client_id` | string | yes | The Client ID for the site's sign-in (telegram-login.js's client_id). |
+| `sign_in.telegram.redirect` | boolean | yes | The redirect flow is also available (a client secret is stored), so `POST /auth/telegram/authorize` works. |
 | `sign_in.google` | object or null | yes | Google sign-in while it is on; null when it is off. |
-| `sign_in.google.client_id` | string | yes | The OAuth client id the site signs in under — Google Identity Services' client_id. |
-| `sign_in.email` | boolean | yes | Signing up with an email and a password is on — and the shop's email goes out (its codes reach the customer). A customer who signed up before signs in with their password whatever this says. |
-| `captcha` | object or null | yes | The captcha the website's forms ask, while it asks one (null: none): what a page draws its widget with. A sign-up, a sign-in with a password, a password reset and a review carry its token (`captcha`), the widget naming the operation's action (`x-captcha`: Turnstile's data-action, ALTCHA's challenge asked with ?action=); a form of the site's own is judged by its backend (POST /captcha/verify). |
+| `sign_in.google.client_id` | string | yes | The OAuth client id for the site's sign-in (Google Identity Services' client_id). |
+| `sign_in.email` | boolean | yes | Email sign-up is on and the shop can send email (so the codes reach the customer). Customers who already signed up can sign in with their password either way. |
+| `captcha` | object or null | yes | The website's captcha, for drawing the widget; null when none is set. Sign-up, password sign-in, password reset and reviews send its token in `captcha`, solved for the operation's action (`x-captcha`: Turnstile's data-action, or ALTCHA's challenge requested with ?action=). For the site's own forms, its backend checks the token with `POST /captcha/verify`. |
 | `captcha.driver` | [CaptchaDriver](#captchadriver) | yes |  |
-| `captcha.site_key` | string or null | yes | The widget's public key — Turnstile's site key; null for ALTCHA, which has none. |
-| `captcha.challenge_url` | string or null | yes | Where the widget fetches its challenge — ALTCHA's challengeurl (GET /captcha/challenge, ?action= naming the form's action); null for Turnstile, which draws its own. |
-| `referral` | object | yes | The referral program's terms: a newcomer who signs in with an invite code (`referral_code`) earns its owner a share of what they pay. |
+| `captcha.site_key` | string or null | yes | The widget's public key (Turnstile's site key); null for ALTCHA, which has none. |
+| `captcha.challenge_url` | string or null | yes | Where the widget fetches its challenge: ALTCHA's challengeurl (`GET /captcha/challenge`, with ?action= naming the form's action). Null for Turnstile, which makes its own. |
+| `referral` | object | yes | The referral program's terms: a new customer who signs in with an invite code (`referral_code`) earns the code's owner a share of their payments. |
 | `referral.enabled` | boolean | yes |  |
-| `referral.rate` | integer | yes | The share, in percent, of a referred customer's payment. |
-| `referral.first_only` | boolean | yes | Only each referred customer's first payment earns it. |
+| `referral.rate` | integer | yes | The share of a referred customer's payment, in percent. |
+| `referral.first_only` | boolean | yes | Only each referred customer's first payment earns a share. |
 
 ### StoreReview
 
-A review the shop shows: approved by support. Its writer's own words and choices — plain text, which the website escapes —, nothing of who wrote it nor of support's.
+An approved review, as the website shows it: the writer's text and choices as plain text (the website must escape it), with nothing about who wrote it or who approved it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes | The name it is signed with. |
 | `rating` | integer | yes | 1 to 5. |
-| `body` | string | yes | Its words, line breaks as written. |
-| `context` | string or null | yes | A line of where they use the service from («ایرانسل · اندروید · Happ»); null for none. |
-| `avatar` | string or null | yes | The key of the website's own avatar they picked; null for none — the website draws its own default. |
+| `body` | string | yes | Its text, with line breaks as written. |
+| `context` | string or null | yes | A line on where the service is used («ایرانسل · اندروید · Happ»); null for none. |
+| `avatar` | string or null | yes | The key of the avatar they picked from the website's own set; null for none (the website shows its default). |
 | `created_at` | string (date-time) | yes | When it was written. |
 
 ### StoreReviewWrittenResponse
@@ -1859,7 +2076,7 @@ A review the shop shows: approved by support. Its writer's own words and choices
 |---|---|---|---|
 | `review` | object | yes |  |
 | `review.id` | integer | yes |  |
-| `review.status` | [ReviewStatus](API-Schemas.md#reviewstatus) | yes | pending: waiting on support until it is approved. |
+| `review.status` | [ReviewStatus](API-Schemas.md#reviewstatus) | yes | `pending`: waiting for support's approval. |
 
 ### StoreReviewsResponse
 
@@ -1871,28 +2088,29 @@ A review the shop shows: approved by support. Its writer's own words and choices
 | `meta.per_page` | integer | yes |  |
 | `meta.total` | integer | yes |  |
 | `meta.last_page` | integer | yes |  |
-| `meta.summary` | object | yes | Every review the shop shows, as one figure — whatever page this is. |
+| `meta.summary` | object | yes | Totals over all approved reviews, regardless of the page. |
 | `meta.summary.count` | integer | yes |  |
-| `meta.summary.average` | number or null | yes | Their mean rating, to two decimals; null while there is none. |
+| `meta.summary.average` | number or null | yes | The average rating, to two decimals; null while there are no reviews. |
 
 ### StoreServiceTerm
 
-A service's term: how long, when its clock started and when it ends — or that it waits for the first connection.
+A service's term: its length, when it started and when it ends, or that it waits for the first connection.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `duration_days` | integer | yes | The term in days, counted from the first connection; 0 = it never ends. |
-| `starts_at` | string (date-time) or null | yes | When the first connection started the clock; null until then. |
+| `duration_days` | integer | yes | The term in whole days, rounded up, counted from the first connection; 0 never ends. `duration_hours` is exact. |
+| `duration_hours` | integer | yes | The term in hours, counted from the first connection; 0 never ends. |
+| `starts_at` | string (date-time) or null | yes | When the first connection started the term; null until then. |
 | `expires_at` | string (date-time) or null | yes | Null while it waits for the first connection, or without a term. |
-| `awaits_first_use` | boolean | yes | Its term has not started: it starts at the first connection. |
+| `awaits_first_use` | boolean | yes | The term has not started yet; it starts at the first connection. |
 
 ### StoreServiceTraffic
 
-A service's quota and what of it is used and left, in bytes.
+A service's quota, and how much is used and left, in bytes.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `limit_bytes` | integer | yes | 0 = unlimited. |
+| `limit_bytes` | integer | yes | 0 for unlimited. |
 | `used_bytes` | integer | yes |  |
 | `remaining_bytes` | integer or null | yes | Null when unlimited. |
 
@@ -1903,11 +2121,11 @@ A device the customer is signed in on.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `device` | string or null | yes | What its browser said it is, in words: «Chrome در Windows». |
-| `ip` | string or null | yes | The address it signed in from. |
+| `device` | string or null | yes | The device as its browser describes it, in words: «Chrome در Windows». |
+| `ip` | string or null | yes | The IP address it signed in from. |
 | `created_at` | string (date-time) | yes | When it signed in. |
-| `last_used_at` | string (date-time) or null | yes | Its last request — written every few minutes, not on each. |
-| `current` | boolean | yes | The one this request came with. |
+| `last_used_at` | string (date-time) or null | yes | Its last request (updated every few minutes, not on every request). |
+| `current` | boolean | yes | The session this request was made with. |
 
 ### StoreSessionsResponse
 
@@ -1919,20 +2137,20 @@ A device the customer is signed in on.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `token` | string | yes | The customer's bearer token on this device, shown this once — the site keeps it (`Authorization: Bearer …`). |
+| `token` | string | yes | The customer's bearer token for this device, shown only this once. The site keeps it and sends it as `Authorization: Bearer …`. |
 | `customer` | [StoreCustomer](#storecustomer) | yes |  |
 
 ### StoreStaff
 
-The customer as one of the shop's admins on its website: what its admin API (/admin/*: the panels' operations this file marks x-staff) answers them.
+What the website's admin API (`/admin/*`, the panel operations marked `x-staff`) allows this customer as an admin of the shop.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | yes | What the website lets its admins do beyond the shop's daily work: an operation marked with a grant answers only while it is here. |
-| `strong_sign_in` | boolean | yes | The website asks its admins a strong sign-in: Telegram, Google, or a password with its second step. |
-| `signed_in_strongly` | boolean | yes | This session was signed in so — or a strong way was proven on it since (POST /me/reauthenticate). |
-| `signed_in_until` | string (date-time) or null | yes | Until when this session's sign-in lets it work the admin API at all — 12 hours after a way in was last proven on it; null: prove a way in again first (POST /me/reauthenticate). |
-| `recent_until` | string (date-time) or null | yes | Until when this session's sign-in counts as recent — what a granted operation, and approving a payment (x-staff-recent), asks too; null: prove a way in again first (POST /me/reauthenticate). |
+| `grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | yes | What the website lets admins do beyond the daily work. An operation that needs a grant works only while the grant is listed here. |
+| `strong_sign_in` | boolean | yes | The website requires admins to sign in strongly: Telegram, Google, or a password with its second step. |
+| `signed_in_strongly` | boolean | yes | This session was signed in strongly, or a strong way in was proven on it since (`POST /me/reauthenticate`). |
+| `signed_in_until` | string (date-time) or null | yes | Until when this session may use the admin API at all: 12 hours after a way in was last proven on it. Null: prove a way in again first (`POST /me/reauthenticate`). |
+| `recent_until` | string (date-time) or null | yes | Until when this session's sign-in counts as recent, which granted operations and payment approval (`x-staff-recent`) also need. Null: prove a way in again first (`POST /me/reauthenticate`). |
 
 ### StoreStatusResponse
 
@@ -1941,34 +2159,37 @@ The customer as one of the shop's admins on its website: what its admin API (/ad
 | `servers` | list of object | yes |  |
 | `servers[].id` | integer | yes |  |
 | `servers[].name` | string | yes |  |
-| `servers[].available` | boolean | yes | It takes a new customer now: switched on, serving subscription links, with room. |
-| `servers[].checked_at` | string (date-time) or null | yes | When the shop last talked to it; null — never. |
+| `servers[].available` | boolean | yes | It takes new customers now: switched on, serving subscription links, and not full. |
+| `servers[].checked_at` | string (date-time) or null | yes | When the shop last reached it; null if never. |
 
 ### StoreSubscription
 
-One of the customer's services, as the shop last saw it on its panel (`synced_at`), with what they may do with it now.
+One of the customer's services, as last read from its panel (`synced_at`), with what the customer can do with it now.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes | Its name on the panel ("amir_2", "USER_7"). |
 | `status` | [SubscriptionStatus](API-Schemas.md#subscriptionstatus) | yes |  |
-| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan it was sold or last renewed on; null once that plan was deleted. |
+| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan it was sold or last renewed on; null once that plan is deleted. |
 | `server` | [NamedRef](API-Schemas.md#namedref) | yes | The server it is on («لوکیشن» in the bot). |
-| `link` | string or null | yes | The one link the customer subscribes to; null once the panel no longer has the service (deleted). |
+| `link` | string or null | yes | The subscription link; null once the panel no longer has the service (deleted). |
 | `traffic` | [StoreServiceTraffic](#storeservicetraffic) | yes |  |
 | `term` | [StoreServiceTerm](#storeserviceterm) | yes |  |
-| `auto_renew` | object | yes | «تمدید خودکار»: renewed from the wallet before its end, on its plan at its price. |
+| `auto_renew` | object | yes | Auto-renewal («تمدید خودکار»): the service is renewed from the wallet before it ends, on its plan at the plan's price. |
 | `auto_renew.on` | boolean | yes | The customer's switch. |
-| `auto_renew.offered` | boolean | yes | The switch may be set (PATCH): it runs, it ends some day, it has its plan, and the wallet is on. |
-| `auto_renew.days_before` | integer | yes | How many days before its end it is renewed, its switch on — the shop's rule, one for every service (1 to 30). |
-| `renewable` | boolean | yes | Its customer may renew it now, on its plan: it is active or ended, its plan still there, renewing something — and in an agent's shop covered by their traffic. |
-| `link_rotation` | boolean | yes | Its link may be changed now (POST …/rotate-link): it runs, and its server can give it a new one. |
-| `next_period` | [StoreNextPeriod](#storenextperiod) or null | yes | Null while no renewal is queued behind the period in use. |
-| `presence` | object or null | yes | Whether it is connected — only when its panel was just asked (POST …/refresh) and has it; null otherwise. |
+| `auto_renew.offered` | boolean | yes | The switch can be set (`PATCH`): the service is active, has an end date and still has its plan, and the wallet payment method is on. |
+| `auto_renew.days_before` | integer | yes | How many days before its end it is renewed when the switch is on. A shop-wide setting, 1 to 30. |
+| `renewable` | boolean | yes | The customer can renew it now on its plan: it is active or ended, its plan still exists and the renewal adds something, and in an agent's shop the agent's traffic covers it. |
+| `extras` | object | yes | Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel). Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. |
+| `extras.traffic` | boolean | yes |  |
+| `extras.time` | boolean | yes |  |
+| `link_rotation` | boolean | yes | Its link can be changed now (`POST …/rotate-link`): it is active and its server can rotate links. |
+| `next_period` | [StoreNextPeriod](#storenextperiod) or null | yes | Null while no renewal is queued after the current period. |
+| `presence` | object or null | yes | Whether it is connected. Only set right after the panel was read (`POST …/refresh`) and still has it; null otherwise. |
 | `presence.online` | boolean or null | yes | Connected right now; null when the panel cannot tell. |
-| `presence.last_online_at` | string (date-time) or null | yes | Its last connection; null — never, or the panel cannot tell. |
-| `synced_at` | string (date-time) or null | yes | When its panel was last read for it — what the numbers are from. |
+| `presence.last_online_at` | string (date-time) or null | yes | Its last connection; null if never, or when the panel cannot tell. |
+| `synced_at` | string (date-time) or null | yes | When the panel was last read for it; the numbers are from then. |
 | `created_at` | string (date-time) | yes |  |
 
 ### StoreSubscriptionResponse
@@ -1993,41 +2214,41 @@ One of the customer's support tickets.
 | `id` | integer | yes |  |
 | `subject` | string | yes |  |
 | `status` | [TicketStatus](API-Schemas.md#ticketstatus) | yes |  |
-| `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | The service of theirs it is about, by its name; null for none — or one deleted since. |
-| `last_message_at` | string (date-time) | yes | When its latest message was written: the list's order. |
-| `unread` | boolean | yes | Support wrote since they last read it (POST /tickets/{id}/read reads it, as the bot reads it once shown there). |
-| `rating` | integer or null | yes | Their rating of it, 1 to 5, once it was closed; null for none — and once it opened again. |
+| `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | Their service it is about, by its name; null for none, or when the service was deleted. |
+| `last_message_at` | string (date-time) | yes | When its latest message was written; the list is sorted by it. |
+| `unread` | boolean | yes | Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot). |
+| `rating` | integer or null | yes | Their rating after it closed, 1 to 5; null for none, and after it is reopened. |
 | `created_at` | string (date-time) | yes |  |
-| `closed_at` | string (date-time) or null | yes | When it was closed; null unless it is closed — a ticket opened again leaves its end behind. |
+| `closed_at` | string (date-time) or null | yes | When it was closed; null unless it is closed (reopening clears it). |
 
 ### StoreTicketDetail
 
-One of the customer's support tickets with its whole conversation, the first message first.
+One of the customer's support tickets, with its whole conversation, oldest message first.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `subject` | string | yes |  |
 | `status` | [TicketStatus](API-Schemas.md#ticketstatus) | yes |  |
-| `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | The service of theirs it is about, by its name; null for none — or one deleted since. |
-| `last_message_at` | string (date-time) | yes | When its latest message was written: the list's order. |
-| `unread` | boolean | yes | Support wrote since they last read it (POST /tickets/{id}/read reads it, as the bot reads it once shown there). |
-| `rating` | integer or null | yes | Their rating of it, 1 to 5, once it was closed; null for none — and once it opened again. |
+| `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | Their service it is about, by its name; null for none, or when the service was deleted. |
+| `last_message_at` | string (date-time) | yes | When its latest message was written; the list is sorted by it. |
+| `unread` | boolean | yes | Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot). |
+| `rating` | integer or null | yes | Their rating after it closed, 1 to 5; null for none, and after it is reopened. |
 | `created_at` | string (date-time) | yes |  |
-| `closed_at` | string (date-time) or null | yes | When it was closed; null unless it is closed — a ticket opened again leaves its end behind. |
-| `rating_note` | string or null | yes | What they said with their rating. |
+| `closed_at` | string (date-time) or null | yes | When it was closed; null unless it is closed (reopening clears it). |
+| `rating_note` | string or null | yes | The note they left with their rating. |
 | `messages` | list of [StoreTicketMessage](#storeticketmessage) | yes |  |
 
 ### StoreTicketMessage
 
-One message of their ticket — theirs, or support's (who of support wrote it is never said: «پشتیبانی»).
+A message in their ticket, from them or from support (the support person is never named; it shows as «پشتیبانی»).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `author` | [TicketAuthor](API-Schemas.md#ticketauthor) | yes |  |
-| `body` | string | yes | Its words, line breaks as they are — plain text. |
-| `attachment` | [TicketAttachment](API-Schemas.md#ticketattachment) or null | yes | Its picture (GET /tickets/{id}/messages/{message}/attachment); null for none. |
+| `body` | string | yes | Its text as plain text, with line breaks kept. |
+| `attachment` | [TicketAttachment](API-Schemas.md#ticketattachment) or null | yes | Its picture (`GET /tickets/{id}/messages/{message}/attachment`); null for none. |
 | `created_at` | string (date-time) | yes |  |
 
 ### StoreTicketResponse
@@ -2046,32 +2267,32 @@ One message of their ticket — theirs, or support's (who of support wrote it is
 | `meta.per_page` | integer | yes |  |
 | `meta.total` | integer | yes |  |
 | `meta.last_page` | integer | yes |  |
-| `meta.unread` | integer | yes | How many of all of their tickets hold support's words they have not read, whatever the list shows (a badge). |
+| `meta.unread` | integer | yes | How many of all their tickets have unread messages from support, regardless of the filters (for a badge). |
 
 ### StoreTwoFactorResponse
 
-The password was right for an account whose sign-in asks a second step: the challenge its code is posted with (POST /auth/login/2fa) — no session opened yet.
+The password is right, but the account needs a second step: the challenge to send with the code (`POST /auth/login/2fa`). No session is opened yet.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `two_factor` | object | yes |  |
-| `two_factor.challenge` | string | yes | Posted back with the code; it takes five wrong codes. |
-| `two_factor.expires_in` | integer | yes | Seconds it waits for the code. |
+| `two_factor.challenge` | string | yes | Send it back with the code; it allows five wrong codes. |
+| `two_factor.expires_in` | integer | yes | Seconds until it expires. |
 
 ### StoreTwoFactorSetupResponse
 
-A new secret for the customer's authenticator app, waiting for its first code.
+A new secret for the customer's authenticator app, waiting for the app's first code.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `secret` | string | yes | Base32 (160 bits): what the app takes when it is typed in by hand. |
-| `uri` | string | yes | The otpauth:// address the app takes it by — for a QR code, or a tap on the phone: the shop's name its issuer, the account's email its name. |
+| `secret` | string | yes | Base32 (160 bits), for typing into the app by hand. |
+| `uri` | string | yes | The otpauth:// address for the app, as a QR code or a link on the phone. Its issuer is the shop's name and its account name is the email. |
 
 ### StoreUnreadResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `unread` | integer | yes | How many of their notices they have not read now. |
+| `unread` | integer | yes | How many of their notifications are still unread. |
 
 ### StoreWalletResponse
 
@@ -2079,25 +2300,25 @@ The customer's wallet. Amounts in Toman, as decimal strings.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `balance` | string | yes | Below zero an agent's debt. |
-| `credit` | string | yes | How far below zero an agent's wallet may go; '0.00' for anyone else. |
-| `spendable` | string | yes | What the wallet can pay now: the balance and the credit. |
-| `top_up` | object | yes | What a top-up may be, as the bot's «افزایش موجودی» offers it — POST /wallet/top-up takes these amounts as they are written here. |
-| `top_up.min` | string | yes | The smallest top-up the shop takes. |
-| `top_up.max` | string | yes | The largest top-up the shop takes. |
+| `balance` | string | yes | Below zero is an agent's debt. |
+| `credit` | string | yes | How far below zero an agent's wallet may go; '0.00' for everyone else. |
+| `spendable` | string | yes | What the wallet can pay now: the balance plus the credit. |
+| `top_up` | object | yes | The top-up limits and presets, as the bot's «افزایش موجودی» offers them. `POST /wallet/top-up` accepts these amounts exactly as written here. |
+| `top_up.min` | string | yes | The smallest top-up allowed. |
+| `top_up.max` | string | yes | The largest top-up allowed. |
 | `top_up.presets` | list of string | yes | The amounts offered as buttons, ascending. |
 
 ### StoreWalletTransaction
 
-One line of the customer's wallet ledger.
+A line of the customer's wallet ledger.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `type` | [WalletTransactionType](API-Schemas.md#wallettransactiontype) | yes |  |
 | `amount` | string | yes | Toman. |
-| `balance_after` | string | yes | The balance from then on. |
-| `description` | string or null | yes | What it was for, in words («شارژ کیف پول (سفارش #12)»). |
+| `balance_after` | string | yes | The balance after this line. |
+| `description` | string or null | yes | What it was for («شارژ کیف پول (سفارش #12)»). |
 | `created_at` | string (date-time) | yes |  |
 
 ### StoreWalletTransactionsResponse

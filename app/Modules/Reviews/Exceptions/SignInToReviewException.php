@@ -7,9 +7,8 @@ namespace App\Modules\Reviews\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * A guest's review — no customer signed in — while the website asks no captcha: nothing would stand between a bot and
- * the shop's queue, so it takes reviews from its signed-in customers alone (Services\Reviews). A 403 in the customer's
- * words: sign in first.
+ * A guest's review while the website asks no captcha: without one nothing would stop a bot, so only signed-in customers
+ * may review. A 403 worded for the customer: sign in first.
  */
 final class SignInToReviewException extends DomainRuleException
 {

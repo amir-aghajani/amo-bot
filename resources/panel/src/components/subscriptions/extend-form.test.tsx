@@ -68,7 +68,7 @@ beforeEach(() => {
 
 describe('extending one service', () => {
   it('sends what was typed, and the dialog follows the service as it is now', async () => {
-    const fresh = subscriptionRow({ duration_days: 33, traffic: { limit: 40 * GB, used: 5 * GB } })
+    const fresh = subscriptionRow({ duration_hours: 33 * 24, traffic: { limit: 40 * GB, used: 5 * GB } })
     server().on('POST', URL, json({ subscription: fresh }))
     const { onChanged } = await extend()
 
@@ -82,7 +82,7 @@ describe('extending one service', () => {
     expect(screen.getByRole('button', { name: 'افزایش زمان و حجم' })).toBeTruthy()
   })
 
-  it('keeps the customer out of it when its box is unticked, and words what alone was given', async () => {
+  it('does not notify the customer when its box is unticked, and describes only what was given', async () => {
     server().on('POST', URL, json({ subscription: SERVICE }))
     await extend()
 
@@ -117,7 +117,7 @@ describe('extending one service', () => {
   })
 })
 
-describe('the amounts, worded for the service', () => {
+describe('the amounts, labelled for the service', () => {
   it('move a running service’s deadline and go on top of its quota', async () => {
     await extend()
 
@@ -132,8 +132,14 @@ describe('the amounts, worded for the service', () => {
     expect(lineUnder('تعداد روز')).toBe('به مدت سرویس اضافه می‌شود؛ زمانش از اولین اتصال مشتری شروع می‌شود.')
   })
 
+  it('lengthen the term of an hourly plan’s service still waiting for its first connection — it ends some day', async () => {
+    await extend({ subscription: subscriptionRow({ expires_at: null, starts_at: null, duration_hours: 6 }) })
+
+    expect([screen.getByLabelText('تعداد روز').hasAttribute('disabled'), lineUnder('تعداد روز')]).toEqual([false, 'به مدت سرویس اضافه می‌شود؛ زمانش از اولین اتصال مشتری شروع می‌شود.'])
+  })
+
   it('leave out the days of one that never ends, the GB taking the focus', async () => {
-    await extend({ subscription: subscriptionRow({ expires_at: null, starts_at: null, duration_days: 0 }) })
+    await extend({ subscription: subscriptionRow({ expires_at: null, starts_at: null, duration_hours: 0 }) })
 
     expect([screen.getByLabelText('تعداد روز').hasAttribute('disabled'), lineUnder('تعداد روز')]).toEqual([true, 'این سرویس تاریخ پایان ندارد.'])
     expect(document.activeElement).toBe(screen.getByLabelText('حجم (گیگابایت)'))

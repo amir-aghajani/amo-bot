@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Catalog\Models;
 
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
+use App\Support\Money;
 use App\Support\Traffic;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -14,17 +15,29 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * A sellable package: duration + traffic + price, offered on one or more servers (PlanServer).
- * The customer picks the server at purchase time; a plan without servers cannot be bought.
+ * A sellable package — term, traffic, price — offered on one or more servers (PlanServer); the customer picks the server
+ * when buying.
  *
  * @property int $id
  * @property int|null $category_id
  * @property string $name
  * @property string|null $description
+ * @property string|null $checkout_note What the bot's checkout of it says under it («یادداشت پیش‌فاکتور»): its purchase's
+ *                                      and its renewal's; null — none
  * @property string $price
- * @property int $duration_days 0 = no time limit
+ * @property string|null $first_purchase_price What a customer pays for it as their first purchase in the shop («قیمت خرید
+ *                                             اول»), below the price; null — none (firstPurchasePrice())
+ * @property string|null $agent_price What an agent, or a customer of a group with agent prices, pays for it («قیمت
+ *                                    نماینده»), below the price; null — none (agentPrice())
+ * @property int $duration_hours the term in hours, counted from the first connection — an hourly plan's, or a daily
+ *                               one's days × 24; 0 = no time limit
  * @property float $traffic_gb 0 = unlimited
  * @property int $ip_limit 0 = unlimited
+ * @property array<string, mixed>|null $extras Its own prices of the extra traffic and time its services may buy
+ *                                             (Subscriptions\Services\ExtrasSettings::planPrices()); null — the shop's
+ * @property string|null $button_style Its button's colour in the bot's plan list, one of Telegram's
+ *                                     (KeyboardLayout::STYLES); null — the client's own
+ * @property int $button_row How many buttons share its button's row there: 1 — a row of its own, 2 or 3
  * @property bool $is_active
  * @property int $sort
  * @property Carbon $created_at
@@ -42,10 +55,16 @@ class Plan extends Model
         'category_id',
         'name',
         'description',
+        'checkout_note',
         'price',
-        'duration_days',
+        'first_purchase_price',
+        'agent_price',
+        'duration_hours',
         'traffic_gb',
         'ip_limit',
+        'extras',
+        'button_style',
+        'button_row',
         'is_active',
         'sort',
     ];
@@ -54,9 +73,13 @@ class Plan extends Model
     protected $casts = [
         'category_id' => 'integer',
         'price' => 'decimal:2',
-        'duration_days' => 'integer',
+        'first_purchase_price' => 'decimal:2',
+        'agent_price' => 'decimal:2',
+        'duration_hours' => 'integer',
         'traffic_gb' => 'float',
         'ip_limit' => 'integer',
+        'extras' => 'array',
+        'button_row' => 'integer',
         'is_active' => 'boolean',
         'sort' => 'integer',
     ];
@@ -65,6 +88,24 @@ class Plan extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(PlanCategory::class, 'category_id');
+    }
+
+    /** Its first-purchase price («قیمت خرید اول») while below its price; null otherwise (Orders\Services\Pricing). */
+    public function firstPurchasePrice(): ?string
+    {
+        return self::below($this->first_purchase_price, $this->price);
+    }
+
+    /** Its agent price («قیمت نماینده») while below its price; null otherwise. */
+    public function agentPrice(): ?string
+    {
+        return self::below($this->agent_price, $this->price);
+    }
+
+    /** `$amount` while it is below `$price` (a discount); null for none. */
+    private static function below(?string $amount, string $price): ?string
+    {
+        return $amount !== null && Money::compare($amount, $price) < 0 ? Money::normalize($amount) : null;
     }
 
     /** The quota as the panel takes it: binary gigabytes, 0 = unlimited. */

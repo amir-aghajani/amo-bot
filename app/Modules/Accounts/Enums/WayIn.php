@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Accounts\Enums;
 
 /**
- * A kind of way into a customer's account on the shop's website — the one list of them: a Telegram account, a Google
- * account, an email (with its password). An account has one of each kind at most, kept in its own column of `users`
- * (column()); the customer's words name it (label()): a merge's refusal, a notice that one was added or taken away.
+ * A kind of way into a customer's account: a Telegram account, a Google account, an email (with its password). An account
+ * has at most one of each, in its own column of `users`.
  */
 enum WayIn: string
 {
@@ -25,7 +24,7 @@ enum WayIn: string
         };
     }
 
-    /** Its name in the customer's words. */
+    /** Its name as the customer reads it: in merge refusals and the notices of a way in added or taken away. */
     public function label(): string
     {
         return match ($this) {

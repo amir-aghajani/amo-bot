@@ -27,8 +27,8 @@ use ShipMonk\PHPStan\DeadCode\Provider\MemberUsageProvider;
  * and a relation read without its method being called — as a property (`$order->payments`) or by its name, in the
  * calls that take relation names (`with('payments.order')`, `withCount()`, `whereHas()`, `load()` …, each segment of a
  * path) or in a list a model hands such a call (Bot::statCounts(): 'customers', 'orders as sold_count'). The
- * detector's own Eloquent support counts every relation as used; a relation here exists only with a caller (CLAUDE.md,
- * Conventions), so phpstan.neon switches that support off for this.
+ * detector's own Eloquent support counts every relation as used, while here a relation exists only with a caller
+ * (docs/Conventions.md), so phpstan.neon switches that support off for this.
  */
 final class ModelUsageProvider implements MemberUsageProvider
 {

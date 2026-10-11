@@ -188,7 +188,7 @@ final class ReportGroupConnectTest extends BotTestCase
         $this->send($this->groupText('/start@' . self::BOT . ' reports_' . $code));
 
         self::assertSame(self::REPORT_GROUP, $this->service(ReportGroupState::class)->chatId());
-        self::assertTrue($logs->hasWarningThatContains('Could not answer in group'));
+        self::assertTrue($logs->hasWarningThatContains('Could not write in group'));
     }
 
     public function testOnlyThisBotsStartIsItsBusinessInAGroup(): void

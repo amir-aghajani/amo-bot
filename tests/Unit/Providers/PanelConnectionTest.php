@@ -11,10 +11,9 @@ use App\Modules\Providers\Support\PanelConnection;
 use Tests\TestCase;
 
 /**
- * Where a panel is and how to reach it, whatever the panel — the fields every connector's form takes for it: an http(s)
- * address with a host and nothing secret or stray in it, the connector's own pages kept out of it; a timeout of 5 to
- * 120 seconds; a full address for a subscription prefix, or none —, how a stored server's options read back, and the one
- * test a kept secret must pass to go anywhere: the same scheme, host and port.
+ * The connection fields every connector's form shares: an http(s) address with a host and nothing secret in it, the
+ * connector's own pages refused; a timeout of 5 to 120 seconds; an optional full subscription prefix. Also how a stored
+ * server's options read back, and the rule a kept secret must pass to be sent: the same scheme, host and port.
  */
 final class PanelConnectionTest extends TestCase
 {

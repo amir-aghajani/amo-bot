@@ -12,10 +12,8 @@ use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 
 /**
- * Everything a handler needs for one update: the update itself, the API, the user and their conversation state — and
- * the ways it answers in that chat. A tap is answered once (answer()); one the handler leaves unanswered is
- * acknowledged by the dispatcher when it is done, and a handler that fails is reported by it — on the button while the
- * tap is unanswered, in a message once it was.
+ * What a handler gets for one update: the update, the API, the customer and their session, and the ways to answer in
+ * that chat (reply, edit in place, replace, delete). Telegram takes one answer per tap; answer() sends only the first.
  */
 final class Context
 {
@@ -44,10 +42,8 @@ final class Context
     }
 
     /**
-     * Edit the message the callback button belongs to (an edit to what it shows already is no change); a fresh message
-     * otherwise — a message the customer sent, or one Telegram will not edit (too old, gone). A button on a photo (a QR
-     * card) cannot have its message edited into text, so that message is replaced instead — deleted and the text sent
-     * anew — and the chat keeps one message, not two.
+     * Show `$text` in place of the tapped button's message; a new message for a message update or one Telegram will not
+     * edit. A photo (a QR card) cannot become text, so it is replaced: deleted and sent anew, keeping one message.
      *
      * @param array<string, mixed> $options
      */
@@ -69,7 +65,7 @@ final class Context
         try {
             $this->api->editMessageText($this->chatId(), $messageId, $text, $options);
         } catch (TelegramApiException $e) {
-            // The message is past editing; anything else — Telegram out of reach, the chat gone — a message fails alike.
+            // Past editing: send it instead. Anything else (Telegram out of reach, the chat gone) would fail a message too.
             if (!$e->is(Refusal::BadRequest)) {
                 throw $e;
             }
@@ -78,8 +74,7 @@ final class Context
     }
 
     /**
-     * Redraw only the buttons of the callback button's message — a switch that flipped — and leave its text as
-     * it is.
+     * Redraw only the buttons of the tapped message (a switch that flipped), leaving its text.
      *
      * @param array<string, mixed> $replyMarkup
      */
@@ -92,9 +87,8 @@ final class Context
     }
 
     /**
-     * A picture made on the fly in place of the callback button's message: edited into it (a text message
-     * can take one since Bot API 10.3), or — when Telegram will not — the message replaced by it, so the
-     * chat keeps one message, not two.
+     * A picture in place of the tapped message: edited in (Bot API 10.3 lets a text message take media), or the
+     * message replaced by it when Telegram refuses.
      *
      * @param array<string, mixed> $options sendPhoto options (caption, reply_markup)
      */
@@ -120,9 +114,8 @@ final class Context
     }
 
     /**
-     * Answer a callback with a fresh message instead of editing the button's message: the old one is
-     * deleted (best effort — Telegram refuses after 48 hours) and the text sent anew, so it lands at the
-     * bottom of the chat like a notification would. For the end of a flow, not a step of it.
+     * The tapped message deleted (best effort) and `$text` sent anew, landing at the bottom of the chat like a
+     * notification — for the end of a flow, not a step of it.
      *
      * @param array<string, mixed> $options sendMessage options (reply_markup etc.)
      * @return array<string, mixed>
@@ -134,7 +127,7 @@ final class Context
         return $this->reply($text, $options);
     }
 
-    /** Take the callback button's message off the screen (best effort, deleteMessage()). */
+    /** Delete the tapped message (best effort). */
     public function delete(): void
     {
         $messageId = $this->update->messageId();
@@ -143,7 +136,7 @@ final class Context
         }
     }
 
-    /** Take the customer's own message off the screen — one that should not stay in the chat (a bot token they sent). */
+    /** Delete the customer's own message — one that must not stay in the chat (a bot token they sent). */
     public function deleteIncoming(): void
     {
         $messageId = $this->update->messageId();
@@ -152,24 +145,21 @@ final class Context
         }
     }
 
-    /**
-     * Take a message of this chat off the screen, best effort: one too old (Telegram refuses after 48 hours) or gone
-     * already stays as it is, and whatever comes next still goes out.
-     */
+    /** Delete a message of this chat, best effort: one too old (over 48 hours) or gone already is left as it is. */
     public function deleteMessage(int $messageId): void
     {
         $this->api->deleteMessage($this->chatId(), $messageId);
     }
 
-    /** Whether the sender is one of the shop's people (role admin): privileged commands, exempt from the gates. */
+    /** Whether the sender is a bot admin (role admin): admin-only commands, and exempt from the gates. */
     public function isAdmin(): bool
     {
         return $this->user->isAdmin();
     }
 
     /**
-     * The tap's answer — a toast, or with `$alert` a popup the customer closes; without text it just stops the button's
-     * spinner. Telegram takes one answer per tap, so only the first is sent (a tap too old by now is past answering).
+     * Answer the tap: a toast, or with `$alert` a popup; without text it only stops the spinner. Only the first answer
+     * is sent — Telegram takes one per tap.
      */
     public function answer(?string $text = null, bool $alert = false): void
     {
@@ -182,7 +172,7 @@ final class Context
         $this->api->answerCallbackQuery($id, $text, $alert);
     }
 
-    /** Whether the tap has had its answer — a failure after it is told in a message, the button takes no other. */
+    /** Whether the tap was answered; a failure after that is reported in a message instead. */
     public function answered(): bool
     {
         return $this->answered;

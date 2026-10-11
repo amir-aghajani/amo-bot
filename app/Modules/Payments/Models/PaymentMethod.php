@@ -12,9 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * One way to pay, as the customer sees it at checkout: an instance of a gateway driver with that
- * driver's settings (`config`) and the admin's label — "کارت به کارت (ملت)". Several rows may share a
- * driver (one per card); the wallet is the built-in row every shop has.
+ * A way to pay offered at checkout: a gateway driver with its settings (`config`) and the admin's label («کارت به کارت
+ * (ملت)»). Several rows may share a driver (one per card); the wallet is the built-in row every shop has.
  *
  * @property int $id
  * @property string $driver

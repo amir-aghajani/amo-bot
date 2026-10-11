@@ -19,12 +19,9 @@ use Tests\Fakes\RecordingMailTransport;
 use Tests\HttpTestCase;
 
 /**
- * Every email a website's sign-ins send — a code, or the email that goes in its place — is held to budgets before it
- * goes, whoever asks and from wherever: twenty an hour asked from one address network, ten a day to one address from
- * every shop together, five a day a signed-in customer adding an email asks for — each a 429 —, and sixty an hour from
- * one shop, a hundred and fifty an hour from every shop together — past those, no code goes at all: a 503 in the
- * customer's words, the log told once. An address with no account is told so once a day, every later ask that day
- * counted as the same email. An email that did not go, or was refused on the way, gives back what it counted.
+ * The budgets every sign-in email is held to before it goes — per network, per address across shops, per customer adding
+ * an email (429s), per shop and per installation (503) — the once-a-day "no account" email, and the budget given back
+ * when no email went.
  */
 final class EmailBudgetsTest extends HttpTestCase
 {

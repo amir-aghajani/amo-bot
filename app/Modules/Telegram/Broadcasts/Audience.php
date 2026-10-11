@@ -15,14 +15,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * Whom a broadcast goes to — always the current bot's customers who are not banned and have a Telegram account (one
- * who signed up on the website alone has no chat to send to, and is neither counted nor reached): everyone; buyers (a
- * service bought: a purchase sold) or non-buyers (none); the inactive ones («غیرفعال‌ها»: no service running now — never
- * bought, or every one ended or switched off); one of the admin's customer groups; the agents (the main bot's only); or
- * the customers with a running service on one server — of the servers this bot's customers are on, so an agent's bot
- * never learns of the shop's other servers. A run takes them in id order past its cursor, so a customer who joins the
- * audience meanwhile may still get it and one who leaves it may not; an audience whose group or server is gone reaches
- * nobody.
+ * Whom a broadcast goes to — always the current bot's active customers with a Telegram account: everyone, buyers,
+ * non-buyers, the inactive (no running service), a customer group, the agents (main bot only), or one server's
+ * customers. Only servers this bot's customers are on can be named, so an agent never learns the shop's other servers.
+ * An audience whose group or server is gone reaches nobody — never everyone.
  */
 final class Audience
 {
@@ -34,7 +30,7 @@ final class Audience
     public const AGENTS = 'agents';
     public const SERVER = 'server';
 
-    /** Every audience, in the order the bot offers them, with its words. */
+    /** Every audience, in the order the bot offers them, with its label. */
     public const LABELS = [
         self::ALL => 'همه کاربران',
         self::BUYERS => 'خریداران',
@@ -54,10 +50,7 @@ final class Audience
         private readonly ?string $name,
     ) {}
 
-    /**
-     * The audience a key (and, for a group or a server, its id) names, as the current bot can reach it now; null for an
-     * unknown key, a group or a server that is gone, or one that is not this bot's to name.
-     */
+    /** The audience a key (and id) names now; null for an unknown key, or a group or server gone or not this bot's to name. */
     public static function of(string $key, ?int $id = null): ?self
     {
         return match ($key) {
@@ -69,7 +62,7 @@ final class Audience
     }
 
     /**
-     * The words for an audience as a run recorded it — one whose group or server is gone since says so.
+     * The words for an audience as a run recorded it; one whose group or server is gone says so.
      *
      * @param array<string, string> $names Names already looked up, by "key:id" — a list shows each one once
      */
@@ -88,7 +81,7 @@ final class Audience
         };
     }
 
-    /** @return Collection<int, Server> The servers whose customers a broadcast of this bot can reach: those its customers have a running service on. */
+    /** @return Collection<int, Server> The servers this bot's customers have a running service on. */
     public static function servers(): Collection
     {
         return self::serversQuery()->oldest('id')->get();
@@ -106,11 +99,11 @@ final class Audience
         return $this->name ?? self::LABELS[$this->key];
     }
 
-    /** @return Builder<User> The customers it reaches now: the bot's chats — a customer without Telegram has none. */
+    /** @return Builder<User> The customers it reaches now. */
     public function users(): Builder
     {
         $users = User::query()->where('status', UserStatus::Active->value)->whereNotNull('telegram_id');
-        // A buyer: a purchase of theirs sold — a wallet top-up alone is no purchase.
+        // A buyer has a purchase sold; a wallet top-up alone is no purchase.
         $buyers = Order::sold()->where('type', OrderType::Purchase->value)->select('user_id');
 
         return match ($this->key) {

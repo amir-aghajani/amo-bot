@@ -10,13 +10,12 @@ use App\Core\Http\Origin;
 use App\Support\Input;
 
 /**
- * A secret a screen never gets back (a token, a password): shown as whether one is kept and a hint that does not give
- * it away; left blank or not sent it keeps what is kept, `clear_<name>` empties it (Input::secret()), and what is kept
- * from then on must have its `pattern` — and be there at all, when a form left without one is refused (`missing`).
+ * A secret a screen never gets back (a token, a password): presented as whether one is kept, with a hint. Left blank
+ * or unsent it keeps the stored one; `clear_<name>` empties it; `missing` makes one required.
  *
- * A kept secret goes only where it was given (`boundTo`): the fields it belongs with — a server's address, the account
- * on it —, each read by what identifies it (a URL by its origin) or as it is. While one of them moves, a secret left
- * blank no longer keeps the one stored: the form refuses it in `moved`'s words, to be typed again or cleared (Form).
+ * `boundTo` names the fields it belongs with (a server's address, the account on it). While one of them changes, a
+ * blank secret no longer keeps the stored one — refused in `moved`'s words — so a kept secret never goes to a server it
+ * was not given for.
  *
  * @extends Field<string>
  */
@@ -34,10 +33,10 @@ final class Secret extends Field
         private readonly string $pattern,
         private readonly string $mismatch,
         private readonly ?\Closure $hint = null,
-        /** What a form that leaves none kept is told; null: it may be left without one */
+        /** The refusal when none would be kept; null: it may be left without one */
         private readonly ?string $missing = null,
         public readonly array $boundTo = [],
-        /** What a blank one is told while a field it belongs with moved: to type it again, or clear it */
+        /** The refusal of a blank one while a field it belongs with moved: type it again, or clear it */
         public readonly string $moved = '',
         ?FieldSpec $spec = null,
     ) {
@@ -48,8 +47,7 @@ final class Secret extends Field
     }
 
     /**
-     * What identifies an address a secret is bound to (`boundTo`): its origin — scheme, host and port, Core\Http\Origin's
-     * one form; another path is the same server. Null for what is no http(s) address.
+     * Identifies a bound address by its origin (scheme, host and port): another path on it is the same server.
      *
      * @return \Closure(mixed): ?string
      */
@@ -96,10 +94,7 @@ final class Secret extends Field
         return ['set' => true, 'hint' => $this->hint !== null ? ($this->hint)($value) : '••••••' . substr($value, -4)];
     }
 
-    /**
-     * `moved`'s words while the input keeps the secret stored — leaves it blank or out, and does not clear it — and a
-     * field it belongs with moved: it would go where it was never given.
-     */
+    /** `moved`'s words when the input keeps the stored secret (blank, not cleared) while a field it is bound to changed. */
     public function leftBehind(array $input, array $values, array $before): ?string
     {
         if ($this->boundTo === [] || ($values[$this->name] ?? '') === '' || Input::text($input, $this->name) !== '' || Input::truthy($input['clear_' . $this->name] ?? false)) {

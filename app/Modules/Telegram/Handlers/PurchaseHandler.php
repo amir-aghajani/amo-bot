@@ -8,17 +8,24 @@ use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Services\PlanCategoryService;
 use App\Modules\Catalog\Services\ServerSelector;
+use App\Modules\Discounts\Enums\DiscountSource;
+use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
+use App\Modules\Orders\DTO\OrderKey;
+use App\Modules\Orders\DTO\Quote;
+use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
+use App\Modules\Orders\Services\Pricing;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Providers\Models\Server;
-use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
+use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
@@ -28,16 +35,15 @@ use App\Support\Money;
 use App\Support\Traffic;
 
 /**
- * The customer's way from a plan to a subscription:
- *   plan:{plan}                       → the plan's details and its servers (by name)
- *   plan:{plan}:srv:{server}          → the checkout (CheckoutScreen): the plan on that server and the ways to pay it
- *   plan:{plan}:srv:{server}:{method} → pay with that method: the order is made now, or the open one of the same plan
- *                                       and server found (OrderService::openPurchase())
- *   checkout:{order}                  → a payment reminder's «پرداخت دوباره»: the checkout of what that order buys — a
- *                                       plan, a service's renewal, a top-up, an agent's traffic —, while the customer may
- *                                       still pay it
+ * From a plan to a subscription:
+ *   plan:{plan}                       → the plan's details and a button per location (its servers)
+ *   plan:{plan}:srv:{server}          → the checkout of the plan on that server
+ *   plan:{plan}:srv:{server}:{method} → pay: the order is made now, or the open one of the same is found
+ *   checkout:{order}                  → a payment reminder's «پرداخت دوباره»: the checkout of whatever that order buys
+ * The price shown and charged is the customer's own (Pricing: a first-purchase or agent price, less their automatic
+ * discount and the code they typed).
  */
-final class PurchaseHandler implements Handler
+final class PurchaseHandler implements Handler, DiscountableCheckout
 {
     public const PLAN = 'plan:';
     public const CHECKOUT = 'checkout:';
@@ -48,16 +54,19 @@ final class PurchaseHandler implements Handler
         private readonly ServerSelector $selector,
         private readonly PlanCategoryService $categories,
         private readonly OrderService $orders,
+        private readonly Pricing $pricing,
         private readonly PaymentMethods $methods,
         private readonly CheckoutScreen $screen,
+        private readonly CustomerServices $services,
         private readonly TopUpHandler $topUps,
         private readonly AgencyHandler $agency,
         private readonly RenewalHandler $renewals,
+        private readonly ExtrasHandler $extras,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
     ) {}
 
-    /** The plan's details and servers. */
+    /** The plan's details and locations. */
     public static function planCallback(int $planId): string
     {
         return CallbackData::build(self::PLAN, $planId);
@@ -69,7 +78,7 @@ final class PurchaseHandler implements Handler
         return CallbackData::build(self::PLAN, $planId, self::SERVER, $serverId);
     }
 
-    /** The checkout of what an order buys again — the payment reminder's «پرداخت دوباره». */
+    /** The checkout of what an order buys — the payment reminder's «پرداخت دوباره». */
     public static function reopenCallback(int $orderId): string
     {
         return CallbackData::build(self::CHECKOUT, $orderId);
@@ -89,6 +98,21 @@ final class PurchaseHandler implements Handler
         };
     }
 
+    /** The checkout `plan:{plan}:srv:{server}` drawn again, for DiscountCodeHandler. */
+    public function drawCheckout(Context $ctx, array $args, ?string $code = null): void
+    {
+        if (count($args) !== 3 || $args[1] !== self::SERVER) {
+            $ctx->edit($this->texts->get(BotText::Unknown));
+
+            return;
+        }
+        $this->checkout($ctx, (int) $args[0], (int) $args[2], $code);
+    }
+
+    /**
+     * The plan's details at the customer's price — a line saying why it differs from the regular price — and a button
+     * per location in its server's colour and row; or that no location can sell it now.
+     */
     private function plan(Context $ctx, int $planId): void
     {
         $plan = Plan::active()->find($planId);
@@ -97,16 +121,33 @@ final class PurchaseHandler implements Handler
 
             return;
         }
+        $price = $this->pricing->purchase($ctx->user, $plan);
 
         $description = trim((string) $plan->description);
         $text = $this->texts->render(BotText::PlanDetails, [
             'plan' => $plan->name,
             'description' => $description === '' ? '' : "\n" . $description,
             'traffic' => Messages::traffic($plan->trafficBytes()),
-            'duration' => Messages::duration($plan->duration_days),
+            'duration' => Messages::duration($plan->duration_hours),
             'devices' => Messages::devices($plan->ip_limit),
-            'price' => Money::format($plan->price),
+            'price' => Money::format($price->amount()),
         ]);
+        $why = match ($price->pricing) {
+            OrderPricing::FirstPurchase => BotText::PlanFirstPurchase,
+            OrderPricing::Agent => BotText::PlanAgentPrice,
+            OrderPricing::Regular, OrderPricing::Gift => null,
+        };
+        if ($why !== null) {
+            $text = BotTexts::paragraphs($text, $this->texts->part($why, ['regular' => Money::format($plan->price)]));
+        }
+        $discount = $price->automatic;
+        if ($discount !== null) {
+            $text = BotTexts::paragraphs($text, $this->texts->part(match ($discount->source) {
+                DiscountSource::Personal => BotText::PlanPersonalDiscount,
+                DiscountSource::Tier => BotText::PlanTierDiscount,
+                DiscountSource::Sale, DiscountSource::Code => BotText::PlanSale,
+            }, ['discount' => $discount->label, 'regular' => Money::format($price->base)]));
+        }
         $choices = $this->selector->covers($plan) ? $this->selector->choices($plan) : [];
         if ($choices === []) {
             $ctx->edit(BotTexts::paragraphs($text, $this->texts->get(BotText::PlanNoServer)), ['reply_markup' => $this->buttons->backOnly($this->listOf($plan))]);
@@ -114,32 +155,50 @@ final class PurchaseHandler implements Handler
             return;
         }
 
-        $servers = array_map(fn(array $choice): array => InlineKeyboard::callback(
+        $servers = array_map(fn(array $choice): array => [InlineKeyboard::callback(
             $this->texts->render(BotText::ServerButton, ['server' => $choice['server']->name]),
             self::serverCallback($plan->id, $choice['server']->id),
-        ), $choices);
-        $keyboard = InlineKeyboard::make()->grid($servers, 1)->row($this->buttons->back($this->listOf($plan)));
+            KeyboardLayout::style($choice['server']->buttonStyle()),
+        ), $choice['server']->buttonRow()], $choices);
+        $keyboard = InlineKeyboard::make()->flow($servers)->row($this->buttons->back($this->listOf($plan)));
 
         $ctx->edit(BotTexts::paragraphs($text, $this->texts->part(BotText::PlanPickServer)), ['reply_markup' => $keyboard->build()]);
     }
 
-    /** The plan on the server the customer picked, and the ways to pay it — nothing ordered yet. */
-    private function checkout(Context $ctx, int $planId, int $serverId): void
+    /**
+     * The checkout of the plan on the server picked, at the customer's price with its discount lines, the plan's note
+     * and the ways to pay — nothing ordered yet.
+     *
+     * @throws DiscountCodeRefusedException when `$typed` does not hold
+     */
+    private function checkout(Context $ctx, int $planId, int $serverId, ?string $typed = null): void
     {
         $choice = $this->choice($ctx, $planId, $serverId);
         if ($choice === null) {
             return;
         }
         [$plan, $server] = $choice;
+        $at = self::serverCallback($plan->id, $server->id);
+        [$quote, $dropped] = $this->screen->quote($ctx, $at, $this->price($ctx, $plan, $server), $typed);
 
-        $this->screen->show($ctx, $this->texts->render(BotText::Checkout, [
+        $text = $this->texts->render(BotText::Checkout, [
             'plan' => $plan->name,
             'server' => $server->name,
-            'amount' => Money::format($plan->price),
-        ]), OrderType::Purchase, static fn(PaymentMethod $method): string => CallbackData::build(self::PLAN, $plan->id, self::SERVER, $server->id, $method->id), self::planCallback($plan->id));
+            'amount' => Money::format($quote->amount()),
+        ]);
+        $this->screen->show(
+            $ctx,
+            $this->screen->withNote($this->screen->priced($text, $quote, $dropped), $plan),
+            OrderType::Purchase,
+            static fn(PaymentMethod $method): string => CallbackData::build(self::PLAN, $plan->id, self::SERVER, $server->id, $method->id),
+            self::planCallback($plan->id),
+            free: !Money::isPositive($quote->amount()),
+            quote: $quote,
+            checkout: $at,
+        );
     }
 
-    /** A way to pay picked: the purchase ordered — or the open one found — and paid. */
+    /** A way to pay picked: the purchase ordered at the customer's price (or the open one found) and paid. */
     private function buy(Context $ctx, int $planId, int $serverId, int $methodId): void
     {
         $choice = $this->choice($ctx, $planId, $serverId);
@@ -149,48 +208,64 @@ final class PurchaseHandler implements Handler
         [$plan, $server] = $choice;
         $method = $this->methods->payable($methodId, OrderType::Purchase);
         if ($method === null) {
-            // Switched off (or deleted) since the checkout was shown: the ways that are left.
+            // Switched off since the checkout was drawn: the ways that are left.
             $this->checkout($ctx, $planId, $serverId);
 
             return;
         }
 
-        $this->screen->buy($ctx, $method, Money::normalize($plan->price), fn(): Order => $this->orders->openPurchase($ctx->user, $plan, $server), self::serverCallback($plan->id, $server->id));
+        $at = self::serverCallback($plan->id, $server->id);
+        $quote = $this->screen->priceToPay($ctx, $at, $this->price($ctx, $plan, $server));
+        if ($quote !== null) {
+            $this->screen->buy($ctx, $method, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openPurchase($ctx->user, $plan, $server, $key, $quote), $at);
+        }
+    }
+
+    /** @return \Closure(?string): Quote The plan's price for the customer with a given discount code. */
+    private function price(Context $ctx, Plan $plan, Server $server): \Closure
+    {
+        return fn(?string $code): Quote => $this->pricing->purchase($ctx->user, $plan, $server, $code);
     }
 
     /**
-     * The reminder's «پرداخت دوباره»: the checkout of what the order buys while the customer may still pay it (paying
-     * finds the order again) — not once it was paid, cancelled or its receipt is with support.
+     * «پرداخت دوباره»: the checkout of what the order buys, while the customer may still pay it — not once it was paid,
+     * cancelled or its receipt is with support.
      */
     private function reopen(Context $ctx, int $orderId): void
     {
         $order = Order::payable()->where('user_id', $ctx->user->id)->find($orderId);
+        $extra = $order === null ? null : ExtraKind::of($order->type);
 
         match (true) {
             $order === null => $ctx->edit($this->texts->get(BotText::OrderNotPending), ['reply_markup' => $this->buttons->backOnly($this->listOf(null))]),
             $order->type === OrderType::WalletTopUp => $this->topUps->checkout($ctx, (int) $order->amount),
             $order->type === OrderType::Traffic => $this->agency->checkout($ctx, intdiv((int) $order->traffic_bytes, Traffic::GIGABYTE)),
             $order->type === OrderType::Renewal => $this->renewal($ctx, $order),
+            $extra !== null => $this->extra($ctx, $order, $extra),
             default => $this->checkout($ctx, (int) $order->plan_id, (int) $order->server_id),
         };
     }
 
-    /** A renewal's checkout of its service — unless the service went meanwhile. */
+    /** A renewal's checkout, unless its service went meanwhile. */
     private function renewal(Context $ctx, Order $order): void
     {
-        $subscription = $order->subscription;
-        if ($subscription === null || $subscription->status === SubscriptionStatus::Deleted) {
-            $ctx->edit($this->texts->get(BotText::ServiceNotFound), ['reply_markup' => $this->buttons->backOnly(MenuHandler::subscriptionsCallback(1))]);
-
-            return;
+        $subscription = $this->services->find($ctx, (int) $order->subscription_id, MenuHandler::subscriptionsCallback(1));
+        if ($subscription !== null) {
+            $this->renewals->checkout($ctx, $subscription);
         }
+    }
 
-        $this->renewals->checkout($ctx, $subscription);
+    /** An extra's checkout for as much as the order buys, unless its service went meanwhile. */
+    private function extra(Context $ctx, Order $order, ExtraKind $kind): void
+    {
+        $subscription = $this->services->find($ctx, (int) $order->subscription_id, MenuHandler::subscriptionsCallback(1));
+        if ($subscription !== null) {
+            $this->extras->checkout($ctx, $subscription, $kind, $kind->quantityOf($order));
+        }
     }
 
     /**
-     * The plan and the server the customer picked, while the plan is sold there; null once the customer has been told
-     * otherwise.
+     * The plan and server picked, while the plan still sells there; null once the customer was told otherwise.
      *
      * @return array{Plan, Server}|null
      */
@@ -203,7 +278,6 @@ final class PurchaseHandler implements Handler
 
             return null;
         }
-
         try {
             $server = $this->selector->covers($plan) ? $this->selector->resolve($plan, $serverId)['server'] : null;
         } catch (NoServerAvailableException) {
@@ -219,7 +293,7 @@ final class PurchaseHandler implements Handler
         return [$plan, $server];
     }
 
-    /** The list this plan came from: its category (or "other") when the shop is grouped, else the plain plan list. */
+    /** The list the plan came from: its category (or «سایر پلن‌ها») when the shop has categories, else the plan list. */
     private function listOf(?Plan $plan): string
     {
         if ($plan === null || !$this->categories->isGrouped()) {

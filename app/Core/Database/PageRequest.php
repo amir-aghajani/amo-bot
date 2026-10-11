@@ -11,10 +11,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
- * What a paged list was asked for, read once from the request's query string: the page (1 and up — Page::fetch()
- * clamps it to the last), the search box's text (Page::term(), applied by search()), the filters, each read as what it
- * may be — a case of the list's enum, a row's id, the shop's days (dates()) — anything else being no filter at all, and
- * the order (sort()).
+ * What a paged list was asked for, read once from the query string: the page, the search term, the filters — each read
+ * as what it may be (an enum case, a row id, a range of days); anything else is no filter — and the order.
  */
 final class PageRequest
 {
@@ -32,8 +30,7 @@ final class PageRequest
     }
 
     /**
-     * A filter that is one case of a string-backed enum (a status tab, a type pill); null — no filter — for anything
-     * else.
+     * A filter that is one case of a string-backed enum (a status tab); null — no filter — for anything else.
      *
      * @template T of \BackedEnum
      * @param class-string<T> $enum
@@ -44,7 +41,7 @@ final class PageRequest
         return $enum::tryFrom(Input::text($this->query, $name));
     }
 
-    /** A filter that names a row — a server, a customer group, a level: its id, null when it names none. */
+    /** A filter that names a row (a server, a customer): its id, null when it names none. */
     public function id(string $name): ?int
     {
         $id = Input::integer($this->query, $name);
@@ -52,7 +49,7 @@ final class PageRequest
         return $id !== null && $id > 0 ? $id : null;
     }
 
-    /** A filter's text as sent, trimmed ("" for none): one that is no enum case, like the subscriptions' «expiring». */
+    /** A filter's text as sent, trimmed ("" for none) — for a value that is no enum case, like the subscriptions' `expiring`. */
     public function text(string $name): string
     {
         return Input::text($this->query, $name);
@@ -65,8 +62,8 @@ final class PageRequest
     }
 
     /**
-     * «#12» in the search box: the row the list numbers 12, and nothing else — how another screen links to one of its
-     * rows (searchLink). Null for any other search, a bare number among them.
+     * `#12` in the search box: the row numbered 12 and nothing else — how one screen links to another's row. Null for
+     * any other search, a bare number included.
      */
     public function row(): ?int
     {
@@ -74,9 +71,8 @@ final class PageRequest
     }
 
     /**
-     * The search box on a list's query, one rule for every list: «#12» is the row the list numbers 12 alone (row());
-     * any other term is the list's own search — `$search` is handed the query, the term and the term as a bare number
-     * (number()), one field among the list's others —; an empty box narrows nothing.
+     * Apply the search box to a list's query: `#12` is row 12 alone; any other term goes to `$search` with the term and
+     * the term as a number (a bare 12 may match the row's number among its other fields); an empty box narrows nothing.
      *
      * @template TModel of Model
      * @param Builder<TModel> $query
@@ -95,16 +91,15 @@ final class PageRequest
         }
     }
 
-    /** The days the list is narrowed to: `from` and `to`, dates of the shop's calendar, both included, either alone. */
+    /** The days the list is narrowed to: `from` and `to`, days of the shop's calendar, both included, either optional. */
     public function dates(): DateRange
     {
         return DateRange::of(Input::text($this->query, 'from'), Input::text($this->query, 'to'));
     }
 
     /**
-     * The order the list was asked for: `sort`, one of the list's keys — `$keys`, each with what it orders by (Sort) —,
-     * or the list's own (`$default`) when it names none of them; `dir`, asc or desc — desc, the newest and the largest
-     * first, when it says neither.
+     * The order asked for: `sort` names one of `$keys` (each mapped to what it orders by), else `$default`; `dir` is asc
+     * or desc, desc by default. Never orders by anything the request names directly.
      *
      * @param array<string, string|Expression|QueryBuilder|list<string|Expression|QueryBuilder>> $keys
      */

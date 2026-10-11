@@ -2,7 +2,6 @@ import { useId, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Check, Search, Star, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
 import { ListView, RowMenu } from '@/components/list-view'
 import { Page } from '@/components/page'
@@ -10,6 +9,7 @@ import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
 import { Reviewer } from '@/components/reviewer'
 import { SearchBox } from '@/components/search-box'
+import { RemoveConfirm } from '@/components/sortable-list'
 import { StatusBadge, statusTabs } from '@/components/status-badge'
 import { TextLink } from '@/components/text-link'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
@@ -18,7 +18,6 @@ import { UserLabel, userPage } from '@/components/user-identity'
 import { api, stateChanged } from '@/lib/api'
 import type { ReviewRow, ReviewsResponse, ReviewStatus } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
-import { messageOf } from '@/lib/failure'
 import { formatDate, formatNumber, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { REVIEW_STATUS } from '@/lib/statuses'
@@ -38,10 +37,8 @@ const DECIDED: Record<keyof ReviewRow['actions'], string> = {
 }
 
 /**
- * The customers' reviews of the shop, written on its website (`/reviews`, both panels): the newest first, the queue
- * waiting on support up front and counted; each one's name, stars, words and where they use the service from, who wrote
- * it — a customer of the shop, or a guest —; approved, the website shows it; rejected — or hidden again later — it does
- * not; deleted (asked first), it is gone.
+ * «نظرات» (both panels): reviews written on the website, newest first, the pending ones as the first tab. Approved ones
+ * show on the website; rejecting hides one; deleting (asked first) removes it.
  */
 export function ReviewsPage() {
   const tabs = useId()
@@ -68,15 +65,11 @@ export function ReviewsPage() {
     },
   })
 
-  // The dialog that asked says why it was refused.
+  // Quiet: RemoveConfirm says a refusal in its dialog.
   const remove = useMutation({
     mutationFn: (review: ReviewRow) => api.delete(`/reviews/${review.id}`),
     meta: { quiet: true, invalidates: CHANGES },
-    onSuccess: (_, review) => {
-      list.remove(review.id)
-      setDeleting(null)
-      toast.success('نظر حذف شد')
-    },
+    onSuccess: (_, review) => list.remove(review.id),
   })
 
   return (
@@ -192,22 +185,15 @@ export function ReviewsPage() {
         </ListView>
       </div>
 
-      <ConfirmModal
-        open={deleting !== null}
-        onClose={() => {
-          setDeleting(null)
-          remove.reset()
-        }}
+      <RemoveConfirm
+        row={deleting}
+        remove={remove}
         title="حذف نظر"
-        description={deleting ? `نظر ${idLabel(deleting.id)}` : undefined}
-        confirmLabel="حذف"
-        destructive
-        pending={remove.isPending}
-        error={remove.error ? messageOf(remove.error) : null}
-        onConfirm={() => deleting && remove.mutate(deleting)}
-      >
-        این نظر برای همیشه پاک می‌شود و برگشت ندارد. برای این‌که فقط در وب‌سایت دیده نشود، کافی است آن را رد کنید.
-      </ConfirmModal>
+        description={(review) => `نظر ${idLabel(review.id)}`}
+        details={() => 'این نظر برای همیشه پاک می‌شود و برگشت ندارد. برای این‌که فقط در وب‌سایت دیده نشود، کافی است آن را رد کنید.'}
+        removed="نظر حذف شد"
+        onClose={() => setDeleting(null)}
+      />
     </Page>
   )
 }

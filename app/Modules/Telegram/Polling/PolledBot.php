@@ -7,10 +7,7 @@ namespace App\Modules\Telegram\Polling;
 use App\Modules\Bots\Models\Bot;
 use GuzzleHttp\Promise\PromiseInterface;
 
-/**
- * One bot the poller polls, and where its polling stands: the update to ask from, the poll it has open, how long it
- * waits before asking again after a failure.
- */
+/** One bot the poller polls, and where its polling stands: the offset, the open poll, the backoff. */
 final class PolledBot
 {
     /** The update to ask for next: one after the last served. */

@@ -16,16 +16,13 @@ use App\Support\Input;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * The website's captcha for any form of its own — a review, a contact form —, the shop holding its secret
- * (Core\Captcha\Verifier): the challenge a widget that asks the shop for one solves (challenge()), and a token judged
- * for the site's backend, which asks the shop server to server — a browser's word that it passed proves nothing —
- * (verify()). A token is taken once: Cloudflare takes a Turnstile token once, the shop an ALTCHA solution once in the
- * quarter of an hour its challenge lives. What the backend asks is the website's own budget, never the sign-ins'
- * (SignInThrottle::verifyingCaptcha()): every check counted against the website — its backend is one address for all
- * its visitors —, and every refusal against the visitor's network, which the backend names (`remoteip`, handed to the
- * captcha's provider too), else against the backend's own; each counted before it is judged, so once a network's
- * refusals are spent its next token is refused unjudged — its provider not asked —, and a bot behind the site's forms
- * spends its own network's, not the site's other visitors'.
+ * The website's captcha for forms of its own (a contact form), the shop holding the secret: a challenge for a widget that
+ * asks the shop for one, and a token judged for the site's backend, server to server — a browser's word that it passed
+ * proves nothing. A token passes once.
+ *
+ * Budgets (SignInThrottle::verifyingCaptcha(), separate from the sign-ins'): every check counts against the website (its
+ * backend is one address for all visitors), every refusal against the visitor's network (`remoteip`, else the backend's).
+ * Both are counted before judging, so a bot behind the site's forms spends its own network's refusals, not other visitors'.
  */
 final class WebsiteCaptcha
 {
@@ -43,8 +40,7 @@ final class WebsiteCaptcha
     ) {}
 
     /**
-     * A challenge for the website's widget — bound to `action` when the query names one —, while its captcha's widget
-     * asks the shop for one.
+     * A challenge for the website's widget, bound to `action` when named, while its captcha takes challenges from the shop.
      *
      * @param array<string, mixed> $query
      * @return array<string, mixed>
@@ -61,8 +57,9 @@ final class WebsiteCaptcha
     }
 
     /**
-     * A token judged for the website's backend, for `action` when it names one, from the visitor `remoteip` names when
-     * it does — passed or not, and the codes of why not; when it was judged.
+     * Judge a token for the website's backend — for `action` and from the visitor `remoteip`, when named: whether it
+     * passed, the reasons when not, and when it was judged. A token that passed, or could not be judged, gives the
+     * network's refusal count back.
      *
      * @param array<string, mixed> $input {token, action?, remoteip?}
      * @return array{passed: bool, action: string|null, hostname: string|null, verified_at: string, reasons: list<string>}
@@ -111,7 +108,7 @@ final class WebsiteCaptcha
     }
 
     /**
-     * The action an input names — none: null —, or why it is none under `action`.
+     * The action an input names (null for none), or why it is none under `action`.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors

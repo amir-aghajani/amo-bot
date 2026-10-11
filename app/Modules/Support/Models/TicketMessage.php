@@ -10,15 +10,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * One message of a ticket: the customer's or support's words, and at most one picture — sent in Telegram (the bot, the
- * report group: its file id, Telegram keeps it) or uploaded (a website, a panel: kept in the tickets' folder, Users\
- * Enums\PictureFolder::Tickets, until the ticket has been closed a while — TicketAttachments::prune(), which leaves its
- * name: the message still says it had one) —, where it was written, and who of support wrote it.
+ * One message of a ticket: the customer's or support's words, where it was written, who of support wrote it, and at most
+ * one picture — sent in Telegram (its file id; Telegram keeps it) or uploaded (kept in the tickets' folder until the
+ * ticket has been closed a while: TicketAttachments::prune() keeps its name, so the message still says it had one).
  *
  * @property int $id
  * @property int $ticket_id
  * @property TicketAuthor $author
- * @property string|null $reviewer Who of support wrote it — a panel's principal, a bot admin's @username or tg:<id>; null for the customer's
+ * @property string|null $reviewer Who of support wrote it (the actor's name); null for the customer's
  * @property string $body
  * @property string|null $attachment_file_id Its picture, sent in Telegram: the file id
  * @property string|null $attachment_path Its picture, uploaded: its name in the tickets' folder; null once it is no longer kept
@@ -41,7 +40,7 @@ class TicketMessage extends Model
         'channel' => TicketChannel::class,
     ];
 
-    /** It came with a picture — kept still, or not any more (its name stays). */
+    /** It came with a picture, kept still or not (its name stays). */
     public function hasPicture(): bool
     {
         return $this->attachment_name !== null || $this->keepsPicture();

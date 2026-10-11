@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { ChevronsUpDown, LoaderCircle, RotateCw, Store } from 'lucide-react'
 import { useOpenShop, useShops } from '@/apps/admin/owner'
+import { pillClasses } from '@/components/filter-select'
 import { IconButton } from '@/components/icon-button'
-import { pillClasses } from '@/components/pill'
 import { RailTooltip, useRail } from '@/components/shell/rail'
 import { StatusBadge } from '@/components/status-badge'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -15,12 +15,10 @@ import { BOT_STATUS } from '@/lib/statuses'
 import { cn } from '@/lib/utils'
 
 /**
- * The owner's way between shops — the main bot's and every agent's — where the Console keeps its workspace picker, under
- * the brand (on the icon rail, a store icon with the same menu). Opening one loads the panel afresh at its dashboard
- * (useOpenShop). It names the shop the tab shows whatever the list of them does — while it is read, when it could not
- * be (said in its menu, with a way to ask again) —, so the way back from an agent's shop never goes; in the main shop,
- * with no agent's shop to open, there is no picker. A shop whose bot is off (its agency ended) is marked so — in the
- * menu, and on the picker while it is the one open. While a shop opens, the picker waits (held).
+ * The owner's switch between shops (the main bot's and every agent's), under the brand — on the rail, a store icon with
+ * the same menu. Opening one loads the panel afresh (useOpenShop). In an agent's shop it is always there, naming the
+ * shop shown even while the list loads or failed (the failure shows in its menu, with a retry), so the way back never
+ * disappears; in the main shop it appears once there is an agent's shop to open. A shop whose bot is off is marked so.
  */
 export function ShopSwitcher() {
   const rail = useRail()

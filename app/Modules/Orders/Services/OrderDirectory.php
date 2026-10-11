@@ -9,6 +9,7 @@ use App\Core\Database\PageRequest;
 use App\Modules\Auth\CurrentPrincipal;
 use App\Modules\Auth\PrincipalKind;
 use App\Modules\Catalog\Models\Plan;
+use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
@@ -19,9 +20,8 @@ use App\Modules\Users\Services\UserDirectory;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * The orders screen («سفارش‌ها», both panels): every order — purchases, renewals, wallet top-ups, agents' traffic — with
- * its customer, what it was for, its payments and how far it got, filtered by status, type and the days it was placed,
- * and searched by number, customer, plan or service; with what its modal may do now (`actions`, OrderActions' rules).
+ * The orders screen («سفارش‌ها»): orders filtered by status (or the STUCK queue), type, customer and days, searched by
+ * number, customer, plan or service, with the operations allowed now (`actions`, OrderActions::allowed()).
  */
 final class OrderDirectory
 {
@@ -33,11 +33,7 @@ final class OrderDirectory
 
     public function __construct(private readonly OrderActions $actions) {}
 
-    /**
-     * One status (a tab) or STUCK, one type or all, one customer's (`user`, their page links here), placed on the days
-     * asked (`from`, `to`), searched — newest first, or by amount (`sort`) —; with the stuck ones counted (the dashboard
-     * and the sidebar link there) and what the list sold: how many of its orders are sales (Order::SOLD) and their amount.
-     */
+    /** A page of orders, newest first or by amount, with the stuck count and the list's sales count and total. */
     public function search(PageRequest $list): Page
     {
         $query = $list->text('status') === self::STUCK ? Order::stuck() : Order::query();
@@ -65,7 +61,7 @@ final class OrderDirectory
     public function present(Order $order): array
     {
         $subscription = $order->subscription;
-        // A renewal names no server of its own: it is where its service is.
+        // A renewal, and extras, name no server of their own: they are where their service is.
         $server = $order->server ?? $subscription?->server;
 
         return [
@@ -73,10 +69,16 @@ final class OrderDirectory
             'type' => $order->type->value,
             'status' => $order->status->value,
             'amount' => $order->amount,
+            // A purchase or a renewal made at its plan's first-purchase or agent price: less than the plan's price.
+            'pricing' => $order->pricing->value,
+        ] + self::discounts($order) + [
             'user' => UserDirectory::presentRef($order->user),
             'plan' => $order->plan === null ? null : ['id' => $order->plan->id, 'name' => $order->plan->name],
             'server' => $server === null ? null : ['id' => $server->id, 'name' => $server->name],
             'subscription' => $subscription === null ? null : ['id' => $subscription->id, 'name' => $subscription->remote_name, 'status' => $subscription->status->value],
+            // What it brings in traffic (an agent's, a service's extra) or in days (a service's extra time).
+            'traffic_bytes' => $order->traffic_bytes,
+            'days' => $order->days,
             // Why it failed, or why it was cancelled — as whoever reads the screen may read it.
             'notes' => self::notes($order),
             'payments' => $order->payments->map(static fn(Payment $payment): array => [
@@ -96,9 +98,25 @@ final class OrderDirectory
     }
 
     /**
-     * Why the order failed or was cancelled, as whoever reads the screen may read it (CurrentPrincipal): the owner, who
-     * runs the servers, the diagnosis of a panel that failed its delivery — its address, its answer —; anyone else — an
-     * agent, the shop's admins on its website — the words kept for everyone (a panel's failure in a word).
+     * An order's discount fields, as every API presents them (the website's OrderPresenter too): the Toman in all, the
+     * lines, and the code it was made with (its id null once the code was deleted).
+     *
+     * @return array{discount_amount: string, discounts: list<array{source: string, label: string, amount: string, percent: int|null}>, discount_code: array{id: int|null, code: string}|null}
+     */
+    public static function discounts(Order $order): array
+    {
+        $code = $order->codeLine();
+
+        return [
+            'discount_amount' => $order->discount_amount,
+            'discounts' => array_map(static fn(DiscountLine $line): array => $line->present(), $order->discountLines()),
+            'discount_code' => $code?->code === null ? null : ['id' => $order->discount_code_id, 'code' => $code->code],
+        ];
+    }
+
+    /**
+     * Why the order failed or was cancelled, for whoever reads it: the owner gets the panel's full diagnosis (address,
+     * answer); anyone else (an agent, the website's admins) the safe summary.
      */
     public static function notes(Order $order): ?string
     {
@@ -106,9 +124,8 @@ final class OrderDirectory
     }
 
     /**
-     * By a bare order number, the customer — name, handle, Telegram id, the way every list searches its customers —, the
-     * plan's name, or the service's name on the panel. («#12» is the order numbered 12 alone: PageRequest::search().) Each
-     * is found once (Page::matches()), so the orders are read through their indexes on those columns.
+     * A search by order number, customer, plan name or the service's panel name. Each is matched once (Page::matches()),
+     * so the orders are read through their indexes.
      *
      * @param Builder<Order> $query
      */

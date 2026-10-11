@@ -6,10 +6,7 @@ namespace App\Modules\Agency\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
 
-/**
- * A level agents are on cannot be deleted: the agents would lose their discount without anyone deciding so. They
- * move to another level first.
- */
+/** A level agents are on cannot be deleted (409): their price per GB would go without anyone deciding so. Move them first. */
 final class LevelInUseException extends DomainRuleException
 {
     public function status(): int

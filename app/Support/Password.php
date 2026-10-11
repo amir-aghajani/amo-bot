@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * The one rule for a password, whoever chooses it — the panel's owner (Auth\Credentials) or a customer on the shop's
- * website: MIN_LENGTH characters at least, MAX_BYTES at most — what bcrypt reads of it: a longer one would open with its
- * start alone (a Persian letter is two bytes) —, and no NUL byte, where bcrypt stops reading. Kept as PHP's own hash
- * (password_hash(), bcrypt today), never as typed.
+ * The one password rule (the panel's owner and website customers alike): at least MIN_LENGTH characters, at most
+ * MAX_BYTES — bcrypt reads no further, so a longer one would open with its start alone (a Persian letter is two
+ * bytes) — and no NUL byte, where bcrypt stops reading.
  */
 final class Password
 {
@@ -18,7 +17,7 @@ final class Password
 
     public const NUL = 'رمز عبور نمی‌تواند کاراکتر NUL داشته باشد.';
 
-    /** Why `$password` cannot be one, in its owner's words; null when it can. */
+    /** Why `$password` is refused; null when it is fine. */
     public static function problem(string $password): ?string
     {
         return match (true) {
@@ -29,7 +28,7 @@ final class Password
         };
     }
 
-    /** The hash kept for it. */
+    /** PHP's own hash of it (PASSWORD_DEFAULT). */
     public static function hash(string $password): string
     {
         return password_hash($password, PASSWORD_DEFAULT);

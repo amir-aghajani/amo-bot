@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Providers\Drivers\ThreeXui\DTO;
 
-use App\Modules\Providers\Drivers\ThreeXui\Support\Raw;
+use App\Modules\Providers\Support\Raw;
 
 /**
  * The panel's settings (POST /panel/api/setting/all, ~120 keys) — the part the shop reads: its subscription server,

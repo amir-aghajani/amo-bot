@@ -69,6 +69,7 @@ The sidebar, top to bottom:
 | «حساب نمایندگی» — an agent's | Their account with the main bot ([below](#an-agents-account)) |
 | «فروشگاه» | «پلن‌ها», «دسته‌بندی‌ها», «روش‌های پرداخت» ([Plans](Plans.md), [Payment methods](Payment-Methods.md)) |
 | «فروش» | «کاربران», «سفارش‌ها» (stuck orders counted), «پرداخت‌ها» (receipts to review counted), «اشتراک‌ها», «زیرمجموعه‌گیری» — and the owner's «نمایندگان» ([Customers](Customers.md), [Orders and payments](Orders-And-Payments.md), [Services](Services.md), [Referrals](Referrals.md), [Agency](Agency.md)) |
+| «تخفیف و جوایز» | «کدهای تخفیف», «فروش ویژه», «سطوح وفاداری», «کش‌بک», «کدهای هدیه», «گردونه شانس», «قرعه‌کشی» ([Discounts](Discounts.md), [Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md), [Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)) |
 | «ربات» | «کیبوردها», «متن‌های ربات», «ارسال همگانی» ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md), [Broadcasts](Broadcasts.md)) |
 | «تنظیمات» (at the foot) | «تنظیمات ربات», «تنظیمات وب‌سایت» and «تنظیمات پنل» ([Bot settings](Bot-Settings.md), [Website](Website.md), [Panel settings](Panel-Settings.md)) |
 
@@ -77,10 +78,11 @@ folded group, or the icon rail, shows a dot for the most pressing one instead. A
 pressed, and the browser remembers it; the group of the page on screen is always open.
 
 **Pages made of sections** list their sections in the sidebar in the menu's place, each with an address of its own:
-«کاربران» (the customers, «گروه‌ها»), «زیرمجموعه‌گیری» («معرف‌ها», «زیرمجموعه‌ها», «پورسانت‌ها»), the owner's
-«نمایندگان» («درخواست‌ها» — with the number waiting —, «نماینده‌ها», «سطح‌ها», «تنظیمات») and «ارسال همگانی» («پیام همگانی»,
-«هدیه همگانی»), and the settings. «منوی اصلی» shows the menu again without leaving the page; on a phone a «بخش» picker
-under the page's title does it. Moving between a page's sections keeps what was typed in each.
+«کاربران» (the customers, «گروه‌ها»), «زیرمجموعه‌گیری» («معرف‌ها», «زیرمجموعه‌ها», «پورسانت‌ها», «هشدارها»), the owner's
+«نمایندگان» («درخواست‌ها» — with the number waiting —, «نماینده‌ها», «سطح‌ها», «تنظیمات»), «کدهای تخفیف» («کدها»,
+«تنظیمات»), «گردونه شانس» («جوایز», «چرخش‌ها», «تنظیمات»), «ارسال همگانی» («پیام همگانی», the owner's «هدیه همگانی»),
+and the settings. «منوی اصلی» shows the menu again without leaving the page; on a phone a «بخش» picker under the
+page's title does it. Moving between a page's sections keeps what was typed in each.
 
 **The icon rail**: the sidebar folds to icons with «جمع کردن سایدبار» or Ctrl+B (⌘+B on a Mac); a group's pages open
 from its icon. The browser remembers the choice; until one is made, a window narrower than a tablet's shows the rail.
@@ -141,8 +143,8 @@ Most lists are read a page of 25 rows at a time, and work the same way:
 - **The address keeps the view**: the tab, the filters, the search, the order and the page are in it, so a reload, the
   browser's back and a link sent to someone show the same list.
 
-Lists the owner orders by hand — plans, categories, payment methods, groups, levels, channels — have ▲▼ instead, and
-no pages.
+Lists the owner orders by hand — plans, categories, payment methods, groups, levels, channels, the wheel's prizes —
+have ▲▼ instead, and no pages.
 
 ## Live, and safe to leave
 

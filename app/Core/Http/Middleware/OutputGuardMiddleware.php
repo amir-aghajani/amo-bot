@@ -11,10 +11,8 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * What PHP prints while a request is handled is never part of the answer: a warning a host prints although the app
- * switched display_errors off (php_admin_flag keeps it on), a library's stray echo. It would come out ahead of the JSON —
- * no longer JSON, and perhaps a path of the server's in it — so it is caught, left out and logged, cut short: the log is
- * for finding where it came from, not a copy of it.
+ * Keeps whatever PHP prints during a request out of the answer — a warning on a host that forces display_errors on, a
+ * stray echo — since it would break the JSON and might leak a server path. It is logged, cut short.
  */
 final class OutputGuardMiddleware implements MiddlewareInterface
 {

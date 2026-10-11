@@ -57,7 +57,7 @@ function section(name: string): HTMLElement {
 }
 
 describe('a sectioned page', () => {
-  it('shows the section its address names, its header worded for it, the others mounted and hidden', () => {
+  it('shows the section its address names with a header for it, keeping the others mounted and hidden', () => {
     open('/users/groups')
 
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('گروه‌ها')

@@ -8,11 +8,9 @@ use App\Modules\Settings\Services\Settings;
 use Illuminate\Support\Carbon;
 
 /**
- * Whether the bot may send premium emoji — Telegram lets it only while its owner (the account that made it in
- * @BotFather) has Telegram Premium — as the bot last found out, each bot for itself: /emoji asks (the bot sends the
- * admin's message back and looks at what survived), and a message Telegram turns down over one says no too (BotApi).
- * While a "no" is fresh, messages go with the plain emoji from the start instead of paying a refused call each; /emoji
- * forgets it before asking again, so a Premium bought meanwhile is seen at once. The editors warn while it says no.
+ * Whether the bot may send premium emoji (only while its owner has Telegram Premium), as last found out — by /emoji, or
+ * by a message Telegram refused over one (BotApi). While a "no" is fresh (HOLD_SECONDS), messages go plain from the
+ * start instead of paying a refused call each.
  */
 final class PremiumEmojiStatus
 {
@@ -32,6 +30,7 @@ final class PremiumEmojiStatus
         return is_array($status) && isset($status['ok'], $status['at']) ? ['ok' => (bool) $status['ok'], 'checked_at' => (string) $status['at']] : null;
     }
 
+    /** Keep what the bot just found: whether its premium emoji went through. */
     public function record(bool $ok): void
     {
         $this->settings->set(self::KEY, ['ok' => $ok, 'at' => now()->toIso8601String()]);

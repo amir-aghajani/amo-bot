@@ -5,14 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Texts;
 
 /**
- * The bot's words — Telegram HTML, as BotTexts renders a text — in the two forms a website (and an email) shows them in:
- * plain() — the tags dropped, the entities read, a premium emoji its plain emoji — and html(), safe HTML: Telegram's
- * formatting as the web has it and nothing else — b/strong, i/em, u/ins, s/strike/del, code, pre and blockquote as they
- * are, a spoiler as `<span class="tg-spoiler">`, a link only to an http(s) address (a bare t.me one made https), a
- * premium emoji its plain emoji, a line break `<br>` (but inside a <pre>, which keeps its lines). Every other tag gives
- * way to its text, every attribute but a link's href goes, and every piece of text is escaped: what comes out is written
- * here, never the source passed through — so a text that is no Telegram HTML (a tag left open or closed out of turn, a
- * script, a handler in an attribute) still comes out as harmless markup, every element it opens closed in order.
+ * The bot's words (Telegram HTML) for a website or an email: plain() drops the tags; html() writes safe HTML anew —
+ * only Telegram's formatting, links to http(s) alone, line breaks as <br>, every text escaped and every element closed
+ * in order. Nothing of the source is passed through, so even a text that is not Telegram HTML (a script, an
+ * attribute handler) comes out harmless.
  */
 final class WebText
 {

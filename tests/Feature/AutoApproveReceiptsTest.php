@@ -21,10 +21,8 @@ use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * A card-to-card method with a review window: a receipt nobody reviews inside it is accepted by the timer — every
- * minute, in every shop —, with nobody's name on it; the order is delivered and the customer gets their service in the
- * bot. A receipt whose order was paid another way, or closed as the timer reached it, is left to support; one approval
- * that breaks does not hold up the others.
+ * The review window: a bot receipt nobody reviewed in time is approved by the timer (no reviewer's name), delivered and the
+ * customer told; a receipt whose order was paid otherwise or closed is left to support; one failure holds up no other.
  */
 final class AutoApproveReceiptsTest extends DatabaseTestCase
 {
@@ -141,7 +139,7 @@ final class AutoApproveReceiptsTest extends DatabaseTestCase
     public function testAnApprovalThatBreaksIsLoggedAndTheOthersStillGo(): void
     {
         // A traffic order of a customer on an agency level whose shop was never opened: its delivery has nothing to add
-        // the traffic to — a fault of the shop's own.
+        // the traffic to — a fault in the shop itself.
         $broken = $this->service(OrderService::class)->openTraffic($this->customer(['telegram_id' => 7007, 'agency_level_id' => $this->agencyLevel()->id]), 20);
         $first = $this->receipt($this->cardPayment($broken, $this->timed));
         Carbon::setTestNow(now()->addMinute());

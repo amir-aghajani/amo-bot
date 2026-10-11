@@ -16,7 +16,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { EMAILED, NOT_DELIVERED } from '@/lib/statuses'
 import { useForm } from '@/lib/use-form'
 
-/** An agent: their bot and what it sold, what they owe, and their level and credit to change — the agent is told. */
+/** An agent: their bot and what it sold, what they owe, and their level and credit to change — the agent is notified. */
 export function AgentModal({ agent, onClose, onSaved }: { agent: AgentRow | null; onClose: () => void; onSaved: (agent: AgentRow) => void }) {
   return (
     <Modal open={agent !== null} onClose={onClose} size="md" title={agent ? `نماینده ${userLabel(agent.user)}` : 'نماینده'}>
@@ -63,10 +63,7 @@ function AgentForm({ agent, onClose, onSaved }: { agent: AgentRow; onClose: () =
   )
 }
 
-/**
- * An agent's traffic from the agents page: what their bot may still sell, more or less of it by hand (a gift, a
- * correction — with the note on their ledger), and every line of it.
- */
+/** An agent's traffic: what their bot may still sell, a manual adjustment (with a ledger note) and the full ledger. */
 export function TrafficModal({ agent, onClose, onSaved }: { agent: AgentRow | null; onClose: () => void; onSaved: (agent: AgentRow) => void }) {
   return (
     <Modal open={agent !== null} onClose={onClose} size="md" title={agent ? `حجم ${userLabel(agent.user)}` : 'حجم نماینده'}>

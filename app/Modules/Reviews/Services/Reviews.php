@@ -28,25 +28,21 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Customers' reviews of the shop («نظرات»), one service whichever door a decision comes through — the panels, or the
- * website's admin side —: written on the shop's website by a guest, or by a customer signed in there (theirs, then),
- * every refusal of its fields at once; kept waiting on support, the report group told; approved — the website shows it
- * —, rejected — it does not —, either way again later, or deleted — never by the admin who wrote it, signed in, whose
- * own review is another admin's to decide. Every change of where a review stands is one conditional update
- * (Core\Database\Transitions), so of two decisions at once one stands, and the other is refused in the words of the
- * state it found.
+ * Customers' reviews of the shop («نظرات»): written on the website by a guest or a signed-in customer, kept waiting on
+ * support (the report group hears of it), then approved (the website shows it), rejected (it does not) — either way again
+ * later — or deleted. One service for the panels and the website's admin API. Every status change is one conditional
+ * update (Transitions), so of two decisions at once one stands and the other is refused by the state it found. A shop
+ * admin never decides about a review they wrote themselves.
  *
- * What a review costs the shop is held: a guest's is taken only while the website asks a captcha — without one, nothing
- * would stand between a bot and the queue, so it takes its signed-in customers' alone (a 403) —; the shop keeps
- * PENDING_MAX waiting on support at most (a 503 until support decides some); an address network — an IPv6 one by its
- * /48 (NETWORK_IPV6_PREFIX), as much as one host is often handed — writes NETWORK_REVIEWS in NETWORK_WINDOW, a signed-in
- * customer CUSTOMER_REVIEWS in CUSTOMER_WINDOW, and every guest together GUEST_REVIEWS in GUEST_WINDOW (a 429) — counted
- * before the website's captcha judges the review's token, so a review refused for its wait spends none, and a token
- * refused keeps its network's count: a bot's guesses cost its network its reviews, and its provider is asked no more
- * than that — never the guests' count, which a bot's guesses would spend for every guest —; a token that could not be
- * judged gives the counts back. The reviews' own windows hold the captcha's tries, never the sign-ins'
- * (Auth\Services\SignInThrottle::issuing()): a review bot behind a carrier's shared address keeps nobody behind it from
- * signing in.
+ * What a review may cost the shop is limited:
+ * - a guest's review is taken only while the website asks a captcha (without one nothing would stop a bot);
+ * - at most PENDING_MAX wait on support (a 503 until support decides some);
+ * - per window: NETWORK_REVIEWS per address network (an IPv6 one by its /48), CUSTOMER_REVIEWS per signed-in customer,
+ *   GUEST_REVIEWS for all guests together (a 429).
+ * The windows are counted before the captcha is judged. A refused token keeps its network's count (a bot's guesses cost
+ * it reviews, and its captcha provider is asked no more) but gives the guests' count back (else a bot would spend it for
+ * every guest); a token that could not be judged gives every count back. These are the reviews' own windows, never the
+ * sign-ins' (SignInThrottle), so a review bot behind a carrier's shared address locks nobody out of signing in.
  */
 final class Reviews
 {
@@ -56,36 +52,36 @@ final class Reviews
     public const BODY_MAX = 600;
     public const CONTEXT_MAX = 100;
 
-    /** The action a review's captcha widget names (Turnstile's `data-action`, ALTCHA's challenge asked with `?action=`): a token solved for another form passes none. */
+    /** The action a review's captcha names (Turnstile's `data-action`, ALTCHA's `?action=`): a token solved for another form fails. */
     public const CAPTCHA_ACTION = 'review';
 
-    /** The reviews the shop keeps waiting on support at most: then it takes no new one until support decides some. */
+    /** The most reviews waiting on support; then no new one is taken until support decides some. */
     public const PENDING_MAX = 200;
 
-    /** Reviews one address network writes in a window of NETWORK_WINDOW seconds — a refused captcha among them —: many customers share one address on a mobile network. */
+    /** Reviews one address network writes per NETWORK_WINDOW seconds, refused captchas included (generous: mobile customers share addresses). */
     public const NETWORK_REVIEWS = 20;
     public const NETWORK_WINDOW = 3600;
 
-    /** The bits an IPv6 address network is counted by: a /48 — what a host is often handed, a /64 for every try from it otherwise. */
+    /** The prefix an IPv6 address network is counted by: a /48, since one host is often handed that much (a /64 per try otherwise). */
     public const NETWORK_IPV6_PREFIX = 48;
 
     /** Reviews one signed-in customer writes in a window of CUSTOMER_WINDOW seconds. */
     public const CUSTOMER_REVIEWS = 3;
     public const CUSTOMER_WINDOW = 86400;
 
-    /** Reviews the shop takes from guests — every one together, from wherever — in a window of GUEST_WINDOW seconds. */
+    /** Reviews the shop takes from all guests together per GUEST_WINDOW seconds. */
     public const GUEST_REVIEWS = 20;
     public const GUEST_WINDOW = 3600;
 
-    /** Refused, as the state the review is in says. */
+    /** Refusals by the state the review is in. */
     public const APPROVED = 'این نظر تایید شده است.';
     public const REJECTED = 'این نظر رد شده است.';
 
-    /** Where a review may be approved from, and rejected from: support moves it either way, at any time. */
+    /** Where a review may be approved from, and rejected from: support moves it either way at any time. */
     private const APPROVABLE = [ReviewStatus::Pending, ReviewStatus::Rejected];
     private const REJECTABLE = [ReviewStatus::Pending, ReviewStatus::Approved];
 
-    /** An avatar: a key of the website's own set — never an address, which the website would load a picture from. */
+    /** An avatar: a key of the website's own set — never an address the website would load a picture from. */
     private const AVATAR = '/^[a-z0-9_-]{1,32}$/';
 
     private const NAME_MISSING = 'نام خود را بنویسید.';
@@ -106,11 +102,10 @@ final class Reviews
     ) {}
 
     /**
-     * A review written on the shop's website — the `name` it is signed with, a `rating`, its `body`, a line of
-     * `context`, one of the site's own avatars —, `$writer` the customer signed in there (null for a guest, taken only
-     * while the site asks a captcha): every refusal of its fields at once; then the shop's room for one; then the tries
-     * counted; then `captcha` judged for the review's action, while the site asks one; then kept, waiting on support, and
-     * the report group told.
+     * A review written on the website — `name`, `rating`, `body`, a line of `context`, one of the site's `avatar`s — by
+     * `$writer` (null for a guest, taken only while the site asks a captcha). In order: every field refusal at once; the
+     * shop's room for one more; the windows counted; the captcha judged (while the site asks one); then kept, waiting on
+     * support, and the report group told.
      *
      * @param array<string, mixed> $input
      * @throws SignInToReviewException 403: a guest's, while the site asks no captcha
@@ -143,10 +138,7 @@ final class Reviews
                 ? ['reviews|customer|' . $writer->id, self::CUSTOMER_REVIEWS, self::CUSTOMER_WINDOW]
                 : ['reviews|guests|' . CurrentBot::id(), self::GUEST_REVIEWS, self::GUEST_WINDOW],
         ];
-        $wait = $this->limiter->attempt($windows);
-        if ($wait > 0) {
-            throw TooManyAttemptsException::wait(self::TOO_MANY, $wait);
-        }
+        $this->limiter->enforce($windows, self::TOO_MANY);
         try {
             $this->captcha->check($site, $request, $input, self::CAPTCHA_ACTION);
         } catch (CaptchaUnavailableException $e) {
@@ -156,7 +148,7 @@ final class Reviews
 
             throw $e;
         } catch (ValidationException $e) {
-            // A refused token costs its network the review, never the guests' count: a bot's guesses would spend it for everyone.
+            // A refused token costs its network the review but not the guests' count, which a bot would spend for everyone.
             if ($writer === null) {
                 $this->limiter->release($windows[1][0]);
             }
@@ -174,7 +166,7 @@ final class Reviews
     }
 
     /**
-     * Approved — the website shows it from now on —, whether it waited or was rejected before.
+     * Approve the review (the website shows it from now on), whether it waited or was rejected before.
      *
      * @throws ActorRefusedException 403 their own review
      * @throws ValidationException 422 on `status`: approved already
@@ -185,7 +177,7 @@ final class Reviews
     }
 
     /**
-     * Rejected — kept, never shown —, whether it waited or was shown before (hidden again).
+     * Reject the review (kept, never shown), whether it waited or was shown before.
      *
      * @throws ActorRefusedException 403 their own review
      * @throws ValidationException 422 on `status`: rejected already
@@ -196,7 +188,7 @@ final class Reviews
     }
 
     /**
-     * Gone, whatever it stood at — shown on the website no more.
+     * Delete the review, whatever its status.
      *
      * @throws ActorRefusedException 403 their own review
      */
@@ -217,8 +209,8 @@ final class Reviews
     }
 
     /**
-     * The review moved to `$to` from where it stood, who decided it and when on it — one conditional update, refused with
-     * `$refusal` when it stood there already (its state as it is now read onto it).
+     * Move the review to `$to` from `$from`, stamping who decided and when, in one conditional update; refused with
+     * `$refusal` when it was not in `$from` (its current state is read onto it).
      *
      * @param list<ReviewStatus> $from
      * @throws ActorRefusedException 403 their own review
@@ -236,8 +228,8 @@ final class Reviews
     }
 
     /**
-     * One of the shop's admins — its customer too — deciding about the review they wrote themselves, signed in: another
-     * admin's (or the panels') to decide.
+     * Refuse a shop admin (also a customer) deciding about a review they wrote themselves: another admin or a panel
+     * decides it.
      *
      * @throws ActorRefusedException
      */
@@ -249,7 +241,7 @@ final class Reviews
     }
 
     /**
-     * The name it is signed with — one line, NAME_MIN to NAME_MAX characters.
+     * The name it is signed with: one line, NAME_MIN to NAME_MAX characters.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
@@ -311,7 +303,7 @@ final class Reviews
     }
 
     /**
-     * A line of where they use the service from — CONTEXT_MAX characters at most —; blank for none.
+     * A line of where they use the service from (CONTEXT_MAX characters at most); blank for none.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
@@ -343,7 +335,7 @@ final class Reviews
     }
 
     /**
-     * A field that is one line — a name, the context —: trimmed, every run of spaces and line breaks one space.
+     * A one-line field (a name, the context): trimmed, every run of whitespace one space.
      *
      * @param array<string, mixed> $input
      */

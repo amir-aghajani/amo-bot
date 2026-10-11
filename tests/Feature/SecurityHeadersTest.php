@@ -7,10 +7,10 @@ namespace Tests\Feature;
 use App\Core\Application;
 use App\Core\Config\Repository as Config;
 use App\Core\Database\DatabaseManager;
+use App\Core\Http\Controllers\HealthController;
 use App\Core\Http\Middleware\SecurityHeadersMiddleware;
 use App\Core\Http\RequestOrigin;
 use App\Core\Installation;
-use App\Modules\Api\Controllers\HealthController;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -96,7 +96,7 @@ final class SecurityHeadersTest extends HttpTestCase
         self::assertSame(['status' => 'ok', 'version' => Application::VERSION, 'installed' => true, 'database' => 'ok'], $this->decode($this->get('/health')), 'no PHP version, no host');
 
         // A database that does not answer (a folder where its file should be): its error names the host, the user, the
-        // file — the log's, never the caller's. Only the health check is handed it: the shop's own manager stays as booted.
+        // file — the log's, never the caller's. Only the health check is handed it: the app's database manager stays as booted.
         mkdir($file = $this->scratchDir() . '/shop.sqlite');
         $capsule = new Capsule();
         $capsule->addConnection(['driver' => 'sqlite', 'database' => $file, 'prefix' => '']);

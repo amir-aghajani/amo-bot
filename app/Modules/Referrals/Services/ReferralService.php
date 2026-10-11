@@ -5,22 +5,23 @@ declare(strict_types=1);
 namespace App\Modules\Referrals\Services;
 
 use App\Modules\Bots\Services\Bots;
+use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Referrals\Models\ReferralCommission;
+use App\Modules\Referrals\Models\ReferralReward;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
 use App\Support\Money;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Psr\Container\ContainerInterface;
 
 /**
- * The referral program («زیرمجموعه‌گیری»): a customer's invite code and link, whose link brought a newcomer, and the
- * commission a referred customer's payment earns the one who brought them — credited to that one's wallet, once per
- * payment. Only money that came in earns it: a card-to-card or gateway payment of a purchase, a renewal or a wallet
- * top-up; a purchase paid from the wallet spends money that was counted when the wallet was charged. A refund leaves
- * the commission standing: it was earned for bringing a customer who paid — a purchase's money stays in the shop as
- * the customer's balance, and giving a top-up back is the shop's own call.
+ * The referral program («زیرمجموعه‌گیری»): invite codes and links, attributing a newcomer to a referrer, and the
+ * commission a referred customer's payment earns (once per payment). Only money that came in earns it — a wallet payment
+ * spends money already counted when the wallet was charged —, and a refund leaves it standing. Start gifts, plan rewards
+ * and alerts are ReferralGifts'.
  */
 final class ReferralService
 {
@@ -36,6 +37,11 @@ final class ReferralService
         private readonly WalletService $wallet,
         private readonly ConnectionInterface $db,
         private readonly Bots $bots,
+        /**
+         * ReferralGifts is resolved when needed: it gives through Rewards → PaymentService, whose settlement calls this
+         * service, so injecting it would be a constructor loop.
+         */
+        private readonly ContainerInterface $container,
     ) {}
 
     /** The customer's invite code, made the first time it is asked for. */
@@ -70,11 +76,9 @@ final class ReferralService
     }
 
     /**
-     * A customer the shop has just registered — not in the database a moment ago — who came with someone's invite code
-     * (a referral link's /start — codeOf() —, or the website's sign-in) becomes that someone's referral: while the
-     * program runs, and never a banned customer's. The code is read whatever its case. A customer the shop already knew
-     * never becomes anyone's referral; the caller (Users\Services\Customers) asks only for the one it has just created.
-     * Returns the referrer.
+     * Makes a just-registered customer the referral of the invite code's owner (a link's /start, or the website's
+     * sign-in), while the program runs and the owner is not banned; returns the referrer. Only newcomers become referrals
+     * — Users\Services\Customers calls this only for a customer it has just created.
      */
     public function attribute(User $newcomer, ?string $code): ?User
     {
@@ -93,11 +97,22 @@ final class ReferralService
         return $referrer;
     }
 
+    /** A newcomer joined through the referrer's link (ReferralGifts::joined()). */
+    public function joined(User $newcomer, User $referrer): void
+    {
+        $this->container->get(ReferralGifts::class)->joined($newcomer, $referrer);
+    }
+
+    /** A payment settled, after its commit (ReferralGifts::purchased()). */
+    public function purchased(Payment $payment): void
+    {
+        $this->container->get(ReferralGifts::class)->purchased($payment);
+    }
+
     /**
-     * The commission a settled payment earns its customer's referrer: for money that came in (Payment::moneyIn()), while
-     * the program runs, never to a banned referrer, only for the customer's first such payment when the admin said so —
-     * and once, the payment's row being unique: the row, which keeps whom it was credited to, and the wallet credit go in
-     * one transaction. Null when it earns nothing.
+     * Credits the commission a settled payment earns the customer's referrer (not banned), at the rate for its kind;
+     * null when it earns nothing. Once per payment (the row's `payment_id` is unique): the row and the wallet credit are
+     * one transaction.
      */
     public function reward(Payment $payment): ?ReferralCommission
     {
@@ -110,7 +125,7 @@ final class ReferralService
         if ($referrer === null || $referrer->isBanned()) {
             return null;
         }
-        $rate = $this->settings->rate();
+        $rate = $payment->order->type === OrderType::Renewal ? $this->settings->renewalRate() : $this->settings->rate();
         $commission = Money::percentOf($payment->amount, $rate);
         if (!Money::isPositive($commission)) {
             return null;
@@ -136,8 +151,7 @@ final class ReferralService
     }
 
     /**
-     * The customer's own numbers — the bot's screen, the website's, their page in the panels: how many their link
-     * brought, and what was credited to them for those (the commissions kept as theirs).
+     * How many customers their link brought and what those earned them.
      *
      * @return array{referrals: int, earned: string}
      */
@@ -151,10 +165,15 @@ final class ReferralService
         ];
     }
 
+    /** How many plans the customer was given free for their invitations («جایزه دعوت»: the milestones given, not withheld). */
+    public function rewardsOf(User $user): int
+    {
+        return ReferralReward::query()->where('referrer_id', $user->id)->whereNotNull('order_id')->count();
+    }
+
     /**
-     * Whether the payment is not the customer's first money in (the first-payment rule): money of theirs came in before
-     * it — paid earlier, or in the same second with a smaller number —, or one of their payments earned a commission
-     * already.
+     * Whether the payment is not the customer's first money in: another came in before it (by `paid_at`, then id), or
+     * one of theirs already earned a commission.
      */
     private static function notFirst(User $customer, Payment $payment): bool
     {

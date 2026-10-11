@@ -5,8 +5,9 @@ subscription link the customer adds to their app. The shop keeps a copy of each 
 truth: about every 15 minutes the running services are read from their panels — counters, quota, end, link —, and a
 service whose time or traffic ran out there ends here too.
 
-**The term starts at the first connection**: a new service waits for it — «در انتظار اولین اتصال (n روز)» — and its end
-is set then.
+**The term starts at the first connection**: a new service waits for it — «در انتظار اولین اتصال (n روز)», an hourly
+plan's «(n ساعت)» — and its end is set then. A term is kept in hours (an hourly plan's hours, a daily one's days × 24);
+less than a day before its end the bot and the panels give its hour too, and the hours left.
 
 ## The list
 
@@ -118,8 +119,14 @@ own), a failure in a short word. And **an admin never changes their own service*
   left alone ten minutes ([Servers](Servers.md#health)).
 - **Renewal** — the customer renews a service on its own plan at its price today, in the bot or on the website, an ended
   one too: the days left always carry over, the traffic left by the shop's rule ([Bot settings](Bot-Settings.md#renewal)).
+- **«حجم و زمان اضافه»** — the customer buys more traffic or more days for a service, each on its own, in the bot or on
+  the website, at its plan's prices or the shop's (off until you turn it on,
+  [Bot settings](Bot-Settings.md#extra-traffic-and-time)). Traffic brings a service whose traffic ran out back. Days for one
+  whose time ran out start its term again from its next connection. One ended on both counts needs a renewal.
 - **«تمدید خودکار»** — the customer's switch: the wallet renews the service days before its end; a wallet short of it is
-  told once a window and tried again until it can pay.
+  told once a window and tried again until it can pay. Not on a plan whose term is shorter than those days — an hourly
+  plan's: a renewal adds the plan's term, and a shorter one would leave the service due again at once. A service bought
+  at a first-purchase price renews at the plan's price, as any; an agent's or a colleague's at the plan's agent price.
 - **The next period** — with the traffic not carried, a renewal queues the next period; when the paid one ends, what is
   left of the old traffic goes and the new period's begins.
 - **«یادآوری»** — a service near its end, or near its traffic's end, is told once while it stays there (both off until

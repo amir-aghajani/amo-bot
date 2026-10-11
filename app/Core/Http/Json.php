@@ -6,15 +6,12 @@ namespace App\Core\Http;
 
 use Psr\Http\Message\ResponseInterface as Response;
 
-/**
- * The one place that writes JSON bodies, so every endpoint, middleware and error handler agrees
- * on encoding (unescaped Unicode — the payloads are Persian) and headers.
- */
+/** Writes every JSON body: unescaped Unicode (the payloads are Persian), and one error shape. */
 final class Json
 {
     /**
-     * A byte that is not UTF-8 (a name a panel sent) becomes U+FFFD rather than failing the answer; anything else that
-     * cannot be encoded is the code's mistake and throws — never an empty body under a 200.
+     * Invalid UTF-8 becomes U+FFFD rather than failing the answer; anything else that cannot be encoded throws — never
+     * an empty body under a 200.
      */
     private const FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR;
 
@@ -26,11 +23,8 @@ final class Json
     }
 
     /**
-     * The error shape shared by the API, its middleware and the error handler:
-     * {"message": string, "errors"?: {field: [messages]}, "request_id": string, "debug"?: {...}} — `request_id` the
-     * request's (RequestId: what the panel shows, and the log's lines of it carry), `debug` only for a failure of the
-     * server's, with APP_DEBUG on, to a request from this machine (ErrorHandler::debug(): the exception's class, its
-     * message, where it happened).
+     * The error shape: {"message", "errors"?: {field: [messages]}, "request_id", "debug"?}. `request_id` is the
+     * request's (shown by the panels, carried by its log lines); `debug` comes from ErrorHandler::debug().
      *
      * @param array<string, list<string>> $errors
      * @param array<string, mixed>|null $debug

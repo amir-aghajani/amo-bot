@@ -11,12 +11,9 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
 /**
- * Phone verification ("تایید شماره موبایل"): a customer without a verified number is asked to share it
- * through Telegram's own "request_contact" button — whatever they send — until the contact card arrives.
- * Only the sender's own card counts (Telegram stamps it with their user id); one from the address
- * book is refused. Once verified the customer is never asked again, even if the switch is turned off and
- * on later. The verifying card then goes on like any update — through the gates after this one (the
- * channel rule) and, if they let it, to the `contact` route, which is the main menu.
+ * Phone verification: a customer without a verified number is asked for it (Telegram's "request_contact" button)
+ * whatever they send. Only their own card counts. Once verified they are never asked again. The card then goes on
+ * through the next gates to the `contact` route (the menu) — a gate never opens the menu itself.
  */
 final class PhoneGate implements Gate
 {

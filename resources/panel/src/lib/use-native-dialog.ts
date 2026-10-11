@@ -1,17 +1,15 @@
 import { useEffect, useRef, type DialogHTMLAttributes, type RefObject } from 'react'
 
-/** The controls a form starts with, in a dialog: a field the keyboard reaches (not a hidden one behind a custom control). */
+/** The fields a dialog's initial focus may go to: ones the keyboard reaches (not a hidden input behind a custom control). */
 const FIELDS = ['input:not([type="hidden"]):not([readonly])', 'textarea:not([readonly])', 'select', 'button[role="combobox"]'].map((field) => `${field}:not(:disabled):not([tabindex="-1"])`).join(', ')
 
 /**
- * Drives a native <dialog> from React state: showModal()/close() follow `open` (so the focus trap,
- * Escape and the top layer come from the browser), the initial focus goes to a [data-autofocus]
- * control inside, else to the dialog's first field (a form's first input), else the browser's
- * choice, and the page behind stops scrolling meanwhile — the modal dialog does not do that by
- * itself — without moving sideways as its scrollbar goes. Closed, the focus goes back to what had it
- * as the dialog opened: a menu's item, gone with its menu, stands for the menu's trigger. It hands
- * back the dialog's handlers for a dismissal — Escape, or a click on the backdrop — which call
- * `onDismiss` and leave the state to React.
+ * Drives a native <dialog> (a Modal, the phone's drawer) from React state:
+ * - showModal()/close() follow `open`, so the browser provides the focus trap, Escape and the top layer;
+ * - the initial focus goes to a `[data-autofocus]` control, else the first field, else the browser's choice;
+ * - the page behind stops scrolling meanwhile, without shifting sideways as its scrollbar goes;
+ * - closed, the focus returns to what had it when the dialog opened (for a menu item, the menu's trigger).
+ * The handlers it returns turn Escape and a backdrop click into `onDismiss`, leaving the state to React.
  */
 export function useNativeDialog(
   ref: RefObject<HTMLDialogElement | null>,

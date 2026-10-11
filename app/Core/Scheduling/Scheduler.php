@@ -10,14 +10,10 @@ use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Interval based scheduler, ticked every minute from outside — a cron's `schedule:run`, the /cron address, or bot:poll
- * while it polls. When each task last ran is kept in a small JSON file (the container's `schedule.state`), so it needs no
- * queue and no daemon.
- *
- * A task is a shop's (`eachBot`: its receipts, renewals, reminders, broadcasts, report group — run once in every shop,
- * the main one first) or the shop's as a whole (its servers' sync and grants — run across every shop at once): Shops
- * says what the shops are. One run has RUN_SECONDS for the work that goes on as long as it may, shared out as it goes
- * (Budget): each turn — a task, or a shop's task in one shop — gets what is left over the turns still to come.
+ * An interval scheduler ticked every minute from outside (a cron's `schedule:run`, the /cron address, bot:poll). When
+ * each task last ran is kept in a JSON file (`schedule.state`): no queue, no daemon. A shop's task (`eachBot`) runs once
+ * in every shop; the rest (servers, grants) once across all of them. A run's RUN_SECONDS are shared out as it goes:
+ * each turn gets what is left divided by the turns still to come (Budget).
  */
 final class Scheduler
 {
@@ -63,12 +59,9 @@ final class Scheduler
     }
 
     /**
-     * Run every task whose interval has passed (every one with `$force`). A task that fails is logged and keeps no
-     * other from running; a shop's task failing in one shop keeps it from none of the others.
-     *
-     * One run at a time, whoever starts it: a run that outlasts its minute (a slow panel) is not joined by a second
-     * doing the same work — the second returns. A task's time is written before it runs, so one that dies on the way
-     * (memory, a killed request) waits its interval like any other instead of running again every minute.
+     * Run every task whose interval has passed (all with `$force`). A failure is logged and stops nothing else. One run
+     * at a time: a second caller returns at once. A task's time is written before it runs, so one that kills the process
+     * waits its interval instead of running again every minute.
      *
      * @return list<string> The tasks that ran.
      */
@@ -134,8 +127,8 @@ final class Scheduler
     }
 
     /**
-     * The shops a shop's task due now runs in; null when they cannot be read (the database is down): the shops' tasks
-     * then wait for the next tick, unmarked.
+     * The shops to run the due shop tasks in; null when they cannot be read (the database is down) — those tasks then
+     * wait for the next tick, unmarked.
      *
      * @param array<string, array{task: class-string<Task>, interval: int, eachBot: bool}> $due
      * @return list<int>|null
@@ -187,8 +180,8 @@ final class Scheduler
     }
 
     /**
-     * The run's lock; null when there is nowhere to keep one (storage not writable) — the run goes ahead then, since a
-     * shop whose tasks never run is worse off than one whose runs may overlap; false when another run holds it.
+     * The run's lock; false when another run holds it; null when there is nowhere to keep one — the run goes ahead,
+     * since tasks that never run are worse than runs that may overlap.
      */
     private function lock(): FileLock|false|null
     {
@@ -210,7 +203,7 @@ final class Scheduler
     }
 
     /**
-     * Written whole or not at all: half a file would read as "nothing ever ran" and run every task at once.
+     * Written atomically: half a file would read as "nothing ever ran" and run every task at once.
      *
      * @param array<string, int> $state
      */

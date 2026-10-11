@@ -10,10 +10,7 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
-/**
- * Anything the bot has no answer for — a text it does not know, a button from a screen long gone: "not understood",
- * with the menu.
- */
+/** What no route takes — an unknown text, a button from a screen long gone: «متوجه نشدم» with the menu. */
 final class FallbackHandler implements Handler
 {
     public function __construct(

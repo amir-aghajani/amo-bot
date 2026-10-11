@@ -22,10 +22,8 @@ import { formatDate } from '@/lib/format'
 import { useForm } from '@/lib/use-form'
 
 /**
- * The owner's way back in without a shell — a password forgotten, or no login set at all —, which the sign-in page's
- * «رمز را فراموش کرده‌اید؟» leads to: the panel writes a one-time key to a file of the host's (storage/recovery-key.txt),
- * the owner reads it in their host's File Manager and sets a new username and password with it. Done, they are signed
- * in under it, and every other session ends.
+ * The owner's way back in without a shell: the panel writes a one-time key to storage/recovery-key.txt, the owner reads
+ * it in the host's File Manager and sets a new login with it. They are then signed in, and every other session ends.
  */
 export function RecoverPage() {
   const { session } = useAuth()

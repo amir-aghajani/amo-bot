@@ -19,9 +19,8 @@ export function useReportGroup() {
 }
 
 /**
- * What the report group card does — a connect link, a check, a test message, disconnecting —, each putting the group the
- * server answers with into the card's copy. A refusal is the panel's toast in the server's words (a 422 on `link`: no
- * link can be made yet).
+ * The report group card's operations (a connect link, a check, a test message, disconnecting), each putting the answered
+ * group into the card's copy. Refusals are toasts (a 422 on `link`: no link can be made yet).
  */
 export function useReportGroupActions() {
   const queryClient = useQueryClient()

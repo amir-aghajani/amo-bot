@@ -13,6 +13,7 @@ use App\Modules\Providers\DTO\Expiry;
  */
 final class ExpiryTime
 {
+    /** The panel's `expiryTime` as the contract's Expiry. */
     public static function toExpiry(int $millis): Expiry
     {
         return match (true) {
@@ -22,6 +23,7 @@ final class ExpiryTime
         };
     }
 
+    /** The contract's Expiry as the panel's `expiryTime`. */
     public static function of(Expiry $expiry): int
     {
         $pending = $expiry->pendingSeconds();

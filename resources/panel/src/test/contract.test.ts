@@ -74,6 +74,10 @@ describe('a request held to the API description', () => {
     expect(contractProblem(request('POST', '/api/admin/plans/reorder', { ids: Array.from({ length: 1001 }, (_, index) => index + 1) }))).toBe(
       'POST /api/admin/plans/reorder: body.ids: 1001 items, more than 1000',
     )
+    // A list no shorter than it may be: a change of several plans' prices moves one price at least.
+    const change = { plan_ids: [3], direction: 'increase', mode: 'percent', value: '10', round_to: 1000, prices: ['price'] }
+    expect(contractProblem(request('POST', '/api/admin/plans/prices/preview', change))).toBeNull()
+    expect(contractProblem(request('POST', '/api/admin/plans/prices/preview', { ...change, prices: [] }))).toBe('POST /api/admin/plans/prices/preview: body.prices: 0 items, fewer than 1')
     // A button's colour may be null — none.
     expect(contractProblem(request('PUT', '/api/admin/keyboards/start', { type: 'inline', rows: [[{ action: 'buy', label: 'خرید', style: null, icon: null }]] }))).toBeNull()
     expect(contractProblem(request('PUT', '/api/admin/keyboards/start', { type: 'inline', rows: [[{ action: 'buy', label: 'خرید', style: 'gold' }]] }))).toBe(

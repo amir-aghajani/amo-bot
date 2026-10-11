@@ -42,7 +42,7 @@ use Tests\Support\FakeTelegram;
  * opens again with it), «🔒 بستن تیکت» and, once closed, «⭐ امتیاز» — each star a message of the customer's window, the
  * group hearing only a first rating or a changed one. Support's answer comes with its picture and both notices with their
  * buttons, each opening a message of its own beside the notice. The report group hears of a ticket opened in the bot as
- * of one opened on the website; the shop's limits are said in its words.
+ * of one opened on the website; the shop's limits are refused with its own messages.
  */
 final class BotTicketsTest extends BotTestCase
 {
@@ -620,7 +620,7 @@ final class BotTicketsTest extends BotTestCase
         self::assertSame(['sendPhoto', 'answerCallbackQuery'], $this->calls(), 'the screen stays');
         self::assertSame(['guide', self::text(BotText::TicketPictureCaption, ['when' => Persian::date($picture->created_at, withTime: true), 'ticket' => (string) $ticket->id])], [$this->params(0)['photo'] ?? null, $this->params(0)['caption'] ?? null]);
 
-        // One Telegram no longer hands over — as a photo, nor as a file — is said so.
+        // One Telegram no longer hands over — as a photo, nor as a file — is reported as gone.
         $this->telegram()->fail(400, 'Bad Request: wrong file identifier/HTTP URL specified');
         $this->telegram()->fail(400, 'Bad Request: wrong file_id or the file is temporarily unavailable');
         $this->send($this->tap(TicketHandler::screenCallback($ticket->id, 1, 'picture', (string) $picture->id)));

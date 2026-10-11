@@ -42,7 +42,7 @@ interface Hidden {
   end: boolean
 }
 
-/** The row's ends that hide tabs, faded — a tab cut there reads as more to see, not as a broken word; nothing while all are in sight. */
+/** A mask fading the row's ends that hide tabs, so a tab cut there reads as "more to see"; none while all are in sight. */
 function fade({ start, end }: Hidden): string | undefined {
   if (!start && !end) return undefined
   const toEnd = isRtl() ? 'to left' : 'to right'
@@ -50,12 +50,11 @@ function fade({ start, end }: Hidden): string | undefined {
 }
 
 /**
- * The one control for switching in place (by decision — no segmented control): an ink underline that slides to the
- * selected tab (measured from the DOM, so it follows any label width and direction), with arrow-key movement; a pick
- * goes through `onChange`. As tabs it switches views — render each view's panel with `tabPanel()` (keep the others
- * mounted and hidden, so drafts survive); as a choice it is a value of a form. A page's own sections are never tabs —
- * the sidebar lists them. A row wider than its place (five tabs on a phone) scrolls sideways, tabs whole, and keeps the
- * selected one in sight — its ends that hide tabs fading, so the one cut there reads as more to see.
+ * The panels' one switching control (deliberately no segmented control): an underline that slides to the selected tab
+ * (measured from the DOM, so any label width and direction work), arrow keys to move. As `tabs` it switches views —
+ * give each view's panel `tabPanel()` and keep the others mounted and hidden, so drafts survive; as `choice` it is a
+ * radio group picking a form's value. A page's own sections are never tabs (the sidebar lists them). A row too wide
+ * for its place scrolls sideways, keeping the selected tab in sight and fading the ends that hide tabs.
  */
 export function PageTabs<T extends string>({ value, tabs, onChange, size = 'md', className, as = 'tabs', id, 'aria-label': ariaLabel }: PageTabsProps<T>) {
   const listRef = useRef<HTMLDivElement>(null)

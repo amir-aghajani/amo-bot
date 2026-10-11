@@ -21,11 +21,10 @@ import { readStored, STORAGE_KEYS, writeStored } from '@/lib/storage'
 import { cn } from '@/lib/utils'
 
 /*
- * The sidebar, drawn as the Console's: the brand and the column's toggle, what the panel puts under it (the owner's shop
- * picker), the pages (groups fold open; their pages indented, text only), and at the foot the settings and the account.
- * Collapsed it is an icon rail — a group's pages then open as a flyout menu. On a page made of sections (the settings,
- * the users…) the column lists that page's sections instead, with the way back to the menu where the picker was; the
- * change slides in as the Console's does.
+ * The sidebar: the brand and the collapse toggle, the panel's picker (the owner's shop switcher), the menu (groups fold
+ * open), and at the foot the settings and the account. Collapsed it is an icon rail, where a group's pages open as a
+ * flyout menu. On a page made of sections (the settings, the users…) the column lists that page's sections instead,
+ * with «منوی اصلی» back to the menu; the switch between the two slides in.
  */
 
 const ITEM = 'flex h-9 w-full min-w-0 items-center gap-3 rounded-lg px-2 text-body transition-colors duration-100 outline-none focus-visible:focus-ring'
@@ -64,18 +63,18 @@ export function SidebarBody({ onClose }: { onClose?: () => void }) {
   const { panel } = useShell()
   const collapsed = useRail()
   const Picker = panel.picker
-  // «منوی اصلی» shows the menu over a page's sections — until the next navigation, which shows what its page has.
+  // «منوی اصلی» shows the menu instead of a page's sections until the next navigation.
   const [menuAt, setMenuAt] = useState<string | null>(null)
   const area = menuAt === location.key ? null : areaFor(panel.nav, location.pathname)
   const level = area?.id ?? 'menu'
 
-  // A new level slides in as the Console's: a page's sections from the end side (a step in), the menu from the start
-  // side (a step back). Nothing moves on the first paint.
+  // A new level slides in: a page's sections from the end side (a step in), the menu from the start side (a step back).
+  // Nothing moves on the first paint.
   const [motion, setMotion] = useState<{ level: string; from: 'start' | 'end' | null }>({ level, from: null })
   if (motion.level !== level) setMotion({ level, from: area ? 'end' : 'start' })
 
-  // A press inside the column that opens another level takes the pressed link or button away with the old one: the
-  // focus goes on to the new level's current page (or its first control) instead of falling to the document.
+  // A press that opens another level removes the pressed control with the old one: the focus moves to the new level's
+  // current page (or its first control) instead of falling to the document.
   const refocus = useRef(false)
   const onPanel = useCallback((element: HTMLDivElement | null) => {
     if (!element || !refocus.current) return

@@ -23,7 +23,7 @@ to set, and its File Manager edits a file. Nothing of the configuration is read 
   (never half) and under a lock, so two writers change it one after the other; the installer makes it readable by the
   shop's own user alone (`0600` — `0644` where PHP runs as another user, [file ownership](Running-In-Production.md#file-ownership)),
   and a rewrite keeps the permissions it has.
-- Every setting, its default and its words: the [config.php reference](Config-Reference.md), generated from the code.
+- Every setting, its default and its description: the [config.php reference](Config-Reference.md), generated from the code.
 
 ## Editing it by hand
 

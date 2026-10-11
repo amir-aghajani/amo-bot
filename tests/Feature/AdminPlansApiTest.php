@@ -12,14 +12,15 @@ use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Models\ServerInbound;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Users\Models\User;
 use App\Support\Validation;
 use Tests\HttpTestCase;
 
 /**
- * The plans screen: a plan's fields checked in Persian (Persian digits taken), the servers it is sold on — a whole server
- * or pinned inbounds, any server the admin likes, an entry customers are not offered flagged with why, and so a plan the
- * bot does not show at all —, its order, its switch, a copy, and a delete refused once it has history.
+ * The plans screen: field validation (Persian digits taken), server entries (whole server or pinned inbounds, unsellable
+ * ones flagged with why), a plan's own extras prices, ordering, the switch, duplicating, and deletion refused once a plan
+ * has history.
  */
 final class AdminPlansApiTest extends HttpTestCase
 {
@@ -157,6 +158,112 @@ final class AdminPlansApiTest extends HttpTestCase
         self::assertSame(1, $plan['sort']);
     }
 
+    public function testAPlanMayPriceTheExtraTrafficAndTimeItsServicesBuyItsOwnWay(): void
+    {
+        $response = $this->postJson('/api/admin/plans', $this->input(['extras' => [
+            'traffic_price' => '۵٬۰۰۰', 'traffic_options' => [['quantity' => '20', 'price' => '90000']], 'traffic_min' => 1, 'traffic_max' => '50',
+            'time_price' => '', 'time_options' => [], 'time_min' => 1, 'time_max' => 30,
+        ]]));
+
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $plan = $this->decode($response)['plan'];
+        self::assertSame([
+            'traffic_price' => '5000.00', 'traffic_options' => [['quantity' => 20, 'price' => '90000.00']], 'traffic_min' => 1, 'traffic_max' => 50,
+            'time_price' => null, 'time_options' => [], 'time_min' => 1, 'time_max' => 30,
+        ], $plan['extras']);
+        $prices = ExtrasSettings::planPrices(Plan::query()->findOrFail($plan['id'])) ?? self::fail('no prices of its own');
+        self::assertSame(['90000.00', '150000.00', false], [$prices->traffic->priceOf(20), $prices->traffic->priceOf(30), $prices->time->sells()]);
+
+        $kept = $this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input(['name' => 'یک‌ماهه ویژه'])))['plan'];
+        self::assertSame($plan['extras'], $kept['extras'], 'changed without them — a form made before them —: its own stay');
+        self::assertNull($this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input(['extras' => null])))['plan']['extras'], "null: the shop's");
+        self::assertNull($this->decode($this->postJson('/api/admin/plans', $this->input(['name' => 'دوماهه'])))['plan']['extras'], "a new plan without them sells at the shop's");
+
+        $refused = $this->postJson('/api/admin/plans', $this->input(['name' => '', 'extras' => [
+            'traffic_price' => '0', 'traffic_min' => 10, 'traffic_max' => 5,
+            'time_options' => [['quantity' => 7, 'price' => '']], 'time_min' => 1, 'time_max' => 30,
+        ]]));
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertSame(['name', 'extras.traffic_price', 'extras.traffic_max', 'extras.time_options'], array_keys($this->decode($refused)['errors']), 'with the rest of the form, each under its field');
+        self::assertSame(2, Plan::query()->count());
+    }
+
+    public function testAFirstPurchasePriceIsWholeTomanBelowThePriceOrNone(): void
+    {
+        $plan = $this->decode($this->postJson('/api/admin/plans', $this->input(['first_purchase_price' => '۵۰٬۰۰۰'])))['plan'];
+        self::assertSame('50000.00', $plan['first_purchase_price']);
+
+        $put = fn(array $overrides): mixed => $this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input($overrides)))['plan']['first_purchase_price'];
+        self::assertSame('50000.00', $put(['name' => 'یک‌ماهه ویژه']), 'changed without it — a form made before it —: its own stays');
+        self::assertSame('0.00', $put(['first_purchase_price' => '0']), 'a free first purchase');
+        self::assertNull($put(['first_purchase_price' => '']), 'blank: none');
+        self::assertSame('20000.00', $put(['first_purchase_price' => '20000']));
+        self::assertNull($put(['first_purchase_price' => null]), 'null: none');
+        self::assertNull($this->decode($this->postJson('/api/admin/plans', $this->input(['name' => 'دوماهه'])))['plan']['first_purchase_price'], 'a new plan without it has none');
+
+        $below = 'قیمت خرید اول باید کمتر از قیمت پلن باشد.';
+        $amount = 'قیمت خرید اول را به تومان و بدون اعشار وارد کنید؛ برای خرید اول رایگان 0 بگذارید، و برای هیچ، خالی.';
+        foreach ([['120000', $below, 'the price itself'], ['150000', $below, 'above it'], ['1.5', $amount, 'a fraction'], ['abc', $amount, 'no amount']] as [$first, $why, $case]) {
+            $errors = $this->decode($this->postJson('/api/admin/plans', $this->input(['name' => '', 'first_purchase_price' => $first])))['errors'] ?? [];
+
+            self::assertSame(['name', 'first_purchase_price'], array_keys($errors), "{$case}: with the rest of the form");
+            self::assertSame([$why], $errors['first_purchase_price'], $case);
+        }
+        $refused = $this->postJson('/api/admin/plans', $this->input(['price' => 'abc', 'first_purchase_price' => '50000']));
+        self::assertSame(['price'], array_keys($this->decode($refused)['errors'] ?? []), 'a price refused itself: nothing said of the first-purchase price against it');
+        self::assertSame(2, Plan::query()->count());
+    }
+
+    public function testAnAgentPriceIsWholeTomanBelowThePriceOrNone(): void
+    {
+        $plan = $this->decode($this->postJson('/api/admin/plans', $this->input(['agent_price' => '۱۰۰٬۰۰۰'])))['plan'];
+        self::assertSame('100000.00', $plan['agent_price']);
+
+        $put = fn(array $overrides): mixed => $this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input($overrides)))['plan']['agent_price'];
+        self::assertSame('100000.00', $put(['name' => 'یک‌ماهه ویژه']), 'changed without it: its own stays');
+        self::assertNull($put(['agent_price' => '']), 'blank: none');
+        self::assertSame('0.00', $put(['agent_price' => '0']), 'free for them');
+        self::assertNull($put(['agent_price' => null]));
+
+        foreach ([['120000', 'قیمت نماینده باید کمتر از قیمت پلن باشد.'], ['1.5', 'قیمت نماینده را به تومان و بدون اعشار وارد کنید؛ برای نماینده رایگان 0 بگذارید، و برای هیچ، خالی.']] as [$agent, $why]) {
+            $errors = $this->decode($this->postJson('/api/admin/plans', $this->input(['name' => '', 'agent_price' => $agent])))['errors'] ?? [];
+
+            self::assertSame(['name' => $errors['name'] ?? null, 'agent_price' => [$why]], ['name' => $errors['name'] ?? null, 'agent_price' => $errors['agent_price'] ?? null]);
+            self::assertSame(['name', 'agent_price'], array_keys($errors), 'with the rest of the form');
+        }
+    }
+
+    public function testItsCheckoutNoteIsKeptAsWrittenOrNone(): void
+    {
+        $plan = $this->decode($this->postJson('/api/admin/plans', $this->input(['checkout_note' => " روی Happ تست شده است.\r\nبرای iOS هم. "])))['plan'];
+        self::assertSame("روی Happ تست شده است.\nبرای iOS هم.", $plan['checkout_note'], 'its lines kept, trimmed');
+
+        $put = fn(array $overrides): mixed => $this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input($overrides)))['plan']['checkout_note'];
+        self::assertSame("روی Happ تست شده است.\nبرای iOS هم.", $put([]), 'changed without it: its own stays');
+        self::assertNull($put(['checkout_note' => '  ']), 'blank: none');
+        self::assertNull($this->decode($this->postJson('/api/admin/plans', $this->input(['name' => 'دوماهه'])))['plan']['checkout_note'], 'a new plan without it has none');
+
+        $long = $this->postJson('/api/admin/plans', $this->input(['checkout_note' => str_repeat('ا', 501)]));
+        self::assertSame(['checkout_note' => ['یادداشت پیش‌فاکتور حداکثر 500 کاراکتر است.']], $this->decode($long)['errors'] ?? null);
+    }
+
+    public function testItsButtonInTheBotHasAColourAndARowWidth(): void
+    {
+        $plan = $this->decode($this->postJson('/api/admin/plans', $this->input()))['plan'];
+        self::assertSame([null, 1], [$plan['button_style'], $plan['button_row']], 'a new plan: the client\'s look, a row of its own');
+
+        $put = fn(array $overrides): array => array_intersect_key($this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input($overrides)))['plan'], ['button_style' => 0, 'button_row' => 0]);
+        self::assertSame(['button_style' => 'success', 'button_row' => 2], $put(['button_style' => 'success', 'button_row' => '۲']));
+        self::assertSame(['button_style' => 'success', 'button_row' => 2], $put([]), 'changed without them: its own stay');
+        self::assertSame(['button_style' => null, 'button_row' => 3], $put(['button_style' => '', 'button_row' => 3]));
+
+        $refused = $this->unchecked()->postJson('/api/admin/plans', $this->input(['button_style' => 'purple', 'button_row' => 4]));
+        self::assertSame([
+            'button_style' => ['رنگ دکمه را از میان آبی، سبز و قرمز انتخاب کنید، یا پیش‌فرض تلگرام.'],
+            'button_row' => ['جای دکمه یک ردیف کامل، دو یا سه دکمه در ردیف است.'],
+        ], $this->decode($refused)['errors'] ?? null);
+    }
+
     public function testWholeServerEntrySellsWhateverIsSelectableRightNow(): void
     {
         $plan = $this->decode($this->postJson('/api/admin/plans', $this->input()))['plan'];
@@ -235,7 +342,7 @@ final class AdminPlansApiTest extends HttpTestCase
 
         $refused = $this->postJson('/api/admin/plans/reorder', ['ids' => []]);
         self::assertSame(422, $refused->getStatusCode());
-        self::assertSame(['message' => 'اطلاعات واردشده معتبر نیست.', 'errors' => ['ids' => ['لیست شناسه‌ها خالی است.']]], array_diff_key($this->decode($refused), ['request_id' => true, 'debug' => true]), 'an empty order is a validation error like any other');
+        self::assertSame(['message' => 'لیست شناسه‌ها خالی است.', 'errors' => ['ids' => ['لیست شناسه‌ها خالی است.']]], array_diff_key($this->decode($refused), ['request_id' => true, 'debug' => true]), 'an empty order is refused on its field, in its own words');
 
         $data = $this->decode($this->patchJson("/api/admin/plans/{$b['id']}", ['is_active' => false]));
         self::assertFalse($data['plan']['is_active']);

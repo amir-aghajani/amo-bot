@@ -25,9 +25,8 @@ use Psr\Log\NullLogger;
 use Tests\Support\FakePanel;
 
 /**
- * The PasarGuard transport: an API key or an admin's token, the token kept for the client's life (the registry keeps
- * a server's driver a while) and renewed once, and every way the panel (or something in front of it) can answer, as a
- * typed failure.
+ * The PasarGuard transport: an API key or an admin's token (kept for the client's life and renewed once), and every way
+ * the panel, or something in front of it, can answer, as a typed failure.
  */
 final class PasarGuardClientTest extends TestCase
 {

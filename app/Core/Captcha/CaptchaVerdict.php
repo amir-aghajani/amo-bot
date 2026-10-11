@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Captcha;
 
 /**
- * What came of a token: whether it passed, the action and the host it was solved for (as far as the driver tells), and
- * why it did not pass — its codes: the provider's own (Turnstile's `timeout-or-duplicate`, `invalid-input-response` …),
- * and the shop's, HOSTNAME_MISMATCH and ACTION_MISMATCH.
+ * What came of a token: passed or not, the action and host it was solved for (when the driver knows), and the reasons
+ * it did not pass — the provider's codes (`timeout-or-duplicate`…) and the two the shop adds (below).
  */
 final readonly class CaptchaVerdict
 {
@@ -26,8 +25,8 @@ final readonly class CaptchaVerdict
     ) {}
 
     /**
-     * A token the driver took, held to the form: solved on one of `$attempt`'s hosts (when the driver says where), for
-     * its action (when it names one) — else refused with the shop's codes.
+     * A token the driver accepted, held to the form: it passes only if solved on one of the site's hosts (when the
+     * driver says where) and for the form's action (when it names one).
      */
     public static function held(CaptchaAttempt $attempt, ?string $action, ?string $hostname): self
     {

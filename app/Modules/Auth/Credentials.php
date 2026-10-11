@@ -8,10 +8,8 @@ use App\Support\Input;
 use App\Support\Password;
 
 /**
- * The panel's login as a form gives it — the installer's step, the login's recovery and the owner's own change from
- * their panel —, read by the one rule for all three: a username of USERNAME_PATTERN, and a password by the one password
- * rule (App\Support\Password — a customer's on the shop's website too), typed twice alike. AdminAccount::save() writes
- * it.
+ * The owner's panel login as a form sends it (the installer, the recovery, the owner's own change), read by one rule:
+ * a USERNAME_PATTERN username and a password by App\Support\Password, typed twice alike. AdminAccount::save() keeps it.
  */
 final class Credentials
 {
@@ -25,9 +23,8 @@ final class Credentials
     ) {}
 
     /**
-     * The form's `username`, `password` and `password_confirmation`, with the messages of the fields it refused — the
-     * caller adds its own before it throws them all at once. `$keepPassword`: a password left blank, its confirmation
-     * too, keeps the one kept instead of being refused.
+     * Read `username`, `password` and `password_confirmation`, returning the errors for the caller to add its own to
+     * and throw at once. With `$keepPassword`, a blank password and confirmation keep the stored one.
      *
      * @param array<string, mixed> $input
      * @return array{self, array<string, list<string>>}

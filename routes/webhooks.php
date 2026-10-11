@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Core\Http\Controllers\CronController;
 use App\Core\Http\Middleware\InstalledMiddleware;
 use App\Core\Http\Urls;
-use App\Modules\Scheduling\Controllers\CronController;
 use App\Modules\Telegram\Controllers\WebhookController;
 use Slim\App;
 use Slim\Routing\RouteCollectorProxy;

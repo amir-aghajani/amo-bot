@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Store\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Accounts\Http\Customer;
@@ -13,8 +12,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * A signed-in customer's notices on the shop's website — everything the shop told them, whether it reached them in
- * Telegram, by email or not at all (Store\Services\CustomerNotifications) —, and marking them read.
+ * A signed-in customer's notices — everything the shop told them, whether it reached them in Telegram, by email or not at
+ * all (Store\Services\CustomerNotifications) — and marking them read.
  */
 final class NotificationsController extends ApiController
 {
@@ -23,7 +22,7 @@ final class NotificationsController extends ApiController
     /** GET /notifications — ?unread=&page=, newest first, how many are unread in its meta. */
     public function index(Request $request, Response $response): Response
     {
-        $page = $this->notifications->page(Customer::of($request)->user, PageRequest::fromQuery($request->getQueryParams()));
+        $page = $this->notifications->page(Customer::of($request)->user, $this->pageRequest($request));
 
         return $this->json($response, $page->toArray('notifications'));
     }

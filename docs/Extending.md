@@ -2,8 +2,7 @@
 
 Where a new piece goes, and what comes with it. A new VPN panel, payment gateway, database, mail service or captcha is
 a driver: [Drivers](Drivers.md). The rules every change keeps — code style, tests, the API contract, the Persian copy —
-are in [Contributing](Contributing.md) and the engineers' handbook,
-[`CLAUDE.md`](https://github.com/amir-aghajani/amo-bot/blob/main/CLAUDE.md).
+are in [Contributing](Contributing.md) and [Conventions](Conventions.md).
 
 ## A panel screen and its API
 
@@ -80,6 +79,6 @@ A Symfony command with `#[AsCommand]`, listed in `app/Console/Kernel.php` — it
 
 Edit `database/schema.php` and run `php bin/console db:rebuild` on your database — and, from the first release on, ship
 the same change as an upgrade for the shops already installed: `database/upgrades/<version>.php`
-([database/upgrades/README.md](https://github.com/amir-aghajani/amo-bot/blob/main/database/upgrades/README.md),
-[Architecture](Architecture.md#data)). A column that points at a customer joins `AccountMerger::REFERENCES`, so a merge
-carries it (a test fails until it does).
+([Database](Database.md#upgrades)). A test installs the first release's database, runs every upgrade on it and holds
+it to a fresh install's, table by table: a change without its upgrade fails it. A column that points at a customer joins
+`AccountMerger::REFERENCES`, so a merge carries it (a test fails until it does).

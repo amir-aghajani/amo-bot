@@ -13,7 +13,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Brings a database to database/schema.php after an edit — the step migrations would be, before the first release.
+ * Brings a developer's database to database/schema.php after an edit (Schema::rebuild()). An installed shop follows a
+ * release through database/upgrades/ instead.
  */
 #[AsCommand(name: 'db:rebuild', description: 'Make every table again from database/schema.php, carrying the rows over')]
 final class DbRebuildCommand extends Command

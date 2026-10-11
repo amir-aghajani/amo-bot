@@ -27,7 +27,7 @@ use Tests\HttpTestCase;
  * a request naming another shop is refused —; their account shows their bot and its traffic, and they sign every other
  * browser of theirs out. The owner's panel (/api/admin) is another panel with another session: neither opens the other,
  * both stay signed in side by side in one browser, and the owner's requests that name an agent's shop work in it, while
- * the shop's own sections keep working where they belong. An agent whose agency ended is signed out, and their links
+ * the owner's whole-shop sections keep working where they belong. An agent whose agency ended is signed out, and their links
  * with it.
  */
 final class AgentPanelTest extends HttpTestCase

@@ -8,11 +8,7 @@ use App\Modules\Accounts\Support\DeviceName;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-/**
- * A device as the customer's session list names it, from its browser's User-Agent: the browser built on another told
- * apart from it (Edge says Chrome, Chrome says Safari), the system told apart the same way (Android says Linux, an
- * iPhone says Mac OS X); what it does not know, said in words.
- */
+/** Device names from User-Agents: browsers and systems built on others told apart, unknown ones in words. */
 final class DeviceNameTest extends TestCase
 {
     /** @return array<string, array{string, string}> */

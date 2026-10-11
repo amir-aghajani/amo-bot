@@ -15,10 +15,8 @@ use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\Exception\ExceptionInterface as MimeException;
 
 /**
- * The shop's one way to send an email — what config.php's MAIL_* settings set up (MailTransport, the container's
- * `mail.transport`), from its MAIL_FROM_ADDRESS. ready() says whether one can go at all; send() sends it, or says it
- * did not go (MailFailedException), the transport's reason logged once — with a mail driver's secret (the SMTP password,
- * Resend's key), should a mail server repeat it, taken out.
+ * Every email the app sends goes through here, from MAIL_FROM_ADDRESS. ready() says whether one can go at all; send() sends it or
+ * throws MailFailedException, logging the transport's reason once with every mail driver's secret taken out.
  */
 final class Mailer
 {
@@ -38,9 +36,8 @@ final class Mailer
     }
 
     /**
-     * From MAIL_FROM_ADDRESS, by MAIL_FROM_NAME — else the message's `fromName` (the shop it is about), else the shop's
-     * name. The message goes to its address alone: one read as anything else — a name with an address in angle brackets
-     * — is no address it can write to.
+     * Send the message, from MAIL_FROM_ADDRESS by MAIL_FROM_NAME (else the message's `fromName`, else APP_NAME). The
+     * recipient is used as a bare address, never parsed for a display name — `"a<victim@x>"@y` writes to nobody else.
      *
      * @throws MailFailedException when the transport did not take it, or an address in it is none it can write to
      * @throws \LogicException while no email can go (ready() is false): the caller asks first
@@ -78,7 +75,7 @@ final class Mailer
         return $named !== '' ? $named : ($message->fromName ?? (string) $this->config->get('app.name', ''));
     }
 
-    /** What a transport said, without a secret any mail driver keeps in config.php — the SMTP account's password, Resend's key. */
+    /** A transport's words without any mail driver's secret (the SMTP password, Resend's key). */
     private function redacted(string $said): string
     {
         $settings = (array) $this->config->get('mail.settings', []);

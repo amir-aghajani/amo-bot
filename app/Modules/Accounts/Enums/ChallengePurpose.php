@@ -32,8 +32,8 @@ enum ChallengePurpose: string
     case Merge = 'merge';
 
     /**
-     * Whether anyone may have one issued, without an account to stand for it or an email it costs — a stranger asking
-     * address after address: what a shop keeps at most so many of at once (AuthChallenges::LIVE_MAX).
+     * Whether anyone may have one issued without an account or an email behind it — what a shop keeps at most
+     * AuthChallenges::LIVE_MAX of, so strangers cannot fill the table.
      */
     public function anyonesToAsk(): bool
     {

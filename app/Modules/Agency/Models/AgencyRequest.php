@@ -12,8 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * A customer asking to become an agent, with a few words about themselves; support approves it — on a level — or
- * rejects it, with a reason the customer reads.
+ * A customer's request to become an agent, with a few words about themselves; support approves it on a level or
+ * rejects it with a reason.
  *
  * @property int $id
  * @property int $user_id
@@ -49,7 +49,7 @@ class AgencyRequest extends Model
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
-        // A customer of the main bot, whichever shop is being worked in.
+        // A customer of the main bot, whichever shop the code runs in.
         $user = $this->belongsTo(User::class);
         $user->withoutGlobalScope(CurrentBot::SCOPE);
 

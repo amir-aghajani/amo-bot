@@ -18,11 +18,8 @@ use App\Support\Input;
 use App\Support\Validation;
 
 /**
- * The payment-method rows: what the admin lists, adds (pick a driver, fill its form), edits, switches and orders, and
- * what the bot offers at checkout. A row's settings are its driver's form (GatewayDriver): checked by it as a whole,
- * kept in the row's config, shown as it reads them. Built-in drivers (the wallet) have exactly one row in every shop —
- * made with the shop —, never added again nor deleted; a row payments were made with is not deleted either — switched
- * off, it stays their method.
+ * The payment-method rows: kept by the panels (a row's settings are its driver's form) and offered at checkout. A
+ * built-in method (the wallet) has one row per shop, never added or deleted; a row with payments is never deleted either.
  */
 final class PaymentMethods
 {
@@ -37,9 +34,8 @@ final class PaymentMethods
     }
 
     /**
-     * What the customer may pay this kind of order with, in checkout order: every method switched on whose driver is
-     * installed — a row of one no longer installed has no gateway to pay with; the panel says so beside it — but the
-     * wallet for a wallet top-up, which it cannot pay.
+     * The methods offered for this kind of order, in checkout order: enabled, with an installed driver, and able to pay it
+     * (pays()).
      *
      * @return list<PaymentMethod>
      */
@@ -48,10 +44,7 @@ final class PaymentMethods
         return array_values(array_filter(PaymentMethod::enabled()->get()->all(), fn(PaymentMethod $method): bool => $this->offers($method, $type)));
     }
 
-    /**
-     * One of forOrder()'s methods by its id; null once it was switched off or deleted, its driver is no longer installed,
-     * or it cannot pay that kind of order.
-     */
+    /** One of forOrder()'s methods by id; null when it is not offered for that kind of order. */
     public function payable(int $id, OrderType $type): ?PaymentMethod
     {
         $method = PaymentMethod::enabled()->find($id);
@@ -59,13 +52,13 @@ final class PaymentMethods
         return $method !== null && $this->offers($method, $type) ? $method : null;
     }
 
-    /** Whether the method may pay that kind of order: anything pays anything, but the wallet does not charge itself. */
+    /** Whether the method may pay that kind of order: any, except the wallet paying its own top-up. */
     public static function pays(PaymentMethod $method, OrderType $type): bool
     {
         return !($method->isWallet() && $type === OrderType::WalletTopUp);
     }
 
-    /** Whether the checkout offers the (switched on) method for that kind of order: its driver is installed, and it pays it. */
+    /** Whether an enabled method is offered for that kind of order: its driver is installed and it pays it. */
     private function offers(PaymentMethod $method, OrderType $type): bool
     {
         return $this->gateways->find($method->driver) !== null && self::pays($method, $type);
@@ -77,6 +70,12 @@ final class PaymentMethods
         return PaymentMethod::enabled()->where('driver', WalletGateway::key())->first();
     }
 
+    /** The built-in wallet, switched on or not: what settles a free order (Checkout::pay()). */
+    public function wallet(): PaymentMethod
+    {
+        return PaymentMethod::query()->where('driver', WalletGateway::key())->firstOrFail();
+    }
+
     /** @return list<array<string, mixed>> The drivers for the "add method" picker, each described with its form. */
     public function drivers(): array
     {
@@ -84,8 +83,8 @@ final class PaymentMethods
     }
 
     /**
-     * A new shop's built-in methods (the wallet), made with the shop: the main bot's are database/schema.php's starting
-     * rows, an agent's are made here when their shop opens — in the current bot's shop.
+     * Creates the built-in methods (the wallet) in the current shop, when an agent's shop opens (the main shop's come with
+     * database/schema.php).
      */
     public function createBuiltins(): void
     {
@@ -164,10 +163,8 @@ final class PaymentMethods
     }
 
     /**
-     * One row of the screen, its payments counted with it (withCount()/loadCount()): the driver's own line about it
-     * (GatewayDriver::summary(), the payments screen's too) and its settings as its driver's form shows them — every
-     * field, one the row lacks (kept before the field existed) at its default —; none for a driver no longer installed,
-     * since nothing then says which of them are secrets.
+     * One row of the screen, its payments counted with it. Its settings are shown as its driver's form presents them —
+     * none for a driver no longer installed, since nothing then says which are secrets.
      *
      * @return array<string, mixed>
      */
@@ -201,8 +198,8 @@ final class PaymentMethods
     }
 
     /**
-     * The admin's label, the settings its driver's form checked — what the row keeps standing for a secret left blank,
-     * and staying for a field the form does not show —, and the switch when the form sent it: every refusal at once.
+     * The label, the settings as the driver's form checks them (a blank secret keeps the stored one) and the switch when
+     * sent; every refusal at once.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>

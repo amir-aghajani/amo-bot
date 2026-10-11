@@ -11,20 +11,20 @@ use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Users\Models\User;
 
 /**
- * What a customer's client is called on the panel, so its client list reads as people. A customer with a Telegram
- * username gets "<username>_<n>" (amir_1, amir_2 … across every server), n from a counter of their own; one without
- * gets "USER_<n>" from a single counter shared by all nameless purchases. The counters only go up, so the number of a
- * service that was deleted is never handed out again. A panel's names are its own whatever bot sold the service, so a
- * name is checked against every bot's services on that server. The client's comment, "<telegram id> | <username or
- * USER>" — "web#<user id> | USER" for a customer without Telegram (who signed up on the website), and the agent's bot
- * ("| @agent_bot") for a service an agent's bot sold — ties the row back to the account whatever the name says.
+ * What a customer's client is called on the panel, so the panel's client list reads as people: "<username>_<n>" (amir_1,
+ * amir_2 … across every server, n from the customer's own counter), or "USER_<n>" from one counter shared by every
+ * customer without a username. Counters only go up, so a deleted service's number is never reused. A panel's names are
+ * unique across every bot's services on it, so a name already taken there is skipped.
+ *
+ * The client's comment ties it back to the account: "<telegram id> | <username or USER>", "web#<user id> | USER" for a
+ * customer without Telegram, plus "| @<agent bot>" for a service an agent's bot sold.
  */
 final class ClientNaming
 {
-    /** Stands in for the username — in the name and in the comment — when the account has none. */
+    /** Stands in for the username, in the name and the comment, when the account has none. */
     private const ANONYMOUS = 'USER';
 
-    /** Stands in for the Telegram id in the comment of a customer without Telegram, before their number in the shop. */
+    /** Stands in for the Telegram id in the comment of a customer without Telegram, before their user id. */
     private const WEB = 'web#';
 
     /** The `sequences` counter behind "USER_<n>". */
@@ -39,8 +39,8 @@ final class ClientNaming
     ) {}
 
     /**
-     * The next name for this customer on this server. Names are unique per panel and a username can move from one
-     * Telegram account to another, so a name a service there already carries is skipped for the next number.
+     * The next name for this customer on this server. A username can move between Telegram accounts, so a name a service
+     * there already carries is skipped for the next number.
      */
     public function next(User $user, Server $server): string
     {
@@ -55,10 +55,7 @@ final class ClientNaming
         return $name;
     }
 
-    /**
-     * The name a service keeps on the server it moves to — unless a service there carries it already, when it gets the
-     * customer's next name, as a purchase would.
-     */
+    /** The name a service keeps on the server it moves to — its own, unless taken there, then the customer's next. */
     public function nameOn(Subscription $subscription, Server $server): string
     {
         return self::taken($server, $subscription->remote_name) ? $this->next($subscription->user, $server) : $subscription->remote_name;
@@ -83,7 +80,7 @@ final class ClientNaming
         return $bot !== '' ? $comment . ' | @' . $bot : $comment;
     }
 
-    /** Whether a service on the server carries the name — any bot's: a panel's names are its own. */
+    /** Whether any bot's service on the server carries the name. */
     private static function taken(Server $server, string $name): bool
     {
         return $server->subscriptions()->where('remote_name', $name)->exists();

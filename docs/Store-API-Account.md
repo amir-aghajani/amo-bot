@@ -23,7 +23,12 @@ token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
     "created_at": "2026-10-01T14:05:09+00:00"
   },
   "unread_notifications": 3,
-  "staff": null
+  "staff": null,
+  "loyalty": {
+    "tier": { "id": 2, "name": "نقره‌ای", "discount_percent": 3, "cashback_percent": 1 },
+    "spent": "750000.00",
+    "next": { "name": "طلایی", "min_spent": "2000000.00", "missing": "1250000.00" }
+  }
 }
 ```
 
@@ -41,6 +46,7 @@ token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
 | `created_at` | since when they are the shop's customer |
 | `unread_notifications` | the count for the site's bell ([notifications](Store-API-Notifications.md)) |
 | `staff` | what the shop's admin API lets them do — their grants, whether this session is signed in strongly enough, until when it works the admin API and until when it counts as recent —; `null` for a customer who is no admin of the shop, and while the website lets no admin in ([the shop's admins](Store-API-Admins.md#signing-in)) |
+| `loyalty` | their loyalty tier — `tier` (its name, the discount it gives at their checkouts and the extra cashback it adds) or `null` below the first —, what they `spent` (purchases, renewals and extras paid and not given back, Toman), and the `next` tier with what is still `missing` to reach it, `null` at the top; a shop with no tier has both `null` ([loyalty tiers](Loyalty-Cashback-And-Draws.md#loyalty-tiers)) |
 
 `PATCH /me` answers as `GET /me` does. `PUT /me/password`, `POST /me/2fa/disable`, a way in added or removed (the `200`s
 of `/me/identities/*`) and `POST /me/merge` answer `{ "customer": … }` — the same object, without the count. The rest

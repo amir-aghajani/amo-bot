@@ -7,10 +7,7 @@ namespace App\Modules\Telegram\Tasks;
 use App\Core\Scheduling\Task;
 use App\Modules\Telegram\Update\ReceivedUpdates;
 
-/**
- * Every hour: the record of the updates every bot took is cut back to what Telegram could still send again — a
- * copy of an update older than ReceivedUpdates::KEEP_HOURS no longer comes.
- */
+/** Hourly: forget the served updates Telegram can no longer send again (ReceivedUpdates::KEEP_HOURS). */
 final class PruneUpdatesTask implements Task
 {
     public function __construct(private readonly ReceivedUpdates $updates) {}

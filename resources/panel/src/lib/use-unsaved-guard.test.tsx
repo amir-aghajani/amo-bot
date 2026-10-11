@@ -7,12 +7,9 @@ import { confirmLeave, NavigationGuard, UnsavedScope, useUnloadGuard, useUnsaved
 import { until } from '@/test/render'
 
 /*
- * Changes nobody saved are not lost without a word: while an edit surface is dirty, closing the tab, reloading and every
- * navigation to another page of the panel — a link, back and forward — ask first; a page's own sections keep their drafts
- * mounted, so moving between them asks nothing; an action that drops every draft by its own doing asks before it acts;
- * a modal asks before dropping a draft of its own, not one behind it; and with nothing unsaved the router is not held.
- * Inside the panel the question is its own dialog (components/leave-question), staying the default; a tab closing alone
- * asks the browser's way.
+ * Unsaved changes (lib/use-unsaved-guard): closing the tab, reloading and leaving the page ask first while a surface is
+ * dirty; a page's own sections do not; an action that drops every draft asks before it acts; a modal asks only about
+ * its own draft; with nothing unsaved the router is not blocked.
  */
 
 function Draft({ dirty }: { dirty: boolean }) {
@@ -212,7 +209,7 @@ describe('a navigation while a draft is unsaved', () => {
 })
 
 describe('the router, with nothing unsaved', () => {
-  it('is not held: a fragment the browser moves to on its own goes by without a word', async () => {
+  it('is not held: a fragment the browser moves to on its own passes without a question', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     window.history.replaceState(null, '', '/agent/login')
     const routes = createBrowserRouter([{ element: <Root />, children: [{ path: '*', element: <Address /> }] }], { basename: '/agent' })
@@ -337,7 +334,7 @@ describe('a modal', () => {
     await until(() => expect(close).toHaveBeenCalledTimes(1))
   })
 
-  it('closes without a word when only a card behind it is dirty', () => {
+  it('closes without asking when only a card behind it is dirty', () => {
     const handle = createRef<Discard>()
     const close = vi.fn()
     render(

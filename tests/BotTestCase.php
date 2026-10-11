@@ -21,8 +21,8 @@ abstract class BotTestCase extends DatabaseTestCase
     /** The customer's chat (= Telegram user id) in these tests: the `customer()` fixture's. */
     protected const CHAT = self::TELEGRAM_ID;
 
-    /** In the report group: a bot admin's Telegram account (make them one: `admin(['telegram_id' => …])`), and a member's who is not one. */
-    protected const GROUP_ADMIN = 6060;
+    /** In the report group: a bot admin's Telegram account (@boss, groupAdminActor()'s), and a member who is not one. */
+    protected const GROUP_ADMIN = self::BOSS_TELEGRAM_ID;
     protected const GROUP_MEMBER = 9090;
 
     /** The last update id handed out: each update a test makes is new to the bot, as each Telegram sends is. */

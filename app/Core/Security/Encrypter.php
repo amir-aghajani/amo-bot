@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace App\Core\Security;
 
 /**
- * AES-256-GCM authenticated encryption keyed by APP_KEY ("base64:<32 random bytes>").
- * Payload format: base64( iv[12] . tag[16] . ciphertext ).
- * Keyed hashes (mac()) are made with a key of their own, derived from APP_KEY (HKDF-SHA256) for what they are for —
- * MAC_LABEL's by default, another purpose's its own: one key never serves two algorithms, nor two uses.
+ * AES-256-GCM authenticated encryption keyed by APP_KEY ("base64:<32 random bytes>"); a payload is
+ * base64(iv[12] . tag[16] . ciphertext). Keyed hashes (mac()) use keys derived from APP_KEY with HKDF, one per purpose,
+ * so one key never serves two algorithms or two uses.
  */
 final class Encrypter
 {
@@ -17,7 +16,7 @@ final class Encrypter
     private const TAG_LENGTH = 16;
     private const KEY_PREFIX = 'base64:';
 
-    /** What the MAC key is derived for (HKDF's info): it names its use, so no other derivation gives the same key. */
+    /** The default MAC key's HKDF label. */
     private const MAC_LABEL = 'amobot-mac';
 
     private readonly string $macKey;
@@ -72,10 +71,8 @@ final class Encrypter
     }
 
     /**
-     * A keyed hash — HMAC-SHA256 under a key derived from APP_KEY for it, never the encryption key itself — of what is
-     * too short to keep as a bare hash: a six-digit code emailed to a customer, a two-factor recovery code. The database
-     * alone does not give it away; the same text hashes the same. `$purpose` names another use (a captcha's challenge
-     * signed): a key derived for it alone, so no hash of one use stands for another's.
+     * HMAC-SHA256 under a key derived for `$purpose`: for what is too short to keep as a bare hash (an emailed six-digit
+     * code, a recovery code) — the database alone does not give it away — and for signing (ALTCHA's challenges).
      */
     public function mac(string $text, string $purpose = self::MAC_LABEL): string
     {

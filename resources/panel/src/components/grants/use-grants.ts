@@ -54,11 +54,10 @@ interface UseGrantsOptions<Row extends GrantRowBase, Data extends { grants: Row[
 }
 
 /**
- * A grants card's data (a server's «افزودن زمان و حجم», the mass gift): the latest grants, putting one the server
- * answered with into the list, stopping one — and, while one is under way and its card is on screen, working on it, a
- * request at a time, each a few seconds of the server's work, so it finishes without waiting for the scheduler; one that
- * waits for its panel is asked again every half minute. Working on a grant, like stopping one, is a mutation: once it is
- * over, what it changed is read again (`invalidates`) — and the card's own read, whom the next would reach.
+ * A grants card's data: the latest grants, and stopping one. While a grant is under way and the card is on screen, it is
+ * worked a request at a time (a few seconds of server work each) so it finishes without waiting for the scheduler; one
+ * waiting on its panel is retried every half minute. Running and stopping are mutations, so `invalidates` and the card's
+ * own read are refreshed once they end.
  */
 export function useGrants<Row extends GrantRowBase, Data extends { grants: Row[] }, Q extends QueryKey>({ query, run, cancel: stop, waiting, invalidates, noun }: UseGrantsOptions<Row, Data, Q>) {
   const queryClient = useQueryClient()

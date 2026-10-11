@@ -31,8 +31,8 @@ export function reloadForNewBuild(): boolean {
 }
 
 /**
- * The tab reloaded for a new build a moment ago: a file still missing now is not that — the reload gave up, and the
- * error screen says why (lib/failure). Without storage the grace cannot hold: never.
+ * The tab reloaded for a new build a moment ago, so a file missing now is not a stale build: the error screen says the
+ * build's files are incomplete (lib/failure). Always false without storage.
  */
 export function reloadedLately(): boolean {
   return Date.now() - Number(readStored(STORAGE_KEYS.reloadedAt, 'session') ?? 0) < GRACE_MS
@@ -42,8 +42,8 @@ export function reloadedLately(): boolean {
 let ahead = 0
 
 /**
- * A file loaded before it is needed — a page a link is about to open (lib/prefetch): a failure says nothing, and does
- * not reload the tab either (`loadingAhead`: Vite's preload error waits); the load that is needed tells, and reloads.
+ * Load a file before it is needed (a page a link is about to open, lib/prefetch). Its failure is silent and reloads
+ * nothing (`loadingAhead` holds Vite's preload error back); the load that is needed reports and reloads.
  */
 export function loadAhead(load: () => Promise<unknown>): void {
   ahead++

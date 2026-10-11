@@ -15,11 +15,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Guards what a customer of the shop's website reads and does for themselves: the request's bearer token
- * (`Authorization: Bearer …`) must open a session of the shop the request is worked in (StoreMiddleware ran first) —
- * none, one that ended, or another shop's is a 401 —, and its customer must not be banned (a 403). The request then
- * carries the Customer; the session's use and the customer's presence are written as they are due (a visit alone
- * quietly, like a message to the bot).
+ * Guards a website customer's own routes: the bearer token must open a live session of the request's shop
+ * (StoreMiddleware ran first) — otherwise a 401 with `WWW-Authenticate: Bearer` — and its customer must not be banned
+ * (403). The request then carries the Customer; the session's use and the customer's visit are recorded as they fall due.
  */
 final class CustomerAuthMiddleware implements MiddlewareInterface
 {

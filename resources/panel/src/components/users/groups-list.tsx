@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { Plus, Tags } from 'lucide-react'
 import { EmptyState } from '@/components/empty-state'
+import { InfoBadge } from '@/components/info-tip'
 import { ListView, RowTitleButton } from '@/components/list-view'
 import { EditorModal, useEditor } from '@/components/row-editor'
 import { SectionActions } from '@/components/sectioned-page'
 import { ActionsHead, EditMenu, OrderCell, OrderHead, RemoveConfirm } from '@/components/sortable-list'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { GroupForm } from '@/components/users/group-form'
+import { AGENT_PRICING_HINT, GroupForm } from '@/components/users/group-form'
 import { api } from '@/lib/api'
 import type { CustomerGroupRow } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
@@ -15,7 +16,7 @@ import { customerGroupsQuery } from '@/lib/queries'
 import { queryKeys } from '@/lib/query-keys'
 import { useRows } from '@/lib/use-rows'
 
-/** The admin's groups of customers, in their order: a name each, with how many are in it; deleting one empties nobody. */
+/** The customer groups in the admin's order, with their member counts; a «همکار» group (agent prices) is marked. */
 export function GroupsList() {
   const editor = useEditor<CustomerGroupRow>()
   const [removing, setRemoving] = useState<CustomerGroupRow | null>(null)
@@ -65,11 +66,18 @@ export function GroupsList() {
               <TableRow key={group.id}>
                 <OrderCell list={list} index={index} label={group.name} />
                 <TableCell>
-                  <RowTitleButton onClick={() => editor.edit(group)}>{group.name}</RowTitleButton>
+                  <span className="flex flex-wrap items-center gap-2">
+                    <RowTitleButton onClick={() => editor.edit(group)}>{group.name}</RowTitleButton>
+                    {group.agent_pricing && (
+                      <InfoBadge variant="info" info={AGENT_PRICING_HINT}>
+                        همکار
+                      </InfoBadge>
+                    )}
+                  </span>
                 </TableCell>
                 <TableCell className="tabular">{formatNumber(group.counts.users)}</TableCell>
                 <TableCell>
-                  <EditMenu label={group.name} onEdit={() => editor.edit(group)} editLabel="تغییر نام" onRemove={() => setRemoving(group)} />
+                  <EditMenu label={group.name} onEdit={() => editor.edit(group)} onRemove={() => setRemoving(group)} />
                 </TableCell>
               </TableRow>
             ))}
@@ -77,7 +85,7 @@ export function GroupsList() {
         </Table>
       </ListView>
 
-      <EditorModal editor={editor} title={(group) => (group ? `تغییر نام «${group.name}»` : 'افزودن گروه')}>
+      <EditorModal editor={editor} title={(group) => (group ? `ویرایش «${group.name}»` : 'افزودن گروه')}>
         {(group) => (
           <GroupForm
             group={group}

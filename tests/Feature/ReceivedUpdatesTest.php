@@ -45,7 +45,7 @@ final class ReceivedUpdatesTest extends BotTestCase
     public function testAnUpdateWhoseServingFailedIsNotServedAgain(): void
     {
         $start = $this->message('/start');
-        // Telegram out of reach as the welcome goes: the serving fails halfway, and the customer is told.
+        // Telegram out of reach as the welcome goes: the serving fails halfway, and the customer is notified.
         $this->telegram()->fail(502, 'Bad Gateway');
         $this->send($start);
         self::assertSame(['sendMessage', 'sendMessage'], $this->calls());

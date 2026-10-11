@@ -42,11 +42,9 @@ function requestOf(captcha: Captcha, values: DriverDraft): WebsiteCaptchaRequest
 }
 
 /**
- * The captcha the website's forms ask — a sign-up, a sign-in with a password, a password reset, a review, and any form of
- * the site's own its backend asks the shop about —: none, or a driver picked from those the server describes, its form drawn
- * from its description (components/driver-form): Cloudflare Turnstile's keys, ALTCHA's none. A secret kept goes with
- * its widget's site key: changed, the field says to type it again, as the server asks. The server refuses a field under
- * `captcha.<field>`: typing it lets its refusal go, another driver picked every one of them.
+ * The captcha guarding the website's forms (sign-up, password sign-in and reset, reviews, the site's own forms): none, or
+ * a driver with its form drawn from its description. A kept secret is bound to the site key: change the key and the
+ * secret must be typed again. Refusals come under `captcha.<field>`.
  */
 export function CaptchaCard({ website }: { website: Website }) {
   const group = useWebsiteGroup<CaptchaDraft>(

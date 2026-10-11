@@ -13,7 +13,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
-/** Takes the shop off webhooks, back to polling: BotWebhooks::disable(), which the owner's panel runs too. */
+/** Takes every bot off webhooks, back to polling (BotWebhooks::disable(), which the owner's panel runs too). */
 #[AsCommand(name: 'bot:webhook:delete', description: 'Remove every bot\'s webhook (bot:poll does it too as it starts)')]
 final class BotWebhookDeleteCommand extends EveryBotCommand
 {

@@ -4,10 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Update;
 
-/**
- * What the dispatcher hands an update from a group or supergroup. Customers are served in private chats only; a group
- * is where the admins read the shop's reports, so its updates have no user, no session and no gates.
- */
+/** Handles an update from a group (the report group): no user, session or gates — the handler checks who pressed. */
 interface GroupHandler
 {
     public function handle(Update $update): void;

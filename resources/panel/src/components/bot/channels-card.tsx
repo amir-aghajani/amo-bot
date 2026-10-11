@@ -22,9 +22,9 @@ import { useForm } from '@/lib/use-form'
 import { useRows } from '@/lib/use-rows'
 
 /**
- * The channels a customer must join before the bot serves them. A channel is added by its link; the
- * server looks it up and refuses it unless the bot is an admin there (it needs that to see the members).
- * List operations apply at once — the rule itself is the switch on the card above it (the channels section).
+ * The channels a customer must join before the bot serves them. A channel is added by its link; the server refuses it
+ * unless the bot is an admin there (it needs that to see members). Changes apply at once; the rule's switch is the card
+ * above.
  */
 export function ChannelsCard({ required }: { required: boolean }) {
   const list = useRows({

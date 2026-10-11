@@ -7,12 +7,9 @@ namespace App\Core\Http;
 use App\Core\Config\Repository as Config;
 
 /**
- * The shop's public addresses — what Telegram, a cron pinger, an agent's browser or the shop's website is handed:
- * APP_URL, the address the shop is reached at with its sub-folder (https://example.com/shop), then the path asked for.
- * Nothing else is added: the sub-folder is APP_URL's alone, so a generated address never carries it twice.
- *
- * The addresses machines call are spelled here once — routes/webhooks.php and routes/api.php route them, Redact masks
- * the secret a webhook's or the cron's ends with.
+ * The shop's public addresses: APP_URL (with its sub-folder) plus a path — never APP_BASE_PATH, so a sub-folder is
+ * never added twice. The machine addresses are spelled here once for the routes and for Redact, which masks the
+ * secret they end with.
  */
 final class Urls
 {
@@ -31,10 +28,7 @@ final class Urls
     /** @var list<string> The addresses whose last segment is a secret: a log line never holds it (Redact). */
     public const SECRET_PATHS = [self::TELEGRAM_WEBHOOK, self::AGENT_WEBHOOK, self::CRON];
 
-    /**
-     * A placeholder of a route's pattern as Slim reads it — `{secret}`, `{id:[0-9]+}`, `{store:[0-9a-f]{24}}` (a pattern
-     * may hold a quantifier's braces) —: its name (group 1) and its pattern, when it has one (group 2).
-     */
+    /** A route placeholder (`{secret}`, `{store:[0-9a-f]{24}}`): its name (group 1) and its pattern, if any (group 2). */
     public const PLACEHOLDER = '/\{(\w+)(?::((?:[^{}]++|\{[^{}]*\})+))?\}/';
 
     public function __construct(private readonly Config $config) {}
@@ -60,7 +54,7 @@ final class Urls
         return $this->base() . self::fill(self::CRON, ['token' => $token]);
     }
 
-    /** The base address of a website's API: what its developer is handed, every endpoint under it. */
+    /** The base address of a website's API, handed to its developer. */
     public function store(string $key): string
     {
         return $this->base() . self::fill(self::STORE, ['store' => $key]);
@@ -72,7 +66,7 @@ final class Urls
         return $this->base() . '/' . $panel . $path;
     }
 
-    /** A machine address as a screen shows it, its placeholders «…» — the secret it ends with is never shown. */
+    /** A machine address with its placeholders as «…», so a screen never shows the secret. */
     public function masked(string $pattern): string
     {
         return $this->base() . preg_replace(self::PLACEHOLDER, '…', $pattern);

@@ -5,15 +5,20 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Modules\Accounts\Services\AccountMerger;
+use App\Modules\Auth\Actor;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Bots\CurrentBot;
+use App\Modules\Referrals\Enums\AlertReason;
+use App\Modules\Referrals\Models\ReferralAlert;
+use App\Modules\Referrals\Services\ReferralAlerts;
 use App\Modules\Referrals\Services\ReferralService;
 use App\Modules\Users\Models\User;
 use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
 /**
- * «زیرمجموعه‌گیری» for the admin: the program's rules and numbers, the customers whose links brought someone (most
- * first), the customers who came through a link (who brought whom), and the commissions paid out — each list searched
- * by the customers on either side. A commission is its referrer's as it was earned, two accounts merged since or not.
+ * The referrals page: the program's rules and numbers, the referrers, invitees and commissions lists (searched on either
+ * side), and the fake-referral alerts support clears. A commission stays with whoever earned it after an account merge.
  */
 final class AdminReferralsApiTest extends HttpTestCase
 {
@@ -40,7 +45,7 @@ final class AdminReferralsApiTest extends HttpTestCase
 
         $summary = $this->decode($this->get('/api/admin/referrals'))['summary'];
 
-        self::assertSame(['enabled' => true, 'rate' => 10, 'first_only' => false, 'referrers' => 2, 'referred' => 3, 'commissions' => 1, 'paid' => '10000.00'], $summary);
+        self::assertSame(['enabled' => true, 'rate' => 10, 'renewal_rate' => 10, 'first_only' => false, 'referrers' => 2, 'referred' => 3, 'commissions' => 1, 'paid' => '10000.00', 'alerts' => 0], $summary);
     }
 
     public function testTheReferrersComeMostReferralsFirstWithWhatTheyEarned(): void
@@ -126,5 +131,63 @@ final class AdminReferralsApiTest extends HttpTestCase
         self::assertSame(['reza' => '0.00', 'ali' => '10000.00'], array_column(array_map(static fn(array $row): array => ['who' => $row['user']['username'], 'earned' => $row['earned']], $referrers), 'earned', 'who'));
         $invitees = $this->decode($this->get("/api/admin/referrals/invitees?referrer={$this->reza->id}"))['invitees'];
         self::assertSame([$older->id => '0.00'], array_column(array_filter($invitees, static fn(array $row): bool => $row['id'] === $older->id), 'earned', 'id'), 'her payments earned Reza, her referrer now, nothing');
+    }
+
+    public function testTheAlertsAreListedNewestFirstMarkedOnTheReferrersAndSupportClearsThem(): void
+    {
+        $burst = $this->referralAlert($this->ali);
+        Carbon::setTestNow(now()->addMinute());
+        $this->referralAlert($this->reza, ['reason' => AlertReason::Idle, 'count' => 20]);
+
+        $rows = $this->decode($this->get('/api/admin/referrals/alerts'))['alerts'];
+        self::assertSame([['reza', 'idle', 20], ['ali', 'burst', 10]], array_map(static fn(array $row): array => [$row['referrer']['username'], $row['reason'], $row['count']], $rows), 'newest first');
+        self::assertSame(['ali'], array_map(static fn(array $row): ?string => $row['referrer']['username'], $this->decode($this->get('/api/admin/referrals/alerts?search=%40ali'))['alerts']));
+        self::assertSame(['ali' => 1, 'reza' => 1], $this->alertsOnTheReferrers());
+        self::assertSame(2, $this->decode($this->get('/api/admin/referrals'))['summary']['alerts']);
+
+        self::assertSame(204, $this->postJson("/api/admin/referrals/alerts/{$burst->id}/clear")->getStatusCode());
+        self::assertFalse(ReferralAlert::query()->whereKey($burst->id)->exists(), 'cleared: gone');
+        self::assertSame(['ali' => 0, 'reza' => 1], $this->alertsOnTheReferrers());
+        self::assertSame(1, $this->decode($this->get('/api/admin/referrals'))['summary']['alerts']);
+        self::assertSame(404, $this->postJson("/api/admin/referrals/alerts/{$burst->id}/clear")->getStatusCode(), 'once');
+    }
+
+    public function testOneOfTheShopsAdminsNeverClearsAnAlertOnThemselves(): void
+    {
+        $alert = $this->referralAlert($this->ali);
+
+        try {
+            $this->service(ReferralAlerts::class)->clear($alert, Actor::groupAdmin($this->ali));
+            self::fail('cleared on themselves');
+        } catch (ActorRefusedException $e) {
+            self::assertSame([403, ActorRefusedException::OWN_ALERT], [$e->status(), $e->getMessage()]);
+        }
+        $this->service(ReferralAlerts::class)->clear($alert, Actor::groupAdmin($this->reza));
+        self::assertSame(0, ReferralAlert::query()->count(), "another admin's to clear");
+    }
+
+    public function testAnAgentsShopHasItsOwnAlerts(): void
+    {
+        $bot = $this->agentBot();
+        $alert = CurrentBot::run($bot, function (): ReferralAlert {
+            $referrer = $this->customer(['telegram_id' => 900_010, 'username' => 'agents_referrer']);
+
+            return $this->referralAlert($referrer, ['reason' => AlertReason::Idle, 'count' => 20]);
+        });
+
+        self::assertSame([], $this->decode($this->get('/api/admin/referrals/alerts'))['alerts'], "the main shop's list");
+        self::assertSame(404, $this->postJson("/api/admin/referrals/alerts/{$alert->id}/clear")->getStatusCode(), "another shop's alert is none of this one's");
+
+        $this->loginAsAgent($bot);
+        self::assertSame([$alert->id], array_column($this->decode($this->get('/api/agent/referrals/alerts'))['alerts'], 'id'));
+        self::assertSame(204, $this->postJson("/api/agent/referrals/alerts/{$alert->id}/clear")->getStatusCode(), 'the agent clears their own');
+    }
+
+    /** @return array<string, int> The referrers list's alerts, by the referrer's handle. */
+    private function alertsOnTheReferrers(): array
+    {
+        $rows = $this->decode($this->get('/api/admin/referrals/referrers'))['referrers'];
+
+        return array_column(array_map(static fn(array $row): array => ['who' => $row['user']['username'], 'alerts' => $row['alerts']], $rows), 'alerts', 'who');
     }
 }

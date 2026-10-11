@@ -14,7 +14,7 @@ use App\Modules\Accounts\Services\MergeOffers;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Store\Models\Website;
 use App\Modules\Users\Models\User;
-use Firebase\JWT\JWT;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
 use Psr\Http\Message\ResponseInterface;
 use Tests\Fakes\RecordingMailTransport;
@@ -23,15 +23,12 @@ use Tests\Support\FakeGoogleLogin;
 use Tests\Support\FakeTelegramLogin;
 
 /**
- * A signed-in customer's ways in on the shop's website — a Telegram account, a Google account, an email with its password
- * — added as their sign-in proves them, and taken away (never the last one). A way in another account of the shop has is
- * a merge offered: that account described, which of the two stays (the older), and a ticket — this account's, once, while
- * the other still has that way in — that makes them one, this session the account that stays.
+ * Ways in added and removed by a signed-in customer (never the last one), and the merge offered when the way in is
+ * another account's: its description, which account stays, and the one-time ticket that makes them one.
  */
 final class IdentitiesTest extends HttpTestCase
 {
-    /** The PKCE verifier the site keeps for a redirect it begins (its challenge goes to the shop). */
-    private const VERIFIER = 'the-sites-own-pkce-verifier.kept~in_this-browser-0123456789';
+    use WebsiteSignIns;
 
     private Website $website;
 
@@ -182,6 +179,28 @@ final class IdentitiesTest extends HttpTestCase
         self::assertNull(User::query()->find($sara->id));
         self::assertSame([$ali->id, $sara->id, AccountMerger::BY_CUSTOMER], [AccountMerge::query()->sole()->user_id, AccountMerge::query()->sole()->merged_user_id, AccountMerge::query()->sole()->actor]);
         self::assertSame([422, AccountRefusedException::OFFER_GONE], $this->message($this->postJson($this->storeApi($this->website, '/me/merge'), ['token' => $merge['token']])), 'a ticket is taken once');
+    }
+
+    public function testATelegramAccountAnotherAccountTakesInTheSameMomentIsAMergeOffered(): void
+    {
+        $this->telegramLogin();
+        $sara = $this->webCustomer();
+        $this->bearer($this->customerSession($sara));
+
+        // The moment the link has looked for another account with this Telegram account and found none, one appears (the
+        // bot's first message from it): the slot's UPDATE meets the unique index, and the link decides again.
+        $taken = false;
+        $offered = $this->whileListening(QueryExecuted::class, function (QueryExecuted $query) use (&$taken): void {
+            if (!$taken && str_starts_with($query->sql, 'select') && str_contains($query->sql, '"telegram_id" = ?')) {
+                $taken = true;
+                $this->customer(['username' => 'ali']);
+            }
+        }, fn(): ResponseInterface => $this->linkTelegram());
+
+        self::assertTrue($taken);
+        self::assertSame(202, $offered->getStatusCode(), (string) $offered->getBody());
+        self::assertSame('Ali', $this->decode($offered)['merge']['account']['name']);
+        self::assertNull($sara->refresh()->telegram_id, 'the slot stays empty: the Telegram account is the other\'s');
     }
 
     public function testAMergeTicketIsTheAskingAccountsWhileTheOtherHasTheWayIn(): void
@@ -472,30 +491,5 @@ final class IdentitiesTest extends HttpTestCase
         $sent = $mail->to($address);
 
         return $this->postJson($this->storeApi($this->website, '/me/identities/email/verify'), ['email' => $address, 'code' => RecordingMailTransport::codeIn($sent[array_key_last($sent)])]);
-    }
-
-    private function nonce(): string
-    {
-        return $this->decode($this->postJson($this->storeApi($this->website, '/auth/nonce')))['nonce'];
-    }
-
-    /**
-     * Telegram's redirect sign-in begun at `$path` — a sign-in's (/auth/telegram/authorize), or the signed-in customer's
-     * own (/me/telegram/authorize) —: the state and the nonce its address carries.
-     *
-     * @return array{state: string, nonce: string}
-     */
-    private function authorize(string $path): array
-    {
-        $address = $this->decode($this->postJson($this->storeApi($this->website, $path), ['redirect_uri' => 'https://shop.example/account', 'code_challenge' => JWT::urlsafeB64Encode(hash('sha256', self::VERIFIER, true))]))['url'];
-        parse_str((string) parse_url($address, PHP_URL_QUERY), $query);
-
-        return ['state' => (string) $query['state'], 'nonce' => (string) $query['nonce']];
-    }
-
-    /** @return array{int, mixed} The status, and its message */
-    private function message(ResponseInterface $response): array
-    {
-        return [$response->getStatusCode(), $this->decode($response)['message'] ?? null];
     }
 }

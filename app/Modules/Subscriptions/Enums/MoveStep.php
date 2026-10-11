@@ -11,6 +11,6 @@ enum MoveStep: string
     case Previous = 'previous';
     /** The server it was going to: it could not make the client. */
     case Target = 'target';
-    /** The service itself: gone from its panel, ended or used up by the time it was read. */
+    /** The service itself: already on the target, gone from its panel, ended or used up by the time it was read. */
     case Service = 'service';
 }

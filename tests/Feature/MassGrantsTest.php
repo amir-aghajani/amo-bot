@@ -21,11 +21,10 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * «هدیه همگانی»: days and traffic for the running services on every server at once — or the agents' only (the services
- * their bots sold, while their agency stands), or one server's — given as a server grant per server (each on its server's page too, each worked
- * through on its own, so a panel out of reach holds up its own server only), the customers told with the admin's reason
- * — an agent's customer by the agent's bot; refused while a server it would reach has one under way; stopped, every part
- * still going stops. A gift runs while a part runs, then is cancelled if one was stopped, done otherwise.
+ * «هدیه همگانی»: days and traffic for the running services on every server at once, the agents' only, one customer group's
+ * or one server's — a part per server, each worked on its own, so an unreachable panel holds up only its server; the
+ * customers told with the reason, an agent's customer by the agent's bot. Refused while a server it would reach has a
+ * grant under way; cancelling stops every running part; its status is read off its parts.
  */
 final class MassGrantsTest extends HttpTestCase
 {
@@ -162,7 +161,8 @@ final class MassGrantsTest extends HttpTestCase
 
         $stopped = $this->decode($this->postJson("/api/admin/mass-grants/{$gift['id']}/cancel"))['grant'];
         self::assertSame(['cancelled', ['cancelled', 'cancelled']], [$stopped['status'], array_column($stopped['parts'], 'status')]);
-        self::assertSame(422, $this->postJson("/api/admin/mass-grants/{$gift['id']}/cancel")->getStatusCode());
+        $again = $this->postJson("/api/admin/mass-grants/{$gift['id']}/cancel");
+        self::assertSame([422, ['status']], [$again->getStatusCode(), array_keys($this->decode($again)['errors'])], 'nothing left running');
         self::assertSame([], FakeProvider::$updated);
 
         // One stopped from its server's page, the other finished by the scheduler a minute later: the gift is over —
@@ -189,5 +189,49 @@ final class MassGrantsTest extends HttpTestCase
         self::assertNotNull($gift['parts'][0]['waiting_reason'], "Germany's part waits for its panel");
         self::assertNull($gift['finished_at']);
         self::assertSame(['mina_1'], FakeProvider::updatedNames(), 'Finland was not held up');
+    }
+
+    public function testAGiftForACustomerGroupReachesItsCustomersServicesOnly(): void
+    {
+        $vip = $this->customerGroup('VIP', [$this->ali]);
+        $empty = $this->customerGroup('خالی');
+        FakeProvider::mirror($this->subscription($this->ali, $this->plan, $this->finland, 'ali_2', ['expires_at' => now()->addDays(4)]));
+
+        self::assertSame([
+            ['id' => $vip->id, 'name' => 'VIP', 'running' => 2, 'unstarted' => 0],
+            ['id' => $empty->id, 'name' => 'خالی', 'running' => 0, 'unstarted' => 0],
+        ], $this->decode($this->get('/api/admin/mass-grants'))['audience']['groups'], "every group of the main shop, in the admin's order, one with nobody too");
+
+        $response = $this->postJson('/api/admin/mass-grants', ['days' => 2, 'reason' => 'هدیه VIP', 'audience' => 'group', 'group_id' => (string) $vip->id]);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $gift = $this->decode($response)['grant'];
+        self::assertSame(['group', ['id' => $vip->id, 'name' => 'VIP'], 2], [$gift['audience'], $gift['group'], $gift['total']]);
+        self::assertSame(['آلمان', 'فنلاند'], array_column(array_column($gift['parts'], 'server'), 'name'), "a part on each server with one of the group's customers' services");
+
+        $gift = $this->decode($this->postJson("/api/admin/mass-grants/{$gift['id']}/run"))['grant'];
+        self::assertSame(['done', 2], [$gift['status'], $gift['granted']]);
+        self::assertSame(['ali_1', 'ali_2'], FakeProvider::updatedNames(), "Sara's and Mina's are no VIP's");
+        self::assertSame(['1001', '1001'], [$this->telegram()->params(0)['chat_id'], $this->telegram()->params(1)['chat_id']], 'Ali told of each');
+        $parts = $this->decode($this->get("/api/admin/servers/{$this->finland->id}/grants"))['grants'];
+        self::assertSame([$gift['id'], false], [$parts[0]['mass_grant_id'], $parts[0]['agents_only']], "on its server's page as a part of the mass gift");
+    }
+
+    public function testAGroupMustBeOneOfTheMainShopsWithServicesAndOneDeletedWhileItsGiftRunsReachesNobodyMore(): void
+    {
+        self::assertArrayHasKey('group_id', $this->decode($this->postJson('/api/admin/mass-grants', ['days' => 2, 'audience' => 'group']))['errors']);
+        $agentsGroup = CurrentBot::run($this->mina->shop(), fn() => $this->customerGroup('نماینده', [$this->mina]));
+        self::assertArrayHasKey('group_id', $this->decode($this->postJson('/api/admin/mass-grants', ['days' => 2, 'audience' => 'group', 'group_id' => $agentsGroup->id]))['errors'], "an agent's shop's group is none of the main shop's");
+        $nobody = $this->postJson('/api/admin/mass-grants', ['days' => 2, 'audience' => 'group', 'group_id' => $this->customerGroup('خالی')->id]);
+        self::assertSame(['مشتری‌های این گروه سرویس فعالی ندارند که این زمان یا حجم به آن برسد.'], $this->decode($nobody)['errors']['grant']);
+
+        $vip = $this->customerGroup('VIP', [$this->ali]);
+        $gift = $this->decode($this->postJson('/api/admin/mass-grants', ['days' => 2, 'audience' => 'group', 'group_id' => $vip->id]))['grant'];
+        $vip->delete();
+
+        $listed = $this->decode($this->get('/api/admin/mass-grants'))['grants'][0];
+        self::assertSame(['group', null, 'running'], [$listed['audience'], $listed['group'], $listed['status']], 'the gift keeps its parts, its group gone');
+        $gift = $this->decode($this->postJson("/api/admin/mass-grants/{$gift['id']}/run"))['grant'];
+        self::assertSame(['done', 0], [$gift['status'], $gift['granted']], 'its group gone, it reaches nobody — never everyone');
+        self::assertSame([], FakeProvider::$updated);
     }
 }

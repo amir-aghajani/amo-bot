@@ -31,11 +31,10 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * «افزودن زمان و حجم» on a server's page: days and traffic for the running services there — and, when the
- * admin ticks it, those still waiting for their first connection; ended ones never — with the admin's reason
- * in the message each customer gets. It is worked through a service at a time by whoever holds the part — the
- * screen, or the scheduler once the screen went quiet —, never gives a service twice, waits at the service it was on
- * while the panel is out of reach or another change holds that service, and runs one at a time on a server.
+ * «افزودن زمان و حجم» on a server's page: days and traffic for the running services there (and, when ticked, those still
+ * waiting for their first connection; never ended ones), with the reason in each customer's message. Worked one service
+ * at a time by whoever holds the part (the screen, or the scheduler), never giving a service twice, waiting while the
+ * panel is out of reach or another change holds the service, one grant at a time per server.
  */
 final class ServerGrantsTest extends HttpTestCase
 {
@@ -80,20 +79,20 @@ final class ServerGrantsTest extends HttpTestCase
 
         $running->refresh();
         self::assertSame('2026-10-03 12:00:00', $running->expires_at?->format('Y-m-d H:i:s'), 'three days after its deadline');
-        self::assertSame(33, $running->duration_days);
+        self::assertSame(33 * 24, $running->duration_hours);
         self::assertSame(40 * Traffic::GIGABYTE, $running->traffic_limit_bytes, 'ten on top of its thirty');
         self::assertSame(20 * Traffic::GIGABYTE, $running->remainingBytes());
         $spec = FakeProvider::lastUpdate('ali_1');
         self::assertSame(40 * Traffic::GIGABYTE, $spec->totalBytes);
         self::assertSame('2026-10-03 12:00:00', $spec->expiry->deadline()?->format('Y-m-d H:i:s'));
         self::assertSame(['ali_1'], FakeProvider::updatedNames());
-        self::assertSame(30, $waiting->refresh()->duration_days);
+        self::assertSame(30 * 24, $waiting->refresh()->duration_hours);
 
         self::assertSame([self::text(BotText::ServiceGranted, [
             'gift' => Messages::gift(3, 10 * Traffic::GIGABYTE),
             'client' => 'ali_1',
             'note' => self::text(BotText::AdminNote, ['comment' => 'جبران قطعی سرور']),
-            'expires' => Messages::expiry($running->expires_at, $running->duration_days),
+            'expires' => Messages::expiry($running->expires_at, $running->duration_hours),
             'remaining' => Messages::bytes(20 * Traffic::GIGABYTE),
         ])], $this->telegram()->sentTo(1001), 'what it got, why, and where it stands now');
         self::assertSame(['sendMessage'], $this->telegram()->calls(), 'only the one it reached is told');
@@ -131,14 +130,14 @@ final class ServerGrantsTest extends HttpTestCase
         self::assertSame(1, $grant['granted']);
         $waiting->refresh();
         self::assertNull($waiting->expires_at, 'the clock still starts at the first connection');
-        self::assertSame(33, $waiting->duration_days, 'a longer term');
+        self::assertSame(33 * 24, $waiting->duration_hours, 'a longer term');
         self::assertSame(33 * 86400, FakeProvider::lastUpdate('sara_1')->expiry->pendingSeconds());
         self::assertSame(40 * Traffic::GIGABYTE, $waiting->traffic_limit_bytes);
         self::assertSame([self::text(BotText::ServiceGranted, [
             'gift' => Messages::gift(3, 10 * Traffic::GIGABYTE),
             'client' => 'sara_1',
             'note' => '',
-            'expires' => Messages::expiry(null, 33),
+            'expires' => Messages::expiry(null, 33 * 24),
             'remaining' => Messages::bytes(40 * Traffic::GIGABYTE),
         ])], $this->telegram()->sentTo(1002), 'the longer term, still waiting for the first connection');
     }
@@ -174,7 +173,7 @@ final class ServerGrantsTest extends HttpTestCase
 
         self::assertSame([3, 1, 2], [$grant['total'], $grant['granted'], $grant['skipped']], 'an ended one is not even counted; the two the panel has ended are passed by');
         self::assertSame(['ali_1'], FakeProvider::updatedNames());
-        self::assertSame(33, $running->refresh()->duration_days);
+        self::assertSame(33 * 24, $running->refresh()->duration_hours);
         self::assertSame('2026-09-19 12:00:00', $ended->refresh()->expires_at?->format('Y-m-d H:i:s'));
         self::assertSame(SubscriptionStatus::Expired, $lapsed->refresh()->status);
         self::assertSame(SubscriptionStatus::Expired, $usedUp->refresh()->status);
@@ -193,23 +192,23 @@ final class ServerGrantsTest extends HttpTestCase
 
         self::assertSame([2, 1, 1], [$grant['total'], $grant['granted'], $grant['skipped']], 'the one switched off on the panel itself is passed by');
         self::assertSame(['sara_1'], FakeProvider::updatedNames());
-        self::assertSame(30, $offOnThePanel->refresh()->duration_days);
-        self::assertSame(33, $running->refresh()->duration_days);
-        self::assertSame(30, $later->refresh()->duration_days, 'bought after the grant was issued');
+        self::assertSame(30 * 24, $offOnThePanel->refresh()->duration_hours);
+        self::assertSame(33 * 24, $running->refresh()->duration_hours);
+        self::assertSame(30 * 24, $later->refresh()->duration_hours, 'bought after the grant was issued');
     }
 
     public function testAServiceTakesWhatItCanOfTheGrant(): void
     {
-        $noTerm = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['duration_days' => 0, 'starts_at' => null, 'expires_at' => null]));
+        $noTerm = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['duration_hours' => 0, 'starts_at' => null, 'expires_at' => null]));
         $unlimited = $this->mirrored($this->subscription($this->sara, $this->plan, $this->server, 'sara_1', ['traffic_limit_bytes' => 0]));
-        $neither = $this->mirrored($this->subscription($this->sara, $this->plan, $this->server, 'sara_2', ['duration_days' => 0, 'starts_at' => null, 'expires_at' => null, 'traffic_limit_bytes' => 0]));
+        $neither = $this->mirrored($this->subscription($this->sara, $this->plan, $this->server, 'sara_2', ['duration_hours' => 0, 'starts_at' => null, 'expires_at' => null, 'traffic_limit_bytes' => 0]));
 
         $grant = $this->work($this->decode($this->start(['days' => 3, 'traffic_gb' => 5]))['grant']['id']);
 
         self::assertSame([2, 1], [$grant['granted'], $grant['skipped']], 'nothing for one that never ends and has no quota');
         $noTerm->refresh();
         self::assertNull($noTerm->expires_at);
-        self::assertSame(0, $noTerm->duration_days, 'still never expires');
+        self::assertSame(0, $noTerm->duration_hours, 'still never expires');
         self::assertSame([null, null], [FakeProvider::lastUpdate('ali_1')->expiry->deadline(), FakeProvider::lastUpdate('ali_1')->expiry->pendingSeconds()]);
         self::assertSame(35 * Traffic::GIGABYTE, $noTerm->traffic_limit_bytes);
         $unlimited->refresh();
@@ -229,7 +228,7 @@ final class ServerGrantsTest extends HttpTestCase
             'gift' => Messages::gift(3, 0),
             'client' => 'sara_1',
             'note' => '',
-            'expires' => Messages::expiry($unlimited->expires_at, $unlimited->duration_days),
+            'expires' => Messages::expiry($unlimited->expires_at, $unlimited->duration_hours),
             'remaining' => Messages::UNLIMITED,
         ])], $this->telegram()->sentTo(1002));
     }
@@ -263,20 +262,20 @@ final class ServerGrantsTest extends HttpTestCase
 
         self::assertSame(['running', 0], [$grant['status'], $grant['granted']]);
         self::assertSame(ProviderErrorPresenter::describe(new ConnectionException(ConnectionFailure::Timeout, 'Connection timed out')), $grant['waiting_reason'], 'why, in the owner\'s words');
-        self::assertSame(30, $first->refresh()->duration_days);
+        self::assertSame(30 * 24, $first->refresh()->duration_hours);
         self::assertSame([], $this->telegram()->calls());
 
         // Back, but left alone a while (Server::BACKOFF_MINUTES): every try at a panel that fails costs its timeout.
         FakeProvider::$down = [];
         $this->service(GrantsTask::class)->run();
-        self::assertSame(30, $first->refresh()->duration_days);
+        self::assertSame(30 * 24, $first->refresh()->duration_hours);
 
         Carbon::setTestNow(now()->addMinutes(Server::BACKOFF_MINUTES));
         $this->service(GrantsTask::class)->run();
 
         $part = GrantPart::query()->findOrFail($grant['id']);
         self::assertSame([GrantStatus::Done, 2, null], [$part->status, $part->granted, $part->waiting_reason], 'the scheduler carries on once the panel answers');
-        self::assertSame(33, $first->refresh()->duration_days);
+        self::assertSame(33 * 24, $first->refresh()->duration_hours);
     }
 
     public function testAnUpdateThatNeverReachedThePanelIsTriedAgain(): void
@@ -294,7 +293,7 @@ final class ServerGrantsTest extends HttpTestCase
 
         self::assertSame(['done', 1], [$grant['status'], $grant['granted']]);
         self::assertCount(1, FakeProvider::$updated);
-        self::assertSame(33, $subscription->refresh()->duration_days, 'given once');
+        self::assertSame(33 * 24, $subscription->refresh()->duration_hours, 'given once');
     }
 
     public function testAnUpdateThatTimedOutIsNotTriedAgain(): void
@@ -307,7 +306,7 @@ final class ServerGrantsTest extends HttpTestCase
         self::assertSame(['done', 0, 1], [$grant['status'], $grant['granted'], $grant['failed']], 'the panel may have taken it: never twice');
         self::assertSame('سرویس ali_1: ' . ProviderErrorPresenter::describe(new ConnectionException(ConnectionFailure::Timeout, 'Connection failed')), $grant['last_failure']);
         self::assertNull($grant['waiting_reason']);
-        self::assertSame(30, $subscription->refresh()->duration_days);
+        self::assertSame(30 * 24, $subscription->refresh()->duration_hours);
     }
 
     public function testAServiceThePanelRefusesDoesNotStopTheRest(): void
@@ -338,8 +337,9 @@ final class ServerGrantsTest extends HttpTestCase
         $cancelled = $this->decode($this->postJson("/api/admin/servers/{$this->server->id}/grants/{$id}/cancel"))['grant'];
         self::assertSame('cancelled', $cancelled['status']);
         self::assertSame('cancelled', $this->work($id)['status']);
-        self::assertSame(30, $subscription->refresh()->duration_days, 'nothing given');
-        self::assertSame(422, $this->postJson("/api/admin/servers/{$this->server->id}/grants/{$id}/cancel")->getStatusCode(), 'not under way any more');
+        self::assertSame(30 * 24, $subscription->refresh()->duration_hours, 'nothing given');
+        $again = $this->postJson("/api/admin/servers/{$this->server->id}/grants/{$id}/cancel");
+        self::assertSame([422, ['status']], [$again->getStatusCode(), array_keys($this->decode($again)['errors'])], 'not under way any more');
         self::assertSame(201, $this->start(['traffic_gb' => 5])->getStatusCode(), 'a new one may start');
     }
 
@@ -370,7 +370,7 @@ final class ServerGrantsTest extends HttpTestCase
         Carbon::setTestNow(now()->addMinutes(Server::BACKOFF_MINUTES));
         $this->service(GrantsTask::class)->run();
 
-        self::assertSame([33, 30], [$reached->refresh()->duration_days, $waiting->refresh()->duration_days], 'what was given stays, nothing more is');
+        self::assertSame([33 * 24, 30 * 24], [$reached->refresh()->duration_hours, $waiting->refresh()->duration_hours], 'what was given stays, nothing more is');
         self::assertSame(['ali_1'], FakeProvider::updatedNames());
     }
 
@@ -387,7 +387,7 @@ final class ServerGrantsTest extends HttpTestCase
         $renewal->release();
         $grant = $this->work($id);
         self::assertSame(['done', 1], [$grant['status'], $grant['granted']]);
-        self::assertSame(33, $held->refresh()->duration_days);
+        self::assertSame(33 * 24, $held->refresh()->duration_hours);
     }
 
     public function testAServiceGoneFromItsPanelSinceItWasReadIsPassedBy(): void
@@ -432,7 +432,7 @@ final class ServerGrantsTest extends HttpTestCase
         self::assertSame(['ali_1', 'sara_1'], $byTheScheduler, 'the scheduler took the part over and gave the second service');
         self::assertSame(['done', 2], [$grant['status'], $grant['granted']]);
         self::assertSame(['ali_1', 'sara_1'], FakeProvider::updatedNames(), 'each given once: the stalled worker, back, finds the part no longer its own');
-        self::assertSame([33, 33], [$first->refresh()->duration_days, $second->refresh()->duration_days]);
+        self::assertSame([33 * 24, 33 * 24], [$first->refresh()->duration_hours, $second->refresh()->duration_hours]);
     }
 
     public function testTheSchedulerOutOfTimeLeavesTheGrantForItsNextRun(): void
@@ -442,10 +442,10 @@ final class ServerGrantsTest extends HttpTestCase
         $task = $this->service(GrantsTask::class);
 
         $this->withTheTurnOver($task->run(...));
-        self::assertSame(30, $subscription->refresh()->duration_days);
+        self::assertSame(30 * 24, $subscription->refresh()->duration_hours);
 
         $task->run();
-        self::assertSame([GrantStatus::Done, 33], [GrantPart::query()->findOrFail($id)->status, $subscription->refresh()->duration_days]);
+        self::assertSame([GrantStatus::Done, 33 * 24], [GrantPart::query()->findOrFail($id)->status, $subscription->refresh()->duration_hours]);
     }
 
     public function testAWorkerHoldingTheGrantKeepsOthersOut(): void
@@ -455,7 +455,7 @@ final class ServerGrantsTest extends HttpTestCase
         GrantPart::query()->whereKey($id)->update(['lease_token' => 'someone-else', 'leased_until' => now()->addMinute()]);
 
         self::assertSame(0, $this->work($id)['granted']);
-        self::assertSame(30, $subscription->refresh()->duration_days);
+        self::assertSame(30 * 24, $subscription->refresh()->duration_hours);
 
         Carbon::setTestNow(now()->addMinutes(2));
         self::assertSame(1, $this->work($id)['granted'], 'a holder that went quiet loses it');

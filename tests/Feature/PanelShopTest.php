@@ -19,7 +19,7 @@ use Tests\Support\FakeTelegram;
  * read, its `shop` query parameter, what a picture's address carries —, the main bot's when it names none. None of it is
  * the session's: one session's requests naming two shops are each worked in their own, whatever came between (the tabs
  * of one browser), and a change lands in the shop it named and nowhere else. A shop that is not there is a 404 —
- * never the main shop in its place —, a name that is no shop's a 422; signed out, a request is told that first.
+ * never the main shop in its place —, a name that is no shop's a 422; signed out, a request gets that answer first.
  */
 final class PanelShopTest extends HttpTestCase
 {

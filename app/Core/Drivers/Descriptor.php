@@ -7,16 +7,14 @@ namespace App\Core\Drivers;
 use App\Core\Forms\Form;
 
 /**
- * What a driver is to the panels: its key, its name and description, the form it asks the admin to fill in (each field
- * described, Form::describe()), short notes under the description (the versions it needs, its caveats) and what its
- * family says of it beyond this (`traits`: a database driver's `installable`, a mail driver's `sender`). Texts are
- * Persian: they are shown as they are.
+ * What the panels show of a driver: its key, Persian label and description, short notes (versions it needs, caveats),
+ * its form, and `traits` — what its family says beyond that (a database driver's `installable`, a gateway's `kind`).
  */
 final class Descriptor
 {
     /**
      * @param list<string> $notes
-     * @param array<string, scalar|list<scalar>|null> $traits What one family says beyond this (a gateway's kind…)
+     * @param array<string, scalar|list<scalar>|null> $traits
      */
     public function __construct(
         public readonly string $key,
@@ -28,7 +26,7 @@ final class Descriptor
     ) {}
 
     /**
-     * The driver as the panels show it, its form's fields described.
+     * The API's DriverDescription: the driver with its form's fields described.
      *
      * @return array{key: string, label: string, description: string, notes: list<string>, fields: list<array<string, mixed>>, traits: object}
      */

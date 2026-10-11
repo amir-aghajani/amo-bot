@@ -10,10 +10,7 @@ export function ticketPage(id: number): string {
   return `/tickets/${id}`
 }
 
-/**
- * The ticket's subject as the link to its page — the customer's words, set apart in whichever direction they are
- * written —, with the service it is about under it, by its name on the panel (set apart left to right).
- */
+/** A ticket's subject linking to its page, with the service it is about under it. */
 export function TicketSubject({ ticket }: { ticket: Pick<TicketRow, 'id' | 'subject' | 'subscription'> }) {
   return (
     <div className="grid min-w-40 gap-0.5">

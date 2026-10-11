@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Keyboard;
 
 /**
- * Fluent builder for inline keyboards (buttons attached to a message).
+ * Fluent builder for inline keyboards (buttons under a message). A row's buttons go left to right as Telegram lays
+ * them out, so for a Persian reader the first one sits on the left.
  *
  *   InlineKeyboard::make()
  *       ->row(InlineKeyboard::callback('Plans', 'menu:plans'), InlineKeyboard::callback('Wallet', 'menu:wallet'))
@@ -62,6 +63,30 @@ final class InlineKeyboard
         }
 
         return $this;
+    }
+
+    /**
+     * Lay buttons out by how many share each one's row (a plan's or server's `button_row`, 1 to ROW_MOST): consecutive
+     * buttons of one width fill rows of that many; a different width starts a new row. Each row is filled in reading
+     * order, the first button rightmost.
+     *
+     * @param list<array{array<string, mixed>, int}> $buttons Each button, and how many share its row
+     */
+    public function flow(array $buttons): self
+    {
+        $row = [];
+        $size = 1;
+        foreach ($buttons as [$button, $perRow]) {
+            $perRow = max(1, min(KeyboardLayout::ROW_MOST, $perRow));
+            if ($row !== [] && ($perRow !== $size || count($row) === $size)) {
+                $this->row(...array_reverse($row));
+                $row = [];
+            }
+            $row[] = $button;
+            $size = $perRow;
+        }
+
+        return $this->row(...array_reverse($row));
     }
 
     /** @return array{inline_keyboard: list<list<array<string, mixed>>>} */

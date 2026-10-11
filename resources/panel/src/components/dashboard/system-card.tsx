@@ -28,12 +28,9 @@ function Row({ label, value, detail, health }: { label: string; value: string; d
 }
 
 /**
- * Is the machinery behind the shop alive: the bot of the shop on screen — the main one, or an agent's, said by which and
- * named by its @username once it is known —,
- * the scheduler — the owner's, beside the dashboard's queues; read on its own, again each minute (a heartbeat changes
- * with time alone). A bot that gets no updates at all points at where every bot's webhook is set (the telegram
- * settings), what a host without a shell runs on; an agent's bot without a token waits for its agent to send one. A new
- * version of AmoBot out (the update screen's read, which the scheduler keeps daily) points at the panel's update.
+ * The owner's view of whether the machinery is alive: the shop's bot (how it gets updates) and the scheduler, read again
+ * every minute since heartbeats age with time alone. A bot with no updates points at the webhook settings; a new AmoBot
+ * release points at the update screen.
  */
 export function SystemCard() {
   const read = useQuery({ ...systemQuery, refetchInterval: 60_000 })

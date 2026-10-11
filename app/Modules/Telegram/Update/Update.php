@@ -5,19 +5,18 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Update;
 
 /**
- * Read-only view over a raw Telegram Update array with the accessors handlers actually need. The bot
- * subscribes to messages, callback queries and its own membership changes (config/telegram.php),
- * so those are the shapes read here.
+ * Read-only view over one raw Telegram update, with the accessors the handlers need. The bot subscribes to messages,
+ * button presses and its own membership changes (config/telegram.php), so those are the shapes read here.
  */
 final class Update
 {
     /**
-     * What a message can carry, by Telegram's field names, in the order they are told apart: an animation carries a
+     * What a message can carry, by Telegram's field names, in the order they are checked: an animation carries a
      * `document` too, so it comes first.
      */
     private const CONTENT = ['animation', 'photo', 'video', 'video_note', 'voice', 'audio', 'sticker', 'live_photo', 'paid_media', 'document', 'poll', 'location', 'contact', 'text'];
 
-    /** The kinds of content that are media (Bot API 10.3) — what Telegram cannot edit into a text message. */
+    /** The kinds of content that are media — what Telegram cannot edit into a text message. */
     private const MEDIA = ['animation', 'audio', 'document', 'live_photo', 'paid_media', 'photo', 'sticker', 'video', 'video_note', 'voice'];
 
     /** @param array<string, mixed> $raw */
@@ -40,16 +39,13 @@ final class Update
         return 'unknown';
     }
 
-    /** @return array<string, mixed>|null */
+    /** @return array<string, mixed>|null The message — for a button press, the message the button is under. */
     public function message(): ?array
     {
         return $this->raw['message'] ?? $this->raw['callback_query']['message'] ?? null;
     }
 
-    /**
-     * What the message (a button's, for a callback) is, by Telegram's field name: "text", "photo", "video", "voice",
-     * "sticker", "document" (a file), "poll"… — null for none of them.
-     */
+    /** What the message carries, by Telegram's field name ("text", "photo", "document", "voice"…); null for none of them. */
     public function contentKind(): ?string
     {
         $message = $this->message() ?? [];
@@ -62,10 +58,7 @@ final class Update
         return null;
     }
 
-    /**
-     * Whether the message (a button's, for a callback) carries media — a photo, a video, a file… — rather
-     * than text: Telegram cannot edit such a message into a text one.
-     */
+    /** Whether the message carries media rather than text: Telegram cannot edit such a message into a text one. */
     public function hasMedia(): bool
     {
         return in_array($this->contentKind(), self::MEDIA, true);
@@ -81,7 +74,7 @@ final class Update
         return isset($this->raw['message']);
     }
 
-    /** @return array<string, mixed>|null */
+    /** @return array<string, mixed>|null The sender (the Telegram User). */
     public function from(): ?array
     {
         return $this->raw['callback_query']['from']
@@ -110,10 +103,7 @@ final class Update
         return $id === null ? null : (int) $id;
     }
 
-    /**
-     * When its chat sent it (unix seconds): the message's date, a membership change's; null for a press of a button,
-     * which carries none (its message's date is the message's).
-     */
+    /** When the chat sent it (unix seconds); null for a button press, which carries no date of its own. */
     public function sentAt(): ?int
     {
         $date = $this->raw['message']['date'] ?? $this->raw['my_chat_member']['date'] ?? null;
@@ -126,7 +116,7 @@ final class Update
         return ($this->chat()['type'] ?? null) === 'private';
     }
 
-    /** A group or a supergroup — the admins' report group is one; a channel is neither. */
+    /** A group or a supergroup (the report group is one); a channel is neither. */
     public function isGroupChat(): bool
     {
         return in_array($this->chat()['type'] ?? null, ['group', 'supergroup'], true);
@@ -154,6 +144,14 @@ final class Update
         return $text === null ? null : (string) $text;
     }
 
+    /** The words under a photo or a file the customer sent; null for none. */
+    public function caption(): ?string
+    {
+        $caption = $this->raw['message']['caption'] ?? null;
+
+        return is_string($caption) ? $caption : null;
+    }
+
     public function isCommand(): bool
     {
         $text = $this->text();
@@ -161,7 +159,7 @@ final class Update
         return $text !== null && str_starts_with($text, '/') && strlen($text) > 1;
     }
 
-    /** Command name without the slash or "@botname" suffix, e.g. "start". */
+    /** The command's name, lower case, without the slash or "@bot" suffix: "start". */
     public function command(): ?string
     {
         $parts = $this->commandParts();
@@ -193,8 +191,8 @@ final class Update
     }
 
     /**
-     * The tapped button's arguments after `$prefix` (CallbackData): "plan:12:srv:3" after "plan:" is ['12', 'srv', '3'];
-     * null for a message, or a button under another prefix.
+     * The pressed button's arguments after `$prefix` (CallbackData::args()): "plan:12:srv:3" after "plan:" is
+     * ['12', 'srv', '3']; null for a message, or a button under another prefix.
      *
      * @return list<string>|null
      */
@@ -212,7 +210,7 @@ final class Update
         return $id === null ? null : (string) $id;
     }
 
-    /** @return array<string, mixed>|null Attached photo (largest size) if any. */
+    /** @return array<string, mixed>|null The attached photo, its largest size. */
     public function photo(): ?array
     {
         $sizes = $this->raw['message']['photo'] ?? null;
@@ -226,6 +224,28 @@ final class Update
         return $this->raw['message']['document'] ?? null;
     }
 
+    /**
+     * The picture the message carries: a photo, or a file `$isPicture` judges to be one (a receipt or a ticket's picture
+     * sent as a file). Null for a message without one.
+     *
+     * @param \Closure(array<string, mixed>): bool $isPicture Judges a document
+     * @return array{file_id: string, name: string|null}|null The file's Telegram id, and its name as sent (a file's)
+     */
+    public function picture(\Closure $isPicture): ?array
+    {
+        $photo = $this->contentKind() === 'photo' ? $this->photo() : null;
+        if ($photo !== null) {
+            return ['file_id' => (string) ($photo['file_id'] ?? ''), 'name' => null];
+        }
+
+        $document = $this->contentKind() === 'document' ? $this->document() : null;
+        if ($document === null || !$isPicture($document)) {
+            return null;
+        }
+
+        return ['file_id' => (string) ($document['file_id'] ?? ''), 'name' => isset($document['file_name']) ? (string) $document['file_name'] : null];
+    }
+
     /** @return array<string, mixed>|null A shared contact card ({phone_number, user_id?, first_name, …}). */
     public function contact(): ?array
     {
@@ -234,7 +254,7 @@ final class Update
         return is_array($contact) ? $contact : null;
     }
 
-    /** Whether the shared contact is the sender's own number (the "request_contact" button), not someone from their address book. */
+    /** Whether the shared contact is the sender's own number (the "request_contact" button), not one from their address book. */
     public function isOwnContact(): bool
     {
         $contact = $this->contact();

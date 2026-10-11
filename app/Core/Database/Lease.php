@@ -154,7 +154,7 @@ final class Lease
 
     /**
      * One conditional UPDATE: true when it found the row. Every database the shop runs on reports the rows an UPDATE
-     * matched (MySQL is told to, Drivers\MySqlDriver), so a step that writes what is there already is no loss.
+     * matched (MySQL is set up to, Drivers\MySqlDriver), so a step that writes what is there already is no loss.
      *
      * @param Builder<Model> $query
      * @param array<string, mixed> $values

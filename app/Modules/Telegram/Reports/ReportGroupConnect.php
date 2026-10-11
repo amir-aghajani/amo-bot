@@ -5,17 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Reports;
 
 use App\Modules\Bots\Services\Bots;
-use App\Modules\Telegram\Api\BotApi;
-use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Update\GroupHandler;
 use App\Modules\Telegram\Update\Update;
-use Psr\Log\LoggerInterface;
 
 /**
- * `/start@<bot> reports_<code>` in a group — the message Telegram sends for the panel's connect link, or the admin typed:
- * with the code outstanding, in a group with topics where the bot may manage them, the group becomes the report group
- * and gets its topics (ReportGroup::adopt()); otherwise the group is told why not, and the screen too. A /start meant for
- * another bot of the group, or without a code, is none of its business.
+ * `/start@<bot> reports_<code>` in a group — what the panel's connect link makes Telegram send, or the admin types. With
+ * the code outstanding, in a supergroup with topics where the bot may manage them, the group becomes the report group
+ * (ReportGroup::adopt()); otherwise the group (and the panel screen) is told why not. A /start for another bot, or
+ * without a code, is ignored.
  */
 final class ReportGroupConnect implements GroupHandler
 {
@@ -27,9 +24,8 @@ final class ReportGroupConnect implements GroupHandler
     public function __construct(
         private readonly ReportGroup $group,
         private readonly ReportGroupState $state,
-        private readonly BotApi $api,
+        private readonly GroupButtons $groupButtons,
         private readonly Bots $bots,
-        private readonly LoggerInterface $logger,
     ) {}
 
     public function handle(Update $update): void
@@ -75,7 +71,7 @@ final class ReportGroupConnect implements GroupHandler
         $this->reply($update, $text);
     }
 
-    /** `/start` with no "@bot", or "@" this bot — in a group with several bots, another's command is not ours. */
+    /** `/start` with no "@bot", or "@" this bot: in a group with several bots, another's command is not ours. */
     private function addressedToUs(Update $update): bool
     {
         $to = $update->commandTarget();
@@ -84,19 +80,9 @@ final class ReportGroupConnect implements GroupHandler
         return $to === null || $bot === '' || strcasecmp($to, $bot) === 0;
     }
 
-    /** Answer under the message that carried the code, in its topic when it was written in one — plain words. */
+    /** Answer under the message that carried the code, in its topic. */
     private function reply(Update $update, string $text): void
     {
-        $message = $update->message() ?? [];
-        $options = ['reply_parameters' => ['message_id' => (int) ($message['message_id'] ?? 0), 'allow_sending_without_reply' => true]];
-        if (($message['is_topic_message'] ?? false) === true && isset($message['message_thread_id'])) {
-            $options['message_thread_id'] = (int) $message['message_thread_id'];
-        }
-
-        try {
-            $this->api->sendText((int) $update->chatId(), $text, $options);
-        } catch (TelegramApiException $e) {
-            $this->logger->warning('Could not answer in group {chat}: {message}', ['chat' => $update->chatId(), 'message' => $e->getMessage()]);
-        }
+        $this->groupButtons->sayUnder((int) $update->chatId(), $update->message() ?? [], $text);
     }
 }

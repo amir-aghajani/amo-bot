@@ -15,15 +15,10 @@ use GuzzleHttp\Promise\PromiseInterface;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * Thin client for the Telegram Bot API: the methods the shop calls, each a call() with its parameters, Telegram's
- * refusals as TelegramApiException (its refusal() says what kind).
- *
- * It speaks as the current bot (CurrentBot): the main one with the token of config.php, an agent's with the token they
- * handed over — so the same services serve every bot's shop. forToken() speaks with a token no bot has yet (an agent's,
- * checked before it is kept).
- *
- * Answering a press and deleting a message are courtesies: they say whether they went through and never throw. An edit
- * to what a message shows already is done, not refused.
+ * Thin client for the Telegram Bot API: one method per call the shop makes, refusals thrown as TelegramApiException.
+ * It speaks as the current bot (CurrentBot: the main bot with config.php's token, an agent's with theirs), so the same
+ * services serve every shop; forToken() checks a token no bot has yet. Answering a tap and deleting a message never
+ * throw, and an edit to what a message already shows counts as done.
  *
  * @see https://core.telegram.org/bots/api
  */
@@ -39,10 +34,9 @@ final class BotApi
     public const MAX_DOWNLOAD = 20 * 1024 * 1024;
 
     /**
-     * Seconds a long poll's answer may be read after its own timeout (getUpdatesAsync()). Telegram answers within the
-     * timeout; but curl counts a transfer's time from its start and checks it before it reads, and the poller moves its
-     * polls only between batches — one held up meanwhile (a batch waiting on a panel) would be failed for "0 bytes" with
-     * its answer waiting unread. Only a connection that never answers is given up on.
+     * Seconds a long poll's answer may still be read after its own timeout. The poller only moves its polls between
+     * batches, and curl counts time from the request's start: without this slack a poll answered while a batch waited
+     * on a panel would fail with its answer unread.
      */
     public const LONG_POLL_SLACK = 60;
 
@@ -52,11 +46,8 @@ final class BotApi
     private ?string $fixedToken = null;
 
     /**
-     * @param \Closure(): string $mainToken The main bot's token, read when a call is made rather than copied into the
-     *                                      client (the configuration's — fromConfig() —, which the settings screen rewrites)
-     * @param Sleeper $sleeper How a flood wait is waited out; tests hand in one that does not
-     * @param PremiumEmojiStatus|null $premiumEmoji What the current bot last found about its premium emoji; without
-     *                                              it, a message Telegram turned down over one is still sent plain, and nothing is remembered
+     * @param \Closure(): string $mainToken The main bot's token, read per call (the settings screen may rewrite it)
+     * @param PremiumEmojiStatus|null $premiumEmoji Remembers a "no" to premium emoji; without it a message is still resent plain
      */
     public function __construct(
         private readonly ClientInterface $http,
@@ -75,16 +66,15 @@ final class BotApi
     }
 
     /**
-     * The longest one call can take, in whole seconds, when a request may take `$timeout` (the outgoing timeout): its
-     * request, a flood wait honoured (MAX_FLOOD_WAIT), and the request again — what a hold on work that calls Telegram is
-     * sized by, so nobody takes it over while it still goes on (a report being sent, a topic being made).
+     * The longest one call can take with a `$timeout` per request: the request, a flood wait, and the request again —
+     * what a lease on work that calls Telegram is sized by, so nobody takes it over mid-call.
      */
     public static function longestCall(float $timeout): int
     {
         return 2 * (int) ceil($timeout) + self::MAX_FLOOD_WAIT;
     }
 
-    /** A client that speaks with this token — one no bot has yet (an agent's, asked who it is before it is kept). */
+    /** A client that speaks with this token, which no bot has yet (an agent's, checked before it is kept). */
     public function forToken(string $token): self
     {
         $client = new self($this->http, $this->mainToken, $this->apiUrl, $this->sleeper);
@@ -99,6 +89,7 @@ final class BotApi
         return new self($http, $this->mainToken, $this->apiUrl, $this->sleeper, $this->premiumEmoji);
     }
 
+    /** Whether the bot it speaks as has a token at all. */
     public function hasToken(): bool
     {
         return $this->token() !== '';
@@ -167,8 +158,7 @@ final class BotApi
     }
 
     /**
-     * A message shown exactly as written — no markup read in it: words that are not the bot's own HTML (a report
-     * Telegram could not parse, what someone typed).
+     * A message shown exactly as written, no markup parsed (words that are not the bot's own HTML).
      *
      * @param array<string, mixed> $options
      * @return array<string, mixed> The message sent
@@ -195,9 +185,8 @@ final class BotApi
     }
 
     /**
-     * A picture made on the fly in place of a message's content: a photo message gets the new picture, and a
-     * text message becomes a photo one (Bot API 10.3). `caption` (HTML like every text) goes with the
-     * picture, the other options (reply_markup) on the message — the same options sendPhoto() takes.
+     * Replace a message's content with a picture (a text message can become a photo one since Bot API 10.3); takes the
+     * same options as sendPhoto().
      *
      * @param array<string, mixed> $options caption, reply_markup
      */
@@ -225,9 +214,8 @@ final class BotApi
     }
 
     /**
-     * Answer a press: the button's spinner stops, with a toast — or a popup (`$alert`) — cut to what Telegram shows.
-     * False when Telegram would not take it (a press too old to answer, Telegram out of reach) — never thrown: what
-     * came of the press shows in the chat anyway.
+     * Answer a tap: stop its spinner, with a toast or (`$alert`) a popup cut to Telegram's 200 units. False when Telegram
+     * refused (a tap too old, Telegram out of reach) — never thrown: what came of the tap shows in the chat anyway.
      */
     public function answerCallbackQuery(string $callbackQueryId, ?string $text = null, bool $alert = false): bool
     {
@@ -245,10 +233,8 @@ final class BotApi
     }
 
     /**
-     * The bytes of a file the bot can see (a receipt a customer sent, a sticker), by its file id; null when Telegram
-     * offers no download of it, or says it is larger than `$maxBytes` — its size as Telegram knows it, never as an
-     * update says (an update posted to an agent's own webhook says what its sender likes): nothing larger is held in
-     * memory.
+     * A file's bytes by its file id; null when Telegram offers no download, or its size as Telegram knows it (never as an
+     * update claims it) is over `$maxBytes`.
      *
      * @throws TelegramApiException
      */
@@ -375,8 +361,7 @@ final class BotApi
     }
 
     /**
-     * A photo Telegram keeps, by its file id — one the bot was sent (a picture a bot admin answered a ticket with) —,
-     * nothing uploaded; the caption is HTML like every text.
+     * Send a photo Telegram keeps, by its file id (nothing uploaded); the caption is HTML.
      *
      * @param array<string, mixed> $options sendPhoto options (caption, reply_markup…)
      * @return array<string, mixed> The message sent
@@ -387,9 +372,8 @@ final class BotApi
     }
 
     /**
-     * getUpdates without waiting for it: the poller keeps one long poll open per bot and serves whichever answers. The
-     * promise is fulfilled with the updates, or rejected with a TelegramApiException — given up on LONG_POLL_SLACK
-     * seconds after the poll's own timeout.
+     * getUpdates without waiting, for the poller (one long poll open per bot). The promise is fulfilled with the updates
+     * or rejected with a TelegramApiException.
      *
      * @param list<string> $allowedUpdates
      * @return PromiseInterface Fulfilled with list<array<string, mixed>>
@@ -428,6 +412,7 @@ final class BotApi
         ]);
     }
 
+    /** Take the bot's webhook down; `$dropPending` drops the updates queued meanwhile. */
     public function deleteWebhook(bool $dropPending = false): void
     {
         $this->call('deleteWebhook', ['drop_pending_updates' => $dropPending]);
@@ -440,13 +425,10 @@ final class BotApi
     }
 
     /**
-     * One Bot API method. Array parameters (reply_markup, entities, ...) are JSON encoded; with files the request goes
-     * multipart, the fields encoded the same way. A short flood wait (429) is honoured once.
-     *
-     * A message with premium emoji (`<tg-emoji>`, or a button's `icon_custom_emoji_id`) Telegram turns down over them —
-     * a bot may use them only while its owner has Telegram Premium — goes again with the plain emoji each stands for
-     * and its buttons without icons (a customer never loses a message to an emoji), and the bot remembers the "no"
-     * (PremiumEmojiStatus): while it is fresh, messages go plain from the start.
+     * One Bot API call (arrays as JSON, multipart with files; a short flood wait honoured once). A message Telegram
+     * refuses over its premium emoji — only allowed while the bot's owner has Telegram Premium — is sent again with plain
+     * emoji and buttons without icons, so a customer never loses a message to an emoji; the "no" is remembered for a
+     * while (PremiumEmojiStatus) so later messages go plain at once.
      *
      * @param array<string, mixed> $params
      * @param array<string, array{string, string}> $files Upload parts: field name => [bytes, filename]
@@ -491,9 +473,8 @@ final class BotApi
     }
 
     /**
-     * The parameters with every premium emoji turned into the plain one it stands for — a message's text or caption, an
-     * edited picture's caption — and the icons taken off its buttons (the label stays: a reply button's tap sends only
-     * that); null when they carry none.
+     * The parameters with every premium emoji replaced by its plain emoji and the icons taken off the buttons; null when
+     * they carry none.
      *
      * @param array<string, mixed> $params
      * @return array<string, mixed>|null
@@ -659,7 +640,7 @@ final class BotApi
         return CurrentBot::isMain() ? ($this->mainToken)() : (string) CurrentBot::get()->token;
     }
 
-    /** @throws TelegramApiException without a token — nothing can be asked, and the URL would leak the absence. */
+    /** @throws TelegramApiException without a token: nothing can be asked. */
     private function requireToken(): string
     {
         $token = $this->token();

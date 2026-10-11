@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Providers\Drivers\ThreeXui\DTO;
 
-use App\Modules\Providers\Drivers\ThreeXui\Support\Raw;
+use App\Modules\Providers\Support\Raw;
 
 /**
  * A client row as /panel/api/clients reads it: the identity, the limits — and every protocol field the panel keeps,

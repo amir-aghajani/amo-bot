@@ -11,8 +11,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The ways customers can pay: rows added from the driver picker, each with its own settings, switched and ordered — the
- * built-in wallet, and a row payments were made with, are not deleted (409).
+ * The ways customers can pay: rows made from a driver, each with its settings, switched and ordered. The built-in wallet,
+ * and a method payments were made with, are not deleted (409).
  */
 final class PaymentMethodsController extends ApiController
 {

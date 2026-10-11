@@ -4,19 +4,18 @@ declare(strict_types=1);
 
 namespace App\Core\Security;
 
+use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Support\Files;
 
 /**
- * Counts attempts per key over a window — a sign-in that keeps failing from one address waits. Shared hosting has no
- * cache server, so each key is a small file in its folder (the container's `throttle.path`), written under an exclusive
- * lock and read under a shared one: two requests at once count twice, never once, and a count is never read half
- * written. A window opens with the first attempt and closes `decay` seconds later, on the shop's clock (now() — the
- * tests move it); clear() closes it early (a sign-in that worked). What must never pass its limit, however many requests
- * ask at once, is attempt()'s: counted first, under the lock, and given back when it is over.
+ * Counts attempts per key in a window. Shared hosting has no cache server, so each key is a small file (`throttle.path`)
+ * written under an exclusive lock and read under a shared one: two requests at once count twice, and nothing is read
+ * half written. A window opens with the first attempt and closes `decay` seconds later on the shop's clock (now()).
+ * attempt() is the one to use when a limit must hold however many requests come at once; enforce() is attempt() with the
+ * usual 429.
  *
- * A throttle that cannot keep count fails closed: with its folder not writable it would let an attacker try without
- * end, so it answers nothing — availableIn() and hit() throw, the request is a 500 and the error log says why — until
- * the folder is fixed.
+ * It fails closed: with its folder unwritable it would let an attacker try without end, so it throws
+ * ThrottleUnavailableException (a 500, logged) until the folder is fixed.
  */
 final class RateLimiter
 {
@@ -67,13 +66,10 @@ final class RateLimiter
     }
 
     /**
-     * One attempt of something held to a limit in every window it is counted in — `[key, max attempts, decay seconds]`
-     * each (an address's and an account's, an hour's and a day's) —: counted in every one while each has room, and 0;
-     * else nothing counted, and the seconds until the fullest has room again (1 at least) — what the caller words as its
-     * refusal (a 429, Core\Exceptions\TooManyAttemptsException). Each window is counted first, under its lock (hit()),
-     * and judged by the count it came to: one over its limit gives back what this attempt counted (release()). So of
-     * requests that ask at the same moment, never more pass than a window has room for — a look at the counts before
-     * counting would let them all through.
+     * Count one attempt in every window (`[key, max attempts, decay seconds]` each — an address's and an account's, an
+     * hour's and a day's). Returns 0 when every window had room; else nothing stays counted and it returns the seconds
+     * until the fullest has room again (at least 1). Each window is counted first under its lock and judged by the count
+     * it reached — checking before counting would let simultaneous requests all through.
      *
      * @param non-empty-list<array{string, int, int}> $windows
      * @throws ThrottleUnavailableException
@@ -98,8 +94,22 @@ final class RateLimiter
     }
 
     /**
-     * One attempt counted by hit() given back, under the same lock — what a reservation that was not spent returns (a
-     * code counted before it was judged, and right). Never below none; a window that closed meanwhile stays closed.
+     * attempt(), refused when a window is full: a 429 saying `$what` and the wait («…؛ ۵ دقیقه دیگر دوباره امتحان کنید.»).
+     *
+     * @param non-empty-list<array{string, int, int}> $windows
+     * @throws TooManyAttemptsException
+     * @throws ThrottleUnavailableException
+     */
+    public function enforce(array $windows, string $what): void
+    {
+        $wait = $this->attempt($windows);
+        if ($wait > 0) {
+            throw TooManyAttemptsException::wait($what, $wait);
+        }
+    }
+
+    /**
+     * Give back one attempt counted by hit() (a code counted before it was judged, and found right). Never below zero.
      *
      * @throws ThrottleUnavailableException
      */

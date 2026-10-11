@@ -19,11 +19,10 @@ use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
 /**
- * The tickets screen (both panels): every ticket of the shop the latest activity first — by status, by customer, searched
- * —, the open ones counted (the queue), one ticket with its conversation (who of support wrote each word — the owner's
- * login «پشتیبانی» in an agent's shop —, where each was written), and what support does: answer (JSON, or a form with a
- * picture) — the customer told, the report group under the ticket —, close — the customer told —, reopen. Each shop its
- * own.
+ * The tickets screen (both panels): the list (latest activity first, by status, customer and search, the open ones
+ * counted), one ticket with its conversation (who of support wrote each message — the owner's login reads «پشتیبانی» in an
+ * agent's shop — and where), and support's operations: answer (JSON, or a form with a picture; the customer told, the
+ * report group hears it), close (the customer told), reopen. Each shop sees its own.
  */
 final class AdminTicketsApiTest extends HttpTestCase
 {

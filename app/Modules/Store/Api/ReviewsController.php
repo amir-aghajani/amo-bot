@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Store\Api;
 
 use App\Core\Captcha\CaptchaUnavailableException;
-use App\Core\Database\PageRequest;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
@@ -21,10 +20,9 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The customers' reviews on the shop's website, while the website shows them (`reviews_enabled`; off, both answer a
- * 404): the approved ones — anyone's to read —, with what every one of them adds up to; and a review written there
- * (Reviews\Services\Reviews) — a guest's, or the customer's its bearer token signs in
- * (Accounts\Http\OptionalCustomerMiddleware) —, waiting on support until it is approved.
+ * The customers' reviews, while the website shows them (`reviews_enabled`; off, both routes are a 404): the approved ones
+ * with their summary, and a new review (Reviews\Services\Reviews) — a guest's, or a signed-in customer's — that waits for
+ * support's approval.
  */
 final class ReviewsController extends ApiController
 {
@@ -41,7 +39,7 @@ final class ReviewsController extends ApiController
     public function index(Request $request, Response $response): Response
     {
         self::open($request);
-        $page = $this->directory->published(PageRequest::fromQuery($request->getQueryParams()));
+        $page = $this->directory->published($this->pageRequest($request));
 
         return $this->json($response, ['reviews' => $page->rows, 'meta' => $page->meta() + ['summary' => $this->directory->summary()]]);
     }
@@ -58,14 +56,13 @@ final class ReviewsController extends ApiController
      */
     public function store(Request $request, Response $response): Response
     {
-        $writer = $request->getAttribute(Customer::ATTRIBUTE);
-        $review = $this->reviews->submit(self::open($request), $request, $writer instanceof Customer ? $writer->user : null, $this->input($request));
+        $review = $this->reviews->submit(self::open($request), $request, Customer::optional($request)?->user, $this->input($request));
 
         return $this->json($response, ['review' => ['id' => $review->id, 'status' => $review->status->value]], 201);
     }
 
     /**
-     * The request's website, while it shows its reviews and takes new ones.
+     * The request's website, while it shows and takes reviews.
      *
      * @throws ReviewsOffException 404
      */

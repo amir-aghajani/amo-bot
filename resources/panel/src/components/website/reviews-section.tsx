@@ -14,10 +14,8 @@ function draftOf(website: Website): Draft {
 }
 
 /**
- * «نظرات»: the website shows the reviews support approved on the «نظرات» page, and takes new ones, while its switch is
- * on (the Store API's GET and POST /reviews — off, as a website starts, both answer a 404). A guest's review is taken
- * only behind the website's captcha («ورود با ایمیل»'s «تایید امنیتی»); without one, its signed-in customers' alone —
- * the card says which, by the captcha the website asks now.
+ * «نظرات»: whether the website shows approved reviews and takes new ones. Guests may review only while the website asks
+ * a captcha; otherwise only signed-in customers can, which the card says.
  */
 export function ReviewsSection({ website }: { website: Website }) {
   const group = useWebsiteGroup(website, draftOf, (values) => values)

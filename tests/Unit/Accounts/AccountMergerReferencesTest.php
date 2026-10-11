@@ -11,10 +11,8 @@ use Illuminate\Database\Schema\Blueprint;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A merge carries everything a customer owns to the account that stays: every column of database/schema.php that points
- * at a customer — a foreign key on `users`, and `bots.user_id` (an agent's own bot, which has none) — is one the merger
- * says what to do with (AccountMerger::REFERENCES), and it names none the schema does not have. A table that adds such a
- * column fails here until the merger handles it, so no merge leaves a row behind on an account that is gone.
+ * Every column of the schema that points at a customer is in AccountMerger::REFERENCES, and nothing else is — so no merge
+ * leaves rows on an account that is gone.
  */
 final class AccountMergerReferencesTest extends TestCase
 {

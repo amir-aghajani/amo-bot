@@ -33,13 +33,13 @@ import { formatCountdown } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /*
- * Every failure the panels show, drawn one way (lib/failure reads it): a whole screen outside the shell (`screen` — the
- * panel could not start, a sign-in page or the installer failed), a page in the shell (`page` — a page that failed to
- * draw, an address no page has), a card in place of what a read would have shown (`card`, the default), a form's or a
- * strip's line (`inline` — FormError). The words are the failure's — the kind's, or the server's where they are the
- * admin's; after a lead that says what was not found, why it may not be —, the ways on are the kind's — ask again, go
- * back, reload, sign in again —, and under «جزئیات فنی», folded, what support needs: the status, the code, the request's
- * id, the moment and its zone, the address, the build, to copy whole.
+ * Every failure the panels show, drawn one way from lib/failure's reading, in four variants:
+ * - `screen`: a whole screen outside the shell (the panel could not start, a sign-in page failed);
+ * - `page`: a page in the shell (a page that failed to draw, an address no page has);
+ * - `card` (the default): in place of what a read would have shown;
+ * - `inline`: a form's or an operation strip's line (FormError).
+ * The ways on are the kind's (ask again, reload, sign in again, go back), and «جزئیات فنی», folded, lists what support
+ * needs, with a button to copy it all.
  */
 
 const ICONS: Record<FailureKind, LucideIcon> = {
@@ -63,24 +63,21 @@ const ICONS: Record<FailureKind, LucideIcon> = {
 type ErrorStateVariant = 'screen' | 'page' | 'card' | 'inline'
 
 interface ErrorStateProps {
-  /** The failure: an ApiError (an answer, or none), anything the panel's code threw. */
+  /** The failure: an ApiError (an answer, or none), or anything the panel's code threw. */
   error?: unknown
-  /** A state that is no thrown failure — an address no page has, a shop not set up yet —: its kind. */
+  /** The kind of a state that is no thrown failure (an address no page has, a shop not set up yet). */
   kind?: FailureKind
   variant?: ErrorStateVariant
-  /** A card's subject, as its line begins: «لیست پلن‌ها» (… بارگذاری نشد / پیدا نشد). */
+  /** A card's subject, which its line begins with: «لیست پلن‌ها» (… بارگذاری نشد / پیدا نشد). */
   what?: string
-  /** This screen's own words for its case, over the kind's. */
+  /** This screen's own words, over the kind's. */
   title?: string
   description?: ReactNode
-  /** Ask again — offered where asking again may help (not for what is not there, or not allowed). */
+  /** Ask again; offered only where that may help (always on a `screen`, which has no other way on). */
   onRetry?: () => void
-  /** The ask again is under way: its button waits. */
+  /** The retry is under way: its button spins. */
   retrying?: boolean
-  /**
-   * A screen's way to another page of the panel than its own dashboard, loaded afresh (a whole address): the main
-   * shop's, from the address of a shop that is not there.
-   */
+  /** A screen's link to a whole address instead of the dashboard (the main shop's, from a shop that is not there). */
   home?: { href: string; label: string }
   className?: string
 }
@@ -89,7 +86,7 @@ export function ErrorState({ error, kind, variant = 'card', what, title, descrip
   const failure = error === undefined || error === null ? null : describeFailure(error)
   const shown = failure?.kind ?? kind ?? 'crash'
   const spec = FAILURE_KINDS[shown]
-  // Under a lead or a title that says it was not found, the words say why — not that again.
+  // The lead or the title already says "not found": the words say why.
   const message = shown === 'not-found' && variant !== 'inline' ? notFoundReason(failure) : (failure?.message ?? spec.description)
   const words = { title: title ?? spec.title, message: description ?? message }
   const wait = useRetryWait(error)

@@ -9,10 +9,9 @@ use App\Core\Forms\FieldType;
 use App\Support\Input;
 
 /**
- * A short list of whole numbers — the amounts a screen offers as buttons —, sent as a list or as text the way an admin
- * types it ("50000, 100000"، or a space between; thousands set apart as Number reads them, «50,000, 100,000»:
- * Input::numbersOf()): each between two bounds, kept without repeats and smallest first, at most so many. With
- * `atLeast`, none may be below another field's number (the presets of a minimum).
+ * A short list of whole numbers (the amounts a screen offers as buttons), sent as a list or typed as text
+ * («50,000, 100,000» — Input::numbersOf()). Each within bounds, kept without repeats, smallest first, at most `most`.
+ * `atLeast` holds every one to another field's number (presets to a minimum).
  *
  * @extends Field<list<int>>
  */

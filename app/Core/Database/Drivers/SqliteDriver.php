@@ -12,11 +12,10 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 
 /**
- * SQLite: a file of the shop's own, no server — the test suite's database (in memory) and a developer's. Not offered
- * by the installer: PHP before 8.4 cannot begin the IMMEDIATE transactions that would keep the bot, the panel and the
- * cron from failing each other's writes with SQLITE_BUSY (the code's read-then-write transactions lean on row locks
- * SQLite does not have), its locking is unsafe on the network filesystems some shared hosts use, and one slow
- * transaction holds every writer. A file database still gets WAL and a busy timeout.
+ * SQLite: the test suite's database (in memory) and a developer's (a file, with WAL and a busy timeout). Not offered
+ * by the installer: PHP before 8.4 cannot begin IMMEDIATE transactions, so the bot, panel and cron would fail each
+ * other's read-then-write transactions with SQLITE_BUSY (there are no row locks); its locking is unsafe on network
+ * filesystems; and one slow transaction holds every writer.
  */
 final class SqliteDriver implements DatabaseDriver
 {

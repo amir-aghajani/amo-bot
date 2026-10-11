@@ -32,10 +32,10 @@ use Tests\Support\FakeRelease;
 
 /**
  * The owner's update, played on a shop of the test's own — never this repository: this code installed in a scratch
- * folder at its own version (CURRENT; its config.php and storage/ the shop's own, its database recorded at that version),
+ * folder at its own version (CURRENT; its own config.php and storage/, its database recorded at that version),
  * the updater's folder and its flag in that storage/, a release key made for the test (release(): FakeRelease), and
  * GitHub (FakeGitHub) the transport of the app's outgoing client. The update screen's API runs on an Updater made over
- * them; the owner is signed in. Every version is the code's or reckoned from it, so a release of the shop's own never
+ * them; the owner is signed in. Every version is the code's or reckoned from it, so a new AmoBot release never
  * moves what the tests mean.
  */
 abstract class UpdateTestCase extends HttpTestCase

@@ -5,22 +5,29 @@ declare(strict_types=1);
 namespace App\Modules\Orders\Tasks;
 
 use App\Core\Scheduling\Task;
+use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\RequestKey;
 use App\Modules\Payments\Services\PaymentService;
 
 /**
- * Orders nobody finished paying: a checkout the customer left after picking a card — or came back to with no receipt
- * that stood — is dropped with its unpaid payments once nothing happened to it for EXPIRE_HOURS, quietly: the customer
- * walked away (PaymentService::expire()). One whose receipt waits for review is support's to decide, whatever its age.
- * And the website's request keys RequestKey::KEEP_DAYS old are forgotten: a request made again after that is a new one.
- * Runs hourly, in every shop.
+ * Drops unpaid orders nobody touched for EXPIRE_HOURS, quietly (PaymentService::expire()); an order made with a discount
+ * code goes sooner, once the code's hold is over (DiscountSettings::holdMinutes()), which frees its use. An order whose
+ * receipt waits for review is never dropped. Also forgets request keys older than RequestKey::KEEP_DAYS. Runs every
+ * INTERVAL_MINUTES in every shop.
  */
 final class ExpireOrdersTask implements Task
 {
     public const EXPIRE_HOURS = 48;
+    public const INTERVAL_MINUTES = 10;
 
-    public function __construct(private readonly PaymentService $payments) {}
+    /** `orders.notes` of an order made with a code, dropped as the code's hold ran out. */
+    public const NOTE_CODE_HOLD = 'مهلت استفاده از کد تخفیف تمام شد';
+
+    public function __construct(
+        private readonly PaymentService $payments,
+        private readonly DiscountSettings $discounts,
+    ) {}
 
     public function run(): void
     {
@@ -28,6 +35,14 @@ final class ExpireOrdersTask implements Task
 
         foreach (Order::payable()->where('updated_at', '<=', $idleSince)->get() as $order) {
             $this->payments->expire($order, $idleSince);
+        }
+
+        $hold = $this->discounts->holdMinutes();
+        if ($hold > 0) {
+            $heldSince = now()->subMinutes($hold);
+            foreach (Order::payable()->whereNotNull('discount_code_id')->where('updated_at', '<=', $heldSince)->get() as $order) {
+                $this->payments->expire($order, $heldSince, self::NOTE_CODE_HOLD);
+            }
         }
 
         RequestKey::query()->where('created_at', '<', now()->subDays(RequestKey::KEEP_DAYS))->delete();

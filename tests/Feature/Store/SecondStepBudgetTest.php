@@ -18,11 +18,8 @@ use Psr\Http\Message\ResponseInterface;
 use Tests\HttpTestCase;
 
 /**
- * Whoever has an account's password may guess its second step's codes no further than a budget of its own: ten wrong
- * codes an hour and twenty a day, whatever challenges and addresses they come by — each counted before it is judged, so
- * codes sent at the same moment cannot pass it. Spent, the next is a 429 whatever it is, and the customer is told — once a
- * day: someone has their password. A code that opens gives its room back; the code a password proven again asks counts
- * against the same budget.
+ * The second step's budget per account (ten wrong codes an hour, twenty a day, counted before judging so concurrent
+ * guesses cannot pass it): spent, a 429 and the customer notified once a day; a right code gives its room back.
  */
 final class SecondStepBudgetTest extends HttpTestCase
 {

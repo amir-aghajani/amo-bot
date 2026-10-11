@@ -7,13 +7,12 @@ namespace App\Core\Mail;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * An email the transport did not take — the mail server refused it, or could not be reached —: a 502. Its message is a
- * customer's, saying only that it did not go; why (`reason`, the transport's own words, never a password) is the log's
- * (Mailer logs it once) and the owner's, whose test send shows it (explained()).
+ * An email the transport did not take: a 502 telling a customer only that it did not go. Why (`reason`, the
+ * transport's redacted words) is logged, and shown to the owner's test send through explained().
  */
 final class MailFailedException extends DomainRuleException
 {
-    /** What a customer is told: the email did not go, and to try again. */
+    /** The customer's message: the email did not go, try again. */
     public const MESSAGE = 'ایمیل فرستاده نشد؛ کمی بعد دوباره امتحان کنید.';
 
     private function __construct(

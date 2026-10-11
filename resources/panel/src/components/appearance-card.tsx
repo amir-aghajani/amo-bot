@@ -11,10 +11,7 @@ const THEMES: PageTab<Theme>[] = [
 /** What the «ظاهر» section is, under the page's title in either panel: kept in the browser, not with the shop. */
 export const APPEARANCE_DESCRIPTION = 'ظاهر پنل؛ در همین مرورگر ذخیره می‌شود، نه در فروشگاه.'
 
-/**
- * The panel's look in this browser (lib/theme), every panel's «ظاهر» section of «تنظیمات پنل»: dark or light — there is
- * no "system" theme, by decision —, applied as it is picked and kept for the next visit; another browser keeps its own.
- */
+/** The «ظاهر» settings section of both panels: dark or light, applied at once and kept in this browser (lib/theme). */
 export function AppearanceCard() {
   const { theme, choose } = useTheme()
 

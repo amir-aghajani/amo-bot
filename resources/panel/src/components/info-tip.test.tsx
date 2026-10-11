@@ -44,7 +44,7 @@ describe('an ⓘ', () => {
 })
 
 describe('a badge that says more', () => {
-  it('is a button named by its words, and a press shows what it means', async () => {
+  it('is a button named by its text, and a press shows what it means', async () => {
     render(
       <InfoBadge variant="warning" info="سرور غیرفعال است.">
         آلمان ۲

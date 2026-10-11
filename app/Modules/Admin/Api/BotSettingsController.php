@@ -10,11 +10,10 @@ use App\Modules\Settings\Services\BotSettingsScreen;
 use App\Modules\Telegram\Qr\QrBackground;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * The bot's settings («تنظیمات ربات»), the shop's own in either panel — a group per subject (BotSettingsScreen), each
- * saved on its own — and the picture its QR codes are drawn on.
+ * The bot's settings («تنظیمات ربات», either panel, per shop): a group per subject (BotSettingsScreen), each saved on its
+ * own, and the picture its QR codes are drawn on.
  */
 final class BotSettingsController extends ApiController
 {
@@ -40,11 +39,7 @@ final class BotSettingsController extends ApiController
     /** POST /bot/qr-background — multipart, `file`: the new background */
     public function uploadBackground(Request $request, Response $response): Response
     {
-        $file = $request->getUploadedFiles()['file'] ?? null;
-        if (!$file instanceof UploadedFileInterface) {
-            throw ValidationException::on('file', 'تصویری انتخاب نشده است.');
-        }
-        $this->background->store($file);
+        $this->background->store($this->uploadedFile($request) ?? throw ValidationException::on('file', 'تصویری انتخاب نشده است.'));
 
         return $this->json($response, ['qr_background' => $this->background->describe()]);
     }
@@ -58,11 +53,8 @@ final class BotSettingsController extends ApiController
     }
 
     /**
-     * PUT /bot/settings/{group} — general: {enabled, phone_required, support_contact}; channels: {join_required};
-     * wallet: {topup_min, topup_presets}; renewal: {carry_traffic}; auto_renew: {auto_renew_days, auto_renew_default};
-     * reminders: {expiry_reminder, expiry_reminder_days, traffic_reminder, traffic_reminder_percent};
-     * referral: {referral_enabled, referral_rate, referral_first_only}; reports: {report_<topic>, …} (a switch per topic
-     * the shop's group has); qr: {qr_enabled}. A group the screen does not have is a 404.
+     * PUT /bot/settings/{group} — that group's fields (BotSettingsScreen; the API description lists each group's form). A
+     * group the screen does not have is a 404.
      *
      * @param array<string, string> $args
      */

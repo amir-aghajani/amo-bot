@@ -9,11 +9,9 @@ use App\Modules\Payments\DTO\Shortfall;
 use App\Support\Money;
 
 /**
- * A checkout on the shop's website that paid nothing (Payments\Services\Checkout), in the website's words: the wallet
- * short of the price (422 on `method_id`, what is missing), the order paid or closed elsewhere in the same moment
- * (409), a request made again whose order was cancelled since — by support, or unpaid in its time, maybe days ago (409,
- * words of its own) —, the wallet's own refusal as it was charged (422 on `method_id`, its reason), and the shop taking
- * no orders while its bot is switched off (503 — a receipt too).
+ * A website checkout that paid nothing: the wallet short (422 on `method_id`), the order paid or closed elsewhere a moment
+ * ago (409), a repeated request whose order was cancelled since (409), the wallet's refusal as it was charged (422), or
+ * the shop taking no orders while its bot is off (503).
  */
 final class CheckoutRefusedException extends DomainRuleException
 {
@@ -46,7 +44,7 @@ final class CheckoutRefusedException extends DomainRuleException
         return new self(self::CANCELLED, 409, null);
     }
 
-    /** `$reason`: the payment's — its gateway's words. */
+    /** `$reason`: the payment's note, the gateway's words. */
     public static function refused(?string $reason): self
     {
         return new self($reason ?? self::REFUSED, 422, 'method_id');

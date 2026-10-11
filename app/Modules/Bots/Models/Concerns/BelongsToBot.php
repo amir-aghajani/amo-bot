@@ -11,14 +11,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A row of one bot's shop (`bot_id`): a query sees the current bot's rows only (CurrentBot — none are hidden while it
- * works everywhere()), and a new row is the current bot's unless it says otherwise.
+ * A row of one bot's shop (`bot_id`): a global scope shows the current bot's rows only (none are hidden while
+ * CurrentBot works everywhere()), and a new row is the current bot's unless it says otherwise.
  *
  * @property int $bot_id
  * @property-read Bot $bot
  */
 trait BelongsToBot
 {
+    /** Eloquent boots this with the model: the shop scope, and the new row's `bot_id`. */
     public static function bootBelongsToBot(): void
     {
         static::addGlobalScope(CurrentBot::SCOPE, static function (Builder $query): void {
@@ -42,8 +43,8 @@ trait BelongsToBot
     }
 
     /**
-     * The shop this row belongs to, for work that must be done in it (CurrentBot::run()): the main bot, or the shop being
-     * worked in — the common case, at hand without a query —, or the bot its row names.
+     * The shop this row belongs to, for work that must run in it (CurrentBot::run()). The main bot and the current shop
+     * come without a query; any other is loaded.
      */
     public function shop(): Bot
     {

@@ -13,13 +13,9 @@ use App\Modules\Telegram\Models\CustomEmoji;
 use Psr\Log\LoggerInterface;
 
 /**
- * The premium emoji the bot's texts and keyboard buttons can use: the ones an admin showed the bot (/emoji,
- * Handlers\CustomEmojiHandler), kept for the editors' picker — Telegram's id, the plain emoji it stands for (what goes
- * inside a `<tg-emoji>`, shown where the premium one cannot be), and how the panel can show it as Telegram does: a still
- * picture, the animation when it moves (a Lottie one — Telegram's gzipped .tgs — or a WebM video), and whether Telegram
- * paints it in the colour of the text around it. Pictures and animations are fetched from Telegram as the panel asks
- * — like a receipt, kept a short while for the reads that follow (Core\Support\FileCache), nothing kept for good. Whether
- * the bot may send them at all is PremiumEmojiStatus'.
+ * The premium emoji an admin showed the bot (/emoji), kept for the panel's picker: Telegram's id, the plain emoji it
+ * stands for, and how to draw it (a still picture, a Lottie or WebM animation, whether it takes the text's colour).
+ * Pictures and animations are fetched from Telegram on demand and cached briefly (FileCache), never kept for good.
  */
 final class CustomEmojis
 {
@@ -42,9 +38,8 @@ final class CustomEmojis
     ) {}
 
     /**
-     * Keep the premium emoji a message carried — each one's id and the plain emoji the message showed for it. Telegram is
-     * asked for each one's sticker, for its own plain emoji and how to show it; when it cannot be asked, the message's
-     * emoji stands and the rest is learned when the panel asks for the picture. Returns how many were new.
+     * Keep the premium emoji a message carried, learning each one's sticker from Telegram (when it cannot answer, the
+     * rest is learned later, when the panel asks). Returns how many were new.
      *
      * @param list<array{id: string, emoji: string}> $found
      */
@@ -108,8 +103,7 @@ final class CustomEmojis
     }
 
     /**
-     * A still picture of a premium emoji for the panel — in the picker or the preview of a text that has one, kept or
-     * not — with the type its bytes are, or null when Telegram has none (or cannot be asked).
+     * A still picture of a premium emoji (kept or not) with its type; null when Telegram has none or cannot be asked.
      *
      * @return array{body: string, mime: string}|null
      */
@@ -130,8 +124,7 @@ final class CustomEmojis
     }
 
     /**
-     * How a premium emoji moves, for the panel — kept or not: its Lottie animation as Telegram has it (a .tgs: gzipped
-     * JSON, LOTTIE_MIME) or its WebM video; null for a still one, or when Telegram has none (or cannot be asked).
+     * A premium emoji's animation (a gzipped Lottie .tgs, or a WebM); null for a still one, or when Telegram has none.
      *
      * @return array{body: string, mime: string}|null
      */
@@ -161,8 +154,7 @@ final class CustomEmojis
     }
 
     /**
-     * A file Telegram keeps, by its id — kept a short while once fetched: the picker shows the same emoji again and again;
-     * null when Telegram has none.
+     * A file's bytes from Telegram, cached briefly (the picker shows the same emoji again and again); null for none.
      *
      * @throws TelegramApiException
      */
@@ -172,8 +164,7 @@ final class CustomEmojis
     }
 
     /**
-     * Telegram's sticker of an emoji, as the panel needs it — learned onto its row when it is kept; empty when Telegram
-     * has none.
+     * Telegram's sticker of an emoji, learned onto its row when kept; empty when Telegram has none.
      *
      * @return array{file_id?: string|null, animation_file_id?: string|null}
      * @throws TelegramApiException
@@ -193,8 +184,7 @@ final class CustomEmojis
     }
 
     /**
-     * What a row keeps of its sticker: a still picture (the one it had when the sticker offers none), how it moves and
-     * the file that does, whether it is repainted. A sticker Telegram did not hand over changes nothing.
+     * Learn a sticker onto its row: a still picture, how it moves, the animation's file, whether it is repainted.
      *
      * @param array<string, mixed> $sticker
      */

@@ -41,7 +41,7 @@ interface DateFilterProps {
   /** The list's days now ('' = open at that end). */
   range: DayRange
   onChange: (range: DayRange) => void
-  /** Which moment of a row the days are of, said in the choices and on the picker: «بر اساس زمان ثبت سفارش». */
+  /** Which moment of a row the days are of, named in the choices and on the picker: «بر اساس زمان ثبت سفارش». */
   basis: string
 }
 

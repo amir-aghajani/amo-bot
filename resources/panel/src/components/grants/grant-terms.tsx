@@ -7,10 +7,7 @@ import type { GrantReach, ServerGrantRequest } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-/**
- * What every grant is issued with — the days and traffic, the reason the customers read, whom else it reaches, whether
- * they hear —, as its form holds it: the request whole (ServerGrantRequest), the amounts as typed.
- */
+/** A grant's terms as its form holds them: the whole ServerGrantRequest, with the amounts as typed. */
 export type GrantTerms = Required<ServerGrantRequest> & { days: string; traffic_gb: string }
 
 export const GRANT_TERMS: GrantTerms = { days: '', traffic_gb: '', reason: '', include_unstarted: false, notify: true }
@@ -27,6 +24,8 @@ interface GrantTermsFieldsProps {
   error: (field: string) => string | undefined
   /** Whom it would reach as the form stands — by what the shop last knew; null while that is not chosen yet (no server picked). */
   reach: GrantReach | null
+  /** What to choose first while `reach` is null — a server, by default; a customer group. */
+  choose?: string
   /** Where those services are, in the count's sentence («این سرور»); absent for wherever the form chose. */
   where?: string
   reasonPlaceholder: string
@@ -36,11 +35,10 @@ interface GrantTermsFieldsProps {
 const NOBODY: GrantReach = { running: 0, unstarted: 0 }
 
 /**
- * The terms of a grant, as both grants forms ask for them: the count it would reach — of every active service it goes
- * through, the number its card then counts as checked — or that it would reach none, which its form does not start
- * (reachOf()) —, the amounts, the reason, the options.
+ * The fields both grant forms share: how many services it would reach (a form that reaches none does not start), the
+ * amounts, the reason and the options.
  */
-export function GrantTermsFields({ values, change, error, reach, where, reasonPlaceholder }: GrantTermsFieldsProps) {
+export function GrantTermsFields({ values, change, error, reach, choose = 'اول سروری انتخاب کنید که به سرویس‌هایش اضافه شود.', where, reasonPlaceholder }: GrantTermsFieldsProps) {
   const id = useId()
   const known = reach ?? NOBODY
   const total = reachOf(known, values)
@@ -52,7 +50,7 @@ export function GrantTermsFields({ values, change, error, reach, where, reasonPl
     <>
       <p className="text-body leading-relaxed text-muted-foreground">
         {reach === null
-          ? 'اول سروری انتخاب کنید که به سرویس‌هایش اضافه شود.'
+          ? choose
           : total > 0
             ? `${active > total ? `از ${formatNumber(active)} سرویس فعال${place}، به ${formatNumber(total)} سرویس` : `به ${formatNumber(total)} سرویس${place}`} اضافه می‌شود؛ ${untouched}`
             : `فعلا سرویسی${place} نیست که این به آن اضافه شود؛ ${untouched}${known.unstarted > 0 ? ' سرویس‌های در انتظار اولین اتصال را پایین‌تر می‌شود شامل کرد.' : ''}`}
@@ -92,8 +90,8 @@ interface GrantAmountFieldsProps {
 }
 
 /**
- * The days and the traffic a grant gives, side by side — a grant's to many services, one service's extension. The first
- * that can be filled in takes the focus: as its dialog opens (`data-autofocus`), or as it appears in one already open.
+ * The days and traffic a grant or a single service's extension gives, side by side. The first field that can be filled
+ * takes the focus.
  */
 export function GrantAmountFields({ values, change, error, days, traffic }: GrantAmountFieldsProps) {
   const id = useId()

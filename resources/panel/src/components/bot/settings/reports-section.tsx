@@ -25,10 +25,7 @@ function switchesOf(settings: BotSettingsData): BotReportsSettingsRequest {
   return { report_purchases, report_renewals, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, ...(report_agency === undefined ? {} : { report_agency }) }
 }
 
-/**
- * Which subjects the report group gets — a switch per topic, labelled as the group names it (the group's read: its
- * failure said here too, with a way to ask again). A topic switched off gets nothing; it stays in the group.
- */
+/** Which subjects the report group gets: a switch per topic. A topic switched off gets nothing but stays in the group. */
 function TopicsCard({ settings }: { settings: BotSettingsData }) {
   const { data: group, error: failure, refetch } = useReportGroup()
   // The group card shows which topics are on.

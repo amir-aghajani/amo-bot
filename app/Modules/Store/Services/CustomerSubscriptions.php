@@ -20,6 +20,7 @@ use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
 use App\Modules\Subscriptions\Exceptions\ServiceNotReadException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\AutoRenewal;
+use App\Modules\Subscriptions\Services\CustomerExtras;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Subscriptions\Services\RenewalSettings;
@@ -30,19 +31,17 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Log\LoggerInterface;
 
 /**
- * A customer's services on the shop's website — their own only, a service of anyone else's not there at all —, and
- * what they do with one there, as the bot's service screen does it (the same services, the same rules): read it from its
- * panel now, switch its «تمدید خودکار», give it a new link. What each may do is judged for a whole page at once — the
- * wallet asked once, an agent's traffic read once —, never a query a service. What asks its panel is held per customer
- * (Core\Security\RateLimiter: a 429 with the wait): REFRESHES reads in REFRESH_WINDOW, ROTATIONS new links in
- * ROTATE_WINDOW.
+ * A customer's own services on the website (another's is a 404), and what they do with one, through the same services and
+ * rules as the bot's service screen: read it from its panel now, switch «تمدید خودکار», get a new link. What each may do is
+ * judged for a whole page at once, never a query per service. What asks a panel is rate-limited per customer: REFRESHES
+ * reads per REFRESH_WINDOW, ROTATIONS new links per ROTATE_WINDOW.
  */
 final class CustomerSubscriptions
 {
     /** What a service shows of its own, loaded with it. */
     private const RELATIONS = ['plan', 'server'];
 
-    /** A new link the panel did not give, in the customer's words — then what happened, in a word. */
+    /** The refusal of a new link the panel did not give, followed by what happened in a word. */
     public const NOT_ROTATED = 'لینک این سرویس عوض نشد: ';
 
     /** Services a customer reads from their panels (refresh() — a few panel requests each) in REFRESH_WINDOW seconds. */
@@ -57,12 +56,13 @@ final class CustomerSubscriptions
         private readonly ProvisioningService $provisioning,
         private readonly AutoRenewal $autoRenewal,
         private readonly CustomerRenewal $renewal,
+        private readonly CustomerExtras $extras,
         private readonly RenewalSettings $renewalSettings,
         private readonly RateLimiter $limiter,
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** The customer's services, newest first — those in one state (`status`, a SubscriptionStatus), or every one —, a page of them. */
+    /** A page of the customer's services, newest first, narrowed to a `status` when the query names one. */
     public function page(User $customer, PageRequest $request): Page
     {
         $query = self::of($customer)->latest('id');
@@ -75,7 +75,7 @@ final class CustomerSubscriptions
     }
 
     /**
-     * One of the customer's services: another's is not there, as one that never was.
+     * One of the customer's services; another's is a 404.
      *
      * @throws ModelNotFoundException 404
      */
@@ -85,7 +85,7 @@ final class CustomerSubscriptions
     }
 
     /**
-     * The service as the website shows it; with `$client`, what its panel was just asked (refresh()).
+     * The service as the website shows it; `$client` is what its panel was just asked (refresh()).
      *
      * @return array<string, mixed>
      */
@@ -95,22 +95,21 @@ final class CustomerSubscriptions
     }
 
     /**
-     * The service read from its panel now, with whether it is connected (ProvisioningService::look() — the bot's
-     * «🔄 به‌روزرسانی اطلاعات»): the row up to date — marked deleted when the panel no longer has the client (null then).
+     * Read the service from its panel now, with whether it is connected (ProvisioningService::look()). The row is updated;
+     * null when the panel no longer has the client (the row is then marked deleted).
      *
-     * @throws ServiceNotReadException 502 when the panel could not be read: out of reach, or left alone a while after it
-     *                                 failed — the row's copy is no answer
+     * @throws ServiceNotReadException 502 when the panel could not be read (out of reach, or backing off after a failure)
      * @throws TooManyAttemptsException 429 its customer read REFRESHES in the window
      */
     public function refresh(Subscription $subscription): ?ClientInfo
     {
-        $this->throttle(['subscriptions|refresh|' . $subscription->user_id, self::REFRESHES, self::REFRESH_WINDOW], 'اطلاعات سرویس را زیاد به‌روز کرده‌اید');
+        $this->limiter->enforce([['subscriptions|refresh|' . $subscription->user_id, self::REFRESHES, self::REFRESH_WINDOW]], 'اطلاعات سرویس را زیاد به‌روز کرده‌اید');
 
         return $this->provisioning->look($subscription);
     }
 
     /**
-     * Its «تمدید خودکار», on or off — while it is offered (AutoRenewal::set()).
+     * Switch its «تمدید خودکار» on or off, while it is offered (AutoRenewal::set()).
      *
      * @throws AutoRenewUnavailableException 422 on `auto_renew`
      */
@@ -120,9 +119,8 @@ final class CustomerSubscriptions
     }
 
     /**
-     * «تغییر لینک»: a new link for the service, every device on the old one dropped (ProvisioningService::rotateLink()).
-     * The customer did it on their website: the bot does not tell them. A panel that fails it is a 502 in the customer's
-     * words — what happened, in a word, never the owner's diagnosis of the panel (ProviderErrorPresenter::summary()).
+     * «تغییر لینک»: a new link, every device on the old one dropped (ProvisioningService::rotateLink()). The bot says
+     * nothing — the customer did it here. A panel failure is a 502 with its summary, never the owner's diagnosis.
      *
      * @throws ValidationException 422 on `status`: it does not run, or its panel cannot give it a new link
      * @throws PanelFailedException 502
@@ -131,7 +129,7 @@ final class CustomerSubscriptions
      */
     public function rotateLink(Subscription $subscription): void
     {
-        $this->throttle(['subscriptions|rotate|' . $subscription->user_id, self::ROTATIONS, self::ROTATE_WINDOW], 'لینک سرویس را زیاد عوض کرده‌اید');
+        $this->limiter->enforce([['subscriptions|rotate|' . $subscription->user_id, self::ROTATIONS, self::ROTATE_WINDOW]], 'لینک سرویس را زیاد عوض کرده‌اید');
         try {
             $this->provisioning->rotateLink($subscription);
         } catch (ProviderException $e) {
@@ -142,8 +140,8 @@ final class CustomerSubscriptions
     }
 
     /**
-     * Services as the website shows them, in their order: what each may do judged for them all at once (the wallet,
-     * an agent's traffic); `$clients` what their panels were just asked, by id (refresh()).
+     * Services as the website shows them: what each may do is judged for them all at once (the wallet, an agent's
+     * traffic, the extras' prices); `$clients` is what their panels were just asked, by id.
      *
      * @param Collection<int, Subscription> $subscriptions Read with RELATIONS
      * @param array<int, ClientInfo> $clients
@@ -154,32 +152,20 @@ final class CustomerSubscriptions
         $offered = $this->autoRenewal->offeredForAll($subscriptions);
         $days = $this->renewalSettings->autoRenewDays();
         $plans = $this->renewal->plansFor($subscriptions);
+        $extras = $this->extras->offersFor($subscriptions);
 
         return array_values($subscriptions->map(fn(Subscription $subscription): array => SubscriptionPresenter::present(
             $subscription,
             autoRenewOffered: $offered[$subscription->id],
             autoRenewDays: $days,
             renewable: $plans[$subscription->id] !== null,
+            extras: $extras[$subscription->id],
             linkRotation: $this->provisioning->rotatable($subscription),
             client: $clients[$subscription->id] ?? null,
         ))->all());
     }
 
-    /**
-     * One more of something the customer asks of a panel, held to its window: `[key, max attempts, seconds]`.
-     *
-     * @param array{string, int, int} $window
-     * @throws TooManyAttemptsException 429, `$what` and the wait
-     */
-    private function throttle(array $window, string $what): void
-    {
-        $wait = $this->limiter->attempt([$window]);
-        if ($wait > 0) {
-            throw TooManyAttemptsException::wait($what, $wait);
-        }
-    }
-
-    /** @return Builder<Subscription> The customer's services — in the shop the request is worked in. */
+    /** @return Builder<Subscription> The customer's services, in the current shop. */
     private static function of(User $customer): Builder
     {
         return Subscription::query()->where('user_id', $customer->id);

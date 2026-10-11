@@ -4,10 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\DTO;
 
-/**
- * What the customer does next once they picked how to pay: nothing — an instant gateway (the wallet) settles the payment
- * at once —, or pay to a card and send the receipt (`transfer`, which the bot words: BotText::CardInstructions).
- */
+/** What the customer does next after picking a method: nothing (it settles at once), or pay to a card (`transfer`). */
 final class PaymentInitiation
 {
     private function __construct(public readonly ?CardTransfer $transfer) {}

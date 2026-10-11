@@ -23,10 +23,8 @@ use Tests\BotTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * What a renewal does with the traffic a period leaves unused — the admin's call. Carried, it is added to
- * the renewed period. Not carried, the renewal still adds the plan's traffic on top at once (nothing is
- * taken away early), and what the paid period leaves unused goes when it ends: from then on at most the
- * renewed traffic remains, counted afresh — unless nothing is left to cap. The days left always carry.
+ * Renewals and unused traffic, by the admin's rule: carried into the renewed period, or capped when the paid period ends
+ * (the renewed traffic counted afresh). The days left always carry.
  */
 final class RenewalTrafficTest extends BotTestCase
 {
@@ -62,7 +60,7 @@ final class RenewalTrafficTest extends BotTestCase
         self::assertSame(self::text(BotText::Renewed, [
             'client' => 'ali_1',
             'plan' => $this->plan->name,
-            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_days),
+            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
             'remaining' => Messages::bytes(40 * Traffic::GIGABYTE),
             'leftover' => self::text(BotText::RenewalLeftoverCarried),
         ]), $this->service(ServiceCard::class)->settledText($order), 'the renewal message says the traffic left went along');
@@ -163,7 +161,7 @@ final class RenewalTrafficTest extends BotTestCase
             $this->renew($subscription);
         }
         Carbon::setTestNow('2026-09-26 12:05:00');
-        // Support deletes the second while the run is at the first; the third breaks on a fault of the shop's own.
+        // Support deletes the second while the run is at the first; the third breaks on a fault in the shop itself.
         $broke = false;
         FakeProvider::$onCall = static function (int $server, string $call) use ($gone, &$broke): void {
             if ($call === 'findClient') {

@@ -17,12 +17,9 @@ interface KeyboardPreviewProps {
 const BOT_NAME = 'ربات فروشگاه'
 
 /**
- * The chat as Telegram Desktop draws it in its dark theme: header, the customer's "/start", the
- * bot's greeting, the composer — and the keyboard where Telegram puts it: a reply keyboard under
- * the composer, inline buttons hanging from the greeting. Bubbles keep Telegram's sides (outgoing on
- * the right) whatever the panel's direction; rows are in reading order, so an RTL flex row puts the
- * first button on the right, exactly where Telegram puts it after the server reverses the row. A button's
- * premium emoji icon sits before its label, as Telegram draws it.
+ * A Telegram Desktop dark-theme chat showing the keyboard where Telegram puts it: a reply keyboard under the composer,
+ * inline buttons under the greeting. Rows are in reading order, so an RTL flex row puts the first button on the right —
+ * where Telegram shows it after the server reverses the row.
  */
 export function KeyboardPreview({ type, rows, message }: KeyboardPreviewProps) {
   return (

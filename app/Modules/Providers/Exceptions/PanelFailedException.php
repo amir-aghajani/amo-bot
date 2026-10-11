@@ -7,8 +7,8 @@ namespace App\Modules\Providers\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * The request needed a panel and the panel failed it: a 502 in words for whoever asked (ProviderErrorPresenter — the
- * owner's diagnosis, or the summary an agent may read), repeated under `errors.panel`: a screen's cue to offer going on
+ * The request needed a panel and the panel failed it: a 502 worded for whoever asked (ProviderErrorPresenter: the
+ * owner's diagnosis, or the summary for anyone else), also under `errors.panel` — a screen's cue to offer going on
  * without that panel.
  */
 final class PanelFailedException extends DomainRuleException

@@ -8,8 +8,8 @@ use App\Core\Mail\MailBody;
 use App\Core\Mail\MailMessage;
 
 /**
- * What an address taken off a customer's account is told: it is no way into that account any more. Its owner hears it
- * there, where the account's own notices no longer reach — the change may not have been theirs.
+ * Tells an address taken off an account that it no longer signs in to it — sent there because the account's notices no
+ * longer reach it, and the change may not have been its owner's.
  */
 final class EmailRemoved
 {

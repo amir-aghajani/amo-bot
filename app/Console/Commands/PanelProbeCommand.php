@@ -19,9 +19,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Talks to a panel with the given connection and prints what the shop sees through its connector — the probe the
- * add-server form runs (ServerService::probeInput(), the connector's form checked as the form's is), from a shell: the
- * quickest way to verify a panel before adding it. Nothing is stored.
+ * The add-server form's probe from a shell (ServerService::probeInput()): connects to a panel through its connector and
+ * prints its status, inbounds and subscription server. Nothing is stored.
  */
 #[AsCommand(name: 'panel:probe', description: 'Connect to a panel through its connector and print its status, inbounds and subscription server')]
 final class PanelProbeCommand extends Command

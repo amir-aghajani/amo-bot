@@ -11,12 +11,9 @@ import { paymentRow } from '@/test/rows'
 import { json, refusal, server, type Answer } from '@/test/server'
 
 /*
- * A payment as the admin reviews it (components/payments/review-modal): what approving brings in its own words, the
- * method's card and holder each in its own direction, a reminder that says when it could not be sent and why, a
- * receipt the browser did not draw explained in the server's words (a download offered only when there is a file), and
- * «بعدی» — a decision keeps the dialog on the decided payment while a next one waits, the dialog closing after the last.
- * An operation running holds every button, the one pressed keeping the focus; once it is over, the focus is where the
- * payment's new state leads — never on the document —, and a refusal because the payment moved on is said once.
+ * A payment's dialog (components/payments/review-modal): how approving is labelled, the method's summary, a reminder
+ * that could not be sent, a receipt the browser could not draw, «بعدی» through the list, and the focus while and after
+ * an operation runs.
  */
 
 const RECEIPT = '/api/admin/payments/7/receipt'
@@ -36,14 +33,26 @@ beforeEach(() => {
 })
 
 describe('what it says', () => {
-  it('words approving by what the payment brings, and as the admin’s own call without a receipt', () => {
+  it('labels approval by what the payment brings, and as a manual decision without a receipt', () => {
     show(paymentRow())
     expect(button('تایید و شارژ کیف پول')).toBeTruthy()
   })
 
-  it('words a purchase approved by hand as a delivery', () => {
+  it('labels a purchase approved by hand as a delivery', () => {
     show(paymentRow({ status: 'pending', receipt: null, order: { ...paymentRow().order, type: 'purchase', plan: 'طلایی' } }))
     expect(button('تایید دستی و تحویل')).toBeTruthy()
+  })
+
+  it('labels approving a service’s extra traffic as adding it, and says how much it adds', () => {
+    show(paymentRow({ order: { ...paymentRow().order, type: 'extra_traffic', plan: 'طلایی', server: 'آلمان', subscription_id: 1, traffic_bytes: 10 * 1024 ** 3 } }))
+    expect(button('تایید و افزودن حجم')).toBeTruthy()
+    expect(within(dialog()).getByText('حجم اضافه · ۱۰ گیگابایت · طلایی · آلمان')).toBeTruthy()
+  })
+
+  it('labels a service’s extra time approved by hand as adding it, and says how much it adds', () => {
+    show(paymentRow({ status: 'pending', receipt: null, order: { ...paymentRow().order, type: 'extra_time', plan: 'طلایی', server: null, subscription_id: 1, days: 7 } }))
+    expect(button('تایید دستی و افزودن زمان')).toBeTruthy()
+    expect(within(dialog()).getByText('زمان اضافه · ۷ روز · طلایی')).toBeTruthy()
   })
 
   it('sets the card apart left to right, the holder’s name as written', () => {
@@ -123,7 +132,7 @@ describe('an operation', () => {
     expect(toast.error).toHaveBeenCalled()
   })
 
-  it('refused because the payment moved on says so once, in the server’s words, though nothing is left to do — the focus on it', async () => {
+  it('refused because the payment changed shows the server’s message once, even with nothing left to do, with the focus on it', async () => {
     const decided = 'این پرداخت را نمی‌شود تایید کرد؛ یا پرداخت‌شده است، یا سفارشش دیگر باز نیست.'
     const cancelled = paymentRow({ status: 'cancelled', actions: { approve: false, reject: false, cancel: false, remind: false, retry: false, refund: false } })
     server().on('POST', '/api/admin/payments/7/approve', refusal(422, decided, { status: [decided] }))
@@ -155,6 +164,20 @@ describe('a refund', () => {
     expect(within(dialog()).getByLabelText('توضیح').getAttribute('maxlength')).toBe('190')
     expect(within(dialog()).getByText('۰ از ۱۹۰ کاراکتر')).toBeTruthy()
   })
+
+  it('of a service’s extra says what was added stays', () => {
+    show(
+      paymentRow({
+        status: 'paid',
+        reviewer: 'root',
+        order: { ...paymentRow().order, type: 'extra_time', status: 'fulfilled', subscription_id: 1 },
+        actions: { ...paymentRow().actions, approve: false, reject: false, cancel: false, refund: true },
+      }),
+    )
+    fireEvent.click(button('بازپرداخت به کیف پول'))
+
+    expect(within(dialog()).getByText('مبلغ به کیف پول مشتری برمی‌گردد و پرداخت «بازپرداخت‌شده» می‌شود؛ زمانی که به سرویس اضافه شده سر جایش می‌ماند.')).toBeTruthy()
+  })
 })
 
 describe('a reminder', () => {
@@ -164,7 +187,7 @@ describe('a reminder', () => {
     fireEvent.click(button('یادآوری به مشتری'))
   }
 
-  it('says it was sent when the customer was told', async () => {
+  it('says it was sent when the customer was notified', async () => {
     remind(json({ payment: paymentRow({ status: 'pending', receipt: null }), delivery: 'told' }))
     await until(() => expect(toast.success).toHaveBeenCalledWith(`پرداخت ${idLabel(7)} یادآوری فرستاده شد`))
   })
@@ -191,7 +214,7 @@ describe('a reminder', () => {
 describe('a receipt the browser did not draw', () => {
   const failed = () => fireEvent.error(within(dialog()).getByRole('img'))
 
-  it('is explained in the server’s words, with nothing to download, when Telegram no longer has it', async () => {
+  it('shows the server’s explanation, with nothing to download, when Telegram no longer has it', async () => {
     server().on('GET', RECEIPT, refusal(404, 'فایل این رسید دیگر در تلگرام نیست.'))
     show(paymentRow())
     failed()

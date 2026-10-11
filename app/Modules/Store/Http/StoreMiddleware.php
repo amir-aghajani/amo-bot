@@ -16,9 +16,8 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Slim\Routing\RouteContext;
 
 /**
- * The Store API's door: the store key in the address (`{store}`) names a website, whose shop the request is worked in
- * (CurrentBot) with the website on the request (website()) — a key that names none switched on, or one whose shop's
- * bot does not run, is a 404 in the error shape, whatever the address under it.
+ * The Store API's door: the store key in the address (`{store}`) names a website, and the request runs in its shop
+ * (CurrentBot) with the website attached (website()). A key of no open website is a 404, whatever the address under it.
  */
 final class StoreMiddleware implements MiddlewareInterface
 {

@@ -52,7 +52,7 @@ final class BotMenuTest extends BotTestCase
         self::assertSame([...self::supportButtons(), MainMenu::HOME], $this->callbacks(0));
     }
 
-    /** @return list<string> What «پشتیبانی» carries besides its words: «🗂️ تیکت‌های من» and «📨 تیکت جدید» (on the right — Telegram lays a row out left to right). */
+    /** @return list<string> What «پشتیبانی» carries besides its text: «🗂️ تیکت‌های من» and «📨 تیکت جدید» (on the right — Telegram lays a row out left to right). */
     private static function supportButtons(): array
     {
         return [TicketHandler::listCallback(1), TicketHandler::START];

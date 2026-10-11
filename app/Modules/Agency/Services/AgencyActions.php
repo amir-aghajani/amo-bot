@@ -27,19 +27,18 @@ use App\Support\Validation;
 use Illuminate\Database\ConnectionInterface;
 
 /**
- * «نمایندگی», what is decided about it — wherever: a customer's request from the main bot, support's verdict on it from
- * the agents page or the report group's buttons, an agent's terms changed, their traffic set right, their agency ended.
- * Each decision is one transaction (a request's a compare-and-swap: of two verdicts in the same moment one stands and
- * the other is refused with the one that stood, decided()), reported to the report group, and told to the customer by
- * the call that made it; a surface renders its own answer and nothing more. An approved agent's shop opens with the
- * approval — their bot's row and its wallet; an agency given back switches it on again, everything kept.
+ * Decisions about the agency («نمایندگی»), wherever they are made: a customer's request, support's verdict (the agents
+ * page or the report group's buttons), an agent's terms, their traffic set right, the agency ended. Each is one
+ * transaction — a verdict a compare-and-swap, the loser told which verdict stood (decided()) — and only the call that
+ * decided tells the customer. Approval opens the agent's shop (their bot row and its wallet); a returning agent's shop is
+ * switched on again, everything kept.
  */
 final class AgencyActions
 {
     /** What the customer may write about themselves with their request. */
     public const NOTE_MAX = 500;
 
-    /** Terms asked of a customer who never was an agent; one whose agency ended — most often a moment ago, elsewhere — is AGENCY_ENDED. */
+    /** Refusals of terms for a customer who never was an agent, or whose agency ended (often a moment ago, elsewhere). */
     public const NOT_AGENT = 'این کاربر نماینده نیست.';
     public const AGENCY_ENDED = 'نمایندگی این کاربر پایان یافته است.';
 
@@ -56,7 +55,7 @@ final class AgencyActions
         private readonly ConnectionInterface $db,
     ) {}
 
-    /** Whether the customer may ask to become an agent now: in the main bot, while the program takes requests, not one already, none of theirs waiting. */
+    /** Whether the customer may ask to become an agent: in the main shop, the program on, not an agent, no request waiting. */
     public function mayRequest(User $user): bool
     {
         return CurrentBot::isMain() && $this->settings->enabled() && !$user->isAgent() && $this->pendingRequest($user) === null;
@@ -69,8 +68,7 @@ final class AgencyActions
     }
 
     /**
-     * The customer asks to become an agent, with a few words about themselves. Null when they may not (mayRequest()) —
-     * decided under a lock on their row, so two taps make one request.
+     * Files the customer's request; null when they may not (mayRequest()). Under a lock on their row, so two taps make one.
      *
      * @throws ValidationException 422 on `note`: none, or longer than NOTE_MAX
      */
@@ -95,12 +93,11 @@ final class AgencyActions
     }
 
     /**
-     * Approve a request on a level, the agent starting with `$credit` — the program's default when none is given (the
-     * report group's way). Their shop opens; they are told their terms. A bot admin is the shop's customer too: their own
-     * request is another admin's to approve.
+     * Approves a request on a level with `$credit` (the program's default when null). Their shop opens and they are notified.
+     * Nobody approves their own request.
      *
-     * @throws ActorRefusedException 403 the request of the admin who pressed (the report group's buttons)
-     * @throws ValidationException 422 on `status`: decided meanwhile — said as it was (decided())
+     * @throws ActorRefusedException 403 their own request
+     * @throws ValidationException 422 on `status`: decided meanwhile (decided())
      */
     public function approve(AgencyRequest $request, Actor $actor, AgencyLevel $level, ?string $credit): AgencyRequest
     {
@@ -127,9 +124,9 @@ final class AgencyActions
     }
 
     /**
-     * Reject a request, with the reason the customer reads (or none).
+     * Rejects a request with the reason the customer reads (or none).
      *
-     * @throws ValidationException 422 on `status`: decided meanwhile — said as it was (decided())
+     * @throws ValidationException 422 on `status`: decided meanwhile (decided())
      */
     public function reject(AgencyRequest $request, Actor $actor, ?string $reason): AgencyRequest
     {
@@ -145,11 +142,10 @@ final class AgencyActions
     }
 
     /**
-     * Move an agent to another level, or change their credit — only while they are one (a conditional write: an agency
-     * ended in the same moment is not given back by it); they are told their new terms, and the answer is whether they
-     * were — null when the terms are the ones they had: nothing changed, nobody told.
+     * Changes an agent's level or credit, by a conditional write that only lands while they are an agent (so an agency
+     * ended at the same moment is not given back). Returns whether they were told; null when nothing changed.
      *
-     * @throws ValidationException 422 on `status`: not an agent — one whose agency ended in the same moment too
+     * @throws ValidationException 422 on `status`: not an agent
      */
     public function change(User $agent, AgencyTerms $terms): ?Delivery
     {
@@ -162,10 +158,8 @@ final class AgencyActions
     }
 
     /**
-     * End the agency: the customer pays and spends as any other from now on (a balance below zero stays owed), their bot
-     * goes off with it (Bot::status()) — its webhook taken down —, their panel sessions end and an unused login link
-     * with them. Their shop is kept for when the agency is given back. Of two in the same moment, one ends it and tells
-     * them, with support's note.
+     * Ends the agency: the level and credit go (a debt stays owed), their bot stops (Bot::status()) and its webhook is
+     * taken down, their panel sessions and login link end. Their shop is kept for a return. Of two at once, one does it.
      *
      * @throws ValidationException 422 on `status`: not an agent
      */
@@ -190,8 +184,7 @@ final class AgencyActions
     }
 
     /**
-     * Set an agent's traffic right — more GB, or less (a minus sign, either kind, Persian digits as typed) —, with the
-     * note they read on their ledger.
+     * Adds or (with a minus sign) removes GB of an agent's traffic, with the note they read on their ledger.
      *
      * @param array<string, mixed> $input {gb, note?}
      * @throws ValidationException 422 on `status` (not an agent), `gb` (no amount, or more than the pool has) or `note`
@@ -214,8 +207,8 @@ final class AgencyActions
     }
 
     /**
-     * The agent's terms written and their shop open — in the caller's transaction: their bot's row and its wallet made the
-     * first time. Answers their bot when it was off and must run again — after the commit, AgentBots::resume().
+     * Writes the agent's terms and opens their shop (bot row and wallet the first time), in the caller's transaction.
+     * Returns their existing bot when it must be resumed after the commit (AgentBots::resume()).
      */
     private function assign(User $agent, AgencyTerms $terms): ?Bot
     {
@@ -235,10 +228,7 @@ final class AgencyActions
         return null;
     }
 
-    /**
-     * A verdict refused because the request was decided first — on the page, in the report group, a moment ago —: what
-     * that decision was (the request as read after it).
-     */
+    /** The verdict that stood, for a verdict refused because the request was decided first. */
     public static function decided(AgencyRequest $request): string
     {
         return match ($request->status) {
@@ -248,15 +238,14 @@ final class AgencyActions
         };
     }
 
-    /** Terms refused because the customer is not an agent: never was, or no longer — their shop is kept when it ends. */
+    /** Why terms are refused: never an agent, or no longer one (their shop is kept when the agency ends). */
     private static function notAgent(User $user): string
     {
         return $user->ownBot()->exists() ? self::AGENCY_ENDED : self::NOT_AGENT;
     }
 
     /**
-     * Write the customer's agency columns only while they are an agent — one conditional UPDATE: true when this call
-     * wrote them.
+     * Writes the agency columns only while the customer is an agent — one conditional UPDATE; true when it wrote them.
      *
      * @param array{agency_level_id: int|null, credit_limit: string} $terms
      */

@@ -27,6 +27,9 @@ export function styleOption(style: ButtonStyle | null): StyleOption {
   return style === null ? DEFAULT : STYLES[style]
 }
 
+/** Every style Telegram has for a button, in the picker's order: what a plan's button in the bot's plan list may take. */
+export const BUTTON_STYLES: readonly ButtonStyle[] = ['primary', 'success', 'danger']
+
 /** The picker's choices: the client's default, then each style the API offers. */
 export function styleOptions(styles: readonly ButtonStyle[]): StyleOption[] {
   return [DEFAULT, ...styles.map((style) => STYLES[style])]

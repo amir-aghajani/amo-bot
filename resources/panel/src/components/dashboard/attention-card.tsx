@@ -31,7 +31,7 @@ const ICON_TONE: Record<Tone, string> = { neutral: 'text-faint', info: 'text-inf
 interface AttentionCardProps {
   /** The queues' counts; undefined when they could not be read: the card says nothing of them, least of all "all clear". */
   attention: Attention | undefined
-  /** An agent's shop whose traffic sells nothing, said first; null otherwise. */
+  /** An agent's shop whose traffic sells nothing, shown first; null otherwise. */
   trafficShortage: TrafficShortage | null | undefined
   /** What to do about it, the panel's own way. */
   trafficHelp?: ReactNode
@@ -42,9 +42,8 @@ interface AttentionCardProps {
 }
 
 /**
- * Queues that need a human: each row links straight to the filtered list — and, above them, an agent's bot that sells
- * nothing. Counts that could not be read are «—»: an empty queue is only ever said of counts that came in, and of what
- * the shop on screen has — the servers are the main bot's shop's to watch, an agent's has none.
+ * The queues that need a human, each linking to its filtered list, with an agent's traffic shortage above them. Counts
+ * that could not be read show «—»: "all clear" is only said of counts that arrived.
  */
 export function AttentionCard({ attention, trafficShortage, trafficHelp, expiringDays, loading }: AttentionCardProps) {
   const mainShop = useMainShop()

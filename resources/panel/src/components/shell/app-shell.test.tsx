@@ -169,7 +169,7 @@ describe('the menu’s queues', () => {
     expect(await screen.findByText('اشتراک‌ها خوانده شد')).toBeTruthy()
   })
 
-  it('count what waits beside the payments and the orders, in their queue’s words', async () => {
+  it('show the waiting counts beside payments and orders, with each queue’s label', async () => {
     open('/orders')
 
     const payments = (await screen.findAllByRole('link', { name: /پرداخت‌ها/ }))[0]

@@ -20,10 +20,9 @@ use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 
 /**
- * «یادآوری»: a customer is told in the bot that a service ends soon, or that most of its traffic is used —
- * as the admin set it, once each while the service stays past the threshold, and again after it came back
- * under it (renewed, given more traffic, no longer running). A service that renews itself hears about its deadline
- * from the renewal instead (not about its traffic); a banned customer hears nothing; a run sends a batch at most.
+ * «یادآوری»: the customer is reminded a service ends soon or most of its traffic is used — as the admin set it, once while past
+ * the threshold and again after coming back under it. A service with «تمدید خودکار» on hears about its deadline from the
+ * renewal instead (not about its traffic); a banned customer hears nothing; a run sends a batch at most.
  */
 final class ServiceRemindersTest extends BotTestCase
 {
@@ -88,7 +87,7 @@ final class ServiceRemindersTest extends BotTestCase
         $this->remind();
         self::assertSame([], $this->calls(), 'the renewal speaks for itself; a banned customer hears nothing');
 
-        // The wallet switched off: nothing will renew it, so the customer is told — without the switch.
+        // The wallet switched off: nothing will renew it, so the customer is reminded — without the switch.
         $this->walletMethod()->forceFill(['enabled' => false])->save();
         $this->remind();
         self::assertSame([$this->endsSoon($renewing, hint: false)], $this->telegram()->sentTo(self::CHAT));
@@ -195,7 +194,7 @@ final class ServiceRemindersTest extends BotTestCase
     {
         return self::text(BotText::ExpiryReminder, [
             'client' => $subscription->remote_name,
-            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_days),
+            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
             'remaining' => Messages::bytes((int) $subscription->remainingBytes()),
             'hint' => $hint ? self::text(BotText::ReminderAutoRenewHint) : '',
         ]);
@@ -209,7 +208,7 @@ final class ServiceRemindersTest extends BotTestCase
             'client' => $subscription->remote_name,
             'remaining' => Messages::bytes((int) $subscription->remainingBytes()),
             'traffic' => Messages::traffic($subscription->traffic_limit_bytes),
-            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_days),
+            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
         ]);
     }
 }

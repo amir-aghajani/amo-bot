@@ -23,11 +23,9 @@ interface ErrorBoundaryState {
 }
 
 /**
- * What the admin sees instead of a blank screen when a screen throws while drawing: the failure as `ErrorState` draws it
- * — the page's place in the shell, or the whole screen —, and the failure told to the shop's log. A page that failed to
- * load because an upgrade replaced the panel's files reloads once for the new build. Around the pages it is keyed on the
- * page and reset by the address: going to another page starts afresh, going to another section of the same page leaves
- * its sections' drafts as they are.
+ * Never a blank screen: when drawing throws, `ErrorState` takes the page's place in the shell (or the whole screen) and
+ * the failure is reported to the shop's log; a stale build reloads once instead. AppShell keys it on the page and resets
+ * it by the address, so another page starts afresh while another section of the same page keeps its drafts.
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null, failed: false, resetKey: this.props.resetKey }
@@ -51,14 +49,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 }
 
 /**
- * The router's last net, its root route's error element: a failure no page's boundary caught — the sign-in page's, the
- * installer's, the shell's own — as the whole screen. Reported by the router (`reportFailure`, its `onError`).
+ * The router's root error element: a failure no page boundary caught (the sign-in page, the installer, the shell
+ * itself), as the whole screen. The router reports it (`onError` → `reportFailure`).
  */
 export function RouteError() {
   return <ErrorState error={useRouteError()} variant="screen" />
 }
 
-/** A failure caught while drawing: the one reload a stale build gets — anything else, the gave-up reload too, to the log. */
+/** A failure caught while drawing: a stale build reloads once; anything else (a reload that did not help too) is reported. */
 export function reportFailure(error: unknown, info?: ErrorInfo): void {
   if (isStaleBuildError(error) && reloadForNewBuild()) return
   reportCrash(error, info?.componentStack)

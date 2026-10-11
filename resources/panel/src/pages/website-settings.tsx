@@ -12,16 +12,11 @@ import { TelegramLoginSection } from '@/components/website/telegram-login-sectio
 import { websiteQuery } from '@/components/website/website-query'
 
 /**
- * The shop's website — the main bot's, or an agent's own —, which talks to the shop through the Store API. A section per
- * subject, picked from the settings' sidebar (a select on a phone): the connection — the API on or off, the site's
- * address and the other origins its pages call from, the API's own address and its key —, then the ways its customers
- * sign in: Telegram, Google, an email with a password and the captcha that guards it; the customers' reviews it shows
- * and takes (ReviewsSection); and last the shop's admins, who work the shop from the website with what it lets them do
- * (StaffSection). One read feeds them all, every card's save puts the website it answers back in its place, and the
- * other sections stay mounted (hidden) so an unsaved draft survives switching.
+ * «تنظیمات وب‌سایت» (both panels): the shop's website, which talks to the shop through the Store API — its connection,
+ * the ways customers sign in, reviews and the shop's admins. One read feeds every card; each save answers the whole
+ * website, which replaces the read.
  *
- * `mailSettings`: where the panel sets the shop's email up (the owner's «تنظیمات پنل › ایمیل»), which email sign-up
- * waits for; an agent's panel has none — the owner sets it up.
+ * `mailSettings`: where the panel sets up the shop's email (the owner's), which email sign-up needs; an agent has none.
  */
 export function WebsiteSettingsPage({ mailSettings }: { mailSettings?: string }) {
   const { data, error, refetch } = useQuery(websiteQuery)

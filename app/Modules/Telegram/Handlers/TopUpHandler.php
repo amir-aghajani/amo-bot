@@ -22,14 +22,11 @@ use App\Support\Input;
 use App\Support\Money;
 
 /**
- * Charging the wallet:
- *   topup:start                → the preset amounts (bot settings) and "any amount" — an amount typed straight away
- *                                taken as after it
- *   topup:custom               → state `topup.amount`: the customer types an amount (Input::amountOf(): Persian digits,
- *                                separators and «تومان» fine)
- *   topup:amt:{toman}          → the checkout (CheckoutScreen): that amount, and every way to pay it but the wallet itself
- *   topup:amt:{toman}:{method} → pay with that method: the top-up is ordered now (OrderService::openTopUp())
- * Once paid, the amount lands on the balance (OrderService::deliver()).
+ * «افزایش موجودی», charging the wallet:
+ *   topup:start                → the preset amounts and «مبلغ دلخواه»; an amount typed right away is taken too
+ *   topup:custom               → an amount awaited (state `topup.amount`; «۱۵۰٬۰۰۰ تومان» is fine)
+ *   topup:amt:{toman}[:{method}] → the checkout (every way to pay but the wallet itself), then pay
+ * The bounds are the bot settings' (WalletSettings, OrderService::topUpAllowed()).
  */
 final class TopUpHandler implements Handler
 {
@@ -71,10 +68,7 @@ final class TopUpHandler implements Handler
         };
     }
 
-    /**
-     * The checkout of a top-up of `$amount` Toman — the presets instead, when it is outside the bot's bounds (they changed
-     * since the button was made).
-     */
+    /** The checkout of a top-up of `$amount` Toman; the presets instead when the amount is out of bounds now. */
     public function checkout(Context $ctx, int $amount): void
     {
         if (!$this->orders->topUpAllowed($amount)) {
@@ -92,10 +86,7 @@ final class TopUpHandler implements Handler
         );
     }
 
-    /**
-     * The amounts offered as buttons, and «مبلغ دلخواه» — and, as the screen invites, an amount typed in their place
-     * straight away: it is awaited here (state `topup.amount`) as after «مبلغ دلخواه».
-     */
+    /** The preset amounts and «مبلغ دلخواه»; as the screen invites, an amount typed right away is awaited too. */
     private function start(Context $ctx): void
     {
         $presets = array_map(static fn(int $amount): array => InlineKeyboard::callback(Money::format($amount), self::checkoutCallback($amount)), $this->settings->topUpPresets());
@@ -114,7 +105,7 @@ final class TopUpHandler implements Handler
         $ctx->edit($this->texts->render(BotText::TopupAsk, $this->minimum()), ['reply_markup' => $this->buttons->backOnly(self::START)]);
     }
 
-    /** State `topup.amount`: whatever the customer typed. */
+    /** State `topup.amount`: the amount typed — its checkout, or why it is refused. */
     private function typed(Context $ctx): void
     {
         $amount = Input::amountOf($ctx->update->text());
@@ -132,7 +123,7 @@ final class TopUpHandler implements Handler
     {
         $method = $this->methods->payable($methodId, OrderType::WalletTopUp);
         if ($method === null || !$this->orders->topUpAllowed($amount)) {
-            // Switched off since the checkout was shown, or the bounds moved: the checkout as it stands now.
+            // The way to pay was switched off, or the bounds moved: the checkout as it stands now.
             $this->checkout($ctx, $amount);
 
             return;

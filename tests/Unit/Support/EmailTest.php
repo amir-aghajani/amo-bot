@@ -9,7 +9,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The one rule for an email address: kept trimmed and in lower case — one address however it is typed —, at most 191
+ * How the app reads an email address: kept trimmed and in lower case — one address however it is typed —, at most 191
  * characters, and an address a mail can go to (a domain with a dot in it) and nothing but it: no quoted name, none of
  * what a mail library reads as another address or several; why it is not one, in its owner's words.
  */

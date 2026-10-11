@@ -85,14 +85,14 @@ describe('the agent’s bot', () => {
 })
 
 describe('where traffic is bought', () => {
-  it('is said under the traffic left', async () => {
+  it('is shown under the remaining traffic', async () => {
     server().on('GET', '/api/agent/account', json(account()))
     open()
 
     expect(await screen.findAllByText(/خرید حجم: ربات اصلی/)).toHaveLength(1)
   })
 
-  it('is said once while the traffic sells nothing: by the notice', async () => {
+  it('is shown only once, in the notice, while the traffic is too low to sell', async () => {
     server().on('GET', '/api/agent/account', json(account({ traffic_balance: 0 }, { balance: 0, smallest_plan: 20 * GB })))
     open()
 
@@ -102,7 +102,7 @@ describe('where traffic is bought', () => {
 })
 
 describe('the other browsers signed in to the panel', () => {
-  it('are signed out after a second look, this one staying — and a refusal is said in the dialog', async () => {
+  it('are signed out after confirmation while this one stays, and a refusal is shown in the dialog', async () => {
     vi.spyOn(toast, 'success')
     server().on('GET', '/api/agent/account', json(account()))
     let answer = refusal(422, 'این کار الان انجام نشد.')

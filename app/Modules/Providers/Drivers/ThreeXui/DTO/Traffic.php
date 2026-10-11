@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Providers\Drivers\ThreeXui\DTO;
 
-use App\Modules\Providers\Drivers\ThreeXui\Support\Raw;
+use App\Modules\Providers\Support\Raw;
 
 /**
  * A client's counters, as the traffic block of a list row or GET /clients/traffic/{email} gives them: bytes up and down,

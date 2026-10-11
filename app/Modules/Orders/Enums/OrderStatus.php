@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Modules\Orders\Enums;
 
+/** Where an order stands: pending → paid → processing → fulfilled | failed, or cancelled unpaid, or refunded. */
 enum OrderStatus: string
 {
-    case Pending = 'pending';       // created, waiting for payment
-    case Paid = 'paid';             // payment confirmed, delivery not started
+    case Pending = 'pending';       // made, waiting for a payment
+    case Paid = 'paid';             // paid, delivery not started
     case Processing = 'processing'; // claimed by the process delivering it («در حال ساخت»); stale after ten minutes
-    case Fulfilled = 'fulfilled';   // config delivered / wallet credited
-    case Cancelled = 'cancelled';
-    case Failed = 'failed';         // paid but provisioning failed; needs admin attention
-    case Refunded = 'refunded';     // the payment went back to the wallet
+    case Fulfilled = 'fulfilled';   // delivered: a service made or changed, the wallet credited, an agent's traffic added
+    case Cancelled = 'cancelled';   // dropped unpaid — by support, or expired
+    case Failed = 'failed';         // paid, but the delivery failed; waits for support's retry
+    case Refunded = 'refunded';     // the payment was given back
 }

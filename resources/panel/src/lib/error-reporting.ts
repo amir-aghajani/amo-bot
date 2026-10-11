@@ -7,16 +7,15 @@ import { toastFailure } from '@/lib/failure'
 import { isStaleBuildError, reloadForNewBuild } from '@/lib/stale-build'
 
 /*
- * The panel's own failures, told to the shop's log (POST /client-errors — the owner learns of a page that broke in an
- * agent's browser too): a screen that could not be drawn (the error boundaries, the router's error screen, `render`),
- * and an error the panel's code did not handle — a press, a promise, a request's own code (`unhandled`). Each failure
- * once in a while (the same again within REPEAT_MS is not sent), at most PER_MINUTE a minute, none while the server
- * asks to wait (its 429); a report that fails is dropped, never reported. The server's answers are not the panel's
- * failures — a refusal is the screen's to show, a failure of the server's is in its log already —, nor is a stale build
- * the one reload brings back (one the reload did not help is: the host's files are not whole), nor what the browser says
- * of itself (a ResizeObserver's loop, a cross-origin script's "Script error."). An unhandled failure is told to the admin
- * too — what they did may not have happened —, in one toast a burst (none again until BURST_MS went by without one).
- * Every failure goes to the console as well, for whoever develops.
+ * The panel's own failures, sent to the shop's log (POST /client-errors), so the owner hears of a page that broke even
+ * in an agent's browser: a screen that could not be drawn (`render`: the error boundaries, the router's error screen)
+ * and an error no code handled (`unhandled`: a press, a promise, a read's or a save's code).
+ *
+ * Not reported: the server's answers (a refusal is the screen's to show, a server error is in its log already), a stale
+ * build that one reload fixes, a request given up on, and the browser's own noise. Throttled: the same failure once per
+ * REPEAT_MS, at most PER_MINUTE a minute, nothing while the server's 429 lasts; a report that fails is dropped.
+ * An unhandled failure is also told to the admin — what they did may not have happened — in one toast per burst.
+ * Everything also goes to the console.
  */
 
 /** The same failure is sent once in this long. */
@@ -44,8 +43,8 @@ interface Reporter {
 let active: Reporter | null = null
 
 /**
- * Report the panel's failures from now on, and hear what nothing handled (window `error`, `unhandledrejection`) — once
- * per page, as it mounts (root.tsx). `send` is how a report goes (the panel's API). Returns the way to stop.
+ * Start reporting, and listen for what nothing handled (window `error`, `unhandledrejection`). Called once per page by
+ * root.tsx; `send` posts a report (tests pass their own). Returns the way to stop.
  */
 export function startErrorReporting(send: (report: ClientErrorRequest) => Promise<unknown> = (report) => api.post('/client-errors', report)): () => void {
   const reporter = createReporter(send)
@@ -62,13 +61,13 @@ export function startErrorReporting(send: (report: ClientErrorRequest) => Promis
   }
 }
 
-/** A screen that could not be drawn (an error boundary's, the router's), with where in the page it was drawing. */
+/** Report a screen that could not be drawn (an error boundary's, the router's), with React's component stack. */
 export function reportCrash(error: unknown, componentStack?: string | null): void {
   console.error('The panel failed to draw this screen:', error, componentStack ?? '')
   active?.report(error, 'render', componentStack)
 }
 
-/** A failure of the panel's own code that a screen worded but no code of it expected (a read's, a save's code that threw). */
+/** Report a bug the screen already shows as a failure: a read's or a save's code that threw something not an ApiError. */
 export function reportBug(error: unknown): void {
   console.error('The panel failed:', error)
   active?.report(error, 'unhandled')
@@ -112,7 +111,7 @@ function createReporter(send: (report: ClientErrorRequest) => Promise<unknown>):
     report,
     unhandled: (error) => {
       if (NOISE.some((pattern) => pattern.test(error instanceof Error ? error.message : String(error))) || isAbort(error)) return
-      // A file of an older build: the one reload brings the new one — the guard's no is told like any failure.
+      // A file of an older build: one reload brings the new one. If that reload already happened, it is reported as any failure.
       if (isStaleBuildError(error) && reloadForNewBuild()) return
       const now = Date.now()
       const burst = now - lastUnhandled < BURST_MS
@@ -135,8 +134,8 @@ function createReporter(send: (report: ClientErrorRequest) => Promise<unknown>):
 }
 
 /**
- * Where the page was, as a report says it: its path, and of its query the parameters' names alone — never a value (a
- * search holds a customer's name, phone or email) nor the fragment (an agent's sign-in link carries its code there).
+ * The page's address for a report: its path and its query's parameter names only — never a value (a search may hold a
+ * customer's name, phone or email) nor the fragment (an agent's sign-in link carries its code there).
  */
 function addressOf(location: Location): string {
   const names = [...new Set(new URLSearchParams(location.search).keys())]
@@ -144,7 +143,7 @@ function addressOf(location: Location): string {
   return names.length === 0 ? location.pathname : `${location.pathname}?${names.join('&')}`
 }
 
-/** A failure of the panel's own: not the server's answer, not the router's about an address, not a request given up on. */
+/** A failure of the panel's own: not the server's answer, not the router's 404, not a request given up on. */
 function reportable(error: unknown): boolean {
   return !(error instanceof ApiError) && !isRouteErrorResponse(error) && !isAbort(error)
 }
@@ -154,5 +153,5 @@ function isAbort(error: unknown): boolean {
 }
 
 function cut(text: string, length: number): string {
-  return text.length > length ? text.slice(0, length) : text
+  return text.slice(0, length)
 }

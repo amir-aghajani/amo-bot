@@ -38,10 +38,9 @@ use Tests\BotTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * «تمدید خودکار»: the customer's switch on the service screen, and the task that renews a service from
- * the wallet once its deadline is within the admin's days — once, never twice, never while a renewal of it is
- * open; a short wallet told once per window (and again in the next); a panel out of reach — or one the shop
- * leaves alone a while — waited for with nothing charged; a renewal paid but not delivered left to support.
+ * «تمدید خودکار»: the customer's switch on the service screen, and the task that renews a service from the wallet once its
+ * deadline is within the admin's days — once, never while a renewal of it is open; a short wallet notified once per window; a
+ * panel out of reach or in backoff waited for with nothing charged; a renewal paid but not delivered left to support.
  */
 final class AutoRenewalTest extends BotTestCase
 {
@@ -300,7 +299,7 @@ final class AutoRenewalTest extends BotTestCase
         $this->due('sara_1', ['expires_at' => now()->addDay()->addHour()], $sara);
         $this->wallet($this->ali, '300000');
         $this->wallet($sara, '300000');
-        // A fault of the shop's own as each renewal is delivered — no panel's refusal, no rule's.
+        // A fault in the shop itself as each renewal is delivered — no panel's refusal, no rule's.
         FakeProvider::$onCall = static function (int $server, string $call): void {
             if ($call === 'updateClient') {
                 throw new \RuntimeException('a fault of the shop\'s own');
@@ -382,7 +381,7 @@ final class AutoRenewalTest extends BotTestCase
 
     public function testTheSwitchIsNotOfferedForAServiceThatNeverEnds(): void
     {
-        $forever = $this->plan(['name' => 'دائمی', 'duration_days' => 0]);
+        $forever = $this->plan(['name' => 'دائمی', 'duration_hours' => 0]);
         $subscription = $this->subscription($this->ali, $forever, $this->server, 'ali_1');
         FakeProvider::mirror($subscription);
 
@@ -428,7 +427,7 @@ final class AutoRenewalTest extends BotTestCase
             'amount' => Money::format($this->plan->price),
             'balance' => Messages::balance($balance),
             'plan' => $this->plan->name,
-            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_days),
+            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
             'remaining' => Messages::bytes((int) $subscription->remainingBytes()),
             'leftover' => self::text(BotText::RenewalLeftoverUntil, [
                 'expiring' => Messages::bytes($subscription->expiringBytes()),
@@ -445,7 +444,7 @@ final class AutoRenewalTest extends BotTestCase
             'client' => $subscription->remote_name,
             'amount' => Money::format($this->plan->price),
             'balance' => Messages::balance($balance),
-            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_days),
+            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
         ]);
     }
 

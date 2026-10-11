@@ -22,10 +22,9 @@ interface PremiumEmojiPickerProps {
 }
 
 /**
- * The premium emoji an admin showed the bot with /emoji, the latest seen first — the bot texts editor puts one at the
- * caret, the keyboards editor makes one a button's icon; the small cross takes one off the list (what uses it keeps
- * it). Warns when the bot's last /emoji found that Telegram takes premium emoji off its messages: the bot's owner needs
- * Telegram Premium for customers to see them.
+ * A picker of the premium emoji the bot knows, latest first (the texts editor inserts one, the keyboards editor makes one
+ * an icon); the cross removes one from the list. Warns when Telegram is stripping premium emoji from the bot's messages:
+ * the bot's owner needs Telegram Premium.
  */
 export function PremiumEmojiPicker({ onPick, selected }: PremiumEmojiPickerProps) {
   const queryClient = useQueryClient()

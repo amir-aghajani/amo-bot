@@ -8,9 +8,8 @@ use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Subscriptions\Models\Subscription;
 
 /**
- * A renewal of the service was asked for while another is under way — its receipt with support, or paid and being
- * delivered or waiting for support's retry (OrderService::renewalUnderWay()): the service would be renewed, and its
- * customer charged, twice. Nothing is ordered.
+ * A renewal was asked for while another renewal of the service is under way (OrderService::renewalUnderWay()): the
+ * customer would pay twice. Nothing is ordered.
  */
 final class RenewalUnderWayException extends DomainRuleException
 {

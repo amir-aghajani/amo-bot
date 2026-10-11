@@ -10,11 +10,9 @@ use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Users\Exceptions\InsufficientBalanceException;
 use App\Modules\Users\Services\WalletService;
+use App\Support\Money;
 
-/**
- * The wallet's gateway (made by WalletDriver): it pays an order from the customer's pre-loaded balance — an agent's
- * down to their credit below zero — and settles at once. The shop's code names the wallet by its key and its label here.
- */
+/** The wallet's gateway: debits the customer's balance (an agent's down to their credit) and settles at once. */
 final class WalletGateway implements GatewayInterface
 {
     public function __construct(private readonly WalletService $wallet) {}
@@ -36,9 +34,15 @@ final class WalletGateway implements GatewayInterface
         return PaymentInitiation::instant();
     }
 
-    /** The debit is the payment — down to an agent's credit —, and its ledger line the gateway's own id of it. */
+    /**
+     * The debit is the payment — down to an agent's credit —, and its ledger line the gateway's own id of it. A free
+     * order (a plan at no price, Checkout::pay()) takes nothing: no line, no id.
+     */
     public function settle(Payment $payment): PaymentResult
     {
+        if (!Money::isPositive($payment->amount)) {
+            return PaymentResult::success();
+        }
         $customer = $payment->order->user;
         try {
             $line = $this->wallet->debit($customer, $payment->amount, WalletService::describePayment($payment), $customer->credit());

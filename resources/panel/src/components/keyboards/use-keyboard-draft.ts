@@ -10,10 +10,7 @@ export interface Position {
   index: number
 }
 
-/**
- * A row of the draft: its buttons, and who it is — a row moved is the same row in its new place (its element, its
- * focus), whatever it holds. Ids are the draft's own: they never reach the server.
- */
+/** A draft row: its buttons and a local id, so a moved row keeps its element and focus. Ids never reach the server. */
 export interface DraftRow {
   id: number
   buttons: KeyboardButtonSpec[]
@@ -31,11 +28,9 @@ const draftOf = (keyboard: KeyboardLayoutData): Values => ({ type: keyboard.type
 const layoutOf = ({ type, rows }: Values) => ({ type, rows: rows.map((row) => row.buttons) })
 
 /**
- * One keyboard's draft: its type and rows of buttons, the edits a row and a button take — each within the API's limits
- * (`KeyboardsResponse.limits`) —, and its save. The draft follows the server's copy (a save, a reset, another admin's
- * save). The server checks the rest (an action twice, a label too long or with a premium emoji's tag in it) and its
- * refusal lands under the row it is about (`rows.2.1`). A button moved one row past the last (`to.row` the number of
- * rows) makes a new row for it.
+ * One keyboard's draft: type and rows, the edits (within `KeyboardsResponse.limits`) and the save. It follows the
+ * server's copy; the server's refusals land under the row they name (`rows.2.1`). Moving a button one row past the last
+ * makes a new row.
  */
 export function useKeyboardDraft(keyboard: KeyboardLayoutData, limits: KeyboardsResponse['limits'], onSaved: (keyboard: KeyboardLayoutData) => void) {
   const form = useForm<Values>(draftOf(keyboard), { follow: true, reads: (values) => trimmed(layoutOf(values)) })

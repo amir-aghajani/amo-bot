@@ -26,14 +26,10 @@ use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Carbon;
 
 /**
- * A customer: someone who talked to the bot, or signed in on the shop's website (Users\Services\Customers registers
- * either). Their ways in are each unique in the shop and each may be missing: a Telegram account (`telegram_id` — none
- * for one who never used the bot, whom the bot cannot write to), an email (proven before it is kept) with a password —
- * and, asked by its sign-in once they turn it on, a code of their authenticator app (hasTwoFactor()) —, a Google account
- * (`google_sub`). `role` admin marks the shop's people inside the bot (privileged commands, exempt from its rules); the
- * panel's login is not a user — it lives in config.php (Auth\Services\AdminAccount). An agent («نماینده») has a level,
- * whose price per GB they buy traffic at, and may spend their wallet down to minus `credit_limit`. The wallet is the
- * ledger (`wallet_transactions`, WalletService its one writer): balance().
+ * A customer of the shop, from the bot or the website (Services\Customers). Each way in — a Telegram account, a proven
+ * email with a password, a Google account — is unique in the shop and may be missing. `role` admin marks the shop's
+ * people; the panel's login is not a user (it lives in config.php). An agent has a level and may spend their wallet down
+ * to minus `credit_limit`. The balance is the wallet ledger's last line (balance()).
  *
  * @property int $id
  * @property int|null $telegram_id Null: no Telegram account — they signed up on the website
@@ -53,6 +49,7 @@ use Illuminate\Support\Carbon;
  * @property bool $bot_blocked Telegram said so: the customer blocked the bot
  * @property int|null $agency_level_id An agent's level; null for everyone else
  * @property string $credit_limit How far below zero an agent's wallet may go
+ * @property int $discount_percent Their own discount («تخفیف اختصاصی»), a percent off what they buy; 0 none
  * @property string|null $referral_code The customer's own invite code (ReferralService::codeFor())
  * @property int|null $referred_by The customer whose link brought this one — set on their first update, never changed
  * @property Carbon|null $last_seen_at
@@ -88,6 +85,7 @@ class User extends Model
         'bot_blocked',
         'agency_level_id',
         'credit_limit',
+        'discount_percent',
         'referral_code',
         'referred_by',
         'last_seen_at',
@@ -108,6 +106,7 @@ class User extends Model
         'bot_blocked' => 'boolean',
         'agency_level_id' => 'integer',
         'credit_limit' => 'decimal:2',
+        'discount_percent' => 'integer',
         'last_seen_at' => 'datetime',
     ];
 
@@ -115,6 +114,7 @@ class User extends Model
         'status' => UserStatus::Active->value,
         'role' => UserRole::Customer->value,
         'credit_limit' => '0.00',
+        'discount_percent' => 0,
     ];
 
     public function isAdmin(): bool
@@ -126,6 +126,12 @@ class User extends Model
     public function isAgent(): bool
     {
         return $this->agency_level_id !== null;
+    }
+
+    /** Whether plans' agent prices are theirs: an agent, or in a «همکار» group (asked only while a plan has one). */
+    public function paysAgentPrices(): bool
+    {
+        return $this->isAgent() || $this->groups()->where('agent_pricing', true)->exists();
     }
 
     /** How far below zero the wallet may go: an agent's credit, none for anyone else. */
@@ -163,11 +169,7 @@ class User extends Model
         $this->forceFill(['phone' => '+' . preg_replace('/\D+/', '', $number)])->save();
     }
 
-    /**
-     * The wallet's balance: the last line of the customer's ledger — WalletService, its one writer, keeps the balance
-     * from then on on every line —, "0.00" before the first. The value read with the row when a list asked for it
-     * (balanceColumn()), otherwise read now.
-     */
+    /** The wallet balance: the last ledger line's ("0.00" before any), read with the row when a list asked (balanceColumn()). */
     public function balance(): string
     {
         $balance = array_key_exists(self::BALANCE, $this->attributes)
@@ -178,8 +180,7 @@ class User extends Model
     }
 
     /**
-     * The column that reads each customer's balance (balance()) with their row, for a list's `addSelect()`: one
-     * subquery on the ledger's (user_id, id) index, not a query a row.
+     * For a list's `addSelect()`: each customer's balance read with their row by one subquery on the ledger's index.
      *
      * @return array<string, Builder<WalletTransaction>>
      */
@@ -188,18 +189,14 @@ class User extends Model
         return [self::BALANCE => self::lastLine()->whereColumn('wallet_transactions.user_id', 'users.id')];
     }
 
-    /**
-     * What a list that read the balance with its rows (balanceColumn()) orders them by it with: a customer without a
-     * ledger at 0 — below the ones in credit, above the agents in debt.
-     */
+    /** The order-by expression for the balance read by balanceColumn(), a customer without a ledger at 0. */
     public static function balanceOrder(): ExpressionContract
     {
         return new Expression('COALESCE(' . self::BALANCE . ', 0)');
     }
 
     /**
-     * The newest line of a ledger, for its balance — whoever's shop is being worked in (an agent's wallet is read in
-     * their own bot's panel, where the main bot's rows are not the current ones).
+     * The newest ledger line, without the shop scope (an agent's main-shop wallet is read from their own bot's panel).
      *
      * @return Builder<WalletTransaction>
      */
@@ -217,9 +214,8 @@ class User extends Model
     }
 
     /**
-     * Narrow `$query` to customers matching what an admin typed into a search box: the name, the
-     * handle (a leading "@" is what people paste) and the email by substring, a Telegram id exactly.
-     * `$term` is Latin-digit text already (Page::term()). Every list searches its customers this way.
+     * Narrows `$query` to customers matching a search term (already normalised, Page::term()): name, handle (a leading
+     * "@" allowed) and email by substring, a Telegram id exactly. Every list searches customers this way.
      *
      * @param Builder<self> $query
      */
@@ -240,9 +236,8 @@ class User extends Model
     }
 
     /**
-     * The customers a search term finds (matching()), for a list of something of theirs — payments, orders, services,
-     * referrals — to narrow itself by with whereIn(): their ids, read once (Page::matches()). A list short enough to
-     * read whole anyway (the agency's requests) takes the subquery alone instead (`$listed` false).
+     * The ids of the customers a term finds, read once (Page::matches()), for another list to narrow itself by with
+     * whereIn(); `$listed` false returns the subquery instead, for short lists.
      *
      * @return list<int|string>|Builder<self>
      */
@@ -291,8 +286,7 @@ class User extends Model
     }
 
     /**
-     * An agent's own bot — their shop, opened when they were approved; none for anyone who never was an agent. (bot() is
-     * the shop this customer belongs to.)
+     * An agent's own bot (their shop), opened on approval; bot() is the shop this customer belongs to.
      *
      * @return HasOne<Bot, $this>
      */

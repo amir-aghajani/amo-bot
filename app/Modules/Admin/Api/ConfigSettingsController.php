@@ -11,8 +11,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The panel's own configuration (config.php), the owner's settings screen: its groups, the checks the screen offers
- * before a save, and the cron trigger's address in full for the screen's copy action.
+ * The installation's configuration (config.php) on the owner's settings screen: its groups, the checks offered before a
+ * save, and the cron trigger's full address for the copy button.
  */
 final class ConfigSettingsController extends ApiController
 {

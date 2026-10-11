@@ -12,9 +12,8 @@ use App\Support\Input;
 use App\Support\Persian;
 
 /**
- * How long a receipt sent in the bot to a card method may wait for a person before it is accepted on its own
- * (AutoApproveReceiptsTask): whole minutes, a week at most — left blank or out, 0: only by hand. A row kept before
- * the window existed reads 0 too.
+ * How many minutes a receipt sent in the bot may wait before it is accepted on its own (AutoApproveReceiptsTask), a week
+ * at most; blank or 0: only by hand.
  *
  * @extends Field<int>
  */

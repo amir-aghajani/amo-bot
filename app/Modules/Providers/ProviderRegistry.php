@@ -13,16 +13,15 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Support\PanelHttp;
 
 /**
- * The panel connectors by their key (servers.driver) — the installation's (`panel.drivers` in bootstrap/container.php),
- * registered as it is built —, and the client of a server's panel. A server's client is kept and handed out again for a
- * while (KEEP_SECONDS) as long as the server's connection is the same: the session or token it signed in for, and what
- * it read of the panel's settings, serve the calls that follow — one sign-in per process, not one per call. A changed
- * connection (another address, other credentials) gets a fresh one at once; a long-running process (bot:poll) reads a
- * panel's settings again at least that often.
+ * The panel connectors by key (`servers.driver`; registered from `panel.drivers` in bootstrap/container.php), and the
+ * client of each server's panel. A server's client is reused for KEEP_SECONDS while its connection stays the same, so
+ * the session or token it signed in for, and the panel settings it read, serve the calls that follow — one sign-in per
+ * process, not per call. A changed connection gets a fresh client at once, and a long-running process (bot:poll)
+ * re-reads a panel's settings at least that often.
  */
 final class ProviderRegistry
 {
-    /** How long a server's client is handed out again. */
+    /** How long a server's client is reused. */
     private const KEEP_SECONDS = 300;
 
     /** @var Registry<PanelDriver> */
@@ -37,7 +36,7 @@ final class ProviderRegistry
     }
 
     /**
-     * One more connector: each of the installation's as the registry is built — or a test's fake panel.
+     * Add a connector: each of the installation's as the registry is built, or a test's fake panel.
      *
      * @throws \LogicException for a key another connector has
      */
@@ -46,14 +45,14 @@ final class ProviderRegistry
         $this->drivers = new Registry([...$this->drivers->all(), $driver]);
     }
 
-    /** Forget a connector and the clients it made — a test's fake panel, gone again before the next test. */
+    /** Forget a connector and the clients made — a test's fake panel, removed before the next test. */
     public function unregister(string $driver): void
     {
         $this->drivers = new Registry(array_filter($this->drivers->all(), static fn(PanelDriver $registered): bool => $registered->key() !== $driver));
         $this->flush();
     }
 
-    /** Forget every client kept: the next call for a server builds one afresh (a test's own servers). */
+    /** Forget every client kept, so the next call for a server builds one afresh (between tests). */
     public function flush(): void
     {
         $this->connected = [];
@@ -70,7 +69,7 @@ final class ProviderRegistry
         return $this->drivers->all();
     }
 
-    /** The connector of this key; null for one this installation does not have (a server's left from another). */
+    /** The connector of this key; null for one this installation does not have (a server left from another). */
     public function find(string $driver): ?PanelDriver
     {
         return $this->drivers->find($driver);
@@ -83,8 +82,8 @@ final class ProviderRegistry
     }
 
     /**
-     * What a connector's panels can do; nothing at all for a key no connector is registered under (a server whose
-     * connector this installation no longer has is sold nowhere, and offers nothing).
+     * What a connector's panels can do; nothing for a key no connector is registered under (such a server is sold
+     * nowhere and offers nothing).
      */
     public function capabilities(string $driver): Capabilities
     {
@@ -92,7 +91,8 @@ final class ProviderRegistry
     }
 
     /**
-     * The client of the server's panel. A server not stored yet (a probe of the form's input) gets one of its own.
+     * The client of the server's panel, reused while its connection is unchanged. A server not stored yet (a probe of the
+     * form) gets one of its own.
      *
      * @throws UnknownDriverException for a key no connector has
      */

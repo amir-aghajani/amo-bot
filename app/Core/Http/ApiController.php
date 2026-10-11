@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Http;
 
+use App\Core\Database\PageRequest;
 use App\Core\Exceptions\ValidationException;
 use App\Support\Input;
 use App\Support\Validation;
@@ -11,12 +12,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
+use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * Base for JSON endpoints. An action is load → service → present: the error handler answers what goes wrong in the
- * one error shape {"message": string, "errors"?: {field: [messages]}} — a refusal (DomainRuleException, a
- * ValidationException among them) with its status and fields, a row that is not there with a 404 — so an action
- * catches only what it words its own way.
+ * Base for JSON endpoints. An action is load → service → present; ErrorHandler answers refusals (DomainRuleException)
+ * and missing rows (404) in the one error shape, so an action catches only what it phrases differently.
  */
 abstract class ApiController
 {
@@ -37,11 +37,9 @@ abstract class ApiController
     }
 
     /**
-     * Bytes a panel shows or saves — a receipt, a sticker — with their length and how long a browser may keep them
-     * (`$cache`, a Cache-Control value). A type the panels show (INLINE) goes as itself, to be shown; anything else,
-     * whatever it is — a document a customer sent as a receipt, an SVG —, as `application/octet-stream` to be saved,
-     * never rendered. Either way the answer's policy lets nothing run on the panels' origin
-     * (SecurityHeadersMiddleware). `$filename` names them, in any script.
+     * A file answer (a receipt, a sticker) with its length and `$cache` (a Cache-Control value). A picture or a sticker's
+     * video goes as itself; anything else — a document a customer sent, an SVG — as an `application/octet-stream`
+     * attachment, so it is saved, never rendered on the panels' origin.
      */
     protected function bytes(Response $response, string $body, string $mime, string $cache, ?string $filename = null): Response
     {
@@ -70,8 +68,8 @@ abstract class ApiController
     }
 
     /**
-     * The row the route names (`{id}`) with `$with` loaded — looked up in the current shop (the model's BelongsToBot
-     * scope), so another shop's row is as missing as a deleted one: the error handler's 404.
+     * The row the route's `{id}` names, with `$with` loaded. The BelongsToBot scope makes another shop's row as missing
+     * as a deleted one: a 404.
      *
      * @template TModel of Model
      * @param class-string<TModel> $model
@@ -82,12 +80,35 @@ abstract class ApiController
      */
     protected function load(string $model, array $args, array $with = []): Model
     {
-        return $model::query()->with($with)->findOrFail(Input::integerOf($args['id'] ?? null) ?? 0);
+        return $model::query()->with($with)->findOrFail($this->routeId($args));
     }
 
     /**
-     * The on/off a request sets under `$field` — refused (a 422 on the field) when it is missing or anything but a
-     * boolean (true/false, 1/0), never read as "off".
+     * The route argument `$name` as a row id; 0 (no row) for anything else.
+     *
+     * @param array<string, string> $args The route's arguments
+     */
+    protected function routeId(array $args, string $name = 'id'): int
+    {
+        return Input::integerOf($args[$name] ?? null) ?? 0;
+    }
+
+    /** A paged list's request — its page, search, filters and order — read off the query string. */
+    protected function pageRequest(Request $request): PageRequest
+    {
+        return PageRequest::fromQuery($request->getQueryParams());
+    }
+
+    /** The file a multipart form uploaded under `$field`; null for none, or a JSON body. */
+    protected function uploadedFile(Request $request, string $field = 'file'): ?UploadedFileInterface
+    {
+        $file = $request->getUploadedFiles()[$field] ?? null;
+
+        return $file instanceof UploadedFileInterface ? $file : null;
+    }
+
+    /**
+     * A switch the request sets under `$field`: a 422 when it is missing or not a boolean — never read as "off".
      *
      * @throws ValidationException
      */
@@ -119,7 +140,7 @@ abstract class ApiController
     {
         $ids = $this->input($request)['ids'] ?? null;
         if (!is_array($ids) || $ids === []) {
-            throw new ValidationException(['ids' => ['لیست شناسه‌ها خالی است.']]);
+            throw ValidationException::on('ids', 'لیست شناسه‌ها خالی است.');
         }
 
         return array_values(array_map(intval(...), $ids));

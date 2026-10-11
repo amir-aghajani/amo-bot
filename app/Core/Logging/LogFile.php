@@ -10,10 +10,8 @@ use Monolog\Level;
 use Monolog\LogRecord;
 
 /**
- * The app's log: a file a day under storage/logs (RotatingFileHandler), its folder and each file made as the app's own
- * files are (Core\Support\Files: its owner's alone, or the account's to read where PHP runs as another user) — and, when
- * that file cannot be written (the folder not the web server's to write, a full disk), PHP's own error log takes the line
- * instead: a log that cannot be kept never takes the request, the update or the run it tells about down with it.
+ * The app's log: a file a day under storage/logs, with the app's file modes (Files). When the file cannot be written
+ * (no permission, a full disk) the line goes to PHP's own error log: a failing log never fails the request.
  */
 final class LogFile extends RotatingFileHandler
 {

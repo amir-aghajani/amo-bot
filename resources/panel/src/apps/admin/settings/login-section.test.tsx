@@ -85,7 +85,7 @@ describe('changing the owner’s login', () => {
     expect(screen.queryByText('تغییرات ذخیره نشده')).toBeNull()
   })
 
-  it('keeps the card as typed, the API’s words under the field they are about', async () => {
+  it('keeps the card as typed, with the API’s messages under their fields', async () => {
     server().on('PUT', URL, refusal(422, 'اطلاعات واردشده معتبر نیست.', { current_password: ['رمز عبور فعلی درست نیست.'] }))
     await show()
 

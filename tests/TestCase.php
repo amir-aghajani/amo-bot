@@ -42,15 +42,15 @@ use Tests\Support\FakeTelegramLogin;
 use Tests\Support\FakeTurnstile;
 
 /**
- * One booted application per test process, kept off the machine it runs on — and each test hands it the doubles it
- * needs by swapping a leaf, never what was built around one: a fake transport under the outgoing HTTP client and under
- * the Bot API (panelHttp(), telegramLogin(), googleLogin(), turnstile(), telegram()), the tests' own mail server under
- * the Mailer (mail()), a handler on the logger (logs()), the run's own files (configFile()), a probed database driver
- * (probedDatabase()), configuration for the test (config()). Everything is put back in tearDown.
+ * The base of every test: one booted application per process, kept off this machine (its own config.php, files and
+ * no network). A test gets its doubles by swapping a leaf, never what was built around it: a fake transport under the
+ * HTTP clients (panelHttp(), telegramLogin(), googleLogin(), turnstile(), telegram()), the mail server (mail()), a log
+ * handler (logs()), config.php (configFile()), a database probe (probedDatabase()), configuration (config()).
+ * Everything is put back in tearDown.
  */
 abstract class TestCase extends BaseTestCase
 {
-    /** Where the app keeps the files it writes, by container entry: in the run's own folder (runDir()), never storage/. */
+    /** The files the app writes, by container entry: in the run's own folder, never storage/. */
     protected const FILES = [
         'installation.lock' => 'installed.lock',
         'install.key' => 'install-key.txt',
@@ -68,8 +68,8 @@ abstract class TestCase extends BaseTestCase
     ];
 
     /**
-     * The configuration every test process boots with — its own config.php, never this machine's: an in-memory SQLite
-     * database, a fixed APP_KEY, UTC, no bot token; every setting that changes behaviour, pinned.
+     * The config.php every test process boots with (never this machine's): in-memory SQLite, a fixed APP_KEY, UTC, no
+     * bot token, no panel login — every setting that changes behaviour pinned.
      */
     private const CONFIG = [
         'APP_DEBUG' => true,
@@ -137,7 +137,7 @@ abstract class TestCase extends BaseTestCase
     protected function tearDown(): void
     {
         Carbon::setTestNow();
-        // Whose shop the code works in, and which request it answers, are the process's: the next test starts with none.
+        // The current shop and request id are process-wide: the next test starts with neither.
         CurrentBot::reset();
         RequestId::reset();
 
@@ -177,9 +177,8 @@ abstract class TestCase extends BaseTestCase
         $this->configured = [];
         self::empty(self::runDir());
 
-        // The panel drivers are one registry per process, which keeps a driver per server id: every test's servers are
-        // its own (their ids come round again), and a test's fake panel goes with it — or it would show up in the
-        // driver catalogue of whatever test runs next.
+        // The panel registry is one per process and keeps a client per server id, and ids come round again: forget them,
+        // and unregister a test's fake panel driver, or it would show in the next test's driver catalogue.
         if (self::$app !== null) {
             $registry = $this->service(ProviderRegistry::class);
             $this->fakePanel ? $registry->unregister(FakeProvider::driver()) : $registry->flush();
@@ -193,14 +192,9 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * One booted application per test process (its configuration pinned, CONFIG: an in-memory SQLite database, a fixed
-     * APP_KEY, UTC, no bot token, no panel login), off this machine: the config.php it boots with is the run's own and
-     * gone once read — a test starts with none, as a fresh upload does —, the files it writes (FILES — the install lock
-     * and key, the recovery key, the config.php the settings edit, the scheduler's state, the sign-in throttle, the
-     * OpenID providers' keys, the QR backgrounds, the receipts uploaded from a website, the support tickets' pictures, the
-     * poller's lock) go to the run's own folder — the router's table to
-     * one beside it, kept for the whole run —, its outgoing HTTP — the panels', the OpenID providers', the Bot API's, the
-     * poller's — reaches no network (a test hands it a fake), and nothing sleeps.
+     * The process's application, booted the first time: on CONFIG (its config.php deleted once read, so a test starts
+     * with none, as a fresh upload does), every file it writes (FILES) in the run's own folder, the router's table in one
+     * beside it kept for the whole run, no network for any outgoing call until a test hands it a fake, and no sleeping.
      */
     protected function app(): Application
     {
@@ -223,7 +217,7 @@ abstract class TestCase extends BaseTestCase
             // The shop's email goes to the tests' own mail server, whatever config.php's MAIL_* say (mail() sets up the rest).
             $container->set('mail.transport', new RecordingMailTransport());
             // Every database driver as a test may answer its probes (probedDatabase()) — the real one's until it does.
-            // The shop's own connection is booted already, on the real driver.
+            // The app's own connection is booted already, on the real driver.
             $container->set('database.drivers', new Registry(array_map(
                 static fn(DatabaseDriver $driver): ProbedDriver => new ProbedDriver($driver),
                 $container->get('database.drivers')->all(),
@@ -250,11 +244,9 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * Put a test double into the container for the rest of this test, rebuilding the entries that
-     * hold the real one (each from its bootstrap/container.php definition, so a factory-built one is
-     * built the same way again). Everything is restored in tearDown — dependents first, so the entry
-     * itself is restored last and never briefly wired to a stale one. For what the helpers above
-     * cover, a leaf is swapped instead and nothing needs listing.
+     * Put a double in the container for this test, rebuilding the entries that hold the real one (from their
+     * bootstrap/container.php definitions). Restored in tearDown, dependents first. The helpers above swap a leaf
+     * instead and need no such list.
      *
      * @param string ...$rebuild Container entries whose singleton holds `$id`
      */
@@ -284,9 +276,8 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * A panel for this test: `Tests\Fakes\FakePanelDriver` becomes driver "fake" (give a Server
-     * `driver => 'fake'`), its panels `Tests\Fakes\FakeProvider`s, their log emptied; the driver is forgotten again in
-     * tearDown. Asked again in the same test, it changes nothing — what the test told the panels so far stands.
+     * Register the fake connector "fake" (FakePanelDriver, its clients FakeProvider) for this test, its state emptied;
+     * unregistered in tearDown. Asked again in the same test, it changes nothing.
      */
     protected function fakePanel(): void
     {
@@ -299,9 +290,8 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * The fake Telegram for this test: the transport the Bot API — and bot:poll's long polls — send through from the
-     * first time it is asked for, the main bot's token FakeTelegram::TOKEN — so handlers, notifiers, tasks and the
-     * poller all talk to it.
+     * The fake Telegram for this test: the transport of the Bot API and of bot:poll's long polls, with the main bot's
+     * token FakeTelegram::TOKEN.
      */
     protected function telegram(): FakeTelegram
     {
@@ -317,8 +307,7 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * A picture as its header describes it — width, height and type —, or null for bytes that are none: what an upload
-     * the shop kept is, whether GD wrote it again (Users\Services\CustomerPictures::keep()) or not.
+     * A picture's width, height and type off its header; null for bytes that are no picture.
      *
      * @return array{int, int, string}|null
      */
@@ -330,8 +319,7 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * What the bot says for a text the admin has not reworded — the catalog's wording, with `$values`
-     * filled in when the test cares about a text that has variables.
+     * A bot text's default wording, with `$values` filled in.
      *
      * @param array<string, scalar> $values
      */
@@ -340,10 +328,7 @@ abstract class TestCase extends BaseTestCase
         return Messages::fill($text->spec()->default, $values);
     }
 
-    /**
-     * Where the app's outgoing HTTP goes for this test — a 3x-ui panel being probed, the settings
-     * screen's getMe() — the transport of the container's client from the first time it is asked for.
-     */
+    /** The fake panel (any outgoing HTTP: a panel, Resend, GitHub) as the outgoing client's transport for this test. */
     protected function panelHttp(): FakePanel
     {
         if ($this->panelHttp === null) {
@@ -354,10 +339,7 @@ abstract class TestCase extends BaseTestCase
         return $this->panelHttp;
     }
 
-    /**
-     * Telegram's sign-in service for this test (oauth.telegram.org: its keys, its code exchange), the transport of the
-     * container's outgoing client from the first time it is asked for — what a website's Telegram sign-in reaches.
-     */
+    /** Telegram's sign-in service (oauth.telegram.org) as the outgoing client's transport for this test. */
     protected function telegramLogin(): FakeTelegramLogin
     {
         if ($this->telegramLogin === null) {
@@ -368,10 +350,7 @@ abstract class TestCase extends BaseTestCase
         return $this->telegramLogin;
     }
 
-    /**
-     * Google's sign-in service for this test (its published keys), the transport of the container's outgoing client from
-     * the first time it is asked for — what a website's Google sign-in reaches.
-     */
+    /** Google's sign-in service (its published keys) as the outgoing client's transport for this test. */
     protected function googleLogin(): FakeGoogleLogin
     {
         if ($this->googleLogin === null) {
@@ -382,10 +361,7 @@ abstract class TestCase extends BaseTestCase
         return $this->googleLogin;
     }
 
-    /**
-     * Cloudflare Turnstile for this test (its siteverify), the transport of the container's outgoing client from the first
-     * time it is asked for — what a website's captcha is checked with.
-     */
+    /** Cloudflare Turnstile's siteverify as the outgoing client's transport for this test. */
     protected function turnstile(): FakeTurnstile
     {
         if ($this->turnstile === null) {
@@ -397,8 +373,8 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * The shop's email set up for this test — config.php's MAIL_FROM_ADDRESS (MAIL_FROM), the tests' mail server the
-     * transport whatever MAIL_TRANSPORT says —: what it sent. Without it, no email can go (Mailer::ready()).
+     * Set the shop's email up for this test (a sender address; the transport is always the tests' mail server) and
+     * return the server. Without it no email can go.
      */
     protected function mail(): RecordingMailTransport
     {
@@ -408,7 +384,7 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * Configuration for this test (`telegram.webhook_secret`, `shop.cron_token`…), as it was again afterwards.
+     * Set configuration for this test (`telegram.webhook_secret`…); put back in tearDown.
      *
      * @param array<string, mixed> $values
      */
@@ -435,8 +411,7 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * The config.php the app reads and writes (the run's own, never this machine's), holding `$settings` and nothing else
-     * for this test.
+     * The config.php the app reads and writes (the run's own), holding `$settings` alone.
      *
      * @param array<string, string|int|bool> $settings
      */
@@ -450,8 +425,8 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * The database driver `$key` with its probe answered by the test — the installer's and the settings screen's
-     * connection checks — and offered by the installer or not, whatever the driver says (null keeps it).
+     * The database driver `$key` with its probe answered by the test (the installer's and the settings' checks), and
+     * offered by the installer or not whatever the driver says (null keeps it).
      */
     protected function probedDatabase(string $key, ?bool $installable = null): ProbedDriver
     {
@@ -466,8 +441,7 @@ abstract class TestCase extends BaseTestCase
     /** A folder of this test's own, gone with everything in it once the test is over. */
     protected function scratchDir(): string
     {
-        // The app booted first: its boot empties the run's folder once, which would take a folder made before it with it
-        // — the first test of a run to reach the app, in whatever order the run has them.
+        // Boot first: the boot empties the run's folder once, and would take a folder made before it.
         $this->app();
         $dir = self::runDir() . '/' . bin2hex(random_bytes(6));
         mkdir($dir);
@@ -475,7 +449,7 @@ abstract class TestCase extends BaseTestCase
         return $dir;
     }
 
-    /** What the app keeps a short while (Core\Support\FileCache — a picture fetched from Telegram), as it is once its time is over. */
+    /** Age everything in FileCache past its time. */
     protected function fileCacheExpired(): void
     {
         foreach (glob($this->app()->container()->get('files.cache') . '/*') ?: [] as $file) {
@@ -484,8 +458,7 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * `$work` run as at the end of a scheduler's turn (Core\Scheduling\Budget): a task that works through a queue — the
-     * sync, the grants, the renewals — stops before its next item. Outside it the work has a turn's time of its own again.
+     * Run `$work` as at the end of a scheduler's turn (Budget): a task working through a queue stops before its next item.
      *
      * @param \Closure(): mixed $work
      */
@@ -526,7 +499,7 @@ abstract class TestCase extends BaseTestCase
         return $transport;
     }
 
-    /** What the network is for the app in a test: not there — a call no fake answers fails at once, as an unreachable host does. */
+    /** No network in a test: a call no fake answers fails at once, as to an unreachable host. */
     private static function offline(RequestInterface $request): PromiseInterface
     {
         return new RejectedPromise(new ConnectException("No network in the tests: {$request->getMethod()} {$request->getUri()} (a test hands the app a fake: panelHttp(), telegram()).", $request));

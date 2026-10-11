@@ -13,9 +13,11 @@ import {
   formatDate,
   formatDay,
   formatDays,
+  formatDeadline,
   formatDevices,
   formatDuration,
   formatGb,
+  formatMinutes,
   formatMoney,
   formatNumber,
   formatPercent,
@@ -68,12 +70,12 @@ describe('numbers and money', () => {
     expect(formatMoney(0)).toBe('۰ تومان')
   })
 
-  it('words a wallet below zero as a debt, as the bot does', () => {
+  it('formats a wallet below zero as a debt, as the bot does', () => {
     expect(formatBalance('80000.00')).toBe('۸۰٬۰۰۰ تومان')
     expect(formatBalance('-20000.00')).toBe('۲۰٬۰۰۰ تومان بدهی')
   })
 
-  it('words an agency level price per gigabyte', () => {
+  it('formats an agency level price per gigabyte', () => {
     expect(formatPricePerGb('3000.00')).toBe('هر گیگابایت ۳٬۰۰۰ تومان')
   })
 
@@ -84,16 +86,26 @@ describe('numbers and money', () => {
 })
 
 describe('quotas and terms', () => {
-  it('words 0 as unlimited for a term, devices and traffic', () => {
+  it('formats 0 as unlimited for a term, days, devices and traffic', () => {
+    expect(formatDuration(0)).toBe(UNLIMITED)
     expect(formatDays(0)).toBe(UNLIMITED)
     expect(formatDevices(0)).toBe(UNLIMITED)
     expect(formatGb(0)).toBe(UNLIMITED)
   })
 
-  it('words a term, devices and a plan traffic', () => {
+  it('formats days, devices and a plan traffic', () => {
     expect(formatDays(30)).toBe('۳۰ روز')
     expect(formatDevices(2)).toBe('۲ دستگاه')
     expect(formatGb(1.5)).toBe('۱٫۵ گیگابایت')
+  })
+
+  it('formats a term given in hours as the bot does: whole days in days, under a day in hours, else both', () => {
+    expect(formatDuration(720)).toBe('۳۰ روز')
+    expect(formatDuration(24)).toBe('۱ روز')
+    expect(formatDuration(6)).toBe('۶ ساعت')
+    expect(formatDuration(1)).toBe('۱ ساعت')
+    expect(formatDuration(30)).toBe('۱ روز و ۶ ساعت')
+    expect(formatDuration(8_784)).toBe('۳۶۶ روز')
   })
 
   it('writes traffic in its largest unit, one decimal under ten — a small amount as small as it is', () => {
@@ -110,16 +122,16 @@ describe('quotas and terms', () => {
     expect(formatBytes(-1)).toBe('۰ گیگابایت')
   })
 
-  it('words a span of minutes as the bot does', () => {
-    expect(formatDuration(30)).toBe('۳۰ دقیقه')
-    expect(formatDuration(120)).toBe('۲ ساعت')
-    expect(formatDuration(90)).toBe('۱ ساعت و ۳۰ دقیقه')
-    expect(formatDuration(1440)).toBe('۱ روز')
-    expect(formatDuration(2880)).toBe('۲ روز')
-    expect(formatDuration(1500)).toBe('۲۵ ساعت')
-    expect(formatDuration(0)).toBe('۰ دقیقه')
-    expect(formatDuration(-5)).toBe('۰ دقیقه')
-    expect(formatDuration(29.6)).toBe('۳۰ دقیقه')
+  it('formats a span of minutes as the bot does', () => {
+    expect(formatMinutes(30)).toBe('۳۰ دقیقه')
+    expect(formatMinutes(120)).toBe('۲ ساعت')
+    expect(formatMinutes(90)).toBe('۱ ساعت و ۳۰ دقیقه')
+    expect(formatMinutes(1440)).toBe('۱ روز')
+    expect(formatMinutes(2880)).toBe('۲ روز')
+    expect(formatMinutes(1500)).toBe('۲۵ ساعت')
+    expect(formatMinutes(0)).toBe('۰ دقیقه')
+    expect(formatMinutes(-5)).toBe('۰ دقیقه')
+    expect(formatMinutes(29.6)).toBe('۳۰ دقیقه')
   })
 })
 
@@ -185,13 +197,26 @@ describe('dates and times', () => {
     expect(timeAgo('2026-09-17T17:00:00+00:00')).toBe('در ۲ ساعت')
   })
 
-  it('says how long until a deadline as the bot does', () => {
+  it('says how long until a deadline as the bot does, rounded up', () => {
     expect(timeLeft('2026-09-27T15:00:00Z')).toBe('۱۰ روز مانده')
     expect(timeLeft('2026-09-18T19:00:00Z')).toBe('۲ روز مانده')
     expect(timeLeft('2026-09-18T15:00:00Z')).toBe('۱ روز مانده')
-    expect(timeLeft('2026-09-17T20:00:00Z')).toBe('کمتر از یک روز مانده')
     expect(timeLeft('2026-09-17T15:00:00Z')).toBe('تمام شده')
     expect(timeLeft('2026-09-01T00:00:00Z')).toBe('تمام شده')
+  })
+
+  it('says the hours left under a day — an hourly plan’s service —, rounded up as the days are', () => {
+    expect(timeLeft('2026-09-18T14:30:00Z')).toBe('۲۴ ساعت مانده')
+    expect(timeLeft('2026-09-17T20:00:00Z')).toBe('۵ ساعت مانده')
+    expect(timeLeft('2026-09-17T16:20:00Z')).toBe('۲ ساعت مانده')
+    expect(timeLeft('2026-09-17T15:40:00Z')).toBe('۱ ساعت مانده')
+  })
+
+  it('writes a deadline as its day — less than a day away, its hour too', () => {
+    expect(formatDeadline('2026-09-27T15:00:00Z')).toBe('۵ مهر ۱۴۰۵')
+    expect(formatDeadline('2026-09-18T15:00:00Z')).toBe('۲۷ شهریور ۱۴۰۵')
+    expect(formatDeadline('2026-09-17T20:00:00Z')).toBe('۲۶ شهریور ۱۴۰۵، ۲۰:۰۰')
+    expect(formatDeadline('2026-09-17T09:00:00Z')).toBe('۲۶ شهریور ۱۴۰۵')
   })
 
   it('writes a span of seconds in its largest unit', () => {
@@ -271,7 +296,7 @@ describe('a typed amount', () => {
     expect(decimalOf('1,234,567')).toBe('1234567')
   })
 
-  it('goes in a request in the API’s form — or as typed, for the API to refuse in its own words', () => {
+  it('goes in a request in the API’s form, or as typed for the API to refuse', () => {
     expect(decimalInput('۱٫۵')).toBe('1.5')
     expect(decimalInput(' پنجاه ')).toBe('پنجاه')
   })

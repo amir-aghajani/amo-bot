@@ -17,10 +17,9 @@ function draftOf(website: Website): Draft {
 }
 
 /**
- * «ورود با تلگرام»: customers sign in to the website with their Telegram account — the bot's customer, services and all —
- * under the Client ID @BotFather shows for the site (Bot Settings › Login Widget), which is not necessarily the bot's own
- * id; the Client Secret only the redirect flow needs, kept as a secret is (blank keeps it, a press empties it). What
- * BotFather must be told — the website's address among its Allowed URLs — is said in steps above the fields.
+ * «ورود با تلگرام»: the Client ID @BotFather shows for the site (Bot Settings › Login Widget — not necessarily the bot's
+ * own id) and the Client Secret only the redirect flow needs (blank keeps the stored one). Customers then sign in as the
+ * bot's own customers. The steps in BotFather are shown above the fields.
  */
 export function TelegramLoginSection({ website }: { website: Website }) {
   const group = useWebsiteGroup(website, draftOf, (values) => ({

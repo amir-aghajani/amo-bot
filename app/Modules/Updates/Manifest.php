@@ -7,11 +7,9 @@ namespace App\Modules\Updates;
 use App\Modules\Updates\Exceptions\UpdateRefusedException;
 
 /**
- * What a release is, as its builder signed it — release.json, written by scripts/release.php and signed by the release
- * workflow: its version, its zip (the file's name, its size and sha256), the PHP and the extensions it needs, and the
- * top-level paths of the app it replaces. Nothing in it is believed before the release key's signature over its very
- * bytes verifies (verified()), and it must be the release asked for: a release signed for one version offered as another
- * is no update.
+ * A release's signed manifest (release.json, written by scripts/release.php): version, zip name, size and sha256, the
+ * PHP and extensions it needs, and the top-level paths it replaces. Nothing in it is believed before the release key's
+ * signature verifies, and it must be the release asked for — one signed for another version is no update.
  */
 final class Manifest
 {
@@ -22,13 +20,13 @@ final class Manifest
 
     public const NOT_THIS_RELEASE = 'فایل مشخصات این نسخه (release.json) با خود نسخه جور نیست؛ نصب نمی‌شود.';
 
-    /** What every release replaces — and every version of the app has: the app, its boot, its front door, its packages. */
+    /** Paths every release replaces and every version has. */
     public const ESSENTIAL = ['app', 'bootstrap', 'public', 'vendor'];
 
-    /** What no release replaces: the shop's configuration and its files. */
+    /** Paths no release replaces: the shop's configuration and its files. */
     private const KEPT = ['config.php', 'storage'];
 
-    /** A top-level path of the app: a plain name, the root's .htaccess the one hidden one. */
+    /** A top-level path: a plain name, or the root's .htaccess. */
     private const PATH = '/^(?:\.htaccess|[A-Za-z0-9][A-Za-z0-9._-]*)$/';
 
     /**
@@ -50,7 +48,7 @@ final class Manifest
     ) {}
 
     /**
-     * The manifest of release `$version` — once `$key` has signed its bytes, and it says it is that release's.
+     * The manifest of release `$version`, once `$key`'s signature over its bytes verifies and it is that release's.
      *
      * @throws UpdateRefusedException when it is not signed by the key, or not that release's manifest
      */

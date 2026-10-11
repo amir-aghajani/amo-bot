@@ -24,21 +24,14 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * A signed-in customer's ways into their account on the shop's website — a Telegram account, a Google account, an email
- * with its password (Enums\WayIn) — added and taken away. A way in is proven the way it signs in
- * (TelegramSignIn::account(), GoogleSignIn::account() — the customer's own redirect state, a proof that does not hold a
- * 422 on its field —, an emailed code — EmailSignIn::sendLinkCode(), proveLink()) before anything is said of it; then it
- * is this account's already (nothing to do), the account has another of its kind (refused: that one goes first), it is
- * nobody's (it is this account's from now on — a Telegram account with its profile, a Google account with the address
- * Google speaks for when the account has none and it is nobody's), or it is another account's of the shop — a merge
- * offered (MergeOffers), the other account described for the customer to judge; never to an account reached by its
- * address alone — an emailed code, Google speaking for it — whose password sign-in asks a second step, which the address
- * is no way past. Taking one away leaves at least one: an email goes with its password and two-factor sign-in (and the
- * address is told, EmailRemoved: it hears nothing of the account any more), a Telegram account with its handle (the bot
- * knows that Telegram account as a newcomer from its next message). Every write is one conditional UPDATE on the slot it
- * fills or empties, so two at once never leave an account with none, nor a way in on two accounts; every one is told the
- * customer, on every door the account has (CustomerNotifier). What changes the ways in asks a recent sign-in of the
- * session (Http\RecentSignInMiddleware).
+ * A signed-in customer's ways into their account (Enums\WayIn: Telegram, Google, an email with its password), added and
+ * taken away. A way in is proven the way it signs in before anything is said about it; then it is already this
+ * account's, refused (the account has another of its kind), filled into the empty slot, or — another account of the
+ * shop holds it — offered as a merge (MergeOffers).
+ *
+ * Every write is one conditional UPDATE on the slot it fills or empties, so two requests at once never leave an account
+ * with no way in, nor a way in on two accounts. The customer is notified of every change on every channel they have.
+ * The routes ask a recent sign-in of the session (Http\RecentSignInMiddleware).
  */
 final class Identities
 {
@@ -53,8 +46,8 @@ final class Identities
     ) {}
 
     /**
-     * A Telegram account added to the customer's — as its sign-in proves one: the popup's id_token, or the redirect's
-     * code (with a state the customer asked for from this very session: POST /me/telegram/authorize).
+     * Add the Telegram account a sign-in proof proves (the popup's id_token, or the redirect's code with a state this
+     * very session asked for) — with its profile, which is Telegram's from then on.
      *
      * @param array<string, mixed> $input {id_token, nonce} or {code, state, code_verifier}
      * @throws AccountRefusedException 422 the account has another Telegram account; a merge the rules refuse
@@ -65,10 +58,9 @@ final class Identities
      */
     public function linkTelegram(SignInSite $site, ServerRequestInterface $request, Customer $customer, array $input): User|MergeOffer
     {
-        $user = $customer->user;
         $account = $this->telegram->account($site, $request, $input, $customer);
 
-        for ($try = 1; ; $try++) {
+        return $this->link($customer->user, WayIn::Telegram, function (User $user) use ($account): User|MergeOffer|array {
             if ($user->telegram_id === $account->id) {
                 return $user;
             }
@@ -76,19 +68,16 @@ final class Identities
                 throw AccountRefusedException::otherTelegram();
             }
             $other = User::query()->where('telegram_id', $account->id)->first();
-            if ($other !== null) {
-                return $this->offers->offer($user, $other, ['telegram_id' => $account->id]);
-            }
-            if ($this->fill($user, WayIn::Telegram, ['telegram_id' => $account->id, 'bot_blocked' => false] + $account->profile, $try)) {
-                return $this->added($user->refresh(), WayIn::Telegram);
-            }
-            $user->refresh();
-        }
+
+            return $other !== null
+                ? $this->offers->offer($user, $other, ['telegram_id' => $account->id])
+                : ['telegram_id' => $account->id, 'bot_blocked' => false] + $account->profile;
+        });
     }
 
     /**
-     * A Google account added to the customer's, as Google's sign-in proves one: the account another of the shop's signs
-     * in with — or, the address Google speaks for being another account's, that account — is a merge offered.
+     * Add the Google account its id_token proves — and the address Google speaks for, when the account has none. Another
+     * account signing in with that Google account, or holding that address, is offered as a merge.
      *
      * @param array<string, mixed> $input {id_token, nonce}
      * @throws AccountRefusedException 422 the account has another Google account; a merge the rules refuse
@@ -96,11 +85,11 @@ final class Identities
      * @throws ValidationException 422 a field missing, or on `id_token`: the proof does not hold
      * @throws TooManyAttemptsException 429
      */
-    public function linkGoogle(SignInSite $site, ServerRequestInterface $request, User $user, array $input): User|MergeOffer
+    public function linkGoogle(SignInSite $site, ServerRequestInterface $request, Customer $customer, array $input): User|MergeOffer
     {
-        $account = $this->google->account($site, $request, $input, $user);
+        $account = $this->google->account($site, $request, $input, $customer);
 
-        for ($try = 1; ; $try++) {
+        return $this->link($customer->user, WayIn::Google, function (User $user) use ($account): User|MergeOffer|array {
             if ($user->google_sub === $account->sub) {
                 return $user;
             }
@@ -115,16 +104,14 @@ final class Identities
             if ($owner !== null) {
                 return $this->offers->offer($user, $owner, ['email' => (string) $account->email], ['google_sub' => $account->sub], byAddress: true);
             }
-            $email = $user->email === null && $account->email !== null ? ['email' => $account->email] : [];
-            if ($this->fill($user, WayIn::Google, ['google_sub' => $account->sub] + $email, $try)) {
-                return $this->added($user->refresh(), WayIn::Google);
-            }
-            $user->refresh();
-        }
+
+            return ['google_sub' => $account->sub] + ($user->email === null && $account->email !== null ? ['email' => $account->email] : []);
+        });
     }
 
     /**
-     * An email for the customer's account, with the password chosen to sign in by it: its code sent. How long it waits.
+     * Send the code that proves an email the customer adds to their account (with the password they chose for it). How
+     * long it waits.
      *
      * @param array<string, mixed> $input {email, password}
      * @throws AccountRefusedException 422 the account has an email
@@ -139,11 +126,11 @@ final class Identities
     }
 
     /**
-     * The email added once its code is typed back: the account's from now on, with its password — or, another account's
-     * of the shop, a merge offered, the address and its password carried for the account that stays.
+     * Add the email once its code is typed back, with its password — or, another account holding the address, offer a
+     * merge that carries both to the account that stays.
      *
      * @param array<string, mixed> $input {email, code}
-     * @throws AccountRefusedException 422 the account has an email; the address is an account's that asks a second step; a merge the rules refuse
+     * @throws AccountRefusedException 422 the account has an email; the address's account asks a second step; a merge the rules refuse
      * @throws ValidationException 422 on `email`, on `code`
      * @throws TooManyAttemptsException 429
      */
@@ -151,24 +138,19 @@ final class Identities
     {
         $proven = $this->email->proveLink($request, $user, $input);
 
-        for ($try = 1; ; $try++) {
+        return $this->link($user, WayIn::Email, function (User $user) use ($proven): MergeOffer|array {
             if ($user->email !== null) {
                 throw AccountRefusedException::hasEmail();
             }
             $other = User::query()->where('email', $proven['email'])->first();
-            if ($other !== null) {
-                return $this->offers->offer($user, $other, ['email' => $proven['email']], $proven, byAddress: true);
-            }
-            if ($this->fill($user, WayIn::Email, $proven, $try)) {
-                return $this->added($user->refresh(), WayIn::Email);
-            }
-            $user->refresh();
-        }
+
+            return $other !== null ? $this->offers->offer($user, $other, ['email' => $proven['email']], $proven, byAddress: true) : $proven;
+        });
     }
 
     /**
-     * A way in taken off the customer's account — never its last: an email with its password and two-factor sign-in (the
-     * address told it is no way in any more), a Telegram account with its handle, a Google account. The customer is told.
+     * Take a way in off the account, never its last: an email goes with its password and two-factor sign-in (and the
+     * address is mailed that it is no way in any more), a Telegram account with its handle. The customer is notified.
      *
      * @throws AccountRefusedException 422 the account has none of that kind, or it is the last way in
      */
@@ -183,6 +165,7 @@ final class Identities
         $others = array_values(array_diff(WayIn::columns(), [$column]));
         $address = $user->email;
 
+        // Only while another way in stays: two removals at once never leave none.
         $removed = User::query()->whereKey($user->id)->whereNotNull($column)
             ->where(static fn(Builder $left) => $left->whereNotNull($others[0])->orWhereNotNull($others[1]))
             ->update($changes);
@@ -200,9 +183,33 @@ final class Identities
     }
 
     /**
-     * Fill the account's empty slot of `$kind` with a way in (`$values`): one conditional UPDATE while it is empty. False
-     * when it did not — the slot filled meanwhile, or (the first time) the way in taken by another account in the same
-     * moment: the caller looks again.
+     * Add a way in of `$kind`. `$decide` looks at the account as it stands and answers the account (the way in is its own
+     * already), a merge offer (another account's), or the values to fill the empty slot with — or throws when the account
+     * has another of the kind. The slot is filled by one conditional UPDATE while it is empty; a race lost (the slot filled
+     * meanwhile, or the way in taken by another account) reads the account again and decides afresh. The customer is
+     * notified.
+     *
+     * @param \Closure(User): (User|MergeOffer|array<string, mixed>) $decide
+     */
+    private function link(User $user, WayIn $kind, \Closure $decide): User|MergeOffer
+    {
+        for ($try = 1; ; $try++) {
+            $decided = $decide($user);
+            if (!is_array($decided)) {
+                return $decided;
+            }
+            if ($this->fill($user, $kind, $decided, $try)) {
+                $this->notifier->wayInAdded($user->refresh(), $kind->label());
+
+                return $user;
+            }
+            $user->refresh();
+        }
+    }
+
+    /**
+     * Fill the account's empty slot of `$kind`. False when it was filled meanwhile, or — the first try — the way in was
+     * taken by another account at the same moment (its unique index); a second such clash is a bug, not a race.
      *
      * @param array<string, mixed> $values
      */
@@ -219,15 +226,7 @@ final class Identities
         }
     }
 
-    /** The account a way in of `$kind` was added to, as it stands now: the customer told, on every door it has — the new one too. */
-    private function added(User $user, WayIn $kind): User
-    {
-        $this->notifier->wayInAdded($user, $kind->label());
-
-        return $user;
-    }
-
-    /** The address taken off the account is told — where the account's notices no longer reach it; a mail that did not go is the Mailer's to log. */
+    /** Mail the address taken off the account, which its notices no longer reach. A mail that does not go is the Mailer's to log. */
     private function tellAddress(User $user, string $address): void
     {
         if (!$this->mailer->ready()) {
@@ -237,7 +236,7 @@ final class Identities
         try {
             $this->mailer->send(EmailRemoved::message($address, $this->bots->name($user->shop())));
         } catch (MailFailedException) {
-            // The way in is gone whatever the mail server said: the account's own notice is kept on its website.
+            // The way in is gone whatever the mail server said; the account's own notice is kept on its website.
         }
     }
 }

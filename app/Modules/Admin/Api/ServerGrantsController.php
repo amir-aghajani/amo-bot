@@ -4,27 +4,21 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
 use App\Modules\Providers\Models\Server;
-use App\Modules\Subscriptions\Enums\GrantAudience;
 use App\Modules\Subscriptions\Models\GrantPart;
 use App\Modules\Subscriptions\Services\Grants;
-use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * «افزودن زمان و حجم» on a server's page: the grants' parts there — one issued here, or a «هدیه همگانی»'s —, a new grant
- * for this server, working on its part while the screen is open (a few seconds a request — the scheduler carries on
- * without it), and stopping it here.
+ * «افزودن زمان و حجم» on a server's page: the grant parts on this server (its own grants' and «هدیه همگانی»'s), a new grant
+ * for it, and stopping one here. While the screen is open it works the part a few seconds per request; the scheduler
+ * carries on without it.
  */
 final class ServerGrantsController extends ApiController
 {
-    /** The seconds one request works on a part: the screen asks again while it is open. */
-    private const BUDGET_SECONDS = 3;
-
     public function __construct(private readonly Grants $grants) {}
 
     /**
@@ -46,9 +40,7 @@ final class ServerGrantsController extends ApiController
      */
     public function store(Request $request, Response $response, array $args): Response
     {
-        $server = $this->load(Server::class, $args);
-        $grant = $this->grants->start(['audience' => GrantAudience::Server->value, 'server_id' => $server->id] + $this->input($request), Principal::of($request)->actor());
-        $part = $grant->parts()->where('server_id', $server->id)->sole()->setRelation('grant', $grant);
+        $part = $this->grants->startOn($this->load(Server::class, $args), $this->input($request), Principal::of($request)->actor());
 
         return $this->json($response, ['grant' => $this->grants->presentPart($part)], 201);
     }
@@ -61,9 +53,7 @@ final class ServerGrantsController extends ApiController
     public function run(Request $request, Response $response, array $args): Response
     {
         $part = $this->part($args);
-        if ($part->isRunning()) {
-            $this->grants->process($part, microtime(true) + self::BUDGET_SECONDS);
-        }
+        $this->grants->runPart($part);
 
         return $this->json($response, ['grant' => $this->grants->presentPart($part->refresh())]);
     }
@@ -77,9 +67,7 @@ final class ServerGrantsController extends ApiController
     public function cancel(Request $request, Response $response, array $args): Response
     {
         $part = $this->part($args);
-        if (!$this->grants->cancelPart($part)) {
-            throw ValidationException::on('status', 'این مورد دیگر در حال انجام نیست.');
-        }
+        $this->grants->cancelPart($part);
 
         return $this->json($response, ['grant' => $this->grants->presentPart($part->refresh())]);
     }
@@ -91,7 +79,7 @@ final class ServerGrantsController extends ApiController
      */
     private function part(array $args): GrantPart
     {
-        $part = GrantPart::query()->where('server_id', $this->load(Server::class, $args)->id)->with('grant')->findOrFail(Input::integerOf($args['grant'] ?? null) ?? 0);
+        $part = GrantPart::query()->where('server_id', $this->load(Server::class, $args)->id)->with('grant')->findOrFail($this->routeId($args, 'grant'));
         \assert($part instanceof GrantPart);
 
         return $part;

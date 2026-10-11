@@ -12,9 +12,9 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Which pages may call the Store API from a browser: under a website's key (Urls::STORE), the site's own origin and
- * the ones its owner listed — while the website is open (Websites::open()). Any other address is told apart by its path
- * alone and answers no other origin; a shop not installed yet, or a database that does not answer, allows none.
+ * Which pages may call the Store API from a browser: under a website's key (Urls::STORE), its own origin and the ones its
+ * owner listed, while the website is open. Any other path — the panels' API above all — allows no origin; a shop not
+ * installed yet, or a database that does not answer, allows none.
  */
 final class WebsiteCorsPolicy implements CorsPolicy
 {
@@ -42,7 +42,7 @@ final class WebsiteCorsPolicy implements CorsPolicy
         }
     }
 
-    /** The store key a Store API address carries — read as the router reads the path, decoded —; null for any other address. */
+    /** The store key in a Store API address, read from the decoded path as the router reads it; null for any other address. */
     private function keyOf(ServerRequestInterface $request): ?string
     {
         $prefix = $this->basePath . strstr(Urls::STORE, '{', true);

@@ -6,9 +6,9 @@ import { providers, until } from '@/test/render'
 import { refusal, server } from '@/test/server'
 
 /*
- * A bot text's editor (components/bot-texts/text-modal): what the save would refuse is said as the admin types — the
- * server's own words (wordingProblem()) —, and goes once the wording is one Telegram takes; the tags such a line names —
- * in its words or the server's own refusal — read as typed in the Persian sentence, each set apart in Unicode's isolates.
+ * A bot text's editor (components/bot-texts/text-modal): what the save would refuse is shown as the admin types — in
+ * the server's own wording (wordingProblem()) —, and goes once the wording is one Telegram takes; the tags such a line
+ * names (its own, or the server's refusal's) read as typed in the Persian sentence, each set apart in Unicode's isolates.
  */
 
 const WELCOME: BotTextRow = {
@@ -59,7 +59,7 @@ describe('a bot text’s editor', () => {
     expect(screen.queryByText(UNCLOSED)).toBeNull()
   })
 
-  it('has nothing to save for a wording the server would keep as it is — a line break at its end —, and a part’s leading line breaks to save', () => {
+  it('has nothing to save for a trailing line break the server would trim, but does save a part’s leading line breaks', () => {
     const part: BotTextRow = { ...WELCOME, key: 'renewal_hint', kind: 'part', value: 'تمدید با یک لمس.', default: 'تمدید با یک لمس.' }
     const { rerender } = render(<TextModal text={WELCOME} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
 

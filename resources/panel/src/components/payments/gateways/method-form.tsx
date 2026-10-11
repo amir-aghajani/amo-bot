@@ -18,9 +18,8 @@ interface MethodFormProps {
 }
 
 /**
- * A payment method's form, whatever its driver: the label the customer picks it by, the driver's own form drawn from its
- * description (components/driver-form) — a card's number, its holder, the note under it, how long its receipts wait —,
- * and the switch. A new method names its driver; a method's form again keeps the one it has.
+ * A payment method's form for any driver: the label customers see, the driver's own fields (drawn from its description)
+ * and the switch. A new method names its driver; an existing one keeps it.
  */
 export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProps) {
   // What the row keeps (its `config`, closed per driver): its form's fields by name.

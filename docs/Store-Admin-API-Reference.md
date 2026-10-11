@@ -2,111 +2,115 @@
 
 # Admin API reference
 
-The shop's admins' API on its website: every operation of the shop's daily work the panels have that its admins
-have too — the description marks them (`x-staff`), and the tests give each its path here —, as its description
-says it. How a website signs its admins in and uses it is [the shop's admins](Store-API-Admins.md). Each answers
-as in the panels ([the panels' API](Panels-API-Reference.md)); here it asks an admin's bearer token
-([the customer scheme](Store-API-Reference.md#the-customer-scheme)) whose sign-in is at most 12 hours old — a
-way in proven on the session, its sign-in or `POST /me/reauthenticate` since —, and refuses at the door with a
-`403` ([StaffRefused](API-Schemas.md#response-staffrefused)).
+The API a shop's website offers its admins: the panels' daily-work operations that admins may also use (marked
+`x-staff` in the description; the tests give each one its path here). How a website signs its admins in and uses
+this API is explained in [the shop's admins](Store-API-Admins.md). Each operation answers as in the panels
+([the panels' API](Panels-API-Reference.md)), but here it needs an admin's bearer token
+([the customer scheme](Store-API-Reference.md#the-customer-scheme)) whose sign-in is at most 12 hours old
+(counted from the sign-in, or from the last `POST /me/reauthenticate`). A refusal at the door is a `403`
+([StaffRefused](API-Schemas.md#response-staffrefused)).
 
-Paths are under the website's base address and `/admin`, `{APP_URL}/api/store/v1/{store}/admin`:
+Paths are relative to the website's base address plus `/admin`, `{APP_URL}/api/store/v1/{store}/admin`:
 
 | Parameter | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `store` | path | string matching `^[0-9a-f]{24}$` | yes | The website's store key, which names the shop — no secret; the panel shows it (and its base address) and turns it over |
+| `store` | path | string matching `^[0-9a-f]{24}$` | yes | The website's store key, which names the shop. Not a secret; the panel shows it with the base address and can replace it |
 
-Every operation may also answer the one error shape ([errors](Store-API.md#errors)). Objects are closed
+Every operation may also return the common error shape ([errors](Store-API.md#errors)). Objects are closed
 ([API schemas](API-Schemas.md)).
 
 ## Grants
 
-The website's `staff_grants`, each one of `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`. What a shop lets its admins do on its website beyond its daily work: the catalogue's plans and categories (catalog), a customer's wallet credited or debited (wallet), a payment given back (refunds), a service given days and traffic (extend), a service deleted for good (delete), a customer's website account taken in hand — two-factor sign-in turned off, every device signed out (account_security).
-An operation that asks one says which — and asks a sign-in of the last 15 minutes too, as approving a payment does
-without a grant (`x-staff-recent`).
+The website's `staff_grants` setting holds any of `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`. What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
+An operation that needs a grant says which, and also needs a sign-in from the last 15 minutes, as approving a payment
+does without a grant (`x-staff-recent`).
 
 ## Operations
 
-The shop's daily work, each operation as the panels' own answers it (linked).
+The shop's daily work; each operation answers like its panel counterpart (linked).
 
 | Operation | What it does |
 |---|---|
-| [`GET /changes`](#get-changes) | Each area's number from the change feed |
-| [`GET /queues`](#get-queues) | How many wait on a human in the shop |
-| [`GET /dashboard`](#get-dashboard) | The period's figures against the one before it |
-| [`GET /broadcasts`](#get-broadcasts) | Every «ارسال همگانی» run, newest first (sent from the bot with /broadcast) |
-| [`POST /broadcasts/{id}/pause`](#post-broadcastsidpause) | Pause a run that is sending |
-| [`POST /broadcasts/{id}/resume`](#post-broadcastsidresume) | Let a paused run go on (the scheduler carries on with it) |
-| [`POST /broadcasts/{id}/cancel`](#post-broadcastsidcancel) | Stop a run for good |
-| [`POST /broadcasts/{id}/unpin`](#post-broadcastsidunpin) | Take a finished pinned run's pins off again |
-| [`GET /plans`](#get-plans) | Every plan, in the customer's order |
+| [`GET /changes`](#get-changes) | The change feed's version of each area |
+| [`GET /queues`](#get-queues) | The counts of what waits for support |
+| [`GET /dashboard`](#get-dashboard) | The dashboard |
+| [`GET /broadcasts`](#get-broadcasts) | All broadcast («ارسال همگانی») runs, newest first |
+| [`POST /broadcasts/{id}/pause`](#post-broadcastsidpause) | Pause a broadcast that is sending |
+| [`POST /broadcasts/{id}/resume`](#post-broadcastsidresume) | Resume a paused broadcast |
+| [`POST /broadcasts/{id}/cancel`](#post-broadcastsidcancel) | Cancel a broadcast |
+| [`POST /broadcasts/{id}/unpin`](#post-broadcastsidunpin) | Unpin a finished pinned broadcast |
+| [`GET /plans`](#get-plans) | All plans, in the order customers see them |
 | [`POST /plans`](#post-plans) | Add a plan |
-| [`GET /plans/options`](#get-plansoptions) | The servers, inbounds and categories the plan form builds from |
-| [`POST /plans/reorder`](#post-plansreorder) | Put the plans in a new order |
-| [`PUT /plans/{id}`](#put-plansid) | Change a plan |
+| [`GET /plans/options`](#get-plansoptions) | The servers, inbounds and categories the plan form offers |
+| [`POST /plans/reorder`](#post-plansreorder) | Reorder the plans |
+| [`POST /plans/prices/preview`](#post-planspricespreview) | Preview a bulk price change |
+| [`POST /plans/prices`](#post-plansprices) | Raise or lower several plans' prices at once |
+| [`PUT /plans/{id}`](#put-plansid) | Update a plan |
 | [`PATCH /plans/{id}`](#patch-plansid) | Switch a plan on or off |
-| [`DELETE /plans/{id}`](#delete-plansid) | Delete a plan nothing was sold with |
-| [`POST /plans/{id}/duplicate`](#post-plansidduplicate) | A copy of a plan, switched off |
-| [`GET /plans/categories`](#get-planscategories) | Every plan category, in order |
-| [`POST /plans/categories`](#post-planscategories) | Add a category |
-| [`POST /plans/categories/reorder`](#post-planscategoriesreorder) | Put the categories in a new order |
-| [`PUT /plans/categories/{id}`](#put-planscategoriesid) | Change a category |
+| [`DELETE /plans/{id}`](#delete-plansid) | Delete a plan |
+| [`POST /plans/{id}/duplicate`](#post-plansidduplicate) | Duplicate a plan |
+| [`GET /plans/categories`](#get-planscategories) | All plan categories, in their order |
+| [`POST /plans/categories`](#post-planscategories) | Add a plan category |
+| [`POST /plans/categories/reorder`](#post-planscategoriesreorder) | Reorder the categories |
+| [`PUT /plans/categories/{id}`](#put-planscategoriesid) | Update a category |
 | [`PATCH /plans/categories/{id}`](#patch-planscategoriesid) | Switch a category on or off |
 | [`DELETE /plans/categories/{id}`](#delete-planscategoriesid) | Delete a category |
-| [`GET /users`](#get-users) | The bot's customers, newest first |
-| [`GET /users/{id}`](#get-usersid) | One customer of the shop, as their page shows them |
+| [`GET /users`](#get-users) | The shop's customers |
+| [`GET /users/{id}`](#get-usersid) | One customer, as their page shows them |
 | [`PATCH /users/{id}`](#patch-usersid) | Ban or unban a customer |
-| [`GET /users/{id}/wallet`](#get-usersidwallet) | A customer's balance and ledger |
+| [`GET /users/{id}/wallet`](#get-usersidwallet) | A customer's wallet balance and ledger |
 | [`POST /users/{id}/wallet`](#post-usersidwallet) | Credit or debit a customer's wallet |
-| [`PUT /users/{id}/groups`](#put-usersidgroups) | The admin's groups a customer is in |
-| [`POST /users/{id}/two-factor/disable`](#post-usersidtwo-factordisable) | Turn off the two-factor sign-in of the customer's account on the website |
-| [`POST /users/{id}/sessions/end`](#post-usersidsessionsend) | Sign the customer out of the website on every device |
-| [`GET /customer-groups`](#get-customer-groups) | The admin's groups of customers, in order, with how many are in each |
-| [`POST /customer-groups`](#post-customer-groups) | Add a group |
-| [`POST /customer-groups/reorder`](#post-customer-groupsreorder) | Put the groups in a new order |
-| [`PUT /customer-groups/{id}`](#put-customer-groupsid) | Rename a group |
-| [`DELETE /customer-groups/{id}`](#delete-customer-groupsid) | Delete a group |
-| [`GET /orders`](#get-orders) | Every order, newest first |
-| [`GET /orders/{id}`](#get-ordersid) | One order as the list shows it |
-| [`POST /orders/{id}/retry`](#post-ordersidretry) | Deliver a paid order whose delivery failed |
-| [`POST /orders/{id}/cancel`](#post-ordersidcancel) | Cancel an order nobody paid, with its open payments |
-| [`GET /payments`](#get-payments) | Every payment, newest first |
-| [`GET /payments/{id}`](#get-paymentsid) | One payment as the list shows it |
-| [`GET /payments/{id}/receipt`](#get-paymentsidreceipt) | The customer's receipt, fetched from Telegram |
-| [`POST /payments/{id}/approve`](#post-paymentsidapprove) | Accept a payment (a receipt, or by hand) and deliver what it paid for |
-| [`POST /payments/{id}/reject`](#post-paymentsidreject) | Refuse a receipt |
+| [`PUT /users/{id}/groups`](#put-usersidgroups) | Set a customer's groups |
+| [`POST /users/{id}/two-factor/disable`](#post-usersidtwo-factordisable) | Turn off a customer's two-factor sign-in on the website |
+| [`POST /users/{id}/sessions/end`](#post-usersidsessionsend) | Sign a customer out of the website on every device |
+| [`GET /customer-groups`](#get-customer-groups) | All customer groups, in their order, with each group's member count |
+| [`POST /customer-groups`](#post-customer-groups) | Add a customer group |
+| [`POST /customer-groups/reorder`](#post-customer-groupsreorder) | Reorder the customer groups |
+| [`PUT /customer-groups/{id}`](#put-customer-groupsid) | Update a customer group |
+| [`DELETE /customer-groups/{id}`](#delete-customer-groupsid) | Delete a customer group |
+| [`GET /orders`](#get-orders) | All orders |
+| [`GET /orders/{id}`](#get-ordersid) | One order, as the list shows it |
+| [`POST /orders/{id}/retry`](#post-ordersidretry) | Retry delivering a paid order whose delivery failed or stalled |
+| [`POST /orders/{id}/cancel`](#post-ordersidcancel) | Cancel an unpaid order |
+| [`GET /payments`](#get-payments) | All payments |
+| [`GET /payments/{id}`](#get-paymentsid) | One payment, as the list shows it |
+| [`GET /payments/{id}/receipt`](#get-paymentsidreceipt) | The payment's receipt picture |
+| [`POST /payments/{id}/approve`](#post-paymentsidapprove) | Approve a payment and deliver what it paid for |
+| [`POST /payments/{id}/reject`](#post-paymentsidreject) | Reject a receipt |
 | [`POST /payments/{id}/cancel`](#post-paymentsidcancel) | Cancel an unpaid payment and its open order |
-| [`POST /payments/{id}/remind`](#post-paymentsidremind) | Remind the customer in the bot |
-| [`POST /payments/{id}/retry`](#post-paymentsidretry) | Deliver again what a paid payment bought |
-| [`POST /payments/{id}/refund`](#post-paymentsidrefund) | Give a paid payment back, by what it bought |
-| [`GET /subscriptions`](#get-subscriptions) | Every service sold, newest first |
-| [`GET /subscriptions/{id}`](#get-subscriptionsid) | One service as the list shows it |
-| [`POST /subscriptions/{id}/sync`](#post-subscriptionsidsync) | Read the service's numbers from its panel again |
-| [`POST /subscriptions/{id}/extend`](#post-subscriptionsidextend) | Give the service days and traffic on top of what it has |
+| [`POST /payments/{id}/remind`](#post-paymentsidremind) | Remind the customer to pay |
+| [`POST /payments/{id}/retry`](#post-paymentsidretry) | Retry the delivery of what a paid payment bought |
+| [`POST /payments/{id}/refund`](#post-paymentsidrefund) | Refund a paid payment |
+| [`GET /subscriptions`](#get-subscriptions) | All services sold |
+| [`GET /subscriptions/{id}`](#get-subscriptionsid) | One service, as the list shows it |
+| [`POST /subscriptions/{id}/sync`](#post-subscriptionsidsync) | Refresh a service's usage and term from its panel |
+| [`POST /subscriptions/{id}/extend`](#post-subscriptionsidextend) | Add days and traffic to a service, on top of what it has |
 | [`POST /subscriptions/{id}/disable`](#post-subscriptionsiddisable) | Switch a service off on its panel |
 | [`POST /subscriptions/{id}/enable`](#post-subscriptionsidenable) | Switch a service back on |
-| [`POST /subscriptions/{id}/move`](#post-subscriptionsidmove) | Move a service to another server with what is left of it |
-| [`POST /subscriptions/{id}/delete`](#post-subscriptionsiddelete) | Delete a service from its panel and the shop |
-| [`GET /tickets`](#get-tickets) | Every support ticket of the shop, the latest activity first |
-| [`GET /tickets/{id}`](#get-ticketsid) | One ticket with its whole conversation |
-| [`POST /tickets/{id}/messages`](#post-ticketsidmessages) | Support's answer |
-| [`GET /tickets/{id}/messages/{message}/attachment`](#get-ticketsidmessagesmessageattachment) | A message's picture |
-| [`POST /tickets/{id}/close`](#post-ticketsidclose) | Close the ticket |
-| [`POST /tickets/{id}/reopen`](#post-ticketsidreopen) | Open a closed ticket again, waiting on support (its rating left behind) |
-| [`GET /reviews`](#get-reviews) | Every review of the shop written on its website, the newest first |
-| [`POST /reviews/{id}/approve`](#post-reviewsidapprove) | Approve the review |
-| [`POST /reviews/{id}/reject`](#post-reviewsidreject) | Reject the review |
-| [`DELETE /reviews/{id}`](#delete-reviewsid) | Delete the review, whatever it stood at |
+| [`POST /subscriptions/{id}/move`](#post-subscriptionsidmove) | Move a service to another server |
+| [`POST /subscriptions/{id}/delete`](#post-subscriptionsiddelete) | Delete a service from its panel and from the shop |
+| [`GET /tickets`](#get-tickets) | All support tickets |
+| [`GET /tickets/{id}`](#get-ticketsid) | One ticket, with its whole conversation |
+| [`POST /tickets/{id}/messages`](#post-ticketsidmessages) | Answer a ticket as support |
+| [`GET /tickets/{id}/messages/{message}/attachment`](#get-ticketsidmessagesmessageattachment) | A ticket message's picture |
+| [`POST /tickets/{id}/close`](#post-ticketsidclose) | Close a ticket |
+| [`POST /tickets/{id}/reopen`](#post-ticketsidreopen) | Reopen a closed ticket |
+| [`GET /reviews`](#get-reviews) | All reviews written on the website |
+| [`POST /reviews/{id}/approve`](#post-reviewsidapprove) | Approve a pending or rejected review |
+| [`POST /reviews/{id}/reject`](#post-reviewsidreject) | Reject a pending or approved review |
+| [`DELETE /reviews/{id}`](#delete-reviewsid) | Delete a review, whatever its status |
 | [`GET /referrals`](#get-referrals) | The referral program's rules and numbers |
-| [`GET /referrals/referrers`](#get-referralsreferrers) | Customers whose link brought someone, most referrals first |
-| [`GET /referrals/invitees`](#get-referralsinvitees) | Who brought whom, newest first |
-| [`GET /referrals/commissions`](#get-referralscommissions) | Commissions paid out, newest first |
+| [`GET /referrals/referrers`](#get-referralsreferrers) | Customers whose referral link brought someone |
+| [`GET /referrals/invitees`](#get-referralsinvitees) | Who brought whom |
+| [`GET /referrals/commissions`](#get-referralscommissions) | Referral commissions paid |
+| [`GET /referrals/alerts`](#get-referralsalerts) | Alerts on referrers whose referrals look fake |
+| [`POST /referrals/alerts/{id}/clear`](#post-referralsalertsidclear) | Clear a referral alert |
 
 ### GET /changes
 
-Each area's number from the change feed; the panel reloads what the areas that moved show
+The change feed's version of each area. The panel reloads what an area shows when its number moves.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/changes`](Panels-API-Reference.md#get-apipanelchanges).
 
 **Answers**
@@ -120,9 +124,9 @@ Each area's number from the change feed; the panel reloads what the areas that m
 
 ### GET /queues
 
-How many wait on a human in the shop — the sidebar's numbers beside the payments, the orders, the support tickets and the reviews
+The counts of what waits for support. The sidebar shows them beside payments, orders, support tickets and reviews.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/queues`](Panels-API-Reference.md#get-apipanelqueues).
 
 **Answers**
@@ -136,9 +140,9 @@ How many wait on a human in the shop — the sidebar's numbers beside the paymen
 
 ### GET /dashboard
 
-The period's figures against the one before it
+The dashboard. The period's figures, compared with the period before.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/dashboard`](Panels-API-Reference.md#get-apipaneldashboard).
 
 **Parameters**
@@ -158,9 +162,9 @@ The period's figures against the one before it
 
 ### GET /broadcasts
 
-Every «ارسال همگانی» run, newest first (sent from the bot with /broadcast)
+All broadcast («ارسال همگانی») runs, newest first. Broadcasts are composed in the bot with /broadcast.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/broadcasts`](Panels-API-Reference.md#get-apipanelbroadcasts).
 
 **Parameters**
@@ -180,9 +184,9 @@ Every «ارسال همگانی» run, newest first (sent from the bot with /bro
 
 ### POST /broadcasts/{id}/pause
 
-Pause a run that is sending
+Pause a broadcast that is sending.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/broadcasts/{id}/pause`](Panels-API-Reference.md#post-apipanelbroadcastsidpause).
 
 **Parameters**
@@ -204,9 +208,9 @@ Pause a run that is sending
 
 ### POST /broadcasts/{id}/resume
 
-Let a paused run go on (the scheduler carries on with it)
+Resume a paused broadcast. The scheduler continues sending it.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/broadcasts/{id}/resume`](Panels-API-Reference.md#post-apipanelbroadcastsidresume).
 
 **Parameters**
@@ -228,9 +232,9 @@ Let a paused run go on (the scheduler carries on with it)
 
 ### POST /broadcasts/{id}/cancel
 
-Stop a run for good; those who got it keep it
+Cancel a broadcast. Messages already sent stay.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/broadcasts/{id}/cancel`](Panels-API-Reference.md#post-apipanelbroadcastsidcancel).
 
 **Parameters**
@@ -252,9 +256,9 @@ Stop a run for good; those who got it keep it
 
 ### POST /broadcasts/{id}/unpin
 
-Take a finished pinned run's pins off again — answers with the new «لغو پین» run
+Unpin a finished pinned broadcast. Starts and returns a new unpin («لغو پین») run.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/broadcasts/{id}/unpin`](Panels-API-Reference.md#post-apipanelbroadcastsidunpin).
 
 **Parameters**
@@ -276,9 +280,9 @@ Take a finished pinned run's pins off again — answers with the new «لغو پ
 
 ### GET /plans
 
-Every plan, in the customer's order
+All plans, in the order customers see them.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/plans`](Panels-API-Reference.md#get-apipanelplans).
 
 **Answers**
@@ -292,26 +296,33 @@ Every plan, in the customer's order
 
 ### POST /plans
 
-Add a plan
+Add a plan.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/plans`](Panels-API-Reference.md#post-apipanelplans).
 
 **Body**, as JSON:
 
-A plan as its form sends it, added or changed whole: its words, its price and what it gives — 0 is no limit for the term, the traffic and the devices —, its category, and the servers it is sold on (the set is replaced).
+A plan's whole form, to add or update it: its texts, its price, what it gives (0 means no limit for the term, the traffic and the devices), its category, and the servers it is sold on (the list replaces the current one).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
 | `description` | string | no | Shown with the plan in the bot; blank for none. |
 | `price` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for a free plan. |
-| `duration_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | The term in days, from the first connection; 0 — it never ends. |
-| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes; 0 — unlimited, which an agent's shop refuses (its traffic is prepaid). |
-| `ip_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Devices at once; 0 — unlimited. |
-| `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A PlanCategoryRow.id; blank or 0 — none. |
+| `duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. |
+| `duration_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in whole days (the older alternative to `duration_hours`); 0 never ends. |
+| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes; 0 for unlimited, which an agent's shop refuses (its traffic is prepaid). |
+| `ip_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Devices at once; 0 for unlimited. |
+| `first_purchase_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | The price of a customer's first purchase in the shop («قیمت خرید اول»), whole Toman below `price`; 0 makes it free. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `agent_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | The price for agents and members of groups with agent prices («قیمت نماینده»), whole Toman below `price`. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
+| `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
+| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
+| `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
-| `is_active` | boolean | no | Absent: a new plan starts on, a changed one keeps its switch. |
+| `is_active` | boolean | no | Left out: on for a new plan, unchanged for an existing one. |
 
 **Answers**
 
@@ -324,9 +335,9 @@ A plan as its form sends it, added or changed whole: its words, its price and wh
 
 ### GET /plans/options
 
-The servers, inbounds and categories the plan form builds from
+The servers, inbounds and categories the plan form offers.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/plans/options`](Panels-API-Reference.md#get-apipanelplansoptions).
 
 **Answers**
@@ -340,18 +351,18 @@ The servers, inbounds and categories the plan form builds from
 
 ### POST /plans/reorder
 
-Put the plans in a new order
+Reorder the plans.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/plans/reorder`](Panels-API-Reference.md#post-apipanelplansreorder).
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -362,11 +373,69 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /plans/prices/preview
+
+Preview a bulk price change. Nothing is saved: returns each plan's prices before and after, and why a plan cannot take the change. A 422 lists every invalid field of the change at once.
+
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **In the panels:** [`POST /api/{panel}/plans/prices/preview`](Panels-API-Reference.md#post-apipanelplanspricespreview).
+
+**Body**, as JSON:
+
+A bulk change of several plans' prices: raise or lower the named prices by a percent or a number of Toman, rounding each new price to the nearest step. A plan without one of the named prices still has none afterwards.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `plan_ids` | list of integer, at most 1000 | yes | The plans to change; at least one. |
+| `direction` | string: `increase`, `decrease` | yes |  |
+| `mode` | string: `percent`, `amount` | yes | A percent of each price (at most 1000, or 100 for a decrease), or a number of Toman. |
+| `value` | [AmountInput](API-Schemas.md#amountinput) | yes | The percent (decimals allowed) or whole Toman; above zero. |
+| `round_to` | integer: `1`, `100`, `1000`, `10000` | yes | Each new price is rounded to the nearest multiple of this; 1 means whole Toman. |
+| `prices` | list of string: `price`, `first_purchase_price`, `agent_price` | yes | Which prices change: the price, the first-purchase price, the agent price. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [PlanPricesPreviewResponse](API-Schemas.md#planpricespreviewresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /plans/prices
+
+Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price), nothing changes and a 422 on `plan_ids` names each such plan.
+
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **In the panels:** [`POST /api/{panel}/plans/prices`](Panels-API-Reference.md#post-apipanelplansprices).
+
+**Body**, as JSON:
+
+A bulk change of several plans' prices: raise or lower the named prices by a percent or a number of Toman, rounding each new price to the nearest step. A plan without one of the named prices still has none afterwards.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `plan_ids` | list of integer, at most 1000 | yes | The plans to change; at least one. |
+| `direction` | string: `increase`, `decrease` | yes |  |
+| `mode` | string: `percent`, `amount` | yes | A percent of each price (at most 1000, or 100 for a decrease), or a number of Toman. |
+| `value` | [AmountInput](API-Schemas.md#amountinput) | yes | The percent (decimals allowed) or whole Toman; above zero. |
+| `round_to` | integer: `1`, `100`, `1000`, `10000` | yes | Each new price is rounded to the nearest multiple of this; 1 means whole Toman. |
+| `prices` | list of string: `price`, `first_purchase_price`, `agent_price` | yes | Which prices change: the price, the first-purchase price, the agent price. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Changed; all plans, as the list shows them | [PlansResponse](API-Schemas.md#plansresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### PUT /plans/{id}
 
-Change a plan
+Update a plan.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`PUT /api/{panel}/plans/{id}`](Panels-API-Reference.md#put-apipanelplansid).
 
 **Parameters**
@@ -377,19 +446,26 @@ Change a plan
 
 **Body**, as JSON:
 
-A plan as its form sends it, added or changed whole: its words, its price and what it gives — 0 is no limit for the term, the traffic and the devices —, its category, and the servers it is sold on (the set is replaced).
+A plan's whole form, to add or update it: its texts, its price, what it gives (0 means no limit for the term, the traffic and the devices), its category, and the servers it is sold on (the list replaces the current one).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
 | `description` | string | no | Shown with the plan in the bot; blank for none. |
 | `price` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for a free plan. |
-| `duration_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | The term in days, from the first connection; 0 — it never ends. |
-| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes; 0 — unlimited, which an agent's shop refuses (its traffic is prepaid). |
-| `ip_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Devices at once; 0 — unlimited. |
-| `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A PlanCategoryRow.id; blank or 0 — none. |
+| `duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. |
+| `duration_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in whole days (the older alternative to `duration_hours`); 0 never ends. |
+| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes; 0 for unlimited, which an agent's shop refuses (its traffic is prepaid). |
+| `ip_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Devices at once; 0 for unlimited. |
+| `first_purchase_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | The price of a customer's first purchase in the shop («قیمت خرید اول»), whole Toman below `price`; 0 makes it free. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `agent_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | The price for agents and members of groups with agent prices («قیمت نماینده»), whole Toman below `price`. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
+| `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
+| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
+| `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
-| `is_active` | boolean | no | Absent: a new plan starts on, a changed one keeps its switch. |
+| `is_active` | boolean | no | Left out: on for a new plan, unchanged for an existing one. |
 
 **Answers**
 
@@ -402,9 +478,9 @@ A plan as its form sends it, added or changed whole: its words, its price and wh
 
 ### PATCH /plans/{id}
 
-Switch a plan on or off
+Switch a plan on or off.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`PATCH /api/{panel}/plans/{id}`](Panels-API-Reference.md#patch-apipanelplansid).
 
 **Parameters**
@@ -415,7 +491,7 @@ Switch a plan on or off
 
 **Body**, as JSON:
 
-The on/off switch of a row in its list (a plan, a category): true or false, nothing else.
+A row's on/off switch (a plan, a category). A JSON boolean only.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -432,9 +508,9 @@ The on/off switch of a row in its list (a plan, a category): true or false, noth
 
 ### DELETE /plans/{id}
 
-Delete a plan nothing was sold with
+Delete a plan. Only a plan nothing was sold with.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`DELETE /api/{panel}/plans/{id}`](Panels-API-Reference.md#delete-apipanelplansid).
 
 **Parameters**
@@ -454,9 +530,9 @@ Delete a plan nothing was sold with
 
 ### POST /plans/{id}/duplicate
 
-A copy of a plan, switched off
+Duplicate a plan. The copy starts switched off.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/plans/{id}/duplicate`](Panels-API-Reference.md#post-apipanelplansidduplicate).
 
 **Parameters**
@@ -478,9 +554,9 @@ A copy of a plan, switched off
 
 ### GET /plans/categories
 
-Every plan category, in order
+All plan categories, in their order.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/plans/categories`](Panels-API-Reference.md#get-apipanelplanscategories).
 
 **Answers**
@@ -494,19 +570,19 @@ Every plan category, in order
 
 ### POST /plans/categories
 
-Add a category
+Add a plan category.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/plans/categories`](Panels-API-Reference.md#post-apipanelplanscategories).
 
 **Body**, as JSON:
 
-A category added or changed.
+A plan category to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Unique in the shop. |
-| `is_active` | boolean | no | Absent: a new category starts on, a changed one keeps its switch. |
+| `is_active` | boolean | no | Left out: on for a new category, unchanged for an existing one. |
 
 **Answers**
 
@@ -519,18 +595,18 @@ A category added or changed.
 
 ### POST /plans/categories/reorder
 
-Put the categories in a new order
+Reorder the categories.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/plans/categories/reorder`](Panels-API-Reference.md#post-apipanelplanscategoriesreorder).
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -543,9 +619,9 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 
 ### PUT /plans/categories/{id}
 
-Change a category
+Update a category.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`PUT /api/{panel}/plans/categories/{id}`](Panels-API-Reference.md#put-apipanelplanscategoriesid).
 
 **Parameters**
@@ -556,12 +632,12 @@ Change a category
 
 **Body**, as JSON:
 
-A category added or changed.
+A plan category to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Unique in the shop. |
-| `is_active` | boolean | no | Absent: a new category starts on, a changed one keeps its switch. |
+| `is_active` | boolean | no | Left out: on for a new category, unchanged for an existing one. |
 
 **Answers**
 
@@ -574,9 +650,9 @@ A category added or changed.
 
 ### PATCH /plans/categories/{id}
 
-Switch a category on or off
+Switch a category on or off.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`PATCH /api/{panel}/plans/categories/{id}`](Panels-API-Reference.md#patch-apipanelplanscategoriesid).
 
 **Parameters**
@@ -587,7 +663,7 @@ Switch a category on or off
 
 **Body**, as JSON:
 
-The on/off switch of a row in its list (a plan, a category): true or false, nothing else.
+A row's on/off switch (a plan, a category). A JSON boolean only.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -604,9 +680,9 @@ The on/off switch of a row in its list (a plan, a category): true or false, noth
 
 ### DELETE /plans/categories/{id}
 
-Delete a category; its plans become uncategorised
+Delete a category. Its plans become uncategorised.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`DELETE /api/{panel}/plans/categories/{id}`](Panels-API-Reference.md#delete-apipanelplanscategoriesid).
 
 **Parameters**
@@ -626,22 +702,22 @@ Delete a category; its plans become uncategorised
 
 ### GET /users
 
-The bot's customers, newest first — or in another order (sort, dir)
+The shop's customers. Newest first, or sorted by `sort` and `dir`.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/users`](Panels-API-Reference.md#get-apipanelusers).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | string | no | The status tab; empty for all |
-| `role` | query | [UserRole](API-Schemas.md#userrole) | no | The bot's admins alone (admin), or everyone else (customer) |
-| `group` | query | integer | no | One of the admin's customer groups: only its customers |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | string | no | The status tab. Empty for all |
+| `role` | query | [UserRole](API-Schemas.md#userrole) | no | Only the bot's admins (`admin`), or only everyone else (`customer`) |
+| `group` | query | integer | no | A customer group's id: only its members |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [UserSort](API-Schemas.md#usersort) | no | What to sort by; any other is the list's own, joined |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [UserSort](API-Schemas.md#usersort) | no | What to sort by. Anything else sorts by sign-up time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -654,9 +730,9 @@ The bot's customers, newest first — or in another order (sort, dir)
 
 ### GET /users/{id}
 
-One customer of the shop, as their page shows them — their row, their referral facts, an agent's agency; another shop's is not found
+One customer, as their page shows them. Their row, referral numbers and, for an agent, their agency. A customer of another shop is a 404.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/users/{id}`](Panels-API-Reference.md#get-apipanelusersid).
 
 **Parameters**
@@ -676,9 +752,9 @@ One customer of the shop, as their page shows them — their row, their referral
 
 ### PATCH /users/{id}
 
-Ban or unban a customer. On the shop's website, an admin's account — another's or their own — and an agent's are the panels' (403).
+Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403).
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`PATCH /api/{panel}/users/{id}`](Panels-API-Reference.md#patch-apipanelusersid).
 
 **Parameters**
@@ -706,9 +782,9 @@ Ban or unban a customer.
 
 ### GET /users/{id}/wallet
 
-A customer's balance and ledger
+A customer's wallet balance and ledger.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/users/{id}/wallet`](Panels-API-Reference.md#get-apipanelusersidwallet).
 
 **Parameters**
@@ -728,9 +804,9 @@ A customer's balance and ledger
 
 ### POST /users/{id}/wallet
 
-Credit or debit a customer's wallet
+Credit or debit a customer's wallet.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `wallet` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `wallet` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/users/{id}/wallet`](Panels-API-Reference.md#post-apipanelusersidwallet).
 
 **Parameters**
@@ -741,13 +817,13 @@ Credit or debit a customer's wallet
 
 **Body**, as JSON:
 
-A credit or a debit by hand — a debit no further than the balance —, with the line the customer reads in their ledger.
+A manual credit or debit, with the line the customer sees in their ledger. A debit cannot exceed the balance.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `type` | [WalletTransactionType](API-Schemas.md#wallettransactiontype) | yes |  |
 | `amount` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman, above zero. |
-| `description` | string | no | The ledger line, 190 characters at most; blank for support's default wording. |
+| `description` | string | no | The ledger line, at most 190 characters. Blank for the default wording. |
 
 **Answers**
 
@@ -760,9 +836,9 @@ A credit or a debit by hand — a debit no further than the balance —, with th
 
 ### PUT /users/{id}/groups
 
-The admin's groups a customer is in: every one listed, no other
+Set a customer's groups. Replaces their groups with the ones listed.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`PUT /api/{panel}/users/{id}/groups`](Panels-API-Reference.md#put-apipanelusersidgroups).
 
 **Parameters**
@@ -773,11 +849,11 @@ The admin's groups a customer is in: every one listed, no other
 
 **Body**, as JSON:
 
-The admin's groups the customer is in: every one listed, no other — an empty list takes them out of all.
+The customer's groups: exactly the ones listed. An empty list removes them from all groups.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `group_ids` | list of integer | yes | CustomerGroupRow ids. |
+| `group_ids` | list of integer | yes | Group ids (`CustomerGroupRow.id`). |
 
 **Answers**
 
@@ -790,9 +866,9 @@ The admin's groups the customer is in: every one listed, no other — an empty l
 
 ### POST /users/{id}/two-factor/disable
 
-Turn off the two-factor sign-in of the customer's account on the website — the phone it was on lost: the password alone signs them in. The customer is told (in Telegram, when they have it), the log says who did it. 422 when it is not on.
+Turn off a customer's two-factor sign-in on the website. For a customer who lost the phone it was on: afterwards the password alone signs them in. The customer is notified and the log records who did it. A 422 when it is not on.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `account_security` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `account_security` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/users/{id}/two-factor/disable`](Panels-API-Reference.md#post-apipanelusersidtwo-factordisable).
 
 **Parameters**
@@ -807,16 +883,16 @@ Turn off the two-factor sign-in of the customer's account on the website — the
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Turned off — the website account as it stands | [CustomerAccountResponse](API-Schemas.md#customeraccountresponse) |
+| `200` | Turned off; the website account as it is now | [CustomerAccountResponse](API-Schemas.md#customeraccountresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /users/{id}/sessions/end
 
-Sign the customer out of the website on every device: every session of theirs ends (the log says who did it)
+Sign a customer out of the website on every device. All their sessions end; the log records who did it.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `account_security` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `account_security` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/users/{id}/sessions/end`](Panels-API-Reference.md#post-apipanelusersidsessionsend).
 
 **Parameters**
@@ -838,9 +914,9 @@ Sign the customer out of the website on every device: every session of theirs en
 
 ### GET /customer-groups
 
-The admin's groups of customers, in order, with how many are in each
+All customer groups, in their order, with each group's member count.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/customer-groups`](Panels-API-Reference.md#get-apipanelcustomer-groups).
 
 **Answers**
@@ -854,18 +930,19 @@ The admin's groups of customers, in order, with how many are in each
 
 ### POST /customer-groups
 
-Add a group
+Add a customer group.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/customer-groups`](Panels-API-Reference.md#post-apipanelcustomer-groups).
 
 **Body**, as JSON:
 
-A group added or renamed.
+A customer group to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | Unique in the shop. |
+| `name` | string | yes | Unique within the shop. |
+| `agent_pricing` | boolean | no | Its members pay the plans' agent prices. Left out: off for a new group, unchanged for an existing one. |
 
 **Answers**
 
@@ -878,18 +955,18 @@ A group added or renamed.
 
 ### POST /customer-groups/reorder
 
-Put the groups in a new order
+Reorder the customer groups.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/customer-groups/reorder`](Panels-API-Reference.md#post-apipanelcustomer-groupsreorder).
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -902,9 +979,9 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 
 ### PUT /customer-groups/{id}
 
-Rename a group
+Update a customer group.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`PUT /api/{panel}/customer-groups/{id}`](Panels-API-Reference.md#put-apipanelcustomer-groupsid).
 
 **Parameters**
@@ -915,11 +992,12 @@ Rename a group
 
 **Body**, as JSON:
 
-A group added or renamed.
+A customer group to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | Unique in the shop. |
+| `name` | string | yes | Unique within the shop. |
+| `agent_pricing` | boolean | no | Its members pay the plans' agent prices. Left out: off for a new group, unchanged for an existing one. |
 
 **Answers**
 
@@ -932,9 +1010,9 @@ A group added or renamed.
 
 ### DELETE /customer-groups/{id}
 
-Delete a group — its customers just leave it
+Delete a customer group. Its members just leave it.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`DELETE /api/{panel}/customer-groups/{id}`](Panels-API-Reference.md#delete-apipanelcustomer-groupsid).
 
 **Parameters**
@@ -954,24 +1032,24 @@ Delete a group — its customers just leave it
 
 ### GET /orders
 
-Every order, newest first — or in another order (sort, dir) —, with the stuck ones counted and what the list sold
+All orders. Newest first, or sorted by `sort` and `dir`; with the count of stuck orders and the list's sales total.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/orders`](Panels-API-Reference.md#get-apipanelorders).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | string | no | The status tab — an OrderStatus, or stuck (paid and not delivered: the delivery failed, or nobody is delivering it); empty for all |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | string | no | The status tab: an OrderStatus, or `stuck` (paid but not delivered, because the delivery failed or stalled). Empty for all |
 | `type` | query | string | no |  |
-| `user` | query | integer | no | One customer's id: only what is theirs (their page links here); anything else is no filter |
-| `from` | query | string (date) | no | The first day of the list (a date of the shop's calendar, included); anything else is no start |
-| `to` | query | string (date) | no | The last day of the list (a date of the shop's calendar, included); anything else is no end |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
+| `from` | query | string (date) | no | The first day to include, in the shop's time zone |
+| `to` | query | string (date) | no | The last day to include, in the shop's time zone |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [OrderSort](API-Schemas.md#ordersort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [OrderSort](API-Schemas.md#ordersort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -984,9 +1062,9 @@ Every order, newest first — or in another order (sort, dir) —, with the stuc
 
 ### GET /orders/{id}
 
-One order as the list shows it
+One order, as the list shows it.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/orders/{id}`](Panels-API-Reference.md#get-apipanelordersid).
 
 **Parameters**
@@ -1006,9 +1084,9 @@ One order as the list shows it
 
 ### POST /orders/{id}/retry
 
-Deliver a paid order whose delivery failed
+Retry delivering a paid order whose delivery failed or stalled.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/orders/{id}/retry`](Panels-API-Reference.md#post-apipanelordersidretry).
 
 **Parameters**
@@ -1030,9 +1108,9 @@ Deliver a paid order whose delivery failed
 
 ### POST /orders/{id}/cancel
 
-Cancel an order nobody paid, with its open payments — a receipt waiting for review among them
+Cancel an unpaid order. Its open payments are cancelled with it, including one whose receipt waits for review.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/orders/{id}/cancel`](Panels-API-Reference.md#post-apipanelordersidcancel).
 
 **Parameters**
@@ -1043,7 +1121,7 @@ Cancel an order nobody paid, with its open payments — a receipt waiting for re
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1060,23 +1138,23 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### GET /payments
 
-Every payment, newest first — or in another order (sort, dir) —, with the review queue's count and what the list took in
+All payments. Newest first, or sorted by `sort` and `dir`; with the count of receipts to review and the list's paid total.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/payments`](Panels-API-Reference.md#get-apipanelpayments).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | string | no | The status tab; empty for all |
-| `user` | query | integer | no | One customer's id: only what is theirs (their page links here); anything else is no filter |
-| `from` | query | string (date) | no | The first day of the list (a date of the shop's calendar, included); anything else is no start |
-| `to` | query | string (date) | no | The last day of the list (a date of the shop's calendar, included); anything else is no end |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | string | no | The status tab. Empty for all |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
+| `from` | query | string (date) | no | The first day to include, in the shop's time zone |
+| `to` | query | string (date) | no | The last day to include, in the shop's time zone |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [PaymentSort](API-Schemas.md#paymentsort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [PaymentSort](API-Schemas.md#paymentsort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -1089,9 +1167,9 @@ Every payment, newest first — or in another order (sort, dir) —, with the re
 
 ### GET /payments/{id}
 
-One payment as the list shows it
+One payment, as the list shows it.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/payments/{id}`](Panels-API-Reference.md#get-apipanelpaymentsid).
 
 **Parameters**
@@ -1111,9 +1189,9 @@ One payment as the list shows it
 
 ### GET /payments/{id}/receipt
 
-The customer's receipt, fetched from Telegram: a picture to show, anything else (a HEIC photo) a file to save
+The payment's receipt picture. A receipt sent in the bot is fetched from Telegram. A picture the browser can show is sent inline; anything else (a HEIC photo) as a download.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/payments/{id}/receipt`](Panels-API-Reference.md#get-apipanelpaymentsidreceipt).
 
 **Parameters**
@@ -1133,9 +1211,9 @@ The customer's receipt, fetched from Telegram: a picture to show, anything else 
 
 ### POST /payments/{id}/approve
 
-Accept a payment (a receipt, or by hand) and deliver what it paid for
+Approve a payment and deliver what it paid for. With a receipt in review, or by hand without one.
 
-- **Who:** one of the shop's admins, signed in on its website, when the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/approve`](Panels-API-Reference.md#post-apipanelpaymentsidapprove).
 
 **Parameters**
@@ -1157,9 +1235,9 @@ Accept a payment (a receipt, or by hand) and deliver what it paid for
 
 ### POST /payments/{id}/reject
 
-Refuse a receipt
+Reject a receipt.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/reject`](Panels-API-Reference.md#post-apipanelpaymentsidreject).
 
 **Parameters**
@@ -1170,7 +1248,7 @@ Refuse a receipt
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1187,9 +1265,9 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### POST /payments/{id}/cancel
 
-Cancel an unpaid payment and its open order — the payment alone while another of the order's payments waits on its receipt's review: that one stays support's to decide
+Cancel an unpaid payment and its open order. If another payment of the order has a receipt waiting for review, only this payment is cancelled and the order stays open for that review.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/cancel`](Panels-API-Reference.md#post-apipanelpaymentsidcancel).
 
 **Parameters**
@@ -1200,7 +1278,7 @@ Cancel an unpaid payment and its open order — the payment alone while another 
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1217,9 +1295,9 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### POST /payments/{id}/remind
 
-Remind the customer in the bot — the answer says whether they were told
+Remind the customer to pay. The answer says whether the reminder reached them.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/remind`](Panels-API-Reference.md#post-apipanelpaymentsidremind).
 
 **Parameters**
@@ -1234,16 +1312,16 @@ Remind the customer in the bot — the answer says whether they were told
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Reminded, or tried to | [ReminderResponse](API-Schemas.md#reminderresponse) |
+| `200` | Sent, or attempted | [ReminderResponse](API-Schemas.md#reminderresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /payments/{id}/retry
 
-Deliver again what a paid payment bought
+Retry the delivery of what a paid payment bought.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/retry`](Panels-API-Reference.md#post-apipanelpaymentsidretry).
 
 **Parameters**
@@ -1265,9 +1343,9 @@ Deliver again what a paid payment bought
 
 ### POST /payments/{id}/refund
 
-Give a paid payment back, by what it bought: a purchase's, a renewal's or an agent's traffic's amount to the customer's wallet, a top-up's back out of it. 422 on `note` past the 190 characters of the wallet line it is written on, or on `status`; 422 too once what the order put in the shop is no longer there (a top-up spent, an agent's traffic sold).
+Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone (a top-up already spent, an agent's traffic already sold).
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `refunds` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `refunds` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/refund`](Panels-API-Reference.md#post-apipanelpaymentsidrefund).
 
 **Parameters**
@@ -1278,7 +1356,7 @@ Give a paid payment back, by what it bought: a purchase's, a renewal's or an age
 
 **Body**, as JSON:
 
-Support's word on a refund: its own line of the message the customer gets, and the note of the wallet line the refund writes — 190 characters at most, a ledger line's (Ledger::NOTE_MAX); blank for none.
+Support's note on a refund. It is a line of the message the customer gets and the description of the wallet line the refund writes, so at most 190 characters (a ledger line's limit). Blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1295,22 +1373,22 @@ Support's word on a refund: its own line of the message the customer gets, and t
 
 ### GET /subscriptions
 
-Every service sold, newest first — or in another order (sort, dir)
+All services sold. Newest first, or sorted by `sort` and `dir`.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/subscriptions`](Panels-API-Reference.md#get-apipanelsubscriptions).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | string | no | The status tab; empty for all |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | string | no | The status tab. Empty for all |
 | `server` | query | integer | no |  |
-| `user` | query | integer | no | One customer's id: only what is theirs (their page links here); anything else is no filter |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [SubscriptionSort](API-Schemas.md#subscriptionsort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [SubscriptionSort](API-Schemas.md#subscriptionsort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -1323,9 +1401,9 @@ Every service sold, newest first — or in another order (sort, dir)
 
 ### GET /subscriptions/{id}
 
-One service as the list shows it
+One service, as the list shows it.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/subscriptions/{id}`](Panels-API-Reference.md#get-apipanelsubscriptionsid).
 
 **Parameters**
@@ -1345,9 +1423,9 @@ One service as the list shows it
 
 ### POST /subscriptions/{id}/sync
 
-Read the service's numbers from its panel again
+Refresh a service's usage and term from its panel.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/subscriptions/{id}/sync`](Panels-API-Reference.md#post-apipanelsubscriptionsidsync).
 
 **Parameters**
@@ -1369,9 +1447,9 @@ Read the service's numbers from its panel again
 
 ### POST /subscriptions/{id}/extend
 
-Give the service days and traffic on top of what it has
+Add days and traffic to a service, on top of what it has.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `extend` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `extend` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/subscriptions/{id}/extend`](Panels-API-Reference.md#post-apipanelsubscriptionsidextend).
 
 **Parameters**
@@ -1382,14 +1460,14 @@ Give the service days and traffic on top of what it has
 
 **Body**, as JSON:
 
-What «افزایش زمان و حجم» gives one service on top of what it has — what a grant gives it —: at least one amount above zero, days only to a service that ends some day, traffic only to one with a quota. In an agent's shop the traffic comes out of the bot's (refused under `traffic_gb` when it is short); the days cost nothing.
+Days and traffic to add to one service («افزایش زمان و حجم»), as a grant adds them. At least one amount must be above zero; days only for a service with an end date, traffic only for one with a quota. In an agent's shop the traffic is taken from the agent's bot (refused on `traffic_gb` when it is short); days cost nothing.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days, 0 to 365; blank is none. |
-| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | no | Gigabytes, 0 to 10000; blank is none. |
-| `note` | string | no | Support's word to the customer, on its own line of the message; 300 characters at most. |
-| `notify` | boolean | no | Whether the customer is told; they are unless it is false. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days, 0 to 365; blank for none. |
+| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | no | Gigabytes, 0 to 10000; blank for none. |
+| `note` | string | no | Support's note to the customer, a separate line of the message; at most 300 characters. |
+| `notify` | boolean | no | Whether to notify the customer; default true. |
 
 **Answers**
 
@@ -1402,9 +1480,9 @@ What «افزایش زمان و حجم» gives one service on top of what it has
 
 ### POST /subscriptions/{id}/disable
 
-Switch a service off on its panel
+Switch a service off on its panel.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/subscriptions/{id}/disable`](Panels-API-Reference.md#post-apipanelsubscriptionsiddisable).
 
 **Parameters**
@@ -1415,7 +1493,7 @@ Switch a service off on its panel
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1432,9 +1510,9 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### POST /subscriptions/{id}/enable
 
-Switch a service back on
+Switch a service back on.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/subscriptions/{id}/enable`](Panels-API-Reference.md#post-apipanelsubscriptionsidenable).
 
 **Parameters**
@@ -1456,9 +1534,9 @@ Switch a service back on
 
 ### POST /subscriptions/{id}/move
 
-Move a service to another server with what is left of it
+Move a service to another server. It keeps its remaining days and traffic.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/subscriptions/{id}/move`](Panels-API-Reference.md#post-apipanelsubscriptionsidmove).
 
 **Parameters**
@@ -1469,7 +1547,7 @@ Move a service to another server with what is left of it
 
 **Body**, as JSON:
 
-A running service moved to another server with what is left of it. `leave_previous` moves it without asking its previous panel, out of reach — the old client stays there for the owner to remove (in an agent's shop only while that panel is out of reach).
+Move an active service to another server, keeping its remaining days and traffic. `leave_previous` moves it without contacting the previous panel (when it is unreachable); the old client stays there for the owner to remove. In an agent's shop this is allowed only while that panel is unreachable.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1487,9 +1565,9 @@ A running service moved to another server with what is left of it. `leave_previo
 
 ### POST /subscriptions/{id}/delete
 
-Delete a service from its panel and the shop
+Delete a service from its panel and from the shop.
 
-- **Who:** one of the shop's admins, signed in on its website, when the website grants `delete` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `delete` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/subscriptions/{id}/delete`](Panels-API-Reference.md#post-apipanelsubscriptionsiddelete).
 
 **Parameters**
@@ -1500,7 +1578,7 @@ Delete a service from its panel and the shop
 
 **Body**, as JSON:
 
-A service deleted from its panel and the shop for good; the note goes to the customer when they hear at all (a service still active). `leave_panel` deletes it without asking its panel, out of reach — the client stays there (in an agent's shop only while that panel is out of reach).
+Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1518,18 +1596,18 @@ A service deleted from its panel and the shop for good; the note goes to the cus
 
 ### GET /tickets
 
-Every support ticket of the shop, the latest activity first — searched by the customer, the subject or a number (#12 the ticket alone) —, with the open ones counted (the queue waiting on support)
+All support tickets. Latest activity first; searchable by customer, subject or number (`#12` finds that ticket only). Includes the count of open tickets waiting for support.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/tickets`](Panels-API-Reference.md#get-apipaneltickets).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | [TicketStatus](API-Schemas.md#ticketstatus) | no | The status tab; empty — or anything else — for every ticket |
-| `user` | query | integer | no | One customer's id: only what is theirs (their page links here); anything else is no filter |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | [TicketStatus](API-Schemas.md#ticketstatus) | no | The status tab. Empty for all tickets |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `page` | query | integer, at least 1 | no |  |
 
 **Answers**
@@ -1543,9 +1621,9 @@ Every support ticket of the shop, the latest activity first — searched by the 
 
 ### GET /tickets/{id}
 
-One ticket with its whole conversation
+One ticket, with its whole conversation.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/tickets/{id}`](Panels-API-Reference.md#get-apipanelticketsid).
 
 **Parameters**
@@ -1565,9 +1643,9 @@ One ticket with its whole conversation
 
 ### POST /tickets/{id}/messages
 
-Support's answer — its words, and a picture as a form — under the panel's principal: the ticket answered, waiting on the customer (a closed one opens again so), the customer told on every door they have (in Telegram, the picture with it), the report group under the ticket. 422 on `body` (1 to 4000 characters) or `file` (a JPEG, a PNG or a WebP by its bytes, 10 MB at most), or on `status` once the ticket holds 200 messages; 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB; a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it.
+Answer a ticket as support. Send JSON, or a form to attach a picture. The ticket becomes answered (a closed ticket reopens), the customer is notified (in Telegram with the picture, else by email) and the report group gets the answer. A 422 on `body` (1 to 4000 characters), on `file` (a JPEG, PNG or WebP, at most 10 MB) or on `status` once the ticket has 200 messages. A 503 while the host has less than 200 MB of free disk, or once the shop's uploads for the day reach 1024 MB. A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/tickets/{id}/messages`](Panels-API-Reference.md#post-apipanelticketsidmessages).
 
 **Parameters**
@@ -1578,20 +1656,20 @@ Support's answer — its words, and a picture as a form — under the panel's pr
 
 **Body**, as JSON:
 
-A ticket's message — support's answer on a panel, the customer's on their website —: its words. One with a picture comes as a form (TicketMessageUploadRequest).
+A ticket message's text: support's answer on a panel, or the customer's message on the website. To attach a picture, send a form instead (TicketMessageUploadRequest).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `body` | string | yes | 1 to 4000 characters, its line breaks kept. |
+| `body` | string | yes | 1 to 4000 characters; line breaks are kept. |
 
 **Body**, as a form (`multipart/form-data`):
 
-A ticket's message with its picture, as a browser form uploads it — a form without one is a message without a picture.
+A ticket message with a picture, as a browser form uploads it. A form without a file is a message without a picture.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `body` | string | yes | 1 to 4000 characters, its line breaks kept. |
-| `file` | file | no | The picture: a JPEG, a PNG or a WebP, judged by its bytes — 10 MB at most; left out, none. |
+| `body` | string | yes | 1 to 4000 characters; line breaks are kept. |
+| `file` | file | no | The picture: a JPEG, PNG or WebP (checked by its content), at most 10 MB. Optional. |
 
 **Answers**
 
@@ -1604,9 +1682,9 @@ A ticket's message with its picture, as a browser form uploads it — a form wit
 
 ### GET /tickets/{id}/messages/{message}/attachment
 
-A message's picture — kept by the shop, or fetched from Telegram — a 404 when it has none or it is gone, a 502 while Telegram is out of reach
+A ticket message's picture. Served from the shop's files or fetched from Telegram. A 404 when the message has no picture or it is gone; a 502 while Telegram cannot be reached.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/tickets/{id}/messages/{message}/attachment`](Panels-API-Reference.md#get-apipanelticketsidmessagesmessageattachment).
 
 **Parameters**
@@ -1614,7 +1692,7 @@ A message's picture — kept by the shop, or fetched from Telegram — a 404 whe
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | integer | yes |  |
-| `message` | path | integer | yes | A message of the ticket (TicketMessageRow.id) |
+| `message` | path | integer | yes | A message of the ticket (`TicketMessageRow.id`) |
 
 **Answers**
 
@@ -1627,9 +1705,9 @@ A message's picture — kept by the shop, or fetched from Telegram — a 404 whe
 
 ### POST /tickets/{id}/close
 
-Close the ticket — the customer told, the report group under the ticket; 422 on `status` when it is closed already
+Close a ticket. The customer and the report group are notified. A 422 on `status` when it is already closed.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/tickets/{id}/close`](Panels-API-Reference.md#post-apipanelticketsidclose).
 
 **Parameters**
@@ -1651,9 +1729,9 @@ Close the ticket — the customer told, the report group under the ticket; 422 o
 
 ### POST /tickets/{id}/reopen
 
-Open a closed ticket again, waiting on support (its rating left behind); 422 on `status` when it is not closed
+Reopen a closed ticket. It waits for support again, and its rating is cleared. A 422 on `status` when it is not closed.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/tickets/{id}/reopen`](Panels-API-Reference.md#post-apipanelticketsidreopen).
 
 **Parameters**
@@ -1675,17 +1753,17 @@ Open a closed ticket again, waiting on support (its rating left behind); 422 on 
 
 ### GET /reviews
 
-Every review of the shop written on its website, the newest first — searched by the name it is signed with, its words, the customer who wrote it or a number (#12 the review alone) —, with the ones waiting on support counted (the queue)
+All reviews written on the website. Newest first; searchable by the signed name, the text, the customer who wrote it or a number (`#12` finds that review only). Includes the count of reviews waiting for support.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/reviews`](Panels-API-Reference.md#get-apipanelreviews).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | [ReviewStatus](API-Schemas.md#reviewstatus) | no | The status tab; empty — or anything else — for every review |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | [ReviewStatus](API-Schemas.md#reviewstatus) | no | The status tab. Empty for all reviews |
 | `page` | query | integer, at least 1 | no |  |
 
 **Answers**
@@ -1699,9 +1777,9 @@ Every review of the shop written on its website, the newest first — searched b
 
 ### POST /reviews/{id}/approve
 
-Approve the review — waiting, or rejected before —: the website shows it from now on (GET /reviews of the Store API), under the request's principal; 403 the shop's admin's own review, 422 on `status` when it is approved already
+Approve a pending or rejected review. The website shows it from now on (the Store API's `GET /reviews`). A 403 for an admin's own review; a 422 on `status` when it is already approved.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/reviews/{id}/approve`](Panels-API-Reference.md#post-apipanelreviewsidapprove).
 
 **Parameters**
@@ -1723,9 +1801,9 @@ Approve the review — waiting, or rejected before —: the website shows it fro
 
 ### POST /reviews/{id}/reject
 
-Reject the review — waiting, or shown before (hidden again) —: kept, never shown on the website; 403 the shop's admin's own review, 422 on `status` when it is rejected already
+Reject a pending or approved review. It is kept but no longer shown on the website. A 403 for an admin's own review; a 422 on `status` when it is already rejected.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`POST /api/{panel}/reviews/{id}/reject`](Panels-API-Reference.md#post-apipanelreviewsidreject).
 
 **Parameters**
@@ -1747,9 +1825,9 @@ Reject the review — waiting, or shown before (hidden again) —: kept, never s
 
 ### DELETE /reviews/{id}
 
-Delete the review, whatever it stood at — shown on the website no more; 403 the shop's admin's own review
+Delete a review, whatever its status. A 403 for an admin's own review.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`DELETE /api/{panel}/reviews/{id}`](Panels-API-Reference.md#delete-apipanelreviewsid).
 
 **Parameters**
@@ -1769,9 +1847,9 @@ Delete the review, whatever it stood at — shown on the website no more; 403 th
 
 ### GET /referrals
 
-The referral program's rules and numbers
+The referral program's rules and numbers.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/referrals`](Panels-API-Reference.md#get-apipanelreferrals).
 
 **Answers**
@@ -1785,19 +1863,19 @@ The referral program's rules and numbers
 
 ### GET /referrals/referrers
 
-Customers whose link brought someone, most referrals first — or in another order (sort, dir)
+Customers whose referral link brought someone. Most referrals first, or sorted by `sort` and `dir`.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/referrals/referrers`](Panels-API-Reference.md#get-apipanelreferralsreferrers).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
+| `search` | query | string | no | The search text ("#12" finds by number) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [ReferrerSort](API-Schemas.md#referrersort) | no | What to sort by; any other is the list's own, referrals |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [ReferrerSort](API-Schemas.md#referrersort) | no | What to sort by. Anything else sorts by number of referrals |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -1810,20 +1888,20 @@ Customers whose link brought someone, most referrals first — or in another ord
 
 ### GET /referrals/invitees
 
-Who brought whom, newest first — or in another order (sort, dir)
+Who brought whom. Newest first, or sorted by `sort` and `dir`.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/referrals/invitees`](Panels-API-Reference.md#get-apipanelreferralsinvitees).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `referrer` | query | integer | no | One customer's id: only the ones their link brought (never they themselves) |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `referrer` | query | integer | no | A customer's id: only the customers their link brought (not the referrer themselves) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [InviteeSort](API-Schemas.md#inviteesort) | no | What to sort by; any other is the list's own, joined |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [InviteeSort](API-Schemas.md#inviteesort) | no | What to sort by. Anything else sorts by sign-up time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -1836,25 +1914,72 @@ Who brought whom, newest first — or in another order (sort, dir)
 
 ### GET /referrals/commissions
 
-Commissions paid out, newest first — or in another order (sort, dir)
+Referral commissions paid. Newest first, or sorted by `sort` and `dir`.
 
-- **Who:** one of the shop's admins, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/referrals/commissions`](Panels-API-Reference.md#get-apipanelreferralscommissions).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
+| `search` | query | string | no | The search text ("#12" finds by number) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [ReferralCommissionSort](API-Schemas.md#referralcommissionsort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [ReferralCommissionSort](API-Schemas.md#referralcommissionsort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [ReferralCommissionsResponse](API-Schemas.md#referralcommissionsresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /referrals/alerts
+
+Alerts on referrers whose referrals look fake. Newest first. An alert stays until support clears it.
+
+- **Who:** an admin of the shop, signed in on its website.
+- **In the panels:** [`GET /api/{panel}/referrals/alerts`](Panels-API-Reference.md#get-apipanelreferralsalerts).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `page` | query | integer, at least 1 | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ReferralAlertsResponse](API-Schemas.md#referralalertsresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /referrals/alerts/{id}/clear
+
+Clear a referral alert. The referrer earns start gifts and plan rewards again from now on; rewards withheld meanwhile are not paid later. An admin cannot clear an alert on themselves (403). An alert already cleared is a 422 on `status`.
+
+- **Who:** an admin of the shop, signed in on its website.
+- **In the panels:** [`POST /api/{panel}/referrals/alerts/{id}/clear`](Panels-API-Reference.md#post-apipanelreferralsalertsidclear).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | Cleared | none |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |

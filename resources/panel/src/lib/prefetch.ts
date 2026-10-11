@@ -2,19 +2,18 @@ import { isValidElement } from 'react'
 import { matchRoutes, type RouteObject } from 'react-router'
 
 /*
- * Pages are their own chunks (lib/lazy-page). The page an address opens is asked for before its turn: the panel's
- * first page as the panel starts — beside its first questions to the server, not after them —, the page a link leads
- * to as soon as the link is about to be followed, and the page the sign-in leads to while its form waits. A page loaded
- * by its turn is drawn at once.
+ * Loading pages (lib/lazy-page) before they are drawn: the first page as the panel starts — alongside its first API
+ * reads, not after them —, a link's page as soon as the link is about to be followed, and the page a sign-in leads to
+ * while its form waits.
  */
 
-/** How long the pointer rests on a link before its page is asked for — passing over the sidebar on the way elsewhere asks for nothing. */
+/** How long the pointer rests on a link before its page loads: passing over the sidebar loads nothing. */
 const HOVER_MS = 50
 
 /** The panel's routes, as it started. */
 let panelRoutes: RouteObject[] | null = null
 
-/** A route's page, when it is one of its own chunk: the route's element is a lazy page, which can load itself. */
+/** The preload of a route whose element is a lazy page (lib/lazy-page); undefined for any other route. */
 function preloaderOf(route: RouteObject): (() => void) | undefined {
   const type: unknown = isValidElement(route.element) ? route.element.type : undefined
   return typeof type === 'function' && 'preload' in type && typeof type.preload === 'function' ? (type.preload as () => void) : undefined
@@ -26,7 +25,7 @@ function preloadAddress(address: string, basename: string): void {
   for (const { route } of matchRoutes(panelRoutes, address, basename) ?? []) preloaderOf(route)?.()
 }
 
-/** Starts loading the page a router address opens ("/", "/users?status=banned") — where the sign-in leads, as its form waits. */
+/** Start loading the page a router address opens ("/", "/users?status=banned"): where a sign-in leads, while its form waits. */
 export function preloadPage(to: string): void {
   preloadAddress(to, '/')
 }
@@ -38,9 +37,8 @@ function linkOf(target: EventTarget | null): HTMLAnchorElement | null {
 }
 
 /**
- * Loads the page the panel opens on, now, and from then on the page a link leads to on a sign it is about to be
- * followed: the pointer resting on it, the keyboard's focus reaching it, a finger or a button pressing it. Returns the
- * way to stop.
+ * Load the page the panel opens on now, and from then on a link's page as soon as it is about to be followed: the
+ * pointer resting on it, the keyboard focusing it, a press. Returns the way to stop.
  */
 export function startPrefetching(routes: RouteObject[], basename: string): () => void {
   panelRoutes = routes

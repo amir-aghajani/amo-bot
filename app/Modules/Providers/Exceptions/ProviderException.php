@@ -11,9 +11,9 @@ namespace App\Modules\Providers\Exceptions;
 class ProviderException extends \RuntimeException
 {
     /**
-     * Whether the panel could not be worked with at all — out of reach, refusing the shop's credentials, not answering
-     * as its API — rather than answering about the one thing asked. Such a failure is the server's: it is recorded on
-     * it, and the shop leaves the panel alone a while (Server::isBackingOff()).
+     * Whether the panel could not be worked with at all — out of reach, refusing the shop's credentials, not answering as
+     * its API — rather than answering about the one thing asked. Such a failure is recorded on the server, which then
+     * backs off a while (Server::isBackingOff()).
      */
     public function unavailable(): bool
     {

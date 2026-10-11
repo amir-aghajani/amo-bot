@@ -6,6 +6,7 @@ namespace App\Modules\Notifications\Services;
 
 use App\Core\Database\Transitions;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Discounts\Models\LoyaltyTier;
 use App\Modules\Notifications\Enums\Delivery;
 use App\Modules\Notifications\Enums\NoticeType;
 use App\Modules\Orders\Enums\OrderStatus;
@@ -15,6 +16,7 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Referrals\Models\ReferralCommission;
+use App\Modules\Rewards\Models\Cashback;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Support\Models\Ticket;
 use App\Modules\Support\Models\TicketMessage;
@@ -36,29 +38,24 @@ use App\Modules\Telegram\Texts\Html;
 use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
+use App\Support\Persian;
 
 /**
- * What the shop tells a customer on its own, outside a conversation, once something was decided: a payment settled,
- * rejected, cancelled, refunded or still waiting; a service switched off, back on, moved (with the new link), deleted,
- * given days and traffic; «تمدید خودکار» done or short of money; «یادآوری»: a service ending soon, its traffic running
- * low; a referral's arrival and its commission; «نمایندگی» approved, rejected, changed, ended, or short of traffic; how
- * their account on the website is signed in to changed — a way in added or taken away, a password set, two-factor
- * sign-in on or off (by them, or by support), another account of theirs made one with it, its second step failed until
- * it waits, the codes emailed to its address failed until none goes for a while —, told on every door it has
- * (tellAccount()); support's answer to their ticket, and its closing.
+ * Everything the shop tells a customer on its own, once something was decided — a method per notice: payments (settled,
+ * rejected, cancelled, refunded, reminded), services (switched off or on, moved, deleted, given days and traffic),
+ * renewals («تمدید خودکار» done or short), reminders («یادآوری»), referrals, the agency, tickets, cashback and loyalty,
+ * the nightly draw, and every change of how their website account is signed in to.
  *
- * Each notice is composed in the shop of the bot the customer talks to — its wording, its token — whoever decided (a
- * panel, a task going through every server's services): its words first (the admin's, BotTexts), then how Telegram is
- * sent them; Notices keeps it for their website and sends it on every door they have — their Telegram chat (none to a
- * customer who turned the bot away), else their email. A message about a payment is a bare reply to the receipt it is
- * about (a plain message without one); none has buttons, the customer is not being asked anything — but for the payment
- * reminder (send the receipt, or pay again), the short wallet (top it up), the service reminders (open the service) and
- * a ticket's (answer support, rate the ticket, open it — each as a message of its own, the notice left as it is). The
- * service itself is sent by Telegram\Notifications\ServiceCard, its caption what the website keeps.
+ * Each notice is composed inside the recipient's shop (tell()), whoever decided: an agent's customer hears from the
+ * agent's bot, in the agent's wording, with balances read in that shop. That is why every method hands tell() a closure
+ * instead of finished words. Notices then keeps it for their website and sends it to their Telegram chat or, failing
+ * that, their email. A payment's message replies to the customer's receipt when there is one. Buttons only where the
+ * customer is asked something: the payment reminder, the short wallet, the service reminders and a ticket's notices.
+ * A service itself is sent by Telegram\Notifications\ServiceCard, its caption what the website keeps.
  */
 final class CustomerNotifier
 {
-    /** A margin kept under Telegram's limit, beside what it counts (Limits counts as it does: an emoji two units). */
+    /** A margin kept under Telegram's message limit (Limits counts as Telegram does: an emoji is two units). */
     private const MESSAGE_ROOM = 96;
 
     public function __construct(
@@ -72,8 +69,8 @@ final class CustomerNotifier
     ) {}
 
     /**
-     * A payment was settled after the fact: what came of it — the service or the charged wallet, or that delivery failed
-     * and support will finish it — and, when it earned their referrer a commission, the referrer hears it too.
+     * A payment was settled after the fact: the service or the charged wallet, or that delivery failed and support will
+     * finish it. A referrer it earned a commission is notified too.
      */
     public function paymentSettled(Payment $payment): void
     {
@@ -91,7 +88,7 @@ final class CustomerNotifier
         CurrentBot::run($payment->shop(), fn() => $this->commissionEarned($payment));
     }
 
-    /** Support refused the receipt: why (the payment's note) — the order stays open, the menu is the way back. */
+    /** Support refused the receipt, with the reason (the payment's note); the order stays open. */
     public function paymentRejected(Payment $payment): void
     {
         $this->tell($payment, NoticeType::PaymentRejected, fn(): array => $this->message($this->texts->render(BotText::ReceiptRejected, [
@@ -100,7 +97,7 @@ final class CustomerNotifier
         ]), self::replyingToReceipt($payment)));
     }
 
-    /** Support dropped the order, with the note they left on the payment, if any. */
+    /** Support cancelled the order, with the note they left on the payment, if any. */
     public function orderCancelled(Payment $payment): void
     {
         $this->tell($payment, NoticeType::OrderCancelled, fn(): array => $this->message($this->texts->render(BotText::OrderCancelledByAdmin, [
@@ -110,8 +107,8 @@ final class CustomerNotifier
     }
 
     /**
-     * The payment was refunded, with support's note: a purchase's money came back as balance; a wallet top-up's charge
-     * went out of the wallet again — or, never delivered, left it as it was.
+     * The payment was refunded, with support's note: a purchase's money came back as balance; a top-up's charge went out
+     * of the wallet again (or, never delivered, the wallet is as it was). Cashback the order earned is said taken back.
      */
     public function paymentRefunded(Payment $payment): void
     {
@@ -127,13 +124,12 @@ final class CustomerNotifier
             'amount' => Money::format($payment->amount),
             'order' => $payment->order_id,
             'note' => $this->adminNote($payment->note),
-        ] + ($text === BotText::TopupRefundedUndelivered ? [] : ['balance' => Messages::balance($order->user->balance())])), self::replyingToReceipt($payment)));
+        ] + ($text === BotText::TopupRefundedUndelivered ? [] : ['balance' => Messages::balance($order->user->balance())])) . $this->cashbackTakenBack($order), self::replyingToReceipt($payment)));
     }
 
     /**
-     * Support nudges a customer whose payment never completed: one still waiting for its receipt gets "send it" and
-     * "pay again", a rejected one only "pay again" — its receipt was refused. Telling them is all it does: whether it
-     * did, the panel says.
+     * Support nudges a customer whose payment never completed: one still waiting for its receipt gets "send receipt" and
+     * "pay again", a rejected one only "pay again". Returns the delivery, which the panel reports.
      */
     public function paymentReminder(Payment $payment): Delivery
     {
@@ -165,15 +161,15 @@ final class CustomerNotifier
     }
 
     /**
-     * Support deleted the service, with their note if they left one. It is gone from the shop by now: the notice is about
-     * their account, with nothing for their website to open.
+     * Support deleted the service, with their note if they left one. The row is gone, so the notice is about their
+     * account, with nothing for their website to open.
      */
     public function serviceDeleted(Subscription $subscription, ?string $note): void
     {
         $this->tell($subscription->user, NoticeType::ServiceDeleted, fn(): array => $this->serviceChanged($subscription, BotText::ServiceDeletedBySupport, ['note' => $this->adminNote($note)]));
     }
 
-    /** The service moved to another server: the new link, like a delivery (the QR card or the text). */
+    /** The service moved to another server: the new link, sent like a delivery (the QR card or the text). */
     public function serviceMoved(Subscription $subscription): void
     {
         $this->tell($subscription, NoticeType::ServiceMoved, function () use ($subscription): array {
@@ -183,10 +179,7 @@ final class CustomerNotifier
         });
     }
 
-    /**
-     * The service got days and traffic — its share of a grant, or support's extension of it alone —: what it got, the
-     * word support gave with it, and where it stands now.
-     */
+    /** The service got days and traffic (a grant's share, or support's extension): what, support's note, and where it stands now. */
     public function serviceGranted(Subscription $subscription, int $days, int $bytes, ?string $note): void
     {
         $this->tell($subscription, NoticeType::ServiceGranted, fn(): array => $this->message($this->card->text($subscription, BotText::ServiceGranted, [
@@ -196,8 +189,8 @@ final class CustomerNotifier
     }
 
     /**
-     * «یادآوری»: the service ends soon — its deadline and what is left, and, when it could renew itself
-     * (`$autoRenewHint`), the switch that would; the button opens its screen.
+     * «یادآوری»: the service ends soon — its deadline and what is left, plus a hint about «تمدید خودکار» when it could
+     * renew itself (`$autoRenewHint`); the button opens its screen.
      */
     public function expiryReminder(Subscription $subscription, bool $autoRenewHint): void
     {
@@ -206,7 +199,7 @@ final class CustomerNotifier
         ]), ['reply_markup' => $this->serviceButton($subscription)]));
     }
 
-    /** «یادآوری»: most of the service's traffic is used — how much, and what is left; the button opens its screen. */
+    /** «یادآوری»: most of the service's traffic is used — how much and what is left; the button opens its screen. */
     public function trafficReminder(Subscription $subscription): void
     {
         $this->tell($subscription, NoticeType::TrafficReminder, fn(): array => $this->message($this->card->text($subscription, BotText::TrafficReminder, [
@@ -214,7 +207,7 @@ final class CustomerNotifier
         ]), ['reply_markup' => $this->serviceButton($subscription)]));
     }
 
-    /** «تمدید خودکار» renewed the service: what the wallet paid, what is left in it, the new deadline — the link has not changed. */
+    /** «تمدید خودکار» renewed the service: what the wallet paid, its balance, the new deadline (the link is unchanged). */
     public function autoRenewed(Order $renewal): void
     {
         $this->tell($renewal, NoticeType::AutoRenewed, fn(): array => $this->message($this->card->renewalText($renewal, BotText::AutoRenewed, [
@@ -224,8 +217,8 @@ final class CustomerNotifier
     }
 
     /**
-     * «تمدید خودکار» found the wallet short: the price, the balance and the deadline, with the button that tops the
-     * wallet up — the next run renews once it can pay.
+     * «تمدید خودکار» found the wallet short: the price, the balance and the deadline, with a top-up button; the next run
+     * renews once it can pay.
      */
     public function autoRenewShort(Subscription $subscription, string $price): void
     {
@@ -233,7 +226,7 @@ final class CustomerNotifier
             'client' => $subscription->remote_name,
             'amount' => Money::format($price),
             'balance' => Messages::balance($subscription->user->balance()),
-            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_days),
+            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
         ]), ['reply_markup' => InlineKeyboard::make()->row($this->buttons->topUp())->build()]));
     }
 
@@ -251,16 +244,39 @@ final class CustomerNotifier
         ])));
     }
 
+    /**
+     * «هدیه شروع» landed in the customer's wallet: a referrer's for the newcomer their link brought (`$newcomer`), or the
+     * newcomer's own (null) — the amount and the balance now.
+     */
+    public function referralStartGift(User $user, string $amount, ?User $newcomer): void
+    {
+        $this->tell($user, NoticeType::ReferralStartGift, fn(): array => $this->message($newcomer !== null
+            ? $this->texts->render(BotText::ReferralStartGiftReferrer, ['amount' => Money::format($amount), 'name' => $newcomer->name() ?? '', 'balance' => Messages::balance($user->balance())])
+            : $this->texts->render(BotText::ReferralStartGiftInvitee, ['amount' => Money::format($amount), 'balance' => Messages::balance($user->balance())])));
+    }
+
+    /**
+     * «جایزه دعوت»: `$buyers` of the referrer's referrals bought, so a service of the plan was given to them free (the
+     * service itself comes as any delivered order).
+     */
+    public function referralRewarded(User $referrer, string $plan, int $buyers): void
+    {
+        $this->tell($referrer, NoticeType::ReferralReward, fn(): array => $this->message($this->texts->render(BotText::ReferralRewarded, [
+            'buyers' => Persian::number($buyers),
+            'plan' => $plan,
+        ])));
+    }
+
     /** Support approved the customer's request to become an agent: their level, its price per GB and their credit. */
     public function agencyApproved(User $agent): void
     {
-        // An agency ended in the same moment was told its end instead.
+        // An agency revoked in the same moment was told its end instead.
         if ($agent->agencyLevel !== null) {
             $this->agencyTerms($agent, BotText::AgencyApproved, NoticeType::AgencyApproved);
         }
     }
 
-    /** Support moved an agent — one still — to another level, or changed their credit: whether they were told, the panel says. */
+    /** Support changed an agent's level or credit; returns the delivery, which the panel reports. */
     public function agencyChanged(User $agent): Delivery
     {
         return $this->agencyTerms($agent, BotText::AgencyChanged, NoticeType::AgencyChanged);
@@ -278,65 +294,65 @@ final class CustomerNotifier
         $this->tell($user, NoticeType::AgencyRevoked, fn(): array => $this->message($this->texts->render(BotText::AgencyRevoked, ['note' => $this->adminNote($note)])));
     }
 
-    /** Support turned off the two-factor sign-in of the customer's account on the website: the password alone signs them in now. */
+    /** Support turned off the two-factor sign-in of the customer's website account. */
     public function twoFactorDisabled(User $user): void
     {
         $this->tellAccount($user, NoticeType::TwoFactorDisabled, BotText::TwoFactorDisabled);
     }
 
-    /** The customer turned the two-factor sign-in of their account on the website on. */
+    /** The customer turned on two-factor sign-in for their website account. */
     public function twoFactorEnabled(User $user): void
     {
         $this->tellAccount($user, NoticeType::TwoFactorEnabled, BotText::TwoFactorTurnedOn);
     }
 
-    /** The customer turned it off themselves, with their password. */
+    /** The customer turned two-factor sign-in off themselves, with their password. */
     public function twoFactorTurnedOff(User $user): void
     {
         $this->tellAccount($user, NoticeType::TwoFactorDisabled, BotText::TwoFactorTurnedOff);
     }
 
-    /** A way into the customer's account on the website was added — `$way` names its kind (Telegram, Google, an email). */
+    /** A way into the customer's website account was added; `$way` names its kind (Telegram, Google, an email). */
     public function wayInAdded(User $user, string $way): void
     {
         $this->tellAccount($user, NoticeType::WayInAdded, BotText::WayInAdded, ['way' => $way]);
     }
 
-    /** A way into the customer's account on the website was taken away — `$way` names its kind. */
+    /** A way into the customer's website account was removed; `$way` names its kind. */
     public function wayInRemoved(User $user, string $way): void
     {
         $this->tellAccount($user, NoticeType::WayInRemoved, BotText::WayInRemoved, ['way' => $way]);
     }
 
-    /** The password of the customer's account on the website was set or changed — from their account, or by a reset. */
+    /** The password of the customer's website account was set or changed (from their account, or by a reset). */
     public function passwordChanged(User $user): void
     {
         $this->tellAccount($user, NoticeType::PasswordChanged, BotText::PasswordChanged);
     }
 
-    /** Another account of the customer's and this one — the account that stayed — were made one. */
+    /** Another account of the customer's was merged into this one, the account that stayed. */
     public function accountMerged(User $user): void
     {
         $this->tellAccount($user, NoticeType::AccountMerged, BotText::AccountMerged);
     }
 
-    /** The second step of the account's password sign-in was failed until it waits: whoever had the password, it was right. */
+    /** The second step of a password sign-in was failed until it locked: whoever tried had the right password. */
     public function secondStepLocked(User $user): void
     {
         $this->tellAccount($user, NoticeType::SecondStepLocked, BotText::SecondStepLocked);
     }
 
-    /** The codes emailed to the account's address were failed until no new one goes to it for a while: someone is guessing at them. */
+    /** The codes emailed to the account's address were failed until none is sent for a while: someone is guessing. */
     public function emailCodesFailed(User $user): void
     {
         $this->tellAccount($user, NoticeType::EmailCodesFailed, BotText::EmailCodesFailed);
     }
 
     /**
-     * Support answered the customer's ticket: which ticket, and the answer — as much of it as a message holds (the whole is
-     * on their website) —, a picture with it said so and sent: the picture, the notice its caption, while it fits one and
-     * Telegram takes the picture (the words alone otherwise — the ticket's screen sends the picture); «✍️ پاسخ» and
-     * «🗂️ مشاهده تیکت» under it.
+     * Support answered the customer's ticket: which ticket and the answer, cut to what a message holds (the whole is on
+     * the website). An answer's picture goes as a photo with the notice as its caption, while the notice fits a caption
+     * and Telegram takes the picture; otherwise the words go alone (the ticket's screen sends the picture). Buttons:
+     * «✍️ پاسخ» and «🗂️ مشاهده تیکت».
      */
     public function ticketAnswered(Ticket $ticket, TicketMessage $answer): void
     {
@@ -362,9 +378,43 @@ final class CustomerNotifier
         });
     }
 
+    /** A delivered order earned the customer cashback («کش‌بک»): how much, and their balance now. */
+    public function cashbackEarned(Cashback $cashback, Order $order): void
+    {
+        $this->tell($order, NoticeType::CashbackEarned, fn(): array => $this->message($this->texts->render(BotText::CashbackEarned, [
+            'order' => $order->id,
+            'cashback_amount' => Money::format($cashback->amount),
+            'balance' => Messages::balance($order->user->balance()),
+        ])));
+    }
+
+    /** A delivered order moved the customer up a loyalty tier: its name and its perks, a line each. */
+    public function loyaltyTierUp(User $user, LoyaltyTier $tier): void
+    {
+        $this->tell($user, NoticeType::LoyaltyTierUp, function () use ($tier): array {
+            $percents = ['tier_discount' => Persian::digits($tier->discount_percent) . '٪', 'tier_cashback' => Persian::digits($tier->cashback_percent) . '٪'];
+            $perks = [];
+            if ($tier->discount_percent > 0) {
+                $perks[] = $this->texts->part(BotText::LoyaltyPerkDiscount, ['tier_discount' => $percents['tier_discount']]);
+            }
+            if ($tier->cashback_percent > 0) {
+                $perks[] = $this->texts->part(BotText::LoyaltyPerkCashback, ['tier_cashback' => $percents['tier_cashback']]);
+            }
+
+            // Without a perk, the line for them leaves no blank behind.
+            return $this->message(rtrim($this->texts->render(BotText::LoyaltyTierUp, ['loyalty_tier' => $tier->name, 'tier_perks' => $perks === [] ? '' : Html::lines(...$perks)] + $percents)));
+        });
+    }
+
+    /** The customer won the shop's nightly draw and was given `$prize` (already worded). */
+    public function lotteryWon(User $user, string $prize): void
+    {
+        $this->tell($user, NoticeType::LotteryWon, fn(): array => $this->message($this->texts->render(BotText::LotteryWon, ['draw_prize' => $prize])));
+    }
+
     /**
-     * Support closed the customer's ticket: a message to it opens it again; «⭐ امتیاز» under it while they have not rated
-     * it, and «🗂️ مشاهده تیکت».
+     * Support closed the customer's ticket (a message to it opens it again). Buttons: «⭐ امتیاز» while unrated, and
+     * «🗂️ مشاهده تیکت».
      */
     public function ticketClosed(Ticket $ticket): void
     {
@@ -379,9 +429,9 @@ final class CustomerNotifier
     }
 
     /**
-     * An agent's bot could not deliver an order: their traffic does not cover it. The agent hears it in the main bot,
-     * with the button that buys more — the order waits for the retry on their panel. It is their customer's order, in
-     * their bot's shop: nothing their own website opens.
+     * An agent's bot could not deliver an order because their traffic does not cover it. The agent hears it in the main
+     * bot with a button to buy more; the order waits for a retry. The order is their customer's, so nothing their own
+     * website opens.
      */
     public function agencyTrafficShort(Order $order): void
     {
@@ -398,9 +448,8 @@ final class CustomerNotifier
     }
 
     /**
-     * The commission the payment earned the customer's referrer (ReferralService::reward()) — the one it was credited to
-     * —, told once: the first notice claims the row, so a retry that tells the customer again does not tell the referrer
-     * twice. The payment is their referral's: nothing their own website opens.
+     * The commission the payment earned the referrer it was credited to (ReferralService::reward()), announced once:
+     * the first notice claims the row, so a retry that notifies the customer again does not notify the referrer twice.
      */
     private function commissionEarned(Payment $payment): void
     {
@@ -417,7 +466,15 @@ final class CustomerNotifier
         ])));
     }
 
-    /** An agent's terms in one of the texts that tell them: level, price per GB, credit. */
+    /** The line under a refund saying the order's cashback was taken back (BotText::CashbackTakenBack); '' for none. */
+    private function cashbackTakenBack(Order $order): string
+    {
+        $cashback = Cashback::query()->where('order_id', $order->id)->whereNotNull('reversed_at')->first();
+
+        return $cashback === null ? '' : (string) $this->texts->part(BotText::CashbackTakenBack, ['cashback_amount' => Money::format($cashback->amount)]);
+    }
+
+    /** Tell an agent their terms in `$text`: level, price per GB, credit. */
     private function agencyTerms(User $agent, BotText $text, NoticeType $type): Delivery
     {
         $level = $agent->agencyLevel ?? throw new \LogicException("User #{$agent->id} is not an agent.");
@@ -430,7 +487,7 @@ final class CustomerNotifier
     }
 
     /**
-     * Support's change of a service, worded: its client's name on the panel and the text's own values.
+     * A plain message about support's change of a service: its client's name on the panel and the text's own values.
      *
      * @param array<string, scalar|Html> $values the text's own, besides the client's name
      * @return array{string, \Closure(int): array<string, mixed>}
@@ -441,7 +498,7 @@ final class CustomerNotifier
     }
 
     /**
-     * A notice that goes as a plain message: its words, and how Telegram is sent them — with `$options` (a reply target,
+     * A notice that goes as a plain message: its text, and how to send it to a chat with `$options` (a reply target,
      * buttons).
      *
      * @param array<string, mixed> $options
@@ -453,9 +510,9 @@ final class CustomerNotifier
     }
 
     /**
-     * How a notice of the ticket goes to the customer's chat: `$send`, once a chat left on another of their tickets left it
-     * (TicketMessageHandler::leaveOtherTicket()) — what they type next answers no ticket by mistake; the notice's own
-     * «✍️ پاسخ» is the way to this one.
+     * Send a ticket's notice with `$send`, first taking the chat off another ticket it was writing into
+     * (TicketMessageHandler::leaveOtherTicket()), so what the customer types next answers no ticket by mistake; the
+     * notice's own «✍️ پاسخ» leads to this one.
      *
      * @param \Closure(int): mixed $send
      * @return \Closure(int): mixed
@@ -470,9 +527,8 @@ final class CustomerNotifier
     }
 
     /**
-     * The buttons under a notice of the ticket, in a row: what the notice asks of the customer first (`$first`, on the
-     * right — Telegram lays a row out left to right), then «🗂️ مشاهده تیکت». Each opens what it does as a message of its
-     * own, so the notice — support's words — stays (TicketHandler).
+     * The buttons under a ticket's notice, one row: what the notice asks first (`$first`, on the right — Telegram lays a
+     * row out left to right), then «🗂️ مشاهده تیکت». Each opens a message of its own, so the notice stays (TicketHandler).
      *
      * @param array<string, mixed> ...$first
      * @return array{inline_keyboard: list<list<array<string, mixed>>>}
@@ -488,7 +544,7 @@ final class CustomerNotifier
         return InlineKeyboard::make()->row(InlineKeyboard::callback($this->texts->get(BotText::ReminderOpenService), SubscriptionHandler::serviceCallback($subscription->id)))->build();
     }
 
-    /** Support's word to the customer on its own line (BotText::AdminNote), or nothing when they left none. */
+    /** Support's note on its own line (BotText::AdminNote), or '' when they left none. */
     private function adminNote(?string $note): Html|string
     {
         $note = trim((string) $note);
@@ -497,11 +553,10 @@ final class CustomerNotifier
     }
 
     /**
-     * Tell the customer `$about` concerns, in the shop of the bot they talk to — its texts, its rules, its token: an
-     * agent's customer hears from the agent's bot, whoever acted. `$compose` words the notice there — its text, and how
-     * Telegram is sent it, given their chat — and Notices delivers it: kept for their website (what it is about: the
-     * order of a payment, an order, a service — nothing for their account), then to their Telegram chat or their email.
-     * What came of it is the answer — the screens that tell for telling's sake say it (a reminder, an agent's new terms).
+     * Tell the customer `$about` concerns, inside the shop of the bot they talk to (its texts, rules and token), whoever
+     * acted. `$compose` runs there and returns the notice's text and how to send it to a chat; Notices keeps it for the
+     * website — linked to the order (a payment's order), service or ticket it is about, nothing for an account — and
+     * sends it. Returns the delivery, which some screens report (a reminder, an agent's new terms).
      *
      * @param \Closure(): array{string, \Closure(int): mixed} $compose
      */
@@ -511,8 +566,6 @@ final class CustomerNotifier
             [$customer, $subject] = match (true) {
                 $about instanceof User => [$about, null],
                 $about instanceof Payment => [$about->order->user, $about->order],
-                $about instanceof Order => [$about->user, $about],
-                $about instanceof Ticket => [$about->user, $about],
                 default => [$about->user, $about],
             };
             [$text, $telegram] = $compose();
@@ -522,8 +575,8 @@ final class CustomerNotifier
     }
 
     /**
-     * A change of how the customer's account is signed in to, worded in their shop and told as a plain message on every
-     * door it has — their Telegram chat and their email both (Notices' `everyDoor`): whoever made the change may hold one.
+     * A change of how the customer's account is signed in to, worded in their shop and sent as a plain message to their
+     * Telegram chat and their email both (Notices' `everyDoor`): whoever made the change may control one of them.
      *
      * @param array<string, scalar> $values
      */
@@ -537,9 +590,8 @@ final class CustomerNotifier
     }
 
     /**
-     * A message about a payment quotes the receipt it is about: a reply to that message when we know it (a receipt sent
-     * through the bot), a plain message otherwise (no receipt, or the customer deleted theirs —
-     * `allow_sending_without_reply`).
+     * A message about a payment replies to the receipt it is about when the bot knows it (a receipt sent in the bot); a
+     * receipt deleted since still lets the message go (`allow_sending_without_reply`).
      *
      * @return array<string, mixed>
      */

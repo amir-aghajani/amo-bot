@@ -15,9 +15,8 @@ use GuzzleHttp\ClientInterface;
 use Symfony\Component\Mailer\Transport\TransportInterface;
 
 /**
- * Resend's API (resend.com) — for a host that sends no mail of its own, or whose mail lands in spam: the account's API
- * key (MAIL_RESEND_API_KEY), each email posted through the shop's one outgoing client (ResendTransport), from an
- * address of a domain the account verified.
+ * Resend's API (resend.com), for a host that sends no mail or whose mail lands in spam: its one setting is the API key
+ * (MAIL_RESEND_API_KEY); the sender's domain must be verified in Resend.
  */
 final class Resend implements MailDriver
 {

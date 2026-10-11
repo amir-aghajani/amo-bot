@@ -8,10 +8,9 @@ use App\Core\Forms\Fields\Field;
 use App\Core\Forms\FieldType;
 
 /**
- * A field of the website's form with a rule of the form's own — what its value says against the others', as the save
- * would leave them (`$rule`: the refusal under it, in the owner's words, or null) —, everything else its field's: a
- * switch on that needs another field (Telegram sign-in, its Client ID), a field another's switch needs (the website on,
- * its address).
+ * Wraps a field with a rule against the other fields' values as the save would leave them (`$rule` answers the refusal,
+ * or null); everything else is the wrapped field's. For a switch that needs another field (Telegram sign-in, its Client
+ * ID) or a field a switch needs (the website on, its address).
  *
  * @template T
  * @extends Field<T>

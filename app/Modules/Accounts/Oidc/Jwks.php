@@ -12,15 +12,12 @@ use GuzzleHttp\Exception\GuzzleException;
 use Psr\Log\LoggerInterface;
 
 /**
- * An OpenID provider's signing keys, as it publishes them (its JWK set), read through the shop's outgoing client and
- * kept in a file of the container's `jwks.path` folder (a file per provider, written whole) for KEEP_SECONDS — a
- * sign-in does not ask the provider each time. A token signed with a key the kept set lacks — the provider turned its
- * keys over — has the set read again, but not sooner than REFRESH_SECONDS after the last read: made-up key ids cannot
- * have the shop ask on every request. A provider out of reach leaves the kept set in use, however old; with none kept,
- * a sign-in cannot be checked (ProviderUnreachableException).
+ * An OpenID provider's signing keys (its JWK set), kept in a file per provider under the container's `jwks.path` for
+ * KEEP_SECONDS so a sign-in does not ask the provider each time. A token naming a key the kept set lacks (the provider
+ * rotated its keys) has the set read again — but not within REFRESH_SECONDS of the last read, so made-up key ids cannot
+ * make the shop ask on every request. While the provider is out of reach the kept set stands in, however old.
  *
- * Only keys that sign, by an asymmetric algorithm, are taken: a set's symmetric key or a key for encryption is left
- * out, as is one this cannot read.
+ * Only asymmetric signing keys are taken: a symmetric key or an encryption key in the set is left out.
  */
 final class Jwks
 {
@@ -39,8 +36,8 @@ final class Jwks
     ) {}
 
     /**
-     * The provider's signing keys by their id (`kid`) — read again first when the kept set is older than KEEP_SECONDS,
-     * or lacks `$kid` and was read REFRESH_SECONDS ago.
+     * The provider's signing keys by `kid`, read again first when the kept set is older than KEEP_SECONDS, or lacks `$kid`
+     * and is at least REFRESH_SECONDS old.
      *
      * @return array<string, Key>
      * @throws ProviderUnreachableException when no set can be had
@@ -73,7 +70,7 @@ final class Jwks
     }
 
     /**
-     * The provider's set as it publishes it now — one that holds no key this can use is none.
+     * The provider's set as published now; one without a usable key counts as none.
      *
      * @return array<string, mixed>
      * @throws ProviderUnreachableException
@@ -108,7 +105,7 @@ final class Jwks
         try {
             Files::writeAtomically($this->file($provider), (string) json_encode(['read_at' => now()->getTimestamp(), 'set' => $set]));
         } catch (\RuntimeException $e) {
-            // A folder the server may not write costs a read of the keys a sign-in, never the sign-in.
+            // An unwritable folder costs a key read per sign-in, never the sign-in itself.
             $this->logger->warning('The signing keys of {issuer} could not be kept: {message}', ['issuer' => $provider->name(), 'message' => $e->getMessage()]);
         }
     }
@@ -119,7 +116,7 @@ final class Jwks
     }
 
     /**
-     * The set's signing keys by their id (a key without one by its place in the set).
+     * The set's usable signing keys by `kid` (a key without one by its position in the set).
      *
      * @param array<string, mixed> $set
      * @return array<string, Key>
@@ -149,7 +146,7 @@ final class Jwks
     }
 
     /**
-     * Whether a key's members the library reads are text, as a JWK's are — anything else is no key to read.
+     * Whether the key's members the library reads are all text, as a JWK's must be.
      *
      * @param array<array-key, mixed> $jwk
      */
@@ -165,7 +162,7 @@ final class Jwks
     }
 
     /**
-     * The algorithm a key that names none signs with, by its type and curve — null for a type that signs nothing here.
+     * The algorithm of a key that names none, by its type and curve; null for a type not accepted here.
      *
      * @param array<array-key, mixed> $jwk
      */

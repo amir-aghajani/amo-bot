@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useId, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Sparkles, Trash2, TriangleAlert, X, type LucideIcon } from 'lucide-react'
 import { flushSync } from 'react-dom'
 import { notePlainEmoji, usePlainEmoji } from '@/components/bot-texts/custom-emojis'
@@ -7,13 +7,13 @@ import { PremiumEmojiPicker } from '@/components/bot-texts/premium-emoji-picker'
 import { Callout } from '@/components/callout'
 import { Field } from '@/components/field'
 import { Creating, FormActions } from '@/components/form-footer'
-import { styleOptions, type StyleOption } from '@/components/keyboards/styles'
+import { StylePicker } from '@/components/keyboards/style-picker'
+import { styleOptions } from '@/components/keyboards/styles'
 import { Modal } from '@/components/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ButtonStyle, KeyboardAction, KeyboardButtonSpec } from '@/lib/api-types'
-import { isRtl } from '@/lib/direction'
 import { useForm } from '@/lib/use-form'
 import { cn } from '@/lib/utils'
 
@@ -52,10 +52,7 @@ const PREMIUM_TAGS = /<tg-emoji\b[^>]*>[\s\S]*?(?:<\/tg-emoji\s*>|<\/[^>]*$|$)|<
 /** A tag's emoji id, when it survived whole — and the plain emoji it holds, when that did too. */
 const PREMIUM_ID = /emoji-id="(\d{1,20})"(?:[^>]*>([^<]+)<)?/
 
-/**
- * The label's premium emoji lifted out: its tags leave the label, and the emoji becomes the icon — when its id survived
- * whole —, the plain emoji its tag held kept for the panel to show in its place (notePlainEmoji()).
- */
+/** Moves a premium emoji pasted into the label to the icon: the tags leave the label, the id becomes the icon (when whole). */
 function liftPremium(label: string): Partial<KeyboardButtonSpec> {
   const [, id, plain] = label.match(PREMIUM_ID) ?? []
   if (id && plain) notePlainEmoji(id, plain)
@@ -69,10 +66,8 @@ function liftPremium(label: string): Partial<KeyboardButtonSpec> {
 }
 
 /**
- * One button: what it does, what it says, the premium emoji it may show before its label, which of Telegram's colours
- * it wears — and, for one on the keyboard, its place, moved from here as well as by dragging. The label follows the
- * chosen action while it is that action's own. A premium emoji pasted into the label is offered a move to the icon,
- * where Telegram shows it. The rest of the rules (an action twice, a label too long) are the save's.
+ * One button's dialog: its action, label, premium-emoji icon and colour, and — for a button on the keyboard — its place
+ * (the keyboard's alternative to dragging). The label follows the action until edited. Other rules are the save's.
  */
 export function ButtonModal({ open, onClose, button, ...props }: ButtonModalProps) {
   return (
@@ -211,72 +206,6 @@ function ButtonForm({ actions, styles, taken, button, labelMax, moves, onSave, o
   )
 }
 
-/** Telegram's colours for the button, one picked: a radio group — arrow keys move the pick, Tab leaves the group. */
-function StylePicker({ options, value, onChange }: { options: StyleOption[]; value: ButtonStyle | null; onChange: (style: ButtonStyle | null) => void }) {
-  const id = useId()
-  const radios = useRef(new Map<ButtonStyle | null, HTMLButtonElement>())
-  const picked = options.some((option) => option.value === value)
-
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const [forward, backward] = isRtl() ? ['ArrowLeft', 'ArrowRight'] : ['ArrowRight', 'ArrowLeft']
-    const step = event.key === 'ArrowDown' || event.key === forward ? 1 : event.key === 'ArrowUp' || event.key === backward ? -1 : 0
-    if (step === 0) return
-    event.preventDefault()
-    const index = options.findIndex((option) => option.value === value)
-    const next = options[(index + step + options.length) % options.length]
-    if (!next) return
-    onChange(next.value)
-    radios.current.get(next.value)?.focus()
-  }
-
-  return (
-    <div className="grid gap-2">
-      <p id={id} className="mb-1 text-body font-medium">
-        رنگ دکمه
-      </p>
-      <div role="radiogroup" aria-labelledby={id} onKeyDown={onKeyDown} className="grid gap-2">
-        {options.map((option, i) => {
-          const selected = option.value === value
-          return (
-            <button
-              key={option.value ?? 'default'}
-              ref={(element) => {
-                if (element) radios.current.set(option.value, element)
-                else radios.current.delete(option.value)
-              }}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              // One stop for Tab: the picked colour (the first, when none of these is).
-              tabIndex={selected || (!picked && i === 0) ? 0 : -1}
-              onClick={() => onChange(option.value)}
-              className={cn(
-                'flex items-center gap-3 rounded-lg border px-3 py-2.5 text-start transition-colors duration-150 outline-none focus-visible:focus-ring',
-                selected ? 'border-selected bg-info-soft/40' : 'border-border hover:bg-fill',
-              )}
-            >
-              <span aria-hidden className="size-9 shrink-0 rounded-lg border border-white/10" style={{ background: option.swatch }} />
-              <span className="grid min-w-0 flex-1 gap-0.5">
-                <span className="text-body font-medium">{option.title}</span>
-                <span className="text-footnote text-muted-foreground">
-                  {option.value ? (
-                    <>
-                      <span dir="ltr">{option.value}</span> — {option.colorName}
-                    </>
-                  ) : (
-                    option.colorName
-                  )}
-                </span>
-              </span>
-              {selected && <Check className="size-4 text-selected" aria-hidden />}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 const MOVES: { direction: MoveDirection; opposite: MoveDirection; label: string; icon: LucideIcon }[] = [
   { direction: 'right', opposite: 'left', label: 'به راست', icon: ArrowRight },
   { direction: 'left', opposite: 'right', label: 'به چپ', icon: ArrowLeft },
@@ -285,9 +214,8 @@ const MOVES: { direction: MoveDirection; opposite: MoveDirection; label: string;
 ]
 
 /**
- * The button's place, moved from the keyboard (dragging is the pointer's way): along its row — the first button sits on
- * the right, as in Telegram — and to the end of the row above or below. The new place is announced; a move that reaches
- * an end hands the focus to one that can still go.
+ * Moves the button along its row (the first sits on the right, as in Telegram) or to the row above or below. Each move is
+ * announced; reaching an end hands the focus to a button that can still move.
  */
 function MoveButtons({ moves }: { moves: ButtonMoves }) {
   const id = useId()

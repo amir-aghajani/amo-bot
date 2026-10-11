@@ -1,8 +1,15 @@
 import {
+  BadgePercent,
   Banknote,
   Bot,
   CreditCard,
+  Crown,
+  Dices,
+  FerrisWheel,
+  Flame,
+  Gift,
   Globe,
+  HandCoins,
   Headset,
   House,
   Keyboard,
@@ -15,6 +22,7 @@ import {
   Star,
   Store,
   Tags,
+  TicketPercent,
   UserPlus,
   Users,
   type LucideIcon,
@@ -24,14 +32,13 @@ import type { BotSettingsGroup, QueueCounts } from '@/lib/api-types'
 import { pageOf } from '@/lib/config'
 
 /*
- * The navigation a panel's sidebar draws, as the Console's: a few top-level pages, then groups that fold open (an icon
- * and a chevron; their pages indented, text only), and the settings at the foot. Each panel has its own (apps/admin/nav,
- * apps/agent/nav), built from what is here: the shapes, the readings of a tree, and the entries and sections of the
- * shop's pages both panels have.
+ * The navigation tree the sidebar, the topbar's title and the tab's title are drawn from: top-level pages, groups that
+ * fold open, and the settings at the foot. Each panel builds its own (apps/admin/nav, apps/agent/nav) from the shapes,
+ * the readings and the shared entries here.
  *
- * A page made of sections — the settings, the users and their groups, the referrals' three lists… — has a column of
- * its own, as the Console's settings do: on its pages the sidebar lists its sections instead of the menu (`areaFor()`),
- * each section at an address of its own.
+ * A page made of sections (the settings, the users and their groups, the referrals' lists…) gets a column of its own
+ * instead of tabs: on its pages the sidebar lists its sections in place of the menu (`areaFor()`), each section at an
+ * address of its own.
  */
 
 export interface NavItem {
@@ -125,6 +132,39 @@ export const SALES_GROUP: NavGroup = {
   ],
 }
 
+/**
+ * The shop's discounts and rewards («تخفیف و جوایز»): its discount codes and sales, its loyalty tiers and cashback, its
+ * gift codes, its lucky wheel and its nightly draw — each page adds its own entry here, and the group stands in both
+ * panels' menus after «فروش» once it has one.
+ */
+export const MARKETING_GROUP: NavGroup = {
+  id: 'marketing',
+  title: 'تخفیف و جوایز',
+  icon: BadgePercent,
+  items: [
+    { id: 'discounts', title: 'کدهای تخفیف', to: '/discounts', icon: TicketPercent },
+    { id: 'sales', title: 'فروش ویژه', to: '/sales', icon: Flame },
+    { id: 'loyalty', title: 'سطوح وفاداری', to: '/loyalty', icon: Crown },
+    { id: 'cashback', title: 'کش‌بک', to: '/cashback', icon: HandCoins },
+    { id: 'gift-codes', title: 'کدهای هدیه', to: '/gift-codes', icon: Gift },
+    { id: 'wheel', title: 'گردونه شانس', to: '/wheel', icon: FerrisWheel },
+    { id: 'lottery', title: 'قرعه‌کشی', to: '/lottery', icon: Dices },
+  ],
+}
+
+/** «کدهای تخفیف»: the shop's codes, and how long an unpaid order made with one holds its use (a group of the bot settings). */
+export const DISCOUNT_SECTIONS: NavSection<'codes' | 'settings'>[] = [
+  { value: 'codes', title: 'کدها', to: '/discounts' },
+  { value: 'settings', title: 'تنظیمات', to: '/discounts/settings' },
+]
+
+/** «گردونه شانس»: its slices, the spins customers made, and its rules (a group of the bot settings). */
+export const WHEEL_SECTIONS: NavSection<'prizes' | 'spins' | 'settings'>[] = [
+  { value: 'prizes', title: 'جوایز', to: '/wheel' },
+  { value: 'spins', title: 'چرخش‌ها', to: '/wheel/spins' },
+  { value: 'settings', title: 'تنظیمات', to: '/wheel/settings' },
+]
+
 export const BOT_GROUP: NavGroup = {
   id: 'bot',
   title: 'ربات',
@@ -144,23 +184,29 @@ export const USER_SECTIONS: NavSection<'users' | 'groups'>[] = [
   { value: 'groups', title: 'گروه‌ها', to: '/users/groups' },
 ]
 
-export const REFERRAL_SECTIONS: NavSection<'referrers' | 'invitees' | 'commissions'>[] = [
+export const REFERRAL_SECTIONS: NavSection<'referrers' | 'invitees' | 'commissions' | 'alerts'>[] = [
   { value: 'referrers', title: 'معرف‌ها', to: '/referrals' },
   { value: 'invitees', title: 'زیرمجموعه‌ها', to: '/referrals/invitees' },
   { value: 'commissions', title: 'پورسانت‌ها', to: '/referrals/commissions' },
+  { value: 'alerts', title: 'هشدارها', to: '/referrals/alerts' },
 ]
 
 /** The broadcasts page's own section; a panel may add its own beside it (the owner's «هدیه همگانی»). */
 export const BROADCAST_MESSAGES: NavSection<'messages'> = { value: 'messages', title: 'پیام همگانی', to: '/broadcasts' }
 
-/** The bot settings' sections — a subject each (the renewal one holds two groups: its rule and «تمدید خودکار»). */
-export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew'>
+/**
+ * The bot settings' sections — a subject each (the renewal one holds two groups: its rule and «تمدید خودکار»). The gift
+ * codes' switch, the lucky wheel's rules, cashback's switch and the nightly draw's rules are groups of the bot settings
+ * too, set on their own pages.
+ */
+export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts'>
 
 export const BOT_SETTINGS_SECTIONS: NavSection<BotSettingsSection>[] = [
   { value: 'general', title: 'عمومی', to: '/bot-settings/general' },
   { value: 'channels', title: 'کانال‌ها', to: '/bot-settings/channels' },
   { value: 'wallet', title: 'کیف پول', to: '/bot-settings/wallet' },
   { value: 'renewal', title: 'تمدید سرویس', to: '/bot-settings/renewal' },
+  { value: 'extras', title: 'حجم و زمان اضافه', to: '/bot-settings/extras' },
   { value: 'reminders', title: 'یادآوری', to: '/bot-settings/reminders' },
   { value: 'referral', title: 'زیرمجموعه‌گیری', to: '/bot-settings/referral' },
   { value: 'reports', title: 'گروه گزارش‌ها', to: '/bot-settings/reports' },
@@ -214,41 +260,37 @@ export function inSettings(nav: PanelNav, pathname: string): boolean {
   return settingsGroupOf(nav, pathname) !== undefined
 }
 
-/** The column the sidebar shows on this page: its sections' (when it has more than one to offer), else null — the menu. */
+/** Every page of the menu, the groups' pages among them, in order. */
+function menuItems(nav: PanelNav): NavItem[] {
+  return nav.menu.flatMap((entry) => (isGroup(entry) ? entry.items : [entry]))
+}
+
+/** The column the sidebar shows on this page: its sections (when it has more than one), else null — the menu. */
 export function areaFor(nav: PanelNav, pathname: string): NavArea | null {
   if (inSettings(nav, pathname)) {
     return { id: 'settings', label: nav.settings.item.title, groups: nav.settings.groups }
   }
 
-  for (const entry of nav.menu) {
-    for (const item of isGroup(entry) ? entry.items : [entry]) {
-      const sections = nav.sections[item.id]
-      if (!sections || !isNavItemActive(item, pathname)) continue
-      return sections.length > 1 ? { id: item.id, label: item.title, groups: [{ id: item.id, title: item.title, icon: item.icon, sections }] } : null
-    }
+  for (const item of menuItems(nav)) {
+    const sections = nav.sections[item.id]
+    if (!sections || !isNavItemActive(item, pathname)) continue
+    return sections.length > 1 ? { id: item.id, label: item.title, groups: [{ id: item.id, title: item.title, icon: item.icon, sections }] } : null
   }
 
   return null
 }
 
 /**
- * The current page's name, for the phone's topbar and the document's title; null at an address no page of the panel has,
- * where the page on screen is the not-found one (components/not-found), which names itself.
+ * The current page's name, for the phone's topbar and the tab's title; null at an address no page has (the not-found
+ * page names itself).
  */
 export function pageTitle(nav: PanelNav, pathname: string): string | null {
-  const settings = settingsGroupOf(nav, pathname)
-  if (settings) return settings.title
-  for (const entry of nav.menu) {
-    for (const item of isGroup(entry) ? entry.items : [entry]) {
-      if (isNavItemActive(item, pathname)) return item.title
-    }
-  }
-  return null
+  return settingsGroupOf(nav, pathname)?.title ?? menuItems(nav).find((item) => isNavItemActive(item, pathname))?.title ?? null
 }
 
 /**
- * Whether a section of the column is where the address is: its own address — or, for the section at the page's own
- * address (its first, `/users`), a subject's page under it that no section names (`/users/12`, one customer).
+ * Whether a section is the one the address is at: its own address — or, for the section at the page's own address
+ * (`/users`), a subject's page under it that no section names (`/users/12`, one customer).
  */
 export function isSectionCurrent(sections: NavSection[], section: NavSection, pathname: string): boolean {
   if (section.to === pathname) return true
@@ -256,10 +298,7 @@ export function isSectionCurrent(sections: NavSection[], section: NavSection, pa
   return section.to === pageOf(section.to) && pathname.startsWith(`${section.to}/`) && !sections.some((other) => other.to === pathname)
 }
 
-/**
- * The section a sectioned page's address names — null for any other address under the page (the page then
- * `Navigate`s to its first section).
- */
+/** The section a sectioned page's address names; null for any other address under the page (it then goes to its first). */
 export function useSection<T extends string>(sections: NavSection<T>[]): NavSection<T> | null {
   const { pathname } = useLocation()
   return sections.find((section) => section.to === pathname) ?? null

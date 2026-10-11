@@ -28,16 +28,12 @@ use Psr\Log\LoggerInterface;
 use Slim\ResponseEmitter;
 
 /**
- * The owner's one-press update, a request a step — a shared host gives a request half a minute or so and keeps nothing
- * running between two: the release's files fetched and its manifest checked against the release key (Download), the zip
- * unpacked a slice at a time (Extract), the host checked — its PHP, its extensions, that PHP may swap the app's folders
- * (Preflight) —, then in one request the install: the shop held (Maintenance), the app's paths swapped for the release's
- * (AppFolders), the database brought along (Core\Database\Upgrades), the compiled code and the router's table forgotten,
- * the version recorded (Installation), the shop open again. Anything after the swap that fails takes the swap back and
- * says why; an install a crash cut short is finished by the next step, by whichever code is in place then. The version
- * an install replaced stays aside until the next update installs, so a regretted one is taken back (rollback()) — while
- * it changed nothing of the database. Files someone put in place by hand, whose database waits for its upgrades, are a
- * run of their own: an install with nothing to swap (UpdateRun::upgrading()). One request works a run at a time.
+ * The owner's one-press update, one request per step, since a shared host gives a request half a minute and runs
+ * nothing in between: Download (the signed manifest, then the zip), Extract (a slice per request), Preflight (PHP,
+ * extensions, whether PHP may swap the app's folders), then Install in one request — the shop held (Maintenance), the
+ * folders swapped (AppFolders), the database upgraded, compiled code forgotten, the version recorded. A failure after the
+ * swap takes it back; an install a crash cut short is finished by the next step. The replaced version stays aside for
+ * rollback() while the database is unchanged. Files put in place by hand make an upgrading run of their own.
  */
 final class Updater
 {
@@ -76,18 +72,18 @@ final class Updater
     private const MANIFEST_BYTES = 65536;
     private const SIGNATURE_BYTES = 1024;
 
-    /** What the disk must have free for a release, as times its zip: the zip, the release unpacked, and room. */
+    /** Free disk a release needs, in times its zip: the zip, the release unpacked, and room. */
     private const ROOM = 4;
 
     /** How long an install or a rollback waits for a scheduler run under way to end. */
     private const SCHEDULER_WAIT_SECONDS = 60;
 
-    /** What every release unpacked has, whatever else it brings: its packages' loader, its boot, its front door, its version. */
+    /** Files every unpacked release must have: the autoloader, the boot, the front controller, the version. */
     private const RELEASE_FILES = ['vendor/autoload.php', 'bootstrap/app.php', 'public/index.php', 'app/Core/Application.php'];
 
     /**
-     * What the request that swaps the app's files still runs once they are swapped — the rest of the install, a rollback,
-     * and the answer —, loaded before: a class loaded afterwards would come from the other version's files.
+     * Classes the swapping request still runs after the swap (the rest of the install or rollback, and the answer),
+     * loaded before it: loaded afterwards, they would come from the other version's files.
      */
     private const LOADED_BEFORE_THE_SWAP = [
         AppFolders::class, Disk::class, UpdateRun::class, UpdateStep::class, Release::class, Maintenance::class,
@@ -119,8 +115,8 @@ final class Updater
     ) {}
 
     /**
-     * The update screen: the version the shop runs, the newest release and when it was read, whether it is newer — and
-     * what keeps the shop from installing it itself —, and the run under way, or the last one.
+     * The update screen: the running version, the newest release and when it was read, whether it is available, what
+     * blocks a self-update, and the current or last run.
      *
      * @return array<string, mixed>
      */
@@ -130,7 +126,7 @@ final class Updater
     }
 
     /**
-     * The newest release read from GitHub now — the owner's «بررسی دوباره».
+     * Read the newest release from GitHub now (the owner's «بررسی دوباره»).
      *
      * @return array<string, mixed>
      * @throws UpdateRefusedException when GitHub does not answer
@@ -143,7 +139,7 @@ final class Updater
     }
 
     /**
-     * An update to `$version`, the newest release, begun: its first step the next request's.
+     * Begin updating to `$version`, the newest release; its first step is the next request's.
      *
      * @return array<string, mixed>
      * @throws ValidationException when `$version` is not the newest release, newer than the shop's
@@ -174,7 +170,7 @@ final class Updater
     }
 
     /**
-     * The run's next step taken — or the part of it a request has time for.
+     * Take the run's next step, or as much of it as this request has time for.
      *
      * @return array<string, mixed>
      * @throws UpdateRefusedException when the step is refused: said, and kept with the run for the screen
@@ -212,7 +208,7 @@ final class Updater
     }
 
     /**
-     * The run given up before its install began: what it fetched and unpacked goes.
+     * Cancel a run before its install began, deleting what it fetched and unpacked.
      *
      * @return array<string, mixed>
      * @throws UpdateRefusedException when there is none, or its install began
@@ -236,8 +232,8 @@ final class Updater
     }
 
     /**
-     * The update installed last taken back: the version it replaced in its place again — while that is kept, and the
-     * update changed nothing of the database (which only a backup takes back).
+     * Put back the version the last update replaced — while it is kept and the update changed nothing of the database
+     * (only a backup takes that back).
      *
      * @return array<string, mixed>
      * @throws UpdateRefusedException when it may not be taken back, or could not be
@@ -292,9 +288,8 @@ final class Updater
     }
 
     /**
-     * Download: the release's manifest and its signature fetched and checked against the release key, then the zip,
-     * checked against the manifest. What an earlier run left goes first — but the version the last update replaced,
-     * kept until this one installs.
+     * Download: the manifest and its signature, verified against the release key, then the zip, checked against the
+     * manifest. What an earlier run left goes first, except the version the last update replaced.
      */
     private function download(UpdateRun $run): UpdateRun
     {
@@ -320,8 +315,8 @@ final class Updater
     }
 
     /**
-     * Extract: the zip — its bytes the manifest's again, every entry where it may go (Package::check()) — unpacked into
-     * the release's folder a slice at a time; once all of it is, the release checked whole.
+     * Extract: the zip, checked again with every entry's path (Package::check()), unpacked a slice per request; then the
+     * whole release checked.
      */
     private function extract(UpdateRun $run): UpdateRun
     {
@@ -353,9 +348,8 @@ final class Updater
     }
 
     /**
-     * Preflight: what the release needs of the host — its PHP, its extensions — and whether PHP may swap the app's
-     * paths: each its own to change, and a folder moving between the updater's and the app's on one file system. The
-     * version the last update replaced goes now: this one's install replaces it.
+     * Preflight: the release's PHP and extensions, and whether PHP may swap the app's paths (its own to change, on one
+     * file system). The version the last update replaced is deleted now.
      */
     private function preflight(UpdateRun $run): UpdateRun
     {
@@ -383,10 +377,9 @@ final class Updater
     }
 
     /**
-     * Install, in one request: the scheduler's run waited for and held off, the shop held, the app's paths swapped for
-     * the release's, the database's upgrades run, the version recorded, the shop open again — or, anything after the
-     * swap failing, the swap taken back. An install a crash cut short (its run installing) is finished from where it
-     * stopped, without the checks it passed before it began.
+     * Install, in one request: wait for and hold off the scheduler, hold the shop, swap the paths, run the upgrades,
+     * record the version, open the shop — or take the swap back if anything after it fails. An install a crash cut short
+     * is finished from where it stopped, skipping the checks it passed.
      */
     private function install(UpdateRun $run): UpdateRun
     {
@@ -440,8 +433,8 @@ final class Updater
     }
 
     /**
-     * An install that failed after its swap, taken back: the app's own paths in their place again — as far as that goes —
-     * and the shop open. The refusal says what failed, and what the shop runs now.
+     * Take back an install that failed after its swap: the old paths restored (as far as possible) and the shop open.
+     * The refusal says what failed and what the shop runs now.
      */
     private function takeBack(UpdateRun $run, string $release, \Throwable $failure): UpdateRefusedException
     {
@@ -470,7 +463,7 @@ final class Updater
     }
 
     /**
-     * `$work` — the app's paths put back where they were — done, or its failure logged: whether it went.
+     * Run `$work` (putting the app's paths back), logging a failure as critical; whether it went.
      *
      * @param \Closure(): void $work
      */
@@ -488,8 +481,8 @@ final class Updater
     }
 
     /**
-     * The run under way or the last one; or, the shop's files newer than its database — put in place by hand, or an
-     * install that stopped after its swap without its run (none kept) —, the upgrades they wait for.
+     * The current or last run — or, when the files are newer than the database (put in place by hand, or a lost run),
+     * an upgrading run for the upgrades they wait for.
      */
     private function run(): ?UpdateRun
     {
@@ -520,7 +513,7 @@ final class Updater
         ];
     }
 
-    /** What keeps the shop from updating itself to `$release`: the host (hostBlocker()), or a release without its signed files. */
+    /** What blocks a self-update to `$release`: the host, or a release without its signed files. */
     private function blocker(?Release $release): ?string
     {
         return $this->hostBlocker(Manifest::ESSENTIAL)
@@ -530,9 +523,8 @@ final class Updater
     }
 
     /**
-     * What keeps the shop from updating itself, whatever the release: no release key to check one with, PHP without the
-     * extensions that check it and unpack it, a clone of the repository (git's to update), or `$paths` of the app PHP may
-     * not change.
+     * What blocks a self-update whatever the release: no release key, no sodium or zip, a git checkout, or `$paths` PHP
+     * may not change.
      *
      * @param list<string> $paths
      */
@@ -554,8 +546,8 @@ final class Updater
     }
 
     /**
-     * The release's manifest as fetched — once the release key's signature over it verifies, and it is `$version`'s. A
-     * manifest that is not goes, its signature with it: nothing unsigned is kept.
+     * The fetched manifest, once its signature verifies and it is `$version`'s; otherwise both files are deleted, so
+     * nothing unsigned is kept.
      *
      * @throws UpdateRefusedException
      */
@@ -577,7 +569,7 @@ final class Updater
     }
 
     /**
-     * The zip as the manifest signed it: its size and its sha256 — or it goes.
+     * Check the zip's size and sha256 against the manifest, deleting it on a mismatch.
      *
      * @throws UpdateRefusedException
      */
@@ -591,7 +583,7 @@ final class Updater
         }
     }
 
-    /** What the run fetched and unpacked gone — as much as a moment allows: the rest is the next run's to clear. */
+    /** Delete what the run fetched and unpacked, as much as the time allows; the next run clears the rest. */
     private function discardDownloads(): void
     {
         try {
@@ -602,8 +594,7 @@ final class Updater
     }
 
     /**
-     * The scheduler's lock, once a run of it under way ends — so none starts while the app's files are swapped; null when
-     * it keeps none (its folder not writable: it runs without, and so does this).
+     * Take the scheduler's lock, waiting for a run to end, so none starts during the swap; null when it keeps no lock.
      *
      * @throws UpdateRefusedException when a run of it does not end in time
      */
@@ -626,7 +617,7 @@ final class Updater
     }
 
     /**
-     * The shop held while the app's files are swapped (Maintenance).
+     * Hold the shop while the app's files are swapped.
      *
      * @throws UpdateRefusedException when the flag cannot be written: nothing is swapped then
      */
@@ -639,7 +630,7 @@ final class Updater
         }
     }
 
-    /** The classes the rest of this request runs once the app's files are swapped, loaded while they are its own. */
+    /** Load LOADED_BEFORE_THE_SWAP and the schema builder while the files are still this version's. */
     private function loadWhatTheSwapNeeds(): void
     {
         foreach (self::LOADED_BEFORE_THE_SWAP as $class) {
@@ -649,7 +640,7 @@ final class Updater
         $this->db->getSchemaBuilder();
     }
 
-    /** The code the swap replaced forgotten: the router's table made from it, and what the opcode cache compiled of it. */
+    /** Forget the replaced code: the router's cached table and the opcode cache (where opcache.restrict_api allows). */
     private function forgetCompiledCode(): void
     {
         clearstatcache(true);
@@ -663,7 +654,7 @@ final class Updater
         }
     }
 
-    /** What went wrong, in one line for the owner: no secret in it (Redact), no longer than a screen line or two. */
+    /** A failure's first line for the owner, redacted and at most 300 characters. */
     private static function reason(\Throwable $e): string
     {
         $line = trim((string) strtok($e->getMessage(), "\n"));

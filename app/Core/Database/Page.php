@@ -12,12 +12,9 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * One page of an admin list — what every list answers: the rows of the requested page (clamped to what exists) and
- * the meta the screen's pager needs, the order a sorted list is in, and the list's own figures (a tab's count, the
- * money it adds up to — with(), tally()).
- * A directory returns one (Page::fetch() from a PageRequest), its controller names the rows (toArray('orders')). The
- * order is the Sort the request asked for, or — a list that is not sorted, a ledger — the caller's own. The search
- * helpers below are what every directory matches its term with.
+ * One page of a paged list: its rows (the requested page, clamped to the last), the pager's meta, the Sort it is in
+ * and the list's own figures (a tab's count, a total — with(), tally()). A directory builds it with fetch(); its
+ * controller answers toArray('orders'). Also the search helpers every directory matches its term with.
  */
 final class Page
 {
@@ -31,9 +28,8 @@ final class Page
     private const LIKE_ESCAPE = '!';
 
     /**
-     * Up to this many rows a search finds are handed to a list as their ids (matches()); a term that finds more stays a
-     * subquery. Low, so finding out costs little when the term is broad: measured on 40,000 customers, «ali» pays a few
-     * milliseconds to learn it, a customer's or a service's own name saves a pass over every order.
+     * Up to this many rows a search finds are handed to a list as ids (matches()); a term that finds more stays a
+     * subquery. Kept low so a broad term costs little to find out (measured on 40,000 customers).
      */
     private const MATCHES_LISTED = 200;
 
@@ -50,8 +46,7 @@ final class Page
     ) {}
 
     /**
-     * The page the request asks for of `$query` (a page past the end is the last one), in the order `$sort` says, each
-     * row as `$present` makes it.
+     * The requested page of `$query` (a page past the end is the last one), in `$sort`'s order, each row presented.
      *
      * @template TModel of Model
      * @param Builder<TModel> $query Filtered — and ordered, for a list without a Sort
@@ -63,9 +58,8 @@ final class Page
     }
 
     /**
-     * fetch(), the page's rows presented together: `$present` is handed them, in the list's order, and answers what the
-     * screen gets of each, in that order — so what judging a row asks of its shop (whether its wallet is on, what an
-     * agent's traffic covers) is asked once for the page, not once a row.
+     * fetch(), with the page's rows presented in one call, so what judging a row asks of the shop (is the wallet on,
+     * what does an agent's traffic cover) is asked once per page, not once per row.
      *
      * @template TModel of Model
      * @param Builder<TModel> $query Filtered — and ordered, for a list without a Sort
@@ -87,7 +81,7 @@ final class Page
     }
 
     /**
-     * The same page with the list's own figures beside the pager's — the count a tab shows, the money the list adds up to.
+     * The same page with the list's own figures added to its meta (a tab's count, the money the list adds up to).
      *
      * @param array<string, int|string> $figures
      */
@@ -97,8 +91,7 @@ final class Page
     }
 
     /**
-     * How many rows `$query` holds and the money they add up to (`$column`, an amount): what a list says of its takings —
-     * the orders it sold, the payments that came in — beside its pager.
+     * How many rows `$query` holds and the sum of their `$column` (an amount) — a list's takings, in one query.
      *
      * @template TModel of Model
      * @param Builder<TModel> $query
@@ -124,7 +117,7 @@ final class Page
     }
 
     /**
-     * What the screen gets: the rows under the list's name, and the meta.
+     * The answer: the rows under `$key`, and the meta.
      *
      * @return array<string, mixed>
      */
@@ -134,8 +127,7 @@ final class Page
     }
 
     /**
-     * The search box's text as the directories match it: trimmed, Persian digits made Latin, cut to
-     * TERM_MAX; "" when there is none.
+     * The search box's text: trimmed, Persian digits made Latin, cut to TERM_MAX; "" when there is none.
      *
      * @param array<string, mixed> $query The request's query string
      */
@@ -145,9 +137,8 @@ final class Page
     }
 
     /**
-     * Rows whose `$column` holds `$term` anywhere, the term's own `%` and `_` taken literally. The pattern
-     * names its escape character: a backslash escapes nothing in SQLite, nor in MySQL under
-     * NO_BACKSLASH_ESCAPES (common on shared hosting) — and client names are full of underscores ("amir_2").
+     * Rows whose `$column` contains `$term`, its `%` and `_` taken literally (client names are full of underscores). The
+     * pattern names its escape character: a backslash escapes nothing in SQLite, nor in MySQL under NO_BACKSLASH_ESCAPES.
      *
      * @template TModel of Model
      * @param Builder<TModel> $query
@@ -174,12 +165,9 @@ final class Page
     }
 
     /**
-     * What a search finds of another table (`$keys`, selecting its key: the customers a term names, the plans, the
-     * services), for a list to narrow itself by with whereIn(): the keys themselves when they are few — a short list the
-     * index on the list's own column takes, so the list reads only the rows they name, and the search runs once for the
-     * page, its count and its figures — or, for a term that finds more than MATCHES_LISTED, the subquery itself (a term
-     * that broad has the list read most of its rows anyway). A LIKE '%…%' reads every row of its table in the shop, so a
-     * search costs one pass over the shop's rows of the table searched, never one per row of the list.
+     * What a search of another table finds (`$keys`: e.g. the customers matching a term), for a list to narrow itself
+     * with whereIn(): the keys themselves when there are at most MATCHES_LISTED — the list's index then reads only those
+     * rows, and the LIKE scan runs once for the page, its count and its figures — else the subquery.
      *
      * @template TModel of Model
      * @param Builder<TModel> $keys

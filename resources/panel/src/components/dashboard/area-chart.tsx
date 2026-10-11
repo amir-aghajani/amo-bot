@@ -66,10 +66,7 @@ export function valueTicks(max: number): number[] {
   }
 }
 
-/**
- * The days that get a label: from the last one back — moved in to show whole —, each one that fits whole and stands
- * `MIN_TICK_GAP` off the label after it.
- */
+/** The days that get a label: from the last one backwards, each that fits whole and keeps `MIN_TICK_GAP` from the next. */
 export function dayTicks(xs: number[], widths: number[], width: number): { index: number; x: number }[] {
   const shown: { index: number; x: number }[] = []
   let end = width

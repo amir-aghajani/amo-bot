@@ -4,7 +4,7 @@ import { Callout } from '@/components/callout'
 import { ConfirmActions } from '@/components/confirm-modal'
 
 interface SkipServerPromptProps {
-  /** What the server did, in the admin's words from the API: «پنل «آلمان»: …». */
+  /** What the server did, worded for the admin by the API: «پنل «آلمان»: …». */
   reason: string
   /** What carrying on without that server means here. */
   question: ReactNode
@@ -20,9 +20,8 @@ interface SkipServerPromptProps {
 }
 
 /**
- * A server that did not answer, or refused, half-way through an operation: carry on without it — its
- * client stays there for the admin to remove — or cancel, which leaves the service as it was. Cancel
- * has the focus, like every "are you sure".
+ * Asked when a server failed half-way through a delete or a move: carry on without it (its client stays there for the
+ * owner to remove) or cancel, which leaves the service as it was. Cancel has the focus.
  */
 export function SkipServerPrompt({ reason, question, skipLabel, cancelLabel, destructive, busy, onSkip, onCancel }: SkipServerPromptProps) {
   return (

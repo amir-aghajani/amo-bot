@@ -48,6 +48,7 @@ use App\Modules\Auth\Services\OwnerAuth;
 use App\Modules\Auth\Services\RecoveryKey;
 use App\Modules\Bots\Scheduling\BotShops;
 use App\Modules\Bots\ShopScopeMiddleware;
+use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Installer\Services\InstallKey;
 use App\Modules\Payments\Drivers\Manual\ManualDriver;
 use App\Modules\Payments\Drivers\Wallet\WalletDriver;
@@ -57,11 +58,16 @@ use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
 use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Providers\Support\PanelHttp;
 use App\Modules\Referrals\Services\ReferralSettings;
+use App\Modules\Rewards\Services\CashbackSettings;
+use App\Modules\Rewards\Services\GiftCodeSettings;
+use App\Modules\Rewards\Services\LotterySettings;
+use App\Modules\Rewards\Services\WheelSettings;
 use App\Modules\Settings\Services\BotSettingsScreen;
 use App\Modules\Settings\Services\DatabaseSettings;
 use App\Modules\Settings\Services\MailSettings;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Store\Http\WebsiteCorsPolicy;
+use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Subscriptions\Services\ReminderSettings;
 use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Telegram\Api\BotApi;
@@ -265,12 +271,18 @@ return [
         $c->get(BotSettings::class),
         $c->get(WalletSettings::class),
         $c->get(RenewalSettings::class),
+        $c->get(ExtrasSettings::class),
         $c->get(ReminderSettings::class),
         $c->get(ReferralSettings::class),
         $c->get(ReportSettings::class),
+        $c->get(DiscountSettings::class),
+        $c->get(GiftCodeSettings::class),
+        $c->get(WheelSettings::class),
+        $c->get(CashbackSettings::class),
+        $c->get(LotterySettings::class),
     ])),
 
-    // The shop's own configuration: config.php beside the app, as WordPress keeps wp-config.php — written by the
+    // The shop's configuration: config.php beside the app, as WordPress keeps wp-config.php — written by the
     // installer, the owner's settings screen and their login, one writer at a time (its lock).
     'config.file' => factory(fn(Application $app) => $app->configFile()),
     'config.lock' => factory(fn(Application $app) => $app->storagePath('cache/config.lock')),

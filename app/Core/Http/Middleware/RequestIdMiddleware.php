@@ -11,9 +11,8 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * The outermost middleware: every request gets an id of its own (RequestId) before anything else runs — so every log
- * line it leaves and every error answer carries it — and every answer says it in `X-Request-Id`, the error answers too.
- * The id is always made here, never taken from the request: anyone can write a header.
+ * The outermost middleware: gives the request its id before anything runs and sends it in `X-Request-Id`. The id is
+ * always made here, never taken from the request.
  */
 final class RequestIdMiddleware implements MiddlewareInterface
 {

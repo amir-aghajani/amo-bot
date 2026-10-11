@@ -16,13 +16,11 @@ use App\Modules\Telegram\Models\ReportMessage;
 use Psr\Log\LoggerInterface;
 
 /**
- * The admins' report group: a Telegram supergroup with topics (a "forum") the admin made, which the bot is handed by a
- * link from the panel — `t.me/<bot>?startgroup=reports_<code>&admin=manage_topics`, Telegram's way to add a bot to a
- * group as an admin with the rights it asks for; the bot then gets `/start@<bot> reports_<code>` in that group. With a
- * good code, a group that has topics and the "manage topics" right, it becomes the report group and gets a topic per
- * subject (ReportTopics), each saying what it is for. What goes wrong with the group itself — the bot removed, demoted,
- * topics switched off — is the problem the screen shows (GroupProblem), learned from a check, the bot's own membership
- * updates or a refused send; a flood limit or an unreachable Telegram holds the reports back for a while (hold()).
+ * The admins' report group: a supergroup with topics, handed to the bot by a panel link
+ * (`t.me/<bot>?startgroup=reports_<code>&admin=manage_topics`, which adds the bot as an admin with that right and sends
+ * `/start@<bot> reports_<code>` in the group). Once adopted it gets a topic per subject (ReportTopics). Trouble with the
+ * group itself (the bot removed or demoted, topics off) is the problem the screen shows (GroupProblem); a flood limit or
+ * an unreachable Telegram pauses the reports for a while (hold()).
  */
 final class ReportGroup
 {
@@ -68,10 +66,9 @@ final class ReportGroup
     }
 
     /**
-     * A fresh connect link (any older one stops working).
+     * A fresh connect link; any older one stops working.
      *
-     * @throws ValidationException while the bot's @username is not known — worded for the shop: the main bot's comes from
-     *                             the owner's settings, an agent's with its token
+     * @throws ValidationException while the bot's @username is not known
      */
     public function newLink(): void
     {
@@ -83,8 +80,7 @@ final class ReportGroup
     }
 
     /**
-     * The connect link outstanding: the startgroup link, the command that does the same typed into the group, and when
-     * they stop working — or null when there is none (or the bot's @username is not known).
+     * The outstanding connect link, the equivalent command to type in the group, and when they expire; null for none.
      *
      * @return array{url: string, command: string, expires_at: string}|null
      */
@@ -127,9 +123,8 @@ final class ReportGroup
     }
 
     /**
-     * The chat is the report group from now on: kept, the topics of any group before it forgotten, and every topic it
-     * does not have yet made, each with a first message saying what it is for. Returns the topics that could not be made
-     * now (a flood limit, a lost right) — each is made with its first report.
+     * Make the chat the report group (forgetting another group's topics) and make every topic it lacks, each introduced.
+     * Returns the topics not made now (a flood limit, a lost right); each is made with its first report.
      *
      * @return list<Topic>
      */
@@ -145,8 +140,8 @@ final class ReportGroup
     }
 
     /**
-     * Look the group up again for the screen: its title, whether it still has topics and the bot its rights — the
-     * problem is set or cleared by what is found — and, when all is well, the topics it lacks are made.
+     * Look the group up again for the screen: its title, topics and the bot's rights set or clear the problem; when all
+     * is well, the topics it lacks are made.
      *
      * @throws ValidationException on `group` while none is connected
      * @throws TelegramUnreachableException when Telegram could not be asked: nothing changes
@@ -207,9 +202,8 @@ final class ReportGroup
     }
 
     /**
-     * The bot's membership in a group changed (my_chat_member): in the report group, that is whether reports can reach it
-     * — removed, demoted or without the "manage topics" right is the problem the screen shows; an admin with it again
-     * clears the problem and whatever waited goes out.
+     * The bot's membership in the report group changed: removed, demoted or without "manage topics" is the problem the
+     * screen shows; given the right back clears it and the waiting reports go out.
      *
      * @param array<string, mixed> $change The ChatMemberUpdated
      */
@@ -236,9 +230,8 @@ final class ReportGroup
     }
 
     /**
-     * What a refusal means for sending to the group: Telegram's flood limit, an unreachable Telegram or the group's own
-     * trouble holds every report back for a while — the trouble is the screen's problem — and true says it did; a
-     * refusal of one report alone holds nothing.
+     * Pause all reports after a flood limit, an unreachable Telegram or the group's own trouble (recorded as the
+     * problem); true when it paused. A refusal of one report alone pauses nothing.
      */
     public function hold(TelegramApiException $e): bool
     {
@@ -308,9 +301,8 @@ final class ReportGroup
     }
 
     /**
-     * Make every topic the group lacks, each with its first message — Telegram's icons asked once. Stops at a refusal
-     * that would refuse the rest too (a flood limit, the group's own trouble, an unreachable Telegram — held, hold()) and
-     * returns what is still missing.
+     * Make every topic the group lacks, each introduced, Telegram's icons asked once. Stops at a refusal that would refuse
+     * the rest too (paused, hold()) and returns what is still missing.
      *
      * @return list<Topic>
      */
@@ -334,7 +326,7 @@ final class ReportGroup
             }
 
             if ($thread === null) {
-                // Someone else is making it right now: theirs to introduce.
+                // Another process is making it now, and introduces it.
                 $missing[] = $topic;
             } else {
                 $this->reports->notice($topic, sprintf(self::INTRO, $topic->title(), $topic->about()));

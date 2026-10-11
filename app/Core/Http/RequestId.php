@@ -5,12 +5,9 @@ declare(strict_types=1);
 namespace App\Core\Http;
 
 /**
- * The id of the request this process is answering: made afresh for each one (RequestIdMiddleware), said in the answer's
- * `X-Request-Id` header and in every error answer (`request_id`, Json::error()), and written on every log line the
- * request leaves (RequestIdProcessor) — the panel shows it on a failure of the server's own («کد پیگیری»), and the owner
- * finds the request in the log by it. It holds for the rest of the request, past the app's answer: a line written at
- * shutdown, or the front controller's last answer when something outside the app's error handling threw, carries it too.
- * The command line answers no request, so its lines carry none.
+ * The id of the request being answered: made by RequestIdMiddleware, sent in `X-Request-Id` and every error body, and
+ * written on every log line (RequestIdProcessor). The panels show it on a server failure («کد پیگیری») so the owner can
+ * find the log lines. It lasts to the end of the process, so shutdown lines carry it too; the CLI has none.
  */
 final class RequestId
 {
@@ -24,13 +21,13 @@ final class RequestId
         return self::$current;
     }
 
-    /** A new id: 16 hex characters — 64 random bits, enough to tell any request of a log from the others. */
+    /** A new id: 16 hex characters (64 random bits). */
     public static function generate(): string
     {
         return bin2hex(random_bytes(8));
     }
 
-    /** The request `$id` is answered from now on. */
+    /** Start answering the request `$id`. */
     public static function begin(string $id): void
     {
         self::$current = $id;

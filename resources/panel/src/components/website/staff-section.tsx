@@ -1,6 +1,6 @@
-import { useId } from 'react'
 import { Info, TriangleAlert } from 'lucide-react'
 import { Callout } from '@/components/callout'
+import { FieldGroup } from '@/components/field'
 import { SectionCard } from '@/components/section-card'
 import { SwitchRow } from '@/components/switch-row'
 import { TextLink } from '@/components/text-link'
@@ -30,17 +30,13 @@ function switched(grants: StaffGrant[], grant: StaffGrant, on: boolean): StaffGr
 }
 
 /**
- * «مدیران سایت»: the shop's admins — its bot's admins, the customers given the role on the users list — work the shop
- * from its website with their own accounts there (the Store API's /admin/*): the switch that lets them in, whether they
- * must have signed in strongly, and what the shop lets them do beyond its daily work, a switch a grant. Who they are is
- * the users list's, narrowed to the role — and the card says plainly what the guards on them are: each admin is kept
- * from their own account alone, so two admins can do for each other what each is refused for themselves.
+ * «مدیران سایت»: whether the bot's admins may work the shop from the website (the Store API's /admin/*), whether they
+ * must sign in strongly, and the extra grants beyond daily work. The card warns that the guards only stop an admin
+ * acting on their own account — two admins can do it for each other.
  */
 export function StaffSection({ website }: { website: Website }) {
   const group = useWebsiteGroup(website, draftOf, (values) => values)
   const { values, set, error } = group
-  const ids = useId()
-  const grantsError = error('staff_grants')
 
   return (
     <SectionCard
@@ -75,22 +71,12 @@ export function StaffSection({ website }: { website: Website }) {
         error={error('staff_strong_sign_in')}
       />
 
-      <div
-        role="group"
-        aria-labelledby={`${ids}-title`}
-        aria-describedby={`${ids}-about${grantsError ? ` ${ids}-error` : ''}`}
-        data-invalid={grantsError ? '' : undefined}
-        tabIndex={grantsError ? -1 : undefined}
-        className="grid gap-3 rounded-md outline-none focus-visible:focus-ring"
+      <FieldGroup
+        label="کارهای بیشتر"
+        description="این کارها فقط وقتی از وب‌سایت انجام می‌شود که روشنشان کنید، و مدیر برای هر کدام باید در ۱۵ دقیقه گذشته وارد شده یا ورودش را دوباره تایید کرده باشد."
+        error={error('staff_grants')}
+        className="gap-3"
       >
-        <div className="grid gap-1">
-          <span id={`${ids}-title`} className="text-body font-medium">
-            کارهای بیشتر
-          </span>
-          <p id={`${ids}-about`} className="text-footnote leading-relaxed text-muted-foreground">
-            این کارها فقط وقتی از وب‌سایت انجام می‌شود که روشنشان کنید، و مدیر برای هر کدام باید در ۱۵ دقیقه گذشته وارد شده یا ورودش را دوباره تایید کرده باشد.
-          </p>
-        </div>
         {GRANTS.map((grant) => (
           <SwitchRow
             key={grant.value}
@@ -100,12 +86,7 @@ export function StaffSection({ website }: { website: Website }) {
             onCheckedChange={(checked) => set('staff_grants', switched(values.staff_grants, grant.value, checked))}
           />
         ))}
-        {grantsError && (
-          <p id={`${ids}-error`} className="text-footnote text-danger">
-            {grantsError}
-          </p>
-        )}
-      </div>
+      </FieldGroup>
     </SectionCard>
   )
 }

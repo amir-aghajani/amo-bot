@@ -14,11 +14,7 @@ use App\Support\Money;
 use App\Support\Validation;
 use Illuminate\Database\Eloquent\Collection;
 
-/**
- * The agents' levels («سطح‌های نمایندگی»): create/update/delete/reorder with Persian validation — a unique name and the
- * price per GB its agents buy their bot's traffic at — in the admin's order, which is also the order the bot lists
- * them in.
- */
+/** The agency levels as the owner keeps them: a unique name and a price per GB, in the admin's order (also the bot's). */
 final class AgencyLevels
 {
     public const NAME_MAX = 32;

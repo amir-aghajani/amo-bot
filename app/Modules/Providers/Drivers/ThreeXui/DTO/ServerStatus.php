@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Providers\Drivers\ThreeXui\DTO;
 
-use App\Modules\Providers\Drivers\ThreeXui\Support\Raw;
+use App\Modules\Providers\Support\Raw;
 
 /**
  * GET /panel/api/server/status — the host as the panel sees it (refreshed every two seconds there), as much of it as the

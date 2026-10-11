@@ -14,6 +14,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
+/** Prints every serving bot's identity and webhook state as Telegram reports them. */
 #[AsCommand(name: 'bot:info', description: 'Show every bot\'s identity and webhook status, as Telegram reports them')]
 final class BotInfoCommand extends EveryBotCommand
 {

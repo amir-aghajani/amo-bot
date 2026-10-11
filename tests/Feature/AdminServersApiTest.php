@@ -18,10 +18,10 @@ use Tests\HttpTestCase;
 use Tests\Support\FakePanel;
 
 /**
- * The servers API against a fake 3x-ui panel (the app's outgoing HTTP client, answered by FakePanel): the connectors and a
- * server's form on each; adding, editing and probing a server by it — each question to a good connection asked on its
- * own —, a check that keeps what it could not learn, the inbounds kept in step, why customers are not sold on a server,
- * and a delete refused while it has services.
+ * The servers API against a fake 3x-ui panel (FakePanel on the outgoing HTTP client): each connector described with the
+ * whole server form; adding, editing and probing a server (each question to a good connection asked on its own); a check
+ * that keeps what it could not learn; the inbound copy kept in step; why a server is not sold; and a delete refused while
+ * services are on it.
  */
 final class AdminServersApiTest extends HttpTestCase
 {
@@ -42,15 +42,28 @@ final class AdminServersApiTest extends HttpTestCase
         self::assertSame(['mark' => '3X', 'vendor' => 'MHSanaei', 'docs_url' => 'https://github.com/MHSanaei/3x-ui', 'inbounds' => true, 'link_rotation' => true], $driver['traits'], 'what the picker draws it by, and what its panels can do');
         self::assertNotEmpty(array_filter($driver['notes'], static fn(string $note): bool => str_contains($note, 'نسخه 3')), 'the versions it needs');
         self::assertSame(
-            ['name', 'base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url', 'capacity', 'notes', 'is_active'],
+            ['name', 'base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'],
             array_column($driver['fields'], 'name'),
-            'the server\'s name, the connector\'s connection, the server\'s own columns',
+            'the server\'s name, the connector\'s connection, the server\'s own columns, its button in the bot',
         );
         self::assertSame(
-            ['verify_tls', 'timeout', 'subscription_url', 'capacity', 'notes', 'is_active'],
+            ['verify_tls', 'timeout', 'subscription_url', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'],
             array_column(array_filter($driver['fields'], static fn(array $field): bool => $field['advanced']), 'name'),
             'under «تنظیمات پیشرفته»',
         );
+    }
+
+    public function testItsLocationButtonInTheBotHasAColourAndARowWidth(): void
+    {
+        $this->panelHttp()->healthyPanel();
+
+        $server = $this->decode($this->postJson('/api/admin/servers', ['button_style' => 'danger', 'button_row' => '2'] + self::tokenForm()))['server'];
+        self::assertSame(['danger', '2'], [$server['form']['button_style'], $server['form']['button_row']]);
+        $kept = Server::query()->findOrFail($server['id']);
+        self::assertSame(['danger', 2], [$kept->buttonStyle(), $kept->buttonRow()]);
+
+        $refused = $this->unchecked()->postJson('/api/admin/servers', ['button_style' => 'purple', 'button_row' => '4'] + self::tokenForm());
+        self::assertSame(['button_style', 'button_row'], array_keys($this->decode($refused)['errors'] ?? []));
     }
 
     public function testAServersFormReportsEveryRefusalAtOnce(): void
@@ -144,6 +157,8 @@ final class AdminServersApiTest extends HttpTestCase
             'capacity' => 250,
             'notes' => 'Hetzner',
             'is_active' => true,
+            'button_style' => '',
+            'button_row' => '1',
         ], $data['server']['form'], 'its form as kept: no secret, only whether one is kept');
         self::assertArrayNotHasKey('api_token', $data['server']);
         self::assertSame(250, $data['server']['capacity']);
@@ -157,7 +172,7 @@ final class AdminServersApiTest extends HttpTestCase
         $server = Server::query()->findOrFail($data['server']['id']);
         self::assertSame('tok-1', $server->api_token, 'decrypted transparently by the cast');
         self::assertNotSame('tok-1', $server->getRawOriginal('api_token'), 'stored encrypted');
-        self::assertSame(['verify_tls' => false, 'timeout' => 30], $server->meta);
+        self::assertSame(['verify_tls' => false, 'timeout' => 30, 'button_row' => '1'], $server->meta);
         self::assertSame(1, $server->sort);
         $inbounds = $server->inbounds()->oldest('id')->get();
         self::assertSame(['1', '2'], $inbounds->pluck('remote_key')->all());

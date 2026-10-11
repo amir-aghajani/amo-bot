@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * The time-zone picker's list: Windows-style groups ("(UTC+03:30) وقت ایران") backed by IANA ids,
- * read from the generated data file (scripts/timezones.php). APP_TIMEZONE keeps storing an IANA id, so
- * PHP, dates and cron need nothing new.
+ * The time-zone picker's list: Windows-style groups ("(UTC+03:30) وقت ایران") of IANA ids, from the data file
+ * scripts/timezones.php generates (so the app needs no intl). APP_TIMEZONE stores an IANA id.
  */
 final class Timezones
 {
@@ -17,8 +16,8 @@ final class Timezones
     private static ?array $zones = null;
 
     /**
-     * Options for a select, with the currently stored id guaranteed to be present even when it is
-     * not a group's canonical member (Europe/Rome shows up under its group's name).
+     * The picker's options, the stored id always among them even when it is not its group's first (Europe/Rome shows
+     * under its group's name).
      *
      * @return list<array{id: string, label: string}>
      */

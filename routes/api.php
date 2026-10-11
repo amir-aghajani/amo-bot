@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Core\Http\Controllers\AppController;
+use App\Core\Http\Controllers\HealthController;
 use App\Core\Http\Middleware\InstalledMiddleware;
 use App\Core\Http\Middleware\JsonCsrfMiddleware;
 use App\Core\Http\Middleware\SessionMiddleware;
@@ -19,13 +21,19 @@ use App\Modules\Admin\Api\BotSettingsController;
 use App\Modules\Admin\Api\BotTextsController;
 use App\Modules\Admin\Api\BotWebhooksController;
 use App\Modules\Admin\Api\BroadcastsController;
+use App\Modules\Admin\Api\CashbackRulesController;
 use App\Modules\Admin\Api\ChangesController;
 use App\Modules\Admin\Api\ClientErrorsController;
 use App\Modules\Admin\Api\ConfigSettingsController;
 use App\Modules\Admin\Api\CustomEmojisController;
+use App\Modules\Admin\Api\CustomerDiscountController;
 use App\Modules\Admin\Api\CustomerGroupsController;
 use App\Modules\Admin\Api\DashboardController;
+use App\Modules\Admin\Api\DiscountCodesController;
+use App\Modules\Admin\Api\GiftCodesController;
 use App\Modules\Admin\Api\KeyboardsController;
+use App\Modules\Admin\Api\LotteryController;
+use App\Modules\Admin\Api\LoyaltyTiersController;
 use App\Modules\Admin\Api\MassGrantsController;
 use App\Modules\Admin\Api\OrdersController;
 use App\Modules\Admin\Api\OwnerAuthController;
@@ -37,6 +45,7 @@ use App\Modules\Admin\Api\QueuesController;
 use App\Modules\Admin\Api\ReferralsController;
 use App\Modules\Admin\Api\ReportGroupController;
 use App\Modules\Admin\Api\ReviewsController;
+use App\Modules\Admin\Api\SalesController;
 use App\Modules\Admin\Api\ServerGrantsController;
 use App\Modules\Admin\Api\ServersController;
 use App\Modules\Admin\Api\SubscriptionsController;
@@ -44,14 +53,14 @@ use App\Modules\Admin\Api\SystemController;
 use App\Modules\Admin\Api\TicketsController;
 use App\Modules\Admin\Api\UsersController;
 use App\Modules\Admin\Api\WebsiteController;
-use App\Modules\Api\Controllers\AppController;
-use App\Modules\Api\Controllers\HealthController;
+use App\Modules\Admin\Api\WheelController;
 use App\Modules\Installer\Controllers\InstallerController;
 use App\Modules\Installer\Middleware\InstallKeyMiddleware;
 use App\Modules\Store\Api\AuthController as StoreAuthController;
 use App\Modules\Store\Api\CaptchaController;
 use App\Modules\Store\Api\CatalogController;
 use App\Modules\Store\Api\CheckoutController;
+use App\Modules\Store\Api\GiftCodesController as StoreGiftCodesController;
 use App\Modules\Store\Api\IdentitiesController;
 use App\Modules\Store\Api\MeController;
 use App\Modules\Store\Api\NotificationsController;
@@ -73,17 +82,14 @@ use Slim\App;
 use Slim\Routing\RouteCollectorProxy;
 
 /*
- * Everything the app answers over HTTP is JSON. Two panels, each with its own API and session: /api/admin/* is the
- * owner's (the `panel.admin` middleware: the login config.php keeps, each request in the shop it names — its tab's),
- * /api/agent/* an agent's (`panel.agent`: signed in with the main bot's one-time link, in their bot's shop). The shop's
- * own screens are registered once under both: its daily work ($operations) and its configuration ($configuration); the
- * owner's sections that are the shop's as a whole run across every bot's services (`shop.everywhere`) or in the main
- * bot's shop (`shop.main`). /api/app tells a panel the shop's name and whether it is installed; /api/install/* is the
- * web installer, there only until it is (`installer.open`). A panel's API waits for the installation, then asks for the
- * CSRF header on a change, then opens the session — in that order.
- * /api/store/v1/{store}/* is the shops' websites' API (the Store API): no panel, no session — a store key and, for a
- * customer's own, their bearer token; its /admin/* is the shop's daily work again ($operations, never its
- * configuration), for the shop's admins signed in on it (StaffMiddleware).
+ * The JSON API. Each group's middleware is its guard, so the router decides what a request is:
+ * - /api/admin (the owner's panel, `panel.admin`) and /api/agent (an agent's, `panel.agent`): installed, then the CSRF
+ *   header on a change, then the session. The shop's screens are registered once and mounted under both — its daily
+ *   work ($operations) and its configuration ($configuration). The owner's whole-shop sections run across every shop
+ *   (`shop.everywhere`) or in the main one (`shop.main`).
+ * - /api/install (the installer, `installer.open`): only until the shop is installed, and only with the install key.
+ * - /api/store/v1/{store} (the Store API): a store key, and a customer's bearer token for their own; its /admin mounts
+ *   $operations again — never $configuration — for the shop's admins (StaffMiddleware).
  */
 return static function (App $app): void {
     $app->get('/health', HealthController::class);
@@ -98,10 +104,9 @@ return static function (App $app): void {
         $install->post('/finish', [InstallerController::class, 'finish']);
     })->add(InstallKeyMiddleware::class)->add(JsonCsrfMiddleware::class)->add('installer.open');
 
-    // The shop's daily work, the same in both panels and on the shop's website for its admins (StaffMiddleware): each
-    // request is worked in the shop its principal is in. What the shop's owner must let its admins do on the website
-    // names its grant (StaffGrant::ARGUMENT) — the panels' principals hold every one —, and what delivers a service by an
-    // admin's word alone asks them a recent sign-in there (StaffMiddleware::RECENT_SIGN_IN), as a granted one does.
+    // The shop's daily work: both panels, and the website's admin API. A route the owner must grant the website's admins
+    // names its grant (StaffGrant::ARGUMENT; the panels hold every grant); one that delivers a service on an admin's word
+    // alone asks them a recent sign-in (StaffMiddleware::RECENT_SIGN_IN).
     $operations = static function (RouteCollectorProxy $shop): void {
         $shop->get('/changes', ChangesController::class);
         $shop->get('/queues', QueuesController::class);
@@ -123,6 +128,8 @@ return static function (App $app): void {
         $shop->delete('/plans/categories/{id:[0-9]+}', [PlanCategoriesController::class, 'destroy'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
         $shop->post('/plans', [PlansController::class, 'store'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
         $shop->post('/plans/reorder', [PlansController::class, 'reorder'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
+        $shop->post('/plans/prices/preview', [PlansController::class, 'previewPrices'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
+        $shop->post('/plans/prices', [PlansController::class, 'changePrices'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
         $shop->put('/plans/{id:[0-9]+}', [PlansController::class, 'update'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
         $shop->patch('/plans/{id:[0-9]+}', [PlansController::class, 'patch'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
         $shop->post('/plans/{id:[0-9]+}/duplicate', [PlansController::class, 'duplicate'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
@@ -183,14 +190,17 @@ return static function (App $app): void {
         $shop->get('/referrals/referrers', [ReferralsController::class, 'referrers']);
         $shop->get('/referrals/invitees', [ReferralsController::class, 'invitees']);
         $shop->get('/referrals/commissions', [ReferralsController::class, 'commissions']);
+        $shop->get('/referrals/alerts', [ReferralsController::class, 'alerts']);
+        $shop->post('/referrals/alerts/{id:[0-9]+}/clear', [ReferralsController::class, 'clearAlert']);
     };
 
-    // The shop's configuration — and the panel's own reports of its failures —, in both panels and nowhere else: how
-    // customers pay, how the bot speaks and looks, its report group, its website, who its admins are.
+    // The shop's configuration (payment methods, the bot's settings, texts and keyboards, the report group, the website,
+    // who its admins are) and the panels' error reports: both panels, never the website's admins.
     $configuration = static function (RouteCollectorProxy $shop): void {
         $shop->post('/client-errors', ClientErrorsController::class);
 
         $shop->put('/users/{id:[0-9]+}/role', [UsersController::class, 'role']);
+        $shop->put('/users/{id:[0-9]+}/discount', [CustomerDiscountController::class, 'update']);
 
         $shop->get('/payment-methods', [PaymentMethodsController::class, 'index']);
         $shop->get('/payment-methods/drivers', [PaymentMethodsController::class, 'drivers']);
@@ -232,10 +242,49 @@ return static function (App $app): void {
         $shop->get('/website', [WebsiteController::class, 'show']);
         $shop->patch('/website', [WebsiteController::class, 'update']);
         $shop->post('/website/key', [WebsiteController::class, 'rotateKey']);
+
+        $shop->get('/discount-codes', [DiscountCodesController::class, 'index']);
+        $shop->post('/discount-codes', [DiscountCodesController::class, 'store']);
+        $shop->put('/discount-codes/{id:[0-9]+}', [DiscountCodesController::class, 'update']);
+        $shop->patch('/discount-codes/{id:[0-9]+}', [DiscountCodesController::class, 'patch']);
+        $shop->delete('/discount-codes/{id:[0-9]+}', [DiscountCodesController::class, 'destroy']);
+        $shop->get('/sales', [SalesController::class, 'index']);
+        $shop->post('/sales', [SalesController::class, 'store']);
+        $shop->put('/sales/{id:[0-9]+}', [SalesController::class, 'update']);
+        $shop->patch('/sales/{id:[0-9]+}', [SalesController::class, 'patch']);
+        $shop->delete('/sales/{id:[0-9]+}', [SalesController::class, 'destroy']);
+
+        $shop->get('/gift-codes', [GiftCodesController::class, 'index']);
+        $shop->post('/gift-codes', [GiftCodesController::class, 'store']);
+        $shop->get('/gift-codes/batches', [GiftCodesController::class, 'batches']);
+        $shop->post('/gift-codes/discard', [GiftCodesController::class, 'discard']);
+        $shop->get('/gift-codes/unused', [GiftCodesController::class, 'unused']);
+        $shop->delete('/gift-codes/{id:[0-9]+}', [GiftCodesController::class, 'destroy']);
+
+        $shop->get('/wheel/prizes', [WheelController::class, 'prizes']);
+        $shop->post('/wheel/prizes', [WheelController::class, 'store']);
+        $shop->post('/wheel/prizes/reorder', [WheelController::class, 'reorder']);
+        $shop->put('/wheel/prizes/{id:[0-9]+}', [WheelController::class, 'update']);
+        $shop->patch('/wheel/prizes/{id:[0-9]+}', [WheelController::class, 'patch']);
+        $shop->delete('/wheel/prizes/{id:[0-9]+}', [WheelController::class, 'destroy']);
+        $shop->get('/wheel/spins', [WheelController::class, 'spins']);
+
+        $shop->get('/loyalty/tiers', [LoyaltyTiersController::class, 'index']);
+        $shop->post('/loyalty/tiers', [LoyaltyTiersController::class, 'store']);
+        $shop->put('/loyalty/tiers/{id:[0-9]+}', [LoyaltyTiersController::class, 'update']);
+        $shop->delete('/loyalty/tiers/{id:[0-9]+}', [LoyaltyTiersController::class, 'destroy']);
+
+        $shop->get('/cashback/rules', [CashbackRulesController::class, 'index']);
+        $shop->post('/cashback/rules', [CashbackRulesController::class, 'store']);
+        $shop->put('/cashback/rules/{id:[0-9]+}', [CashbackRulesController::class, 'update']);
+        $shop->patch('/cashback/rules/{id:[0-9]+}', [CashbackRulesController::class, 'patch']);
+        $shop->delete('/cashback/rules/{id:[0-9]+}', [CashbackRulesController::class, 'destroy']);
+
+        $shop->get('/lottery/draws', [LotteryController::class, 'draws']);
     };
 
-    // The owner's panel: signed in with the login config.php keeps, each request in the shop it names — or, that login
-    // lost, with a key off the host's files that sets it again.
+    // The owner's panel: config.php's login (or its recovery by a key off the host's files), each request in the shop
+    // it names.
     $app->group('/api/admin', function (RouteCollectorProxy $api) use ($operations, $configuration): void {
         $api->post('/auth/login', [OwnerAuthController::class, 'login']);
         $api->post('/auth/recovery/key', [OwnerAuthController::class, 'recoveryKey']);
@@ -314,7 +363,7 @@ return static function (App $app): void {
         })->add('panel.admin');
     })->add(SessionMiddleware::class)->add(JsonCsrfMiddleware::class)->add(InstalledMiddleware::class);
 
-    // An agent's panel: signed in with the one-time link their account in the main bot gives them, in their bot's shop.
+    // An agent's panel: signed in by the one-time link the main bot gives them, always in their bot's shop.
     $app->group('/api/agent', function (RouteCollectorProxy $api) use ($operations, $configuration): void {
         $api->post('/auth/link', [AgentAuthController::class, 'link']);
 
@@ -329,18 +378,14 @@ return static function (App $app): void {
         })->add('panel.agent');
     })->add(SessionMiddleware::class)->add(JsonCsrfMiddleware::class)->add(InstalledMiddleware::class);
 
-    // The shop's website (the Store API, docs/Store-API.md): the store key in its address names the shop — its website
-    // switched on — whose shop each request is worked in. A customer signs in with a bearer token of their own: no
-    // session cookie, so no CSRF header; a page on the website's origins may read the answers (CORS, HttpKernel), and a
-    // body is JSON — a form only where a picture is uploaded (JsonBodiesMiddleware::UPLOAD) —, so another site's page
-    // sends none without the preflight the website's origins alone pass. What the shop sells and the reviews it shows
-    // are anyone's to read, and a review anyone's to write — its writer's own when their bearer token comes with it; a
-    // customer's services, orders, wallet, referrals, notices and support tickets are theirs alone, and so is their
-    // checkout — every request that orders carries its Idempotency-Key.
+    // The shop's website (the Store API): the store key names the shop. Customers use bearer tokens — no cookie, so no
+    // CSRF header — and bodies are JSON (a form only where a picture is uploaded), so another site's page cannot send
+    // one without the preflight only the website's origins pass. The catalogue and reviews are public (read as the
+    // customer when a token comes with them); a customer's own data and checkout need their token.
     $app->group(Urls::STORE, function (RouteCollectorProxy $store) use ($operations): void {
         $store->get('', [StoreController::class, 'show']);
-        $store->get('/plans', [CatalogController::class, 'plans']);
-        $store->get('/plans/{id:[0-9]+}', [CatalogController::class, 'plan']);
+        $store->get('/plans', [CatalogController::class, 'plans'])->add(OptionalCustomerMiddleware::class);
+        $store->get('/plans/{id:[0-9]+}', [CatalogController::class, 'plan'])->add(OptionalCustomerMiddleware::class);
         $store->get('/status', [CatalogController::class, 'status']);
         $store->get('/reviews', [StoreReviewsController::class, 'index']);
         $store->post('/reviews', [StoreReviewsController::class, 'store'])->add(OptionalCustomerMiddleware::class);
@@ -363,7 +408,7 @@ return static function (App $app): void {
             $customer->get('/me', [MeController::class, 'show']);
             $customer->patch('/me', [MeController::class, 'update']);
             $customer->post('/me/reauthenticate', [MeController::class, 'reauthenticate']);
-            $customer->post('/me/telegram/authorize', [IdentitiesController::class, 'authorize']);
+            $customer->post('/me/telegram/authorize', [StoreAuthController::class, 'authorize']);
             $customer->get('/me/sessions', [MeController::class, 'sessions']);
             $customer->delete('/me/sessions/{id:[0-9]+}', [MeController::class, 'endSession']);
 
@@ -389,14 +434,19 @@ return static function (App $app): void {
             $customer->post('/subscriptions/{id:[0-9]+}/rotate-link', [StoreSubscriptionsController::class, 'rotateLink']);
             $customer->get('/subscriptions/{id:[0-9]+}/renewal', [CheckoutController::class, 'renewal']);
             $customer->post('/subscriptions/{id:[0-9]+}/renewal', [CheckoutController::class, 'renew']);
+            $customer->get('/subscriptions/{id:[0-9]+}/extras', [CheckoutController::class, 'extras']);
+            $customer->post('/subscriptions/{id:[0-9]+}/extra-traffic', [CheckoutController::class, 'extraTraffic']);
+            $customer->post('/subscriptions/{id:[0-9]+}/extra-time', [CheckoutController::class, 'extraTime']);
             $customer->get('/payment-methods', [CheckoutController::class, 'methods']);
             $customer->get('/orders', [StoreOrdersController::class, 'index']);
             $customer->post('/orders', [CheckoutController::class, 'purchase']);
             $customer->get('/orders/{id:[0-9]+}', [StoreOrdersController::class, 'show']);
+            $customer->post('/discount-codes/check', [CheckoutController::class, 'checkCode']);
             $customer->post('/payments/{id:[0-9]+}/receipt', [CheckoutController::class, 'receipt'])->setArgument(JsonBodiesMiddleware::UPLOAD, 'picture');
             $customer->get('/wallet', [WalletController::class, 'show']);
             $customer->post('/wallet/top-up', [CheckoutController::class, 'topUp']);
             $customer->get('/wallet/transactions', [WalletController::class, 'transactions']);
+            $customer->post('/gift-codes/redeem', [StoreGiftCodesController::class, 'redeem']);
             $customer->get('/referral', [ReferralController::class, 'show']);
             $customer->get('/notifications', [NotificationsController::class, 'index']);
             $customer->post('/notifications/read', [NotificationsController::class, 'read']);

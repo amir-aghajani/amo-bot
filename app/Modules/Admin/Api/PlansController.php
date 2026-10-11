@@ -10,7 +10,10 @@ use App\Modules\Catalog\Services\PlanService;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-/** The plans screen (PlanService): the list, the form's options, add, edit, the switch, a copy, the order, delete. */
+/**
+ * The plans screen (PlanService): the list, the form's options, add, edit, the switch, a copy, the order, several plans'
+ * prices changed at once, delete.
+ */
 final class PlansController extends ApiController
 {
     public function __construct(private readonly PlanService $plans) {}
@@ -61,6 +64,23 @@ final class PlansController extends ApiController
     public function duplicate(Request $request, Response $response, array $args): Response
     {
         return $this->present($response, $this->plans->duplicate($this->load(Plan::class, $args)), 201);
+    }
+
+    /**
+     * POST /plans/prices/preview — several plans' prices raised or lowered at once, as the change would leave them:
+     * nothing saved, each plan's problem said.
+     */
+    public function previewPrices(Request $request, Response $response): Response
+    {
+        return $this->json($response, ['changes' => $this->plans->previewPrices($this->input($request))]);
+    }
+
+    /** POST /plans/prices — the change made, every plan's prices at once (or none: a 422 naming each plan's problem). */
+    public function changePrices(Request $request, Response $response): Response
+    {
+        $this->plans->changePrices($this->input($request));
+
+        return $this->json($response, ['plans' => $this->plans->all()]);
     }
 
     /** POST /plans/reorder — {ids: [..]} in the new display order. */

@@ -15,7 +15,7 @@ import { json, refusal, server } from '@/test/server'
  * form is drawn from its description —, and who the emails come from while any goes out; saved as the chosen driver's
  * own request, what the other drivers keep left unsent; a password kept is asked for again, in the server's words, once
  * its server, the connection's encryption or its account moved. Beside it, a test email by the settings as saved: a
- * word once it went, the address refused under it, any other failure in its words.
+ * toast once it went, the address refused under it, any other failure in the server's message.
  */
 
 const SAVE = '/api/admin/settings/config/mail'
@@ -317,7 +317,7 @@ describe('the test email', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('says why it did not go, in the server’s words, until a send goes', async () => {
+  it('shows why it was not sent, with the server’s message, until a send succeeds', async () => {
     const words = 'ایمیل فرستاده نشد: Expected response code "250" but got code "550", with message "550 Relaying denied".'
     server().on('POST', TEST, refusal(502, words))
     await show()

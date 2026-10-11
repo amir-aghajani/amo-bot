@@ -17,11 +17,7 @@ use Illuminate\Support\Carbon;
 use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
-/**
- * A customer's orders on the shop's website — their own alone, another's a 404 by the query itself —, newest first,
- * each with its payments: how each was paid, whether a receipt went with it, and support's word on its latest verdict —
- * which the customer is meant to read —, never the order's own notes, support's diagnosis.
- */
+/** A customer's own orders with their payments (a payment's verdict note shown, support's own notes never). */
 final class StoreOrdersTest extends HttpTestCase
 {
     private Website $website;
@@ -68,11 +64,17 @@ final class StoreOrdersTest extends HttpTestCase
             'type' => 'purchase',
             'status' => 'fulfilled',
             'amount' => '120000.00',
+            'pricing' => 'regular',
+            'discount_amount' => '0.00',
+            'discounts' => [],
+            'discount_code' => null,
             'created_at' => '2026-10-07T12:00:00+00:00',
             'fulfilled_at' => '2026-10-07T12:00:00+00:00',
             'plan' => ['id' => $this->plan->id, 'name' => 'یک‌ماهه'],
             'server' => ['id' => $this->server->id, 'name' => 'Berlin'],
             'subscription' => ['id' => $delivered->id, 'name' => $delivered->remote_name],
+            'traffic_bytes' => null,
+            'days' => null,
             'payments' => [[
                 'id' => $paid->id,
                 'method' => ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual'],
@@ -90,11 +92,17 @@ final class StoreOrdersTest extends HttpTestCase
             'type' => 'wallet_topup',
             'status' => 'pending',
             'amount' => '50000.00',
+            'pricing' => 'regular',
+            'discount_amount' => '0.00',
+            'discounts' => [],
+            'discount_code' => null,
             'created_at' => '2026-10-07T12:01:00+00:00',
             'fulfilled_at' => null,
             'plan' => null,
             'server' => null,
             'subscription' => null,
+            'traffic_bytes' => null,
+            'days' => null,
             'payments' => [[
                 'id' => $pending->id,
                 'method' => ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual'],

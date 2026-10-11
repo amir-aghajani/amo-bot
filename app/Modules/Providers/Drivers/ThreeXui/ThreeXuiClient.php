@@ -15,18 +15,18 @@ use GuzzleHttp\Cookie\CookieJar;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * HTTP transport for the 3x-ui v3 panel API (the panel's own description: tests/Fixtures/3x-ui-openapi.json).
+ * HTTP transport for the 3x-ui v3 panel API (its own description: tests/Fixtures/3x-ui-openapi.json).
  *
- * Every /panel/api endpoint answers with the envelope {"success": bool, "msg": string, "obj": mixed}; this class signs
- * in and unwraps `obj`. It signs in with a Bearer API token, or with a session cookie from POST /login — itself behind
+ * Every /panel/api endpoint answers the envelope {"success": bool, "msg": string, "obj": mixed}; this class signs in and
+ * unwraps `obj`. It signs in with a Bearer API token, or with a session cookie from POST /login. The login sits behind
  * the panel's CSRF guard: GET /csrf-token opens the anonymous session and hands out the token every unsafe request
- * replays — and signs in again once when the session expires. Every request is marked XHR: 3x-ui answers refused
- * credentials with a 401 only then (a bare 404, indistinguishable from a wrong base path, otherwise).
+ * replays. An expired session is signed in again once. Every request is marked XHR, because only then does 3x-ui answer
+ * refused credentials with a 401 (otherwise a bare 404, indistinguishable from a wrong base path).
  *
  * Failures are typed so the owner can be told what to fix: ConnectionException (nothing answered),
  * AuthenticationException (token or login refused), UnexpectedResponseException (a 404, a redirect or a web page
- * instead of the API — usually a wrong web base path) and ThreeXuiApiException (the panel said no, and why). Where a
- * remedy is the panel's own (its menus, its token kinds), it rides as the exception's `hint`.
+ * instead of the API — usually a wrong web base path) and ThreeXuiApiException (the panel said no, and why). A remedy in
+ * 3x-ui's own terms rides as the exception's `hint`.
  */
 final class ThreeXuiClient
 {
@@ -64,7 +64,7 @@ final class ThreeXuiClient
     }
 
     /**
-     * The `obj` of an envelope endpoint, sent a JSON body (none when null) with POST.
+     * The `obj` of an envelope endpoint, POSTed a JSON body (none when null).
      *
      * @param array<string, mixed>|list<mixed>|null $json
      * @throws ProviderException
@@ -93,13 +93,15 @@ final class ThreeXuiClient
     }
 
     /**
+     * Send with the token, or with the session — signing in first when there is none, and once more when it expired.
+     *
      * @param array<string, mixed> $options
      * @throws ProviderException
      */
     private function authenticated(string $method, string $path, array $options): ResponseInterface
     {
         if ($this->credentials->usesToken()) {
-            return $this->guard($this->send($method, $path, self::withHeaders($options, ['Authorization' => 'Bearer ' . $this->credentials->token])));
+            return $this->guard($this->send($method, $path, PanelHttp::withHeaders($options, ['Authorization' => 'Bearer ' . $this->credentials->token])));
         }
 
         if (!$this->sessionReady) {
@@ -158,7 +160,7 @@ final class ThreeXuiClient
 
     /**
      * Whether the panel asks for a one-time code at login — only to word a refused login, so a panel that cannot say
-     * (an older build without the endpoint) is taken as no.
+     * (an older build without the endpoint) counts as no.
      */
     private function twoFactorEnabled(): bool
     {
@@ -189,14 +191,13 @@ final class ThreeXuiClient
         return is_string($token) ? $token : '';
     }
 
-    /** A 401, or (builds that ignore the XHR marker) a redirect to the panel's own login page. */
+    /** A 401, or (on builds that ignore the XHR marker) a redirect to the panel's own login page. */
     private function sessionExpired(ResponseInterface $response): bool
     {
-        $status = $response->getStatusCode();
-        if ($status === 401) {
+        if ($response->getStatusCode() === 401) {
             return true;
         }
-        if ($status < 300 || $status >= 400) {
+        if (!PanelHttp::isRedirect($response)) {
             return false;
         }
 
@@ -207,9 +208,8 @@ final class ThreeXuiClient
     }
 
     /**
-     * Answers that are not the panel API, as typed failures. send() marks requests as XHR, so every v3 build answers 401
-     * (not a 404, not a redirect to its login page) for credentials it does not take: a 404 really is an unknown route,
-     * a redirect really is one.
+     * Answers that are not the panel's API, as typed failures. Requests are marked XHR, so every v3 build answers a 401
+     * for credentials it does not take: a 404 really is an unknown route, and a redirect really is one.
      *
      * @throws AuthenticationException|UnexpectedResponseException
      */
@@ -223,29 +223,25 @@ final class ThreeXuiClient
         if ($status === 403 && $this->credentials->usesToken()) {
             throw AuthenticationException::insufficientScope(self::panelMessage($response), self::HINT_SCOPE);
         }
-        if ($status >= 300 && $status < 400) {
-            throw new UnexpectedResponseException($status, location: $response->getHeaderLine('Location'), hint: self::HINT_REDIRECT);
+        if (PanelHttp::isRedirect($response)) {
+            throw PanelHttp::redirected($response, self::HINT_REDIRECT);
         }
         if (str_contains($response->getHeaderLine('Content-Type'), 'text/html')) {
-            throw self::unexpected($response);
+            throw self::notTheApi($response);
         }
 
         return $response;
     }
 
-    /** An answer that is not the API, with the 3x-ui guess at why: a 404 is a missing web base path (or a panel before v3). */
-    private static function unexpected(ResponseInterface $response): UnexpectedResponseException
+    /** An answer that is not the API, with 3x-ui's likely cause: a 404 is a missing web base path, or a panel before v3. */
+    private static function notTheApi(ResponseInterface $response): UnexpectedResponseException
     {
-        $status = $response->getStatusCode();
-
-        return new UnexpectedResponseException($status, PanelHttp::excerpt($response), hint: match (true) {
-            $status === 404 => self::HINT_BASE_PATH,
-            $status < 400 => self::HINT_NOT_API,
-            default => '',
-        });
+        return PanelHttp::notTheApi($response, self::HINT_BASE_PATH, self::HINT_NOT_API);
     }
 
     /**
+     * The session's cookies, and the CSRF token on an unsafe request.
+     *
      * @param array<string, mixed> $options
      * @return array<string, mixed>
      */
@@ -253,19 +249,7 @@ final class ThreeXuiClient
     {
         $headers = $method !== 'GET' && ($this->csrfToken ?? '') !== '' ? ['X-CSRF-Token' => (string) $this->csrfToken] : [];
 
-        return self::withHeaders($options, $headers) + ['cookies' => $this->cookies];
-    }
-
-    /**
-     * @param array<string, mixed> $options
-     * @param array<string, string> $headers
-     * @return array<string, mixed>
-     */
-    private static function withHeaders(array $options, array $headers): array
-    {
-        $options['headers'] = $headers + (array) ($options['headers'] ?? []);
-
-        return $options;
+        return PanelHttp::withHeaders($options, $headers) + ['cookies' => $this->cookies];
     }
 
     /**
@@ -274,10 +258,12 @@ final class ThreeXuiClient
      */
     private function send(string $method, string $path, array $options): ResponseInterface
     {
-        return $this->http->send($this->connection, $method, $path, self::withHeaders($options, ['Accept' => 'application/json', 'X-Requested-With' => 'XMLHttpRequest']));
+        return $this->http->send($this->connection, $method, $path, PanelHttp::withHeaders($options, ['Accept' => 'application/json', 'X-Requested-With' => 'XMLHttpRequest']));
     }
 
     /**
+     * The JSON body, or the failure of an answer that is not JSON.
+     *
      * @return array<string, mixed>
      * @throws UnexpectedResponseException
      */
@@ -285,7 +271,7 @@ final class ThreeXuiClient
     {
         $decoded = json_decode((string) $response->getBody(), true);
 
-        return is_array($decoded) ? $decoded : throw self::unexpected($response);
+        return is_array($decoded) ? $decoded : throw self::notTheApi($response);
     }
 
     /** The panel's own words in a refusal's body, when it gave some. */

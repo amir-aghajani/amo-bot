@@ -196,7 +196,7 @@ describe('a previous server that fails', () => {
     expect(result.current.cancelled).toBe(true)
   })
 
-  it('stops the batch in the server’s words when it will not leave the client there (an agent’s shop, the panel answering)', async () => {
+  it('stops the batch with the server’s message when it refuses to leave the client there (an agent’s shop, the panel answering)', async () => {
     const services = [service(1), service(2)]
     answers(services[0] as SubscriptionRow, (request) => (leaves(request) ? refusal(422, LEAVE_REFUSED, { status: [LEAVE_REFUSED] }) : refusal(502, PREVIOUS_DOWN, { previous: [PREVIOUS_DOWN] })))
     const { result } = batch(services)

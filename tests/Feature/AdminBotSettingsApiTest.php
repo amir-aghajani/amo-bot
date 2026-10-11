@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Modules\Bots\CurrentBot;
+use App\Modules\Catalog\Models\Plan;
+use App\Modules\Rewards\Forms\PrizePlan;
 use App\Modules\Settings\Exceptions\UnknownGroupException;
 use App\Modules\Settings\Services\Settings;
+use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Qr\QrBackground;
@@ -15,9 +19,9 @@ use Tests\HttpTestCase;
 
 /**
  * The bot settings screen — every bot its own, in both panels: the modules' groups (the switches, the channel rule, the
- * wallet's top-up amounts, the QR code and its picture, renewal and its automatic kind, reminders, referrals, the report
- * group's topics — the agency's only in the main bot's shop), each saved on its own and refused whole, with each
- * group's bounds. (The field engine itself: Unit\Core\Forms.)
+ * wallet's top-up amounts, the QR code and its picture, renewal and its automatic kind, extra traffic and time and their
+ * prices, reminders, referrals, the report group's topics — the agency's only in the main bot's shop), each saved on its
+ * own and refused whole, with each group's bounds. (The field engine itself: Unit\Core\Forms.)
  */
 final class AdminBotSettingsApiTest extends HttpTestCase
 {
@@ -44,13 +48,31 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'carry_traffic' => false,
             'auto_renew_days' => 2,
             'auto_renew_default' => false,
+            'extras_enabled' => false,
+            'extra_traffic_price' => null,
+            'extra_traffic_options' => [],
+            'extra_traffic_min' => 1,
+            'extra_traffic_max' => 100,
+            'extra_time_price' => null,
+            'extra_time_options' => [],
+            'extra_time_min' => 1,
+            'extra_time_max' => 30,
             'expiry_reminder' => false,
             'expiry_reminder_days' => 3,
             'traffic_reminder' => false,
             'traffic_reminder_percent' => 80,
             'referral_enabled' => false,
             'referral_rate' => 10,
+            'referral_renewal_rate' => 10,
             'referral_first_only' => false,
+            'referral_start_referrer' => '0.00',
+            'referral_start_invitee' => '0.00',
+            'referral_start_when' => 'purchase',
+            'referral_reward_every' => 0,
+            'referral_reward_plan_id' => null,
+            'referral_alert_burst' => 10,
+            'referral_alert_minutes' => 60,
+            'referral_alert_idle' => 20,
             'report_purchases' => true,
             'report_renewals' => true,
             'report_wallet' => true,
@@ -60,7 +82,24 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'report_agency' => true,
             'report_tickets' => true,
             'report_reviews' => true,
-        ], $this->decode($response)['settings'], 'renewal: the traffic left not carried; automatic renewal two days before the deadline, off for new services; reminders and referrals off until the admin turns them on; every report topic wanted (no group until one is connected)');
+            'hold_minutes' => 60,
+            'gift_codes_enabled' => false,
+            'wheel_enabled' => false,
+            'wheel_cooldown_hours' => 24,
+            'wheel_buyers_only' => false,
+            'wheel_cost' => 0,
+            'cashback_enabled' => false,
+            'lottery_enabled' => false,
+            'lottery_hour' => 22,
+            'lottery_winners' => 1,
+            'lottery_prize' => 'wallet',
+            'lottery_wallet' => '50000.00',
+            'lottery_traffic_gb' => 10,
+            'lottery_days' => 7,
+            'lottery_plan_id' => null,
+            'lottery_entries' => 'order',
+            'lottery_exclude_agents' => true,
+        ], $this->decode($response)['settings'], 'renewal: the traffic left not carried; automatic renewal two days before the deadline, off for new services; extra traffic and time, reminders and referrals off until the admin turns them on; every report topic wanted (no group until one is connected)');
 
         $background = $this->decode($response)['qr_background'];
         self::assertFalse($background['custom'], 'the shipped picture until the admin uploads one');
@@ -230,20 +269,96 @@ final class AdminBotSettingsApiTest extends HttpTestCase
         self::assertTrue($this->decode($this->get('/api/admin/bot/settings'))['settings']['expiry_reminder'], 'nothing stored from a refused save');
     }
 
-    public function testTheReferralGroupTakesTheSwitchTheRateAndTheFirstPaymentRule(): void
+    public function testTheReferralGroupTakesItsCommissionsGiftsRewardAndAlerts(): void
     {
-        $response = $this->putJson('/api/admin/bot/settings/referral', ['referral_enabled' => true, 'referral_rate' => '۱۵', 'referral_first_only' => true]);
+        $plan = $this->plan(['name' => 'جایزه']);
+        $group = [
+            'referral_enabled' => true,
+            'referral_rate' => '۱۵',
+            'referral_renewal_rate' => '0',
+            'referral_first_only' => true,
+            'referral_start_referrer' => '۲۰٬۰۰۰',
+            'referral_start_invitee' => 10000,
+            'referral_start_when' => 'join',
+            'referral_reward_every' => '5',
+            'referral_reward_plan_id' => (string) $plan->id,
+            'referral_alert_burst' => 0,
+            'referral_alert_minutes' => '30',
+            'referral_alert_idle' => 40,
+        ];
+        $response = $this->putJson('/api/admin/bot/settings/referral', $group);
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         $settings = $this->decode($response)['settings'];
-        self::assertSame([true, 15, true], [$settings['referral_enabled'], $settings['referral_rate'], $settings['referral_first_only']]);
+        self::assertSame(
+            [true, 15, 0, true, '20000.00', '10000.00', 'join', 5, $plan->id, 0, 30, 40],
+            array_map(static fn(string $name): mixed => $settings[$name], array_keys($group)),
+            'as the admin typed them, Persian digits and separators too',
+        );
 
-        $bad = $this->unchecked()->putJson('/api/admin/bot/settings/referral', ['referral_enabled' => false, 'referral_rate' => 0, 'referral_first_only' => 'sometimes']);
+        $otherShops = CurrentBot::run($this->agentBot(), fn(): Plan => $this->plan(['name' => 'نماینده']));
+        $bad = $this->unchecked()->putJson('/api/admin/bot/settings/referral', [
+            'referral_rate' => 0,
+            'referral_renewal_rate' => 101,
+            'referral_first_only' => 'sometimes',
+            'referral_start_referrer' => '-1',
+            'referral_start_when' => 'tomorrow',
+            'referral_reward_plan_id' => $otherShops->id,
+            'referral_alert_minutes' => 0,
+        ] + $group);
         self::assertSame(422, $bad->getStatusCode());
         $errors = $this->decode($bad)['errors'];
         self::assertSame(['درصد پورسانت باید عددی بین 1 تا 100 باشد.'], $errors['referral_rate']);
+        self::assertSame(['درصد پورسانت تمدید باید عددی بین 0 تا 100 باشد.'], $errors['referral_renewal_rate']);
         self::assertSame([Validation::NOT_A_SWITCH], $errors['referral_first_only']);
-        self::assertTrue($this->decode($this->get('/api/admin/bot/settings'))['settings']['referral_enabled'], 'nothing stored from a refused save');
+        self::assertSame(['هدیه شروع معرف باید مبلغی بین ۰ تومان تا ۱۰٬۰۰۰٬۰۰۰ تومان باشد.'], $errors['referral_start_referrer']);
+        self::assertArrayHasKey('referral_start_when', $errors);
+        self::assertSame([PrizePlan::NOT_A_PLAN], $errors['referral_reward_plan_id'], "another shop's plan is none of this one's");
+        self::assertSame(['بازه هشدار باید عددی بین 1 تا 10080 دقیقه باشد.'], $errors['referral_alert_minutes']);
+
+        $none = $this->putJson('/api/admin/bot/settings/referral', ['referral_reward_plan_id' => null] + $group);
+        self::assertSame([PrizePlan::PICK], $this->decode($none)['errors']['referral_reward_plan_id'], 'a reward needs its plan');
+        self::assertSame(15, $this->decode($this->get('/api/admin/bot/settings'))['settings']['referral_rate'], 'nothing stored from a refused save');
+
+        $off = $this->putJson('/api/admin/bot/settings/referral', ['referral_reward_every' => 0, 'referral_reward_plan_id' => ''] + $group);
+        self::assertNull($this->decode($off)['settings']['referral_reward_plan_id'], 'no reward, no plan');
+    }
+
+    public function testTheExtrasGroupTakesTheSwitchAndTheShopsPriceListAsTheAdminTypesIt(): void
+    {
+        $response = $this->putJson('/api/admin/bot/settings/extras', [
+            'extras_enabled' => true,
+            'extra_traffic_price' => '۲٬۰۰۰',
+            'extra_traffic_options' => [['quantity' => '50', 'price' => null], ['quantity' => 10, 'price' => '18,000'], ['quantity' => null, 'price' => '']],
+            'extra_traffic_min' => '۵',
+            'extra_traffic_max' => 200,
+            'extra_time_price' => null,
+            'extra_time_options' => [['quantity' => 30, 'price' => 25000]],
+            'extra_time_min' => 1,
+            'extra_time_max' => 30,
+        ]);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $saved = array_intersect_key($this->decode($response)['settings'], array_flip(['extras_enabled', 'extra_traffic_price', 'extra_traffic_options', 'extra_traffic_min', 'extra_traffic_max', 'extra_time_price', 'extra_time_options']));
+        self::assertSame([
+            'extras_enabled' => true,
+            'extra_traffic_price' => '2000.00',
+            'extra_traffic_options' => [['quantity' => 10, 'price' => '18000.00'], ['quantity' => 50, 'price' => null]],
+            'extra_traffic_min' => 5,
+            'extra_traffic_max' => 200,
+            'extra_time_price' => null,
+            'extra_time_options' => [['quantity' => 30, 'price' => '25000.00']],
+        ], $saved, 'Persian digits and separators, a blank row dropped, the smallest first');
+        $prices = $this->service(ExtrasSettings::class)->prices();
+        self::assertSame(['100000.00', null], [$prices->traffic->priceOf(50), $prices->time->priceOf(7)], 'fifty GB at the price of a GB; no price of a day, only the thirty days');
+
+        $bad = $this->putJson('/api/admin/bot/settings/extras', ['extras_enabled' => true, 'extra_traffic_price' => '', 'extra_traffic_options' => [['quantity' => 10, 'price' => '']], 'extra_traffic_min' => 50, 'extra_traffic_max' => 20, 'extra_time_min' => 1, 'extra_time_max' => 30]);
+        self::assertSame(422, $bad->getStatusCode());
+        self::assertSame([
+            'extra_traffic_options' => ['۱۰ گیگابایت قیمت ندارد؛ قیمت آن، یا قیمت هر گیگابایت را بنویسید.'],
+            'extra_traffic_max' => ['بیشترین حجم دلخواه نمی‌تواند از کمترین حجم دلخواه کمتر باشد.'],
+        ], $this->decode($bad)['errors']);
+        self::assertSame('2000.00', $this->service(ExtrasSettings::class)->prices()->traffic->price, 'nothing stored from a refused save');
     }
 
     public function testAnAgentsBotHasSettingsOfItsOwn(): void

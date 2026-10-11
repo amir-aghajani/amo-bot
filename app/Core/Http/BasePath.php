@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Http;
 
 /**
- * The URL prefix the app is served from ("/shop"; "" at the root), so it also runs from a sub-folder
- * (public_html/shop) or through the root .htaccess fallback on shared hosting. Pure: the container's
- * `http.base_path` entry feeds it the configuration and the SAPI's view of the request.
+ * The URL prefix requests arrive under ("/shop"; "" at the root), so the app also runs from a sub-folder or through the
+ * root .htaccess fallback. APP_BASE_PATH overrides the detection.
  */
 final class BasePath
 {

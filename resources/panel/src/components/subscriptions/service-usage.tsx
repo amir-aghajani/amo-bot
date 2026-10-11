@@ -1,7 +1,7 @@
 import { Dash } from '@/components/list-view'
 import { ProgressBar } from '@/components/progress-bar'
 import type { SubscriptionRow } from '@/lib/api-types'
-import { formatBytes, formatDate, formatDays, timeLeft, UNLIMITED } from '@/lib/format'
+import { formatBytes, formatDate, formatDeadline, formatDuration, timeLeft, UNLIMITED } from '@/lib/format'
 import type { Tone } from '@/lib/statuses'
 import { cn } from '@/lib/utils'
 
@@ -30,21 +30,20 @@ export function UsageMeter({ traffic, className }: { traffic: SubscriptionRow['t
 }
 
 /**
- * When the service ends, worded as the bot words it for the customer: the date with the days left (amber once it is
- * within the shop's "ending soon" window — the server's `expiring_soon`), still waiting for the first connection (the
- * panel starts the clock then), or never.
+ * When a service ends, worded as the bot words it: the date and the days (or, within a day, hours) left — amber inside
+ * the "ending soon" window —, its term while it waits for the first connection, or never.
  */
-export function ServiceExpiry({ subscription }: { subscription: Pick<SubscriptionRow, 'status' | 'expires_at' | 'duration_days' | 'expiring_soon'> }) {
+export function ServiceExpiry({ subscription }: { subscription: Pick<SubscriptionRow, 'status' | 'expires_at' | 'duration_hours' | 'expiring_soon'> }) {
   // A deleted service has no client left to wait for or to run out: its end is a date on record, nothing more.
   if (subscription.status === 'deleted') {
     return subscription.expires_at === null ? <Dash /> : <span className="whitespace-nowrap">{formatDate(subscription.expires_at, { dateStyle: 'medium' })}</span>
   }
 
   if (subscription.expires_at === null) {
-    return subscription.duration_days > 0 ? (
+    return subscription.duration_hours > 0 ? (
       <div className="grid gap-0.5">
         <span className="whitespace-nowrap">در انتظار اولین اتصال</span>
-        <span className="text-footnote text-muted-foreground">{formatDays(subscription.duration_days)} از اولین اتصال</span>
+        <span className="text-footnote text-muted-foreground">{formatDuration(subscription.duration_hours)} از اولین اتصال</span>
       </div>
     ) : (
       <span>{UNLIMITED}</span>
@@ -53,7 +52,7 @@ export function ServiceExpiry({ subscription }: { subscription: Pick<Subscriptio
 
   return (
     <div className="grid gap-0.5">
-      <span className="whitespace-nowrap">{formatDate(subscription.expires_at, { dateStyle: 'medium' })}</span>
+      <span className="whitespace-nowrap">{formatDeadline(subscription.expires_at)}</span>
       <span className={cn('text-footnote', subscription.expiring_soon ? 'text-warning' : 'text-muted-foreground')}>{timeLeft(subscription.expires_at)}</span>
     </div>
   )

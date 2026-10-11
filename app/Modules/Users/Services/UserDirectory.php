@@ -16,9 +16,8 @@ use App\Modules\Users\Models\WalletTransaction;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * The admin's view of the customer base ("کاربران"): a searchable, filterable page of the bot's users with the counts
- * the table shows and the admin's groups each is in (filterable by one), and the customer's wallet ledger — who wrote a
- * line by hand as its reader may see it (Reviewers). What is decided about a customer is UserActions'.
+ * The customers screen («کاربران»): a filterable, searchable page with each customer's counts and groups, and a
+ * customer's wallet ledger. Decisions about a customer are UserActions'.
  */
 final class UserDirectory
 {
@@ -31,11 +30,7 @@ final class UserDirectory
         private readonly Reviewers $reviewers,
     ) {}
 
-    /**
-     * The customers — newest first, or in the order the table's headers ask for (`sort`: when they joined, when they
-     * were last seen, their balance, their orders, their running services) —: by status, by role (the bot's admins), in
-     * one of the admin's groups, searched.
-     */
+    /** A page of customers by status, role and group, searched, newest first or by a column. */
     public function search(PageRequest $list): Page
     {
         $query = User::query()->withCount(self::counts())->addSelect(User::balanceColumn())->with('groups');
@@ -90,9 +85,7 @@ final class UserDirectory
     }
 
     /**
-     * The customer as every other screen points at them (a payment's, an order's): the three
-     * Telegram identifiers, kept apart — none but the name for a customer without Telegram —, their
-     * email, plus our id.
+     * The customer as other screens refer to them: name, handle, Telegram id and email kept apart, plus our id.
      *
      * @return array{id: int, name: string|null, username: string|null, telegram_id: int|null, email: string|null}
      */
@@ -115,6 +108,8 @@ final class UserDirectory
             'status' => $user->status->value,
             'role' => $user->role->value,
             'balance' => $user->balance(),
+            // Their own discount («تخفیف اختصاصی»), a percent off what they buy; 0 none.
+            'discount_percent' => $user->discount_percent,
             'counts' => [
                 'orders' => (int) $user->getAttribute('orders_count'),
                 'subscriptions' => (int) $user->getAttribute('subscriptions_count'),
@@ -137,9 +132,7 @@ final class UserDirectory
     }
 
     /**
-     * The customer the way every directory finds one (User::matching(): the name, the handle, the email, the Telegram
-     * id), plus what only this table knows: the phone by substring — a leading "+" is what people paste — and our own
-     * id, a bare number. («#12» is the customer numbered 12 alone: PageRequest::search().)
+     * A search as every list finds customers (User::matching()), plus the phone (four digits or more) and our own id.
      *
      * @param Builder<User> $builder
      */

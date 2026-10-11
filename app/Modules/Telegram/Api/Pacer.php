@@ -7,9 +7,8 @@ namespace App\Modules\Telegram\Api;
 use App\Core\Support\Sleeper;
 
 /**
- * The pace of the bot's bulk sends — a broadcast, the reminders —: PER_SECOND calls a second at most, under Telegram's
- * limit of about 30 messages a second for a bot, so its answers to the customers writing to it meanwhile keep their room.
- * Each call is followed by its share of a second, slept through the shop's Sleeper (the tests' does not sleep).
+ * The pace of bulk sends (broadcasts, reminders): PER_SECOND calls a second, under Telegram's ~30 a second for a bot,
+ * leaving room for answers to customers. Each call sleeps its share of a second through the Sleeper (a no-op in tests).
  */
 final class Pacer
 {

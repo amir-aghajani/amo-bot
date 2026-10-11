@@ -22,11 +22,9 @@ use App\Support\Requirements;
 use Psr\Log\LoggerInterface;
 
 /**
- * Setting the shop up, step by step — the web installer's (the owner's panel, over /api/install): the host's
- * requirements, config.php with a key of the shop's own, the database — written only once its driver's probe answers —
- * and its tables, the panel's login, the shop's name and address (and the bot's token, when it is at hand), then the
- * lock that ends the installation. Every step can be taken again until then; each answers a refusal with a
- * ValidationException in the owner's words.
+ * The web installer's steps — the only way to install a shop, since shared hosting has no shell: requirements,
+ * config.php with its own APP_KEY, the database (written only once it answers) and its tables, the owner's login, the
+ * shop's name and address (and the bot's token), then the lock. Each step can be repeated until the lock is written.
  */
 final class Installer
 {
@@ -42,7 +40,7 @@ final class Installer
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** @return array<string, mixed> Where the installation stands, step by step */
+    /** @return array<string, mixed> The installation's status, step by step */
     public function status(): array
     {
         $requirements = $this->requirements->check();
@@ -60,8 +58,8 @@ final class Installer
     }
 
     /**
-     * The database the shop runs on, written to config.php only once its driver's probe answers. A secret left blank is
-     * an empty one here (a local MySQL often has no password): the installer shows nothing kept.
+     * Write the database settings once the probe answers. A blank secret means empty here (a local MySQL often has no
+     * password): the installer shows nothing kept.
      *
      * @param array<string, mixed> $input {driver?, …the driver's fields}
      * @throws ValidationException
@@ -78,8 +76,7 @@ final class Installer
     }
 
     /**
-     * The shop's tables, on the database config.php names (on the web, a request after the one that wrote it): the ones
-     * it does not have yet.
+     * Make the tables the database lacks — in a request after the one that wrote config.php, so it runs on the new one.
      *
      * @return list<string> The tables made now
      * @throws ValidationException
@@ -101,7 +98,7 @@ final class Installer
     }
 
     /**
-     * The panel's login — the installer's step —, by the one rule (Credentials), its password kept as a hash.
+     * Save the owner's panel login.
      *
      * @param array<string, mixed> $input {username, password, password_confirmation}
      * @throws ValidationException
@@ -115,7 +112,7 @@ final class Installer
     }
 
     /**
-     * The shop's name and public address, and the bot's token when the owner gives it (written once Telegram knows it).
+     * Save the shop's name and address, and the bot's token when given (once Telegram knows it).
      *
      * @param array<string, mixed> $input {name, url, token?}
      * @throws ValidationException|BotTokenException
@@ -132,7 +129,7 @@ final class Installer
     }
 
     /**
-     * End the installation: from now on the panel signs in, and the installer and its key are gone.
+     * Write the lock and delete the key: the installer is gone and the panel signs in from now on.
      *
      * @throws ValidationException when a step the shop cannot run without is not done
      */
@@ -163,7 +160,7 @@ final class Installer
     }
 
     /**
-     * The config.php the shop runs on, with a key of the shop's own — made when there is none.
+     * Make config.php with an APP_KEY of its own, when it has none.
      *
      * @throws ValidationException when it cannot be made or written
      */
@@ -184,8 +181,8 @@ final class Installer
     }
 
     /**
-     * The database step as it shows, whether a database answers to what config.php names and whether the shop's tables
-     * are all there. Not asked before config.php names a driver: a fresh copy has nothing worth trying.
+     * The database step: its settings, whether a database answers and whether every table is there. Nothing is probed
+     * before config.php names a driver.
      *
      * @param array<string, string> $config config.php's DB_* settings
      * @return array<string, mixed>

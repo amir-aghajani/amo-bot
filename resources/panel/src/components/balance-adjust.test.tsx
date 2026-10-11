@@ -49,7 +49,7 @@ const sent = (path: string) =>
     .map((request) => request.body)
 
 describe('a wallet’s dialog', () => {
-  it('offers no revert, and leaves without a word with a direction picked and nothing typed — but asks once an amount is', async () => {
+  it('offers no revert, and closes without asking when only a direction is picked, but asks once an amount is typed', async () => {
     server().on('GET', '/api/admin/users/10/wallet', json({ user: CUSTOMER, transactions: [] } satisfies UserWalletResponse))
     const onClose = vi.fn()
     render(
@@ -87,7 +87,7 @@ describe('a wallet’s amount', () => {
     expect(sent('/api/admin/users/10/wallet').map((body) => (body as { amount: string }).amount)).toEqual(['150000', '150000'])
   })
 
-  it('that is no whole number of Toman is refused in the form’s words, and nothing is sent', () => {
+  it('that is not a whole number of Toman is refused by the form, and nothing is sent', () => {
     wallet()
 
     adjust('مبلغ (تومان)', '1.5', 'افزایش موجودی')
@@ -110,7 +110,7 @@ describe('an agent’s traffic', () => {
     await until(() => expect(sent('/api/admin/agency/agents/10/traffic')).toEqual([{ gb: '-1.5', note: '' }]))
   })
 
-  it('that is no such number is refused in the form’s words, and nothing is sent', () => {
+  it('that is not such a number is refused by the form, and nothing is sent', () => {
     server().on('GET', '/api/admin/agency/agents/10/traffic', json({ lines: [], meta: { page: 1, per_page: 25, total: 0, last_page: 1 } }))
     render(<TrafficModal agent={AGENT} onClose={() => undefined} onSaved={() => undefined} />, { wrapper: providers().wrapper })
 

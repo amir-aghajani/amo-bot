@@ -26,7 +26,7 @@ final class AdminCustomEmojisApiTest extends HttpTestCase
     /** A one-pixel PNG: a picture Telegram might hand over. */
     private const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-    /** The start of a .tgs (gzip) and of a WebM (EBML): what an animated and a video sticker are told by. */
+    /** The start of a .tgs (gzip) and of a WebM (EBML): how an animated and a video sticker are told apart. */
     private const TGS = "\x1f\x8b\x08\x00lottie";
     private const WEBM = "\x1a\x45\xdf\xa3webm";
 

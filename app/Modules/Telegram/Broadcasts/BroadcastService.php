@@ -25,15 +25,11 @@ use Illuminate\Support\Collection;
 use Psr\Log\LoggerInterface;
 
 /**
- * «ارسال همگانی»: a bot admin's message copied — or forwarded — to an Audience of customers, with the admin's link
- * buttons under a copy and each message pinned when they asked; and «لغو پین», the same pins taken off again. Sending is
- * paced (Api\Pacer: Telegram takes about 30 messages a second) and done in batches by the one worker holding the run's lease: the
- * bot for the first few right after the admin pressed «ارسال», then Tasks\SendBroadcastsTask every minute — past a
- * cursor, each customer claimed before their message goes, so none gets it twice. The admin pauses, resumes or cancels
- * it (control(): a compare-and-swap on its status, so the worker stops at the next customer) from the bot's live
- * progress message — which the worker redraws every few seconds — or from the panel. A customer who turned the bot away
- * is counted, not sent to, and learned when Telegram says so (CustomerChats); a flood limit Telegram imposes stops the
- * batch where it was, for the next one to carry on.
+ * «ارسال همگانی»: an admin's message copied or forwarded to an Audience (optionally pinned, with link buttons under a
+ * copy), and «لغو پین» runs that take those pins off. A run is worked in batches by whoever holds its lease — the bot
+ * for the first few, then SendBroadcastsTask — past a cursor, each customer claimed before their message goes, so nobody
+ * gets it twice. Sending is paced (Api\Pacer). Pause, resume and cancel are a compare-and-swap on the status, so the
+ * worker stops at the next customer. A flood limit stops the batch where it was, for the next one to carry on.
  */
 final class BroadcastService
 {
@@ -65,8 +61,8 @@ final class BroadcastService
     ) {}
 
     /**
-     * Start a run of the message a bot admin sent in their chat with the bot, as their draft says (mode, audience, pin,
-     * buttons); its progress is drawn in `$progressMessageId`, a message of the bot's in that chat.
+     * Start a run of the message the admin sent in their chat with the bot, as their draft says; its progress is drawn
+     * in `$progressMessageId`, a bot message in that chat.
      *
      * @param array{message_id: int, content?: string|null, excerpt?: string|null, mode: BroadcastMode, audience: string, audience_id?: int|null, pin: bool, buttons?: list<list<array{text: string, url: string}>>} $draft
      * @throws ValidationException on `audience` when it names a group or a server that is gone: it reaches nobody
@@ -94,8 +90,8 @@ final class BroadcastService
     }
 
     /**
-     * Start taking a pinned broadcast's pins off again — from the bot (`$admin`, who then sends the run its progress
-     * message) or the panel (`$reviewer`, no progress message).
+     * Start taking a finished pinned run's pins off — from the bot (`$admin`, who gets a progress message) or the panel
+     * (`$reviewer`).
      *
      * @throws ValidationException on `status` when there is nothing to take off, or it is being done already
      */
@@ -121,9 +117,9 @@ final class BroadcastService
     }
 
     /**
-     * Work on the run until `$limit` customers are handled or `$deadline` (a unix time with fraction) passes, while no
-     * one else does; true when it is over (done now, or done or cancelled before), false while there is more — or it is
-     * paused, or another worker has it.
+     * Work the run until `$limit` customers are handled or `$deadline` (unix time) passes, while holding its lease. True
+     * when it is over (done now, or done or cancelled before); false while there is more, it is paused, or another worker
+     * holds it.
      */
     public function process(Broadcast $broadcast, int $limit, ?float $deadline = null): bool
     {
@@ -151,19 +147,19 @@ final class BroadcastService
                     }
                     $userId = $recipient instanceof BroadcastPin ? $recipient->user_id : $recipient->id;
                     $previous = $broadcast->last_user_id;
-                    // Claimed before the message goes: paused, cancelled or taken over meanwhile, the run stops here.
+                    // Claimed before the message goes: once paused, cancelled or taken over, the run stops here.
                     if (!$lease->write(['last_user_id' => $userId])) {
                         return false;
                     }
 
                     $outcome = $recipient instanceof BroadcastPin ? $this->unpin($recipient) : $this->deliver($broadcast, $recipient);
                     if ($outcome === null) {
-                        // Telegram wants a longer pause than a worker sleeps: this customer waits for the next batch.
+                        // A flood limit longer than a worker sleeps: this customer waits for the next batch.
                         $lease->move('last_user_id', $userId, $previous);
 
                         return false;
                     }
-                    // Counted whatever became of the run meanwhile: what was done is done.
+                    // Counted even if the run was paused meanwhile: the message went.
                     Broadcast::query()->whereKey($broadcast->id)->increment($outcome);
                     $broadcast->setAttribute($outcome, $broadcast->getAttribute($outcome) + 1)->syncOriginalAttribute($outcome);
                     $handled++;
@@ -185,8 +181,8 @@ final class BroadcastService
     }
 
     /**
-     * Pause, resume or cancel a run — a compare-and-swap on its status; on success its worker stops at the next customer
-     * and the admin's progress message shows the new state. True when this call moved it.
+     * Pause, resume or cancel a run with a compare-and-swap on its status (the worker stops at the next customer); true
+     * when this call moved it.
      */
     public function control(Broadcast $broadcast, BroadcastControl $control): bool
     {
@@ -215,10 +211,7 @@ final class BroadcastService
         }
     }
 
-    /**
-     * Tell the admin a message run they sent from the bot went to everyone (the scheduler's way; inline, they are
-     * watching it) — not one they cancelled, nor an unpin run.
-     */
+    /** Tell the admin their message run is done (not a cancelled one, nor an unpin run). */
     public function report(Broadcast $broadcast): void
     {
         $chat = $broadcast->adminChat();
@@ -239,8 +232,7 @@ final class BroadcastService
     }
 
     /**
-     * The admin's link buttons, typed in the bot — a row a line, buttons on a line apart by «|», each «text - link» (a
-     * link: http(s) or tg://), a label as long as a keyboard's.
+     * The admin's link buttons as typed: a row a line, buttons apart by «|», each «text - link» (http(s) or tg://).
      *
      * @return list<list<array{text: string, url: string}>>
      * @throws ValidationException on `buttons`, with the line that is not right, or too many
@@ -314,8 +306,8 @@ final class BroadcastService
     }
 
     /**
-     * The next recipients past the cursor: a message run's audience, an unpin run's pins (by customer). An audience whose
-     * group or server is gone has nobody left to reach.
+     * The next recipients past the cursor: a message run's audience, or an unpin run's pins. An audience whose group or
+     * server is gone reaches nobody.
      *
      * @return Collection<int, User>|Collection<int, BroadcastPin>
      */
@@ -331,8 +323,8 @@ final class BroadcastService
     }
 
     /**
-     * One customer's message: skipped when they turned the bot away, copied (with the admin's buttons) or forwarded, and
-     * pinned when the run says so — a pin that fails does not undo the message.
+     * One customer's message: skipped when they blocked the bot, else copied or forwarded and pinned when asked (a failed
+     * pin does not undo the message).
      *
      * @return self::SENT|self::BLOCKED|self::FAILED|null Null: a flood limit, for the next batch to try again
      */
@@ -372,9 +364,8 @@ final class BroadcastService
     }
 
     /**
-     * One pin taken off, in its customer's chat; a pin Telegram no longer has (the customer deleted it, or the chat) —
-     * or one in the chat of a customer who has no Telegram account any more (taken off it on the website: there is no
-     * chat to ask) — counts as off.
+     * One pin taken off. A pin Telegram no longer has, or one of a customer without a Telegram account any more, counts
+     * as off.
      *
      * @return self::SENT|self::FAILED|null Null: a flood limit, for the next batch to try again
      */
@@ -410,7 +401,7 @@ final class BroadcastService
         return self::FAILED;
     }
 
-    /** Everyone has been through: done. True when it is over — done by this call, or cancelled meanwhile. */
+    /** Everyone was reached: mark it done. True when it is over (done by this call, or cancelled meanwhile). */
     private function finish(Broadcast $broadcast, Lease $lease): bool
     {
         $done = $lease->finish(['status' => BroadcastStatus::Done, 'finished_at' => now()]);

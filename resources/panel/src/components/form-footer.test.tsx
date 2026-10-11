@@ -12,12 +12,9 @@ import { providers, until } from '@/test/render'
 import { refusal, server } from '@/test/server'
 
 /*
- * A form's footer (components/form-footer): a card's save and revert are held — not disabled — while there is nothing to
- * save or revert, so the button just pressed keeps the focus once its work is done, and a press of a held one does
- * nothing. A dialog's form offers a revert only as an edit of what is saved — held, with its submit, while nothing
- * changed —, never as a new one's; changed and changed back, nothing is unsaved and nothing asks. A save the server
- * refuses field by field (a 422) puts the focus on the first field to fix — however far above the button, a fold that
- * holds one opening for it — and the footer says how many are left, following each fix.
+ * The form footers (components/form-footer): save and revert held rather than disabled, a revert only on an edit, no
+ * unsaved question after a change is typed back, and a 422 moving the focus to the first invalid field (opening its
+ * fold) with a count of what is left.
  */
 
 /** A group's name in its dialog: an edit of the group — or, inside Creating, as EditorModal opens it on no row, a new one's. */

@@ -42,10 +42,8 @@ interface WebhookCardProps {
 }
 
 /**
- * How the bots get their updates — every bot the shop runs at once: on webhooks (Telegram calls the shop at its address,
- * what a host without a shell runs on) or by bot:poll on the server. The owner puts them on webhooks, again after a new
- * token or webhook secret, or takes them off here — what bot:webhook:set and bot:webhook:delete do —, and reads what
- * happened to each bot. The mode is the main bot's (GET /system), which the others follow — whichever shop is open.
+ * «دریافت پیام‌ها»: puts every bot on webhooks (what a host without a shell needs) or takes them off — the panel's
+ * bot:webhook:set/delete — and shows each bot's outcome. The mode shown is the main bot's, which the others follow.
  */
 export function WebhookCard({ appUrl, webhookUrl }: WebhookCardProps) {
   const mode = useQuery(systemQuery).data?.system.main_bot.mode
@@ -136,7 +134,7 @@ export function WebhookCard({ appUrl, webhookUrl }: WebhookCardProps) {
   )
 }
 
-/** What happened to each bot, in the server's words — or that no bot has a token to switch. */
+/** What happened to each bot, as the server reports it — or that no bot has a token to switch. */
 function Outcomes({ outcomes }: { outcomes: WebhookOutcome[] }) {
   if (outcomes.length === 0) {
     return (

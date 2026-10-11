@@ -28,9 +28,8 @@ interface TextModalProps {
 }
 
 /**
- * One bot text: the wording, the variables it may use, and how Telegram will show it — and, as it is typed, what the
- * save would refuse in it (wordingProblem(), the server's rules mirrored; the server stays the judge). A wording
- * half-written is not lost to a stray Esc, the backdrop or leaving the page — the form's actions ask first.
+ * Edits one bot text: the wording, its variables and a Telegram preview, with a live warning of what the save would
+ * refuse (wordingProblem() mirrors the server's rules; the server stays the judge).
  */
 export function TextModal({ text, onClose, onSaved }: TextModalProps) {
   return (

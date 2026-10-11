@@ -1,7 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
-import { Coins, Search, Settings2, UserPlus, Users } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Coins, Search, Settings2, ShieldCheck, UserPlus, Users } from 'lucide-react'
 import { Link } from 'react-router'
+import { toast } from 'sonner'
 import { MenuButtonNotice } from '@/components/bot/menu-button-notice'
+import { ConfirmModal } from '@/components/confirm-modal'
 import { CustomerFilter, customerList } from '@/components/customer-filter'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
@@ -12,11 +15,25 @@ import { SectionedPage } from '@/components/sectioned-page'
 import { REFERRAL_SECTIONS } from '@/components/shell/nav'
 import { StatCard, StatGrid } from '@/components/stat-card'
 import { searchLink, TextLink } from '@/components/text-link'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { UserIdentity, userPage } from '@/components/user-identity'
+import { distinctUserLabel, UserIdentity, userPage } from '@/components/user-identity'
 import { api } from '@/lib/api'
-import type { InviteeSort, InviteesResponse, ReferralCommissionSort, ReferralCommissionsResponse, ReferralSummaryResponse, ReferrerSort, ReferrersResponse } from '@/lib/api-types'
+import type {
+  InviteeSort,
+  InviteesResponse,
+  ReferralAlertReason,
+  ReferralAlertRow,
+  ReferralAlertsResponse,
+  ReferralCommissionSort,
+  ReferralCommissionsResponse,
+  ReferralSummary,
+  ReferralSummaryResponse,
+  ReferrerSort,
+  ReferrersResponse,
+} from '@/lib/api-types'
+import { messageOf } from '@/lib/failure'
 import { formatAmount, formatMoney, formatNumber, formatPercent, MONEY_UNIT, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { usePagedList } from '@/lib/use-paged-list'
@@ -36,6 +53,17 @@ const HEADERS: Record<Section, { title: string; description: string }> = {
     title: 'پورسانت‌ها',
     description: 'پورسانت‌هایی که بابت پرداخت زیرمجموعه‌ها به کیف پول معرف‌ها اضافه شده، تازه‌ترین اول.',
   },
+  alerts: {
+    title: 'هشدارها',
+    description:
+      'معرف‌هایی که زیرمجموعه‌هایشان ساختگی به نظر می‌رسد، تازه‌ترین اول. تا هشدار رفع نشود هدیه شروع و جایزه دعوت به معرف داده نمی‌شود — و بعد از رفع هم آنچه نگه داشته شد داده نمی‌شود؛ پورسانت‌ها مثل قبل است.',
+  },
+}
+
+/** Why an alert was raised, in the admins' words: how many and of what. */
+const ALERT_REASON: Record<ReferralAlertReason, (count: number) => string> = {
+  burst: (count) => `${formatNumber(count)} عضویت پشت سر هم با یک لینک`,
+  idle: (count) => `${formatNumber(count)} زیرمجموعه بدون هیچ خرید`,
 }
 
 /** The program in a paragraph, behind the header's ⓘ on every section. */
@@ -48,10 +76,8 @@ const INVITEE_SORTS: InviteeSort[] = ['joined', 'earned']
 const COMMISSION_SORTS: ReferralCommissionSort[] = ['created', 'commission']
 
 /**
- * The referral program: its numbers over three sections, listed in the sidebar — the customers whose links brought
- * someone, the customers who came through a link (who brought whom), and the commissions paid out. The rules are a
- * section of the bot settings. The sections stay mounted when another is shown, so each keeps its search and page.
- * Numbers that could not be read say so, and are «—».
+ * «زیرمجموعه‌گیری»: the program's numbers above four sections — referrers, invitees, commissions and fake-referral
+ * alerts. The rules live in the bot settings.
  */
 export function ReferralsPage() {
   const read = useQuery({ queryKey: queryKeys.referrals, queryFn: () => api.get<ReferralSummaryResponse>('/referrals') })
@@ -86,18 +112,12 @@ export function ReferralsPage() {
             <StatCard label="معرف‌ها" value={summary && formatNumber(summary.referrers)} hint="مشتری‌هایی که لینکشان کسی را آورده" loading={read.isPending} />
             <StatCard label="زیرمجموعه‌ها" value={summary && formatNumber(summary.referred)} hint="مشتری‌هایی که با لینک دعوت آمده‌اند" loading={read.isPending} />
             <StatCard label="پورسانت‌های پرداخت‌شده" value={summary && formatNumber(summary.commissions)} hint="هر کدام بابت یک پرداخت" loading={read.isPending} />
-            <StatCard
-              label="جمع پورسانت‌ها"
-              value={summary && formatAmount(summary.paid)}
-              unit={MONEY_UNIT}
-              hint={summary && `${formatPercent(summary.rate)} از ${summary.first_only ? 'اولین پرداخت هر زیرمجموعه' : 'هر پرداخت'}`}
-              loading={read.isPending}
-            />
+            <StatCard label="جمع پورسانت‌ها" value={summary && formatAmount(summary.paid)} unit={MONEY_UNIT} hint={summary && commissionTerms(summary)} loading={read.isPending} />
           </StatGrid>
         </>
       )}
     >
-      {{ referrers: <ReferrersList />, invitees: <InviteesList />, commissions: <CommissionsList /> }}
+      {{ referrers: <ReferrersList />, invitees: <InviteesList />, commissions: <CommissionsList />, alerts: <AlertsList /> }}
     </SectionedPage>
   )
 }
@@ -142,7 +162,15 @@ function ReferrersList() {
             {list.rows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>
-                  <UserIdentity user={row.user} status={row.status} to={userPage(row.id)} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <UserIdentity user={row.user} status={row.status} to={userPage(row.id)} />
+                    {row.alerts > 0 && (
+                      <TextLink to={searchLink('/referrals/alerts', row.id)} className="shrink-0">
+                        <Badge variant="warning">هشدار</Badge>
+                        <span className="sr-only">: {formatNumber(row.alerts)} هشدار بر این معرف؛ هدیه شروع و جایزه دعوت نگه داشته می‌شود</span>
+                      </TextLink>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {/* The invitees' list, narrowed to this referrer: the column says what the count is, the link's name what it opens. */}
@@ -161,10 +189,7 @@ function ReferrersList() {
   )
 }
 
-/**
- * Customers who came through a link, newest first: who brought them and what their payments earned that one — or the
- * ones one referrer's link brought (`referrer`: the referrers list's count, a customer's page).
- */
+/** Customers who came through a link, newest first, with their referrer and what they earned them; `?referrer=` narrows to one referrer. */
 function InviteesList() {
   const list = usePagedList({
     queryKey: queryKeys.invitees,
@@ -284,6 +309,98 @@ function CommissionsList() {
           </TableBody>
         </Table>
       </ListView>
+    </>
+  )
+}
+
+/** What a payment earns, in the stat's hint: the rate, of every payment or each one's first — and a renewal's own rate. */
+function commissionTerms(summary: ReferralSummary): string {
+  const terms = `${formatPercent(summary.rate)} از ${summary.first_only ? 'اولین پرداخت هر زیرمجموعه' : 'هر پرداخت'}`
+  if (summary.first_only || summary.renewal_rate === summary.rate) return terms
+  return `${terms}؛ ${summary.renewal_rate === 0 ? 'تمدید بدون پورسانت' : `تمدید ${formatPercent(summary.renewal_rate)}`}`
+}
+
+/**
+ * Alerts on referrers whose referrals look fake, newest first. «رفع هشدار» (asked first) lets the referrer earn gifts again
+ * from then on; what was held back stays held. A refusal shows in the dialog and the list is read again.
+ */
+function AlertsList() {
+  const list = usePagedList({
+    queryKey: queryKeys.referralAlerts,
+    read: (query) => api.get<ReferralAlertsResponse>('/referrals/alerts', query),
+    list: 'alerts',
+    address: '/referrals/alerts',
+  })
+  const [clearing, setClearing] = useState<ReferralAlertRow | null>(null)
+
+  const clear = useMutation({
+    mutationFn: (alert: ReferralAlertRow) => api.post(`/referrals/alerts/${alert.id}/clear`),
+    // The numbers above the lists and the referrers' marks.
+    meta: { quiet: true, invalidates: [queryKeys.referrals, queryKeys.referrers] },
+    onSuccess: (_, alert) => {
+      list.remove(alert.id)
+      setClearing(null)
+      toast.success('هشدار رفع شد')
+    },
+    onError: () => list.refetch(),
+  })
+
+  return (
+    <>
+      <SearchBox value={list.typed} onChange={list.setTyped} placeholder="نام، نام کاربری یا شناسه معرف" aria-label="جستجوی هشدار" />
+      <ListView
+        list={list}
+        noun="هشدارها"
+        unit="هشدار"
+        skeletonRows={4}
+        empty={<EmptyState framed icon={ShieldCheck} title="هشداری نیست" description="معرفی که زیرمجموعه‌هایش ساختگی به نظر برسند، این‌جا و در گروه گزارش‌ها می‌آید." />}
+        noMatch={<EmptyState framed icon={Search} title="هشداری پیدا نشد" description="با این جستجو چیزی نیست." />}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>معرف</TableHead>
+              <TableHead>دلیل</TableHead>
+              <TableHead className="hidden md:table-cell">زمان</TableHead>
+              <TableHead>
+                <span className="sr-only">عملیات</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.rows.map((alert) => (
+              <TableRow key={alert.id}>
+                <TableCell>
+                  <UserIdentity user={alert.referrer} status={alert.status} to={userPage(alert.referrer.id)} />
+                </TableCell>
+                <TableCell>{ALERT_REASON[alert.reason](alert.count)}</TableCell>
+                <TableCell className="hidden text-muted-foreground md:table-cell">{timeAgo(alert.created_at)}</TableCell>
+                <TableCell>
+                  <Button size="sm" variant="secondary" onClick={() => setClearing(alert)} aria-label={`رفع هشدار ${distinctUserLabel(alert.referrer)}`}>
+                    رفع هشدار
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </ListView>
+
+      <ConfirmModal
+        open={clearing !== null}
+        onClose={() => {
+          setClearing(null)
+          clear.reset()
+        }}
+        title="رفع هشدار"
+        description={clearing ? distinctUserLabel(clearing.referrer) : undefined}
+        confirmLabel="رفع هشدار"
+        pending={clear.isPending}
+        error={clear.error ? messageOf(clear.error) : null}
+        onConfirm={() => clearing && clear.mutate(clearing)}
+      >
+        از این پس هدیه شروع و جایزه دعوت دوباره به این معرف داده می‌شود؛ آنچه تا حالا نگه داشته شد داده نمی‌شود. اگر هشدار دیگری هم روی او باشد، تا رفع آن هم چیزی داده نمی‌شود.
+      </ConfirmModal>
     </>
   )
 }

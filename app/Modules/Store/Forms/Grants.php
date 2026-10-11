@@ -10,10 +10,8 @@ use App\Core\Forms\FieldType;
 use App\Modules\Store\Enums\StaffGrant;
 
 /**
- * What the website lets the shop's admins do beyond the shop's daily work: a list of grants (Enums\StaffGrant), the whole
- * of it sent — what is not in it is not granted —, kept without repeats in the grants' own order. Anything that is no
- * grant is refused; a kept value reads back with what is no grant any more left out. The website's card draws it, one
- * switch a grant.
+ * The website's `staff_grants` field: the whole list of grants (Enums\StaffGrant) is sent each time, kept without repeats
+ * in the grants' own order. Anything that is no grant is refused; a kept value no longer a grant reads back left out.
  *
  * @extends Field<list<string>>
  */

@@ -12,11 +12,9 @@ use App\Modules\Orders\Services\OrderService;
 use Psr\Log\LoggerInterface;
 
 /**
- * Deliveries whose process died — the bot restarted between a payment and its delivery, or in the middle of one: an
- * order paid with nobody delivering it for OrderService::STALE_PROCESSING_MINUTES (Order::stale()) is delivered the way
- * support's retry would (OrderActions::resume()), and the customer told only when it worked. Never a failed delivery:
- * that one waits for support, by design. One order at a time, the longest-waiting first, while the run's share of time
- * lasts (each may ask a panel); every minute, in every shop.
+ * Finishes deliveries whose process died (the bot restarted after a payment or mid-delivery): stale orders
+ * (Order::stale()) are delivered as support's retry would (OrderActions::resume()), oldest first, within the run's time
+ * budget. A failed delivery is never resumed: it waits for support. Every minute, in every shop.
  */
 final class ResumeDeliveriesTask implements Task
 {

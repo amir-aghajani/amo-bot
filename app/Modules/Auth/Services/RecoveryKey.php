@@ -6,13 +6,10 @@ namespace App\Modules\Auth\Services;
 
 use App\Core\Security\HostKey;
 
-/**
- * The key of the panel's way back in (LoginRecovery): written to storage/recovery-key.txt as the sign-in page asks, read
- * by the owner off their host's files, good for an hour from when it was made, and gone once it has set a new login.
- */
+/** LoginRecovery's one-time key in storage/recovery-key.txt: valid for an hour, deleted once used. */
 final class RecoveryKey extends HostKey
 {
-    /** Where the owner finds it, from the shop's own folder. */
+    /** Where the owner finds it, relative to the app's folder. */
     public const FILE = 'storage/recovery-key.txt';
 
     /** An hour: long enough to open a file manager, too short to be left lying about. */

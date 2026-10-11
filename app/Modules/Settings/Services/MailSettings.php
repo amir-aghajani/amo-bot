@@ -18,11 +18,9 @@ use App\Core\Mail\MailDriver;
 use App\Core\Mail\MailTransport;
 
 /**
- * The shop's email part of config.php, for the settings screen (ConfigSettings' `mail` group): how it goes out — none,
- * or a mail driver (App\Core\Mail\Drivers) —, the chosen driver's own settings by its form, and who the emails come
- * from. Every driver is shown with its form described and its settings as config.php holds them; a save checks the
- * chosen driver's form with the sender's, and leaves the other drivers' settings as they are kept — a secret among them
- * goes nowhere new (its `boundTo`).
+ * The mail part of config.php (ConfigSettings' `mail` group): the way out (none or a mail driver), that driver's
+ * settings and the sender. A save checks only the chosen driver's form with the sender's; the other drivers' settings
+ * stay as kept, for a way back.
  */
 final class MailSettings
 {
@@ -34,8 +32,7 @@ final class MailSettings
     ) {}
 
     /**
-     * The group as the screen shows it: the way out, who the emails come from, every mail driver described, and each
-     * driver's settings by its key — a secret as whether one is kept.
+     * The group as the screen shows it: the way out, the sender, every driver described, and each driver's values.
      *
      * @return array<string, mixed>
      */
@@ -54,8 +51,8 @@ final class MailSettings
     }
 
     /**
-     * The group's form checked: MAIL_TRANSPORT, and — for a driver — its settings and the sender's, ready to write. A
-     * way out none of the drivers' is refused alone: there is no form to check the rest by.
+     * Check the group: MAIL_TRANSPORT and, for a driver, its settings and the sender. An unknown way out is refused alone,
+     * since there is no form to check the rest by.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
@@ -75,7 +72,7 @@ final class MailSettings
         return ['MAIL_TRANSPORT' => $key] + (new Form('mail', [...$this->drivers->get($key)->describe()->form->fields, ...$this->sender()]))->check($input, $this->kept());
     }
 
-    /** None, or a mail driver — what the shop runs with while config.php does not say; none for a driver it does not have. */
+    /** The way out: none or a driver; defaults to the running one (none for a driver it does not have). */
     private function transport(): Choice
     {
         $keys = [MailTransport::NONE, ...array_map(static fn(MailDriver $driver): string => $driver->key(), $this->drivers->all())];
@@ -85,8 +82,7 @@ final class MailSettings
     }
 
     /**
-     * Who the emails come from, whichever driver sends them: an address — required, since no email goes from none —
-     * and a name, blank for the shop's own.
+     * The sender, whatever the driver: a required address, and a name (blank for the shop's).
      *
      * @return list<Field<mixed>>
      */

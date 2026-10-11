@@ -13,9 +13,8 @@ use App\Modules\Payments\Models\PaymentMethod;
 use Tests\TestCase;
 
 /**
- * A method row read through its driver (the container's `payment.drivers`): how it settles and whether it is the shop's
- * own, by the driver's traits; its one line and its gateway, made from its settings — and a row whose driver is no
- * longer installed says nothing, and is no gateway at all.
+ * GatewayRegistry: a method row read through its driver — its kind and built-in trait, its summary and gateway made from
+ * its settings — and a row whose driver is no longer installed, which has none of them.
  */
 final class GatewayRegistryTest extends TestCase
 {

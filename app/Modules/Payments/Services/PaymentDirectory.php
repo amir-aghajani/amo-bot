@@ -18,9 +18,8 @@ use App\Modules\Users\Services\UserDirectory;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * The payments screen («پرداخت‌ها», both panels): a searchable, filterable page of every payment with what the review
- * needs — the customer, the order, the method, the receipt — and the operations its modal may run now (`actions`,
- * PaymentActions' rules).
+ * The payments screen («پرداخت‌ها»): a searchable page of payments with what a review needs and the operations allowed
+ * now (`actions`, PaymentActions::allowed()).
  */
 final class PaymentDirectory
 {
@@ -34,9 +33,8 @@ final class PaymentDirectory
     ) {}
 
     /**
-     * One status (a tab) or all, one customer's (`user`, their page links here), made on the days asked (`from`, `to`),
-     * searched by number or customer — newest first, or by amount (`sort`) —; with the review queue's count and what the
-     * list took in: how many of its payments are paid and their amount.
+     * A page filtered by status, customer and days, searched by number or customer, newest first or by amount; with the
+     * review queue's count and the list's paid count and total.
      */
     public function search(PageRequest $list): Page
     {
@@ -58,8 +56,7 @@ final class PaymentDirectory
     }
 
     /**
-     * One row of the screen. `description` is the word on its latest verdict (the screen shows it for a failed or a
-     * cancelled one), `refund_note` that word on a refund.
+     * One row of the screen. `description` is the note of its latest verdict; `refund_note` the same, on a refund.
      *
      * @return array<string, mixed>
      */
@@ -86,9 +83,13 @@ final class PaymentDirectory
                 'plan' => $order->plan?->name,
                 'server' => $order->server?->name,
                 'subscription_id' => $order->subscription_id,
+                // What it brings in traffic (an agent's, a service's extra) or in days (a service's extra time).
+                'traffic_bytes' => $order->traffic_bytes,
+                'days' => $order->days,
                 // Why its delivery failed, as whoever reads the screen may read it.
                 'notes' => $order->status === OrderStatus::Failed ? OrderDirectory::notes($order) : null,
-            ],
+                // What its discounts took off what is paid.
+            ] + OrderDirectory::discounts($order),
             // Sent in the bot or uploaded from the website: GET /payments/{id}/receipt serves either (Receipts::fetch()).
             'receipt' => $payment->receipt_at === null ? null : [
                 'name' => $payment->receipt_name,
@@ -105,8 +106,7 @@ final class PaymentDirectory
     }
 
     /**
-     * By a bare number — the payment's or its order's —, or the customer — name, handle, Telegram id — the way every
-     * list searches its customers. («#12» is the payment numbered 12 alone: PageRequest::search().)
+     * A search by a bare number (the payment's or its order's) or by the customer.
      *
      * @param Builder<Payment> $query
      */

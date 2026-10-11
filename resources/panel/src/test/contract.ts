@@ -2,15 +2,11 @@ import { inject } from 'vitest'
 import type { SentRequest } from '@/test/server'
 
 /*
- * The API description as the panels' tests hold their requests to it — what tests/HttpTestCase does with the PHP tests'
- * (league/openapi-psr7-validator), read the same way: a request to the API must be an operation of
- * resources/api/openapi.yaml — its method and path, its path's parameters as they are described —, its query's and its
- * headers' described parameters what their schemas say (a value as the server casts it: "2" is an integer; the shop the
- * owner's tab names, `X-Shop`, among them), and its body what the operation takes: none where it takes none
- * (`x-no-body`, a GET, a DELETE), else its schema's — closed objects, so a field the operation does not read is a drift
- * too. The schemas use a small part of OpenAPI 3.0, the part
- * scripts/api-types.mjs generates the panels' types from; a keyword outside it fails loudly rather than letting a request
- * pass unread.
+ * Every request a panel test sends is checked against resources/api/openapi.yaml, as the PHP tests check theirs: it
+ * must be an operation (method and path), its path, query and header parameters must match their schemas (a value as
+ * the server casts it: "2" is an integer), and its body must be what the operation takes — none where it takes none,
+ * else its closed schema, so an extra field fails too. Only the part of OpenAPI 3.0 the description uses is read (the
+ * part scripts/api-types.mjs generates types from); any other keyword fails loudly rather than letting a request pass.
  */
 
 /** A schema as the description writes one: OpenAPI 3.0's Schema Object, the part the description uses. */
@@ -25,6 +21,7 @@ interface Schema {
   additionalProperties?: boolean | Schema
   minProperties?: number
   items?: Schema
+  minItems?: number
   maxItems?: number
   allOf?: Schema[]
   oneOf?: Schema[]
@@ -186,6 +183,7 @@ const KEYWORDS = new Set([
   'additionalProperties',
   'minProperties',
   'items',
+  'minItems',
   'maxItems',
   'allOf',
   'oneOf',
@@ -212,6 +210,7 @@ function check(value: unknown, given: Schema, where: string): string[] {
   if (schema.minimum !== undefined && typeof value === 'number' && value < schema.minimum) problems.push(`${where}: ${value}, below ${schema.minimum}`)
   if (typeof value === 'string' && schema.format !== undefined && !formatOf(schema.format, where).test(value)) problems.push(`${where}: ${shown(value)}, not a ${schema.format}`)
   if (isObject(value)) problems.push(...objectProblems(value, schema, where))
+  if (Array.isArray(value) && schema.minItems !== undefined && value.length < schema.minItems) problems.push(`${where}: ${value.length} items, fewer than ${schema.minItems}`)
   if (Array.isArray(value) && schema.maxItems !== undefined && value.length > schema.maxItems) problems.push(`${where}: ${value.length} items, more than ${schema.maxItems}`)
   if (Array.isArray(value) && schema.items !== undefined) {
     const { items } = schema

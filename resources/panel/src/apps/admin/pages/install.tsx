@@ -18,11 +18,9 @@ import { useDocumentTitle } from '@/lib/document-title'
 import { queryKeys } from '@/lib/query-keys'
 
 /**
- * The web installer, for a shop that is not installed yet (the panel opens it instead of everything else): first the
- * installer's key — whoever installs must be able to read a file on the host —, then the server's requirements, the
- * database and its tables, the panel's login, the shop's name and address with the bot's token if it is at hand, then
- * the end of the installation — every step over /api/install, which is gone afterwards. It opens on the first step the
- * installation still needs; a done step can be gone back to.
+ * The web installer (the only page of a shop not yet installed): the install key read off the host, requirements,
+ * database and tables, the owner's login, the site (and the bot's token), then finish — all over /api/install, which
+ * disappears afterwards. It opens on the first step still needed; a done step can be revisited.
  */
 export function InstallPage() {
   const queryClient = useQueryClient()

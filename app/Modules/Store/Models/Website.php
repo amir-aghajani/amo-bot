@@ -14,13 +14,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * A shop's website: the switch the Store API answers it by, the public store key its address carries, where the site
- * is and which other origins a browser may call the API from, how its customers sign in — with Telegram, with an email
- * and a password, with Google — and the captcha its forms ask (a driver of Core\Captcha, its settings): what the
- * account's services ask of the site they sign a customer in on (Accounts\Contracts\SignInSite, a Core\Captcha\
- * CaptchaSite too). Whether it shows its customers' reviews and takes new ones (`reviews_enabled`). And whether the
- * shop's admins work the shop from it — the strong sign-in it asks of them, what it grants them (Http\StaffMiddleware).
- * One per bot, made by Services\Websites the first time its panel asks.
+ * A shop's website, one per bot (made by Services\Websites): its switch, its public store key, its address and allowed
+ * origins, how customers sign in, its captcha, its reviews switch, and the door for the shop's admins. It is the
+ * SignInSite the account services sign customers in on.
  *
  * @property int $id
  * @property string $key The store key: 24 lower-case hex characters — it names the shop, it is no secret
@@ -67,10 +63,7 @@ class Website extends Model implements SignInSite
 
     protected $hidden = ['telegram_client_secret', 'captcha_config'];
 
-    /**
-     * A website starts switched off, and so do its ways to sign in, its reviews — and its door for the shop's admins:
-     * shut, a strong sign-in asked of them once it opens, nothing granted beyond the shop's daily work.
-     */
+    /** A website starts with everything off — the shop's admins shut out too, and asked a strong sign-in once let in. */
     protected $attributes = [
         'enabled' => false,
         'telegram_login' => false,
@@ -94,7 +87,7 @@ class Website extends Model implements SignInSite
         'staff_grants' => 'array',
     ];
 
-    /** Whether a page on `$origin` (as the browser sends it) may call the API: the site's own origin, or one it lists. */
+    /** Whether a page on `$origin` may call the API: the site's own origin, or one it lists. */
     public function allowsOrigin(string $origin): bool
     {
         $origin = Origin::normalize($origin);
@@ -105,7 +98,7 @@ class Website extends Model implements SignInSite
         return $origin === Origin::of((string) $this->url) || in_array($origin, $this->origins ?? [], true);
     }
 
-    /** The Client ID customers sign in with Telegram under — while that sign-in is on and one is kept; null otherwise. */
+    /** The Telegram Client ID while Telegram sign-in is on and one is kept; null otherwise. */
     public function telegramClientId(): ?string
     {
         return $this->telegram_login && ($this->telegram_client_id ?? '') !== '' ? $this->telegram_client_id : null;
@@ -129,7 +122,7 @@ class Website extends Model implements SignInSite
         return ($this->google_client_id ?? '') !== '' ? $this->google_client_id : null;
     }
 
-    /** Whether customers may sign up with an email and a password; the accounts made keep signing in whatever it says. */
+    /** Whether customers may sign up with an email; accounts already made keep signing in either way. */
     public function allowsEmailSignUp(): bool
     {
         return $this->email_signup;
@@ -145,7 +138,7 @@ class Website extends Model implements SignInSite
         return $this->captcha_config ?? [];
     }
 
-    /** @return list<string> What the website lets the shop's admins do beyond the shop's daily work (`staff_grants`): StaffGrant values, in their order. */
+    /** @return list<string> The grants given to the shop's admins (StaffGrant values, in their order). */
     public function staffGrants(): array
     {
         return StaffGrant::among($this->staff_grants ?? []);

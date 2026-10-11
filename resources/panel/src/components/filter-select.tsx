@@ -1,9 +1,12 @@
 import { useId, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Select as SelectPrimitive } from 'radix-ui'
-import { pillClasses } from '@/components/pill'
 import { SelectContent, SelectItem, SelectSeparator } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+
+/** A filter pill's look (a hairline box with a name and a value), shared by controls drawn as one: the shop picker, CustomerFilter. */
+export const pillClasses =
+  'inline-flex h-8 max-w-full items-center gap-1.5 rounded-lg border border-border-strong bg-card px-2.5 text-body whitespace-nowrap transition-colors duration-150 outline-none hover:bg-fill focus-visible:focus-ring disabled:opacity-50 data-[state=open]:bg-fill dark:border-border dark:bg-transparent'
 
 /** Radix keeps '' for "no value"; the filters' «all» travels under this name instead. */
 const ALL = '__all__'

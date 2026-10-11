@@ -9,9 +9,9 @@ use App\Core\Forms\FieldType;
 use App\Support\Input;
 
 /**
- * A whole number between two bounds — Persian digits accepted, as everywhere a form takes a number, and its thousands set
- * apart as an amount's are («10,000»: Input::wholeOf()). Its one refusal names the bounds: «تعداد روز باید عددی بین 1 تا
- * 30 باشد.» (with the unit after them when it has one).
+ * A whole number between two bounds, typed with Persian digits or thousands separators too (Input::wholeOf()). Its one
+ * refusal names the bounds («تعداد روز باید عددی بین 1 تا 30 باشد.»). `atLeast` holds it to another field's number (a
+ * range's most to its least).
  *
  * @extends Field<int>
  */
@@ -28,6 +28,7 @@ final class Number extends Field
         /** Said after the bounds: «ثانیه», «گیگابایت» */
         private readonly string $unit = '',
         ?FieldSpec $spec = null,
+        private readonly ?self $atLeast = null,
     ) {
         parent::__construct($name, $key, $default, $spec);
     }
@@ -57,6 +58,14 @@ final class Number extends Field
         $value = Input::integerOf($kept);
 
         return $value !== null && $value >= $this->min && $value <= $this->max ? $value : $this->default;
+    }
+
+    public function conflict(array $values): ?string
+    {
+        $floor = $this->atLeast === null ? null : $values[$this->atLeast->name] ?? null;
+        $value = $values[$this->name] ?? null;
+
+        return is_int($floor) && is_int($value) && $value < $floor ? sprintf('%s نمی‌تواند از %s کمتر باشد.', $this->label, $this->atLeast?->label) : null;
     }
 
     protected function bounds(): array

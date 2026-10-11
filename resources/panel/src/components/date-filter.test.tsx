@@ -7,12 +7,9 @@ import { setShopTimeZone } from '@/lib/format'
 import { until } from '@/test/render'
 
 /*
- * A list's «تاریخ» filter (components/date-filter) and the Persian calendar behind «بازه دلخواه…»
- * (components/date-range-picker): the pill says the days in words — a preset's name, or the days —, a preset hands the
- * days it names — the shop's days, whatever the browser's clock says —, the calendar shows a Jalali month in Persian
- * digits from Saturday with today marked, opens with the focus on a day and gives it back to the pill, two presses make
- * a range in order (one, a single day), the keys walk it right to left, and Escape leaves it with nothing changed.
- * Today is 14 مهر 1405 (2026-10-06, a Tuesday), the browser in UTC and the shop's zone not known yet.
+ * The «تاریخ» filter (components/date-filter) and its Jalali calendar (components/date-range-picker): the pill's words,
+ * the presets on the shop's days, picking a range, the keyboard and the focus. Today is 14 مهر 1405 (2026-10-06, a
+ * Tuesday), the browser in UTC and the shop's zone not known yet.
  */
 
 const BASIS = 'بر اساس زمان ثبت سفارش'

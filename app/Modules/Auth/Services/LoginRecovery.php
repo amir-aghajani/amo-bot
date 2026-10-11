@@ -17,17 +17,16 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * The way back into the owner's panel without a shell — a password forgotten, or no login set at all —, from the
- * sign-in page: whoever can read the host's files (its File Manager) proves it with the one-time key the panel writes
- * there (RecoveryKey), and sets a new login by the installer's one rule (Credentials). A wrong key is a failed sign-in,
- * counted per address (SignInThrottle). Done, the key is gone, this browser is signed in under the new login, and every
- * other session ends with the old one.
+ * The way back into the owner's panel without a shell (a forgotten password, or no login yet): the sign-in page has a
+ * one-time key written to storage/ (RecoveryKey); whoever reads it in the host's file manager sets a new login. A wrong
+ * key is a failed sign-in counted per address. Afterwards the key is gone, this browser is signed in and every other
+ * session ends.
  */
 final class LoginRecovery
 {
     public const WRONG_KEY = 'کلید بازیابی درست نیست یا وقتش گذشته است؛ متن فایل ' . RecoveryKey::FILE . ' را دوباره کپی کنید، یا کلید تازه بسازید.';
 
-    /** Its failures, counted apart from the password's: a wrong key is no guess at the owner's password. */
+    /** Its own throttle way: a wrong key is no guess at the owner's password. */
     private const WAY = 'recovery';
 
     public function __construct(
@@ -39,8 +38,8 @@ final class LoginRecovery
     ) {}
 
     /**
-     * The key written for the owner to read off the host — a new one when there is none that still opens; the same one
-     * while it does, so nobody can turn it over while its owner copies it.
+     * Write the key for the owner to read off the host — the same one while it is valid, so nobody can replace it while
+     * the owner copies it.
      *
      * @return array{file: string, expires_at: string}
      * @throws SignInRefusedException 503 when storage/ cannot be written
@@ -65,8 +64,8 @@ final class LoginRecovery
     }
 
     /**
-     * A new login, set with the key: every refusal of the form at once — the key's among them —, then the shop the
-     * request names (the tab's: where this browser is signed in), before anything is written.
+     * Set a new login with the key: every refusal of the form at once (the key's among them), then the shop the request
+     * names, before anything is written.
      *
      * @param array<string, mixed> $input {key, username, password, password_confirmation}
      * @throws ValidationException 422: the form's refusals, a wrong key, a shop named that is no bot's id (`shop`), or a

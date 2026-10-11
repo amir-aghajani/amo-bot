@@ -171,7 +171,7 @@ final class BotQrDeliveryTest extends BotTestCase
             'client' => $client,
             'plan' => $this->plan->name,
             'server' => $this->server->name,
-            'duration' => Messages::duration($this->plan->duration_days),
+            'duration' => Messages::duration($this->plan->duration_hours),
             'traffic' => Messages::traffic($this->plan->trafficBytes()),
             'subscription' => $link,
         ]);

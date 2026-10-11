@@ -20,6 +20,7 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Providers\Services\ServerHealth;
 use App\Modules\Referrals\Services\ReferralService;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Support\Enums\TicketStatus;
 use App\Modules\Support\Services\Tickets;
@@ -40,11 +41,12 @@ use Tests\Fakes\FakeProvider;
 
 /**
  * What the shop tells its report group, topic by topic: a sale and how it was paid (and what it earned a referrer), a
- * renewal and the new deadline, a charged wallet and its balance, an agent's traffic bought, a receipt and every
- * verdict on it, a newcomer and whoever brought them, a delivery that failed and the way out, a panel that stopped
- * answering and answers again — each in the group of the bot it happened in (an agent's sale in the agent's; the
- * servers' and the agency's news in the shop's own). Words it cannot compose cost only the report; a database that
- * refuses one fails what it reports, in its transaction — never carried on as if it stood.
+ * renewal and the new deadline, extra traffic or time and the service as it now stands, a charged wallet and its
+ * balance, an agent's traffic bought, a receipt and every verdict on it, a newcomer and whoever brought them, a delivery
+ * that failed and the way out, a panel that stopped answering and answers again — each in the group of the bot it
+ * happened in (an agent's sale in the agent's; the servers' and the agency's news in the main shop's). Words it cannot
+ * compose cost only the report; a database that refuses one fails what it reports, in its transaction — never carried
+ * on as if it stood.
  */
 final class ShopReportsTest extends BotTestCase
 {
@@ -127,9 +129,41 @@ final class ShopReportsTest extends BotTestCase
             "♻️ <b>تمدید سرویس</b> · سفارش #{$order->id}",
             '👤 ' . self::ALI,
             '🔖 سرویس: <code>ali_1</code> · یک‌ماهه · آلمان',
-            '📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_days),
+            '📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours),
             '💳 مبلغ: ۱۲۰٬۰۰۰ تومان · کیف پول',
         ]), $this->reported(Topic::Renewals));
+    }
+
+    public function testExtraTrafficOrTimeIsReportedWithRenewalsWithTheServiceAsItNowStands(): void
+    {
+        $ali = $this->customer(['username' => 'ali']);
+        $server = $this->sellingServer();
+        $this->buy($ali, $this->plan([], $server), $server);
+        $subscription = Subscription::query()->sole();
+
+        $traffic = $this->paidExtra($subscription, ExtraKind::Traffic, 10, '20000');
+        $time = $this->paidExtra($subscription, ExtraKind::Time, 7, '7000');
+
+        self::assertSame([
+            implode("\n", [
+                "🔋 <b>حجم اضافه</b> · سفارش #{$traffic->id}",
+                '👤 ' . self::ALI,
+                '🔖 سرویس: <code>ali_1</code> · آلمان',
+                '➕ ۱۰ گیگابایت',
+                '📥 حجم باقی‌مانده: ۴۰ گیگابایت',
+                '📅 پایان: ' . Messages::expiry(null, 30 * 24),
+                '💳 مبلغ: ۲۰٬۰۰۰ تومان · کیف پول',
+            ]),
+            implode("\n", [
+                "⏳ <b>زمان اضافه</b> · سفارش #{$time->id}",
+                '👤 ' . self::ALI,
+                '🔖 سرویس: <code>ali_1</code> · آلمان',
+                '➕ ۷ روز',
+                '📥 حجم باقی‌مانده: ۴۰ گیگابایت',
+                '📅 پایان: ' . Messages::expiry(null, 37 * 24),
+                '💳 مبلغ: ۷٬۰۰۰ تومان · کیف پول',
+            ]),
+        ], $this->reportedIn(Topic::Renewals), 'its term still waits for the first connection: seven days longer');
     }
 
     public function testADeliveryThatFailsIsAnErrorWithItsReasonAndTheSaleComesWithTheRetry(): void
@@ -250,7 +284,7 @@ final class ShopReportsTest extends BotTestCase
         self::assertCount(1, CurrentBot::run($bot, fn(): array => $this->reportedIn(Topic::Purchases)), "the agent's own group");
         self::assertSame([], $this->reportedIn(Topic::Purchases), "the shop's group hears nothing of the agent's sales");
 
-        // Whatever shop the code works in, a server is the shop's own news.
+        // Whatever shop the code works in, a server's news goes to the main shop's group.
         CurrentBot::run($bot, fn() => $this->service(ShopReports::class)->serverDown($server, 'Connection timed out'));
         self::assertCount(1, $this->reportedIn(Topic::Errors));
         self::assertSame([], CurrentBot::run($bot, fn(): array => $this->reportedIn(Topic::Errors)));

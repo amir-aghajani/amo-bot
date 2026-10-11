@@ -27,9 +27,8 @@ use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * Settling is a compare-and-swap: whatever races — the admin and the auto-approve timer, two tabs deciding the same
- * receipt, two refund clicks, a wallet tap on an order another payment just paid, a refund meeting a delivery — the
- * money moves once, the panel is asked once, and only the call that made the move tells the customer.
+ * Settlement races: support and the timer, two tabs, two refund clicks, a wallet tap on an order just paid, a refund meeting
+ * a delivery — the money moves once, the panel is asked once, and only the call that moved it tells the customer.
  */
 final class PaymentSettlementTest extends DatabaseTestCase
 {

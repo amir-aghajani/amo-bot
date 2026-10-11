@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useRef, useSt
 import { X } from 'lucide-react'
 import { IconButton } from '@/components/icon-button'
 import { PortalContainerContext, useModalLayer } from '@/components/portal-container'
+import { createListeners } from '@/lib/listeners'
 import { useNativeDialog } from '@/lib/use-native-dialog'
 import { UnsavedScope, useUnsavedScope } from '@/lib/use-unsaved-guard'
 import { cn } from '@/lib/utils'
@@ -15,23 +16,19 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl'
 }
 
-/** How wide it may grow from the layout's `md` up; below it, a phone's, it is a sheet the screen's whole width (.app-modal). */
+/** The widest each size grows from `md` up; below it (a phone) the dialog is a full-width sheet (.app-modal). */
 const SIZES = { sm: 'md:max-w-[26rem]', md: 'md:max-w-lg', lg: 'md:max-w-2xl', xl: 'md:max-w-4xl' }
 
-/** The dialog's fade-out (.app-modal in index.css), and a little more: what it showed stays on it meanwhile. */
+/** The fade-out's length (.app-modal in index.css), plus a little: the content stays on the dialog meanwhile. */
 const EXIT_MS = 200
 
 /**
- * A centred dialog on the native <dialog> element, drawn as the Console's: the popover surface, 16px corners, a
- * title with its description under it and the close button at its end, then the content — no rules between them. On a
- * phone it is a sheet rising from the screen's bottom edge, the screen's whole width, and above the keyboard as it opens.
- * showModal() supplies the focus trap, Escape, inert background and top-layer stacking; the fade is CSS (.app-modal in
- * index.css), and what the dialog showed stays on it while it fades out — its owner has let go of the row by then —,
- * then leaves, so the next opening starts afresh. The content scrolls inside the panel, the header stays put. Floating
- * layers opened from inside (selects, menus, tooltips) portal into the dialog itself — the body is inert and below the
- * top layer while a modal is open — via PortalContainerContext, and the toasts are drawn in the topmost one. The ✕,
- * Escape and the backdrop ask first when a form inside has unsaved changes, and wait while a request inside runs
- * (`useHoldOpen`: the control that runs it says so).
+ * Every dialog of the panels, on the native <dialog> (showModal() brings the focus trap, Escape, the inert background
+ * and the top layer). A title with its description, a ✕, then content that scrolls under a fixed header; on a phone a
+ * sheet rising from the bottom edge. Floating layers opened inside (selects, menus, tooltips) and the toasts portal into
+ * the dialog, since the body is inert while it is open. The ✕, Escape and the backdrop ask before dropping unsaved
+ * changes of a form inside, and wait while a request inside runs (`useHoldOpen`). While it fades out it keeps showing
+ * what it showed, so its owner may let go of the row at once.
  */
 export function Modal({ open, onClose, title, description, children, size = 'md' }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
@@ -91,10 +88,7 @@ interface Content {
   children: ReactNode
 }
 
-/**
- * What the dialog shows: what it is handed while open, and — while it fades out — what it showed last, until the fade is
- * over (state adjusted during render while open, dropped by a timer once closed).
- */
+/** What the dialog shows: its content while open, and the last content until the fade-out is over. */
 function useShown(open: boolean, content: Content): Content | null {
   const [last, setLast] = useState<Content | null>(open ? content : null)
   if (open && (last === null || last.title !== content.title || last.description !== content.description || last.children !== content.children)) {
@@ -113,23 +107,17 @@ function useShown(open: boolean, content: Content): Content | null {
 /** The requests running inside one modal: while there is one, its ✕, Escape and backdrop wait. */
 function createHolds() {
   let count = 0
-  const listeners = new Set<() => void>()
-  const changed = () => listeners.forEach((listener) => listener())
+  const changes = createListeners()
 
   return {
-    subscribe: (listener: () => void) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
+    subscribe: changes.subscribe,
     held: () => count > 0,
     hold: () => {
       count++
-      changed()
+      changes.notify()
       return () => {
         count--
-        changed()
+        changes.notify()
       }
     },
   }
@@ -137,20 +125,16 @@ function createHolds() {
 
 const HoldsContext = createContext<ReturnType<typeof createHolds> | null>(null)
 
-/**
- * Keep the modal this is in from closing by its ✕, Escape or backdrop while `active` — a request it runs (a form's
- * submit, a confirmed decision, an operation, a batch). Outside a modal it holds nothing.
- */
+/** Keep the surrounding modal open (its ✕, Escape, backdrop) while `active`: a request it runs. Nothing outside a modal. */
 export function useHoldOpen(active: boolean): void {
   const holds = useContext(HoldsContext)
 
   useEffect(() => (active && holds ? holds.hold() : undefined), [active, holds])
 }
 
-/** Not subscribed to anything: outside a modal nothing is held. */
 const unsubscribed = () => () => undefined
 
-/** Whether a request runs inside the modal this is in (`useHoldOpen`): another way out of what it shows (a picker's step back) waits as its ✕ does. */
+/** Whether a request runs inside the surrounding modal: another way out (a picker's step back) waits as the ✕ does. */
 export function useHeld(): boolean {
   const holds = useContext(HoldsContext)
 

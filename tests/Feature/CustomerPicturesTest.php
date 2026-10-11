@@ -21,10 +21,8 @@ use Psr\Log\LoggerInterface;
 use Tests\TestCase;
 
 /**
- * A picture the shop keeps — a receipt, a ticket's — as GD writes it again: no larger than CustomerPictures::MAX_SIDE,
- * turned the way its camera said it was held (a phone's photo kept upright), nothing of the sender's file but its pixels;
- * one GD cannot read kept as it came. A shop's uploads take no more than their day; a picture Telegram keeps is fetched
- * once for the reads that follow.
+ * Kept pictures: re-encoded with GD (at most MAX_SIDE, upright, pixels only), kept as they came when GD cannot read them,
+ * the shop's daily upload budget, and Telegram pictures fetched once for the reads that follow.
  */
 #[RequiresPhpExtension('gd')]
 final class CustomerPicturesTest extends TestCase

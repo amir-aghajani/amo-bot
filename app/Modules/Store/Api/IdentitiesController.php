@@ -11,12 +11,10 @@ use App\Core\Mail\MailFailedException;
 use App\Modules\Accounts\DTO\MergeOffer;
 use App\Modules\Accounts\Enums\WayIn;
 use App\Modules\Accounts\Exceptions\AccountRefusedException;
-use App\Modules\Accounts\Exceptions\SignInsBusyException;
 use App\Modules\Accounts\Http\Customer;
 use App\Modules\Accounts\Services\AccountPresenter;
 use App\Modules\Accounts\Services\Identities;
 use App\Modules\Accounts\Services\MergeOffers;
-use App\Modules\Accounts\Services\TelegramSignIn;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Telegram\Api\TelegramUnreachableException;
@@ -26,37 +24,16 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * A signed-in customer's ways in (Accounts\Services\Identities): a Telegram account, a Google account or an email added
- * — the customer's account as it stands, or, the way in being another account's of the shop, a merge offered (202) —,
- * one taken away, and a merge offered taken (Accounts\Services\MergeOffers): the account that stays, this request's
- * session its own. And Telegram's redirect sign-in begun for the customer themselves — a state theirs alone, which
- * adding their Telegram account and proving it again take (Accounts\Services\TelegramSignIn::authorize()).
+ * A signed-in customer's ways in (Accounts\Services\Identities): one added (answered with the account, or a 202 merge
+ * offer when it is another account's), one removed, an offered merge accepted — all behind a recent sign-in
+ * (RecentSignInMiddleware). Telegram's redirect for this session begins at AuthController::authorize().
  */
 final class IdentitiesController extends ApiController
 {
     public function __construct(
         private readonly Identities $identities,
         private readonly MergeOffers $offers,
-        private readonly TelegramSignIn $telegram,
     ) {}
-
-    /**
-     * POST /me/telegram/authorize — {redirect_uri, code_challenge}: where to send the browser to prove their Telegram
-     * account, back to the site — the PKCE challenge of the verifier the site keeps; the state this session's own: no
-     * other browser's request spends it, nor another device of theirs.
-     *
-     * @throws SignInRefusedException 422 Telegram sign-in, or its redirect flow, not set up
-     * @throws ValidationException 422 on `redirect_uri`, on `code_challenge`
-     * @throws TooManyAttemptsException 429
-     * @throws SignInsBusyException 503
-     */
-    public function authorize(Request $request, Response $response): Response
-    {
-        $input = $this->input($request);
-        $url = $this->telegram->authorize(StoreMiddleware::website($request), $request, Input::text($input, 'redirect_uri'), Input::text($input, 'code_challenge'), Customer::of($request));
-
-        return $this->json($response, ['url' => $url]);
-    }
 
     /**
      * POST /me/identities/telegram — {id_token, nonce} or {code, state, code_verifier}.
@@ -82,7 +59,7 @@ final class IdentitiesController extends ApiController
      */
     public function google(Request $request, Response $response): Response
     {
-        return $this->linked($response, $this->identities->linkGoogle(StoreMiddleware::website($request), $request, Customer::of($request)->user, $this->input($request)));
+        return $this->linked($response, $this->identities->linkGoogle(StoreMiddleware::website($request), $request, Customer::of($request), $this->input($request)));
     }
 
     /**
@@ -123,9 +100,9 @@ final class IdentitiesController extends ApiController
     }
 
     /**
-     * POST /me/merge — {token}: the two accounts one; the account that stays.
+     * POST /me/merge — {token}: the two accounts made one; answers the survivor.
      *
-     * @throws AccountRefusedException 422 the ticket no longer holds, or the merge the rules refuse now
+     * @throws AccountRefusedException 422 the ticket no longer holds, or the merge is refused now
      */
     public function merge(Request $request, Response $response): Response
     {
@@ -134,7 +111,7 @@ final class IdentitiesController extends ApiController
         return $this->customer($response, $this->offers->accept($customer->user, $customer->session, Input::text($this->input($request), 'token')));
     }
 
-    /** A way in added (the customer's account) or another account's (the merge offered, a 202). */
+    /** A way in added (the account), or another account's (a 202 merge offer). */
     private function linked(Response $response, User|MergeOffer $outcome): Response
     {
         return $outcome instanceof MergeOffer ? $this->json($response, $outcome->present(), 202) : $this->customer($response, $outcome);

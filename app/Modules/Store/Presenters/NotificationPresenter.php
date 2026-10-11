@@ -8,9 +8,8 @@ use App\Modules\Notifications\Models\Notification;
 use App\Modules\Telegram\Texts\WebText;
 
 /**
- * A notice the shop told a customer, as their website shows it: what it was, its words — the bot's, as plain text and
- * as safe HTML (Telegram\Texts\WebText) —, what it is about (one of their orders or services, for a link; null for
- * neither), whether they read it, and when it came.
+ * A notice as the customer's website shows it: its kind, its text as plain text and as safe HTML (Telegram\Texts\WebText),
+ * what it is about (an order, a service or a ticket, for a link), whether it was read, and when it came.
  */
 final class NotificationPresenter
 {

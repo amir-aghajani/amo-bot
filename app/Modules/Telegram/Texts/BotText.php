@@ -5,11 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Texts;
 
 /**
- * Every text the bot sends a customer that the admin may reword («متن‌های ربات»): the key the code asks
- * BotTexts for, and the settings key the admin's wording is kept under (`bot.text.<value>`). What each is,
- * its default and its %variables% are TextCatalog's. Not here: the main menu's labels (the keyboards
- * editor's), the words the formatters build values from (units, «۳ روز مانده» — Messages), and what the
- * bot says to its own admins (/broadcast).
+ * Every text the bot sends a customer that the admin may reword («متن‌های ربات»). The value is stored (settings key
+ * `bot.text.<value>`), so it never changes. What each text is, its default and its variables are TextCatalog's.
  */
 enum BotText: string
 {
@@ -45,6 +42,11 @@ enum BotText: string
     case CategoryPlans = 'category_plans';
     case PlanButton = 'plan_button';
     case PlanDetails = 'plan_details';
+    case PlanFirstPurchase = 'plan_first_purchase';
+    case PlanAgentPrice = 'plan_agent_price';
+    case PlanSale = 'plan_sale';
+    case PlanPersonalDiscount = 'plan_personal_discount';
+    case PlanTierDiscount = 'plan_tier_discount';
     case PlanPickServer = 'plan_pick_server';
     case ServerButton = 'server_button';
     case PlanNoServer = 'plan_no_server';
@@ -54,6 +56,16 @@ enum BotText: string
     case Checkout = 'checkout';
     case TopupCheckout = 'topup_checkout';
     case CheckoutNoGateway = 'checkout_no_gateway';
+    case CheckoutFree = 'checkout_free';
+    case CheckoutPlanNote = 'checkout_plan_note';
+    case CheckoutDiscount = 'checkout_discount';
+    case CheckoutBeforeDiscount = 'checkout_before_discount';
+    case DiscountCodeButton = 'discount_code_button';
+    case DiscountCodeRemove = 'discount_code_remove';
+    case DiscountCodeAsk = 'discount_code_ask';
+    case DiscountCodeRefused = 'discount_code_refused';
+    case DiscountCodeDropped = 'discount_code_dropped';
+    case DiscountCodeLost = 'discount_code_lost';
     case OrderNotPending = 'order_not_pending';
     case PayInsufficient = 'pay_insufficient';
     case PayFailed = 'pay_failed';
@@ -66,6 +78,8 @@ enum BotText: string
     case ReceiptOutcomeSubscription = 'receipt_outcome_subscription';
     case ReceiptOutcomeRenewal = 'receipt_outcome_renewal';
     case ReceiptOutcomeTopup = 'receipt_outcome_topup';
+    case ReceiptOutcomeExtraTraffic = 'receipt_outcome_extra_traffic';
+    case ReceiptOutcomeExtraTime = 'receipt_outcome_extra_time';
     case PayProcessing = 'pay_processing';
 
     // delivery and what support decided about a payment
@@ -150,6 +164,23 @@ enum BotText: string
     case RenewalLeftoverCarried = 'renewal_leftover_carried';
     case RenewFailed = 'renew_failed';
 
+    // «حجم و زمان اضافه»
+    case ServiceExtraTraffic = 'service_extra_traffic';
+    case ServiceExtraTime = 'service_extra_time';
+    case ExtraTrafficMenu = 'extra_traffic_menu';
+    case ExtraTrafficTyped = 'extra_traffic_typed';
+    case ExtraTimeMenu = 'extra_time_menu';
+    case ExtraTimeRestart = 'extra_time_restart';
+    case ExtraTimeTyped = 'extra_time_typed';
+    case ExtraOption = 'extra_option';
+    case ExtraInvalid = 'extra_invalid';
+    case ExtraTrafficCheckout = 'extra_traffic_checkout';
+    case ExtraTimeCheckout = 'extra_time_checkout';
+    case ExtraUnavailable = 'extra_unavailable';
+    case ExtraTrafficAdded = 'extra_traffic_added';
+    case ExtraTimeAdded = 'extra_time_added';
+    case ExtraFailed = 'extra_failed';
+
     // «یادآوری»
     case ExpiryReminder = 'expiry_reminder';
     case TrafficReminder = 'traffic_reminder';
@@ -175,10 +206,19 @@ enum BotText: string
     case ReferralScreen = 'referral_screen';
     case ReferralTermsEvery = 'referral_terms_every';
     case ReferralTermsFirst = 'referral_terms_first';
+    case ReferralTermsRenewal = 'referral_terms_renewal';
+    case ReferralTermsNoRenewal = 'referral_terms_no_renewal';
+    case ReferralTermsGiftBoth = 'referral_terms_gift_both';
+    case ReferralTermsGiftYou = 'referral_terms_gift_you';
+    case ReferralTermsGiftFriend = 'referral_terms_gift_friend';
+    case ReferralTermsReward = 'referral_terms_reward';
     case ReferralShare = 'referral_share';
     case ReferralOff = 'referral_off';
     case ReferralJoined = 'referral_joined';
     case ReferralCommission = 'referral_commission';
+    case ReferralStartGiftReferrer = 'referral_start_gift_referrer';
+    case ReferralStartGiftInvitee = 'referral_start_gift_invitee';
+    case ReferralRewarded = 'referral_rewarded';
 
     // «نمایندگی»: the request, support's decisions, the agent's account — their traffic, their bot, their panel
     case AgencyOff = 'agency_off';
@@ -277,6 +317,53 @@ enum BotText: string
     case TicketAnswered = 'ticket_answered';
     case TicketAnswerPicture = 'ticket_answer_picture';
     case TicketClosed = 'ticket_closed';
+
+    // gift codes («🎁 کد هدیه»)
+    case GiftCodeAsk = 'gift_code_ask';
+    case GiftCodeOff = 'gift_code_off';
+    case GiftCodeWallet = 'gift_code_wallet';
+    case GiftCodePlan = 'gift_code_plan';
+    case GiftCodePlanPending = 'gift_code_plan_pending';
+    case GiftCodeUnknown = 'gift_code_unknown';
+    case GiftCodeTaken = 'gift_code_taken';
+    case GiftCodeYours = 'gift_code_yours';
+    case GiftCodeExpired = 'gift_code_expired';
+    case GiftCodeUnavailable = 'gift_code_unavailable';
+    case GiftCodeWait = 'gift_code_wait';
+
+    // the lucky wheel («🎡 گردونه شانس»)
+    case WheelScreen = 'wheel_screen';
+    case WheelPrizeLine = 'wheel_prize_line';
+    case WheelCost = 'wheel_cost';
+    case WheelFree = 'wheel_free';
+    case WheelNext = 'wheel_next';
+    case WheelSpinButton = 'wheel_spin_button';
+    case WheelOff = 'wheel_off';
+    case WheelBuyersOnly = 'wheel_buyers_only';
+    case WheelEmpty = 'wheel_empty';
+    case WheelTooSoon = 'wheel_too_soon';
+    case WheelShort = 'wheel_short';
+    case WheelSlice = 'wheel_slice';
+    case WheelSliceCurrent = 'wheel_slice_current';
+    case WheelWon = 'wheel_won';
+    case WheelGivenWallet = 'wheel_given_wallet';
+    case WheelGivenService = 'wheel_given_service';
+    case WheelGivenPlan = 'wheel_given_plan';
+    case WheelGivenPlanPending = 'wheel_given_plan_pending';
+    case WheelNothing = 'wheel_nothing';
+    case WheelFailed = 'wheel_failed';
+    case WheelRefunded = 'wheel_refunded';
+
+    // loyalty tiers, cashback and the nightly draw («سطح وفاداری»، «کش‌بک»، «قرعه‌کشی شبانه»)
+    case LoyaltyTierLine = 'loyalty_tier_line';
+    case LoyaltyTierClimb = 'loyalty_tier_climb';
+    case LoyaltyNoTier = 'loyalty_no_tier';
+    case LoyaltyTierUp = 'loyalty_tier_up';
+    case LoyaltyPerkDiscount = 'loyalty_perk_discount';
+    case LoyaltyPerkCashback = 'loyalty_perk_cashback';
+    case CashbackEarned = 'cashback_earned';
+    case CashbackTakenBack = 'cashback_taken_back';
+    case LotteryWon = 'lottery_won';
 
     public function spec(): TextSpec
     {

@@ -1,9 +1,9 @@
 import type { BotTextKind, BotTextRow } from '@/lib/api-types'
 
 /*
- * What the server would refuse in a bot text's wording, in its own words, worked out as the admin types — a mirror of
- * BotTexts::problem() and TelegramHtml::problem(), so the editor warns before a save is refused. The server stays the
- * judge: this only warns, and what it does not know (the length, which the editor counts) it leaves to the save.
+ * What the server would refuse in a bot text's wording, worked out as the admin types — a mirror of BotTexts::problem()
+ * and TelegramHtml::problem() that uses the server's messages, so the editor warns before a save is refused. The server
+ * stays the judge: this only warns, and leaves the length (which the editor counts) to the save.
  */
 
 /** A `%name%` the bot fills in, the name captured (BotTexts::VARIABLE). */
@@ -12,19 +12,15 @@ const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 /** A tag in a text Telegram shows as typed (a popup, a button). */
 const ANY_TAG = /<\/?[a-z][a-z-]*[^>]*>/i
 
-/**
- * A wording as the server keeps it (BotTexts::save()): its line breaks a newline each, trimmed — a part only on its end,
- * its leading line breaks being its spacing in the text that takes it in.
- */
+/** A wording as the server keeps it (BotTexts::save()): newlines normalised and trimmed — a part only at its end, its leading breaks being its spacing. */
 export function keptWording(kind: BotTextKind, input: string): string {
   const value = input.replace(/\r\n?/g, '\n')
   return kind === 'part' ? value.trimEnd() : value.trim()
 }
 
 /**
- * What is wrong with the wording of `text` as the server would say it, or null: empty, a button on two lines, a variable
- * the text does not have or a required one missing, tags where there is no formatting — and, in Telegram HTML, what
- * Telegram would not take (telegramHtmlProblem()).
+ * What the server would refuse in a wording, or null: empty, a button on two lines, an unknown or missing
+ * required variable, tags where there is no formatting, or Telegram HTML that Telegram would not take.
  */
 export function wordingProblem(text: Pick<BotTextRow, 'kind' | 'html' | 'variables'>, input: string): string | null {
   const value = keptWording(text.kind, input)
@@ -67,10 +63,9 @@ function decoded(value: string): string {
 }
 
 /**
- * The first thing Telegram would not take in an HTML text, in the admin's words (TelegramHtml::problem(), read the same
- * way: the Bot API's tags only, attributes as `name="value"`, every tag closed in order, a «<» that opens no tag refused,
- * nothing Telegram would drop without a word — formatting inside <code>/<pre>, a link in a link, a quote in a quote —,
- * and a premium emoji as its numeric id with one plain emoji inside); null when it is fine.
+ * The first thing Telegram would not take in an HTML text, or null — mirroring TelegramHtml::problem(): Bot API tags
+ * only, `name="value"` attributes, tags closed in order, no stray «<», nothing Telegram would silently drop, and a
+ * premium emoji as a numeric id around one plain emoji.
  */
 function telegramHtmlProblem(text: string): string | null {
   const open: string[] = []

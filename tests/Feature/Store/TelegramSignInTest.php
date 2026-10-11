@@ -25,13 +25,9 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegramLogin;
 
 /**
- * Signing in on the shop's website with Telegram's popup (telegram-login.js): the site asks the shop for a nonce,
- * Telegram signs an id_token with it, and the site posts both. The token is checked against Telegram's published keys —
- * kept an hour, read again for a key they lack, at most once a minute — for this site's Client ID, in its time, its nonce
- * spent once; its `id` is the shop's customer with that Telegram account — the bot's, wallet and all, their profile as
- * Telegram has it now — or a newcomer, registered as the bot registers one: reported, made a referral by the site's
- * code, an agent the admin of their own bot. A banned customer is refused; Telegram sign-in off is a 422; Telegram out
- * of reach a 502; an address whose sign-ins keep failing waits.
+ * Telegram's popup sign-in: the nonce, the id_token checked against Telegram's keys (kept, refreshed for an unknown key at
+ * most once a minute), the bot's customer or a newcomer registered as the bot does, banned customers, Telegram off (422)
+ * or out of reach (502), and the address throttle.
  */
 final class TelegramSignInTest extends HttpTestCase
 {

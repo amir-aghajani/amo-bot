@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Texts;
 
 /**
- * A piece of Telegram HTML that goes into a text as it is — a part the admin worded (BotTexts::part()), or lines of
- * them — where any other value BotTexts::render() takes is plain text and is escaped on the way in. Escaping is
- * render()'s alone: nothing else builds an Html out of a value.
+ * Telegram HTML that goes into a text as it is — a part the admin worded (BotTexts::part()), or lines of them. Any
+ * other value BotTexts::render() takes is plain text and gets escaped; nothing else builds an Html out of a value.
  */
 final readonly class Html implements \Stringable
 {

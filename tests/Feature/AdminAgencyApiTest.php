@@ -27,13 +27,9 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * «نمایندگان» on the owner's panel: the program's numbers and rules — the shop's, in the main bot's settings, whatever
- * shop the panel shows; the levels — a unique name and a price per GB, in order, kept while agents are on one; the
- * requests, approved on a level with a credit (the agent's shop opens, or the one they had runs again) or rejected with
- * a note, once — of two verdicts at once one stands —, each reported under the request in the report group; and the
- * agents — their bot, its traffic and what it sold, what they owe, read in the same few queries however many there
- * are —, their level and credit changed, their traffic set right, their agency ended (their bot goes off and its
- * webhook down), only while they are agents. The customer hears of every decision, once.
+ * The owner's agents page: the program's numbers and settings (the main shop's), levels, requests approved (opening or
+ * resuming the agent's shop) or rejected once each and reported, and agents — read in a fixed few queries — with their
+ * terms changed, traffic set right or agency ended. The customer hears of every decision once.
  */
 final class AdminAgencyApiTest extends HttpTestCase
 {

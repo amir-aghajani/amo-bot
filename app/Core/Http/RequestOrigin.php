@@ -7,17 +7,11 @@ namespace App\Core\Http;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * Where a request came from: the browser's address, and whether it reached the shop over HTTPS.
+ * Where a request came from: the browser's address, and whether it arrived over HTTPS.
  *
- * Behind a reverse proxy (nginx in front of PHP-FPM, Cloudflare) REMOTE_ADDR is the proxy's, and the browser's address
- * is in the X-Forwarded-For chain each proxy appends to. Anyone can write that header, so it is read only through the
- * proxies the shop trusts (TRUSTED_PROXIES, addresses or CIDR ranges): from the connection backwards, every hop that is
- * a trusted proxy is passed over, and the first that is not is the browser. An address taken from a stranger's header
- * would let them pick a new one for every sign-in attempt. Cloudflare appends the visitor to the chain too, so listing
- * its ranges is all a shop behind it needs (or the web server restores the address itself, mod_remoteip / real_ip).
- *
- * HTTPS is read from the forwarding headers of anyone: it only ever adds protection — HSTS, a secure session cookie —
- * which a browser on plain HTTP ignores, so a forged header gains nothing.
+ * Behind a proxy REMOTE_ADDR is the proxy's; the X-Forwarded-For chain is walked back from the connection only through
+ * TRUSTED_PROXIES (addresses or CIDR ranges), since anyone can write that header and would get a fresh address for every
+ * sign-in attempt. HTTPS is believed from anyone's forwarding headers: it only adds protection (HSTS, a secure cookie).
  */
 final class RequestOrigin
 {
@@ -34,10 +28,8 @@ final class RequestOrigin
     public function __construct(private readonly array $trustedProxies = []) {}
 
     /**
-     * Whether the request came straight from this machine: its connection is the loopback's, and nothing forwarded it —
-     * a reverse proxy or a tunnel on the machine (nginx in front of Apache, cloudflared, ngrok) makes every visitor's
-     * connection look local, and says so in a forwarding header. Whatever trusts no one but the machine's own owner (the
-     * traces APP_DEBUG shows) goes to such a request alone.
+     * Whether the request came straight from this machine: a loopback connection with no forwarding header at all (a
+     * local proxy or tunnel makes every visitor look local). Only such a request is shown APP_DEBUG's details.
      */
     public function fromThisMachine(ServerRequestInterface $request): bool
     {
@@ -90,20 +82,15 @@ final class RequestOrigin
         return $address;
     }
 
-    /**
-     * The browser's address as a throttle counts its tries (network()) — an IPv6 one by its first `$bits` bits, its /64
-     * unless a count reaches wider.
-     */
+    /** The browser's address as a throttle counts it (network()). */
     public function clientNetwork(ServerRequestInterface $request, int $bits = self::IPV6_NETWORK): string
     {
         return self::network($this->clientIp($request), $bits);
     }
 
     /**
-     * An address as a throttle counts its tries: an IPv4 one — mapped into IPv6 or not — as it is, an IPv6 one by its
-     * first `$bits` bits (IPV6_NETWORK: its /64). A host is handed the whole of a /64 — and often a /48 — and may try from
-     * another address of it every time: counted one by one, it would never wait, and would leave a file in the throttle's
-     * folder for every try. What is no address is counted as it is.
+     * An address as a throttle counts it: IPv4 as it is, IPv6 by its first `$bits` bits. A host gets a whole /64 (often
+     * a /48) and could use a fresh address for every try — never waiting, and leaving a throttle file per try.
      */
     public static function network(string $address, int $bits = self::IPV6_NETWORK): string
     {

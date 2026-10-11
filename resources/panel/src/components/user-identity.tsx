@@ -14,36 +14,29 @@ const NO_NAME = 'بدون نام'
 const NO_USERNAME = 'بدون نام کاربری'
 const NO_EMAIL = 'بدون ایمیل'
 
-/**
- * What tells a customer apart where their handle would: the Telegram id — else, for one who signed up on the website
- * (no Telegram account), their email, else their number in the shop. As it reads, not yet isolated.
- */
+/** A customer's account identifier: the Telegram id, else (a website-only customer) the email, else «#id». Not isolated. */
 function account(user: UserRef): string {
   return user.telegram_id !== null ? String(user.telegram_id) : (user.email ?? `#${user.id}`)
 }
 
-/** Where only one identifier fits: the name, else the handle, else the Telegram id (else the email) — as it reads, not yet isolated. */
+/** Where only one identifier fits: the name, else the handle, else the account identifier. Not isolated. */
 function oneLine(user: UserRef): string {
   return user.name ?? (user.username ? `@${user.username}` : account(user))
 }
 
-/**
- * The one line in a plain string (a toast, a dialog's title, a confirm's sentence, the tab's name), isolated
- * (lib/direction) so the Persian around it keeps it whole: «@amir», never «amir@».
- */
+/** The one-line label in a plain string (a toast, a dialog's title, the tab's title), isolated so «@amir» stays whole. */
 export function userLabel(user: UserRef): string {
   return isolate(oneLine(user))
 }
 
-/** The one line in markup (a narrow cell, a filter's pill): in `<bdi>`, as userLabel isolates it in a string. */
+/** The one-line label in markup (a narrow cell, a filter pill), in a `<bdi>`. */
 export function UserLabel({ user }: { user: UserRef }) {
   return <bdi>{oneLine(user)}</bdi>
 }
 
 /**
- * One line that tells a customer from every other — the name with the handle, else with the Telegram id (else the
- * email) —, for a control one of many rows carries (its ⋮): two customers called «࿐Âmîr™» are two people, and two
- * menus. Each part isolated.
+ * A label that tells a customer from every other — the name with the handle or the account identifier — for a control
+ * each of many rows carries (its ⋮ menu): two customers of the same name get two different names.
  */
 export function distinctUserLabel(user: UserRef): string {
   const handle = user.username ? handleLabel(user.username) : isolate(account(user))
@@ -51,8 +44,8 @@ export function distinctUserLabel(user: UserRef): string {
 }
 
 /**
- * Where a chat with the customer in Telegram opens: the public handle when there is one, else the id link only the apps
- * understand; null for a customer without a Telegram account (they signed up on the website) — there is no chat to open.
+ * The customer's Telegram chat: their public handle's t.me address, else the tg:// id link only the apps understand;
+ * null for a customer without a Telegram account.
  */
 function telegramLink(user: UserRef): string | null {
   if (user.telegram_id === null) return null
@@ -60,8 +53,8 @@ function telegramLink(user: UserRef): string | null {
 }
 
 /**
- * The way to a chat with the customer in Telegram, in one wording wherever it is offered — a dialog's foot, their page,
- * a row's menu (the place's own look, through `asChild`) —; nothing for a customer without a Telegram account.
+ * «گفتگو در تلگرام», the only way to a customer's chat (a dialog's foot, their page, a row's menu — styled by the place
+ * through `asChild`); nothing for a customer without a Telegram account.
  */
 export function TelegramChatLink({ user, ...props }: { user: UserRef } & Omit<ComponentProps<'a'>, 'href' | 'children'>) {
   const href = telegramLink(user)
@@ -75,7 +68,7 @@ export function TelegramChatLink({ user, ...props }: { user: UserRef } & Omit<Co
   )
 }
 
-/** A customer's own page — both panels have it, for the shop's own customers. */
+/** A customer's page, in both panels. */
 export function userPage(id: number): string {
   return `/users/${id}`
 }

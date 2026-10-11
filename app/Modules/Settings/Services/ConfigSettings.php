@@ -35,22 +35,16 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * The panel's own configuration — the application, the database, the main bot, the shop's email, the rest — as
- * config.php holds it, for the owner's settings screen and the installer: never the database's settings table, since
- * these are needed before a database answers. The groups `app`, `telegram` and `advanced` are declared here on the field
- * engine (a setting the file lacks shows what the app runs with: config/*.php's value); `database` is DatabaseSettings'
- * — its fields are its driver's, and nothing is written before a database answers to them —, `mail` MailSettings' — a
- * mail driver's form and who the emails come from. A secret is never sent back: the screen gets whether one is kept and
- * a hint, a blank one keeps it and `clear_<field>` empties it — and a kept one goes nowhere but where it was given (the
- * main bot's token, to the Bot API's address it was saved with). Moving that address to another origin sends every
- * bot's token there — agents' too, which the screen never shows —, so the save that moves it asks the owner's current
- * password (AdminAccount::confirm()), as a change of their login does.
+ * The owner's «تنظیمات پنل» and the installer's view of config.php — never the settings table, since these are needed
+ * before a database answers. Groups `app`, `telegram` and `advanced` are declared here; `database` is
+ * DatabaseSettings' (written only once a database answers), `mail` MailSettings'. Moving the Bot API's address to
+ * another origin would send every bot's token there — agents' too — so that save asks the owner's current password.
  */
 final class ConfigSettings
 {
     private const LOG_LEVELS = ['debug', 'info', 'notice', 'warning', 'error'];
 
-    /** The bot's token left blank while the Bot API's address moved: no bot's token goes to another host unasked. */
+    /** The main bot's token left blank while the Bot API's address moved. */
     public const TOKEN_MOVED = 'آدرس API تلگرام عوض شده است؛ توکن ربات اصلی را دوباره وارد کنید: توکن ذخیره‌شده به آدرس دیگری فرستاده نمی‌شود.';
 
     public function __construct(
@@ -94,9 +88,8 @@ final class ConfigSettings
     }
 
     /**
-     * One group of the screen, checked and written to config.php — the database's only once a database answers to it;
-     * the main bot's, when it moves the Bot API's address to another origin, only with the owner's current password
-     * (`current_password`, judged with the form's other refusals: a wrong one is a failed sign-in of theirs).
+     * Check one group and write it to config.php. Moving the Bot API's address to another origin also asks
+     * `current_password`, judged with the form's other errors (a wrong one counts as a failed sign-in).
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed> The screen as it is now (present())
@@ -136,8 +129,7 @@ final class ConfigSettings
     }
 
     /**
-     * The database the shop runs on — the installer's step, the screen's group —: checked by its driver's form, and
-     * written only once a database answers to it.
+     * Check the database settings by the driver's form and write them only once a database answers to them.
      *
      * @param array<string, mixed> $input {driver?, …the driver's fields}
      * @throws ValidationException
@@ -162,7 +154,7 @@ final class ConfigSettings
     }
 
     /**
-     * The main bot's token, once Telegram says whose it is, with that bot's @username (the installer's site step).
+     * Save the main bot's token once Telegram says whose it is, with its @username (the installer's site step).
      *
      * @return array{id: int, username: string, name: string}
      * @throws BotTokenException|ValidationException
@@ -176,9 +168,8 @@ final class ConfigSettings
     }
 
     /**
-     * Whose a token is, as Telegram says (getMe) — the one typed, else the one kept. Also how the screen learns the
-     * bot's @username. It is asked at the Bot API's address the shop runs with — the saved one: a token kept goes
-     * nowhere else.
+     * Ask Telegram (getMe) whose a token is — the one typed, else the kept one — at the saved Bot API address, where a
+     * kept token may go.
      *
      * @return array{id: int, username: string, name: string}
      * @throws BotTokenException|ValidationException
@@ -205,8 +196,7 @@ final class ConfigSettings
     }
 
     /**
-     * A short email to `$to` by the mail settings as config.php holds them — the saved ones, which a request reads as it
-     * starts: whether the shop's email goes out, and if not, why.
+     * Send a test email to `$to` with the saved mail settings; a failure says why (the transport's own words).
      *
      * @throws ValidationException 422 on `to`: no address
      * @throws MailNotReadyException 422: no transport, or no address to send from, saved
@@ -241,7 +231,7 @@ final class ConfigSettings
         return $token === '' ? null : $this->urls->cron($token);
     }
 
-    /** @return list<Form> The groups declared here, a setting the file lacks reading as what the app runs with */
+    /** @return list<Form> The groups declared here; an unset setting defaults to what the app runs with */
     private function groups(): array
     {
         return [
@@ -290,10 +280,7 @@ final class ConfigSettings
         throw new UnknownGroupException();
     }
 
-    /**
-     * The main bot's token: shown as the bot's id and its last characters, and kept with the Bot API's address it was
-     * saved for — every bot's token goes there (BotApi): moved to another host, it is typed again.
-     */
+    /** The main bot's token, hinted as its bot id and last characters, bound to the Bot API's origin. */
     private function botToken(): Secret
     {
         return new Secret(
@@ -315,8 +302,7 @@ final class ConfigSettings
     }
 
     /**
-     * Whether the save moves the Bot API's address to another origin — scheme, host or port (Secret::byOrigin()) — from
-     * the one config.php holds: every bot's token goes there from then on.
+     * Whether the save moves the Bot API's address to another origin (scheme, host or port).
      *
      * @param array<string, mixed> $input
      */
@@ -334,7 +320,7 @@ final class ConfigSettings
     }
 
     /**
-     * A group's form checked against what the file holds (a secret left blank keeps it): the settings to write.
+     * Check a group's form against what the file holds: the settings to write.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>

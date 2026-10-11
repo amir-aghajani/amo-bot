@@ -731,7 +731,7 @@ final class BotBroadcastTest extends BotTestCase
         return CallbackData::build(BroadcastHandler::CALLBACK, ...$args);
     }
 
-    /** What the draft card says of a message: its kind, and its words. */
+    /** What the draft card says of a message: its kind and its text. */
     private static function content(string $kind, string $words): string
     {
         return Messages::BROADCAST_CONTENT[$kind] . ' — «' . $words . '»';
@@ -756,7 +756,7 @@ final class BotBroadcastTest extends BotTestCase
         ]);
     }
 
-    /** An audience as the picker offers it: its words and how many it reaches. */
+    /** An audience as the picker offers it: its label and how many it reaches. */
     private static function option(string $label, int $count): string
     {
         return Messages::fill(Messages::BROADCAST_AUDIENCE_OPTION, ['label' => $label, 'count' => Persian::number($count)]);

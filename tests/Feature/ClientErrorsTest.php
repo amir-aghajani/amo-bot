@@ -20,10 +20,8 @@ use Slim\Psr7\Factory\StreamFactory;
 use Tests\HttpTestCase;
 
 /**
- * A failure of a panel's own code, reported by its page (POST /client-errors, ClientErrors): one error line of the log
- * and nothing else, from a signed-in panel only. A report is the browser's word: each part is cut short and taken out of
- * any secret, its address keeps its path and its query's names alone, nothing in it begins a line of the log, the body
- * is capped, and a principal or an address sends only so many in a window.
+ * POST /client-errors: one log line per report, signed-in panels only, every part cut and redacted, query values and
+ * fragments stripped, no forged log lines, the body capped, and reports rate-limited per principal and address.
  */
 final class ClientErrorsTest extends HttpTestCase
 {

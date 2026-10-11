@@ -13,10 +13,8 @@ import { messageOf } from '@/lib/failure'
 import { queryKeys } from '@/lib/query-keys'
 
 /**
- * What the site's developer is handed: the API's base address — the store key in it, which names the shop and is no
- * secret — to copy, and a new key when the old address must stop working: asked first, since the site loses the API
- * until it takes the new one, the website it answers put in place of the page's read. Not a form — a new key applies at
- * once.
+ * The API base address for the site's developer (the store key in it names the shop and is no secret), and «ساخت کلید
+ * جدید» to retire the old address — asked first, since the site loses the API until it switches.
  */
 export function ApiAddressCard({ website }: { website: Website }) {
   const queryClient = useQueryClient()

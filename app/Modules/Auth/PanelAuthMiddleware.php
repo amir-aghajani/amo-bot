@@ -13,11 +13,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Guards one panel's API — the owner's (/api/admin, the container's `panel.admin`) or the agents' (/api/agent,
- * `panel.agent`): a request without a principal signed in to that panel is a 401 JSON; one with is worked in the shop
- * it is the principal's in (the owner's: the shop the request names; an agent's: their bot's — CurrentBot), read by them
- * (CurrentPrincipal), and carries them (Principal::of()), whose name a decision is recorded under. Who is signed in is
- * asked first: a request of nobody's is told that, whatever shop it names.
+ * Guards one panel's API (`panel.admin` for /api/admin, `panel.agent` for /api/agent): a 401 without a signed-in
+ * principal — asked before any shop is looked at — else the request runs in the principal's shop (CurrentBot), read by
+ * them (CurrentPrincipal), with the principal on the request (Principal::of()).
  */
 final class PanelAuthMiddleware implements MiddlewareInterface
 {

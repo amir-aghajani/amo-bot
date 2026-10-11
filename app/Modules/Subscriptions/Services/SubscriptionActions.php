@@ -26,34 +26,34 @@ use App\Modules\Subscriptions\Models\Subscription;
 use Psr\Log\LoggerInterface;
 
 /**
- * What the subscriptions screen's modal does with a service — in either panel, or on the shop's website (its admins):
- * read the panel again, give it days and traffic, switch the client off or back on, move it to another server, delete it
- * for good — each allowed by the service's state (allowed()) and by who asks (the Actor), worked on the panel by
- * ProvisioningService, and told to the customer here: a switch always, days and traffic unless the admin says not to, a
- * move with its new link, a delete only when it took away a service that still ran (tidying away an ended one is quiet),
- * a read never. A panel that fails is a 502 in words for whoever reads the screen — the owner's diagnosis, the summary
- * for an agent and for the shop's admins on its website (a move's too: MoveException::worded()). A move or a delete that leaves the client on
- * its panel (the panel out of reach) is the owner's call in the main shop; in an agent's shop, and for the shop's admins
- * on its website, it waits until the shop has seen that panel fail (mayLeave()); the traffic given to a service of an
- * agent's shop is the agent's (extend()); and one of the shop's admins — its customer too — never changes their own
- * service, reading its panel again aside (notTheirOwn()). The panels are the owner's: what an agent's shop asks of them
- * from this screen, and what the shop's admins ask from its website, is held to PANEL_WORK operations in
- * PANEL_WORK_WINDOW (a 429 with the wait) — the shop's count, the owner's too while they have an agent's shop open.
+ * The subscriptions screen's operations on one service — both panels, and the website's admin API: read the panel
+ * again, add days and traffic, switch off or on, move to another server, delete. Each is allowed by the service's state
+ * (allowed()) and by who asks (the Actor), done on the panel by ProvisioningService, and told to the customer here (a
+ * switch always; an extension unless the admin says not to; a move with its new link; a delete only of a service that
+ * still ran; a sync never).
+ *
+ * Rules by who asks:
+ * - A panel's failure is a 502 worded for the reader: the owner gets the diagnosis, anyone else the summary.
+ * - Leaving a client on an unreachable panel (a move or delete without contacting it) is the owner's call in the main
+ *   shop; elsewhere — an agent's shop, or the website's admins — only while that panel is in backoff (mayLeave()).
+ * - Traffic added to a service of an agent's shop comes out of the agent's pool (extend()).
+ * - A shop admin never changes their own service (notTheirOwn()).
+ * - Panel work from an agent's shop or the website's admins is rate-limited (PANEL_WORK per PANEL_WORK_WINDOW, per
+ *   shop); the owner in the main shop is not.
  */
 final class SubscriptionActions
 {
-    /** An agent's shop — or the shop's admins on its website — asked to leave a client on a panel that answers (mayLeave()). */
+    /** Refusal of mayLeave(): the panel answers, so its client may not be left on it. */
     public const LEAVE_REFUSED = 'پنل سرور «%s» در دسترس است؛ کلاینت این سرویس فقط وقتی روی پنل می‌ماند که پنل جواب ندهد.';
 
     /**
-     * The operations a shop runs on the panels from this screen — a service read again, given days and traffic, switched,
-     * moved, deleted — in PANEL_WORK_WINDOW seconds, but the owner's own in the main bot's shop: a move batch's pace,
-     * never a flood of a panel that would put it out of reach for every shop.
+     * Panel operations a shop may run from this screen per PANEL_WORK_WINDOW seconds (the owner in the main shop is not
+     * counted): enough for a move batch, never a flood that would put a panel out of reach for every shop.
      */
     public const PANEL_WORK = 60;
     public const PANEL_WORK_WINDOW = 60;
 
-    /** The refusal past PANEL_WORK, in the panel's reader's words: TooManyAttemptsException::wait() adds the wait. */
+    /** The refusal past PANEL_WORK; TooManyAttemptsException::wait() adds the wait. */
     public const TOO_MUCH_PANEL_WORK = 'درخواست زیادی به پنل سرورها فرستاده‌اید';
 
     public function __construct(
@@ -65,8 +65,8 @@ final class SubscriptionActions
     ) {}
 
     /**
-     * Read the client again from its panel: counters, quota, term and link — or, when the panel no longer has it, the
-     * service marked deleted.
+     * Read the client again from its panel (counters, quota, term, link); a client the panel no longer has marks the
+     * service deleted.
      *
      * @throws ValidationException|PanelFailedException|TooManyAttemptsException
      */
@@ -78,15 +78,14 @@ final class SubscriptionActions
     }
 
     /**
-     * «افزایش زمان و حجم»: days and traffic on top of what the service has — exactly what a grant gives it
-     * (ProvisioningService::grant()) —, from what its panel says right now: a service the panel has ended, or switched
-     * off itself, takes nothing. In an agent's shop the traffic is the agent's: drawn from their bot's pool before any
-     * panel is asked — refused under `traffic_gb` when the pool is short — and given back when the extension does not go
-     * through (TrafficPool::extending()); the days cost nothing. Logged under whoever gave it; the customer hears it,
-     * with the admin's note, unless `notify` is off.
+     * «افزایش زمان و حجم»: days and traffic on top of what the service has — exactly what a grant gives
+     * (ProvisioningService::grant()) — checked against the panel right now: a service the panel ended or switched off
+     * takes nothing. In an agent's shop the traffic is drawn from the agent's pool before any panel is asked (refused
+     * under `traffic_gb` when short) and given back if the extension fails (TrafficPool::extending()); days cost
+     * nothing. The customer is notified, with the note, unless `notify` is off.
      *
      * @param array<string, mixed> $input {days, traffic_gb, note?, notify?}
-     * @throws ActorRefusedException 403 one of the shop's admins' own service
+     * @throws ActorRefusedException 403 a shop admin's own service
      * @throws ValidationException|PanelFailedException|ServiceBusyException|TooManyAttemptsException
      */
     public function extend(Subscription $subscription, Actor $actor, array $input): void
@@ -98,10 +97,10 @@ final class SubscriptionActions
         $this->panelWork($subscription, $actor);
 
         $give = fn() => $this->onPanel($subscription, $actor, function () use ($subscription, $gift): void {
-            // The grant adds to what the panel says right now — and the service it describes must still take it.
+            // The grant adds to what the panel says right now, so the service must still take it after the read.
             $client = $this->provisioning->inspect($subscription);
             $this->allow($subscription, SubscriptionAction::Extend);
-            // ProvisioningService::grant() sends the client switched on: one switched off on the panel itself is left so.
+            // grant() sends the client switched on: one switched off on the panel itself is left alone.
             if ($client?->enabled !== true) {
                 throw ValidationException::on('status', 'این سرویس روی پنل غیرفعال شده است؛ زمان و حجم فقط به سرویس فعال اضافه می‌شود.');
             }
@@ -131,45 +130,34 @@ final class SubscriptionActions
     }
 
     /**
-     * Switch the client off; the customer hears it, with the admin's note.
+     * Switch the client off; the customer is notified, with the admin's note.
      *
-     * @throws ActorRefusedException 403 one of the shop's admins' own service
+     * @throws ActorRefusedException 403 a shop admin's own service
      * @throws ValidationException|PanelFailedException|ServiceBusyException|TooManyAttemptsException
      */
     public function disable(Subscription $subscription, Actor $actor, ?string $note): void
     {
-        self::notTheirOwn($subscription, $actor);
-        $this->allow($subscription, SubscriptionAction::Disable);
-        $this->panelWork($subscription, $actor);
-        if ($this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->setEnabled($subscription, false))) {
-            $this->notifier->serviceDisabled($subscription, $note);
-        }
+        $this->switchClient($subscription, $actor, false, $note);
     }
 
     /**
-     * Switch it back on; the customer hears it.
+     * Switch the client back on; the customer is notified.
      *
-     * @throws ActorRefusedException 403 one of the shop's admins' own service — switched off by another's decision
+     * @throws ActorRefusedException 403 a shop admin's own service
      * @throws ValidationException|PanelFailedException|ServiceBusyException|TooManyAttemptsException
      */
     public function enable(Subscription $subscription, Actor $actor): void
     {
-        self::notTheirOwn($subscription, $actor);
-        $this->allow($subscription, SubscriptionAction::Enable);
-        $this->panelWork($subscription, $actor);
-        if ($this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->setEnabled($subscription, true))) {
-            $this->notifier->serviceEnabled($subscription);
-        }
+        $this->switchClient($subscription, $actor, true);
     }
 
     /**
      * Move the service to another server with what is left of it (ProvisioningService::move()); the customer gets the new
-     * link. A refusal under `server_id` is about the target (no service can go there); one under `status` is about this
-     * service alone (not active, or already there), so a batch moves on to the next one — but for LEAVE_REFUSED, which is
-     * about the previous server (an agent may not leave a client on a panel that answers), so a batch from it stops.
+     * link. A refusal under `server_id` is about the target (no service can go there, so a batch stops); one under
+     * `status` is about this service alone (a batch moves on) — except LEAVE_REFUSED, which is about the previous server.
      *
      * @param bool $leavePrevious do not contact the previous server (out of reach): its client stays there
-     * @throws ActorRefusedException 403 one of the shop's admins' own service — a client left behind would be a second one
+     * @throws ActorRefusedException 403 a shop admin's own service (a client left behind would be a second one)
      * @throws ValidationException|NoServerAvailableException|MoveException|ServiceBusyException|TooManyAttemptsException
      */
     public function move(Subscription $subscription, Actor $actor, ?int $serverId, bool $leavePrevious): void
@@ -192,11 +180,11 @@ final class SubscriptionActions
 
     /**
      * Delete the service for good: its client off the panel and its row gone (ProvisioningService::delete()). The
-     * customer hears it only when it took away a service that still ran.
+     * customer is notified only when a running service was taken away.
      *
-     * @param bool $leavePanel do not contact the panel (out of reach): the service is deleted here and its client stays on
-     *                         the panel for the admin to remove
-     * @throws ActorRefusedException 403 one of the shop's admins' own service
+     * @param bool $leavePanel do not contact the panel (out of reach): the row goes and the client stays on the panel
+     *                         for the admin to remove
+     * @throws ActorRefusedException 403 a shop admin's own service
      * @throws ValidationException|PanelFailedException|ServiceBusyException|TooManyAttemptsException
      */
     public function delete(Subscription $subscription, Actor $actor, ?string $note, bool $leavePanel): void
@@ -214,13 +202,12 @@ final class SubscriptionActions
 
     /**
      * What the modal may do with the service right now, by its state:
-     * - sync: anything whose client the panel still had last time (read the panel again);
-     * - extend: an active one — running, or waiting for its first connection — that can take days (it ends some day)
-     *   or traffic (it has a quota);
-     * - disable: an active one;
-     * - enable: one switched off here — an ended one needs time or traffic (a renewal), not a switch;
-     * - move: an active one — what is left of it goes to the new server;
-     * - delete: anything, one whose client is gone from the panel too (its row is all that is left).
+     * - sync: anything whose client the panel still had last time;
+     * - extend: an active one (running, or waiting for its first connection) that can take days (it ends some day) or
+     *   traffic (it has a quota);
+     * - disable, move: an active one;
+     * - enable: one switched off here — an ended one needs a renewal, not a switch;
+     * - delete: anything, including one whose client is gone from the panel.
      *
      * @return array<string, bool> By SubscriptionAction value
      */
@@ -241,8 +228,27 @@ final class SubscriptionActions
     }
 
     /**
-     * @throws ValidationException when the service's state does not allow the action — worded by that state, which most
-     *                             often was decided elsewhere a moment ago (switched off, ended, gone from its panel)
+     * Switch the client off or on; the customer is notified only when this call made the switch (not when another tab just
+     * did).
+     *
+     * @throws ActorRefusedException|ValidationException|PanelFailedException|ServiceBusyException|TooManyAttemptsException
+     */
+    private function switchClient(Subscription $subscription, Actor $actor, bool $enabled, ?string $note = null): void
+    {
+        self::notTheirOwn($subscription, $actor);
+        $this->allow($subscription, $enabled ? SubscriptionAction::Enable : SubscriptionAction::Disable);
+        $this->panelWork($subscription, $actor);
+        if (!$this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->setEnabled($subscription, $enabled))) {
+            return;
+        }
+        $enabled ? $this->notifier->serviceEnabled($subscription) : $this->notifier->serviceDisabled($subscription, $note);
+    }
+
+    /**
+     * Refuse the action unless the service's state allows it, worded by that state (most often changed elsewhere a moment
+     * ago: switched off, ended, gone from its panel).
+     *
+     * @throws ValidationException 422 on `status`
      */
     private function allow(Subscription $subscription, SubscriptionAction $action): void
     {
@@ -265,8 +271,8 @@ final class SubscriptionActions
     }
 
     /**
-     * One of the shop's admins — who is its customer too — asking to change their own service: a decision about
-     * themselves, another admin's (or the panels') to make. Reading its panel again decides nothing.
+     * Refuse a shop admin (who is also a customer) changing their own service: another admin or a panel decides that.
+     * Reading its panel again decides nothing, so sync() does not ask.
      *
      * @throws ActorRefusedException
      */
@@ -278,8 +284,7 @@ final class SubscriptionActions
     }
 
     /**
-     * Days and traffic the service cannot take, refused under their fields: days when it never ends, traffic when it has
-     * no quota — a grant would give it nothing of either.
+     * Refuse days for a service that never ends and traffic for an unlimited one, each under its field.
      *
      * @throws ValidationException
      */
@@ -296,17 +301,15 @@ final class SubscriptionActions
     }
 
     /**
-     * Whether the service's client may be left on its panel — a move or a delete that does not contact the server: at the
-     * owner's word in the main bot's shop; in an agent's shop, and for the shop's admins on its website, only while that
-     * panel is out of reach (Server::isBackingOff(): the shop has just failed to reach it — the screen's first try records
-     * it). Neither ever keeps a working client on a panel that answers: a second service on the shop's servers that nobody
-     * paid for.
+     * Whether the service's client may be left on its panel (a move or delete that does not contact it): the owner's call
+     * in the main shop; otherwise only while that panel is in backoff (the screen's first, failed try records that). A
+     * client left on a panel that answers would be a second working service nobody paid for.
      *
      * @throws ValidationException 422 on `status`
      */
     private function mayLeave(Subscription $subscription, Actor $actor): void
     {
-        if (($subscription->shop()->isMain() && !$actor->isStaff()) || $subscription->server->isBackingOff()) {
+        if (self::ownersOwnShop($subscription, $actor) || $subscription->server->isBackingOff()) {
             return;
         }
 
@@ -314,26 +317,22 @@ final class SubscriptionActions
     }
 
     /**
-     * One more operation a shop runs on the panels (PANEL_WORK in PANEL_WORK_WINDOW, the shop's count); the owner works
-     * their own shop as they please — its admins on its website do not.
+     * Count one more panel operation against the shop's limit (PANEL_WORK per PANEL_WORK_WINDOW); the owner in the main
+     * shop is not counted.
      *
      * @throws TooManyAttemptsException 429 with the wait
      */
     private function panelWork(Subscription $subscription, Actor $actor): void
     {
-        $shop = $subscription->shop();
-        if ($shop->isMain() && !$actor->isStaff()) {
+        if (self::ownersOwnShop($subscription, $actor)) {
             return;
         }
 
-        $wait = $this->limiter->attempt([['subscriptions|panel|' . $shop->id, self::PANEL_WORK, self::PANEL_WORK_WINDOW]]);
-        if ($wait > 0) {
-            throw TooManyAttemptsException::wait(self::TOO_MUCH_PANEL_WORK, $wait);
-        }
+        $this->limiter->enforce([['subscriptions|panel|' . $subscription->shop()->id, self::PANEL_WORK, self::PANEL_WORK_WINDOW]], self::TOO_MUCH_PANEL_WORK);
     }
 
     /**
-     * The panel work of one operation: a panel that fails it is a 502 in words for whoever reads the screen (panelWords()).
+     * Run one operation's panel work; a panel that fails it is a 502 worded for the reader (panelWords()).
      *
      * @template T
      * @param \Closure(): T $work
@@ -351,12 +350,17 @@ final class SubscriptionActions
     }
 
     /**
-     * A panel's failure for whoever asked — the one who reads the answer: the owner, who runs the servers, the diagnosis
-     * (whichever shop they have open); an agent, or one of the shop's admins on its website, what happened in a word —
-     * never the panel's address or its answers.
+     * A panel's failure for whoever asked: the owner, who runs the servers, gets the diagnosis (whichever shop is open);
+     * an agent or a website admin gets the summary — never the panel's address or answers.
      */
     private static function panelWords(Actor $actor, ProviderException $e): string
     {
         return $actor->isOwner() ? ProviderErrorPresenter::describe($e) : ProviderErrorPresenter::summary($e);
+    }
+
+    /** The owner working in the main shop: the limits and the leave rule for everyone else do not apply. */
+    private static function ownersOwnShop(Subscription $subscription, Actor $actor): bool
+    {
+        return $subscription->shop()->isMain() && !$actor->isStaff();
     }
 }

@@ -10,9 +10,9 @@ use App\Core\Forms\FieldType;
 use App\Core\Http\Origin;
 
 /**
- * The other origins a browser may call the Store API from, besides the website's own address — a site being built on
- * http://localhost:3000 —, as a list or as the text an admin types (one a line, or apart by commas): each http(s) with a
- * host and a port at most, nothing after it, kept in Core\Http\Origin's one form, without repeats, `max` at most.
+ * The website's other allowed origins (a site being built on http://localhost:3000), sent as a list or typed text (one a
+ * line, or comma-separated): each `scheme://host[:port]` and nothing more, kept normalised (Core\Http\Origin), without
+ * repeats, `max` at most.
  *
  * @extends Field<list<string>>
  */

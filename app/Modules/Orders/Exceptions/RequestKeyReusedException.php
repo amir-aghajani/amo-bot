@@ -7,11 +7,9 @@ namespace App\Modules\Orders\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * A request's key (the website's `Idempotency-Key`, `request_keys`) came to an order of something else before: another
- * type, plan, server or service — or a top-up of another amount (MESSAGE); or the request sent with it first asked for
- * another way to pay (OTHER_METHOD: made again with this one, the same order would be paid twice over, or another way). A
- * price changed since is no other thing: the order the key came to answers it (OrderService::open()). A key stands for
- * one checkout attempt; the request is refused rather than answered with that other order — or a second one made.
+ * An Idempotency-Key reused for a different request: its order buys something else (another type, plan, server, service
+ * or top-up amount — MESSAGE), or the key was first sent with another payment method (OTHER_METHOD). A changed price is
+ * not a different request: the key's own order answers it (OrderService::open()).
  */
 final class RequestKeyReusedException extends DomainRuleException
 {

@@ -13,17 +13,13 @@ use App\Modules\Store\Models\Website;
 use App\Modules\Telegram\BotSettings;
 
 /**
- * The shop as its website introduces it (`GET /` of the Store API), in the shop the request is worked in: its name —
- * the main shop's APP_NAME, an agent's its bot's title (Bots::name(): what the shop's emails are signed with too) —, its
- * bot and the link to it, whether it takes orders now (its bot's master switch: off, the website's checkout refuses
- * every order — CustomerCheckout::takingOrders()), how to reach support (the bot's «پشتیبانی», as a link), the ways a
- * customer signs in with their public ids — Telegram's Client ID, Google's, an email and a password while its sign-up is
- * on and the shop's email goes out —, the captcha its forms ask (what a page draws its widget with: the driver, its
- * public key, where it fetches its challenge — Core\Captcha\Verifier::widget()), and the referral program's terms.
+ * The Store API's `GET /`: what a website needs first about its shop — its name (Bots::name()) and bot, whether it takes
+ * orders now (the bot's master switch), support's link, the ways to sign in with their public ids, the captcha widget to
+ * draw (Core\Captcha\Verifier::widget()) and the referral terms.
  */
 final class Storefront
 {
-    /** Where a widget that asks the shop for its challenge fetches one, under the website's base address. */
+    /** Where a widget that asks the shop for a challenge fetches it, under the website's base address. */
     public const CHALLENGE = '/captcha/challenge';
 
     public function __construct(

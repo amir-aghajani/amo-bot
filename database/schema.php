@@ -6,25 +6,21 @@ use App\Modules\Payments\Drivers\Wallet\WalletGateway;
 use Illuminate\Database\Schema\Blueprint;
 
 /*
- * The shop's database: every table, in the order they are made (a foreign key only points at a table above it), and
- * the rows a new shop starts with — what a fresh install makes (Core\Database\Schema applies this file). From the first
- * release on, a change here ships with its upgrade, database/upgrades/<version>.php, which brings an installed shop's
- * database to the same shape (Core\Database\Upgrades — the panel's updater runs them); `php bin/console db:rebuild`
- * stays a developer's tool, which makes every table again and carries the rows over.
+ * Every table, in the order they are made (a foreign key only points at a table above it), and the rows a new shop
+ * starts with — what a fresh install makes (Core\Database\Schema). A change here ships with the same change in
+ * database/upgrades/<version>.php for installed shops; `php bin/console db:rebuild` follows it on a developer's
+ * database. See docs/Database.md.
  */
 return [
     'tables' => [
         /*
-         * The bots, each with a shop of its own: #1 is the main bot (its token and @username are config.php's, never
-         * this row's), the others agents' («نماینده»), whose tokens they handed over from the main bot. A row of a shop — a
-         * customer, a plan, an order, a setting — says whose it is with `bot_id` (Bots\CurrentBot); the servers, the
-         * grants and the agency's own tables are the shop's as a whole. `user_id` is the agent (a customer of the main
-         * bot; no foreign key — users come after bots): their bot runs while they have an agency
-         * (`users.agency_level_id`). `token` is encrypted, `telegram_id`/`username`/`title` are what Telegram says the bot
-         * is, `problem` what keeps it from running; `webhook_secret` (encrypted too) is in the address of its webhook. The
-         * traffic the agent's bot may still sell is the last line of `traffic_transactions`. `panel_epoch` goes up to end
-         * the agent's panel sessions; `login_code` is the sha256 of the code of their last panel login link (one use,
-         * until `login_code_expires_at`).
+         * The bots, each with a shop of its own: #1 is the main bot (its token and @username live in config.php), the
+         * others agents' («نماینده»). A shop's rows carry `bot_id` (Bots\CurrentBot); servers, grants and the agency's
+         * tables belong to the installation. `user_id` is the agent (a main-bot customer; no foreign key, since users
+         * come later), whose bot runs while they have an agency level. `token` and `webhook_secret` are encrypted;
+         * `telegram_id`, `username` and `title` are what Telegram reports; `problem` is what keeps the bot from running.
+         * `panel_epoch` goes up to end the agent's panel sessions; `login_code` is the sha256 of their last one-time
+         * panel link, valid until `login_code_expires_at`.
          */
         'bots' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -43,19 +39,15 @@ return [
         },
 
         /*
-         * The shop's own bookkeeping.
+         * Bookkeeping.
          *
-         * `settings` — the settings the admin changes at runtime from a panel (Settings service; groups of them on the
-         * settings field engine), each bot's own, a JSON `value` each — plus the bot's runtime state Telegram\BotState
-         * keeps there (webhook URL, poll heartbeat). The panel's own configuration lives in config.php, not here.
+         * `settings` — runtime settings a panel changes, per bot, a JSON `value` each (Settings\Services\Settings), plus
+         * the bot's runtime state (Telegram\BotState). The installation's configuration is config.php, not this.
          *
-         * `sequences` — named counters that only go up (Core\Database\Sequence): rows appear on first use, `value` is
-         * the last number drawn. First user: the number after "USER_" on panel clients of customers without a
-         * Telegram username.
+         * `sequences` — named counters that only go up (Core\Database\Sequence), e.g. the number in "USER_7".
          *
-         * `change_versions` — the admin panel's live view (Core\Database\ChangeFeed): one number per area of the shop
-         * (payments, orders, …) that goes up whenever a write to one of the area's tables is committed. Rows appear on
-         * the first write.
+         * `change_versions` — the panels' live view (Core\Database\ChangeFeed): a version per area of the shop, bumped
+         * when a write to one of its tables commits.
          */
         'settings' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -78,8 +70,8 @@ return [
         },
 
         /*
-         * «نمایندگی»: an agent runs a bot of their own and buys the traffic it sells, at their level's price per GB.
-         * `agency_levels` are the admin's (name, `price_per_gb` in Toman, order); a level agents are on cannot go.
+         * «نمایندگی»: an agent runs a bot of their own and buys the traffic it sells at their level's `price_per_gb`.
+         * A level agents are on cannot be deleted.
          */
         'agency_levels' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -90,31 +82,22 @@ return [
         },
 
         /*
-         * Customers — everyone who talked to a bot or signed in on its shop's website (Users\Services\Customers registers
-         * them all the same way, whichever door they came through), a customer of that bot's shop (`bot_id`: one person
-         * who talks to two bots is two customers), nothing else: the panel's login
-         * is config.php's, not a user. The ways a customer signs in are each unique in their shop and each may be
-         * missing: `telegram_id` (the Telegram account the bot knows them by — none for one who signed up on the website
-         * alone, whom the bot never writes to), `email` (lower case, only ever written once proven — a code sent to it
-         * typed back, or Google's `email_verified`), `password_hash` (bcrypt, only with an email) and `google_sub` (their
-         * Google account). The email and password sign-in may ask a second step, a code of an authenticator app (RFC 6238):
-         * `totp_secret` (encrypted), `totp_recovery_codes` (the keyed hashes of the one-time codes that stand in for the
-         * app, encrypted JSON), `totp_enabled_at` (since when it is asked; null: it is not) and `totp_last_step` (the time
-         * step of the last code taken: none is taken twice). `role` admin marks the shop's people inside the bot (privileged commands,
-         * exempt from its gates). `phone` is the number the customer shared with their own contact card (E.164) —
-         * shared is verified; not unique: a customer who recreates their account keeps it. `bot_blocked` is what
-         * Telegram last said: the customer blocked the bot (a broadcast skips them). The wallet is the
-         * `wallet_transactions` ledger, written only by WalletService: each line's `balance_after` is the balance from
-         * then on, the last one the balance now. `referral_code` is the customer's own invite code (made the first time
-         * they open «زیرمجموعه‌گیری»), `referred_by` the customer whose link — or code, on the website — brought them:
-         * set as they are registered only, never changed. An agent («نماینده», a customer of the main bot) has an `agency_level_id`;
-         * `credit_limit` is how far below zero their wallet may go (0 for everyone else).
+         * Customers of a bot's shop — whoever talked to the bot or signed in on its website (one person in two shops is
+         * two customers). The owner's panel login is config.php's, not a user. The ways in are each unique in the shop
+         * and each optional: `telegram_id` (none for a website-only customer, whom the bot never writes to), `email`
+         * (lower case, stored only once proven), `password_hash` (bcrypt, only with an email) and `google_sub`.
+         * Two-factor sign-in (RFC 6238): `totp_secret` (encrypted), `totp_recovery_codes` (keyed hashes, encrypted JSON),
+         * `totp_enabled_at` (null: off) and `totp_last_step` (so no code is taken twice).
          *
-         * `agency_requests` — a customer asking to become an agent, with their `note`; support approves it (with the
-         * level given) or rejects it (with the `reason` the customer reads), `reviewer` saying who.
+         * `role` admin makes the customer one of the shop's admins (the bot's privileged commands, the website's admin
+         * API). `phone` is a verified number (their own contact card, E.164). `bot_blocked` is Telegram's last word on
+         * whether they blocked the bot. The balance is the last line of `wallet_transactions`. `referral_code` is their
+         * own invite code; `referred_by` whoever brought them, set once at registration. An agent has an
+         * `agency_level_id`, and `credit_limit` is how far below zero their wallet may go.
          *
-         * `customer_groups` — the admin's own groups of customers («گروه»: a name, in the admin's order), a customer in
-         * any number of them (`customer_group_user`); a broadcast can go to one group.
+         * `agency_requests` — a customer asking to become an agent, approved (with a level) or rejected (with a `reason`).
+         *
+         * `customer_groups` — the admin's groups of customers («گروه»), members in `customer_group_user`.
          */
         'users' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -136,6 +119,8 @@ return [
             $table->boolean('bot_blocked')->default(false);
             $table->foreignId('agency_level_id')->nullable()->constrained('agency_levels')->restrictOnDelete();
             $table->decimal('credit_limit', 14, 2)->default(0);
+            // A percent off whatever the customer buys, theirs for good (Discounts: «تخفیف اختصاصی»); 0 none.
+            $table->unsignedTinyInteger('discount_percent')->default(0);
             $table->string('referral_code', 16)->nullable()->unique();
             $table->foreignId('referred_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('last_seen_at')->nullable();
@@ -150,7 +135,8 @@ return [
             $table->index(['bot_id', 'created_at']);
             // The users screen in the order they were last seen, read off the index instead of sorting the shop.
             $table->index(['bot_id', 'last_seen_at']);
-            // A referrer's referrals, counted from the index with the shop's own filter (the referral lists, the program's numbers).
+            // A referrer's referrals, counted from the index with the shop's `bot_id` filter (the referral lists, the
+            // program's numbers).
             $table->index(['referred_by', 'bot_id']);
         },
 
@@ -177,13 +163,13 @@ return [
             $table->decimal('amount', 14, 2);
             $table->decimal('balance_after', 14, 2);
             $table->string('description')->nullable();
-            // Who wrote a line by hand — a credit or a debit from a panel, or one of the shop's admins on its website —
-            // as Auth\Services\Reviewers keeps them; null for the lines the shop writes itself.
+            // Who wrote a line by hand (a panel, a website admin), as Auth\Services\Reviewers keeps them; null for the
+            // shop's own lines.
             $table->string('reviewer', 64)->nullable();
             $table->timestamp('created_at')->nullable();
 
-            // A customer's last line — their balance, read off the index alone — and their ledger, newest first (its own
-            // name: the columns', after the longest table prefix, would pass MySQL's 64 characters).
+            // A customer's last line (their balance, off the index alone) and their ledger newest first. Named: the
+            // default name would pass MySQL's 64 characters after the longest prefix.
             $table->index(['user_id', 'id', 'balance_after'], 'wallet_transactions_balance_index');
         },
 
@@ -191,6 +177,8 @@ return [
             $table->bigIncrements('id');
             $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
             $table->string('name', 32);
+            // Its customers pay plans' agent prices («همکار»), as the agents do.
+            $table->boolean('agent_pricing')->default(false);
             $table->integer('sort')->default(0);
             $table->timestamps();
 
@@ -206,44 +194,27 @@ return [
         },
 
         /*
-         * The shop's website (the Store API, docs/Store-API.md): a row per bot that has one — made, switched off, the
-         * first time its panel asks. `key` is the public store key the API's address carries (24 lower-case hex
-         * characters: it names the shop, it is no secret; a new one ends the old address); `url` the site's address, its
-         * origin the first one a browser may call the API from, `origins` the others (a JSON list of
-         * `scheme://host[:port]`). Telegram sign-in: `telegram_login` the switch, `telegram_client_id` the Client ID
-         * @BotFather shows for the site, `telegram_client_secret` its secret (encrypted; only the redirect flow needs it).
-         * Email sign-up: `email_signup` the switch (it takes the installation's mail). Google sign-in: `google_client_id`,
-         * the site's OAuth client in Google Cloud. The captcha its forms ask — a sign-up, a sign-in with a password, a
-         * password reset, and any of its own (Core\Captcha): `captcha_driver` the driver's key (null: none asked) and
-         * `captcha_config` what its form keeps (encrypted JSON: Turnstile's keys, its secret among them). The shop's admins
-         * on the website (its admin API, Store\Http\StaffMiddleware): `staff_enabled` whether it lets them in,
-         * `staff_strong_sign_in` whether it asks them a strong sign-in (Telegram, Google, or a password with its second
-         * step), `staff_grants` what it lets them do beyond the shop's daily work (a JSON list of Store\Enums\StaffGrant).
+         * A shop's website (the Store API): one row per bot, made switched off the first time a panel asks. `key` is the
+         * public store key in the API's address (a new one ends the old address); `url` and `origins` are the origins a
+         * browser may call from. Sign-in: Telegram (`telegram_login`, `telegram_client_id`, `telegram_client_secret`
+         * encrypted, needed for the redirect flow only), email sign-up (`email_signup`), Google (`google_client_id`). The
+         * captcha its forms ask: `captcha_driver` (null: none) and `captcha_config` (encrypted JSON). Its admins
+         * (Store\Http\StaffMiddleware): `staff_enabled`, `staff_strong_sign_in`, `staff_grants` (Store\Enums\StaffGrant).
          *
-         * `customer_sessions` — a customer signed in on the website, one row per device: `token_hash` the sha256 of the
-         * bearer token (the token itself is shown once, never kept), `device` and `ip` what the customer's session list
-         * shows. A session ends after 30 days unused (`last_used_at`, else `created_at`), at `expires_at` (180 days from
-         * the sign-in) whatever its use, or when the customer ends it. `authenticated_at` is when the customer last proved
-         * a way into the account on it — the sign-in, or one asked again since —: what changes how the account is signed
-         * in to asks it within 15 minutes. `method` is how it was signed in (Accounts\Enums\SignInMethod — a stronger way
-         * proven again since takes its place; null: a session opened before the shop kept it, counted as a password
-         * alone): what the website's admin API asks of a session strong.
+         * `customer_sessions` — a website sign-in per device: `token_hash` (the bearer token's sha256; the token is shown
+         * once), `device` and `ip` for the session list. Ends 30 days unused, or at `expires_at` (180 days after the
+         * sign-in). `authenticated_at` is when a way in was last proven on it (changing how the account signs in asks
+         * this within 15 minutes); `method` how it was signed in (Accounts\Enums\SignInMethod; null counts as a password
+         * alone).
          *
-         * `auth_challenges` — every short-lived secret of the sign-in flows: an id_token's nonce, an OIDC `state` with the
-         * PKCE challenge the site made of its verifier, the redirect address and a nonce (`payload`, encrypted JSON), a
-         * code emailed to an address (`subject`, the address — a sign-up's, with the account it makes in `payload`; a
-         * password reset's; an email being added to an account, with the password chosen for it), a two-factor sign-in's
-         * second step (`user_id` the account it signs in), an authenticator app's secret waiting for its first code (the
-         * customer's, one at a time) and a merge ticket (the account that asked, the other one and what to carry over in
-         * `payload`). `secret_hash` is the sha256 of the secret the browser holds (a code's keyed with APP_KEY: six digits
-         * are no secret to a hash alone); one use each — spending one is a conditional DELETE, so of two at once one wins
-         * —, one tried with codes `attempts` times at most.
+         * `auth_challenges` — the sign-in flows' short-lived secrets: nonces, OIDC states (with the PKCE challenge and
+         * redirect address in `payload`, encrypted JSON), emailed codes (`subject` the address), a two-factor second
+         * step, an authenticator secret awaiting its first code, a merge ticket. `secret_hash` is the secret's sha256
+         * (keyed with APP_KEY for a code: six digits are no secret to a plain hash). Each is spent once by a conditional
+         * DELETE, and one tried with codes at most `attempts` times.
          *
-         * `account_merges` — every merge of two of a shop's customers into one (Accounts\Services\AccountMerger): the
-         * account that stayed (`user_id`), the merged one's former number (`merged_user_id` — that row is gone), what it
-         * was signed in by and called (`merged`: its Telegram id and handle, its email, whether a Google account signed it
-         * in, its names, since when it was a customer), how much of what it owned moved (`moved`: counts), and who merged
-         * them (`actor`: the customer themselves, or a panel's principal). The customer's page in the panels lists them.
+         * `account_merges` — every merge of two customers (Accounts\Services\AccountMerger): the account that stayed, the
+         * merged one's former id and what identified it (`merged`), counts of what moved (`moved`), and the `actor`.
          */
         'websites' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -321,11 +292,9 @@ return [
         },
 
         /*
-         * What the shop told a customer (Notifications\Services\Notices) — every notice the bot sends them on its own, kept
-         * for their website's feed whether it reached them in Telegram, by email or not at all: `type` what it was (a
-         * Notifications\Enums\NoticeType), `text` its words as the bot wrote them (Telegram HTML; the caption, when it went
-         * as a QR card), `subject_type` + `subject_id` what it is about for the website to link to (one of the customer's
-         * orders or services; null for neither), `read_at` when they read it there. Kept 180 days.
+         * Every notice the shop sent a customer (Notifications\Services\Notices), kept for their website's feed however
+         * it reached them: `type` (NoticeType), `text` (Telegram HTML), `subject_type` + `subject_id` (the order, service
+         * or ticket to link to), `read_at`. Kept 180 days.
          */
         'notifications' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -348,18 +317,14 @@ return [
         },
 
         /*
-         * Panels clients are created on — the shop's as a whole, every bot sells on them. Credentials (`password`,
-         * `api_token`, `totp_secret`) are stored encrypted; `meta` tunes the connection (verify_tls, timeout,
-         * subscription_url). `last_checked_at` / `last_error` are the last contact with the panel and why it failed
-         * (a panel that failed is left alone a while). `serves_subscriptions` is what the last check learned about the
-         * panel's subscription server (null = never asked) — and a server without one is not sold: the customer gets
-         * exactly one subscription link, nothing else.
+         * The VPN panels services are made on — the installation's, every bot sells on them. `password`, `api_token` and
+         * `totp_secret` are encrypted; `meta` holds the connector's other settings. `last_checked_at` / `last_error` are
+         * the last contact and why it failed (a failed panel is left alone a while). `serves_subscriptions` is what the
+         * last check learned (null: never asked); a server serving no subscription links is not sold.
          *
-         * `server_inbounds` mirrors what the panel attaches clients to (refreshed by every check) by the driver's own
-         * key — only what the admin picks by, never the protocol settings (they carry every client's secrets):
-         * `is_selectable` is the admin opting one in for sale; `enabled` follows the panel (one it no longer lists is
-         * kept, switched off: services and plans may point at it); `protocol` and `port` are null for what has neither
-         * (a PasarGuard group).
+         * `server_inbounds` mirrors what the panel attaches clients to, by the connector's own `remote_key` — never the
+         * protocol settings, which carry every client's secrets. `is_selectable` is the admin offering it for sale;
+         * `enabled` follows the panel (one it no longer lists is kept, switched off).
          */
         'servers' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -403,13 +368,10 @@ return [
         },
 
         /*
-         * What is for sale. A plan is duration + traffic + price (0 = unlimited / no expiry), filed under one category
-         * or none (the bot asks for the category first when any active category exists; a deleted category leaves its
-         * plans uncategorised). `plan_servers` is where a plan is sold — one row per server: `all_inbounds` sells
-         * whatever the server marks selectable (resolved at purchase time), otherwise the rows of
-         * `plan_server_inbounds`. A purchase picks one server and gets a single client attached to every inbound of
-         * that entry. `sort` is the customer-facing order everywhere. Each bot sells its own plans in its own categories
-         * (`bot_id`) on the shop's servers.
+         * What is for sale, each bot its own. A plan is a term, traffic and a price (0 traffic or term: unlimited), in a
+         * category or none. `plan_servers` is where it is sold, one row per server: `all_inbounds` sells every inbound
+         * the server marks selectable, else the rows of `plan_server_inbounds`. A purchase picks one server and gets one
+         * client on all of that entry's inbounds. `sort` is the customer-facing order.
          */
         'plan_categories' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -429,10 +391,22 @@ return [
             $table->foreignId('category_id')->nullable()->constrained('plan_categories')->nullOnDelete();
             $table->string('name', 128);
             $table->text('description')->nullable();
+            // A note under its checkout («یادداشت پیش‌فاکتور»), a purchase's and a renewal's; null for none.
+            $table->text('checkout_note')->nullable();
             $table->decimal('price', 14, 2);
-            $table->unsignedInteger('duration_days')->default(30);
+            // The price of a customer's first purchase in the shop («قیمت خرید اول»), below the price; null for none.
+            $table->decimal('first_purchase_price', 14, 2)->nullable();
+            // The price for agents and «همکار» customer groups («قیمت نماینده»), below the price; null for none.
+            $table->decimal('agent_price', 14, 2)->nullable();
+            // The term in hours from the first connection (a daily plan's days × 24); 0 for no limit.
+            $table->unsignedInteger('duration_hours')->default(720);
             $table->decimal('traffic_gb', 10, 2)->default(0);
             $table->unsignedInteger('ip_limit')->default(0);
+            // The plan's own prices for extra traffic and time (ExtrasSettings' form, by field); null for the shop's.
+            $table->json('extras')->nullable();
+            // Its button in the bot's plan list: Telegram's colour (null: the client's) and how many share its row (1–3).
+            $table->string('button_style', 16)->nullable();
+            $table->unsignedTinyInteger('button_row')->default(1);
             $table->boolean('is_active')->default(true);
             $table->integer('sort')->default(0);
             $table->timestamps();
@@ -459,12 +433,10 @@ return [
         },
 
         /*
-         * A subscription is one client on one panel: `remote_name` is the panel-wide identifier the client is
-         * addressed by (named after the customer: "amir_1", "USER_7") and `subscription_url` the one link the customer
-         * gets, as the panel served it. The purchase order points at its subscription (`orders.subscription_id`), as a
-         * renewal order does. Counters, quota and term mirror the panel, as of `last_synced_at`; `status` is ours
-         * (active, expired, disabled, deleted). A change made on the panel holds the row for its length (`lease_token`,
-         * until `leased_until`), so two never interleave.
+         * A customer's service: one client on one panel. `remote_name` is the client's panel-wide name ("amir_1",
+         * "USER_7") and `subscription_url` the one link the customer gets. Counters, quota and term mirror the panel as
+         * of `last_synced_at`; `status` is the shop's own. A change made on the panel holds the row with a lease, so two
+         * never interleave.
          */
         'subscriptions' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -479,24 +451,23 @@ return [
             $table->unsignedBigInteger('upload_bytes')->default(0);
             $table->unsignedBigInteger('download_bytes')->default(0);
             $table->unsignedInteger('ip_limit')->default(0);
-            // The term: duration_days counts from the first connection (0 = never expires); starts_at / expires_at are
-            // filled once the panel has started the clock, and stay null until then.
-            $table->unsignedInteger('duration_days')->default(0);
+            // The term in hours from the first connection (0: never ends); starts_at / expires_at stay null until the
+            // panel starts the clock.
+            $table->unsignedInteger('duration_hours')->default(0);
             $table->timestamp('starts_at')->nullable();
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('last_synced_at')->nullable();
-            // When support switched it off (status disabled): the screen says since when.
+            // When support switched it off.
             $table->timestamp('disabled_at')->nullable();
-            // The customer's «تمدید خودکار» switch (its default for new services is the admin's), and when they were
-            // last told their wallet could not pay an automatic renewal — once per renewal window.
+            // The customer's «تمدید خودکار» switch, and when they were last told their wallet could not pay it (once per
+            // renewal window).
             $table->boolean('auto_renew')->default(false);
             $table->timestamp('renewal_notified_at')->nullable();
-            // When the customer was reminded that the service ends soon / that its traffic runs low — once each while
-            // it stays past the admin's threshold; cleared when it is back under it (renewed, more traffic).
+            // When the customer was reminded of the end / of low traffic: once while past the threshold, cleared when
+            // back under it.
             $table->timestamp('expiry_reminded_at')->nullable();
             $table->timestamp('traffic_reminded_at')->nullable();
-            // A renewal bought before the paid period ended, with the shop set to reset what is left: that period ends
-            // at period_ends_at, and from then on at most next_period_bytes remains (the renewed traffic).
+            // A renewal bought early, unused traffic not carried: at period_ends_at at most next_period_bytes remains.
             $table->timestamp('period_ends_at')->nullable();
             $table->unsignedBigInteger('next_period_bytes')->nullable();
             $table->string('lease_token', 32)->nullable();
@@ -504,7 +475,7 @@ return [
             $table->timestamps();
 
             $table->unique(['server_id', 'remote_name']);
-            // A customer's services by state, counted from the index with the shop's own filter (the users screen).
+            // A customer's services by state, counted from the index with the shop's `bot_id` filter (users screen).
             $table->index(['user_id', 'bot_id', 'status']);
             // A shop's services by state and deadline: the screen's tabs and counts, ending soon, automatic renewal, reminders.
             $table->index(['bot_id', 'status', 'expires_at']);
@@ -518,15 +489,11 @@ return [
         },
 
         /*
-         * Days and traffic the admin gives running services — an outage made good, a gift — with the `reason` the
-         * customers read (when `notify`), and, ticked (`include_unstarted`), to those still waiting for their first
-         * connection too. A grant is for the services there when it was issued (`upto_subscription_id`), on every
-         * server, the agents' only, or one server's (`audience`), and has a part per server it reaches
-         * (`grant_parts`): each is worked through on its own, a service at a time past its `last_subscription_id`
-         * cursor, by one worker at a time (the one holding `lease_token`, until `leased_until`), so a panel out of reach
-         * holds up its own server only (`waiting_reason`); `last_failure` names the latest service a panel refused. A
-         * grant runs while one of its parts does — its status and its end are its parts'. One part runs on a server at a
-         * time: `running_server_id` is the server while the part runs (computed), and unique.
+         * Days and traffic given to running services (an outage made good, a gift), with the `reason` customers read
+         * when `notify`. A grant covers the services that existed when it was issued (`upto_subscription_id`) in its
+         * `audience` and has a part per server (`grant_parts`), each worked through past its cursor by whoever holds its
+         * lease, so a panel out of reach holds up only its own server. A grant's status is its parts'. One part runs
+         * per server at a time: `running_server_id` (generated) is unique.
          */
         'grants' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -536,6 +503,8 @@ return [
             $table->boolean('notify')->default(true);
             $table->boolean('include_unstarted')->default(false);
             $table->string('audience', 8);
+            // The customer group of a mass gift to one group (`audience` group).
+            $table->foreignId('customer_group_id')->nullable()->constrained('customer_groups')->nullOnDelete();
             $table->unsignedBigInteger('upto_subscription_id')->default(0);
             $table->string('reviewer', 191)->nullable();
             $table->timestamp('created_at')->nullable();
@@ -568,48 +537,30 @@ return [
         },
 
         /*
-         * Money changing hands.
+         * Money.
          *
-         * `payment_methods` — the ways customers can pay, one row per instance of a gateway driver (several
-         * card-to-card rows, one per card; later one per merchant account of an online gateway): `config` is the
-         * driver's own settings, `sort` the order at checkout. The wallet is a built-in row every shop starts with
-         * (below, under `rows`; an agent's shop gets its own when it opens, PaymentMethods::createBuiltins()).
+         * `payment_methods` — one row per instance of a gateway driver (one per card for card-to-card): `config` is the
+         * driver's settings, `sort` the checkout order. The wallet is a built-in row of every shop.
          *
-         * `orders` — what the customer asked for: a purchase (`plan_id` + the `server_id` they chose among the plan's
-         * servers), a renewal (`subscription_id` — its server is the service's), a wallet top-up, or an agent's traffic
-         * (`traffic_bytes`, bought from the main bot for the agent's own). `status` walks pending → paid → processing →
-         * fulfilled (or failed), every step a compare-and-swap (Core\Database\Transitions) so a delivery never happens
-         * twice; `notes` carries the reason a fulfilment failed or an order was cancelled, in words anyone of the shop may
-         * read — a panel that failed it said in a word —, and `diagnosis` the owner's reading of that panel's failure
-         * (its address, its answer: ProviderErrorPresenter::describe()), which only the owner is shown. When it was paid
-         * is its paying payment's `paid_at`.
+         * `orders` — a purchase (`plan_id` and the chosen `server_id`), a renewal or an extra (`subscription_id`), a
+         * wallet top-up, or an agent's traffic (`traffic_bytes`). `status` moves pending → paid → processing → fulfilled
+         * (or failed), every step a compare-and-swap so nothing is delivered twice. `notes` is why it failed or was
+         * cancelled, in words anyone may read; `diagnosis` the panel's failure in full, shown to the owner alone.
          *
-         * `request_keys` — every request of the website that ordered, by its key (its Idempotency-Key, one a customer),
-         * and the order it came to: the one it made, the open one of the same thing it found, or the one the key had made
-         * before (OrderService::open()) — several keys may name one order —, and the way to pay it asked for
-         * (`payment_method_id`). The same request made again gets that order back as it stands, never a second one —
-         * nor the order paid another way: another way under the key is refused; a key is kept a week (ExpireOrdersTask).
+         * `request_keys` — the website's ordering requests by Idempotency-Key and the order each came to, with the way to
+         * pay it asked for: the same request again gets that order back, never a second one. Kept a week.
          *
-         * `payments` — one attempt to pay an order through a method: the customer is the order's, the driver the
-         * method's (a method that has payments is disabled, never deleted). `reference` is the gateway's own id of it.
-         * A card-to-card receipt sent in the bot is the Telegram file id (`receipt_file_id`, never copied to disk) and the
-         * message the verdicts reply to (`receipt_message_id`); one uploaded from the website is a file of the shop's own
-         * (`receipt_path`: its name in storage/uploads/receipts, Payments\Services\Receipts — gone with its order's
-         * expiry). Either way its file name as the customer sent it (`receipt_name`), their words with it
-         * (`receipt_note`), and when (`receipt_at`). `note` is the word on its latest verdict — the admin's reason
-         * for a rejection, their note on a cancellation or a refund, or the gateway's refusal; `reviewer` is who
-         * decided (the panel login, a bot admin's @username) — none on a receipt the review window accepted.
+         * `payments` — one attempt to pay an order through a method (a method with payments is never deleted). A receipt
+         * sent in the bot is Telegram's file (`receipt_file_id`, `receipt_message_id`); one uploaded on the website is a
+         * file under storage/uploads/receipts (`receipt_path`). `note` is the latest verdict's word; `reviewer` who
+         * decided (none when the review window accepted it).
          *
-         * `referral_commissions` — what a payment earned its customer's referrer: one row per payment at most (`payment_id`
-         * unique), with whom it was credited to (`referrer_id` — the customer's `referred_by` when it was earned, kept: two
-         * accounts merged since may name another), the rate then in force and the commission credited to the referrer's
-         * wallet; `notified_at` is claimed by the one message that tells them.
+         * `referral_commissions` — what a payment earned the referrer, once per payment; `referrer_id` is kept as it was
+         * when earned, and `notified_at` is claimed by the one message that tells them.
          *
-         * `traffic_transactions` — an agent's prepaid traffic, line by line (Agency\Services\TrafficPool): bought from
-         * the main bot (`purchase`, its `order_id`), drawn by a sale or a renewal in their bot (`sale` / `renewal`, the
-         * order behind it) or by the traffic the shop gave one of its services (`extension`, with the `reviewer`), given
-         * back when that delivery or extension failed (`refund`), or set right by the shop (`adjust`, with the
-         * `reviewer`). `bytes` is signed; `balance_after` is what the bot may sell from then on — the last line's, now.
+         * `traffic_transactions` — an agent's prepaid traffic ledger (Agency\Services\TrafficPool): purchases, sales and
+         * renewals drawn, extensions, refunds and adjustments. `bytes` is signed; `balance_after` is what the bot may still
+         * sell.
          */
         'payment_methods' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -624,6 +575,104 @@ return [
             $table->index(['enabled', 'sort']);
         },
 
+        /*
+         * Discounts. `discount_codes` — a code typed at checkout: `type` percent, fixed or free and its `value` (a percent
+         * capped at `max_discount`, or Toman), limited by `min_amount`, `order_types`, `plan_ids`, `server_ids` (null:
+         * any), `first_purchase_only`, its window and its uses (`max_uses`, `per_user`). A use is an order made with it
+         * that is not cancelled, so an unpaid order gives its use back by itself. `sales` — a timed percent off plans
+         * («فروش ویژه»). `loyalty_tiers` — tiers by what a customer spent («سطح وفاداری»), each a discount and extra
+         * cashback. A customer's own discount is `users.discount_percent`.
+         */
+        'discount_codes' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->string('code', 32);
+            $table->string('note', 191)->nullable();
+            $table->string('type', 8);
+            $table->decimal('value', 14, 2)->default(0);
+            $table->decimal('max_discount', 14, 2)->nullable();
+            $table->decimal('min_amount', 14, 2)->nullable();
+            $table->json('order_types')->nullable();
+            $table->json('plan_ids')->nullable();
+            $table->json('server_ids')->nullable();
+            $table->boolean('first_purchase_only')->default(false);
+            $table->timestamp('starts_at')->nullable();
+            $table->timestamp('ends_at')->nullable();
+            $table->unsignedInteger('max_uses')->nullable();
+            $table->unsignedInteger('per_user')->nullable();
+            $table->boolean('enabled')->default(true);
+            $table->timestamps();
+
+            // A code a customer types, found in their shop (its case aside: kept in upper case).
+            $table->unique(['bot_id', 'code']);
+        },
+
+        'sales' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->string('name', 64);
+            $table->unsignedTinyInteger('percent');
+            $table->json('order_types')->nullable();
+            $table->json('plan_ids')->nullable();
+            $table->timestamp('starts_at')->nullable();
+            $table->timestamp('ends_at')->nullable();
+            $table->boolean('enabled')->default(true);
+            $table->timestamps();
+
+            // The sales a shop runs now, read with every price shown.
+            $table->index(['bot_id', 'enabled', 'ends_at']);
+        },
+
+        'loyalty_tiers' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->string('name', 32);
+            $table->decimal('min_spent', 14, 2)->default(0);
+            $table->unsignedTinyInteger('discount_percent')->default(0);
+            $table->unsignedTinyInteger('cashback_percent')->default(0);
+            $table->unsignedInteger('sort')->default(0);
+            $table->timestamps();
+
+            $table->unique(['bot_id', 'name']);
+        },
+
+        /*
+         * Cashback rules («کش‌بک»): a percent of what an order paid, credited once it is delivered, per kind of order
+         * (null: purchases and renewals), customer group and way to pay (null: any).
+         */
+        'cashback_rules' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->unsignedTinyInteger('percent');
+            $table->json('order_types')->nullable();
+            $table->foreignId('customer_group_id')->nullable()->constrained('customer_groups')->cascadeOnDelete();
+            $table->foreignId('payment_method_id')->nullable()->constrained('payment_methods')->cascadeOnDelete();
+            $table->boolean('enabled')->default(true);
+            $table->unsignedInteger('sort')->default(0);
+            $table->timestamps();
+
+            $table->index(['bot_id', 'enabled']);
+        },
+
+        /*
+         * The lucky wheel's prizes («گردونه شانس»): a `kind` (nothing, wallet, traffic, days, a free plan), its `amount`,
+         * and a `weight`, its share of the wheel.
+         */
+        'wheel_prizes' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->string('label', 64);
+            $table->string('kind', 16);
+            $table->decimal('amount', 14, 2)->nullable();
+            $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
+            $table->unsignedInteger('weight')->default(1);
+            $table->boolean('enabled')->default(true);
+            $table->unsignedInteger('sort')->default(0);
+            $table->timestamps();
+
+            $table->index(['bot_id', 'enabled']);
+        },
+
         'orders' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
             $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
@@ -633,15 +682,23 @@ return [
             $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
             $table->foreignId('server_id')->nullable()->constrained('servers')->nullOnDelete();
             $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->nullOnDelete();
+            // What an order brings: traffic (an agent's, or a service's extra) or days (a service's extra time).
             $table->unsignedBigInteger('traffic_bytes')->nullable();
+            $table->unsignedInteger('days')->nullable();
             $table->decimal('amount', 14, 2);
+            // Which of the plan's prices it was made at (Orders\Enums\OrderPricing).
+            $table->string('pricing', 16)->default('regular');
+            // What came off its price (Orders\DTO\Quote): the total, the lines (source, words, Toman), and the code used.
+            $table->decimal('discount_amount', 14, 2)->default(0);
+            $table->json('discounts')->nullable();
+            $table->foreignId('discount_code_id')->nullable()->constrained('discount_codes')->nullOnDelete();
             $table->text('notes')->nullable();
             $table->text('diagnosis')->nullable();
             $table->timestamp('fulfilled_at')->nullable();
             $table->timestamps();
 
-            // A customer's orders by status, counted from the index with the shop's own filter (the users screen, their page,
-            // the unpaid ones a website's checkout may leave open).
+            // A customer's orders by status, counted from the index with the shop's `bot_id` filter (the users screen,
+            // their page, the unpaid ones a website's checkout may leave open).
             $table->index(['user_id', 'bot_id', 'status']);
             $table->index('subscription_id');
             // A plan's sales (the plans screen).
@@ -651,6 +708,89 @@ return [
             // the index alone.
             $table->index(['bot_id', 'status', 'type', 'amount']);
             $table->index(['bot_id', 'created_at', 'status', 'amount']);
+            // A code's uses — in all, and a customer's —, counted from the index (Discounts\Services\DiscountCodes).
+            $table->index(['discount_code_id', 'user_id', 'status']);
+        },
+
+        /*
+         * Rewards given. `gift_codes` — wallet credit or a free plan («کد هدیه»), made in batches, redeemed once.
+         * `wheel_spins` — each spin: who, the prize as it was, the outcome. `cashbacks` — an order's cashback, once.
+         * `lottery_draws` — a night's draw among buyers, and `lottery_winners`.
+         */
+        'gift_codes' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->string('code', 32);
+            $table->string('batch', 64)->nullable();
+            $table->string('kind', 8);
+            $table->decimal('amount', 14, 2)->nullable();
+            $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
+            $table->timestamp('expires_at')->nullable();
+            $table->foreignId('redeemed_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('redeemed_at')->nullable();
+            $table->foreignId('order_id')->nullable()->constrained('orders')->nullOnDelete();
+            $table->timestamps();
+
+            $table->unique(['bot_id', 'code']);
+            // A batch's codes, the newest first (the panel's list).
+            $table->index(['bot_id', 'batch']);
+        },
+
+        'wheel_spins' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('wheel_prize_id')->nullable()->constrained('wheel_prizes')->nullOnDelete();
+            $table->string('kind', 16);
+            $table->string('label', 64);
+            $table->decimal('amount', 14, 2)->nullable();
+            $table->string('outcome', 191)->nullable();
+            $table->foreignId('order_id')->nullable()->constrained('orders')->nullOnDelete();
+            $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->nullOnDelete();
+            $table->timestamp('created_at')->nullable();
+
+            // A customer's last spin (the wheel's cooldown) and a shop's spins newest first (the panel's list).
+            $table->index(['user_id', 'created_at']);
+            $table->index(['bot_id', 'created_at']);
+        },
+
+        'cashbacks' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->foreignId('order_id')->unique()->constrained('orders')->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedTinyInteger('percent');
+            $table->decimal('amount', 14, 2);
+            $table->timestamp('reversed_at')->nullable();
+            $table->timestamp('created_at')->nullable();
+
+            $table->index(['user_id', 'bot_id']);
+        },
+
+        'lottery_draws' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            // The shop's day it drew (its zone's), once a day.
+            $table->date('day');
+            $table->unsignedInteger('entries')->default(0);
+            $table->string('prize_kind', 16);
+            $table->decimal('prize_amount', 14, 2)->nullable();
+            $table->foreignId('prize_plan_id')->nullable()->constrained('plans')->nullOnDelete();
+            $table->timestamp('created_at')->nullable();
+
+            $table->unique(['bot_id', 'day']);
+        },
+
+        'lottery_winners' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('lottery_draw_id')->constrained('lottery_draws')->cascadeOnDelete();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('outcome', 191)->nullable();
+            $table->foreignId('order_id')->nullable()->constrained('orders')->nullOnDelete();
+            $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->nullOnDelete();
+            $table->timestamp('created_at')->nullable();
+
+            $table->index('user_id');
         },
 
         'request_keys' => static function (Blueprint $table): void {
@@ -658,9 +798,7 @@ return [
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->string('key', 64);
             $table->foreignId('order_id')->constrained('orders')->cascadeOnDelete();
-            // The way to pay the request asked for — null only for a key kept before keys kept it (db:rebuild copies such
-            // rows: a week's at most), whose order is answered whatever way is sent. A method is deleted only while
-            // nothing was paid with it: a key that never came to a payment goes with it.
+            // The way to pay the request asked for; null only on keys kept before this column (any way is then accepted).
             $table->foreignId('payment_method_id')->nullable()->constrained('payment_methods')->cascadeOnDelete();
             $table->timestamp('created_at')->nullable();
 
@@ -708,9 +846,52 @@ return [
             $table->timestamp('notified_at')->nullable();
             $table->timestamps();
 
-            // What a referrer earned, summed from the index alone with the shop's own filter (their numbers — the bot's, the
-            // website's, their page's —, the referrers list; its own name: the columns' would pass MySQL's 64 characters).
+            // What a referrer earned, summed from the index alone with the shop's `bot_id` filter (their numbers — the
+            // bot's, the website's, their page's —, the referrers list; its own name: the columns' would pass MySQL's 64
+            // characters).
             $table->index(['referrer_id', 'bot_id', 'commission'], 'referral_commissions_earned_index');
+        },
+
+        /*
+         * The referral program beyond commissions. `referral_bonuses` — the start gift («هدیه شروع») to the referrer and
+         * the newcomer, once per newcomer, on joining or on the first purchase (`trigger`). `referral_rewards` — a free plan
+         * each time a referrer's buying referrals reach a `milestone`. `referral_alerts` — referrals that look made up
+         * («زیرمجموعه فیک»): why, and how many.
+         */
+        'referral_bonuses' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->foreignId('invitee_id')->unique()->constrained('users')->cascadeOnDelete();
+            $table->foreignId('referrer_id')->constrained('users')->cascadeOnDelete();
+            $table->decimal('referrer_amount', 14, 2)->default(0);
+            $table->decimal('invitee_amount', 14, 2)->default(0);
+            $table->string('trigger', 16);
+            $table->timestamp('created_at')->nullable();
+
+            $table->index('referrer_id');
+        },
+
+        'referral_rewards' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->foreignId('referrer_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedInteger('milestone');
+            $table->foreignId('order_id')->nullable()->constrained('orders')->nullOnDelete();
+            $table->timestamp('created_at')->nullable();
+
+            $table->unique(['referrer_id', 'milestone']);
+        },
+
+        'referral_alerts' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->foreignId('referrer_id')->constrained('users')->cascadeOnDelete();
+            $table->string('reason', 32);
+            $table->unsignedInteger('count')->default(0);
+            $table->timestamp('created_at')->nullable();
+
+            $table->index(['referrer_id', 'created_at']);
+            $table->index(['bot_id', 'created_at']);
         },
 
         'traffic_transactions' => static function (Blueprint $table): void {
@@ -729,20 +910,13 @@ return [
         },
 
         /*
-         * Support conversations (Support\Services\Tickets).
+         * Support tickets (Support\Services\Tickets). `tickets` — a customer's question («تیکت») from the website or the
+         * bot, maybe about a service: `status` open (waiting on support), answered or closed; `last_message_at` orders every
+         * list; `customer_unread` says support wrote since they last read; a closed one may carry a `rating`.
          *
-         * `tickets` — a customer's question to support («تیکت»), from the shop's website or its bot: its `subject`, the
-         * service it is about when there is one (`subscription_id`), and where it stands — `status` open (waiting on
-         * support), answered (support wrote last) or closed (`closed_at`) —, when its latest message was written
-         * (`last_message_at`, every list's order), whether support wrote since the customer last read it
-         * (`customer_unread`), and, once closed, the customer's `rating` (1 to 5) with a `rating_note`.
-         *
-         * `ticket_messages` — its messages in order: who wrote it (`author`, and who of support — `reviewer`, a panel's
-         * principal or a bot admin's @username / tg:<id>), the `body`, at most one picture — sent in Telegram
-         * (`attachment_file_id`) or uploaded (`attachment_path`, its name in storage/uploads/tickets — a name of the
-         * shop's own, «{bot}-{ticket}-{16 hex}.{ext}»; null again once its ticket has been closed 30 days and the file
-         * went) — with its name (`attachment_name`, left when the file goes: the message had a picture), and where it was
-         * written (`channel`: web, bot, panel, group).
+         * `ticket_messages` — the conversation: `author`, support's `reviewer`, the `body`, at most one picture (Telegram's
+         * `attachment_file_id`, or an upload's `attachment_path` under storage/uploads/tickets, cleared 30 days after the
+         * ticket closes while `attachment_name` stays), and the `channel` it was written in.
          */
         'tickets' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -788,12 +962,9 @@ return [
         },
 
         /*
-         * Customers' reviews of the shop («نظرات», Reviews\Services\Reviews), written on its website and shown there once
-         * support approved them: who wrote it (`user_id`, the customer signed in on the website; null for a guest — or one
-         * whose account went), the `name` it is signed with, its `rating` (1 to 5), the writer's words (`body`), a line of
-         * where they use the service from (`context`), one of the website's own avatars they picked (`avatar`, the key of
-         * the site's own set — never an address), where it stands — `status` pending (waiting on support), approved
-         * (shown) or rejected (not) — and who of support decided it last (`reviewer`), when (`decided_at`).
+         * Customers' reviews of the shop («نظرات»), written on its website and shown once approved: the writer (null for a
+         * guest), the `name` signed, a `rating` of 1–5, the `body`, a `context` line, an `avatar` key from the site's own
+         * set (never an address), `status` pending, approved or rejected, and who decided it, when.
          */
         'reviews' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -819,62 +990,36 @@ return [
         },
 
         /*
-         * The bots' own tables, each row a bot's (`bot_id`).
+         * Each bot's own Telegram state.
          *
-         * `telegram_updates` — the updates a bot took (Telegram's `update_id`), each recorded before it is served, so one
-         * Telegram sends again — a webhook answered past its patience, a poller that stopped before confirming its
-         * offset — is served once. Telegram holds an update a day at most: a row goes after two
-         * (Update\ReceivedUpdates::KEEP_HOURS); a bot's newest is when it last heard from Telegram. `chat_id` is the chat
-         * an update counts against — one its chat sent just now (not one Telegram held back): a chat faster than a person
-         * is left unanswered while it keeps on (ReceivedUpdates::lately()).
+         * `telegram_updates` — every update a bot took, recorded before it is served so one Telegram sends again is served
+         * once; kept two days (ReceivedUpdates::KEEP_HOURS). `chat_id` is the chat it counts against, so a chat faster than
+         * a person is left unanswered while it keeps on.
          *
-         * `telegram_sessions` — one row per chat with a bot — a customer's private chat, its id their Telegram id: the
-         * conversation `state` (a handler's "waiting for…") and `data` (keys starting with `_` are the chat's own facts
-         * and survive a menu tap; the rest is the step's scratch).
+         * `telegram_sessions` — one row per chat: the conversation `state` and `data` (keys starting with `_` are the
+         * chat's own facts and outlive a flow; the rest is the step's scratch).
          *
-         * `bot_channels` — channels or groups a customer must be a member of before the bot serves them, as the admin
-         * added them by link. The bot has to be an admin there to see who is a member; `bot_is_admin` is what the last
-         * check found. The customer is sent to the public `username`'s t.me link, or a private one's `invite_link` —
-         * every row has one of the two.
+         * `bot_channels` — the channels a customer must join first; the bot must be an admin there (`bot_is_admin`, the
+         * last check's finding). Each row has a public `username` or a private `invite_link`.
          *
-         * `broadcasts` — a message a bot admin (`user_id`) sends to customers from inside the bot (/broadcast): the bot
-         * copies — or forwards (`mode`) — the admin's own message (`message_id`, in their private chat with the bot,
-         * where the progress and the summary go too) to each customer of the `audience` (all, buyers, non-buyers,
-         * inactive, a customer group, agents, one server's — `audience_id` names the group or the server), in batches
-         * past the `last_user_id` cursor by one worker at a time (`lease_token` until `leased_until`), with the admin's
-         * link `buttons` under a copy and each message pinned when `pin` says so (`broadcast_pins` keeps where, for taking
-         * them off later). `status` sending → paused → sending … → done or cancelled; `progress_message_id` is the
-         * admin's live progress message. A row of `kind` unpin takes the pins of its `source_id` off again — the message,
-         * its mode and audience are its source's, it has none of its own. `content`/`excerpt` say what the message is,
-         * for the panel; `reviewer` is the panel login behind an operation started there.
+         * `broadcasts` — a bot admin's /broadcast: their own message copied or forwarded to an `audience`, in batches past
+         * the `last_user_id` cursor under a lease, with link `buttons` and optional pins (`broadcast_pins` keeps where).
+         * `progress_message_id` is the admin's live progress message. A row of `kind` unpin takes its `source_id`'s pins
+         * off again; it has no message of its own.
          *
-         * `report_topics` — the topics the bot made in its admins' report group (a forum supergroup; which one is
-         * `report_chats`', and its topics are forgotten when another is connected): one per subject (`topic`,
-         * Reports\Topic), `thread_id` its message_thread_id. A null `thread_id` is a topic being made — or made again
-         * after an admin deleted it — by whoever holds the row (`lease_token` until `leased_until`), so two processes
-         * never make the same topic twice.
+         * `report_topics` — the topics the bot made in its report group, one per `topic`; a null `thread_id` is one being
+         * made by whoever holds the lease, so two processes never make it twice.
          *
-         * `report_messages` — what the shop tells that group, queued: Telegram takes 20 messages a minute in a group, so
-         * they go out paced, in order, and wait out a flood limit or an unreachable Telegram instead of being lost; what
-         * support must act on — a receipt, a delivery that failed (`priority` 0, Reports\Topic::priority()) — before the
-         * rest, and a customer's review (2) after all of it. A message the bot writes in the group itself, outside the
-         * queue — a receipt's prompt for a reason — is
-         * recorded as one sent (its `ref` what it asks about): a reply to the bot's messages is told by the message it
-         * answers, never by their words. `copy_chat_id`/`copy_message_id` is a customer's message to copy with `text` as its caption (a receipt sent in
-         * the bot), `photo_path` a picture of the shop's own to send with it as its caption (a receipt or a ticket's
-         * picture uploaded from a website or a panel, as `<folder>/<name>` under storage/uploads — Users\Services\
-         * CustomerPictures::reference()); `keyboard` the inline buttons it carries (a receipt's «تایید» / «رد», a ticket's
-         * «بستن»); `ref` names what a report is about so a later one can reply to it (`reply_ref`: a receipt's verdict
-         * under the receipt, a ticket's next message under its last one) and, with `clears_buttons`, take the buttons off
-         * it — a receipt decided is not decided again —; `ticket_id` the ticket a report is about, which an admin's reply
-         * to it in the group answers, and which keeps it while it is not closed (a week's of the rest are kept). A sender
-         * holds a row while it sends it (`lease_token` until `leased_until`); `attempts` counts the senders that went quiet
-         * holding it (a crash mid-send); once sent it records the group and `message_id`.
+         * `report_messages` — the report group's queue (Telegram takes 20 a minute in a group), sent by `priority` then in
+         * order, waiting out a flood limit instead of being lost. A receipt sent in the bot is copied
+         * (`copy_chat_id`/`copy_message_id`), a picture the shop keeps sent from `photo_path`. `ref` / `reply_ref` /
+         * `clears_buttons` thread a report under an earlier one and take its buttons off; `ticket_id` keeps a ticket's
+         * reports while it is open. A message the bot writes in the group outside the queue (a rejection's prompt) is
+         * recorded as one sent, so a reply is matched by the message it answers, never by its text.
          *
-         * `custom_emojis` — the premium emoji an admin showed the bot (/emoji), for the editors' picker: Telegram's
-         * `emoji_id`, the plain `emoji` it stands for, `file_id`, a still picture of it for the panel, and how Telegram
-         * draws it — `format` (static, animated = a Lottie animation, video = WebM; null until Telegram was asked), the
-         * `animation_file_id` that moves, and `repaint` (Telegram paints it in the colour of the text around it).
+         * `custom_emojis` — the premium emoji an admin showed the bot (/emoji), for the editors' picker: the plain `emoji`
+         * it stands for, a still picture (`file_id`), and how Telegram draws it (`format`, `animation_file_id`,
+         * `repaint`).
          */
         'telegram_updates' => static function (Blueprint $table): void {
             $table->foreignId('bot_id')->constrained('bots')->restrictOnDelete();
@@ -884,8 +1029,7 @@ return [
 
             $table->primary(['bot_id', 'update_id']);
             $table->index('received_at');
-            // A chat's pace: its updates of the last seconds, counted off the index (its own name: the columns', after the
-            // longest table prefix, would pass MySQL's 64 characters).
+            // A chat's pace, counted off the index (named: the default name would pass MySQL's 64 characters).
             $table->index(['bot_id', 'chat_id', 'received_at'], 'telegram_updates_pace_index');
         },
 
@@ -954,11 +1098,9 @@ return [
         },
 
         /*
-         * `report_chats` — each bot's report group as the shop knows it (Telegram\Reports\ReportGroupState), a row per
-         * bot: the group connected (`chat_id`, `title`, `connected_at`), what keeps reports from it (`problem`, a
-         * Reports\GroupProblem), until when sending waits (`paused_until`), the connect link's one-time `code`
-         * (encrypted, until `code_expires_at`) and the last group offered with it that could not become the report
-         * group (`attempt_*`). Runtime state, read afresh by whoever acts on it — not a setting.
+         * `report_chats` — each bot's report group (Telegram\Reports\ReportGroupState): the group connected, what keeps
+         * reports from it (`problem`), until when sending waits (`paused_until`), the connect link's one-time `code`
+         * (encrypted) and the last group that could not be connected (`attempt_*`). Runtime state, read afresh.
          */
         'report_chats' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -1012,15 +1154,13 @@ return [
             $table->string('error', 255)->nullable();
             $table->timestamps();
 
-            // A bot's queue (neither sent nor given up on) in the order it goes — by priority, then as it came: read off
-            // the index, however long the queue —, and what it sent in the last minute.
+            // A bot's queue in sending order, and what it sent in the last minute, read off the index.
             $table->index(['bot_id', 'sent_at', 'failed_at', 'priority'], 'report_messages_queue_index');
-            // What is old enough to go: every report but a ticket's in two ranges under a null ticket (ReportSender::
-            // prune(), every minute — the reports kept for a ticket still open never read again), a ticket's by its
-            // ticket (pruneTickets(), hourly).
+            // Pruning: reports of no ticket under a null `ticket_id` (ReportSender::prune()), a ticket's by its ticket
+            // (pruneTickets()), so the reports kept for open tickets are never read again.
             $table->index(['bot_id', 'ticket_id', 'sent_at', 'failed_at'], 'report_messages_pruning_index');
             $table->index('ref');
-            // The report an admin's reply in the group answers, by the message it replied to (a ticket's: Reports\TicketReplies).
+            // The report an admin's reply answers, by the message it replied to (Reports\TicketReplies).
             $table->index(['chat_id', 'message_id']);
         },
 
@@ -1039,13 +1179,13 @@ return [
         },
     ],
 
-    // What a new shop starts with — put into a table when it is made, never into one a rebuild carries rows into.
+    // The rows a new shop starts with, put into a table when it is made (never by a rebuild).
     'rows' => [
-        // The main bot: the shop's own (its token is config.php's).
+        // The main bot (its token lives in config.php).
         'bots' => static fn(): array => [
             ['id' => 1, 'created_at' => now(), 'updated_at' => now()],
         ],
-        // The wallet: the payment method every shop has (an agent's shop gets its own, PaymentMethods::createBuiltins()).
+        // The wallet: the payment method every shop has (an agent's shop gets its own as it opens).
         'payment_methods' => static fn(): array => [
             ['driver' => WalletGateway::key(), 'label' => WalletGateway::label(), 'config' => '[]', 'enabled' => true, 'sort' => 1, 'created_at' => now(), 'updated_at' => now()],
         ],

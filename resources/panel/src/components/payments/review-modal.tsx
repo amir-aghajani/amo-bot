@@ -6,6 +6,8 @@ import { DetailFooter, DetailModal } from '@/components/detail-modal'
 import { Fact, FactList } from '@/components/fact-list'
 import { LEDGER_NOTE_MAX } from '@/components/note-input'
 import { OperationsSection, useOperations, type OperationSpec } from '@/components/operations'
+import { DiscountFact } from '@/components/orders/order-discounts'
+import { orderBrings } from '@/components/orders/order-subject'
 import { MethodSummary } from '@/components/payments/method-summary'
 import { Reviewer } from '@/components/reviewer'
 import { StatusBadge } from '@/components/status-badge'
@@ -48,12 +50,14 @@ const ACTIONS: Record<Action, OperationSpec> = {
   },
 }
 
-/** What approving a payment brings, by what it paid for: the service, the wallet's charge, the agent's traffic. */
+/** What approving a payment brings, by what it paid for: the service, the wallet's charge, the agent's traffic, a service's extra traffic or time. */
 const BRINGS: Record<OrderType, { does: string; done: string }> = {
   purchase: { does: 'تحویل', done: 'تحویل داده شد' },
   renewal: { does: 'تحویل', done: 'تحویل داده شد' },
   wallet_topup: { does: 'شارژ کیف پول', done: 'کیف پول شارژ شد' },
   traffic: { does: 'افزودن حجم', done: 'حجم به ربات نماینده اضافه شد' },
+  extra_traffic: { does: 'افزودن حجم', done: 'حجم به سرویس اضافه شد' },
+  extra_time: { does: 'افزودن زمان', done: 'زمان به سرویس اضافه شد' },
 }
 
 /** Approving, worded by what it brings — and, without a receipt to approve, as the admin's own call («تایید دستی»). */
@@ -62,13 +66,19 @@ function approveOf(payment: PaymentRow): OperationSpec {
   return { ...ACTIONS.approve, label: `${payment.status === 'awaiting_review' ? 'تایید' : 'تایید دستی'} و ${does}`, done: `تایید شد و ${done}` }
 }
 
-/** A refund means a different thing for what the payment paid for: a service, an agent's traffic, a wallet top-up. */
+/** A refund means a different thing for what the payment paid for: a service, a service's extra, an agent's traffic, a wallet top-up. */
 function refundOf(payment: PaymentRow): OperationSpec {
   switch (payment.order.type) {
     case 'traffic':
       return {
         ...ACTIONS.refund,
         confirm: 'مبلغ به کیف پول نماینده برمی‌گردد و حجمی که با آن خریده بود از حجم رباتش کم می‌شود؛ اگر از آن حجم فروخته باشد، بازپرداخت انجام نمی‌شود.',
+      }
+    case 'extra_traffic':
+    case 'extra_time':
+      return {
+        ...ACTIONS.refund,
+        confirm: `مبلغ به کیف پول مشتری برمی‌گردد و پرداخت «بازپرداخت‌شده» می‌شود؛ ${payment.order.type === 'extra_traffic' ? 'حجمی' : 'زمانی'} که به سرویس اضافه شده سر جایش می‌ماند.`,
       }
     case 'wallet_topup':
       return {
@@ -96,9 +106,9 @@ interface ReviewModalProps {
 }
 
 /**
- * A payment as the admin works on it: the receipt, the facts, and every operation its state allows — and «بعدی», so a
- * queue of receipts is reviewed in a row: a decision keeps the dialog on the decided payment while a next one waits
- * (the dialog closes after the last), «بعدی» in focus, as it is on every payment «بعدی» brings.
+ * A payment's dialog: the receipt, the facts and the operations its state allows. «بعدی» walks the list so a queue of
+ * receipts is reviewed in a row: after a decision the dialog stays (with «بعدی» focused) while a next payment exists, and
+ * closes after the last.
  */
 export function ReviewModal({ payment, gone, onClose, onReviewed, onStale, next }: ReviewModalProps) {
   // A decision draws the payment afresh (`round`): its operations as for a payment just opened.
@@ -146,10 +156,7 @@ interface ReviewBodyProps {
   focusNext: boolean
 }
 
-/**
- * What a payment's operation changes beside the payment: its order, the service it delivered, the dashboard's counts, and
- * the customer's page — their counts, the wallet a refund or a top-up moved.
- */
+/** Reads a payment's operation changes besides the payment: orders, services, the dashboard and the customer's page and wallet. */
 const CHANGES = [queryKeys.orders, queryKeys.subscriptions, queryKeys.dashboards, queryKeys.everyUser, queryKeys.everyUserWallet]
 
 function ReviewBody({ payment, onClose, onReviewed, onDecided, onStale, next, focusNext }: ReviewBodyProps) {
@@ -202,6 +209,8 @@ function ReviewBody({ payment, onClose, onReviewed, onDecided, onStale, next, fo
 
 /** Everything known about the payment. */
 function Facts({ payment }: { payment: PaymentRow }) {
+  const brings = orderBrings(payment.order)
+
   return (
     <FactList>
       {/* A space, not a margin alone, between the badge and the words beside it: two words for assistive tech, not one. */}
@@ -216,9 +225,11 @@ function Facts({ payment }: { payment: PaymentRow }) {
       <Fact label="مبلغ">
         <span className="font-medium tabular">{formatMoney(payment.amount)}</span>
       </Fact>
+      <DiscountFact order={payment.order} />
       <CustomerFacts user={payment.user} />
       <Fact label="بابت">
         {ORDER_TYPE[payment.order.type]}
+        {brings && ` · ${brings.amount}`}
         {payment.order.plan && ` · ${payment.order.plan}`}
         {payment.order.server && ` · ${payment.order.server}`}
       </Fact>
@@ -279,10 +290,7 @@ function Facts({ payment }: { payment: PaymentRow }) {
 /** A picture every browser draws, by its file name; a photo Telegram sent as a photo has none and is a JPEG. */
 const DRAWABLE = /\.(jpe?g|png|webp|gif)$/i
 
-/**
- * The receipt itself (components/api-picture: drawn when the browser can, else what there is — the file to download, or
- * the server's word on why there is none) — or, without one, why there is none.
- */
+/** The receipt picture (ApiPicture), or why the payment has none. */
 function ReceiptView({ payment }: { payment: PaymentRow }) {
   if (!payment.receipt) {
     const why = payment.kind === 'instant' ? 'پرداخت از کیف پول؛ رسیدی در کار نیست' : payment.status === 'pending' ? 'مشتری هنوز رسیدی نفرستاده است' : 'این پرداخت رسیدی ندارد'

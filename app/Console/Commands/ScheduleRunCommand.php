@@ -12,9 +12,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
-/**
- * Cron entry point. Add to crontab:  * * * * * php /path/to/bin/console schedule:run >> /dev/null 2>&1
- */
+/** The cron entry point: `* * * * * php /path/to/bin/console schedule:run >> /dev/null 2>&1`. */
 #[AsCommand(name: 'schedule:run', description: 'Run the scheduled tasks that are due')]
 final class ScheduleRunCommand extends Command
 {

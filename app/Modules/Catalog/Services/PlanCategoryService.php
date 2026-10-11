@@ -16,10 +16,8 @@ use App\Support\Validation;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * Plan categories for the admin screen and the shop: create/rename/delete/reorder with Persian validation — a name
- * unique in the shop, the table's unique index deciding (Core\Database\UniqueName) — and the grouping the customer
- * browses (the categories with their sellable plans, plus an "other" group for plans without one): in the bot
- * (groups()), and on the shop's website with each plan's servers to pick (catalogue()).
+ * Plan categories as the panels keep them (a name unique in the shop), and the catalogue customers browse: the active
+ * categories with their sellable plans, then an «سایر پلن‌ها» group for the rest (groups(), catalogue()).
  */
 final class PlanCategoryService
 {
@@ -87,10 +85,8 @@ final class PlanCategoryService
     }
 
     /**
-     * What the customer browses in the bot: every active category, in order — an empty one is still offered and says so
-     * when opened — then the uncategorised sellable plans as one last group (category null). Without any category the
-     * single "other" group is the whole shop and the category step is skipped. Only plans with a server to pick right now
-     * are in (ServerSelector::offers()): the admin may keep any server on a plan, the customer sees what can deliver.
+     * What the customer browses: every active category in order (even an empty one), then the remaining sellable plans
+     * as one group with a null category. Only plans that can be sold now are in (ServerSelector::offers()).
      *
      * @return list<array{category: PlanCategory|null, plans: Collection<int, Plan>}>
      */
@@ -100,9 +96,7 @@ final class PlanCategoryService
     }
 
     /**
-     * groups(), with what each plan in them offers the customer to pick — the servers it can be delivered on now, in the
-     * plan's order (ServerSelector::offers(), by plan id): the shop's website shows its catalogue with them, read in the
-     * same few queries however many plans and servers.
+     * groups() with each plan's server choices (ServerSelector::offers(), by plan id), in a few queries however many plans.
      *
      * @return array{groups: list<array{category: PlanCategory|null, plans: Collection<int, Plan>}>, choices: array<int, list<array{server: Server, inbounds: Collection<int, ServerInbound>}>>}
      */

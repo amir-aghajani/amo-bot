@@ -11,9 +11,7 @@ use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-/**
- * The channels a customer must join ("کانال‌های اجباری" on the bot settings screen).
- */
+/** The channels a customer must join («کانال‌های اجباری» on the bot settings screen). */
 final class BotChannelsController extends ApiController
 {
     public function __construct(private readonly RequiredChannels $channels) {}

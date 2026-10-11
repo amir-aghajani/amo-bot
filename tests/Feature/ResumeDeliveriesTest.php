@@ -26,11 +26,9 @@ use Tests\Fakes\FakeProvider;
 use Tests\Support\FakeTelegram;
 
 /**
- * A delivery whose process died — the bot restarted after the money was in, before or during the delivery: once nobody
- * has touched the order for OrderService::STALE_PROCESSING_MINUTES, the task (every minute, in every shop) delivers it
- * as support's retry would, and the customer hears it only when it worked, as a reply to their receipt. A failed
- * delivery is never taken up — it waits for support —, a delivery that may still be on its way is left alone, an order
- * that breaks holds up none of the others, and the run stops at its share of time.
+ * Resuming deliveries a dead process left: stale paid orders are delivered as a retry would and the customer told only on
+ * success; failed or possibly-still-running deliveries are left alone, one failure holds up no other, and the run stops at
+ * its time budget.
  */
 final class ResumeDeliveriesTest extends DatabaseTestCase
 {
@@ -139,7 +137,7 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
 
     public function testAnOrderThatBreaksHoldsUpNoneOfTheOthers(): void
     {
-        // An agent's traffic for a bot they do not have: a fault of the shop's own, the order fails with the general reason.
+        // An agent's traffic for a bot they do not have: a fault in the shop itself, the order fails with the general reason.
         $broken = $this->paidOrder($this->topUpOrder($this->customer, '30000.00', ['type' => OrderType::Traffic, 'status' => OrderStatus::Paid, 'traffic_bytes' => 1]));
         $topUp = $this->paidOrder($this->topUpOrder($this->customer, '20000.00', ['status' => OrderStatus::Paid]));
         $logs = $this->logs();

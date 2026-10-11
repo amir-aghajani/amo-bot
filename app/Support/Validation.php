@@ -6,9 +6,7 @@ namespace App\Support;
 
 use Psr\Http\Message\UploadedFileInterface;
 
-/**
- * The validation sentences every form repeats, worded once.
- */
+/** The validation sentences every form repeats, worded once. */
 final class Validation
 {
     /** A settings switch that did not arrive as on/off. */
@@ -20,10 +18,7 @@ final class Validation
         return "{$label} حداکثر {$max} کاراکتر است.";
     }
 
-    /**
-     * Why PHP did not take an uploaded file whole — past the server's own limit (php.ini's, which may be below the
-     * form's), or cut short —; null for one it took.
-     */
+    /** Why PHP did not take an uploaded file whole (past php.ini's limit, or cut short); null when it did. */
     public static function uploadFailure(UploadedFileInterface $file): ?string
     {
         return match ($file->getError()) {

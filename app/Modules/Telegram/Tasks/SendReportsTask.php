@@ -9,10 +9,8 @@ use App\Core\Scheduling\Task;
 use App\Modules\Telegram\Reports\ReportSender;
 
 /**
- * Every minute: what waits for the admins' report group goes out — what the panel queued (a receipt approved there),
- * what the other tasks just did (they run before this one), and what a flood limit or an unreachable Telegram held
- * back — as much as the minute takes, within the run's time; then old rows are forgotten. The bot also sends after
- * every update it answers, so this is what keeps a webhook installation's panel-made reports moving.
+ * Every minute (last in the run): sends what waits for the report group — what the panel and the other tasks queued, or
+ * what a pause held back — then forgets old rows. The bot also sends after every update.
  */
 final class SendReportsTask implements Task
 {

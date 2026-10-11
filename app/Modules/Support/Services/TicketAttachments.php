@@ -21,16 +21,14 @@ use Psr\Http\Message\UploadedFileInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * A ticket message's picture, under the shop's one rule for a picture it is sent (Users\Services\CustomerPictures): an
- * upload judged by its bytes and kept in the tickets' folder (PictureFolder::Tickets, the container's `tickets.path`,
- * storage/uploads/tickets) under a name of the shop's own — until its ticket has been closed KEEP_DAYS (prune()): then it
- * goes, its message saying it had one —, or a photo sent in Telegram, kept by its file id; served on demand to the panels
- * and to the customer's website (fetch()), and sent to a customer's chat as a photo (send(): support's answer, the
- * bot's ticket screen).
+ * A ticket message's picture, under the shop's one picture rule (Users\Services\CustomerPictures): an upload judged by
+ * its bytes and kept in the tickets' folder (`tickets.path`) under a name the shop makes up until its ticket has been
+ * closed KEEP_DAYS (prune()), or a photo sent in Telegram, kept by its file id. Served to the panels and the website
+ * (fetch()), and sent to a customer's chat as a photo (send(): support's answer, the bot's ticket screen).
  */
 final class TicketAttachments
 {
-    /** Days an uploaded picture of a closed ticket is kept once it closed — a ticket opened again keeps its own. */
+    /** Days an uploaded picture of a closed ticket is kept after it closed; a reopened ticket keeps its own. */
     public const KEEP_DAYS = 30;
 
     /** What a refusal of a message's picture calls it. */
@@ -43,8 +41,7 @@ final class TicketAttachments
     ) {}
 
     /**
-     * An upload as a message's picture, judged (CustomerPictures::judge()); null for none — no file, or a form sent
-     * without one.
+     * An upload judged as a message's picture (CustomerPictures::judge()); null for no file.
      *
      * @throws ValidationException 422 on `file`
      * @throws StorageFullException 503: the host's disk has no room for it
@@ -60,8 +57,8 @@ final class TicketAttachments
     }
 
     /**
-     * What a message of the ticket records of its picture: an upload kept in the tickets' folder (its name there), a
-     * Telegram photo's file id — and the picture's name; nothing without one.
+     * Keep the picture and return the message's columns for it: an upload's name in the tickets' folder, or a Telegram
+     * file id, and the picture's name; nothing without one.
      *
      * @return array<string, string>
      * @throws \RuntimeException when the folder cannot be written
@@ -78,7 +75,7 @@ final class TicketAttachments
         };
     }
 
-    /** An uploaded picture nobody needs any more: a message that was never written after all. */
+    /** Delete an uploaded picture nobody needs: its message was not written after all. */
     public function discard(string $path): void
     {
         $this->pictures->discard(PictureFolder::Tickets, $path);
@@ -88,9 +85,8 @@ final class TicketAttachments
      * The message's picture: its bytes, their type as the bytes say, and its name.
      *
      * @return array{body: string, mime: string, name: string}
-     * @throws AttachmentUnavailableException 404: none, or its file is no more — gone from Telegram, deleted, no longer
-     *                                        kept (its ticket closed KEEP_DAYS)
-     * @throws TelegramUnreachableException 502: Telegram could not be asked — the picture is still there
+     * @throws AttachmentUnavailableException 404: none, or its file is gone (from Telegram, or no longer kept here)
+     * @throws TelegramUnreachableException 502: Telegram could not be asked; the picture is still there
      */
     public function fetch(TicketMessage $message): array
     {
@@ -105,11 +101,10 @@ final class TicketAttachments
     }
 
     /**
-     * The message's picture sent to a chat as a photo of its own, `$options` its caption and buttons — Telegram's by its
-     * file id, an upload by its bytes; with `$fetch`, a file id Telegram will not send as a photo (a picture the customer
-     * sent as a file) fetched and sent by its bytes. True once it went; false when it could not — none is kept, its file
-     * is gone, Telegram turned the picture itself down. The chat's own trouble (blocked, gone) and Telegram's (out of
-     * reach) go up, as any message's do.
+     * Send the message's picture to a chat as a photo, with `$options` (caption, buttons): Telegram's by its file id, an
+     * upload by its bytes. With `$fetch`, a file id Telegram will not send as a photo (a picture sent as a file) is
+     * fetched and sent by its bytes. True once it went; false when it could not (none kept, file gone, Telegram turned
+     * the picture down). The chat's own trouble (blocked, gone) and Telegram's (out of reach) go up like any message's.
      *
      * @param array<string, mixed> $options
      * @throws TelegramApiException
@@ -146,10 +141,9 @@ final class TicketAttachments
     }
 
     /**
-     * The uploaded pictures of the shop's tickets closed KEEP_DAYS ago go — the file deleted once its message no longer
-     * names it, each message's own name left, so it still says it had a picture (fetch(): no longer kept). One opened
-     * again meanwhile keeps its own: the message is let go of only while its ticket is closed still. Telegram's pictures
-     * stay Telegram's.
+     * Delete the uploaded pictures of the shop's tickets closed KEEP_DAYS ago. Each message is cleared first by a
+     * conditional update that still requires its ticket closed, so a ticket reopened meanwhile keeps its pictures; the
+     * message keeps the picture's name, so it still says it had one. Telegram's pictures stay Telegram's.
      */
     public function prune(): void
     {
@@ -168,8 +162,8 @@ final class TicketAttachments
     }
 
     /**
-     * A picture Telegram turned down: the chat's trouble (the customer blocked the bot, their chat is gone) and Telegram's
-     * own (out of reach, a flood limit) are any message's, and go up; anything else is the picture's.
+     * Rethrow a refusal that is not about the picture: the chat's trouble (blocked, gone) or Telegram's own (out of reach,
+     * a flood limit), as for any message.
      *
      * @throws TelegramApiException
      */

@@ -9,9 +9,9 @@ use App\Core\Scheduling\Task;
 use App\Modules\Subscriptions\Services\Grants;
 
 /**
- * Carries on with the grants under way («افزودن زمان و حجم», «هدیه همگانی») when no screen is doing it: every minute,
- * each server's part in turn, for the scheduler's share of time (shared hosting kills long cron runs). One that waits
- * for its panel tries it again here, once the panel is no longer left alone.
+ * Carries on with the grants under way when no screen is working them: every minute, each running part in turn, for the
+ * scheduler's share of time (shared hosting kills long cron runs). A part waiting for its panel is tried again here once
+ * that panel's backoff is over.
  */
 final class GrantsTask implements Task
 {

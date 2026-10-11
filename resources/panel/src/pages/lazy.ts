@@ -10,6 +10,10 @@ export const BotTextsPage = lazyPage(
   () => import('@/pages/bot-texts'),
   (module) => module.BotTextsPage,
 )
+export const CashbackPage = lazyPage(
+  () => import('@/pages/cashback'),
+  (module) => module.CashbackPage,
+)
 export const CustomerPage = lazyPage(
   () => import('@/pages/customer'),
   (module) => module.CustomerPage,
@@ -18,9 +22,25 @@ export const DashboardPage = lazyPage(
   () => import('@/pages/dashboard'),
   (module) => module.DashboardPage,
 )
+export const DiscountCodesPage = lazyPage(
+  () => import('@/pages/discount-codes'),
+  (module) => module.DiscountCodesPage,
+)
+export const GiftCodesPage = lazyPage(
+  () => import('@/pages/gift-codes'),
+  (module) => module.GiftCodesPage,
+)
 export const KeyboardsPage = lazyPage(
   () => import('@/pages/keyboards'),
   (module) => module.KeyboardsPage,
+)
+export const LotteryPage = lazyPage(
+  () => import('@/pages/lottery'),
+  (module) => module.LotteryPage,
+)
+export const LoyaltyPage = lazyPage(
+  () => import('@/pages/loyalty'),
+  (module) => module.LoyaltyPage,
 )
 export const OrdersPage = lazyPage(
   () => import('@/pages/orders'),
@@ -50,6 +70,10 @@ export const ReviewsPage = lazyPage(
   () => import('@/pages/reviews'),
   (module) => module.ReviewsPage,
 )
+export const SalesPage = lazyPage(
+  () => import('@/pages/sales'),
+  (module) => module.SalesPage,
+)
 export const SubscriptionsPage = lazyPage(
   () => import('@/pages/subscriptions'),
   (module) => module.SubscriptionsPage,
@@ -69,4 +93,8 @@ export const UsersPage = lazyPage(
 export const WebsiteSettingsPage = lazyPage(
   () => import('@/pages/website-settings'),
   (module) => module.WebsiteSettingsPage,
+)
+export const WheelPage = lazyPage(
+  () => import('@/pages/wheel'),
+  (module) => module.WheelPage,
 )

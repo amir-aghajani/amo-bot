@@ -7,23 +7,18 @@ namespace App\Modules\Updates;
 use App\Core\Support\Files;
 
 /**
- * The app's own top-level paths — the folders and files a release replaces: app/, vendor/, public/, …, the root's
- * .htaccess — swapped for a release's, and back. A folder is moved, never copied: aside into the updater's previous/,
- * the release's into its place — each a rename on one file system, at once however many files it holds. A file
- * (composer.json, the root's .htaccess) is copied aside and replaced in one rename, so it is never missing. Both ways
- * read where each path stands off the disk itself — the release's copy still in its folder or not, the app's in
- * previous/ or not —, so an install a crash cut short is finished (install()) or taken back (restore()) from wherever it
- * stopped, by whichever code runs then. config.php and storage/ are no path of a release's (Manifest). What a host's
- * own tools wrote into the .htaccess files a release replaces — the PHP version and settings cPanel's MultiPHP tools
- * keep there, in the document root's — goes on into the release's (HOST_FILES): without it the shop could wake up on
- * another PHP.
+ * Swaps the app's top-level paths (app/, vendor/, public/, the root .htaccess…) for a release's, and back. A folder is
+ * renamed (instant on one file system) aside into previous/; a file is copied aside and replaced in one rename, so it is
+ * never missing. Both directions read each path's state off the disk, so a crash at any point is finished or taken back
+ * by whichever code runs next. cPanel's own blocks in the .htaccess files (the PHP version) are carried into the
+ * release's — without them the shop could wake up on another PHP.
  */
 final class AppFolders
 {
-    /** The .htaccess files a release replaces that a host's tools write into, by the path of the release that brings each. */
+    /** The .htaccess files host tools write into, by the release path that brings each. */
     private const HOST_FILES = ['.htaccess' => '.htaccess', 'public' => 'public/.htaccess'];
 
-    /** A block a host's tool wrote: from its «# … BEGIN cPanel-generated …» line to its «# … END cPanel-generated …» one. */
+    /** A host tool's block: from «# … BEGIN cPanel-generated …» to «# … END cPanel-generated …». */
     private const HOST_BLOCK = '/^#[^\r\n]*BEGIN cPanel-generated[^\r\n]*\R.*?^#[^\r\n]*END cPanel-generated[^\r\n]*/ms';
 
     public function __construct(
@@ -34,8 +29,8 @@ final class AppFolders
     ) {}
 
     /**
-     * The release's paths in the app's place, the app's own kept aside — those still to swap, when some are already —, the
-     * host's own lines kept in the .htaccess files among them.
+     * Put the release's paths in the app's place (those not swapped yet), the app's kept aside, the host's .htaccess
+     * blocks carried over.
      *
      * @param list<string> $paths
      * @throws \RuntimeException when one cannot be moved: what moved stays so, for restore() to take back
@@ -71,7 +66,7 @@ final class AppFolders
     }
 
     /**
-     * The app's own paths back in their place, the release's back in its folder — as far as install() took them.
+     * Undo install() as far as it went: the app's paths back, the release's back in its folder.
      *
      * @param list<string> $paths
      * @throws \RuntimeException when one cannot be moved back
@@ -100,8 +95,8 @@ final class AppFolders
     }
 
     /**
-     * Which of the app's paths PHP may not change — '.' for the app's folder itself: one not its own (another account's,
-     * PHP running as the web server's user), or one it may not write; null when it may change them all.
+     * The first of the app's paths PHP may not change ('.' for the app's folder: not its own, or not writable); null
+     * when it may change them all.
      *
      * @param list<string> $paths
      */
@@ -119,10 +114,7 @@ final class AppFolders
         return null;
     }
 
-    /**
-     * Whether a folder moves from the updater's folder into the app's and back: the two on one file system, both PHP's to
-     * write in — what install() does to every path, tried on one of nothing.
-     */
+    /** Whether an empty folder can be renamed from previous/ into the app's folder and back, as install() will do. */
     public function renames(): bool
     {
         $probe = '.amobot-update-' . bin2hex(random_bytes(4));
@@ -151,7 +143,7 @@ final class AppFolders
         return is_dir("{$this->app}/.git");
     }
 
-    /** Whether the version a release replaced is kept aside, to put back: what every version has (Manifest::ESSENTIAL). */
+    /** Whether the replaced version is kept aside in full, so a rollback is possible. */
     public function kept(): bool
     {
         foreach (Manifest::ESSENTIAL as $path) {
@@ -164,8 +156,7 @@ final class AppFolders
     }
 
     /**
-     * The blocks the host's tools wrote into the app's `$file` before the swap (kept aside), at the end of the release's —
-     * those it does not hold already, so a second go adds nothing.
+     * Append to the release's `$file` the host tools' blocks of the replaced one it does not hold yet.
      *
      * @throws \RuntimeException when the file cannot be written
      */
@@ -183,7 +174,7 @@ final class AppFolders
         }
     }
 
-    /** Whether there is something at the path: a file, a folder, or a link — even one to nothing. */
+    /** Whether anything is at the path, a dangling link included. */
     private static function exists(string $path): bool
     {
         return file_exists($path) || is_link($path);

@@ -5,12 +5,9 @@ declare(strict_types=1);
 namespace App\Core\Security;
 
 /**
- * RFC 6238 time-based one-time passwords as the authenticator apps make them — SHA-1, 30-second steps, six digits: the
- * code a 3x-ui panel's two-factor login takes when the shop signs in to it, and the second step a customer of a shop's
- * website signs in with (the app on their phone). A secret is 160 random bits in base32 (secret()), handed to the app as
- * an otpauth:// address (uri()). verify() takes the code of the step now or of one either side of it (a phone's clock a
- * little off, a code typed as it turned), and only of a step later than the last one taken: a code opens once. The
- * clock is the shop's (now() — the tests move it).
+ * RFC 6238 one-time passwords as authenticator apps make them (SHA-1, 30-second steps, six digits): a 3x-ui panel's
+ * two-factor login, and a website customer's second step. verify() takes the current step's code or one either side
+ * (clock drift), and only a step later than the last one taken, so a code opens once. Uses the shop's clock (now()).
  */
 final class Totp
 {
@@ -31,9 +28,8 @@ final class Totp
     }
 
     /**
-     * The step `$code` is the code of — now's, or one either side of it — when that step is later than `$after` (the
-     * last one a code was taken for, so none opens twice); null when it is none of them. Of two steps one code is the
-     * code of, the later is taken: what it opened opens nothing again.
+     * The step (now's, or one either side) whose code `$code` is, if later than `$after` — the last step taken; null
+     * otherwise. Of two matching steps the later is returned, so neither opens again.
      */
     public static function verify(string $base32Secret, string $code, ?int $after = null, ?int $timestamp = null): ?int
     {
@@ -69,9 +65,8 @@ final class Totp
     }
 
     /**
-     * The address an authenticator app takes the secret by — a QR code of it, or a tap on the phone it is shown on —, the
-     * Key URI Format's: the issuer and the account the app lists it under, and the code's own terms. Neither may hold a
-     * colon (the label's own separator): one is read as a space.
+     * The otpauth:// address (Key URI Format) an app takes the secret by, listed under the issuer and account. A colon
+     * in either (the label's separator) becomes a space.
      */
     public static function uri(string $base32Secret, string $issuer, string $account): string
     {
@@ -102,7 +97,7 @@ final class Totp
         return str_pad((string) ($binary % (10 ** self::DIGITS)), self::DIGITS, '0', STR_PAD_LEFT);
     }
 
-    /** The secret's bytes — as typed: spaces, dashes, padding and lower case are all read. */
+    /** The secret's bytes; spaces, dashes, padding and lower case are accepted. */
     private static function key(string $base32Secret): string
     {
         $encoded = strtoupper(str_replace([' ', '-', '='], '', $base32Secret));

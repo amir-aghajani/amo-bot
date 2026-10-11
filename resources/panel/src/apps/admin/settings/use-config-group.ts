@@ -14,10 +14,7 @@ interface ConfigGroupOptions<T extends object> {
   reads?: (values: T) => unknown
 }
 
-/**
- * One group of the panel's own settings (config.php) as a card's form: a save PUTs the group and the whole screen's copy is
- * what it answers — every group is read again from the file.
- */
+/** One config.php group as a card's form: a save PUTs the group, and its answer (every group, read again from the file) replaces the screen's copy. */
 export function useConfigGroup<T extends object>(initial: T, { save, saved, invalidates, reads }: ConfigGroupOptions<T>) {
   return useSettingsGroup<T, ConfigSettingsResponse, ConfigSettingsResponse>({
     save,

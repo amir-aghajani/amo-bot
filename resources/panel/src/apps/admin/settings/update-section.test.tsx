@@ -31,7 +31,7 @@ function answer(update: Partial<UpdateStatus>): Answer {
   return json({ update: { ...AVAILABLE, ...update } } satisfies UpdateResponse)
 }
 
-/** What the page says, its words across the elements they are set in. */
+/** What the page says, its text across the elements it is set in. */
 const shown = () => document.body.textContent ?? ''
 
 function open(update: Partial<UpdateStatus> = {}) {
@@ -87,7 +87,7 @@ describe('the update screen', () => {
 })
 
 describe('an update', () => {
-  it('is begun behind a second look, driven a step a request, and the page reloaded on the new build', async () => {
+  it('starts after confirmation, runs one step per request, and reloads the page on the new build', async () => {
     const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => undefined)
     open()
     server().on('POST', `${SCREEN}/start`, answer({ available: false, run: run('download') }))
@@ -130,7 +130,7 @@ describe('an update', () => {
     expect(screen.queryByRole('button', { name: 'لغو به‌روزرسانی' })).toBeNull()
   })
 
-  it('installed is taken back behind a second look, and the page reloaded on the version it put back', async () => {
+  it('once installed is rolled back after confirmation, and reloads the page on the restored version', async () => {
     const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => undefined)
     open({ available: false, run: run('done', { progress: 100, rollback: true, finished_at: '2026-10-08T07:00:00+00:00' }) })
     server().on('POST', `${SCREEN}/rollback`, answer({ run: run('rolled_back', { progress: 100, finished_at: '2026-10-08T07:05:00+00:00' }) }))

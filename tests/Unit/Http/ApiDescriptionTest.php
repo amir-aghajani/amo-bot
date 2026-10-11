@@ -53,8 +53,11 @@ final class ApiDescriptionTest extends TestCase
         '/captcha/verify',
     ];
 
-    /** What anyone does on a website, a signed-in customer as themselves: a review, theirs when their token comes with it. */
-    private const STORE_EITHER = ['post /reviews'];
+    /**
+     * What anyone does on a website, a signed-in customer as themselves: what the shop sells, read as offered to them —
+     * a plan for first purchases left out once they bought —, and a review, theirs when their token comes with it.
+     */
+    private const STORE_EITHER = ['get /plans', 'get /plans/{id}', 'post /reviews'];
 
     public function testTheDescriptionIsValidOpenApi(): void
     {

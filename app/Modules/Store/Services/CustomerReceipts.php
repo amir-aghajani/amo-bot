@@ -21,14 +21,10 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * The receipt of a card transfer, uploaded from the shop's website — taken as the bot takes one (ReceiptHandler): for the
- * customer's own payment while it awaits its receipt (PaymentService::awaitsReceipt()), a picture by its bytes
- * (Receipts::judge()), kept among the shop's uploads (Receipts::keep()), then the same compare-and-swap and the same
- * report to the group (PaymentService::submitUpload()) — but no review window: an uploaded receipt always waits for
- * support (AutoApproveReceiptsTask). A picture that lost the compare-and-swap — another receipt, or a decision, came
- * first — is not kept. A customer uploads CustomerPictures::UPLOADS pictures in its window at most — receipts and their
- * tickets' pictures alike, each a picture kept on the host: one budget (CustomerPictures::budget()). None is taken while
- * the shop takes no orders — its bot switched off (CustomerCheckout::takingOrders()).
+ * A card transfer's receipt uploaded from the website, taken as the bot takes one: for the customer's own payment while
+ * it awaits a receipt, judged as a picture by its bytes, kept among the shop's uploads, then the bot's compare-and-swap
+ * and report (PaymentService::submitUpload()). Unlike the bot's, an uploaded receipt never auto-approves: it always waits
+ * for support. Uploads share the customer's one picture budget with their tickets (CustomerPictures::budget()).
  */
 final class CustomerReceipts
 {
@@ -42,14 +38,14 @@ final class CustomerReceipts
     ) {}
 
     /**
-     * The picture `$file`, with the customer's words (`note`, the receipt's length rule), as the receipt of their payment
-     * `$paymentId` — and its order as it stands now: the payment awaiting review.
+     * Take `$file` (with the customer's `note`) as the receipt of their payment `$paymentId`; answers its order, the payment
+     * now awaiting review. A picture that loses the compare-and-swap — another receipt or a decision came first — is
+     * discarded, as is one whose save failed.
      *
      * @param array<string, mixed> $input The form's other fields
      * @throws ModelNotFoundException 404: no payment of theirs
-     * @throws ValidationException 422 on `status` (it awaits no receipt — in the words support reads the state in), `note`
-     *                             or `file`
-     * @throws TooManyAttemptsException 429: they uploaded CustomerPictures::UPLOADS pictures in its window
+     * @throws ValidationException 422 on `status` (it awaits no receipt), `note` or `file`
+     * @throws TooManyAttemptsException 429: the customer's picture budget is spent
      * @throws StorageFullException 503: the host's disk has no room for it
      * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
      */
@@ -61,7 +57,7 @@ final class CustomerReceipts
             throw ValidationException::on('status', $this->actions->refusal($payment, 'receipt'));
         }
 
-        // The note and the picture refused at once, before anything is kept.
+        // The note and the picture are refused together, before anything is kept.
         $noteRefused = null;
         try {
             $note = Input::note($input, 'note', PaymentService::RECEIPT_NOTE_MAX);
@@ -76,23 +72,20 @@ final class CustomerReceipts
         if ($noteRefused !== null) {
             throw $noteRefused;
         }
-        // Counted once it passed its checks, as it is kept: the customer's one budget of pictures.
-        $wait = $this->limiter->attempt([CustomerPictures::budget($customer)]);
-        if ($wait > 0) {
-            throw TooManyAttemptsException::wait(CustomerPictures::TOO_MANY, $wait);
-        }
+        // Counted once it passed its checks: the customer's one budget of pictures.
+        $this->limiter->enforce([CustomerPictures::budget($customer)], CustomerPictures::TOO_MANY);
 
         $path = $this->receipts->keep($payment, $picture['bytes'], $picture['extension']);
         try {
             $submitted = $this->payments->submitUpload($payment, $path, $note, $file?->getClientFilename());
         } catch (\Throwable $e) {
-            // Taken back with what refused it — the receipt's report the database turned down, say —: no receipt either.
+            // The save failed (its report refused by the database, say): no receipt, so no file either.
             $this->receipts->discard($path);
 
             throw $e;
         }
         if (!$submitted) {
-            // Another receipt — an album's other picture — or a decision came first: this picture is no receipt.
+            // Another receipt (an album's other picture) or a decision came first.
             $this->receipts->discard($path);
 
             throw ValidationException::on('status', $this->actions->refusal($payment->refresh(), 'receipt'));

@@ -23,15 +23,12 @@ use App\Support\Input;
 use Psr\Log\LoggerInterface;
 
 /**
- * The buttons under a receipt in the report group — «✅ تایید» and «❌ رد» — for the bot's admins only (GroupButtons::
- * admin()): they do what the payments screen does, through PaymentActions — its rules (a receipt decided here, on the
- * screen or by the timer is not decided again; an admin's own receipt is another admin's to approve), the customer told
- * by it, the admin's account the one who decided (Auth\Actor::groupAdmin()). «رد» asks first: without a reason, or with one the admin writes as a reply to the bot's prompt (a ForceReply), which
- * the customer reads as support's note. The prompt is recorded as the bot posts it (ReportMessage::posted(): the group,
- * its message, the payment it asks about), and a reply is a reason only when it answers that very message, in the
- * receipts topic — never by what the replied message's words say: customers' words are in the group's reports (a
- * ticket's, their names, an agency request), and would name another customer's receipt. A decided receipt loses its
- * buttons — here at once, and by its verdict's report (ReportSender) whoever decided.
+ * «✅ تایید» and «❌ رد» under a receipt in the report group, for bot admins only: they act through PaymentActions, as
+ * the payments screen does (its rules, the customer told, the admin recorded as the reviewer; an admin's own receipt is
+ * another admin's to approve). «رد» asks first — without a reason, or with one the admin writes as a reply to the bot's
+ * prompt. The prompt is recorded as it is posted, and a reply counts as a reason only when it answers that very message
+ * in the receipts topic — never judged by the replied message's words, which may be a customer's. A decided receipt
+ * loses its buttons.
  */
 final class ReceiptReview implements GroupHandler
 {
@@ -44,7 +41,7 @@ final class ReceiptReview implements GroupHandler
     private const REJECT_WITH_REASON = 'nw';
     private const BACK = 'bk';
 
-    /** What `ref` the record of a prompt for a reason carries: `prompt:<payment id>`, the payment it asks about. */
+    /** The `ref` a recorded prompt for a reason carries: `prompt:<payment id>`. */
     private const PROMPT_REF = 'prompt:';
     private const PROMPT = '✍️ دلیل رد رسید پرداخت #%d را در پاسخ به همین پیام بنویسید؛ مشتری آن را به عنوان توضیح پشتیبانی می‌بیند.%s';
 
@@ -66,8 +63,7 @@ final class ReceiptReview implements GroupHandler
     ) {}
 
     /**
-     * The two buttons under a receipt that waits for review — «تایید» on a Persian reader's right (Telegram lays a row
-     * out left to right).
+     * The two buttons under a receipt waiting for review, «تایید» on a Persian reader's right.
      *
      * @return list<list<array<string, mixed>>>
      */
@@ -78,54 +74,47 @@ final class ReceiptReview implements GroupHandler
             ->build()['inline_keyboard'];
     }
 
-    /** A press on one of the buttons, from a group. */
+    /** A press on one of the buttons. */
     public function handle(Update $update): void
     {
-        $callbackId = (string) $update->callbackId();
         $args = $update->callbackArgs(self::PREFIX) ?? [];
         if (count($args) !== 2 || !in_array($args[0], [self::APPROVE, self::REJECT, self::REJECT_PLAIN, self::REJECT_WITH_REASON, self::BACK], true)) {
-            $this->api->answerCallbackQuery($callbackId);
+            $this->groupButtons->answer($update);
 
             return;
         }
         [$action, $paymentId] = $args;
 
-        $admin = GroupButtons::admin($update->from());
+        $admin = $this->groupButtons->presser($update, self::NOT_ADMIN);
         if ($admin === null) {
-            $this->api->answerCallbackQuery($callbackId, self::NOT_ADMIN, alert: true);
-
             return;
         }
 
-        $chatId = (int) $update->chatId();
-        $messageId = (int) $update->messageId();
         $payment = self::find((int) $paymentId);
         if ($payment === null) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, self::NOT_FOUND, alert: true);
+            $this->groupButtons->dismiss($update, self::NOT_FOUND);
 
             return;
         }
 
         match ($action) {
-            self::APPROVE => $this->approve($callbackId, $chatId, $messageId, $payment, $admin),
-            self::REJECT_PLAIN => $this->reject($callbackId, $chatId, $messageId, $payment, $admin),
+            self::APPROVE => $this->approve($update, $payment, $admin),
+            self::REJECT_PLAIN => $this->reject($update, $payment, $admin),
             self::REJECT_WITH_REASON => $this->askReason($update, $payment, $admin),
             // «رد» and «بازگشت» only change the buttons, while there is still something to decide.
-            default => $this->showButtons($callbackId, $chatId, $messageId, $payment, $action === self::REJECT ? self::rejectButtons($payment->id) : self::buttons($payment->id)),
+            default => $this->showButtons($update, $payment, $action === self::REJECT ? self::rejectButtons($payment->id) : self::buttons($payment->id)),
         };
     }
 
     /**
-     * A message in the receipts topic that replies to the bot's prompt for a reason — that very message, as the bot
-     * recorded it —: the receipt is rejected with it, as the payments screen's note. False when the message is not such a
-     * reply (it is none of this class's business).
+     * A message replying to the bot's prompt for a reason, in the receipts topic: the receipt is rejected with it as
+     * support's note. False when the message is no such reply (not this class's business).
      */
     public function reason(Update $update): bool
     {
         $message = $update->raw['message'] ?? null;
-        $prompt = is_array($message) ? ($message['reply_to_message'] ?? null) : null;
-        if (!is_array($message) || !is_array($prompt) || (int) ($prompt['from']['id'] ?? 0) !== $this->api->botId()) {
+        $prompt = is_array($message) ? $this->groupButtons->botReplied($message) : null;
+        if ($prompt === null) {
             return false;
         }
 
@@ -136,29 +125,19 @@ final class ReceiptReview implements GroupHandler
             return false;
         }
 
-        $reply = fn(string $text) => $this->groupButtons->say($chatId, (int) ($message['message_id'] ?? 0), GroupButtons::threadOf($message), $text);
-
-        // An admin writing as the group (anonymous) has no account to authorise.
-        if (isset($message['sender_chat'])) {
-            $reply(GroupButtons::ANONYMOUS);
-
-            return true;
-        }
-        $admin = GroupButtons::admin($update->from());
+        $admin = $this->groupButtons->writer($chatId, $message, self::NOT_ADMIN);
         if ($admin === null) {
-            $reply(self::NOT_ADMIN);
-
             return true;
         }
-        if (trim((string) ($message['text'] ?? '')) === '') {
-            $reply(self::TEXT_ONLY);
+        if (trim((string) $update->text()) === '') {
+            $this->groupButtons->sayUnder($chatId, $message, self::TEXT_ONLY);
 
             return true;
         }
 
         $payment = self::find($paymentId);
         if ($payment === null) {
-            $reply(self::NOT_FOUND);
+            $this->groupButtons->sayUnder($chatId, $message, self::NOT_FOUND);
             $this->api->deleteMessage($chatId, $promptId);
 
             return true;
@@ -169,7 +148,7 @@ final class ReceiptReview implements GroupHandler
         } catch (ValidationException $e) {
             // Too long: the prompt stays for another try. Decided meanwhile: the prompt is moot.
             $tooLong = $e->errors()['text'][0] ?? null;
-            $reply($tooLong ?? $e->getMessage());
+            $this->groupButtons->sayUnder($chatId, $message, $tooLong ?? $e->getMessage());
             if ($tooLong === null) {
                 $this->api->deleteMessage($chatId, $promptId);
             }
@@ -183,66 +162,63 @@ final class ReceiptReview implements GroupHandler
         return true;
     }
 
-    private function approve(string $callbackId, int $chatId, int $messageId, Payment $payment, User $admin): void
+    private function approve(Update $update, Payment $payment, User $admin): void
     {
         try {
             $this->actions->approve($payment, Actor::groupAdmin($admin));
         } catch (ActorRefusedException $e) {
-            // Their own receipt: another admin's to decide — its buttons stay for them.
-            $this->api->answerCallbackQuery($callbackId, $e->getMessage(), alert: true);
+            // Their own receipt: another admin's to decide, so the buttons stay.
+            $this->groupButtons->answer($update, $e->getMessage(), alert: true);
 
             return;
         } catch (ValidationException|OrderNotPayableException $e) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $e->getMessage(), alert: true);
+            $this->groupButtons->dismiss($update, $e->getMessage());
 
             return;
         }
 
-        $this->groupButtons->set($chatId, $messageId, null);
+        $this->groupButtons->buttons($update, null);
         $this->logger->info('Payment {id} approved from the report group by {reviewer}', ['id' => $payment->id, 'reviewer' => $payment->reviewer]);
 
-        // Paid but not delivered (a panel out of reach): said at once — the retry is under the failure's report.
+        // Paid but not delivered (a panel out of reach): said at once; the retry is under the failure's report.
         $order = $payment->order;
         if ($order->status === OrderStatus::Failed) {
-            $this->api->answerCallbackQuery($callbackId, sprintf(self::APPROVED_UNDELIVERED, trim((string) ShopReports::failure($order))), alert: true);
+            $this->groupButtons->answer($update, sprintf(self::APPROVED_UNDELIVERED, trim((string) ShopReports::failure($order))), alert: true);
 
             return;
         }
-        $this->api->answerCallbackQuery($callbackId, self::APPROVED);
+        $this->groupButtons->answer($update, self::APPROVED);
     }
 
-    private function reject(string $callbackId, int $chatId, int $messageId, Payment $payment, User $admin): void
+    private function reject(Update $update, Payment $payment, User $admin): void
     {
         try {
             $this->actions->reject($payment, Actor::groupAdmin($admin), null);
         } catch (ValidationException $e) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $e->getMessage(), alert: true);
+            $this->groupButtons->dismiss($update, $e->getMessage());
 
             return;
         }
 
-        $this->groupButtons->set($chatId, $messageId, null);
+        $this->groupButtons->buttons($update, null);
         $this->logger->info('Payment {id} rejected from the report group by {reviewer}', ['id' => $payment->id, 'reviewer' => $payment->reviewer]);
-        $this->api->answerCallbackQuery($callbackId, self::REJECTED);
+        $this->groupButtons->answer($update, self::REJECTED);
     }
 
     /**
-     * «رد با نوشتن دلیل»: the bot asks, under the receipt, for the reason as a reply to its message — a ForceReply for
-     * the admin who pressed (when they have a @username to mention) — and the receipt keeps its two buttons meanwhile.
+     * «رد با نوشتن دلیل»: the bot asks under the receipt for the reason as a reply to its prompt (a ForceReply that
+     * mentions the admin when they have a @username), recorded so the reply can be told apart; the receipt keeps its
+     * two buttons meanwhile.
      */
     private function askReason(Update $update, Payment $payment, User $admin): void
     {
-        $callbackId = (string) $update->callbackId();
-        $chatId = (int) $update->chatId();
-        $messageId = (int) $update->messageId();
         if (!$this->actions->allowed($payment)['reject']) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $this->actions->refusal($payment, 'reject'), alert: true);
+            $this->groupButtons->dismiss($update, $this->actions->refusal($payment, 'reject'));
 
             return;
         }
+        $chatId = (int) $update->chatId();
+        $messageId = (int) $update->messageId();
 
         $mention = $admin->username !== null && $admin->username !== '' ? ' @' . $admin->username : '';
         $text = sprintf(self::PROMPT, $payment->id, $mention);
@@ -254,26 +230,25 @@ final class ReceiptReview implements GroupHandler
         if ($promptId !== null) {
             ReportMessage::posted(Topic::Receipts, $text, self::PROMPT_REF . $payment->id, $chatId, $promptId);
         }
-        $this->groupButtons->set($chatId, $messageId, self::buttons($payment->id));
-        $this->api->answerCallbackQuery($callbackId, self::WRITE_REASON);
+        $this->groupButtons->buttons($update, self::buttons($payment->id));
+        $this->groupButtons->answer($update, self::WRITE_REASON);
     }
 
     /**
-     * Put these buttons under the receipt — while it still waits for review; one decided meanwhile loses them.
+     * Put these buttons under the receipt while it still waits for review; one decided meanwhile loses them.
      *
      * @param list<list<array<string, mixed>>> $rows
      */
-    private function showButtons(string $callbackId, int $chatId, int $messageId, Payment $payment, array $rows): void
+    private function showButtons(Update $update, Payment $payment, array $rows): void
     {
         if (!$this->actions->allowed($payment)['reject']) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $this->actions->refusal($payment, 'reject'), alert: true);
+            $this->groupButtons->dismiss($update, $this->actions->refusal($payment, 'reject'));
 
             return;
         }
 
-        $this->groupButtons->set($chatId, $messageId, $rows);
-        $this->api->answerCallbackQuery($callbackId);
+        $this->groupButtons->buttons($update, $rows);
+        $this->groupButtons->answer($update);
     }
 
     /** @return list<list<array<string, mixed>>> «رد» opened: without a reason, with one, or back. */
@@ -293,7 +268,7 @@ final class ReceiptReview implements GroupHandler
         return CallbackData::build(self::PREFIX, $action, $paymentId);
     }
 
-    /** The payment the bot's prompt — its message `$messageId` in the group — asks about, as the prompt was recorded; null for any other message. */
+    /** The payment the bot's prompt (its message `$messageId`) asks about, as recorded; null for any other message. */
     private static function promptedPayment(int $chatId, int $messageId): ?int
     {
         $ref = ReportMessage::query()->where('chat_id', $chatId)->where('message_id', $messageId)->latest('id')->value('ref');

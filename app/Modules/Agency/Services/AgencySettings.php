@@ -14,11 +14,9 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Settings\Services\Settings;
 
 /**
- * The rules of the shop's agency program («تنظیمات», a section of the owner's agents page — `GET|PUT /agency/settings`;
- * the main bot's settings, whichever shop reads them): whether it takes requests — off, the menu's button goes for
- * customers; agents keep their screen and their bots —, the credit an approved agent starts with, and the traffic an
- * agent buys for their bot: the amounts offered as buttons and the least they may type, in GB. Off until the owner
- * turns it on.
+ * The agency program's settings, kept in the main bot's rows whichever shop reads them (off by default): whether it
+ * takes requests (agents keep their bots either way), an approved agent's starting credit, and the traffic amounts an
+ * agent may buy.
  */
 final class AgencySettings
 {

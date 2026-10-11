@@ -41,9 +41,8 @@ type Action = keyof BroadcastRow['actions']
 type Control = Exclude<Action, 'unpin'>
 
 /**
- * Every «ارسال همگانی» run, newest first and live (the change feed moves it while it sends): what went, to whom, how far
- * it got, and the controls its state allows — the same as the bot's progress message, which follows. A cancel and a
- * «لغو پین» ask first.
+ * Every broadcast run, newest first, updated live while it sends: content, audience, progress and the controls its state
+ * allows (the bot's progress message follows them). Cancel and «لغو پین» ask first.
  */
 export function BroadcastsList() {
   const list = usePagedList({ queryKey: queryKeys.broadcasts, read: (query) => api.get<BroadcastsResponse>('/broadcasts', query), list: 'broadcasts', address: '/broadcasts' })

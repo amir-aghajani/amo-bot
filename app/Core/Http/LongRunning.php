@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Http;
 
 /**
- * A request whose work must not stop halfway — Telegram's webhook, the /cron address: what was started is finished
- * when the caller hangs up (Telegram's patience, a pinger's timeout), within a time limit of the request's own instead
- * of the host's default. The command line has no limit and keeps it.
+ * For a request whose work must not stop halfway (the webhook, /cron, an update step): keep going when the caller hangs
+ * up, within a time limit of its own instead of the host's default. Does nothing to the command line's (unlimited) time.
  */
 final class LongRunning
 {

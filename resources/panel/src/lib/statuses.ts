@@ -4,6 +4,12 @@ import type {
   BotMode,
   BroadcastStatus,
   Delivery,
+  DiscountKind,
+  DiscountState,
+  DiscountType,
+  GiftCodeKind,
+  GiftCodeStatus,
+  OrderPricing,
   OrderStatus,
   OrderType,
   PaymentStatus,
@@ -14,12 +20,13 @@ import type {
   TicketChannel,
   TicketStatus,
   UserStatus,
+  WheelPrizeKind,
 } from '@/lib/api-types'
 
 /*
- * What the panel calls each state of each thing, and in which status family it is drawn — one vocabulary per domain,
- * keyed by the API's own values, so a status the API adds is a type error until it is worded here. A badge, a tab and a
- * filter of the same domain say the same words.
+ * The words and the colour family of every state the panels show — one vocabulary per domain, keyed by the API's own
+ * values, so a state the API adds is a type error until it is worded here. A badge, a tab and a filter of one domain
+ * use the same words.
  */
 
 /** The status families of the design (index.css): neutral ink, blue for information, green, amber, red. */
@@ -46,12 +53,29 @@ export const ORDER_STATUS: Record<OrderStatus, Status> = {
  */
 export const ORDER_STUCK: Status = { label: 'نیازمند رسیدگی', tone: 'danger' }
 
-/** What an order was for. */
+/**
+ * What an order was for — a plan, then what is bought for a service (its renewal, extra traffic or time), a wallet's
+ * top-up, an agent's traffic —, in the order a list's «نوع» filter offers them.
+ */
 export const ORDER_TYPE: Record<OrderType, string> = {
   purchase: 'خرید',
   renewal: 'تمدید',
+  extra_traffic: 'حجم اضافه',
+  extra_time: 'زمان اضافه',
   wallet_topup: 'شارژ کیف پول',
   traffic: 'خرید حجم نمایندگی',
+}
+
+/**
+ * The price an order was made at, when it is not its plan's own (`regular`, which says nothing): a customer's first
+ * purchase at its plan's first-purchase price, or its agent price — an agent's, or a customer of a «همکار» group —, said
+ * beside or under its amount.
+ */
+export const ORDER_PRICING: Record<OrderPricing, string | null> = {
+  regular: null,
+  first_purchase: 'قیمت خرید اول',
+  agent: 'قیمت نماینده',
+  gift: 'هدیه',
 }
 
 /**
@@ -125,6 +149,52 @@ export const REVIEW_STATUS: Record<ReviewStatus, Status> = {
   pending: { label: 'در انتظار بررسی', tone: 'warning' },
   approved: { label: 'تاییدشده', tone: 'success' },
   rejected: { label: 'ردشده', tone: 'neutral' },
+}
+
+/** A gift code: still to be taken, taken by a customer, or past its end with nobody taking it. */
+export const GIFT_CODE_STATUS: Record<GiftCodeStatus, Status> = {
+  unused: { label: 'استفاده‌نشده', tone: 'info' },
+  redeemed: { label: 'استفاده‌شده', tone: 'success' },
+  expired: { label: 'منقضی‌شده', tone: 'neutral' },
+}
+
+/** How a discount code — or a sale — stands now. */
+export const DISCOUNT_STATE: Record<DiscountState, Status> = {
+  active: { label: 'فعال', tone: 'success' },
+  scheduled: { label: 'شروع نشده', tone: 'info' },
+  ended: { label: 'تمام‌شده', tone: 'neutral' },
+  used_up: { label: 'ظرفیت پر', tone: 'warning' },
+  off: { label: 'غیرفعال', tone: 'neutral' },
+}
+
+/** What a discount code takes off. */
+export const DISCOUNT_TYPE: Record<DiscountType, string> = {
+  percent: 'درصدی',
+  fixed: 'مبلغ ثابت',
+  free: 'رایگان',
+}
+
+/** The kinds of order a discount takes, in the order a form offers them. */
+export const DISCOUNT_KIND: Record<DiscountKind, string> = {
+  purchase: 'خرید',
+  renewal: 'تمدید',
+  extra_traffic: 'حجم اضافه',
+  extra_time: 'زمان اضافه',
+}
+
+/** What a gift code is worth. */
+export const GIFT_CODE_KIND: Record<GiftCodeKind, string> = {
+  wallet: 'شارژ کیف پول',
+  plan: 'سرویس رایگان',
+}
+
+/** What a slice of the lucky wheel gives, in the order its form offers them. */
+export const WHEEL_PRIZE_KIND: Record<WheelPrizeKind, string> = {
+  wallet: 'شارژ کیف پول',
+  traffic: 'حجم',
+  days: 'زمان',
+  plan: 'سرویس رایگان',
+  nothing: 'پوچ',
 }
 
 /**

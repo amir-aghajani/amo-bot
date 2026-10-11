@@ -18,6 +18,7 @@ const AUDIENCES: Record<MassGrantAudience, string> = {
   all: 'همه سرویس‌ها',
   agents: 'فقط سرویس‌های نماینده‌ها',
   server: 'سرویس‌های یک سرور',
+  group: 'سرویس‌های مشتری‌های یک گروه',
 }
 
 const massGrantsQuery = queryOptions({ queryKey: queryKeys.massGrants, queryFn: () => api.get<MassGrantsResponse>('/mass-grants') })
@@ -28,16 +29,23 @@ const waiting = (grant: MassGrantRow) => {
   return running.length > 0 && running.every((part) => part.waiting_reason !== null)
 }
 
-/** Whom a gift is for: everyone's services, the agents', or one server's. */
+/** Whom a gift is for: everyone's services, the agents', one server's or one customer group's customers'. */
 function audienceLabel(grant: MassGrantRow): string {
-  return grant.audience === 'server' ? `سرویس‌های «${grant.server?.name ?? 'سرور حذف‌شده'}»` : grant.audience === 'agents' ? 'سرویس‌های نماینده‌ها' : 'همه سرویس‌ها'
+  switch (grant.audience) {
+    case 'server':
+      return `سرویس‌های «${grant.server?.name ?? 'سرور حذف‌شده'}»`
+    case 'group':
+      return grant.group ? `سرویس‌های گروه «${grant.group.name}»` : 'سرویس‌های گروهی که حذف شد'
+    case 'agents':
+      return 'سرویس‌های نماینده‌ها'
+    default:
+      return 'همه سرویس‌ها'
+  }
 }
 
 /**
- * «هدیه همگانی»: days and traffic for the running services on every server at once — or the agents' only, or one
- * server's — with the reason the customers read in the bot. Each server's part is a grant of its own (on its server's
- * page too), so a panel out of reach holds up only its own server. The one under way is worked on from here while the
- * page is open; the scheduler carries on without it.
+ * «هدیه همگانی»: days and traffic for running services on every server at once, or only agents', one customer group's or
+ * one server's. Each server's part is a grant of its own, so a panel out of reach holds up only its server.
  */
 export function MassGrantsCard() {
   const grants = useGrants({
@@ -98,21 +106,26 @@ interface MassGrantFormProps {
   onStarted: (grant: MassGrantRow) => void
 }
 
-/** A mass gift as its form holds it: a grant's terms, whom it is for, and the server picked for one server's services. */
-type MassGrantDraft = GrantTerms & { audience: MassGrantAudience; server_id: string }
+/** A mass gift as its form holds it: a grant's terms, whom it is for, and the server or the group picked for one's services. */
+type MassGrantDraft = GrantTerms & { audience: MassGrantAudience; server_id: string; group_id: string }
 
-/** The gift as the API takes it: a server named only for one server's services. */
-const bodyOf = (values: MassGrantDraft) => ({ ...values, server_id: values.audience === 'server' ? values.server_id : '' })
+/** The gift as the API takes it: a server named only for one server's services, a group only for one group's. */
+const bodyOf = (values: MassGrantDraft) => ({
+  ...values,
+  server_id: values.audience === 'server' ? values.server_id : '',
+  group_id: values.audience === 'group' ? values.group_id : '',
+})
 
 function MassGrantForm({ audience, onCancel, onStarted }: MassGrantFormProps) {
   // A server picked and then left for everyone's services is no part of the gift: what is unsaved is what it sends.
   const { values, set, patch, error, formError, busy, dirty, submit, handleSubmit } = useForm<MassGrantDraft>(
-    { ...GRANT_TERMS, audience: 'all', server_id: '' },
+    { ...GRANT_TERMS, audience: 'all', server_id: '', group_id: '' },
     { reads: (draft) => trimmed(bodyOf(draft)) },
   )
   const server = audience.servers.find((s) => String(s.id) === values.server_id)
-  // Not known while one server's services are meant and none is picked: the save then asks for the server.
-  const reach = values.audience === 'server' ? (server ?? null) : audience[values.audience]
+  const group = audience.groups.find((g) => String(g.id) === values.group_id)
+  // Not known while one server's — or one group's — services are meant and none is picked: the save then asks for it.
+  const reach = values.audience === 'server' ? (server ?? null) : values.audience === 'group' ? (group ?? null) : audience[values.audience]
 
   const start = handleSubmit(async () => {
     const result = await submit(() => api.post('/mass-grants', bodyOf(values)))
@@ -139,26 +152,74 @@ function MassGrantForm({ audience, onCancel, onStarted }: MassGrantFormProps) {
           )}
         </Field>
         {values.audience === 'server' && (
-          <Field id="mass_server" label="سرور" error={error('server_id')}>
-            {(control) => (
-              <Select value={values.server_id} onValueChange={(value) => set('server_id', value)}>
-                <SelectTrigger {...control} className="w-full">
-                  <SelectValue placeholder="انتخاب سرور" />
-                </SelectTrigger>
-                <SelectContent>
-                  {audience.servers.map((option) => (
-                    <SelectItem key={option.id} value={String(option.id)}>
-                      {option.name} ({formatNumber(option.running)} سرویس)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </Field>
+          <TargetSelect
+            id="mass_server"
+            label="سرور"
+            placeholder="انتخاب سرور"
+            options={audience.servers}
+            value={values.server_id}
+            onChange={(value) => set('server_id', value)}
+            error={error('server_id')}
+          />
+        )}
+        {values.audience === 'group' && (
+          <TargetSelect
+            id="mass_group"
+            label="گروه مشتریان"
+            placeholder="انتخاب گروه"
+            options={audience.groups}
+            value={values.group_id}
+            onChange={(value) => set('group_id', value)}
+            error={error('group_id')}
+            empty="هنوز گروهی نیست؛ گروه‌ها در صفحه کاربران ساخته می‌شوند."
+          />
         )}
       </div>
-      <GrantTermsFields values={values} change={patch} error={error} reach={reach} reasonPlaceholder="مثلا: هدیه نوروز" />
+      <GrantTermsFields
+        values={values}
+        change={patch}
+        error={error}
+        reach={reach}
+        choose={values.audience === 'group' ? 'اول گروهی انتخاب کنید که به سرویس‌های مشتری‌هایش اضافه شود.' : undefined}
+        reasonPlaceholder="مثلا: هدیه نوروز"
+      />
       <FormActions error={formError} onCancel={onCancel} submitLabel="شروع هدیه" busy={busy} disabled={reach !== null && reachOf(reach, values) === 0} icon={Gift} dirty={dirty} />
     </form>
+  )
+}
+
+interface TargetSelectProps {
+  id: string
+  label: string
+  placeholder: string
+  /** The servers or groups that have services, each with how many run. */
+  options: { id: number; name: string; running: number }[]
+  value: string
+  onChange: (value: string) => void
+  error?: string
+  /** What to say, the select held, while there is nothing to pick. */
+  empty?: string
+}
+
+/** The one server, or the one customer group, a gift for "one of them" goes to. */
+function TargetSelect({ id, label, placeholder, options, value, onChange, error, empty }: TargetSelectProps) {
+  const none = options.length === 0 && empty !== undefined
+  return (
+    <Field id={id} label={label} error={error} hint={none ? empty : undefined}>
+      {(control) => (
+        <Select value={value} onValueChange={onChange} disabled={none}>
+          <SelectTrigger {...control} className="w-full">
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.id} value={String(option.id)}>
+                {option.name} ({formatNumber(option.running)} سرویس)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </Field>
   )
 }

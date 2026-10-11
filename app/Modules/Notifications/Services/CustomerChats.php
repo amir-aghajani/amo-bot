@@ -13,20 +13,18 @@ use Psr\Log\LogLevel;
 
 /**
  * Writing to a customer's private chat on the bot's own initiative — a notice, a broadcast. A customer without a
- * Telegram account (one who signed up on the website) has no chat: nothing is sent, nothing is asked of Telegram.
- * Telegram refuses the chat of a customer who blocked the bot or whose account is gone: such a refusal is remembered on
- * their row (`users.bot_blocked` — their next message to the bot clears it, UserResolver), and nobody remembered so is
- * written to again. A notice that does not reach its customer is logged and dropped: what it tells stands either way.
+ * Telegram account has no chat: nothing is sent. Telegram's refusal of a customer who blocked the bot or whose account
+ * is gone is remembered on their row (`users.bot_blocked`, cleared by their next message to the bot), and nobody so
+ * marked is written to again. A message that does not arrive is logged and dropped: what it tells stands either way.
  */
 final class CustomerChats
 {
     public function __construct(private readonly LoggerInterface $logger) {}
 
     /**
-     * `$send` to the customer's chat — it composes and sends, given the chat id —, and whether they were told: not when
-     * they have no Telegram account, nor when they turned the bot away (known, or learned now), nor when Telegram refused
-     * or was out of reach (logged). What `$send` gets wrong itself — a text the code mis-filled — is no delivery problem
-     * and goes up.
+     * Run `$send` (it sends, given the chat id) for the customer's chat, and return whether they were told: not without a
+     * Telegram account, not when they turned the bot away (known, or learned now), not when Telegram refused or was out
+     * of reach (logged). Only Telegram's answers are caught: a bug in `$send` goes up.
      *
      * @param \Closure(int): mixed $send
      * @param string $about What the message is about, for the log ("payment #12")
@@ -48,7 +46,7 @@ final class CustomerChats
             if ($this->turnedAway($customer, $e)) {
                 return Delivery::TurnedAway;
             }
-            // Telegram out of reach costs this one message; a refusal of what was sent is the shop's mistake to see.
+            // Telegram out of reach costs this one message; a refusal of what was sent is the shop's mistake, logged as an error.
             $transient = $e->refusal()->isTransient();
             $this->logger->log($transient ? LogLevel::WARNING : LogLevel::ERROR, 'Could not tell user {user} about {about}: {message}', ['user' => $customer->id, 'about' => $about, 'message' => $e->getMessage()]);
 
@@ -57,8 +55,8 @@ final class CustomerChats
     }
 
     /**
-     * Whether Telegram's refusal says the customer turned the bot away — they blocked it, their account is gone, their
-     * chat is no more — remembered on their row when it does.
+     * Whether Telegram's refusal says the customer turned the bot away (blocked it, or their account or chat is gone);
+     * remembered on their row when it does.
      */
     public function turnedAway(User $customer, TelegramApiException $e): bool
     {

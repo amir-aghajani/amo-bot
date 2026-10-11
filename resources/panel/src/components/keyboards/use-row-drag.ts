@@ -3,9 +3,8 @@ import type { Position } from '@/components/keyboards/use-keyboard-draft'
 import { isRtl } from '@/lib/direction'
 
 /**
- * Moving a keyboard's buttons by dragging (native drag and drop): where the dragged one came from, and where it would
- * land — the row under the pointer, before the first chip past it in reading order; the drop zone under the last row is
- * the row after it, a new one. The keyboard way is the button dialog's moves.
+ * Dragging a keyboard's buttons (native drag and drop): where the button came from and where it would land — before the
+ * first chip past the pointer in reading order; the zone under the last row makes a new row.
  */
 export function useRowDrag(move: (from: Position, to: Position) => unknown) {
   const [dragging, setDragging] = useState<Position | null>(null)

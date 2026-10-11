@@ -8,15 +8,14 @@ use App\Modules\Support\Models\Ticket;
 use App\Modules\Support\Models\TicketMessage;
 
 /**
- * What every screen says of a ticket and of its messages, said once: the panels' (Support\Services\TicketDirectory) and
- * the customer's website's (Store\Presenters\TicketPresenter) each add their own to it — the panels who the customer is,
- * how many messages, who of support wrote each and where; the website whether support wrote since the customer read it.
+ * The fields of a ticket and its messages that every screen shows, defined once: the panels' (Services\TicketDirectory)
+ * and the website's (Store\Presenters\TicketPresenter) presenters each add their own.
  */
 final class TicketFields
 {
     /**
-     * A ticket: what it is about — its subject, the customer's service by its name on the panel —, where it stands and
-     * since when it is closed, its latest activity, its rating.
+     * A ticket: its subject, the service it is about (by its name on the panel), its status and when it closed, its
+     * latest activity and its rating.
      *
      * @return array<string, mixed>
      */
@@ -37,8 +36,7 @@ final class TicketFields
     }
 
     /**
-     * A message: whose, its words, its picture — its name, and whether it is there to show still (an uploaded one goes a
-     * while after its ticket closed) — and when.
+     * A message: whose, its text, its picture (its name, and whether it is still kept to show) and when.
      *
      * @return array<string, mixed>
      */

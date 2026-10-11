@@ -3,7 +3,7 @@ import type { QueryKey } from '@tanstack/react-query'
 import { ImageIcon, ImagePlus, Info, Send, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Callout } from '@/components/callout'
-import { Field } from '@/components/field'
+import { Field, FieldGroup } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
 import { IconButton } from '@/components/icon-button'
 import { NoteInput } from '@/components/note-input'
@@ -14,7 +14,6 @@ import type { TicketDetail, TicketMessageRequest } from '@/lib/api-types'
 import { formatBytes } from '@/lib/format'
 import { TICKET_STATUS } from '@/lib/statuses'
 import { useForm } from '@/lib/use-form'
-import { cn } from '@/lib/utils'
 
 /** The longest answer the server takes (Support\Services\Tickets::BODY_MAX). */
 const BODY_MAX = 4000
@@ -42,17 +41,14 @@ interface ReplyFormProps {
 }
 
 /**
- * Support's answer under the conversation: its words — held to what the server takes, counted as they are typed — and a
- * picture with them if need be (a picture alone answers nothing, by the server's rule: the words go first). The customer
- * is told; a closed ticket opens again, answered — the form says so before it is sent. Sent, the form starts afresh
- * with the focus back in its words.
+ * Support's answer: words (required — a picture alone is no answer) and an optional picture, refused at once when too
+ * large. Answering a closed ticket reopens it, which the form says first. Once sent the form starts afresh, focused.
  */
 export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
   const id = useId()
   const picker = useRef<HTMLInputElement>(null)
   const choose = useRef<HTMLButtonElement>(null)
   const { values, set, reset, errors, setErrors, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(BLANK)
-  const pictureError = error('file')
 
   const send = handleSubmit(async () => {
     const { body, file } = values
@@ -65,7 +61,7 @@ export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
     toast.success('پاسخ فرستاده شد')
   })
 
-  /** A picture picked: kept for the answer — or, past the server's limit, refused at once in its words, never after it is sent. */
+  /** Keeps a picked picture for the answer, or refuses one past the server's limit at once (with the server's message). */
   const pick = (file: File | undefined) => {
     if (!file) return
     if (file.size > PICTURE_MAX_BYTES) {
@@ -97,19 +93,8 @@ export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
             <NoteInput max={BODY_MAX} rows={4} value={values.body} onChange={(event) => set('body', event.target.value)} placeholder="پاسخ خود را بنویسید" />
           </Field>
 
-          {/* One field of the form, its control a button that opens the picker: refused, it takes the focus as a whole. */}
-          <div
-            role="group"
-            aria-labelledby={`${id}-picture`}
-            aria-describedby={`${id}-picture-line`}
-            data-invalid={pictureError ? '' : undefined}
-            tabIndex={pictureError ? -1 : undefined}
-            className="grid gap-1.5 rounded-md outline-none focus-visible:focus-ring"
-          >
-            <span id={`${id}-picture`} className="flex items-baseline gap-1.5 text-body font-medium">
-              تصویر
-              <span className="text-caption font-normal text-faint">(اختیاری)</span>
-            </span>
+          {/* Its control is a button that opens the hidden file input: refused, the group takes the focus as a whole. */}
+          <FieldGroup label="تصویر" optional error={error('file')} hint={`JPG، PNG یا WebP، حداکثر ${formatBytes(PICTURE_MAX_BYTES)}؛ همراه متن پاسخ فرستاده می‌شود.`}>
             <input
               ref={picker}
               type="file"
@@ -150,10 +135,7 @@ export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
                 </>
               )}
             </div>
-            <p id={`${id}-picture-line`} className={cn('text-footnote', pictureError ? 'text-danger' : 'text-muted-foreground')}>
-              {pictureError ?? `JPG، PNG یا WebP، حداکثر ${formatBytes(PICTURE_MAX_BYTES)}؛ همراه متن پاسخ فرستاده می‌شود.`}
-            </p>
-          </div>
+          </FieldGroup>
 
           <FormActions error={formError} submitLabel="ارسال پاسخ" icon={Send} busy={busy} disabled={values.body.trim() === ''} dirty={dirty} />
         </form>

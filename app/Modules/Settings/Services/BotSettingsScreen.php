@@ -10,9 +10,8 @@ use App\Modules\Settings\DeclaresSettings;
 use App\Modules\Settings\Exceptions\UnknownGroupException;
 
 /**
- * The bot settings screen («تنظیمات ربات», the same in both panels — every bot its own): the groups of settings the
- * modules declare, registered in bootstrap/container.php, shown together and saved one group at a time. The screen
- * knows no module; a module's rules are its own class's.
+ * The bot settings screen («تنظیمات ربات», both panels, each bot its own): the groups the modules declare, shown together
+ * and saved one at a time.
  */
 final class BotSettingsScreen
 {
@@ -22,7 +21,7 @@ final class BotSettingsScreen
         private readonly array $modules,
     ) {}
 
-    /** @return array<string, mixed> Every group's fields as the screen shows them, by name — one name, one field */
+    /** @return array<string, mixed> Every group's fields by name; a name declared twice is a LogicException */
     public function present(): array
     {
         $values = [];
@@ -39,7 +38,7 @@ final class BotSettingsScreen
     }
 
     /**
-     * One group's form, checked and kept.
+     * Check and keep one group's form.
      *
      * @param array<string, mixed> $input
      * @throws UnknownGroupException|ValidationException

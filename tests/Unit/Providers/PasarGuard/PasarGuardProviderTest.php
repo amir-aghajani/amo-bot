@@ -21,8 +21,8 @@ use Tests\Support\FakePanel;
 use Tests\TestCase;
 
 /**
- * The generic ProviderInterface on PasarGuard: users for clients, groups for inbounds, on hold for a term
- * that waits for the first connection, and the link the panel signs made absolute.
+ * The generic ProviderInterface on PasarGuard: users as clients, groups as inbounds, "on hold" for a term waiting for the
+ * first connection, and the signed link made absolute.
  */
 final class PasarGuardProviderTest extends TestCase
 {

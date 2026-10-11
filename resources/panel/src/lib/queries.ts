@@ -18,9 +18,8 @@ import type {
 import { queryKeys } from '@/lib/query-keys'
 
 /*
- * The shop's reads that more than one screen makes — a list page and the form or the filter that offers the same rows,
- * the notice that checks the keyboard the keyboards page edits — each defined once, so every screen shares one cache
- * entry and one way to ask. A read only one screen makes stays beside it.
+ * The reads more than one screen makes, each defined once so the screens share one cache entry. A read only one screen
+ * makes stays beside that screen.
  */
 
 export const plansQuery = queryOptions({ queryKey: queryKeys.plans, queryFn: () => api.get<PlansResponse>('/plans') })

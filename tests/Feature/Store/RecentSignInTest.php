@@ -22,17 +22,12 @@ use Tests\Support\FakeGoogleLogin;
 use Tests\Support\FakeTelegramLogin;
 
 /**
- * What changes how a customer's account on the shop's website is signed in to — a way in added or taken away, the
- * password, two-factor sign-in, a merge — asks the session's sign-in to be recent: a bearer token alone — one that leaked
- * from a device signed in a while ago — takes no account over. A sign-in is recent for 15 minutes; after that the
- * customer proves one way into this very account again (POST /me/reauthenticate) — its password (with its second step's
- * code while it asks one), its Telegram account or its Google account —, counted as a sign-in is, and the session may
- * change them for 15 minutes more. Anything else a session does asks nothing of the kind.
+ * Changes to how an account is signed in to ask a sign-in of the last 15 minutes, so a leaked token alone takes no
+ * account over; POST /me/reauthenticate proves a way in again (password with its second step, Telegram or Google).
  */
 final class RecentSignInTest extends HttpTestCase
 {
-    /** The PKCE verifier the site keeps for a redirect it begins (its challenge goes to the shop). */
-    private const VERIFIER = 'the-sites-own-pkce-verifier.kept~in_this-browser-0123456789';
+    use WebsiteSignIns;
 
     private Website $website;
 
@@ -207,30 +202,5 @@ final class RecentSignInTest extends HttpTestCase
         $nonce = $this->nonce();
 
         return $this->reauthenticate(['method' => 'google', 'id_token' => FakeGoogleLogin::idToken(FakeGoogleLogin::claims(self::GOOGLE_CLIENT_ID, $nonce, $claims)), 'nonce' => $nonce]);
-    }
-
-    private function nonce(): string
-    {
-        return $this->decode($this->postJson($this->storeApi($this->website, '/auth/nonce')))['nonce'];
-    }
-
-    /**
-     * Telegram's redirect sign-in begun at `$path` — a sign-in's, or the signed-in customer's own —: the state and the
-     * nonce its address carries.
-     *
-     * @return array{state: string, nonce: string}
-     */
-    private function authorize(string $path): array
-    {
-        $address = $this->decode($this->postJson($this->storeApi($this->website, $path), ['redirect_uri' => 'https://shop.example/account', 'code_challenge' => JWT::urlsafeB64Encode(hash('sha256', self::VERIFIER, true))]))['url'];
-        parse_str((string) parse_url($address, PHP_URL_QUERY), $query);
-
-        return ['state' => (string) $query['state'], 'nonce' => (string) $query['nonce']];
-    }
-
-    /** @return array{int, mixed} The status, and what it said under its fields */
-    private function refused(ResponseInterface $response): array
-    {
-        return [$response->getStatusCode(), $this->decode($response)['errors'] ?? null];
     }
 }

@@ -17,10 +17,8 @@ export interface BroadcastsSection {
 }
 
 /**
- * «ارسال همگانی»: the messages the bot's admins send to customers from the bot (/broadcast), live, with their controls —
- * the shop's own bot's —, and the sections a panel adds beside them (`more`), each listed in the sidebar with the
- * messages, whose header then names the section on screen; a page of the messages alone is titled by its own name, as
- * the menu, the topbar and the tab call it. Every section stays mounted, so each keeps its page.
+ * «ارسال همگانی»: the broadcasts admins send from the bot (/broadcast), with their controls, plus the sections a panel adds
+ * (`more` — the owner's mass gift). With sections the header names the one on screen; alone it is titled by the page.
  */
 export function BroadcastsPage({ more = [] }: { more?: BroadcastsSection[] }) {
   // The main bot's shop also has its agents and its servers' customers among its audiences; an agent's bot neither.

@@ -13,10 +13,8 @@ use App\Modules\Support\Enums\TicketStatus;
 use App\Modules\Support\Models\Ticket;
 
 /**
- * The shop's queues that wait on a human, counted: the receipts to review, the orders paid and not delivered
- * (Order::stuck()), the support tickets waiting on an answer and the customers' reviews waiting on support — the numbers
- * the panels' sidebar shows beside «پرداخت‌ها», «سفارش‌ها», «پشتیبانی» and «نظرات», and the first rows of the dashboard's
- * attention card. The current shop's.
+ * The current shop's queues that wait on a human: receipts to review, paid orders not delivered (Order::stuck()), tickets
+ * waiting on an answer, reviews waiting on support — the sidebar's badges and the dashboard's attention card.
  */
 final class Queues
 {

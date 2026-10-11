@@ -15,9 +15,8 @@ use App\Support\Input;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * A customer's notices on the shop's website — what the shop told them, wherever it reached them (Notifications\Services\
- * Notices keeps every one) —, their own only: the feed, newest first, a page at a time; what they have not read; and
- * marking them read.
+ * A customer's own notices on the website — every one the shop sent them, wherever it reached them
+ * (Notifications\Services\Notices keeps them all): the feed, the unread count, and marking them read.
  */
 final class CustomerNotifications
 {
@@ -26,7 +25,7 @@ final class CustomerNotifications
 
     private const IDS_REFUSED = 'شناسه‌ها باید لیستی از حداکثر ' . self::READ_MAX . ' شماره اعلان باشد.';
 
-    /** The customer's notices, newest first — only those they have not read with `unread` (true) —, a page of them, and how many are unread. */
+    /** A page of the customer's notices, newest first (only unread ones with `unread`), with the unread count. */
     public function page(User $customer, PageRequest $request): Page
     {
         $query = self::of($customer)->latest('id');
@@ -38,8 +37,8 @@ final class CustomerNotifications
     }
 
     /**
-     * How many of the customer's notices they have not read. Their number names their shop already: counted off the
-     * (user_id, read_at) index alone, the shop's scope left aside.
+     * How many of the customer's notices are unread. Counted off the (user_id, read_at) index alone, without the shop
+     * scope: the customer's id already names their shop.
      */
     public function unread(User $customer): int
     {
@@ -47,8 +46,8 @@ final class CustomerNotifications
     }
 
     /**
-     * The customer's notices numbered `ids` read — another's number is no error, it marks nothing —, every one of theirs
-     * without `ids`: one UPDATE, a notice read before keeping when it was. What is left unread is the answer.
+     * Mark the customer's notices `ids` read (another's id marks nothing, no error), or all of theirs without `ids`, in one
+     * UPDATE that keeps an earlier read time. Answers how many are left unread.
      *
      * @param array<string, mixed> $input The request's body: `ids`, a list of numbers, or none
      * @throws ValidationException on `ids`: not a list of numbers, or more than READ_MAX
@@ -68,7 +67,7 @@ final class CustomerNotifications
     }
 
     /**
-     * The notices' numbers a request names: a list of whole numbers (Persian digits, or their text, too), READ_MAX at most.
+     * The ids a request names: a list of whole numbers (Persian digits too), READ_MAX at most.
      *
      * @return list<int>
      * @throws ValidationException on `ids`
@@ -87,7 +86,7 @@ final class CustomerNotifications
         return $numbers;
     }
 
-    /** @return Builder<Notification> The customer's notices — in the shop the request is worked in. */
+    /** @return Builder<Notification> The customer's notices, in the current shop. */
     private static function of(User $customer): Builder
     {
         return Notification::query()->where('user_id', $customer->id);

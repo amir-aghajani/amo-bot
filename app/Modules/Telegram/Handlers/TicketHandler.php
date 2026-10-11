@@ -29,30 +29,15 @@ use App\Support\Persian;
 use App\Support\Text;
 
 /**
- * «☎️ پشتیبانی» and the customer's support tickets in the bot — the screens. What the customer writes in a ticket is
- * TicketMessageHandler's, and every rule the shop's one service's (Support\Services\Tickets: the website's and the
- * panels' too); this renders:
- *   menu:support                  → home(): the support contact as the admin gave it (BotSettings) — or that none is —,
- *                                   with «📨 تیکت جدید» and «🗂️ تیکت‌های من»
- *   ticket:new                    → which of their services it is about — their running ones, the newest NEW_SERVICES,
- *                                   and «بدون سرویس مشخص» —, or straight on for a customer without one
- *   ticket:new:{service}          → its first message awaited (TicketMessageHandler); 0 for no service
- *   ticket:list:{page}            → «تیکت‌های من»: the latest activity first, PER_PAGE a page, each «#12 · subject»
- *                                   marked by where it stands
- *   ticket:{id}:{from}            → the ticket: its subject, where it stands, its service and rating, and its last SHOWN
- *                                   messages (support's «پشتیبانی», theirs «شما», each with its time; a picture numbered,
- *                                   «🖼️ تصویر n» under the screen sending it) — read by now (Tickets::markRead()); «بازگشت»
- *                                   to the page `from` of the list (0: its first)
- *   ticket:{id}:{from}:reply      → their next message awaited — a closed ticket opens again with it
- *   ticket:{id}:{from}:close      → closed, while it is open or answered
- *   ticket:{id}:{from}:rate[:{n}] → a closed ticket rated, 1 to 5
- *   ticket:{id}:{from}:picture:{message} → that message's picture, as a photo of its own (the screen stays)
- * and a service's «⚠️ ارسال گزارش اختلال» (SubscriptionHandler's `sub:{id}:report`) → report(): a new ticket about that
- * service, its first message awaited.
- * A button under a notice of the ticket (support's answer, its closing — CustomerNotifier) carries `from` NOTICE: what it
- * opens comes as a message of its own, so the notice stays — support's words with it. Every tap here is navigation (a
- * message half written is left behind). Only the customer's own tickets answer (Ticket::of()): another's is one that is
- * not there.
+ * «☎️ پشتیبانی» and the customer's support tickets — the screens; what the customer writes is TicketMessageHandler's,
+ * and every rule is Support\Services\Tickets' (shared with the website and the panels):
+ *   menu:support                  → home(): the admin's support contact, «📨 تیکت جدید» and «🗂️ تیکت‌های من»
+ *   ticket:new[:{service}]        → which running service it is about (0: none), then its first message awaited
+ *   ticket:list:{page}            → «تیکت‌های من», the latest activity first
+ *   ticket:{id}:{from}            → the ticket and its last messages, marked read; «بازگشت» to list page `from`
+ *   ticket:{id}:{from}:reply|close|rate[:{n}]|picture:{message} → its buttons
+ * A button under a notice (support's answer, its closing) carries `from` NOTICE: what it opens comes as a new message,
+ * so the notice stays. Only the customer's own tickets answer (Ticket::of()).
  */
 final class TicketHandler implements Handler
 {
@@ -70,7 +55,7 @@ final class TicketHandler implements Handler
     /** The messages a ticket's screen shows: the last ones. */
     private const SHOWN = 5;
 
-    /** The most of a message's words the screen shows, as Telegram counts them; the whole is on the shop's website and its panels. */
+    /** The most of a message's words the screen shows, as Telegram counts them (the whole is on the website and the panels). */
     private const WORDS_SHOWN = 600;
 
     /** The most of its subject a ticket's button shows. */
@@ -103,10 +88,7 @@ final class TicketHandler implements Handler
         return CallbackData::build(self::PREFIX, self::LIST, $page);
     }
 
-    /**
-     * The ticket's screen — opened from that page of «تیکت‌های من», 0 from anywhere else —, `$action` one of its buttons
-     * (reply, close, rate…).
-     */
+    /** The ticket's screen, opened from page `$from` of «تیکت‌های من» (0: elsewhere); `$action` one of its buttons. */
     public static function screenCallback(int $ticketId, int $from, string ...$action): string
     {
         return CallbackData::build(self::PREFIX, $ticketId, $from, ...$action);
@@ -141,10 +123,7 @@ final class TicketHandler implements Handler
         };
     }
 
-    /**
-     * «پشتیبانی» (MainMenu::SUPPORT): the contact the admin gave support — or that none is set —, as it ever was, and the
-     * tickets: a new one, and the customer's own.
-     */
+    /** «پشتیبانی» (MainMenu::SUPPORT): the admin's support contact (or that none is set), a new ticket and the customer's own. */
     public function home(Context $ctx): void
     {
         $contact = $this->settings->supportContact();
@@ -159,11 +138,7 @@ final class TicketHandler implements Handler
         ));
     }
 
-    /**
-     * «⚠️ ارسال گزارش اختلال» on a service's screen (SubscriptionHandler): a new ticket about that service — its first
-     * message awaited, as a new ticket's is (TicketMessageHandler) —, asked for in the outage report's words, «بازگشت» to
-     * the service's screen.
-     */
+    /** «⚠️ ارسال گزارش اختلال» on a service's screen: a new ticket about that service, its first message awaited. */
     public function report(Context $ctx, Subscription $service): void
     {
         TicketMessageHandler::awaitNew($ctx->session, $service->id);
@@ -171,13 +146,10 @@ final class TicketHandler implements Handler
         $ctx->edit($this->texts->render(BotText::TicketReportAsk, ['client' => $service->remote_name]), ['reply_markup' => $this->buttons->backOnly(SubscriptionHandler::serviceCallback($service->id))]);
     }
 
-    /**
-     * «📨 تیکت جدید»: which of their services the ticket is about — the running ones, the newest NEW_SERVICES, named as
-     * the panel names them, and «بدون سرویس مشخص» —; a customer without one goes straight on to the message.
-     */
+    /** «📨 تیکت جدید»: which running service it is about, or «بدون سرویس مشخص»; without any, straight on to the message. */
     private function services(Context $ctx): void
     {
-        $services = Subscription::active()->where('user_id', $ctx->user->id)->latest('id')->limit(self::NEW_SERVICES)->get(['id', 'remote_name']);
+        $services = CustomerServices::running($ctx->user->id)->limit(self::NEW_SERVICES)->get(['id', 'remote_name']);
         if ($services->isEmpty()) {
             $this->ask($ctx, 0, MainMenu::SUPPORT);
 
@@ -194,10 +166,7 @@ final class TicketHandler implements Handler
         $ctx->edit($this->texts->get(BotText::TicketPickService), ['reply_markup' => $keyboard->build()]);
     }
 
-    /**
-     * A new ticket's first message awaited (TicketMessageHandler) — about that service of the customer's, or none (0) —,
-     * «بازگشت» to the step before (`$back`): the services, or «پشتیبانی» when there were none to pick.
-     */
+    /** A new ticket's first message awaited — about the customer's service `$serviceId`, or none (0) —, «بازگشت» to `$back`. */
     private function ask(Context $ctx, int $serviceId, string $back): void
     {
         $service = $serviceId > 0 ? Subscription::query()->where('user_id', $ctx->user->id)->find($serviceId) : null;
@@ -208,11 +177,7 @@ final class TicketHandler implements Handler
         ]), ['reply_markup' => $this->buttons->backOnly($back)]);
     }
 
-    /**
-     * «تیکت‌های من»: the customer's tickets, the latest activity first, a page at a time — each a button «#12 · subject»
-     * marked by where it stands —, «بعدی» / «قبلی» under them when there is more than a page and the page's number under
-     * the title; none yet, a word and «📨 تیکت جدید». «بازگشت» to «پشتیبانی».
-     */
+    /** «تیکت‌های من»: a button per ticket, the latest activity first, a page at a time; none yet offers a new one. */
     private function list(Context $ctx, int $page): void
     {
         $mine = Ticket::of($ctx->user);
@@ -275,10 +240,7 @@ final class TicketHandler implements Handler
         $this->put($ctx, $fresh, $text, $this->keyboard($ticket, $from, $pictures));
     }
 
-    /**
-     * «✍️ پاسخ»: their next message awaited (TicketMessageHandler) — a closed ticket opens again with it, which the prompt
-     * says —, «بازگشت» to the ticket. Support's latest words are read by now: the customer is answering them.
-     */
+    /** «✍️ پاسخ»: the next message awaited (a closed ticket opens again with it, which the prompt says); marked read. */
     private function reply(Context $ctx, Ticket $ticket, int $from, bool $fresh): void
     {
         $this->tickets->markRead($ticket);
@@ -290,10 +252,7 @@ final class TicketHandler implements Handler
         ]), $this->buttons->backOnly(self::screenCallback($ticket->id, $from)));
     }
 
-    /**
-     * «🔒 بستن تیکت»: closed by the customer — the report group hears it, nobody else —, the screen redrawn; one support
-     * closed a moment ago is said so.
-     */
+    /** «🔒 بستن تیکت»: closed by the customer, the screen redrawn; one support closed a moment ago gets a popup saying so. */
     private function close(Context $ctx, Ticket $ticket, int $from): void
     {
         try {
@@ -307,10 +266,7 @@ final class TicketHandler implements Handler
         $this->show($ctx, $ticket, $from, fresh: false);
     }
 
-    /**
-     * «⭐ امتیاز»: the stars, 1 to 5, «بازگشت» to the ticket — under a notice, as a message of its own. A ticket opened
-     * again meanwhile has nothing to rate until it closes.
-     */
+    /** «⭐ امتیاز»: five star buttons; a ticket opened again meanwhile has nothing to rate until it closes. */
     private function stars(Context $ctx, Ticket $ticket, int $from, bool $fresh): void
     {
         if ($ticket->status !== TicketStatus::Closed) {
@@ -330,10 +286,7 @@ final class TicketHandler implements Handler
         $this->put($ctx, $fresh, $this->texts->render(BotText::TicketRateAsk, ['ticket' => $ticket->id]), $keyboard->build());
     }
 
-    /**
-     * A star pressed: the closed ticket rated — the report group hears a first rating or a changed one —, the screen
-     * redrawn with its rating. A rating is a message of the customer's window: past it, the wait is said.
-     */
+    /** A star pressed: the closed ticket rated and the screen redrawn. A rating counts against the customer's message limit. */
     private function rate(Context $ctx, Ticket $ticket, int $from, int $rating): void
     {
         try {
@@ -352,10 +305,7 @@ final class TicketHandler implements Handler
         $this->show($ctx, $ticket, $from, fresh: false);
     }
 
-    /**
-     * «🖼️ تصویر n»: a message's picture, as a photo of its own — the screen stays —, said whose message it went with and
-     * when; one that is not there any more (Telegram no longer hands it over, its file gone) is said so.
-     */
+    /** «🖼️ تصویر n»: the message's picture as a photo of its own (the screen stays); one no longer kept gets a popup saying so. */
     private function picture(Context $ctx, Ticket $ticket, int $messageId): void
     {
         $message = TicketMessage::query()->where('ticket_id', $ticket->id)->find($messageId);
@@ -370,10 +320,8 @@ final class TicketHandler implements Handler
     }
 
     /**
-     * The ticket worded: its number and subject, where it stands, the service it is about and the customer's rating, and
-     * its last SHOWN messages, the earliest of them first — as many as a message holds with the rest (the earliest left
-     * out first), a line saying how many came before them —; and the messages shown whose picture is there to send, in
-     * the order they are numbered.
+     * The ticket's screen text — its state, service, rating and its last SHOWN messages, as many as fit one Telegram
+     * message (the earliest dropped first) — and the shown messages with a picture to send, in their numbered order.
      *
      * @return array{string, list<TicketMessage>}
      */
@@ -407,7 +355,7 @@ final class TicketHandler implements Handler
             }
         }
 
-        // The latest message alone — its words cut by as much as the admin's wording leaves no room for.
+        // Only the latest message is left: cut its text by as much as the admin's wording leaves no room for.
         $shown = array_slice($latest, -1);
         $text = $render($shown, self::WORDS_SHOWN);
         $over = TelegramHtml::visibleLength($text) - $room;
@@ -416,9 +364,8 @@ final class TicketHandler implements Handler
     }
 
     /**
-     * The ticket's messages on its screen, a part each — whose (theirs «شما», support's «پشتیبانی»), when, its words cut
-     * to `$words` as Telegram counts them (Limits::fit()), its picture numbered as its «🖼️ تصویر» button is (or said to be no longer kept) —, under a
-     * line saying how many earlier ones are not shown.
+     * The messages on the screen, a part each (who, when, the words cut to `$words`, the picture's number), under a line
+     * counting the earlier ones not shown.
      *
      * @param list<TicketMessage> $messages
      */
@@ -445,9 +392,8 @@ final class TicketHandler implements Handler
     }
 
     /**
-     * Rows as Telegram lays them out, left to right — for a right-to-left reader the first button of a row is the one on
-     * the right: «🖼️ تصویر n» for each picture shown, 1 on the right; «پاسخ», beside it «بستن تیکت» while the ticket is
-     * open or answered, or «امتیاز» once it is closed and not yet rated; «بازگشت» to the page of the list it was opened from.
+     * The ticket's buttons (rows reversed for a right-to-left reader): «🖼️ تصویر n» per picture; «پاسخ» with «بستن تیکت»
+     * while open, or «امتیاز» once closed and unrated; «بازگشت» to the list page it came from.
      *
      * @param list<TicketMessage> $pictures
      * @return array<string, mixed>
@@ -482,7 +428,7 @@ final class TicketHandler implements Handler
     }
 
     /**
-     * A screen in place of the tapped message — or, under a notice (`$fresh`), a message of its own: the notice stays.
+     * A screen in place of the tapped message — or, opened under a notice (`$fresh`), as a new message so the notice stays.
      *
      * @param array<string, mixed> $keyboard
      */

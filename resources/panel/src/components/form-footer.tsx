@@ -7,10 +7,13 @@ import { CardFooter } from '@/components/ui/card'
 import { formatNumber } from '@/lib/format'
 import { useConfirmDiscard, useUnsavedGuard } from '@/lib/use-unsaved-guard'
 
-/**
- * A form-level failure (nothing to pin on one field), announced to assistive tech: ErrorState's line. With the `failure`
- * it came of, a wait the server asked for (a 429) counts down under it.
+/*
+ * The two footers every edit surface ends with: FormActions (a form in a dialog: revert, cancel, submit) and SaveFooter
+ * (a card edited in place: revert, save). Both guard unsaved changes (lib/use-unsaved-guard) and, when a submit comes
+ * back refused field by field, focus the first invalid field and say how many are left.
  */
+
+/** A form-level failure (nothing to pin on one field), as ErrorState's inline line; with its `failure`, a 429's wait counts down. */
 export function FormError({ message, failure }: { message: string | null | undefined; failure?: unknown }) {
   if (!message) return null
 
@@ -18,17 +21,17 @@ export function FormError({ message, failure }: { message: string | null | undef
 }
 
 /**
- * A field its form marks invalid: a control (Field sets `aria-invalid` from the form's errors) — or a group of controls
- * that is one field of the form, its refusals said under it (`data-invalid`, focusable: a plan's servers).
+ * A field the form marks invalid: a control (Field sets `aria-invalid`), or a focusable group of controls that is one
+ * field (`data-invalid`: a plan's servers).
  */
 export const INVALID_FIELD = '[aria-invalid="true"], [data-invalid]'
 
-/** A fold's mark — the rarely needed part of a form (Disclosure), hidden until opened —, which opens for a field it holds that is marked invalid. */
+/** Marks a Disclosure's folded part, which opens when a field inside is marked invalid. */
 export const FOLD = 'data-fold'
 
 /**
- * The folds that keep a field out of sight — closed Disclosures, which open for it —, none when it is in sight; null when
- * something else does: a section kept mounted but hidden, or inert — no place for the focus.
+ * The closed folds that hide a field (empty when it is in sight), or null when something else hides it — a hidden
+ * section, or an inert one — so the focus cannot go there.
  */
 function foldsOver(field: HTMLElement): HTMLElement[] | null {
   const folds: HTMLElement[] = []
@@ -42,7 +45,7 @@ function foldsOver(field: HTMLElement): HTMLElement[] | null {
   return folds
 }
 
-/** The focus on the field, once its folds have opened for it; what stops the wait. */
+/** Focus the field once its folds have opened; returns what stops the wait. */
 function focusOnceShown(field: HTMLElement, folds: HTMLElement[]): () => void {
   const shown = () => folds.every((fold) => !fold.hasAttribute('hidden'))
   if (shown()) {
@@ -59,10 +62,9 @@ function focusOnceShown(field: HTMLElement, folds: HTMLElement[]): () => void {
 }
 
 /**
- * The fields of the footer's form that a refusal marked invalid — counted as the form shows them, so the footer's word
- * follows each fix and goes with the last —, and, as a submit ends with some (the server refused them by name, a 422),
- * the focus on the first one the admin can be taken to — on screen, or in a fold, which opens for it —, which brings it
- * into view however far above the footer it is. `anchor` goes on an element of the footer, inside the form.
+ * The footer's form's invalid fields: how many are marked now (so the count follows each fix), and — when a submit ends
+ * with some — the focus on the first one that can take it, opening its folds first; focusing scrolls it into view.
+ * `anchor` goes on an element of the footer, inside the form.
  */
 function useFieldsToFix(busy: boolean) {
   const [form, setForm] = useState<HTMLFormElement | null>(null)
@@ -93,7 +95,7 @@ function useFieldsToFix(busy: boolean) {
   return { anchor, toFix }
 }
 
-/** How many fields wait for a fix, said near the button that was refused. */
+/** How many fields wait for a fix, shown beside the buttons. */
 function FieldsToFix({ count }: { count: number }) {
   return (
     <span className="flex items-center gap-1.5 text-footnote text-danger">
@@ -103,52 +105,48 @@ function FieldsToFix({ count }: { count: number }) {
   )
 }
 
-/** Whether the form inside makes something new: what a dialog opened on nothing says (`Creating`). */
 const CreatingContext = createContext(false)
 
 /**
- * What a dialog provides to the form it opens to make something new — EditorModal without a row, PickerModal's form, the
- * keyboard's button dialog —: the form has nothing saved to go back to, so its actions offer no revert, whatever it hands
- * them.
+ * Provided by a dialog whose form makes something new (EditorModal without a row, PickerModal's form): there is
+ * nothing saved to go back to, so FormActions offers no revert whatever the form passes.
  */
 export const Creating = CreatingContext.Provider
 
 interface FormActionsProps {
-  /** The form's failure (FormError), said above the row. */
+  /** The form's failure (FormError), shown above the row. */
   error?: string | null
-  /** Close the dialog without saving; absent where the form is a card on a page (the server's connection). */
+  /** Close the dialog without saving; absent for a form that is a card on a page. */
   onCancel?: () => void
   submitLabel: string
-  /** True while the submit runs: the buttons lock and the submit shows a spinner. */
+  /** The submit runs: the buttons lock and the submit spins. */
   busy?: boolean
-  /** The submit cannot go now (nothing to submit yet, a sibling request running); cancel and revert stay free. */
+  /** Nothing to submit yet (or a sibling request running); cancel and revert stay free. */
   disabled?: boolean
-  /** The submit button's icon when idle. */
+  /** The submit cannot go yet, for a reason the form says beside it: held (aria-disabled), so a press keeps the focus. */
+  held?: boolean
+  /** The submit's icon when idle. */
   icon?: LucideIcon
   /** Something at the start of the row (a delete button, a test button). */
   start?: ReactNode
-  /** The values say something else than where the form started (useForm's `dirty`): what would be lost — asked about first. */
+  /** The values differ from where the form started (useForm's `dirty`): leaving asks first. */
   dirty?: boolean
   /**
-   * Discard the unsaved changes in place (the form stays open) — handed by a form that edits what is saved (a row, a
-   * text, a customer's groups), which then has nothing to do while nothing changed: its revert and its submit are held. A
-   * form that makes something new hands none — or its dialog says it is new (`Creating`) —: there is nothing to go back to.
+   * Discard the unsaved changes in place. Passed by a form that edits something saved — its revert and submit are then
+   * held while nothing changed. A form that makes something new passes none (or is inside `Creating`).
    */
   onRevert?: () => void
 }
 
 /**
- * The cancel/submit row that closes every form in a dialog — an edit's with a way to throw unsaved edits away, held as its
- * submit is while nothing changed —, and, while there are unsaved changes, the question before they are lost (closing
- * the tab, a link elsewhere, «انصراف», the dialog's ✕ or Escape). While the submit runs, the dialog waits for it; refused
- * field by field, the focus goes to the first field to fix and the row says how many are left.
+ * The cancel/submit row of every form in a dialog. While the values are dirty, leaving (the tab, a link, «انصراف», the
+ * dialog's ✕) asks first; while the submit runs, the dialog waits for it.
  */
-export function FormActions({ error, onCancel, submitLabel, busy = false, disabled = false, icon, start, dirty = false, onRevert }: FormActionsProps) {
+export function FormActions({ error, onCancel, submitLabel, busy = false, disabled = false, held = false, icon, start, dirty = false, onRevert }: FormActionsProps) {
   useUnsavedGuard(dirty && !busy)
   useHoldOpen(busy)
   const confirmDiscard = useConfirmDiscard()
   const { anchor, toFix } = useFieldsToFix(busy)
-  // An edit of what is saved — never a new row's form, which has nothing to go back to.
   const revert = useContext(CreatingContext) ? undefined : onRevert
 
   return (
@@ -165,8 +163,8 @@ export function FormActions({ error, onCancel, submitLabel, busy = false, disabl
               انصراف
             </Button>
           )}
-          {/* An edit with nothing changed has nothing to save: held, not disabled — just pressed, it keeps the focus. */}
-          <Button type="submit" icon={icon} busy={busy} disabled={disabled} aria-disabled={revert !== undefined && !dirty}>
+          {/* An edit with nothing changed has nothing to save: held rather than disabled, so a press keeps the focus. */}
+          <Button type="submit" icon={icon} busy={busy} disabled={disabled} aria-disabled={held || (revert !== undefined && !dirty)}>
             {submitLabel}
           </Button>
         </div>
@@ -178,21 +176,17 @@ export function FormActions({ error, onCancel, submitLabel, busy = false, disabl
 interface SaveFooterProps {
   saving: boolean
   dirty: boolean
-  /** Discard the unsaved changes of this card. */
+  /** Discard this card's unsaved changes. */
   onRevert: () => void
-  /** Lock the save for another reason (a read-only file, a sibling request). */
+  /** Lock the save for another reason (config.php cannot be written). */
   disabled?: boolean
-  /** Save by hand instead of submitting the enclosing form (a card that is not a <form>). */
+  /** Save by hand, for a card that is not a <form>. */
   onSave?: () => void
-  /** Actions at the start of the footer (test buttons, a reset). */
+  /** Actions at the start of the footer (a test button). */
   start?: ReactNode
 }
 
-/**
- * The foot of a card that edits in place: the unsaved hint, revert, and save — pinned under the card's content. While
- * something is unsaved, leaving asks first (the tab, a reload, a link to another page). Refused field by field, the
- * focus goes to the first field to fix and the foot says how many are left.
- */
+/** The foot of a card that edits in place: the unsaved hint, revert and save. While dirty, leaving asks first. */
 export function SaveFooter({ saving, dirty, onRevert, disabled = false, onSave, start }: SaveFooterProps) {
   useUnsavedGuard(dirty && !saving)
   const { anchor, toFix } = useFieldsToFix(saving)
@@ -203,7 +197,7 @@ export function SaveFooter({ saving, dirty, onRevert, disabled = false, onSave, 
       <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
         {toFix > 0 ? <FieldsToFix count={toFix} /> : dirty && !saving && <span className="me-1 text-footnote text-faint">تغییرات ذخیره نشده</span>}
         <RevertButton onClick={onRevert} held={saving || !dirty} size="sm" />
-        {/* Saved, it has nothing to save — and keeps the focus it was pressed with (held, not disabled). */}
+        {/* Nothing to save: held rather than disabled, so a press keeps the focus. */}
         <Button type={onSave ? 'button' : 'submit'} size="sm" onClick={onSave} busy={saving} disabled={disabled} aria-disabled={!dirty}>
           ذخیره
         </Button>
@@ -212,10 +206,7 @@ export function SaveFooter({ saving, dirty, onRevert, disabled = false, onSave, 
   )
 }
 
-/**
- * "Throw my unsaved edits away" — the same control on every form, greyed out while there is nothing to revert, and held
- * rather than disabled: pressed, it keeps the focus.
- */
+/** «بازگردانی تغییرات»: held (not disabled) while there is nothing to revert, so a press keeps the focus. */
 function RevertButton({ onClick, held = false, size = 'default' }: { onClick: () => void; held?: boolean; size?: 'default' | 'sm' }) {
   return (
     <Button variant="ghost" size={size} icon={Undo2} onClick={onClick} aria-disabled={held}>

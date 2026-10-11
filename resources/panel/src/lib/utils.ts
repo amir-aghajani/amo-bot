@@ -14,13 +14,14 @@ const twMerge = extendTailwindMerge({
   },
 })
 
+/** Class names joined, later Tailwind utilities winning over earlier ones of the same property. */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
 /**
- * A web address's origin — its scheme, host and port, as the server compares where a kept secret may go
- * (Core\Http\Origin) and Google an OAuth client's JavaScript origins —; the text itself, trimmed, when it is no address.
+ * A web address's origin (scheme, host and port) — what the server compares a kept secret's address by
+ * (Core\Http\Origin); the trimmed text itself when it is no address.
  */
 export function originOf(address: string): string {
   const text = address.trim()

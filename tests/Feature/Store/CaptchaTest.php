@@ -17,16 +17,14 @@ use Tests\Support\AltchaWidget;
 use Tests\Support\FakeTurnstile;
 
 /**
- * The captcha a website asks of what takes a password — a sign-up, a sign-in, a password reset —, by the driver its
- * owner chose: the widget's token (`captcha`), solved for the form's action, judged once the form's own fields passed —
- * Cloudflare Turnstile by Cloudflare (the website's secret, the token, the visitor), ALTCHA by the shop itself, its
- * challenge the shop's own. A token that is none, solved for another form or on another site, or taken before, is a 422
- * on `captcha`; Cloudflare out of reach a 503. A refused token costs the address network that sent it what an email
- * does — once that is spent, the next is refused unjudged —, a passing one nothing; a website that asks none asks
- * nothing.
+ * The captcha on sign-up, password sign-in and reset, with each driver (Turnstile, ALTCHA): a token solved for another
+ * form or site, or reused, is a 422 on `captcha`; Cloudflare out of reach a 503; a refused token costs the address
+ * network what an email does, a passing one nothing.
  */
 final class CaptchaTest extends HttpTestCase
 {
+    use WebsiteSignIns;
+
     private const SECRET = '0x4AAAAAAA-turnstile-secret';
 
     /** Each form a captcha guards: its address, what it answers once it passes, and the action its widget names. */
@@ -161,11 +159,5 @@ final class CaptchaTest extends HttpTestCase
         };
 
         return $this->postJson($this->storeApi($this->website, $path), $body + ($captcha === null ? [] : ['captcha' => $captcha]));
-    }
-
-    /** @return array{int, mixed} The status, and what it said under its fields */
-    private function refused(ResponseInterface $response): array
-    {
-        return [$response->getStatusCode(), $this->decode($response)['errors'] ?? null];
     }
 }

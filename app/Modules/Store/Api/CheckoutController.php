@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Store\Api;
 
+use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Accounts\Http\Customer;
@@ -18,17 +19,16 @@ use App\Modules\Store\Presenters\SubscriptionPresenter;
 use App\Modules\Store\Services\CustomerCheckout;
 use App\Modules\Store\Services\CustomerReceipts;
 use App\Modules\Store\Services\CustomerSubscriptions;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Models\Subscription;
-use App\Support\Input;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * A signed-in customer's checkout on the shop's website (Store\Services\CustomerCheckout, over the shop's one checkout):
- * the ways to pay, a purchase, a service's renewal and its preview, a wallet top-up — each ordering request with its
- * Idempotency-Key — and a card transfer's receipt (Store\Services\CustomerReceipts).
+ * A signed-in customer's checkout (Store\Services\CustomerCheckout): the ways to pay, a purchase, a renewal and its
+ * preview, a service's extras, a discount code checked, a wallet top-up — each ordering request with its
+ * Idempotency-Key, read before anything else — and a card transfer's receipt (Store\Services\CustomerReceipts).
  */
 final class CheckoutController extends ApiController
 {
@@ -40,7 +40,7 @@ final class CheckoutController extends ApiController
     ) {}
 
     /**
-     * GET /payment-methods — ?for=purchase|renewal|wallet_topup: the ways to pay that kind of order.
+     * GET /payment-methods — ?for=purchase|renewal|wallet_topup|extra_traffic|extra_time: the ways to pay that kind of order.
      *
      * @throws ValidationException 422 on `for`
      */
@@ -50,7 +50,7 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * POST /orders — {plan_id, server_id, method_id} with its Idempotency-Key: a purchase, paid.
+     * POST /orders — {plan_id, server_id, method_id, discount_code?}: a purchase, paid.
      *
      * @throws ValidationException 422
      * @throws NoServerAvailableException 422 on `server_id`
@@ -60,13 +60,12 @@ final class CheckoutController extends ApiController
     public function purchase(Request $request, Response $response): Response
     {
         $key = IdempotencyKey::of($request);
-        $customer = Customer::of($request)->user;
 
-        return $this->answer($request, $response, $this->checkout->purchase($customer, $this->input($request), $key));
+        return $this->answer($request, $response, $this->checkout->purchase(Customer::of($request)->user, $this->input($request), $key));
     }
 
     /**
-     * GET /subscriptions/{id}/renewal — the renewal before it is paid: the plan, its price, the service as it would leave it.
+     * GET /subscriptions/{id}/renewal — the renewal before it is paid.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
@@ -75,28 +74,11 @@ final class CheckoutController extends ApiController
      */
     public function renewal(Request $request, Response $response, array $args): Response
     {
-        $preview = $this->checkout->renewal($this->own($request, $args));
-        $plan = $preview->plan;
-
-        return $this->json($response, ['renewal' => [
-            'plan' => [
-                'id' => $plan->id,
-                'name' => $plan->name,
-                'price' => $plan->price,
-                'traffic_gb' => $plan->traffic_gb,
-                'duration_days' => $plan->duration_days,
-            ],
-            'price' => $preview->price,
-            'after' => [
-                'term' => SubscriptionPresenter::term($preview->after),
-                'traffic' => SubscriptionPresenter::traffic($preview->after),
-                'next_period' => SubscriptionPresenter::nextPeriod($preview->after),
-            ],
-        ]]);
+        return $this->json($response, ['renewal' => SubscriptionPresenter::renewal($this->checkout->renewal($this->own($request, $args)))]);
     }
 
     /**
-     * POST /subscriptions/{id}/renewal — {method_id} with its Idempotency-Key: the service renewed, paid.
+     * POST /subscriptions/{id}/renewal — {method_id, discount_code?}: the service renewed, paid.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
@@ -114,7 +96,59 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * POST /wallet/top-up — {amount, method_id} with its Idempotency-Key: the wallet charged.
+     * GET /subscriptions/{id}/extras — the extra traffic and time the service may buy now, at its prices.
+     *
+     * @param array<string, string> $args
+     * @throws ModelNotFoundException 404
+     */
+    public function extras(Request $request, Response $response, array $args): Response
+    {
+        return $this->json($response, ['extras' => SubscriptionPresenter::extras($this->checkout->extras($this->own($request, $args)))]);
+    }
+
+    /**
+     * POST /subscriptions/{id}/extra-traffic — {gb, method_id, discount_code?}: extra traffic, paid.
+     *
+     * @param array<string, string> $args
+     * @throws ModelNotFoundException 404
+     * @throws ValidationException 422
+     * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws CheckoutRefusedException 422 / 409; 503 the shop takes no orders while its bot is switched off
+     */
+    public function extraTraffic(Request $request, Response $response, array $args): Response
+    {
+        return $this->extra($request, $response, $args, ExtraKind::Traffic);
+    }
+
+    /**
+     * POST /subscriptions/{id}/extra-time — {days, method_id, discount_code?}: extra time, paid.
+     *
+     * @param array<string, string> $args
+     * @throws ModelNotFoundException 404
+     * @throws ValidationException 422
+     * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws CheckoutRefusedException 422 / 409; 503 the shop takes no orders while its bot is switched off
+     */
+    public function extraTime(Request $request, Response $response, array $args): Response
+    {
+        return $this->extra($request, $response, $args, ExtraKind::Time);
+    }
+
+    /**
+     * POST /discount-codes/check — {code, for, plan_id?, server_id?, subscription_id?, gb?, days?}: what the code takes off,
+     * nothing ordered.
+     *
+     * @throws ValidationException 422 on `code` and the rest
+     * @throws ModelNotFoundException 404: no service of theirs
+     * @throws TooManyAttemptsException 429: too many codes that did not hold
+     */
+    public function checkCode(Request $request, Response $response): Response
+    {
+        return $this->json($response, ['quote' => $this->checkout->checkCode(Customer::of($request)->user, $this->input($request))]);
+    }
+
+    /**
+     * POST /wallet/top-up — {amount, method_id}: the wallet charged.
      *
      * @throws ValidationException 422
      * @throws RequestKeyReusedException 422 on `idempotency_key`
@@ -128,8 +162,7 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * POST /payments/{id}/receipt — multipart: `file` (the picture), `note`: a card transfer's receipt; its order, the
-     * payment awaiting review.
+     * POST /payments/{id}/receipt — multipart `file` and `note`: a card transfer's receipt; answers its order.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404: no payment of theirs
@@ -138,15 +171,26 @@ final class CheckoutController extends ApiController
      */
     public function receipt(Request $request, Response $response, array $args): Response
     {
-        $file = $request->getUploadedFiles()['file'] ?? null;
-        $order = $this->receipts->upload(
-            Customer::of($request)->user,
-            Input::integerOf($args['id'] ?? null) ?? 0,
-            $file instanceof UploadedFileInterface ? $file : null,
-            $this->input($request),
-        );
+        $order = $this->receipts->upload(Customer::of($request)->user, $this->routeId($args), $this->uploadedFile($request), $this->input($request));
 
         return $this->json($response, ['order' => $this->orders->present($order)]);
+    }
+
+    /**
+     * `$kind` bought for the service the route names; the key is read first.
+     *
+     * @param array<string, string> $args
+     * @throws ModelNotFoundException 404
+     * @throws ValidationException 422
+     * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws CheckoutRefusedException
+     */
+    private function extra(Request $request, Response $response, array $args, ExtraKind $kind): Response
+    {
+        $key = IdempotencyKey::of($request);
+        $subscription = $this->own($request, $args);
+
+        return $this->answer($request, $response, $this->checkout->extra(Customer::of($request)->user, $subscription, $kind, $this->input($request), $key));
     }
 
     /** @throws CheckoutRefusedException */
@@ -156,13 +200,13 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * The service the route names, the customer's own.
+     * The customer's own service the route names.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
      */
     private function own(Request $request, array $args): Subscription
     {
-        return $this->subscriptions->find(Customer::of($request)->user, Input::integerOf($args['id'] ?? null) ?? 0);
+        return $this->subscriptions->find(Customer::of($request)->user, $this->routeId($args));
     }
 }

@@ -17,10 +17,8 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * A customer's account on the shop's website, as support reads it on their page in either panel (GET /users/{id}'s
- * `account`): its ways in, whether its password sign-in asks a second step, the devices signed in, and the accounts
- * merged into it — and what support does to it: two-factor sign-in turned off for a customer who lost their phone (told
- * in Telegram, logged with who did it), every device signed out (logged).
+ * A customer's website account on their page (ways in, two-factor sign-in, devices, merges), and support turning
+ * two-factor sign-in off or signing every device out — the customer told, the actor logged.
  */
 final class CustomerWebsiteAccountApiTest extends HttpTestCase
 {

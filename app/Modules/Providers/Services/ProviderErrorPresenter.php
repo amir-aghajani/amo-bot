@@ -16,11 +16,10 @@ use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 
 /**
  * A connector failure in words, for two audiences. The owner, who runs the servers, gets the diagnosis — the same for
- * every panel, with the driver's remedy (`hint`) appended — and the technical detail apart (the panel's own words,
- * cURL's, where a redirect points): explain() / describe(). Anyone else — an agent, the shop's admins on its website, an
- * agent's report group — gets summary(): what happened in a word, never the panel's host, port, path or answers. Which
- * one a reader gets is decided where it is read: by who reads a screen (a failed order's `notes` and `diagnosis`,
- * OrderDirectory::notes(); a subscriptions screen's answer), by whose group a report goes to.
+ * every panel, with the connector's remedy (`hint`) appended — and the technical detail apart (the panel's own words,
+ * cURL's, where a redirect points): explain(), describe(). Anyone else (an agent, a website admin, an agent's report
+ * group) gets summary(): what happened in a word, never the panel's host, path or answers. The caller decides which by
+ * who reads it.
  */
 final class ProviderErrorPresenter
 {
@@ -40,7 +39,7 @@ final class ProviderErrorPresenter
         return ['message' => $message, 'detail' => trim($detail)];
     }
 
-    /** The owner's diagnosis on one line, the detail in parentheses — a server's `last_error`, a grant's failures. */
+    /** The owner's diagnosis on one line, the detail in parentheses: a server's `last_error`, a grant's failures. */
     public static function describe(ProviderException $e): string
     {
         ['message' => $message, 'detail' => $detail] = self::explain($e);
@@ -48,7 +47,7 @@ final class ProviderErrorPresenter
         return self::join($message, $detail);
     }
 
-    /** What anyone but the owner may read: what happened, in a word — nothing of the panel itself. */
+    /** What anyone but the owner may read: what happened in a word, nothing of the panel itself. */
     public static function summary(ProviderException $e): string
     {
         return match (true) {
@@ -60,6 +59,7 @@ final class ProviderErrorPresenter
         };
     }
 
+    /** A diagnosis and its detail on one line. */
     public static function join(string $message, string $detail): string
     {
         return $detail === '' ? $message : "{$message} ({$detail})";

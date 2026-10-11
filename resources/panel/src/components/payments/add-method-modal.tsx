@@ -13,9 +13,8 @@ interface AddMethodModalProps {
 }
 
 /**
- * Two steps: pick a driver (card-to-card today, online gateways later), then fill its form — drawn from its description
- * (gateways/method-form). Built-in drivers (the wallet) are listed for completeness but cannot be added — the shop
- * already has them.
+ * Adds a payment method in two steps: pick a driver, then fill its form (drawn from the driver's description). Built-in
+ * drivers (the wallet) are listed but cannot be picked: every shop already has one.
  */
 export function AddMethodModal({ open, onClose, onCreated }: AddMethodModalProps) {
   return (

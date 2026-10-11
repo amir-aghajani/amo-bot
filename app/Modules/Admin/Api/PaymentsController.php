@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
 use App\Modules\Payments\Models\Payment;
@@ -17,9 +16,9 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The payments screen and everything its modal can do: list, the receipt itself, approve (a receipt or by hand),
- * reject, cancel, remind, retry the delivery, refund — each PaymentActions', which tells the customer; the answer is
- * the payment's row as it stands after it.
+ * The payments screen: the list, a receipt's picture, and the modal's operations — approve, reject, cancel, remind, retry
+ * the delivery, refund — each PaymentActions', which tells the customer. An operation answers the payment's row as it
+ * stands after it.
  */
 final class PaymentsController extends ApiController
 {
@@ -32,7 +31,7 @@ final class PaymentsController extends ApiController
     /** GET /payments?search=&status=&user=&from=&to=&sort=&dir=&page= */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->payments->search(PageRequest::fromQuery($request->getQueryParams()))->toArray('payments'));
+        return $this->json($response, $this->payments->search($this->pageRequest($request))->toArray('payments'));
     }
 
     /**
@@ -46,8 +45,8 @@ final class PaymentsController extends ApiController
     }
 
     /**
-     * GET /payments/{id}/receipt — the receipt's bytes: a picture to show, anything else (a HEIC photo) a file to save;
-     * a 404 when there is none (none sent, or Telegram no longer has it), a 502 while Telegram is out of reach.
+     * GET /payments/{id}/receipt — the receipt: a picture to show, anything else a file to save; a 404 when there is none
+     * (none sent, or Telegram no longer has it), a 502 while Telegram is out of reach.
      *
      * @param array<string, string> $args
      */
@@ -93,7 +92,7 @@ final class PaymentsController extends ApiController
     }
 
     /**
-     * POST /payments/{id}/remind — nudge the customer in the bot; the answer says whether they were told (`delivery`)
+     * POST /payments/{id}/remind — remind the customer to pay; `delivery` says whether, and how, they were told
      *
      * @param array<string, string> $args
      */
@@ -116,8 +115,8 @@ final class PaymentsController extends ApiController
     }
 
     /**
-     * POST /payments/{id}/refund — {note?}: the wallet line the refund writes carries it, so it is held to that line's room
-     * (PaymentService::REFUND_NOTE_MAX)
+     * POST /payments/{id}/refund — {note?}: the note becomes the refund's wallet line, so it is held to that line's
+     * length (PaymentService::REFUND_NOTE_MAX)
      *
      * @param array<string, string> $args
      */
@@ -134,13 +133,13 @@ final class PaymentsController extends ApiController
         return $this->load(Payment::class, $args, PaymentDirectory::RELATIONS);
     }
 
-    /** Support's word to the customer that came with the decision — refused past `$max` before anything changes. */
+    /** Support's note to the customer with the decision, refused past `$max` before anything changes. */
     private function note(Request $request, int $max = Input::NOTE_MAX): ?string
     {
         return Input::note($this->input($request), 'note', $max);
     }
 
-    /** The payment's row as it stands now — its order re-read, as an operation left it. */
+    /** The payment's row as it stands now, its relations read again. */
     private function row(Response $response, Payment $payment): Response
     {
         return $this->json($response, ['payment' => $this->payments->present($payment->load(PaymentDirectory::RELATIONS))]);

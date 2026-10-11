@@ -16,10 +16,8 @@ use App\Modules\Payments\Enums\GatewayKind;
 use App\Support\BankCard;
 
 /**
- * Card-to-card: the customer pays to a card of the shop's and sends the receipt — in the bot or from the website —,
- * which a person accepts, or the method's review window does for one sent in the bot. A method a card: its form is the
- * card's number, whose card it is, a note for the customer under it and the review window, each kept in the row's
- * config under its name; its gateway is ManualGateway.
+ * Card-to-card: the customer pays to the shop's card and sends a receipt, which support accepts — or the method's review
+ * window, for a receipt sent in the bot. One method row per card: number, holder, a note for the customer, the window.
  */
 final class ManualDriver implements GatewayDriver
 {

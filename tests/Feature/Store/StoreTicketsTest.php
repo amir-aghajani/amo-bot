@@ -33,15 +33,9 @@ use Psr\Log\LoggerInterface;
 use Tests\HttpTestCase;
 
 /**
- * A customer's support tickets on the shop's website — their own only, another's not there at all: opened with a
- * subject, a first message and, when they choose, the service it is about and a picture (JSON, or a form with its
- * `file`); written in under the ticket's hold — a closed one opens again —, read — and said read, support's words and
- * their notices read then —, closed, rated once closed. Every refusal at once, and a customer who opens, writes, rates or
- * sends pictures faster than a person waits (429: their pictures one budget with their receipts; the pictures they ask
- * for a hundred and twenty an hour); a ticket holds two hundred messages and twenty pictures the customer uploads; no
- * picture is taken while the host's disk has no room (503).
- * A closed ticket's uploaded pictures go a month after it closed, its messages saying they had one. What they do tells
- * nobody but the report group; support's answer reaches them — in Telegram, by email, in their feed.
+ * Support tickets on the website: opening, writing (a closed ticket reopens), reading and marking read, closing and
+ * rating; refusals at once; the rate, picture and size limits; a full disk (503); old pictures pruned a month after
+ * closing; support's answers reaching the customer.
  */
 final class StoreTicketsTest extends HttpTestCase
 {

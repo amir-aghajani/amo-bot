@@ -6,6 +6,7 @@ namespace App\Modules\Referrals\Services;
 
 use App\Core\Database\Page;
 use App\Core\Database\PageRequest;
+use App\Modules\Referrals\Models\ReferralAlert;
 use App\Modules\Referrals\Models\ReferralCommission;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
@@ -28,9 +29,9 @@ final class ReferralDirectory
     public function __construct(private readonly ReferralSettings $settings) {}
 
     /**
-     * The program's rules and numbers, above the lists.
+     * The program's rules and numbers, above the lists — the alerts that stand among them.
      *
-     * @return array{enabled: bool, rate: int, first_only: bool, referrers: int, referred: int, commissions: int, paid: string}
+     * @return array{enabled: bool, rate: int, renewal_rate: int, first_only: bool, referrers: int, referred: int, commissions: int, paid: string, alerts: int}
      */
     public function summary(): array
     {
@@ -44,17 +45,20 @@ final class ReferralDirectory
         return [
             'enabled' => $this->settings->enabled(),
             'rate' => $this->settings->rate(),
+            'renewal_rate' => $this->settings->renewalRate(),
             'first_only' => $this->settings->firstOnly(),
             'referrers' => (int) ($referred->referrers ?? 0),
             'referred' => (int) ($referred->referred ?? 0),
             'commissions' => $commissions,
             'paid' => $paid,
+            'alerts' => ReferralAlert::query()->count(),
         ];
     }
 
     /**
      * Customers whose link brought someone: how many, what it earned them (the commissions credited to them), when the
-     * last one came — the most referrals first, or by either of the others.
+     * last one came, and how many alerts on them stand (ReferralAlerts: their start gifts and plan rewards withheld) —
+     * the most referrals first, or by either of the others.
      */
     public function referrers(PageRequest $list): Page
     {
@@ -62,7 +66,8 @@ final class ReferralDirectory
             ->whereHas('referrals')
             ->withCount('referrals')
             ->withMax('referrals', 'created_at')
-            ->addSelect(['earned' => ReferralCommission::query()->selectRaw(self::SUM)->whereColumn('referral_commissions.referrer_id', 'users.id')]);
+            ->addSelect(['earned' => ReferralCommission::query()->selectRaw(self::SUM)->whereColumn('referral_commissions.referrer_id', 'users.id')])
+            ->addSelect(['open_alerts' => ReferralAlert::query()->selectRaw('COUNT(*)')->whereColumn('referral_alerts.referrer_id', 'users.id')]);
         if ($list->term !== '') {
             User::matching($query, $list->term);
         }
@@ -76,7 +81,30 @@ final class ReferralDirectory
             'referrals' => (int) $user->getAttribute('referrals_count'),
             'earned' => self::money($user->getAttribute('earned')),
             'last_referral_at' => self::iso($user->getAttribute('referrals_max_created_at')),
+            'alerts' => (int) $user->getAttribute('open_alerts'),
         ], $sort);
+    }
+
+    /**
+     * The alerts on referrers whose referrals look made up, the newest first: who, why and how many as it was raised —
+     * each standing until support clears it. Searched by the referrer; the list numbers its rows by them, «#12» being the
+     * alerts on customer 12 alone (the referrers list's way here).
+     */
+    public function alerts(PageRequest $list): Page
+    {
+        $query = ReferralAlert::query()->with('referrer')->latest('id');
+        $list->search($query, static function (Builder $query, string $term): void {
+            $query->whereIn('referrer_id', User::idsMatching($term));
+        }, 'referrer_id');
+
+        return Page::fetch($query, $list, static fn(ReferralAlert $alert): array => [
+            'id' => $alert->id,
+            'referrer' => UserDirectory::presentRef($alert->referrer),
+            'status' => $alert->referrer->status->value,
+            'reason' => $alert->reason->value,
+            'count' => $alert->count,
+            'created_at' => $alert->created_at->toIso8601String(),
+        ]);
     }
 
     /**

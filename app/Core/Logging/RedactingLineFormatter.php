@@ -8,17 +8,13 @@ use Monolog\Formatter\LineFormatter;
 use Monolog\LogRecord;
 
 /**
- * Monolog's line, secrets taken out (Redact) — the last word on every log line, whatever wrote it: a message, its
- * context, an exception's message and every previous exception's and trace the formatter prints.
- *
- * One record is one entry, whatever it holds: the lines after its first — a trace, a value with line breaks in it,
- * a customer's text — are indented under it, so nothing written into a record can begin a line that reads as a record of
- * its own; and no control code a viewer acts on (a terminal's escape sequence, a line break of another kind, a bidi
- * override that would reorder what is shown) is written as it is, but as a `?`.
+ * Monolog's line formatter with every secret redacted (Redact). A record stays one entry: its continuation lines (a
+ * trace, a customer's multi-line text) are indented so they can never pass for a record of their own, and control codes
+ * a viewer acts on (terminal escapes, other line separators, bidi overrides) are written as `?`.
  */
 final class RedactingLineFormatter extends LineFormatter
 {
-    /** How the lines after a record's first begin: never like a record, which begins with its time in brackets. */
+    /** How a record's continuation lines begin; a record begins with its time in brackets. */
     public const CONTINUATION = '    ';
 
     /**

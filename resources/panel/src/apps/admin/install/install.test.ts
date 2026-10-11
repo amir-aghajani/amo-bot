@@ -63,7 +63,7 @@ describe('the install key', () => {
     expect(hasKey()).toBe(false)
   })
 
-  it('refused is a 403 on `key`, in the server’s words; any other failure is not about the key', () => {
+  it('refused is a 403 on `key` with the server’s message; any other failure is not about the key', () => {
     expect(keyRefusal(new ApiError(403, 'Refused.', { key: ['کلید نصب درست نیست.'] }))).toBe('کلید نصب درست نیست.')
     expect(keyRefusal(new ApiError(422, 'Refused.', { key: ['x'] }))).toBeUndefined()
     expect(keyRefusal(new ApiError(0, 'ارتباط با سرور برقرار نشد.'))).toBeUndefined()

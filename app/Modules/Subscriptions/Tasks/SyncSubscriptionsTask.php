@@ -13,11 +13,10 @@ use App\Modules\Subscriptions\Services\ProvisioningService;
 use Psr\Log\LoggerInterface;
 
 /**
- * Keeps the shop's copy of every running service — every bot's — close to its panel: each run reads, per server with
- * active services, its whole client list at once (ProvisioningService::syncServer()) — the counters the reminders and the
- * screens show, a deadline the panel started at the first connection, a service that ended. Every read is recorded on
- * the server; a panel that failed is left alone a while (Server::isBackingOff()) — every attempt costs its connect
- * timeout, and under bot:poll the bot waits that long — and the run stops at its share of the scheduler's time.
+ * Keeps the shop's copy of every running service (every bot's) close to its panel, every 15 minutes: one client list per
+ * server with active services (ProvisioningService::syncServer()). A panel in backoff is skipped — every attempt costs
+ * its connect timeout, and under bot:poll the bot waits that long — and the run stops at its share of the scheduler's
+ * time.
  */
 final class SyncSubscriptionsTask implements Task
 {

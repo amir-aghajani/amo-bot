@@ -13,10 +13,8 @@ use GuzzleHttp\Promise\Utils as Promises;
 use Psr\Http\Message\RequestInterface;
 
 /**
- * The long polls' own HTTP: a curl multi handle the poller drives itself, so every bot's poll is open at once and
- * whichever answers is served — apart from the Bot API's client, since a call made while serving an update must not
- * wait for the other bots' polls to end. The transport is the container's `telegram.polling` (where a test puts its
- * fake Telegram), the multi handle `telegram.polling.curl`.
+ * The long polls' own HTTP client over a curl multi handle the poller drives, so every bot's poll is open at once —
+ * apart from the Bot API's client, so a call made while serving an update never waits on the polls.
  */
 final class LongPolls
 {
@@ -26,15 +24,15 @@ final class LongPolls
         private readonly CurlMultiHandler $curl,
     ) {}
 
+    /** An HTTP client over the polls' own transport. */
     public function client(): ClientInterface
     {
         return new Client(['handler' => $this->transport, 'http_errors' => false]);
     }
 
     /**
-     * Move the polls on a little: what was asked goes out, curl waits up to its select timeout for an answer, and what
-     * answered settles — in the same tick: the promise of an answer curl has just read waits on the task queue, and left
-     * there it would settle only after the next wait of up to a second.
+     * Move the polls on: send what was asked, let curl wait for an answer, and settle what answered in the same tick
+     * (otherwise an answer would wait on the task queue until the next wait).
      */
     public function tick(): void
     {

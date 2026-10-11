@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Updates;
 
 /**
- * Where an update stands, a request a step: its files fetched and checked, unpacked, the host checked, installed — then
- * done, or taken back by the owner afterwards (RolledBack). An install that failed is taken back by itself and stays at
- * Install, its error said, for another try.
+ * An update's steps, one request each. A failed install takes itself back and stays at Install with its error, for
+ * another try; RolledBack is a Done update the owner took back.
  */
 enum UpdateStep: string
 {

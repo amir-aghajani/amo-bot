@@ -21,8 +21,11 @@ use Tests\TestCase;
  */
 final class DriverFormsTest extends TestCase
 {
-    /** What a server's form has beside its connector's: the server's own columns (Providers\Services\ServerService). */
-    private const SERVER = ['name', 'capacity', 'notes', 'is_active'];
+    /**
+     * What a server's form has beside its connector's: the server's own columns, and its button among a plan's locations
+     * in the bot (Providers\Services\ServerService).
+     */
+    private const SERVER = ['name', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'];
 
     /**
      * Each request a family's drivers are saved by — a oneOf of a shape per driver — with its registry's container entry,

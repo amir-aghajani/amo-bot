@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Copy, Package, Plus } from 'lucide-react'
+import { BadgePercent, Copy, Package, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
 import { InfoBadge } from '@/components/info-tip'
 import { Dash, ListView, RowTitleButton } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
+import { BulkPricesModal } from '@/components/plans/bulk-prices-modal'
 import { PlanForm } from '@/components/plans/plan-form'
 import { EditorModal, useEditor } from '@/components/row-editor'
 import { ActionsHead, EditMenu, OrderCell, OrderHead, RemoveConfirm } from '@/components/sortable-list'
@@ -17,19 +18,19 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import type { ActivationRequest, PlanRow } from '@/lib/api-types'
-import { formatDays, formatDevices, formatGb, formatMoney, formatNumber } from '@/lib/format'
+import { formatDevices, formatDuration, formatGb, formatMoney, formatNumber } from '@/lib/format'
 import { plansQuery } from '@/lib/queries'
 import { useRows } from '@/lib/use-rows'
 import { cn } from '@/lib/utils'
 
 /**
- * The catalogue: what customers can buy, in the order they see it — a plan the bot does not show flagged with why.
- * `addServers`: where servers are added (the owner's servers page), for a plan form in a shop without any; an agent's
- * panel adds none.
+ * «پلن‌ها»: the catalogue in the order customers see it, a plan the bot does not show flagged with why, and the bulk price
+ * change. `addServers` is where servers are added (the owner's); an agent's panel adds none.
  */
 export function PlansPage({ addServers }: { addServers?: string }) {
   const editor = useEditor<PlanRow>()
   const [removing, setRemoving] = useState<PlanRow | null>(null)
+  const [repricing, setRepricing] = useState(false)
   const list = useRows({
     query: plansQuery,
     list: 'plans',
@@ -62,7 +63,16 @@ export function PlansPage({ addServers }: { addServers?: string }) {
         title="پلن‌ها"
         count={list.isPending || list.error ? undefined : plans.length}
         description="بسته‌هایی که مشتری در ربات می‌خرد؛ ترتیب همین لیست، ترتیب نمایش است."
-        actions={add('default')}
+        actions={
+          <>
+            {plans.length > 0 && (
+              <Button variant="secondary" icon={BadgePercent} onClick={() => setRepricing(true)}>
+                تغییر گروهی قیمت
+              </Button>
+            )}
+            {add('default')}
+          </>
+        }
       />
 
       <ListView
@@ -95,7 +105,7 @@ export function PlansPage({ addServers }: { addServers?: string }) {
                     <RowTitleButton onClick={() => editor.edit(plan)}>{plan.name}</RowTitleButton>
                     {plan.description && <span className="line-clamp-1 max-w-64 text-footnote text-muted-foreground">{plan.description}</span>}
                     <span className="text-footnote text-muted-foreground md:hidden">
-                      {formatGb(plan.traffic_gb)} · {formatDays(plan.duration_days)}
+                      {formatGb(plan.traffic_gb)} · {formatDuration(plan.duration_hours)}
                     </span>
                     {/* Where their columns are not drawn, the category and what keeps the plan from a customer come here. */}
                     {plan.category && (
@@ -115,9 +125,15 @@ export function PlansPage({ addServers }: { addServers?: string }) {
                   {plan.category ? plan.category.is_active ? <Badge variant="outline">{plan.category.name}</Badge> : <InactiveCategory name={plan.category.name} /> : <Dash />}
                 </TableCell>
                 <TableCell className="hidden tabular md:table-cell">{formatGb(plan.traffic_gb)}</TableCell>
-                <TableCell className="hidden tabular md:table-cell">{formatDays(plan.duration_days)}</TableCell>
+                <TableCell className="hidden tabular md:table-cell">{formatDuration(plan.duration_hours)}</TableCell>
                 <TableCell className="hidden tabular xl:table-cell">{formatDevices(plan.ip_limit)}</TableCell>
-                <TableCell className="font-medium tabular">{formatMoney(plan.price)}</TableCell>
+                <TableCell className="tabular">
+                  <div className="grid">
+                    <span className="font-medium">{formatMoney(plan.price)}</span>
+                    {plan.first_purchase_price !== null && <span className="text-footnote text-muted-foreground">خرید اول: {priceWords(plan.first_purchase_price)}</span>}
+                    {plan.agent_price !== null && <span className="text-footnote text-muted-foreground">نماینده: {priceWords(plan.agent_price)}</span>}
+                  </div>
+                </TableCell>
                 <TableCell className="hidden lg:table-cell">
                   <Placement plan={plan} />
                 </TableCell>
@@ -166,6 +182,16 @@ export function PlansPage({ addServers }: { addServers?: string }) {
         )}
       </EditorModal>
 
+      <BulkPricesModal
+        open={repricing}
+        plans={plans}
+        invalidates={list.invalidates}
+        onClose={() => setRepricing(false)}
+        onSaved={(changed) => {
+          for (const plan of changed) list.upsert(plan)
+        }}
+      />
+
       <RemoveConfirm
         row={removing}
         remove={list.remove}
@@ -178,6 +204,11 @@ export function PlansPage({ addServers }: { addServers?: string }) {
       />
     </Page>
   )
+}
+
+/** What a plan costs some customers — a first purchase, an agent —, in words: its amount, or «رایگان» for a free one. */
+function priceWords(price: string): string {
+  return Number(price) === 0 ? 'رایگان' : formatMoney(price)
 }
 
 /** Why a plan is not deleted — the server's rule: an order or a service points at it, and the history stays. Null when it may go. */
@@ -199,9 +230,8 @@ function InactiveCategory({ name }: { name: string }) {
 }
 
 /**
- * The servers a plan is sold on, each saying what of it is sold when pressed; amber when an entry cannot sell now — the
- * server's own reason behind it —, and the customer does not see the plan there. `problems`: only those, for a narrow
- * screen without the column (nothing when all is well). A plan on no server has a dash: its own flag says why.
+ * The servers a plan is sold on; an entry that cannot sell now is amber with its reason. `problems` shows only those
+ * (for narrow screens without the column).
  */
 function Placement({ plan, problems = false, className }: { plan: PlanRow; problems?: boolean; className?: string }) {
   const entries = problems ? plan.servers.filter((entry) => entry.unsellable_reason !== null) : plan.servers

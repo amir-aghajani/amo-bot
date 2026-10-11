@@ -16,9 +16,9 @@ use Slim\App as SlimApp;
 use Slim\Factory\AppFactory;
 
 /**
- * Builds the Slim application: the prefix it is mounted at, the routes, and what every request goes through. What a
- * request needs besides — the installation, a session, the CSRF header, a signed-in panel — is its route group's
- * middleware (routes/*.php): the router decides what a request is, so no spelling of an address escapes its guards.
+ * Builds the Slim application: its prefix, the routes and the global middleware. Everything else a request needs (the
+ * installation, a session, the CSRF header, a sign-in) is its route group's middleware, so the router decides what a
+ * request is and no spelling of an address escapes its guards.
  */
 final class HttpKernel
 {

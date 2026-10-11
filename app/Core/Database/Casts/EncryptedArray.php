@@ -8,9 +8,8 @@ use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Stores an array attribute — a driver's settings, a secret among them — as JSON encrypted at rest (Encrypted, which
- * it writes and reads through): `protected $casts = ['captcha_config' => EncryptedArray::class]`. Nothing, or an empty
- * array, is kept as null; a value that no longer decrypts (Encrypted logs it) or holds no array reads as null.
+ * An array attribute (a driver's settings, a secret among them) kept as JSON encrypted through Encrypted. An empty
+ * array is kept as null; a value that no longer decrypts, or is no array, reads as null.
  *
  * @implements CastsAttributes<array<string, mixed>|null, array<string, mixed>|null>
  */

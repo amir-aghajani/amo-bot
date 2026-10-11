@@ -7,29 +7,26 @@ namespace App\Core\Support;
 use App\Support\Requirements;
 
 /**
- * A picture the shop is handed — a customer's receipt, a ticket's picture, the QR card's background, a premium emoji's
- * still —, read and written one way: what it is by its own bytes (typeOf()), how big by its header before anything is
- * decoded (size(), sizeOfFile()), whether it may be decoded in the memory PHP has left (decodable()), decoded (decode()),
- * turned as its camera held it (upright()), made no larger than a side (fitted()) and written again in its type
- * (encoded()) — with GD, where the host has it. A damaged picture is an answer here (null), never a PHP warning:
- * getimagesize() and GD complain about one before they give up, and those complaints are theirs alone (quietly()).
+ * The one place a picture is handled (receipts, tickets' pictures, the QR background): its type by its own bytes, its
+ * size off the header before anything is decoded, whether it fits in PHP's free memory, then — with GD — decoding,
+ * turning upright, shrinking and writing it again. A damaged picture is an answer (null), never a PHP warning.
  */
 final class Picture
 {
-    /** What bytes are when they are no picture this knows: a file to save, never one to show. */
+    /** The type of bytes that are no known picture: a file to save, never to show. */
     public const UNKNOWN = 'application/octet-stream';
 
-    /** The most pixels a picture is decoded with when PHP's memory has no limit; with one, what it leaves free decides. */
+    /** The most pixels decoded when PHP's memory has no limit; with one, the free memory decides. */
     private const MAX_PIXELS = 50_000_000;
 
-    /** The type the bytes are, by their own content — whatever their sender says they are. */
+    /** The bytes' type by their own content, whatever their sender says. */
     public static function typeOf(string $bytes): string
     {
         return (new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes) ?: self::UNKNOWN;
     }
 
     /**
-     * Its width and height, off its header — nothing decoded —; null for bytes that are no picture.
+     * Width and height off the header, nothing decoded; null for bytes that are no picture.
      *
      * @return array{int, int}|null
      */
@@ -54,10 +51,8 @@ final class Picture
     }
 
     /**
-     * Whether a picture of `$width` by `$height` — `$length` bytes of it — may be decoded and made no larger than `$side`
-     * (fitted()) in what PHP's memory has left: four bytes a pixel at its fullest — the picture beside GD's first pass and
-     * the one made smaller, or one kept at its size beside itself turned — and a margin, beside its bytes and what is
-     * written. With no limit, MAX_PIXELS.
+     * Whether a `$width` × `$height` picture (`$length` bytes) can be decoded and fitted to `$side` in PHP's free memory:
+     * four bytes a pixel for every copy alive at once, plus a margin. With no memory limit, MAX_PIXELS.
      */
     public static function decodable(int $width, int $height, int $side, int $length): bool
     {
@@ -84,10 +79,9 @@ final class Picture
     }
 
     /**
-     * The image no larger than `$side` on its longest side, its proportions kept, drawn again on a truecolor one with its
-     * transparency; the same image when it fits. Made smaller, the one given is let go of — and null when GD could not
-     * do it. By imagecopyresampled(), never imagescale(): the bicubic scaler of the libgd Linux's PHP packages link
-     * (2.3.3) reads a row that is not there and ends the process — a picture 2050 by 2 is enough.
+     * The image no larger than `$side` on its longest side, proportions and transparency kept; the same image when it
+     * fits. The one given is destroyed when scaled; null when GD failed. Uses imagecopyresampled(), never imagescale():
+     * libgd 2.3.3's bicubic scaler (Linux PHP packages) reads past the image and kills the process (2050 × 2 is enough).
      */
     public static function fitted(\GdImage $image, int $side): ?\GdImage
     {
@@ -109,8 +103,8 @@ final class Picture
     }
 
     /**
-     * A JPEG's image turned and flipped the way its camera says it was held (EXIF's Orientation, read from `$jpeg`'s own
-     * bytes — no exif extension): the way it was seen. The one given is let go of when it is turned.
+     * A JPEG's image turned as its EXIF Orientation says (read from the bytes, no exif extension). The image given is
+     * destroyed when turned.
      */
     public static function upright(\GdImage $image, string $jpeg): \GdImage
     {
@@ -142,8 +136,8 @@ final class Picture
     }
 
     /**
-     * The image written as `$type` — image/png or image/webp, either keeping its transparency, else a JPEG; the two lossy
-     * ones at `$quality` —; null when GD cannot write it (a host's GD without WebP).
+     * The image encoded as `$type` (PNG and WebP keep transparency; anything else is a JPEG; lossy at `$quality`); null
+     * when GD cannot (no WebP support).
      */
     public static function encoded(\GdImage $image, string $type, int $quality): ?string
     {
@@ -163,8 +157,7 @@ final class Picture
     }
 
     /**
-     * The size a picture is made no larger than `$side` on its longest side with, its proportions kept; its own when it
-     * fits.
+     * The size that fits `$side` on the longest side, proportions kept; its own when it already fits.
      *
      * @return array{int, int}
      */
@@ -175,10 +168,7 @@ final class Picture
         return $scale < 1.0 ? [max(1, (int) round($width * $scale)), max(1, (int) round($height * $scale))] : [$width, $height];
     }
 
-    /**
-     * How the camera says a JPEG is held — EXIF's Orientation, 1 to 8 —, read from its first APP1 segment; 1 (as it is
-     * stored) for none.
-     */
+    /** EXIF Orientation (1–8) from the JPEG's first APP1 segment; 1 for none. */
     private static function orientation(string $jpeg): int
     {
         $at = 2;
@@ -223,7 +213,7 @@ final class Picture
     }
 
     /**
-     * What getimagesize() answered as a width and a height; null for none.
+     * getimagesize()'s width and height; null for none.
      *
      * @param array<int|string, mixed> $size
      * @return array{int, int}|null
@@ -236,8 +226,7 @@ final class Picture
     }
 
     /**
-     * `$call` with what it complains of on the way left out: getimagesize() and GD warn about a damaged picture before
-     * they give up — their false is the answer, and the warning nobody's.
+     * Run `$call` with its warnings silenced: getimagesize() and GD warn about a damaged picture before returning false.
      *
      * @template T
      * @param \Closure(): T $call

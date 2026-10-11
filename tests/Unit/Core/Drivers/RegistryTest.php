@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * The one driver kernel every family stands on: a family's drivers found by key in the order they were registered, a
- * key no driver has the code's mistake, and a driver described to the panels — its words, its form's fields described,
+ * key no driver has the code's mistake, and a driver described to the panels — its labels, its form's fields described,
  * and what its family says of it beyond that.
  */
 final class RegistryTest extends TestCase

@@ -16,12 +16,10 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 /**
- * What of the catalogue can be sold right now. The admin may attach any server to a plan; a customer is only shown what
- * can deliver today — a server whose connector is installed, that is switched on, serves subscription links (the one
- * thing the customer gets), has room and — where the panel deals in inbounds — something sellable on it; and, in an
- * agent's bot, a plan whose traffic the agent's prepaid traffic still covers. One judgement for the bot's shop, the
- * website's catalogue, a move, and the screens that say why something is not offered: problem() for a server or a plan's
- * entry on it, judge() and offers() for plans — their servers read once for the whole list, never a few queries a plan.
+ * What of the catalogue can be sold right now — one judgement for the bot, the website, moving a service and the panels'
+ * explanations. A customer only sees servers that can deliver today (ServerReadiness, plus something sellable where the
+ * panel deals in inbounds) and, in an agent's shop, plans the agent's prepaid traffic covers. A list's plans and servers
+ * are read in one go, never a few queries per plan.
  */
 final class ServerSelector
 {
@@ -36,9 +34,8 @@ final class ServerSelector
     ) {}
 
     /**
-     * The servers a customer can pick for a plan right now, in the plan's order, each with the inbounds a purchase on it
-     * gets (every selectable one for a whole-server entry, or the pinned set; none on a panel without inbounds, where the
-     * whole server is the only thing to sell). Its entries are read as they are now, whatever the plan was read with.
+     * The servers a customer can pick for the plan now, in the plan's order, each with the inbounds a purchase gets
+     * (empty on a panel without inbounds). Its entries are read afresh.
      *
      * @return list<array{server: Server, inbounds: Collection<int, ServerInbound>}>
      */
@@ -47,19 +44,15 @@ final class ServerSelector
         return $this->choicesAmong(self::entriesOf(new Collection([$plan]))[$plan->id]);
     }
 
-    /**
-     * Why customers are not sold on the server — on the plan's `$entry` for it, when given — right now, in the admin's
-     * words; null when they are.
-     */
+    /** Why customers are not sold on the server (for the plan's `$entry`, when given) right now; null when they are. */
     public function problem(Server $server, ?PlanServer $entry = null): ?string
     {
         return $this->readiness->problem($server) ?? ($entry !== null && $this->inbounds($server, $entry) === null ? self::NO_INBOUND : null);
     }
 
     /**
-     * Whether the plan may be offered: in an agent's bot, while the agent's traffic covers what it sells (read afresh —
-     * another sale may have drawn on it a moment ago); always in the main bot. A delivery does not ask: it draws the
-     * traffic itself (TrafficPool::draw()).
+     * Whether the plan may be offered: always in the main shop; in an agent's, while their traffic (read afresh) covers
+     * its quota. Delivery does not ask — it draws the traffic itself (TrafficPool::draw()).
      */
     public function covers(Plan $plan): bool
     {
@@ -69,8 +62,7 @@ final class ServerSelector
     }
 
     /**
-     * covers() of several plans at once — a page of a customer's services, each renewed on its plan —, by id: an
-     * agent's traffic read once for its shop (afresh for every list).
+     * covers() of several plans at once, by id, each shop's traffic read once.
      *
      * @param iterable<Plan> $plans
      * @return array<int, bool>
@@ -87,10 +79,9 @@ final class ServerSelector
     }
 
     /**
-     * Whether the current shop — an agent's bot — sells nothing for want of traffic, for its panel to warn about: its
-     * traffic cannot cover even its smallest plan on sale (covers()), or it has none left, which is no better once a plan
-     * is put on sale — no plan is offered and no service renewed. What it may still sell and what the smallest plan needs
-     * (null while none is on sale); null while it can sell, and always in the main bot.
+     * For an agent's panel warning: the shop's traffic balance and its smallest plan's quota when it cannot sell anything
+     * for want of traffic (not even the smallest plan on sale, or none left at all); null while it can, and in the main
+     * shop.
      *
      * @return array{balance: int, smallest_plan: int|null}|null
      */
@@ -110,9 +101,8 @@ final class ServerSelector
     }
 
     /**
-     * Where a service of `$plan` may move: a server that can sell (problem()); on a panel with inbounds the client gets
-     * the plan's entry for that server when the plan has one (the inbounds a purchase there gets), every inbound the
-     * server sells otherwise.
+     * The inbounds a service of `$plan` gets when moved to `$server`: the plan's entry there if it has one, else every
+     * inbound the server sells.
      *
      * @return Collection<int, ServerInbound>
      * @throws NoServerAvailableException saying why the server cannot take it
@@ -126,10 +116,7 @@ final class ServerSelector
     }
 
     /**
-     * Why customers are not shown each plan right now, its switch aside, in the admin's words — no server on it, none
-     * of its servers able to sell (problem() says why of each), or, in an agent's bot, traffic that does not cover it —,
-     * by id; null for one they are shown. The plans' servers are read in one go (entriesOf()), an agent's traffic once
-     * for its shop.
+     * Why customers are not shown each plan now (its switch aside), by id; null for one they are shown.
      *
      * @param Collection<int, Plan> $plans
      * @return array<int, string|null>
@@ -140,11 +127,8 @@ final class ServerSelector
     }
 
     /**
-     * What a customer is offered of the plans right now, by id: the plans judge() has nothing against, each with the
-     * servers to pick it on (choices(), in the plan's order) — the plans' servers read once for them all. A plan whose
-     * every server is off, full, without subscription links or without a sellable inbound is kept out of the shop rather
-     * than shown as unbuyable: the bot's «خرید اشتراک» lists these plans, the website its catalogue with their locations
-     * (PlanCategoryService::catalogue()).
+     * The plans customers are offered now, by id, each with its choices. A plan that cannot be sold is left out rather
+     * than shown as unbuyable.
      *
      * @param Collection<int, Plan> $plans
      * @return array<int, list<array{server: Server, inbounds: Collection<int, ServerInbound>}>>
@@ -162,8 +146,7 @@ final class ServerSelector
     }
 
     /**
-     * Resolve the customer's choice. Without a server id the plan's only choice is used; with several, the customer must
-     * have picked one.
+     * The customer's choice of server: with no id, the plan's only choice (several require a pick).
      *
      * @return array{server: Server, inbounds: Collection<int, ServerInbound>}
      * @throws NoServerAvailableException
@@ -193,9 +176,7 @@ final class ServerSelector
     }
 
     /**
-     * judge() and choices() of the plans together: why each is not shown (null when it is) and the servers a customer
-     * may pick it on — the plans' entries read once for them all (entriesOf()), an agent's traffic once for its shop,
-     * and only for a plan something could be sold on.
+     * judge() and choices() of the plans together, their entries read once and each shop's traffic once.
      *
      * @param Collection<int, Plan> $plans
      * @return array<int, array{reason: string|null, choices: list<array{server: Server, inbounds: Collection<int, ServerInbound>}>}>
@@ -222,7 +203,7 @@ final class ServerSelector
     }
 
     /**
-     * covers(), its shop's traffic read once over a list: `$balances`, by bot id — the main bot's shop sells without.
+     * covers(), caching each shop's traffic in `$balances` (by bot id) over a list.
      *
      * @param array<int, int> $balances
      */
@@ -233,10 +214,7 @@ final class ServerSelector
         return $bot->isMain() || self::coveredBy($plan, $balances[$bot->id] ??= $bot->trafficBalance());
     }
 
-    /**
-     * Whether an agent's traffic (`$balance`, in bytes) covers the plan: it sells a quota — an unlimited plan cannot be
-     * paid for from prepaid traffic — no bigger than what is left.
-     */
+    /** Whether `$balance` bytes cover the plan's quota; an unlimited plan cannot be paid from prepaid traffic. */
     private static function coveredBy(Plan $plan, int $balance): bool
     {
         $bytes = $plan->trafficBytes();
@@ -245,10 +223,8 @@ final class ServerSelector
     }
 
     /**
-     * The plans' entries as they are now, by plan id, each plan's in its order — read afresh, never kept on a plan (one
-     * read a while ago — a long-lived process, a screen's two questions — is judged by today's servers), in one go for
-     * them all with what judging them reads: the server with its active services counted (its room) and its inbounds,
-     * and the entry's pinned inbounds (PlanServer::sellableInbounds() reads them off the entry then).
+     * The plans' entries, by plan id, read afresh in one query (never trusted from the plan model, which a long-lived
+     * process may have read long ago), with their servers' active services counted and their inbounds.
      *
      * @param Collection<int, Plan> $plans
      * @return array<int, Collection<int, PlanServer>>
@@ -290,8 +266,8 @@ final class ServerSelector
     }
 
     /**
-     * What a sale on the server gets: the entry's inbounds, or — without one — every inbound the server sells; none on a
-     * panel without inbounds, which is sold whole. Null when there is nothing to sell.
+     * What a sale on the server gets: the entry's inbounds, else every inbound the server sells, or an empty list on a
+     * panel without inbounds; null when there is nothing to sell.
      *
      * @return Collection<int, ServerInbound>|null
      */

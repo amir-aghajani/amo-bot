@@ -45,7 +45,7 @@ describe('the preview', () => {
     expect(shown.textContent).toBe('bold and italic plain')
   })
 
-  it('shows a link’s words and where it points, without following it', () => {
+  it('shows a link’s text and where it points, without following it', () => {
     const shown = preview('<a href="https://t.me/amobot">ربات ما</a>')
 
     expect(shown.querySelector('a')).toBeNull()

@@ -16,16 +16,16 @@ use Psr\Http\Message\ResponseInterface;
 /**
  * HTTP transport for the PasarGuard API (FastAPI, under /api at the panel's root): JSON in, JSON out.
  *
- * It signs in with an API key (`X-Api-Key`, PasarGuard 5.1+), or with an admin's username and password traded at
- * POST /api/admin/token (an OAuth2 password form) for a bearer token it keeps — the driver instance lives a while
- * (ProviderRegistry), so the panel is not signed in to, nor its admins notified of a login, on every call — and signs in
- * again once when the panel refuses the token it kept (expired, or the password changed since).
+ * It signs in with an API key (`X-Api-Key`, PasarGuard 5.1+), or trades an admin's username and password at
+ * POST /api/admin/token (an OAuth2 password form) for a bearer token it keeps. The client lives a while
+ * (ProviderRegistry), so the panel — which costs a bcrypt and notifies its admins on each sign-in — is not signed in to
+ * on every call. A kept token the panel refuses (expired, password changed) is renewed once.
  *
  * Failures are typed: ConnectionException (nothing answered), AuthenticationException (credentials refused),
- * NotFoundException (the panel has no such user — its "User not found", the only 404 that means so),
- * UnexpectedResponseException (an unknown route, a redirect, a web page instead of the API: a wrong address or a panel
- * too old) and PasarGuardApiException (the panel said no, in its `detail`). No secret reaches a message or a log line:
- * the key, the token and the password travel in headers and the sign-in form only, and a sign-in answer is never quoted.
+ * NotFoundException (only PasarGuard's own "User not found" 404), UnexpectedResponseException (an unknown route, a
+ * redirect, a web page: a wrong address or a panel too old) and PasarGuardApiException (the panel said no, in its
+ * `detail`). No secret reaches a message or a log line: the key, token and password travel in headers and the sign-in
+ * form only, and a sign-in answer is never quoted.
  */
 final class PasarGuardClient
 {
@@ -102,8 +102,8 @@ final class PasarGuardClient
     }
 
     /**
-     * Send with the API key, or with the kept token — a fresh one when there is none, or when the panel refused the kept
-     * one. A fresh token refused too is the end of it.
+     * Send with the API key, or with the kept token — signing in for a fresh one when there is none or the panel refused
+     * the kept one. A fresh token refused too is the end of it.
      *
      * @param array<string, mixed> $options
      * @throws ProviderException
@@ -111,14 +111,14 @@ final class PasarGuardClient
     private function authorized(string $method, string $path, array $options): ResponseInterface
     {
         if ($this->credentials->usesToken()) {
-            return $this->send($method, $path, self::withHeader($options, 'X-Api-Key', (string) $this->credentials->token));
+            return $this->send($method, $path, PanelHttp::withHeaders($options, ['X-Api-Key' => (string) $this->credentials->token]));
         }
 
         $kept = $this->token;
-        $response = $this->send($method, $path, self::withHeader($options, 'Authorization', 'Bearer ' . ($kept ?? $this->signIn())));
+        $response = $this->send($method, $path, PanelHttp::withHeaders($options, ['Authorization' => 'Bearer ' . ($kept ?? $this->signIn())]));
         if ($response->getStatusCode() === 401 && $kept !== null) {
             $this->http->logger->info('PasarGuard at {host} refused the kept token; signing in again', ['host' => parse_url($this->connection->baseUrl, PHP_URL_HOST)]);
-            $response = $this->send($method, $path, self::withHeader($options, 'Authorization', 'Bearer ' . $this->signIn()));
+            $response = $this->send($method, $path, PanelHttp::withHeaders($options, ['Authorization' => 'Bearer ' . $this->signIn()]));
         }
         if ($response->getStatusCode() === 401) {
             $this->token = null;
@@ -164,7 +164,7 @@ final class PasarGuardClient
     }
 
     /**
-     * The answer's JSON body, or the typed failure it stands for.
+     * The answer's JSON body, or the typed failure it stands for. `$method` and `$path` name the call in the log.
      *
      * @return array<string, mixed>
      * @throws ProviderException
@@ -172,15 +172,15 @@ final class PasarGuardClient
     private function decode(string $method, string $path, ResponseInterface $response): array
     {
         $status = $response->getStatusCode();
-        if ($status >= 300 && $status < 400) {
-            throw new UnexpectedResponseException($status, location: $response->getHeaderLine('Location'), hint: self::HINT_REDIRECT);
+        if (PanelHttp::isRedirect($response)) {
+            throw PanelHttp::redirected($response, self::HINT_REDIRECT);
         }
 
         // Every answer of the API is JSON, its refusals included; anything else came from something else.
         $raw = (string) $response->getBody();
         $body = $raw === '' ? [] : json_decode($raw, true);
         if (!is_array($body) || ($raw === '' && $status >= 400)) {
-            throw self::unexpected($response);
+            throw self::notTheApi($response);
         }
         if ($status < 300) {
             return $body;
@@ -192,7 +192,7 @@ final class PasarGuardClient
             $status === 401 => AuthenticationException::rejectedToken($status, self::HINT_KEY),
             $status === 403 && $this->credentials->usesToken() => AuthenticationException::insufficientScope($detail, self::HINT_KEY_SCOPE),
             $status === 404 && $detail === self::USER_NOT_FOUND => new NotFoundException("PasarGuard {$method} {$path}: {$detail}"),
-            $status === 404 && $detail === self::ROUTE_NOT_FOUND => self::unexpected($response),
+            $status === 404 && $detail === self::ROUTE_NOT_FOUND => self::notTheApi($response),
             default => new PasarGuardApiException($method, $path, $status, $detail),
         };
     }
@@ -203,24 +203,17 @@ final class PasarGuardClient
      */
     private function send(string $method, string $path, array $options): ResponseInterface
     {
-        return $this->http->send($this->connection, $method, $path, self::withHeader($options, 'Accept', 'application/json'));
+        return $this->http->send($this->connection, $method, $path, PanelHttp::withHeaders($options, ['Accept' => 'application/json']));
     }
 
-    /** An answer that is not the API, with PasarGuard's guess at why. */
-    private static function unexpected(ResponseInterface $response): UnexpectedResponseException
+    /** An answer that is not the API, with PasarGuard's likely cause: the dashboard's or another site's address, or a panel before 3.1. */
+    private static function notTheApi(ResponseInterface $response): UnexpectedResponseException
     {
-        $status = $response->getStatusCode();
-
-        return new UnexpectedResponseException($status, PanelHttp::excerpt($response), hint: match (true) {
-            $status === 404 => self::HINT_ADDRESS,
-            $status < 400 => self::HINT_NOT_API,
-            default => '',
-        });
+        return PanelHttp::notTheApi($response, self::HINT_ADDRESS, self::HINT_NOT_API);
     }
 
     /**
-     * The panel's `detail`: a sentence, a field → message map (its own 422s), or the framework's list of errors — as one
-     * line.
+     * The panel's `detail` as one line: a sentence, a field → message map (its own 422s), or the framework's list.
      *
      * @param array<mixed> $body
      */
@@ -245,14 +238,4 @@ final class PasarGuardClient
         return implode('; ', $lines);
     }
 
-    /**
-     * @param array<string, mixed> $options
-     * @return array<string, mixed>
-     */
-    private static function withHeader(array $options, string $name, string $value): array
-    {
-        $options['headers'] = [$name => $value] + (array) ($options['headers'] ?? []);
-
-        return $options;
-    }
 }

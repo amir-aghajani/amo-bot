@@ -1,6 +1,6 @@
 import { Disclosure } from '@/components/disclosure'
 import { isSecretState, leftBehind, NOTHING_KEPT, shownFields, type DriverDraft } from '@/components/driver-form/draft'
-import { Field } from '@/components/field'
+import { Field, FieldGroup } from '@/components/field'
 import { PageTabs } from '@/components/page-tabs'
 import { SecretField } from '@/components/secret-field'
 import { SwitchRow } from '@/components/switch-row'
@@ -37,12 +37,10 @@ interface DriverFieldsProps {
 }
 
 /**
- * A driver's form drawn from its description alone: every field shown by its kind — a line of text, a number (its unit
- * beside its label), an amount, a list typed as text, a switch, a choice (a few side by side, more in a list), a secret
- * kept unless typed again or cleared, an email, a web address, a path, a few lines, a bank card's number in groups of
- * four —, Latin content left to right, a field shown only while the ones it names hold a value it lists, and the rarely
- * needed ones under «تنظیمات پیشرفته». A secret kept for an address that moved says so before it is sent, in the
- * server's words.
+ * A driver's form drawn from its description alone: each shown field by its type (a choice of three or fewer side by
+ * side, more in a list; a secret kept unless typed again or cleared; a card number in groups of four), Latin content
+ * left to right, the `advanced` fields under «تنظیمات پیشرفته». A kept secret whose bound field moved shows the server's
+ * `moved` words before the save would be refused.
  */
 export function DriverFields({ driver, stored, draft, set, error, idPrefix }: DriverFieldsProps) {
   const shown = shownFields(driver, draft)
@@ -112,7 +110,7 @@ function DriverField({ id, field, draft, set, error, stored, movedHint }: Driver
     }
     case 'choice':
       return field.options.length <= SIDE_BY_SIDE ? (
-        <ChoiceRow id={id} field={field} label={label} value={text} set={set} error={error} hint={hint} />
+        <ChoiceRow field={field} label={label} value={text} set={set} error={error} hint={hint} />
       ) : (
         <Field id={id} label={label} hint={hint} error={error} optional={!field.required}>
           {(control) => (
@@ -170,7 +168,6 @@ function DriverField({ id, field, draft, set, error, stored, movedHint }: Driver
 }
 
 interface ChoiceRowProps {
-  id: string
   field: FieldDescription
   label: string
   value: string
@@ -180,25 +177,10 @@ interface ChoiceRowProps {
 }
 
 /** A few choices side by side (PageTabs as a radio group): one field of the form, focused whole when it is refused. */
-function ChoiceRow({ id, field, label, value, set, error, hint }: ChoiceRowProps) {
+function ChoiceRow({ field, label, value, set, error, hint }: ChoiceRowProps) {
   return (
-    <div
-      role="group"
-      aria-labelledby={`${id}-label`}
-      aria-describedby={error || hint ? `${id}-line` : undefined}
-      data-invalid={error ? '' : undefined}
-      tabIndex={error ? -1 : undefined}
-      className="grid gap-1.5 rounded-md outline-none focus-visible:focus-ring sm:col-span-2"
-    >
-      <span id={`${id}-label`} className="text-body font-medium">
-        {label}
-      </span>
+    <FieldGroup label={label} error={error} hint={hint} className="sm:col-span-2">
       <PageTabs as="choice" size="sm" className="w-fit" aria-label={field.label} value={value} tabs={field.options} onChange={(next) => set(field.name, next)} />
-      {(error || hint) && (
-        <p id={`${id}-line`} className={error ? 'text-footnote text-danger' : 'text-footnote text-muted-foreground'}>
-          {error ?? hint}
-        </p>
-      )}
-    </div>
+    </FieldGroup>
   )
 }

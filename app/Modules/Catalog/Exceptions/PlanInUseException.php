@@ -6,10 +6,7 @@ namespace App\Modules\Catalog\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
 
-/**
- * A plan that orders or subscriptions still point at cannot be deleted; it can only be
- * deactivated, so the history keeps its name and figures.
- */
+/** A plan orders or services point at cannot be deleted (409): switch it off, so the history keeps it. */
 final class PlanInUseException extends DomainRuleException
 {
     public function status(): int

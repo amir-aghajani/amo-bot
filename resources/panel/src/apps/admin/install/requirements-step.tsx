@@ -29,10 +29,7 @@ function Met({ ok, optional }: { ok: boolean; optional: boolean }) {
   return <CircleX className="size-4 shrink-0 text-danger" aria-label="فراهم نیست" />
 }
 
-/**
- * What the host must have, each met or not; the installation goes on once every one but the optional ones is — those
- * (what the panel updates the shop itself with) only say what is missing.
- */
+/** The host's requirements, each met or not; optional ones (what the one-press update needs) do not hold the installation up. */
 export function RequirementsStep({ status, onDone, recheck, rechecking }: StepProps & { recheck: () => void; rechecking: boolean }) {
   return (
     <PublicPanel title="پیش‌نیازهای سرور" description="فروشگاه روی هاستی اجرا می‌شود که این‌ها را دارد. هر کدام که نیست را از پشتیبانی هاست بخواهید، بعد دوباره بررسی کنید.">

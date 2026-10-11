@@ -7,8 +7,7 @@ namespace App\Modules\Bots;
 use App\Modules\Bots\Models\Bot;
 
 /**
- * What a piece of work done for every bot that runs (Bots::eachServing()) came to for one of them: what it gave back,
- * or what stopped it.
+ * What work done for every running bot (Bots::eachServing()) came to for one of them: its result, or what stopped it.
  *
  * @template-covariant T
  */

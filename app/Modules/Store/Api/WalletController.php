@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Store\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Http\ApiController;
 use App\Modules\Accounts\Http\Customer;
 use App\Modules\Store\Services\CustomerWallet;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-/** A signed-in customer's wallet on the shop's website, and its ledger (Store\Services\CustomerWallet). */
+/** A signed-in customer's wallet and its ledger (Store\Services\CustomerWallet). */
 final class WalletController extends ApiController
 {
     public function __construct(private readonly CustomerWallet $wallet) {}
@@ -25,7 +24,7 @@ final class WalletController extends ApiController
     /** GET /wallet/transactions — ?page=, newest line first. */
     public function transactions(Request $request, Response $response): Response
     {
-        $page = $this->wallet->ledger(Customer::of($request)->user, PageRequest::fromQuery($request->getQueryParams()));
+        $page = $this->wallet->ledger(Customer::of($request)->user, $this->pageRequest($request));
 
         return $this->json($response, $page->toArray('transactions'));
     }

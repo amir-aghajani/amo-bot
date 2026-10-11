@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * The shop's own time zone (APP_TIMEZONE): what people read. Every time the app keeps is UTC — PHP's clock and the
- * database's — so a stored moment means the same whatever the setting says, the host's zone or its daylight saving;
- * this zone is applied only where a time is shown to someone (a Jalali date in the bot, the dashboard's days, the log).
- * Changing the setting changes how times read, never what they are.
+ * The shop's time zone (APP_TIMEZONE). Every stored time is UTC (PHP's clock and the database session); this zone is
+ * applied only where a time is shown (the bot's Jalali dates, the dashboard's days, the log), so changing it changes how
+ * times read, never what they are.
  */
 final class LocalTime
 {
     private static ?\DateTimeZone $zone = null;
 
-    /** Set once at boot, from config; a name PHP does not know falls back to UTC rather than taking the app down. */
+    /** Set once at boot; a name PHP does not know falls back to UTC. */
     public static function use(string $name): void
     {
         try {

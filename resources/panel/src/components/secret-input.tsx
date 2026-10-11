@@ -4,12 +4,10 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 /**
- * A password/token field with a reveal toggle. The wrapper is LTR so the caret and selection behave
- * for Latin secrets; like every LTR field the text is right-aligned (index.css), so the toggle sits
- * at the far right next to where the value ends. A secret the shop keeps (a panel's, the database's,
- * a mail server's) is no login of the browser's: `new-password` keeps a password manager from filling
- * the panel's own sign-in into it — which `off` does not for a password field — and from making the
- * card unsaved without a key pressed. The owner's own current password says so itself.
+ * A password or token field with a reveal toggle, LTR so the caret and selection behave for Latin secrets. Defaults to
+ * `autoComplete="new-password"`: a secret the shop keeps (a panel's, the database's) is not the browser's login, and a
+ * password manager — which ignores `off` on a password field — would otherwise fill in the panel's own sign-in and make
+ * the card unsaved. A sign-in form passes `current-password`.
  */
 export function SecretInput({ className, ...props }: Omit<ComponentProps<typeof Input>, 'type'>) {
   const [reveal, setReveal] = useState(false)

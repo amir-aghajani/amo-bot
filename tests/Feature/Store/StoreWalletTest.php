@@ -10,11 +10,7 @@ use App\Modules\Users\Services\WalletService;
 use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
-/**
- * A customer's wallet on the shop's website, as the bot's «کیف پول» has it: its balance — an agent's debt below zero —,
- * an agent's credit and what the two can pay, what a top-up may be (the bot's «افزایش موجودی» bounds), and its ledger,
- * newest line first, a page at a time — theirs alone.
- */
+/** A customer's wallet: balance, an agent's credit, what they can pay, the top-up bounds, and their ledger. */
 final class StoreWalletTest extends HttpTestCase
 {
     private Website $website;

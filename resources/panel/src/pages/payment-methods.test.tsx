@@ -81,7 +81,7 @@ beforeEach(() => {
 })
 
 describe('the payment methods', () => {
-  it('say what each is in its driver’s words — the card left to right — with a card’s automatic approval under it', async () => {
+  it('describe each with its driver’s summary (the card left to right) and a card’s automatic approval under it', async () => {
     showMethods([WALLET, cardMethodRow({ config: { card_number: '6037997700001119', card_holder: 'امیر رضایی', instructions: '', auto_approve_after: 30 } })])
 
     const cards = await screen.findAllByText('6037 •••• •••• 1119')
@@ -150,7 +150,7 @@ describe('the payment methods', () => {
 })
 
 describe('the page’s count', () => {
-  it('is said once the list was read — never a zero it does not know', async () => {
+  it('is shown once the list was read, never as an unknown zero', async () => {
     server().on('GET', '/api/admin/payment-methods', refusal(500, 'خطای سرور.'))
     render(<PaymentMethodsPage />, { wrapper: providers().wrapper })
 

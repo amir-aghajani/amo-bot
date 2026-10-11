@@ -6,7 +6,7 @@ namespace App\Modules\Settings\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
 
-/** A settings group the screen does not have — in this shop, or at all. */
+/** A settings group the screen does not have (in this shop, or at all): a 404. */
 final class UnknownGroupException extends DomainRuleException
 {
     public function __construct()

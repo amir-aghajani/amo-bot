@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Http\ApiController;
 use App\Modules\Accounts\Exceptions\AccountRefusedException;
 use App\Modules\Admin\Services\CustomerProfile;
@@ -18,10 +17,9 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The users table — the customers, their status and role, the admin's groups they are in, and their wallet — and one
- * customer's page, with what support does to their account on the shop's website: its two-factor sign-in turned off,
- * its devices signed out. What is decided is UserActions', by the request's principal (a panel's, or one of the shop's
- * admins on its website — the bot's admin role is the panels' alone).
+ * The users table and a customer's page: status, role, groups, wallet, and their website account (two-factor sign-in
+ * turned off, every device signed out). Decisions are UserActions', by the request's principal; the role is the panels'
+ * alone.
  */
 final class UsersController extends ApiController
 {
@@ -35,7 +33,7 @@ final class UsersController extends ApiController
     /** GET /users?search=&status=&role=&group=&sort=&dir=&page= */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->users->search(PageRequest::fromQuery($request->getQueryParams()))->toArray('users'));
+        return $this->json($response, $this->users->search($this->pageRequest($request))->toArray('users'));
     }
 
     /**

@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace App\Core\Mail;
 
 /**
- * The one look of the shop's emails: Persian, right to left, a small card of inline styles (a mail reader keeps no
- * stylesheet) — the shop's name, a heading, then the words: paragraphs and a code set apart left to right where there is
- * one to type (message()), or words that come formatted (formatted()) —, and the same words as plain text beside it. A
- * value is text and is escaped here — a caller hands words, never HTML —, but for the formatted words, which their maker
- * made safe.
+ * How every email of the shop looks: a right-to-left card in inline styles (mail readers keep no stylesheet) with the
+ * shop's name, a heading and the text, plus the same as plain text. message() escapes everything it is given;
+ * formatted() takes HTML its maker already made safe.
  */
 final class MailBody
 {
@@ -28,10 +26,7 @@ final class MailBody
         return new MailMessage($to, $subject, self::html($subject, $shop, $heading, $paragraphs($before) . $box . $paragraphs($after)), self::text($shop, $heading, [...$before, ...($code === null ? [] : [$code]), ...$after]), $shop);
     }
 
-    /**
-     * The card around words that come formatted — `$html`, safe HTML its maker escaped and held to formatting and links
-     * (Telegram\Texts\WebText::html(): a notice the shop told a customer, as its bot words it) —, and their plain text.
-     */
+    /** The card around `$html`, already safe (WebText::html(): a notice as the bot words it), with its plain text. */
     public static function formatted(string $to, string $subject, string $shop, string $heading, string $html, string $text): MailMessage
     {
         return new MailMessage($to, $subject, self::html($subject, $shop, $heading, '<div style="margin:0 0 12px;font-size:14px;line-height:1.9;">' . $html . '</div>'), self::text($shop, $heading, [$text]), $shop);

@@ -5,7 +5,7 @@ import { WebsiteAccountCard } from '@/components/customer/website-account-card'
 import type { CustomerAccount, CustomerAccountResponse, UserDetailResponse, UserRow } from '@/lib/api-types'
 import { customerQuery } from '@/lib/queries'
 import { providers, until } from '@/test/render'
-import { customerAccount, userRow } from '@/test/rows'
+import { customerAccount, loyaltyStanding, userRow } from '@/test/rows'
 import { json, noContent, refusal, server } from '@/test/server'
 
 /*
@@ -38,7 +38,7 @@ function Page() {
 
 /** The card on the customer's page, the server answering the page's read with `account`. */
 function open(account: CustomerAccount = SIGNED_IN, customer: UserRow = SARA) {
-  const detail: UserDetailResponse = { user: customer, referral: { referrer: null, referrals: 0, earned: '0.00' }, agency: null, account }
+  const detail: UserDetailResponse = { user: customer, referral: { referrer: null, referrals: 0, earned: '0.00' }, agency: null, account, loyalty: loyaltyStanding() }
   server().on('GET', '/api/admin/users/10', json(detail))
   render(<Page />, { wrapper: providers().wrapper })
 }
@@ -80,13 +80,13 @@ describe('the website account', () => {
     expect(screen.queryByRole('region', { name: 'حساب‌های ادغام‌شده' })).toBeNull()
   })
 
-  it('turns two-factor sign-in off after a second look, the account answered put in place', async () => {
+  it('turns two-factor sign-in off after confirmation, and shows the account from the answer', async () => {
     open()
     server().on('POST', '/api/admin/users/10/two-factor/disable', json({ account: { ...SIGNED_IN, two_factor: false } } satisfies CustomerAccountResponse))
 
     fireEvent.click(await screen.findByRole('button', { name: 'خاموش کردن ورود دو مرحله‌ای' }))
     const dialog = await screen.findByRole('dialog', { name: 'خاموش کردن ورود دو مرحله‌ای' })
-    // The customer is told on every door they have — Telegram, their email — and their website keeps it.
+    // The customer is notified on every channel they have — Telegram, their email — and their website keeps it.
     expect(dialog.textContent).toContain('در ربات تلگرام و با ایمیل، هر کدام که دارد')
     expect(dialog.textContent).toContain('در اعلان‌های وب‌سایتش هم می‌ماند')
     expect(server().sent('POST', '/api/admin/users/10/two-factor/disable')).toEqual([])
@@ -101,7 +101,7 @@ describe('the website account', () => {
     expect(server().sent('GET', '/api/admin/users/10')).toHaveLength(1)
   })
 
-  it('signs the customer out of every device after a second look', async () => {
+  it('signs the customer out of every device after confirmation', async () => {
     open()
     server().on('POST', '/api/admin/users/10/sessions/end', noContent)
 

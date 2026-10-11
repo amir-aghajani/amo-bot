@@ -6,7 +6,7 @@ namespace App\Core\Captcha;
 
 use App\Core\Exceptions\DomainRuleException;
 
-/** A captcha's token that could not be judged — its provider out of reach, or not answering as its API does: a 503 (the driver logged why). */
+/** A token that could not be judged (the provider out of reach or answering oddly): a 503; the driver logged why. */
 final class CaptchaUnavailableException extends DomainRuleException
 {
     public const MESSAGE = 'تایید امنیتی در دسترس نیست؛ کمی بعد دوباره تلاش کنید.';

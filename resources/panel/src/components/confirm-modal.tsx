@@ -22,7 +22,7 @@ interface ConfirmModalProps {
   /** Extra explanation under the description (consequences, what stays). */
   children?: ReactNode
   confirmLabel?: string
-  /** The way out's own words (the default: «انصراف»). */
+  /** The cancel button's label (the default: «انصراف»). */
   cancelLabel?: string
   /** Red button for things that delete or discard. */
   destructive?: boolean

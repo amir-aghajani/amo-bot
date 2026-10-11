@@ -9,9 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A broadcast's message pinned in a customer's chat — their private chat with the bot, so their Telegram id — kept so
- * «لغو پین» can take it off again; gone once it is. Its key is the pair (broadcast, user): rows are only made and then
- * deleted by query, never saved again as models.
+ * A broadcast message pinned in a customer's chat, kept so «لغو پین» can take it off. Keyed by (broadcast, user): rows
+ * are inserted and deleted by query, never saved as models.
  *
  * @property int $broadcast_id
  * @property int $user_id

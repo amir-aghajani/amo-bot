@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Support\DTO;
 
 /**
- * A ticket message's picture before it is kept: uploaded — from a website, a panel —, judged by its bytes (the shop
- * keeps it in the tickets' folder), or sent in Telegram — the bot, the report group — by its file id (Telegram keeps
- * it). Its name is what its sender's device gave it, or one made up.
+ * A ticket message's picture before it is kept: an upload judged by its bytes (kept in the tickets' folder), or a
+ * Telegram file id (Telegram keeps it). Its name is the sender's device's, or one made up.
  */
 final readonly class Attachment
 {

@@ -12,11 +12,7 @@ use Slim\Psr7\Factory\StreamFactory;
 use Tests\Fakes\RecordingMailTransport;
 use Tests\HttpTestCase;
 
-/**
- * The Store API takes JSON: a form, text, or a body that says nothing of itself is a 415 — what a page of another site
- * could make its visitors' browsers send without a preflight never reaches a sign-up, a sign-in or a reset. A route
- * that takes a picture (a receipt, a ticket's message) takes a form too; a request that carries nothing is its route's.
- */
+/** The Store API takes JSON bodies only (415 otherwise), except multipart forms on the routes that take a picture. */
 final class StoreBodiesTest extends HttpTestCase
 {
     /** A PNG of one pixel: a picture by its bytes. */

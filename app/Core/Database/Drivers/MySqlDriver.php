@@ -16,8 +16,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 
 /**
- * MySQL, and MariaDB through the same connection — the database every host offers, and the one the installer
- * proposes. The schema needs MySQL 5.7.8 (JSON columns) or MariaDB 10.3 (Laravel 12's oldest).
+ * MySQL and MariaDB — what every host offers, and what the installer proposes. The schema needs MySQL 5.7.8 (JSON
+ * columns) or MariaDB 10.3 (Laravel 12's oldest).
  */
 final class MySqlDriver implements DatabaseDriver
 {
@@ -33,7 +33,7 @@ final class MySqlDriver implements DatabaseDriver
      */
     public const PREFIX_MAX = 16;
 
-    /** The password left blank while the address it was kept for moved: it never goes to another server, a test of the new one included. */
+    /** A blank password while the address moved: a kept password never goes to another server, not even for a test. */
     public const ADDRESS_MOVED = 'آدرس دیتابیس عوض شده است؛ رمز عبور را دوباره وارد کنید.';
 
     public function key(): string
@@ -128,10 +128,7 @@ final class MySqlDriver implements DatabaseDriver
         return $lead . ' (' . trim($e->getMessage()) . ')';
     }
 
-    /**
-     * Where the database is — a host and a port, or a socket on this machine —, the account on it, and its tables'
-     * prefix: each a config.php setting, the password kept with the address it was given for.
-     */
+    /** The connection settings: a host and port (or a socket), the account, and the tables' prefix. */
     private function form(): Form
     {
         return new Form($this->key(), [
@@ -196,9 +193,9 @@ final class MySqlDriver implements DatabaseDriver
     }
 
     /**
-     * An UPDATE reports the rows it matched, as SQLite (and PostgreSQL) do — not only those whose values it changed:
-     * a compare-and-swap or a lease renewal that writes what is already there won (Core\Database\Transitions, Lease).
-     * PHP 8.4 names the option on the driver's own class; neither exists without pdo_mysql, which then never connects.
+     * Make an UPDATE report the rows it matched, as SQLite does, not only those it changed: a compare-and-swap or a
+     * lease renewal that writes what is already there still won (Transitions, Lease). PHP 8.4 moved the constant to
+     * Pdo\Mysql; neither exists without pdo_mysql.
      *
      * @return array<int, bool>
      */

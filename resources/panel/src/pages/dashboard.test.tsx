@@ -69,7 +69,7 @@ describe('a dashboard whose read failed', () => {
 })
 
 describe('another range', () => {
-  it('keeps the last range’s figures on screen, dimmed and worded as that range’s, until its own arrive', async () => {
+  it('keeps the last range’s figures on screen, dimmed and labelled for that range, until the new ones arrive', async () => {
     const reads = server().hold('GET', '/api/admin/dashboard')
     open()
     await until(() => expect(reads.waiting).toBe(1))

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { PowerOff } from 'lucide-react'
 import { ChannelsSection } from '@/components/bot/settings/channels-section'
+import { ExtrasSection } from '@/components/bot/settings/extras-section'
 import { GeneralSection } from '@/components/bot/settings/general-section'
 import { QrSection } from '@/components/bot/settings/qr-section'
 import { ReferralSection } from '@/components/bot/settings/referral-section'
@@ -17,11 +18,8 @@ import type { BotSettingsResponse } from '@/lib/api-types'
 import { botSettingsQuery } from '@/lib/queries'
 
 /**
- * How the bot behaves — settings the running bot picks up at once, no restart. A section per subject (the switches,
- * the required channels, the wallet's top-up amounts, renewal and the automatic kind, the reminders, referrals, the
- * admins' report group, the QR code and its background), picked from the settings' sidebar (a select on a phone); the
- * other sections stay mounted (hidden) so an unsaved draft survives switching. Each bot has its own: the shop the
- * panel shows.
+ * «تنظیمات ربات» (both panels): the shop's bot settings, a section per subject, each card saving its own group. The
+ * running bot picks a change up within seconds; each bot (the shop on screen) has its own.
  */
 export function BotSettingsPage() {
   const { data, error, refetch } = useQuery(botSettingsQuery)
@@ -49,7 +47,7 @@ export function BotSettingsPage() {
   )
 }
 
-const EMPTY = { general: null, channels: null, wallet: null, renewal: null, reminders: null, referral: null, reports: null, qr: null }
+const EMPTY = { general: null, channels: null, wallet: null, renewal: null, extras: null, reminders: null, referral: null, reports: null, qr: null }
 
 function sectionsOf(data: BotSettingsResponse) {
   const { settings } = data
@@ -58,6 +56,7 @@ function sectionsOf(data: BotSettingsResponse) {
     channels: <ChannelsSection settings={settings} />,
     wallet: <WalletSection settings={settings} />,
     renewal: <RenewalSection settings={settings} />,
+    extras: <ExtrasSection settings={settings} />,
     reminders: <RemindersSection settings={settings} />,
     referral: <ReferralSection settings={settings} />,
     reports: <ReportsSection settings={settings} />,

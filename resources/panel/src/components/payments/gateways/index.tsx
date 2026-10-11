@@ -2,13 +2,12 @@ import type { ComponentType, ReactNode } from 'react'
 import { CreditCard, TimerReset, Wallet, type LucideIcon } from 'lucide-react'
 import { KIND_LABELS } from '@/components/payments/kinds'
 import type { DriverDescription, GatewayKind, PaymentMethodRow, UnregisteredMethodRow } from '@/lib/api-types'
-import { formatDuration } from '@/lib/format'
+import { formatMinutes } from '@/lib/format'
 
 /*
- * What the panel adds to a gateway driver beyond its description (GET /payment-methods/drivers: its words, its traits
- * and its form, which components/driver-form draws — gateways/method-form): its icon, and what the list says of a method
- * beside its summary — handed the method as its driver describes it, so nothing is cast. Adding a driver to the API
- * makes this registry ask for it.
+ * What the panel adds to a gateway driver beyond its description (labels, traits and form come from
+ * GET /payment-methods/drivers): its icon, and an optional note beside a method's summary, typed by the driver's own row
+ * so nothing is cast. A new driver in the API is a type error here until it has an entry.
  */
 
 /** A method of a driver the panel knows, by its driver: a card's (`manual`), the wallet. */
@@ -60,7 +59,7 @@ function AutoApproval({ method }: { method: MethodOf<'manual'> }) {
   return (
     <span className="flex items-center gap-1 text-muted-foreground">
       <TimerReset className="size-3" aria-hidden />
-      تایید خودکار بعد از {formatDuration(minutes)}
+      تایید خودکار بعد از {formatMinutes(minutes)}
     </span>
   )
 }

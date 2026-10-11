@@ -8,9 +8,8 @@ use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Payments\Models\Payment;
 
 /**
- * The payment's move lost to another process — the admin and the auto-approve timer at the same moment. Thrown inside
- * PaymentService's settlement transaction, unwinding it takes the gateway's work (a wallet debit) back with it;
- * PaymentService answers the loss as "not this call" (false), and the decision that stood is someone else's.
+ * A payment's move lost to another process (support and the auto-approve timer at once). Thrown inside the settlement's
+ * transaction so the gateway's work rolls back; PaymentService answers it as "not this call".
  */
 final class PaymentSettledException extends DomainRuleException
 {

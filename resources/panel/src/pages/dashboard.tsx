@@ -47,10 +47,9 @@ interface DashboardPageProps {
 }
 
 /**
- * The overview, as the Console's: a greeting, the headline figures, the period's curve, what needs a hand (and beside
- * it what a panel adds), and the latest arrivals. Another range keeps the last one's figures on screen, dimmed — worded
- * as that range's, which they are — until its own arrive; a read that failed with nothing to show leaves every card at
- * «—» under the failure — never a zero it does not know, nor an "all clear".
+ * The overview: a greeting, the headline figures, the period's curve, what needs attention (plus what a panel adds) and
+ * the latest arrivals. Switching range keeps the last figures dimmed until the new ones arrive; a failed read leaves
+ * every card at «—», never a made-up zero.
  */
 export function DashboardPage({ aside, trafficHelp }: DashboardPageProps) {
   const session = useSession()

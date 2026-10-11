@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Texts;
 
 /**
- * A Telegram message written the way the bot's texts are: its text and entities (or a caption and its entities) as
- * Telegram HTML — bold, italic, underline, strikethrough, spoilers, code, code blocks with their language, links,
- * mentions of an account, quotes, and premium emoji as `<tg-emoji emoji-id="…">😀</tg-emoji>`. What Telegram finds
- * by itself (a @handle, a link typed out, a #tag) stays plain text, and so does a `%variable%` typed in the message.
- * Entities count in UTF-16 code units, as Telegram does.
+ * Turns a Telegram message (its text and entities) into Telegram HTML, the form of the bot's texts — used by /emoji to
+ * hand an admin a template. Entities Telegram finds by itself (a @handle, a link typed out) stay plain text. Offsets are
+ * UTF-16 code units, as Telegram counts them.
  */
 final class EntityHtml
 {

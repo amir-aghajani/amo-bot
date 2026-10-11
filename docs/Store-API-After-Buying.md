@@ -22,9 +22,10 @@ every 15 minutes).
     "server": { "id": 2, "name": "هلند" },
     "link": "https://sub.example.net/sub/3d9e6b1f0a72",
     "traffic": { "limit_bytes": 107374182400, "used_bytes": 42949672960, "remaining_bytes": 64424509440 },
-    "term": { "duration_days": 60, "starts_at": "2026-09-20T10:00:00+00:00", "expires_at": "2026-11-19T10:00:00+00:00", "awaits_first_use": false },
+    "term": { "duration_days": 60, "duration_hours": 1440, "starts_at": "2026-09-20T10:00:00+00:00", "expires_at": "2026-11-19T10:00:00+00:00", "awaits_first_use": false },
     "auto_renew": { "on": true, "offered": true, "days_before": 2 },
     "renewable": true,
+    "extras": { "traffic": true, "time": true },
     "link_rotation": true,
     "next_period": { "ends_at": "2026-10-20T10:00:00+00:00", "bytes": 53687091200 },
     "presence": null,
@@ -42,15 +43,17 @@ every 15 minutes).
 | `server` | where it is («لوکیشن») |
 | `link` | the one subscription link the customer adds to their app — show it with a copy button and a QR code the site draws; `null` once `deleted` |
 | `traffic` | `limit_bytes` (`0` unlimited), `used_bytes`, `remaining_bytes` (`null` when unlimited) |
-| `term` | `duration_days` (`0` never ends), `starts_at` (the first connection), `expires_at`, `awaits_first_use` |
+| `term` | `duration_hours` the term exactly, in hours (`0` never ends — a one-hour test says `1`, a month `720`), `duration_days` the same in whole days, rounded up (kept for the sites made before `duration_hours`), `starts_at` (the first connection), `expires_at`, `awaits_first_use` |
 | `auto_renew` | `on` the customer's switch, `offered` whether it may be set, `days_before` how many days before its end the wallet renews it — the shop's rule, one for every service ([automatic renewal](#automatic-renewal)) |
-| `renewable` | it may be renewed now ([a renewal](Store-API-Buying.md#a-renewal)): active or ended, its plan still there, renewing something — and in an agent's shop covered by their traffic |
+| `renewable` | it may be renewed now ([a renewal](Store-API-Buying.md#a-renewal)): active or ended, its plan still there and renewing something — and in an agent's shop covered by their traffic |
+| `extras` | `traffic` and `time`: whether extra traffic, and extra time, may be bought for it now ([extra traffic and time](Store-API-Buying.md#extra-traffic-and-time)) — the shop sells it, and the service can take it: traffic while it has a quota and its time has not run out, time while it has a term and its traffic has not run out |
 | `link_rotation` | its link may be changed now ([a new link](#a-new-link)): it runs, and its server can give it a new one |
 | `next_period` | a renewal queued behind the period in use: when that period ends, and the most that is left then ([a renewal](Store-API-Buying.md#a-renewal)); `null` for none |
 | `presence` | whether it is connected — only in `POST …/refresh`'s answer, else `null` |
 
 **The term starts at the first connection.** A new service has `awaits_first_use: true`, `starts_at` and `expires_at`
-`null`: show "starts on first connection — 30 days". Once it connects, `expires_at` is its end.
+`null`: show "starts on first connection — 30 days" (or "— 1 hour": word the term from `duration_hours`, which an hourly
+plan's services have since this release). Once it connects, `expires_at` is its end.
 
 ## Reading a service now
 
@@ -65,7 +68,8 @@ counted too, then `429` (`اطلاعات سرویس را زیاد به‌روز 
 ## Automatic renewal
 
 `PATCH /subscriptions/{id}` `{ "auto_renew": true }` or `false` (a JSON boolean) answers `{ "subscription": … }`. Offered
-(`auto_renew.offered`) while the service runs, ends some day, still has its plan, and the shop takes the wallet;
+(`auto_renew.offered`) while the service runs, ends some day, still has its plan — one whose term is at least the
+`days_before` it is renewed in: a plan of a few hours is not —, and the shop takes the wallet;
 otherwise — turning it off too — `422` on `auto_renew` (`تمدید خودکار برای این سرویس در دسترس نیست.`), and anything but
 a boolean is `422` on it too. With it on, the shop renews the service from the wallet `auto_renew.days_before` days
 before its end, on its plan at that plan's price. The customer hears of it: `auto_renewed`, `auto_renew_short` (the
@@ -85,14 +89,18 @@ new link.
 
 `GET /orders?status=&type=&page=` lists the customer's orders, newest first, each with its payments (newest first) — the
 order shape of [what a checkout answers](Store-API-Buying.md#what-a-checkout-answers); `GET /orders/{id}` answers
-`{ "order": … }`. An order's `subscription` is the service it delivered or renews, as `{ id, name }` — its name on the
-server, as a ticket names its service ([the list](Store-API-Support-Tickets.md#the-list)): a purchase's once delivered,
-a renewal's from the start; `null` for none, or once that service was deleted. Link it to `GET /subscriptions/{id}`.
+`{ "order": … }`. An order's `subscription` is the service it delivered, renews or adds extras to, as `{ id, name }` — its
+name on the server, as a ticket names its service ([the list](Store-API-Support-Tickets.md#the-list)): a purchase's once
+delivered, a renewal's and extras' from the start; `null` for none, or once that service was deleted. Link it to
+`GET /subscriptions/{id}`. `traffic_bytes` and `days` are what an order of extras brings its service — extra traffic in
+bytes, extra time in days —, `null` for the rest (an agent's `traffic` order says its traffic in `traffic_bytes` too).
 
 | `type` | |
 |---|---|
 | `purchase` | a new service |
 | `renewal` | a service's renewal (`subscription` is that service, `server` where it is) |
+| `extra_traffic` | extra traffic for a service (`traffic_bytes`; `subscription` is that service, `plan` its plan, `server` where it is) |
+| `extra_time` | extra time for a service (`days`; `subscription`, `plan` and `server` as for extra traffic) |
 | `wallet_topup` | money into the wallet (`plan`, `server` and `subscription` are `null`) |
 | `traffic` | an agent's traffic for their bot, bought in the bot |
 
@@ -101,10 +109,10 @@ a renewal's from the start; `null` for none, or once that service was deleted. L
 | `pending` | waiting to be paid — a card's receipt to come, refused, or with support (its payment says which) |
 | `paid` | paid; the delivery has not started |
 | `processing` | paid; the delivery is under way |
-| `fulfilled` | delivered (`fulfilled_at`; `subscription` the service delivered or renewed) |
+| `fulfilled` | delivered (`fulfilled_at`; `subscription` the service delivered, renewed or given its extras) |
 | `failed` | paid, but the delivery failed — support delivers it (or gives the money back) |
 | `cancelled` | cancelled by support, or left unpaid for 48 hours |
-| `refunded` | the money went back — a purchase's or a renewal's into the wallet, a delivered top-up's out of it again |
+| `refunded` | the money went back — a purchase's, a renewal's or extras' into the wallet, a delivered top-up's out of it again |
 
 | Payment `status` | |
 |---|---|
@@ -156,11 +164,15 @@ Newest line first, the lines the bot's «کیف پول» shows; `description` is
 {
   "enabled": true,
   "rate": 10,
+  "renewal_rate": 5,
   "first_only": false,
+  "start_gift": { "referrer": "20000.00", "invitee": "10000.00", "trigger": "purchase" },
+  "reward": { "every": 5, "plan": { "id": 4, "name": "یک‌ماهه" } },
   "code": "k7m2xq9p",
   "bot_link": "https://t.me/amo_shop_bot?start=ref_k7m2xq9p",
   "invited": 3,
-  "earned": "36000.00"
+  "earned": "36000.00",
+  "rewards": 0
 }
 ```
 
@@ -171,5 +183,45 @@ Newest line first, the lines the bot's «کیف پول» shows; `description` is
   ([invite codes at sign-up](Store-API-Sign-In.md#invite-codes-at-sign-up)).
 - `invited` — the customers their code brought; `earned` — what those brought them, in Toman.
 - While `enabled`, a referred customer's payment that brings money in — a card transfer, for anything; not a wallet
-  payment — earns the referrer `rate` percent (whole Toman, rounded down) into their wallet; with `first_only`, only
-  that customer's first. One level: a referral's referrals earn the referrer nothing.
+  payment — earns the referrer `rate` percent (whole Toman, rounded down) into their wallet — a renewal's
+  `renewal_rate` instead (0: renewals earn nothing) —; with `first_only`, only that customer's first. One level: a
+  referral's referrals earn the referrer nothing.
+- `start_gift` («هدیه شروع», `null` while there is none) — Toman to the referrer's wallet (`referrer`) and to the
+  newcomer's own (`invitee`), once a newcomer: as they join (`trigger` `join`) or as their first purchase is paid
+  (`purchase` — any way to pay; a service given free is no purchase). Both are told (`referral_start_gift` notices).
+- `reward` («جایزه دعوت», `null` while there is none) — each time `every` more of the newcomers their code brought
+  have bought, a service of `plan` is given to them free (a `referral_reward` notice, then the service as any
+  order's); `rewards` — how many they were given.
+- While an alert on their referrals stands — support's, when they look made up —, no start gift and no reward is given,
+  and none of what was held back later; commissions are as ever.
+
+## Gift codes
+
+A gift code («کد هدیه») is worth Toman in the wallet or a plan's service given free, and is taken once — by one
+customer of the shop, the bot's «🎁 کد هدیه» and the website alike ([gift codes](Gift-Codes-And-Lucky-Wheel.md#gift-codes)).
+
+`POST /gift-codes/redeem` `{ "code": "nowruz-7k3m 9qxapt" }` → `200`
+```json
+{
+  "gift": {
+    "kind": "wallet",
+    "words": "۵۰٬۰۰۰ تومان شارژ کیف پول",
+    "balance": "430000.00",
+    "order": null,
+    "subscription": null
+  }
+}
+```
+
+- Send the code as the customer typed it: any case, dashes and spaces anywhere, Persian digits — the shop reads it as
+  it keeps it (capital Latin letters and digits).
+- `words` is what it gave, ready to show. A wallet code answers the `balance` it brought the wallet to; a plan's code the
+  `order` its service was given by — `fulfilled`, or `failed` and waiting for support's retry, as any order — and, once
+  delivered, its `subscription` ([services](#services)); `balance` is then `null`. Nothing is sent in Telegram: your
+  site shows it.
+- Refused, a `422` with the reason under `code`, worded for the customer: the shop takes no codes now (its switch is
+  off), no such code, taken — by this customer or another —, past its last day, or its service cannot be delivered right
+  now (no server delivers the plan: the code stays the customer's to try again later).
+- Every try counts against the customer and the address network it came from until it names one of the shop's codes:
+  10 wrong ones an hour for a customer, 30 for a network, then a `429` whose `Retry-After` says the wait — so codes are
+  not guessed.

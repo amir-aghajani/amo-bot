@@ -13,13 +13,13 @@ const projectRoot = fileURLToPath(new URL('.', import.meta.url))
 /** The panels, each a page of its own built from the same sources: the owner's at /admin/, an agent's at /agent/. */
 const PANELS = ['admin', 'agent'] as const
 
-/** Where the build writes: public/ — beside the PHP front controller, which is why the build cleans only its own. */
+/** Where the build writes: public/, beside the PHP front controller — which is why the build cleans only its own outputs. */
 const outDir = path.join(projectRoot, 'public')
 
 /** What the build writes there: each panel's page, and the hashed files both panels' pages share. */
 const OUTPUTS = [...PANELS, 'assets']
 
-/** The least a script or stylesheet weighs to be worth a brotli of its own beside it. */
+/** The smallest script or stylesheet worth a brotli copy beside it. */
 const BROTLI_MIN_BYTES = 1024
 
 /* What the chunks are told apart by (the build's codeSplitting, below). */
@@ -32,15 +32,13 @@ const OWN_APPS = /[\\/]src[\\/]apps[\\/]/
 const SHARED_SOURCE = (id: string) => PANEL_SOURCES.test(id) && !OWN_APPS.test(id)
 
 /**
- * What the built panels need from the web server, written by the build itself:
- *
- * - each page's Content-Security-Policy, ahead of every script — a panel loads only the build's files and talks only
- *   to its own origin; the page's inline script (it sets the page's <base> before anything loads) is allowed by its
- *   hash, taken from the built page, so editing the script never leaves a stale one;
- * - beside each script and stylesheet its brotli (x.js.br), compressed once at the best level, and assets/.htaccess:
- *   the build's files carry a hash of their content in their names, so a browser keeps them for good, and one that reads
- *   brotli is given that file as it is — nothing is compressed per request (Apache, by that .htaccess);
- * - a clean slate: public/ also holds the PHP front controller, so the build removes only what it writes there.
+ * What the production build adds:
+ * - each page's Content-Security-Policy: only the build's files and the panel's own origin; the page's inline script
+ *   (which sets its <base> before anything loads) is allowed by its hash, taken from the built page, so it never goes
+ *   stale;
+ * - beside each script and stylesheet a brotli copy (x.js.br, best level, made once), and assets/.htaccess: the hashed
+ *   files are cached for good, and a browser that reads brotli gets the .br as it is — nothing compressed per request;
+ * - a clean slate: public/ also holds the PHP front controller, so the build removes only its own outputs.
  */
 function production(): Plugin {
   return {
@@ -184,12 +182,12 @@ export default defineConfig(({ command }) => ({
     rolldownOptions: {
       input: Object.fromEntries(PANELS.map((panel) => [panel, path.join(projectRoot, `resources/panel/${panel}/index.html`)])),
       output: {
-        // The chunks, by how often they change and who needs them. What a panel's first screen needs from its libraries
-        // changes only with a dependency — React, then the rest (the router, react-query, Radix's menus and tooltips, the
-        // toasts) —, so a browser keeps it across the shop's upgrades, as the bundler's own runtime beside it. The panels' own
-        // first-load code is one chunk whichever panel, and what three pages or more share (the page header, the lists,
-        // the forms, the select…) one more, loaded with the first of them; the rest goes with its page. A panel's own
-        // code (src/apps/…) stays in its own chunks: an agent's page never names the owner's.
+        // The chunks, by how often they change and who needs them:
+        // - `react` and `vendor`: the libraries the first screen needs. They change only with a dependency, so a
+        //   browser keeps them across the shop's upgrades;
+        // - `app`: both panels' shared first-load code (and the icons it draws);
+        // - `common`: what three pages or more share, loaded with the first of them; the rest goes with its page.
+        // A panel's own code (src/apps/…) stays in its own chunks: an agent's page never references the owner's.
         codeSplitting: {
           groups: [
             { name: 'react', test: REACT, tags: ['$initial'], priority: 4 },
@@ -208,10 +206,9 @@ export default defineConfig(({ command }) => ({
     strictPort: true,
     proxy: { '/api': 'http://127.0.0.1:8080' },
   },
-  // `pnpm test`: the panels' unit tests, each beside what it tests (src/**/*.test.ts[x]), in a DOM opened at the owner's
-  // panel (/admin/ — what lib/config reads the panel and its API off), every request answered by src/test/server and held
-  // to the API description (read once a run: src/test/global-setup), the clock in UTC wherever the suite runs, in an
-  // order of their own each run (as the PHP suite: no test leans on another).
+  // `pnpm test`: the unit tests beside what they test (src/**/*.test.ts[x]), in a happy-dom page at the owner's panel
+  // (/admin/, which lib/config reads), every request answered by src/test/server and held to the API description
+  // (src/test/global-setup), in UTC, shuffled each run so no test leans on another.
   test: {
     include: ['src/**/*.test.{ts,tsx}'],
     environment: 'happy-dom',

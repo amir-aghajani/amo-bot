@@ -31,8 +31,8 @@ use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * Plan → server choice → paid order → one panel client on every inbound of the chosen entry, named after the customer,
- * whose term starts at the first connection — and what a renewal of it sends the panel, a link rotation, a read-back.
+ * A paid purchase becomes one panel client on every inbound of the chosen plan entry, named after the customer, its term
+ * starting at the first connection; then what a renewal sends the panel, a link rotation, and a read-back.
  */
 final class PurchaseProvisioningTest extends DatabaseTestCase
 {
@@ -91,7 +91,7 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
         self::assertNotNull($subscription);
         self::assertSame('customer_1', $subscription->remote_name);
         self::assertSame('https://fake.test/sub/sub-1', $subscription->subscription_url, 'the link the panel served is stored: no panel call is needed to hand it out again');
-        self::assertSame(30, $subscription->duration_days);
+        self::assertSame(30 * 24, $subscription->duration_hours);
         self::assertNull($subscription->expires_at, 'no deadline until the customer connects');
         self::assertNull($subscription->starts_at);
         self::assertTrue($subscription->awaitsFirstUse());
@@ -117,13 +117,13 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
 
     public function testAPlanWithoutATermNeverExpires(): void
     {
-        $forever = $this->plan(['name' => 'دائمی', 'duration_days' => 0], $this->berlin);
+        $forever = $this->plan(['name' => 'دائمی', 'duration_hours' => 0], $this->berlin);
 
         $subscription = $this->bought($forever);
 
         $expiry = FakeProvider::$created[0]['spec']->expiry;
         self::assertSame([null, null], [$expiry->deadline(), $expiry->pendingSeconds()], 'never: no deadline, no term');
-        self::assertSame(0, $subscription->duration_days);
+        self::assertSame(0, $subscription->duration_hours);
         self::assertFalse($subscription->awaitsFirstUse());
     }
 
@@ -175,7 +175,7 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
 
         self::assertSame('2026-10-25 09:00:00', $subscription->expires_at?->format('Y-m-d H:i:s'));
         self::assertSame('2026-09-25 09:00:00', $subscription->starts_at?->format('Y-m-d H:i:s'), 'the term before the deadline');
-        self::assertSame(30, $subscription->duration_days);
+        self::assertSame(30 * 24, $subscription->duration_hours);
     }
 
     public function testInspectReportsPresenceAndNullOnceTheClientIsGone(): void
@@ -247,7 +247,7 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
         self::assertSame(60 * 86400, $sent->expiry->pendingSeconds(), 'the plan\'s days on the term, the clock still waiting');
         self::assertSame(2 * $this->plan->trafficBytes(), $sent->totalBytes, 'and its traffic on top');
         self::assertSame([], FakeProvider::$trafficReset, 'nothing is taken away while the period has not passed');
-        self::assertSame([60, true], [$subscription->duration_days, $subscription->awaitsFirstUse()]);
+        self::assertSame([60 * 24, true], [$subscription->duration_hours, $subscription->awaitsFirstUse()]);
     }
 
     public function testARenewalOfARunningServicePutsThePlansDaysOnTopOfTheDeadlineItsPanelHas(): void
@@ -262,7 +262,7 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
 
         $sent = FakeProvider::lastUpdate('customer_1');
         self::assertSame('2026-11-08 12:00:00', $sent->expiry->deadline()?->format('Y-m-d H:i:s'));
-        self::assertSame(['2026-11-08 12:00:00', 60, 2 * $planBytes], [$subscription->expires_at?->format('Y-m-d H:i:s'), $subscription->duration_days, $subscription->traffic_limit_bytes]);
+        self::assertSame(['2026-11-08 12:00:00', 60 * 24, 2 * $planBytes], [$subscription->expires_at?->format('Y-m-d H:i:s'), $subscription->duration_hours, $subscription->traffic_limit_bytes]);
         self::assertSame(['2026-10-09 12:00:00', $planBytes], [$subscription->period_ends_at?->format('Y-m-d H:i:s'), $subscription->next_period_bytes], 'what the paid period leaves unused goes when it ends (not carried, by default)');
         self::assertSame([42, '42 | customer'], [$sent->telegramId, $sent->comment], 'a renewal re-sends the account the client points back at');
     }
@@ -280,7 +280,7 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
         $sent = FakeProvider::lastUpdate('customer_1');
         self::assertSame(30 * 86400, $sent->expiry->pendingSeconds());
         self::assertSame($planBytes, $sent->totalBytes, 'the plan\'s traffic, what was left not carried');
-        self::assertSame([SubscriptionStatus::Active, true, null, 30, 0], [$subscription->status, $subscription->awaitsFirstUse(), $subscription->starts_at, $subscription->duration_days, $subscription->usedBytes()]);
+        self::assertSame([SubscriptionStatus::Active, true, null, 30 * 24, 0], [$subscription->status, $subscription->awaitsFirstUse(), $subscription->starts_at, $subscription->duration_hours, $subscription->usedBytes()]);
         self::assertNull($subscription->period_ends_at, 'nothing queued behind a period that is over');
     }
 

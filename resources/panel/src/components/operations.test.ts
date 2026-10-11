@@ -8,13 +8,9 @@ import { queryKeys } from '@/lib/query-keys'
 import { providers, until } from '@/test/render'
 
 /*
- * A detail dialog's operations (components/operations): the ones the subject's state allows; a plain one runs at once,
- * a worded or destructive one waits on its strip for a second look, one that asks more than a note for the dialog's form
- * on its strip; one done has what the dialog says it changes beside the subject read again; a refusal is said in the
- * API's words — the list read again when the subject moved on, the refusal then the dialog's one word on it —, and an
- * operation waiting on its strip is withdrawn once the state no longer allows it, unless it is the admin's own in flight
- * or the dialog holds the operations with a question of its own. Each end — a run, a strip — says where the focus goes
- * (the section puts it there, components/payments and components/orders test it on screen).
+ * A detail dialog's operations (components/operations): which run at once and which wait on a strip or a form, what is
+ * read again after one, how a refusal is shown (and the list read again when the subject moved on), withdrawing an
+ * operation the new state no longer allows, and where the focus goes when each ends.
  */
 
 type Action = 'approve' | 'reject' | 'cancel'
@@ -72,7 +68,7 @@ describe('the operations', () => {
     expect(invalidated.mock.calls.map(([filters]) => filters?.queryKey)).toEqual(CHANGES)
   })
 
-  it('hold a worded one on its strip, and run it with its note on the second look', async () => {
+  it('hold one that takes a note on its strip, and run it with the note on confirmation', async () => {
     const { result, perform } = operations()
 
     act(() => result.current.choose('reject'))
@@ -86,7 +82,7 @@ describe('the operations', () => {
     expect(perform.mock.calls[0]?.[0]).toEqual({ action: 'reject', note: 'رسید خوانا نیست' })
   })
 
-  it('hold a destructive one for a second look, sent without a note', async () => {
+  it('hold a destructive one for confirmation, sent without a note', async () => {
     const { result, perform } = operations()
 
     act(() => result.current.choose('cancel'))
@@ -139,7 +135,7 @@ describe('the operations', () => {
 })
 
 describe('the subject moving on', () => {
-  it('withdraws the operation waiting on its strip, with a word', () => {
+  it('withdraws the operation waiting on its strip, and says so', () => {
     const { result, rerender } = operations()
     act(() => result.current.choose('reject'))
 
@@ -174,7 +170,7 @@ describe('the subject moving on', () => {
 })
 
 describe('a refusal', () => {
-  it('is said in the words the API put under the state, and the list behind is read again — the dialog’s one word on it, the focus asked there', async () => {
+  it('on `status` shows the API’s message, reads the list again, and moves the focus to the message', async () => {
     const { result, onStale } = operations({ perform: () => Promise.reject(new ApiError(422, 'Refused.', { status: ['این پرداخت همین الان تایید شد.'] })) })
 
     act(() => result.current.choose('approve'))
@@ -185,7 +181,7 @@ describe('a refusal', () => {
     expect(result.current.focus).toMatchObject({ to: 'word', insist: true })
   })
 
-  it('of the note is said in its words, the list left alone — and nothing else read again', async () => {
+  it('on the note shows its message and reads nothing again', async () => {
     const { result, onStale, invalidated } = operations({ perform: () => Promise.reject(new ApiError(422, 'Refused.', { note: ['حداکثر ۳۰۰ کاراکتر.'] })) })
 
     act(() => result.current.choose('reject'))
@@ -215,7 +211,7 @@ describe('a refusal', () => {
     await act(async () => finish('fresh'))
   })
 
-  it('the dialog words its own way is left to it', async () => {
+  it('that the dialog handles itself is left to the dialog', async () => {
     const onFailure = vi.fn(() => true)
     const { result } = operations({ perform: () => Promise.reject(new ApiError(502, 'پنل پاسخ نداد.')), onFailure })
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Core;
 
+use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Security\RateLimiter;
 use App\Core\Security\ThrottleUnavailableException;
 use Tests\TestCase;
@@ -107,6 +108,22 @@ final class RateLimiterTest extends TestCase
         self::assertEqualsWithDelta(3600, $limiter->attempt($windows), 2, 'the hour is spent: the wait is its');
         self::assertSame(0, $limiter->attempt([['message|7', 3, 600]]), 'nothing was counted for the refused one');
         self::assertEqualsWithDelta(600, $limiter->attempt([['message|7', 3, 600]]), 2);
+    }
+
+    public function testEnforceIsAnAttemptRefusedAsA429WithItsWaitInMinutes(): void
+    {
+        $limiter = new RateLimiter($this->scratchDir() . '/throttle');
+        $windows = [['tickets|open|7', 1, 600]];
+        $limiter->enforce($windows, 'تیکت زیادی باز کرده‌اید');
+
+        try {
+            $limiter->enforce($windows, 'تیکت زیادی باز کرده‌اید');
+            self::fail('the window is full');
+        } catch (TooManyAttemptsException $e) {
+            self::assertSame([429, 'تیکت زیادی باز کرده‌اید؛ ۱۰ دقیقه دیگر دوباره امتحان کنید.'], [$e->status(), $e->getMessage()]);
+            self::assertEqualsWithDelta(600, $e->retryAfter, 2);
+        }
+        self::assertSame(2, $limiter->hit('tickets|open|7', 600), 'the refused one was not counted: the first, then this one');
     }
 
     public function testAnAttemptGivenBackLeavesItsRoomNeverLessThanNone(): void

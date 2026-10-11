@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * One of a bot's runtime settings, its value JSON (Services\Settings). `bot_id` is named on every query by the Settings
- * service — there is no global scope here, since the agency's settings are the main bot's whoever reads them.
+ * One runtime setting of a bot, its value JSON. No shop scope: the Settings service names `bot_id` on every query,
+ * since some settings (the agency's) are the main bot's whoever reads them.
  *
  * @property int $id
  * @property int $bot_id

@@ -50,8 +50,10 @@ From the panel, «ادامه» leaves the next batch to the scheduler. An agent'
 
 «هدیه همگانی» › «هدیه جدید»: days and traffic for many services at once — a holiday gift, a long outage made good:
 
-- **«به چه سرویس‌هایی»** — «همه سرویس‌ها», «فقط سرویس‌های نماینده‌ها» (what the bots of the agencies that stand sold)
-  or «سرویس‌های یک سرور».
+- **«به چه سرویس‌هایی»** — «همه سرویس‌ها», «فقط سرویس‌های نماینده‌ها» (what the bots of the agencies that stand sold),
+  «سرویس‌های یک سرور» or «سرویس‌های مشتری‌های یک گروه» — then «گروه مشتریان»: one of the main shop's customer groups
+  ([«گروه‌ها»](Customers.md), on the users page), each with how many of its customers' services run; the gift reaches
+  the running services of the customers in it as each one's turn comes.
 - «تعداد روز» (0 to 365), «حجم (گیگابایت)» (0 to 10000), «دلیل» (300 characters, the customers read it), «سرویس‌های در
   انتظار اولین اتصال هم شامل شوند» (off) and «پیام به مشتری‌ها» (on) — as a [server's](Servers.md#adding-days-and-traffic).
 
@@ -71,3 +73,6 @@ too, where it can be stopped alone.
 - **A group or server deleted** after the draft leaves its audience empty: the card offers no «ارسال», and a run under way
   ends at its next batch.
 - **Traffic a mass gift gives agents' customers** is not drawn from the agents' pools.
+- **A customer group deleted while its gift runs** — the gift keeps its parts and its list line («سرویس‌های گروهی که حذف
+  شد»), and reaches nobody more: it finishes, never turning into a gift for everyone. A customer taken out of the group
+  meanwhile is passed by; one added is reached, if their service was there as the gift was given.

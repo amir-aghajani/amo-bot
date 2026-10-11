@@ -11,9 +11,8 @@ import { copyText } from '@/lib/clipboard'
 import { formatDate, formatNumber } from '@/lib/format'
 
 /**
- * Handing the bot a group: what the admin does in Telegram, then the link — Telegram's own "add to group as admin"
- * link, which asks for the "manage topics" right and carries a one-time code — or the command that does the same
- * typed into the group. The screen waits (useReportGroup polls) and turns when the bot reports the group connected.
+ * Connecting a report group: the steps in Telegram, then Telegram's "add to group as admin" link (asking for "manage
+ * topics", carrying a one-time code) or the equivalent command. The card polls until the bot reports the group connected.
  */
 export function ConnectSteps({ group, creating, onCreate }: { group: ReportGroupData; creating: boolean; onCreate: () => void }) {
   const link = group.link

@@ -28,9 +28,8 @@ interface OverviewChartProps {
 }
 
 /**
- * The period at a glance (the Console's usage card): the metric's name and what it counts, the period's total with
- * its change against the previous one, the daily curve, and the period's shape — average, best day — at its foot; a
- * skeleton while it is read, «—» when there is nothing to draw.
+ * The period at a glance: a metric's total and change against the previous period, the daily curve, and the average and
+ * best day. A skeleton while it loads, «—» with nothing to draw.
  */
 export function OverviewChart({ series, kpis, loading }: OverviewChartProps) {
   const [metric, setMetric] = useState<Metric>('revenue')

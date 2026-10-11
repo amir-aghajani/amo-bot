@@ -11,11 +11,10 @@ use Illuminate\Database\ConnectionInterface;
 
 /**
  * What the shop knows of a panel's health: when it last talked to it and why that failed (`last_checked_at`,
- * `last_error`, in the owner's words) — the server's page and the dashboard show them, Server::isBackingOff() reads them.
- * A panel that had answered and stops — or answers again — is news for the main bot's report group; a server's first
- * contact is not. Each change is a compare-and-swap on the row, so two processes noticing it at once report it once —
- * written with its report in one transaction: a report the database refuses takes the change back, and the next contact
- * notices it again.
+ * `last_error`, worded for the owner), shown on the server's page and the dashboard and read by Server::isBackingOff().
+ * A panel that had answered and stops — or answers again — is reported to the main bot's report group (a server's first
+ * contact is not). Each change is a compare-and-swap on the row, so two processes noticing it report it once, written in
+ * one transaction with its report: a report the database refuses takes the change back, to be noticed again next time.
  */
 final class ServerHealth
 {
@@ -24,16 +23,16 @@ final class ServerHealth
         private readonly ConnectionInterface $db,
     ) {}
 
-    /** A contact that read the panel as a whole — the admin's check, the periodic sync —: what it found, whatever it was. */
+    /** Record a contact that read the panel as a whole (the admin's check, the sync): whatever it found. */
     public function record(Server $server, ?string $error): void
     {
         $error === null ? $this->answered($server) : $this->failed($server, $error);
     }
 
     /**
-     * Any other contact — a customer's screen, a renewal, a grant —: only what changes the picture is written, a panel
-     * that could not be worked with (ProviderException::unavailable()) or one that answers again; a failure about the one
-     * thing asked means the panel answered.
+     * Record any other contact (a customer's screen, a renewal, a grant), writing only what changes the picture: a panel
+     * that could not be worked with (ProviderException::unavailable()), or one that answers again. A failure about the
+     * one thing asked means the panel answered.
      */
     public function contacted(Server $server, ?ProviderException $failure): void
     {

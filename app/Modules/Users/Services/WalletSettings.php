@@ -11,9 +11,8 @@ use App\Modules\Settings\DeclaresSettings;
 use App\Modules\Settings\Services\Settings;
 
 /**
- * The shop's wallet rules, as the admin sets them at runtime (the `wallet` group of the bot settings, «کیف پول»; every
- * bot its own): the smallest top-up and the amounts offered as buttons — what the bot's «افزایش موجودی», the website's
- * top-up and OrderService::topUpAllowed() go by —, below the largest a top-up may be.
+ * The wallet settings (the `wallet` group): the smallest top-up and the amounts offered as buttons, up to TOPUP_MAX.
+ * OrderService::topUpAllowed() enforces them for the bot and the website.
  */
 final class WalletSettings implements DeclaresSettings
 {

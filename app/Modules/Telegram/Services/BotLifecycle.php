@@ -16,11 +16,9 @@ use App\Modules\Telegram\Exceptions\WebhookAddressException;
 use Psr\Log\LoggerInterface;
 
 /**
- * How a bot is wired to Telegram: a webhook (its address is Urls') or polling (which needs the webhook gone), and the
- * identity Telegram reports — for the current bot (CurrentBot): the main one keeps its secret and its @username in
- * config.php, an agent's in its row, and its webhook has an address of its own (its id and its secret). bot:poll and bot:info are
- * the thin front of this, BotWebhooks of switching every bot at once; an agent's bot handed over while the shop runs
- * follows the main bot's mode (follow()).
+ * How the current bot is wired to Telegram: a webhook or polling (which needs the webhook gone), and the identity
+ * Telegram reports. The main bot keeps its webhook secret and @username in config.php, an agent's bot on its row with a
+ * webhook address of its own. An agent's bot handed over later follows the main bot's mode (follow()).
  */
 final class BotLifecycle
 {
@@ -43,8 +41,7 @@ final class BotLifecycle
     ) {}
 
     /**
-     * The public address the webhooks are registered under — `$baseUrl` (bot:webhook:set --url), else APP_URL — once it
-     * is one Telegram calls.
+     * The public address webhooks are registered under: `$baseUrl` (bot:webhook:set --url), else APP_URL.
      *
      * @throws WebhookAddressException when it is not HTTPS, which Telegram refuses
      */
@@ -59,9 +56,8 @@ final class BotLifecycle
     }
 
     /**
-     * Register the current bot's webhook at the public URL (`$baseUrl` in APP_URL's place) and remember it — an agent's
-     * held to AGENT_CONNECTIONS calls at once. A missing secret is made first: the main bot's is written to config.php
-     * (TELEGRAM_WEBHOOK_SECRET), an agent's to its row (encrypted).
+     * Register the current bot's webhook (an agent's held to AGENT_CONNECTIONS calls at once), making its secret first if
+     * missing: the main bot's in config.php, an agent's on its row.
      *
      * @return string The URL registered
      * @throws WebhookAddressException when the URL is not HTTPS, which Telegram refuses
@@ -94,7 +90,7 @@ final class BotLifecycle
     }
 
     /**
-     * Take the current bot's webhook down — polling and webhooks are mutually exclusive on Telegram's side.
+     * Take the current bot's webhook down (Telegram allows polling only without one).
      *
      * @throws TelegramApiException
      */
@@ -105,8 +101,8 @@ final class BotLifecycle
     }
 
     /**
-     * Ask Telegram who the current bot is and keep it — the main bot's @username in config.php (the settings screen
-     * shows it; a read-only config.php costs only that), an agent's @username and name in its row; returns the username.
+     * Ask Telegram who the current bot is and keep it (the main bot's @username in config.php, an agent's on its row);
+     * returns the username.
      *
      * @throws TelegramApiException
      */
@@ -128,9 +124,8 @@ final class BotLifecycle
     }
 
     /**
-     * An agent's bot was handed over (or a new token for it): it follows the main bot — a webhook of its own when the
-     * shop runs on webhooks, none otherwise (bot:poll takes it up on its next round). A refusal that keeps the bot from
-     * running is kept on its row (BotHealth); the poller or the next bot:webhook:set tries again.
+     * An agent's bot handed over (or given a new token) follows the main bot's mode: its own webhook when the shop runs
+     * on webhooks, none otherwise (bot:poll takes it up). A refusal is kept on its row (BotHealth).
      */
     public function follow(Bot $bot): void
     {

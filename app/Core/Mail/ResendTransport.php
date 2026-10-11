@@ -13,11 +13,8 @@ use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email;
 
 /**
- * Email through Resend's API (resend.com) — for a host that sends no mail of its own, or whose mail lands in spam: each
- * message posted to its /emails endpoint as JSON, signed with the account's API key (MAIL_RESEND_API_KEY), through the
- * shop's one outgoing client (the tests answer it as they answer every other call). The sender's domain must be one the
- * account verified (Resend › Domains). A refusal is Resend's own words with its status — the owner's diagnosis on the
- * test send —; the key is never in one.
+ * Email through Resend's API: each message posted as JSON with the API key as a bearer, through the shop's one outgoing
+ * client, no redirect followed. A refusal carries Resend's own words and status, never the key.
  */
 final class ResendTransport extends AbstractTransport
 {
@@ -73,7 +70,7 @@ final class ResendTransport extends AbstractTransport
     }
 
     /**
-     * The email as Resend's API takes it: who from (by name), to whom, the subject and both bodies.
+     * The email in Resend's JSON shape.
      *
      * @return array<string, string|list<string>>
      */

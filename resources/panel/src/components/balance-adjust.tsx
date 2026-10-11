@@ -54,11 +54,10 @@ interface BalanceAdjustProps<A extends string, N extends string, R> {
 }
 
 /**
- * A balance changed by hand — a customer's wallet, an agent's traffic: the balance now, the direction, how much (in Toman
- * a whole number, «۱۵۰٬۰۰۰» going as "150000"; in gigabytes decimals too, «۱٫۵» or «1.5» going as "1.5"; what is no such
- * number is the form's to refuse, never sent as another), a note for their ledger (held to a ledger line's limit,
- * counted). After a change the form is ready for the next, in the same direction. The amount and the note sit side by
- * side where the form has the room (a dialog, a wide card), one under the other in a narrow column.
+ * A balance changed by hand (a customer's wallet, an agent's traffic): the balance, the direction, the amount — whole
+ * Toman with `whole` («۱۵۰٬۰۰۰» goes as "150000"), else up to two decimals («۱٫۵» goes as "1.5"); anything else is
+ * refused here, never sent as another number — and a ledger note. After a change the form is ready for the next one in
+ * the same direction.
  */
 export function BalanceAdjust<A extends string, N extends string, R>(props: BalanceAdjustProps<A, N, R>) {
   const { balanceLabel, balance, fields, amountLabel, amountPlaceholder, whole = false, amountHint, noteHint, notePlaceholders, submitLabels, send, invalidates, onDone, onCancel } = props

@@ -13,11 +13,9 @@ use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
 /**
- * The reviews screen (both panels, and the shop's website for its admins): every review of the shop, the newest first —
- * by status, searched by the name it is signed with, its words, the customer who wrote it or its number —, the pending
- * ones counted (the queue: the sidebar's and the dashboard's too); and what support decides — approve (the website shows
- * it), reject (it does not), either way again, delete —, each once, a refused state in the words of the state it found,
- * under the deciding principal (the owner's login «پشتیبانی» to anyone but the owner). Each shop its own.
+ * The reviews screen (both panels and the website's admin API): the list (newest first, by status and search, the pending
+ * ones counted for the sidebar and the dashboard) and support's decisions — approve, reject, either again, delete — each
+ * taken once, a refused state worded by the state it found, recorded under the deciding principal. Each shop sees its own.
  */
 final class AdminReviewsApiTest extends HttpTestCase
 {

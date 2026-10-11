@@ -24,10 +24,8 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * A service's renewal on the shop's website — the bot's «♻️ تمدید سرویس», through the same checkout: its preview (the
- * plan, its price, the service as the renewal would leave it — CustomerRenewal::preview(), which the bot's checkout shows
- * too) is what the payment then makes; a service its customer may not renew, or one being renewed, is refused in the
- * API's words; a renewal made again with its key is answered by the order it made, even once that one is under way.
+ * Renewals on the website: the preview is what the payment then makes; a service that may not be renewed, or is being
+ * renewed, is refused; a repeated request is answered by its order.
  */
 final class StoreRenewalTest extends HttpTestCase
 {
@@ -62,10 +60,10 @@ final class StoreRenewalTest extends HttpTestCase
     {
         $preview = $this->decode($this->get($this->storeApi($this->website, "/subscriptions/{$this->subscription->id}/renewal")))['renewal'];
 
-        self::assertSame(['id' => $this->plan->id, 'name' => 'یک‌ماهه', 'price' => '120000.00', 'traffic_gb' => 30, 'duration_days' => 30], $preview['plan']);
+        self::assertSame(['id' => $this->plan->id, 'name' => 'یک‌ماهه', 'price' => '120000.00', 'traffic_gb' => 30, 'duration_days' => 30, 'duration_hours' => 720, 'checkout_note' => null], $preview['plan']);
         self::assertSame('120000.00', $preview['price']);
         self::assertSame([
-            'term' => ['duration_days' => 60, 'starts_at' => '2026-09-19T12:00:00+00:00', 'expires_at' => '2026-11-18T12:00:00+00:00', 'awaits_first_use' => false],
+            'term' => ['duration_days' => 60, 'duration_hours' => 1440, 'starts_at' => '2026-09-19T12:00:00+00:00', 'expires_at' => '2026-11-18T12:00:00+00:00', 'awaits_first_use' => false],
             'traffic' => ['limit_bytes' => Traffic::bytesOfGb(60), 'used_bytes' => Traffic::bytesOfGb(18), 'remaining_bytes' => Traffic::bytesOfGb(42)],
             'next_period' => ['ends_at' => '2026-10-19T12:00:00+00:00', 'bytes' => Traffic::bytesOfGb(30)],
         ], $preview['after'], "the plan's 30 days on top of the deadline, its 30 GB on top of the quota — and the 12 GB left going when this period ends");
@@ -89,7 +87,7 @@ final class StoreRenewalTest extends HttpTestCase
         FakeProvider::mirror($this->subscription);
 
         $preview = $this->decode($this->get($this->storeApi($this->website, "/subscriptions/{$this->subscription->id}/renewal")))['renewal'];
-        self::assertSame(['duration_days' => 30, 'starts_at' => null, 'expires_at' => null, 'awaits_first_use' => true], $preview['after']['term'], 'a new term from its next connection: no start yet — not the old one');
+        self::assertSame(['duration_days' => 30, 'duration_hours' => 720, 'starts_at' => null, 'expires_at' => null, 'awaits_first_use' => true], $preview['after']['term'], 'a new term from its next connection: no start yet — not the old one');
 
         $renewed = $this->decode($this->renewing($this->walletMethod()))['checkout']['subscription'];
         self::assertSame($preview['after'], ['term' => $renewed['term'], 'traffic' => $renewed['traffic'], 'next_period' => $renewed['next_period']], 'what the preview said');

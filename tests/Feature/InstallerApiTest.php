@@ -24,7 +24,7 @@ use Tests\HttpTestCase;
  * The web installer over /api/install, on a fresh shop of the run's own — no config.php, no login, no lock —, opened with the
  * install key the host's files hold, the MySQL driver's probe answered by the test (the tables are the test
  * database's) and Telegram by its fake. Every step says what keeps it from being done — a database that does not
- * answer, a file the server may not write — in the owner's words, and the installation ends only with all of it done.
+ * answer, a file the server may not write — worded for the owner, and the installation ends only with all of it done.
  */
 final class InstallerApiTest extends HttpTestCase
 {

@@ -13,12 +13,8 @@ import { ticketDetail, ticketMessage } from '@/test/rows'
 import { json, refusal, server, type Answer } from '@/test/server'
 
 /*
- * A ticket's page (pages/ticket): what it is about and where it stands — since when, once closed —, whose it is and the
- * service it is about; the conversation, the first message first — the customer's and support's apart, each with where it
- * was written and support's writer —, a picture opening at full size and, when the browser cannot draw one, the server's
- * word on why; the answer, as JSON or — with a picture — as a form, the ticket read again from it; closing after a second
- * look, opening again — after a second look when it takes the customer's rating with it —; and a ticket the shop does
- * not have not found.
+ * A ticket's page (pages/ticket): its facts, the conversation with its pictures, the answer (JSON, or a form with a
+ * picture), closing and reopening (asked first when reopening drops the rating), and a ticket that is not there.
  */
 
 const TICKET = '/api/admin/tickets/12'
@@ -119,7 +115,7 @@ describe('a ticket’s page', () => {
     expect(header?.textContent).toMatch(/^پشتیبانیپنل/)
   })
 
-  it('shows the customer’s rating, with what they said, once given', async () => {
+  it('shows the customer’s rating and note, once given', async () => {
     open(answer(ticketDetail({ status: 'closed', rating: 4, rating_note: 'پاسخ سریع بود' })))
     await title()
 
@@ -147,7 +143,7 @@ describe('a message’s picture', () => {
     ).toBe('speedtest.png')
   })
 
-  it('the browser could not draw is explained in the server’s words, with nothing to download, once it is gone', async () => {
+  it('the browser could not draw shows the server’s explanation, with nothing to download, once it is gone', async () => {
     server().on('GET', PICTURE, refusal(404, 'این تصویر دیگر در تلگرام نیست.'))
     open()
     await title()
@@ -171,7 +167,7 @@ describe('a message’s picture', () => {
     expect(thumbnail().getAttribute('src')).toBe(`${PICTURE}?shop=1`)
   })
 
-  it('no longer kept is said so, and not asked for', async () => {
+  it('no longer stored says so, and is not requested', async () => {
     open(json({ ticket: ticketDetail({ messages: [ticketMessage({ attachment: { name: 'speedtest.png', kept: false } })] }) } satisfies TicketResponse))
     await title()
 
@@ -199,7 +195,7 @@ describe('the answer', () => {
     messages: [...ticketDetail().messages, ticketMessage({ id: 32, author: 'support', reviewer: 'root', body: 'بررسی می‌کنیم.', channel: 'panel', created_at: '2026-10-06T10:00:00Z' })],
   })
 
-  it('goes as JSON with words alone, and the ticket is read again from it — the form afresh, the focus back in its words', async () => {
+  it('goes as JSON when it has only text; the answer becomes the ticket, the form is cleared and the focus returns to the text', async () => {
     server().on('POST', ANSWER, answer(answered))
     open()
     await title()
@@ -247,7 +243,7 @@ describe('the answer', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'افزودن تصویر' }))
   })
 
-  it('refuses a picture past the server’s limit as it is picked, in the server’s words — nothing sent', async () => {
+  it('refuses a picture over the server’s limit as soon as it is picked, with the server’s message, and sends nothing', async () => {
     open()
     await title()
     const big = new File(['png-bytes'], 'big.png', { type: 'image/png' })
@@ -260,7 +256,7 @@ describe('the answer', () => {
     expect(server().sent('POST', ANSWER)).toEqual([])
   })
 
-  it('says a picture the server refused under it, the field to fix in focus', async () => {
+  it('shows the server’s refusal of a picture under it, with the focus on that field', async () => {
     const wrong = 'تصویر باید JPG، PNG یا WebP باشد.'
     server().on('POST', ANSWER, refusal(422, wrong, { file: [wrong] }))
     open()
@@ -275,7 +271,7 @@ describe('the answer', () => {
     expect(document.activeElement?.hasAttribute('data-invalid')).toBe(true)
   })
 
-  it('cannot go without words', async () => {
+  it('cannot be sent without text', async () => {
     open()
     await title()
 
@@ -294,7 +290,7 @@ describe('the answer', () => {
 })
 
 describe('closing and opening again', () => {
-  it('closes after a second look, the button turning into the way to open it again', async () => {
+  it('closes after confirmation, and the button becomes the reopen button', async () => {
     server().on('POST', '/api/admin/tickets/12/close', answer(ticketDetail({ status: 'closed' })))
     open()
     await title()
@@ -310,7 +306,7 @@ describe('closing and opening again', () => {
     expect(toast.success).toHaveBeenCalledWith('تیکت بسته شد')
   })
 
-  it('says in the dialog a close refused because it was closed meanwhile, and reads the ticket again', async () => {
+  it('shows in the dialog that the ticket was closed meanwhile, and reads it again', async () => {
     const closed = 'این تیکت بسته شده است.'
     server().on('POST', '/api/admin/tickets/12/close', refusal(422, closed, { status: [closed] }))
     open()
@@ -324,7 +320,7 @@ describe('closing and opening again', () => {
     await until(() => expect(server().sent('GET', TICKET)).toHaveLength(2))
   })
 
-  it('opens a closed one the customer did not rate again at a press', async () => {
+  it('reopens an unrated closed ticket in one press', async () => {
     server().on('POST', '/api/admin/tickets/12/reopen', answer(ticketDetail({ status: 'open' })))
     open(answer(ticketDetail({ status: 'closed', closed_at: '2026-10-07T14:30:00Z' })))
     await title()
@@ -374,7 +370,7 @@ describe('closing and opening again', () => {
       expect(toast.success).toHaveBeenCalledWith('تیکت دوباره باز شد')
     })
 
-    it('says in the dialog a reopen refused because it was opened meanwhile, and reads the ticket again', async () => {
+    it('shows in the dialog that the ticket was reopened meanwhile, and reads it again', async () => {
       const notClosed = 'این تیکت بسته نیست.'
       server().on('POST', '/api/admin/tickets/12/reopen', refusal(422, notClosed, { status: [notClosed] }))
       const error = vi.spyOn(toast, 'error')
@@ -397,14 +393,14 @@ describe('a ticket the page cannot show', () => {
     expect(screen.getByRole('link', { name: 'تیکت‌ها' }).getAttribute('href')).toBe('/tickets')
   })
 
-  it('is the panel’s page not found for an address that names no ticket, without asking', async () => {
+  it('shows the panel’s not-found page for an address that names no ticket, without a request', async () => {
     open(undefined, '/tickets/someone')
 
     expect(await screen.findByText('این صفحه پیدا نشد')).toBeTruthy()
     expect(server().sent('GET', TICKET)).toEqual([])
   })
 
-  it('starts afresh on another ticket — nothing of the one before left on it', async () => {
+  it('starts fresh on another ticket, with nothing left from the previous one', async () => {
     server().on('GET', '/api/admin/tickets/13', answer(ticketDetail({ id: 13, subject: 'Another one' })))
     const router = open()
     await title()

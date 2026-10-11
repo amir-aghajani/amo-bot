@@ -20,12 +20,8 @@ import type { ConfigSettingsResponse } from '@/lib/api-types'
 import { queryKeys } from '@/lib/query-keys'
 
 /**
- * «تنظیمات پنل»: the panel's own configuration — every value a setting of config.php, the file the installer writes
- * beside the app, which the owner can also edit in their host's File Manager, so it stays editable even when the
- * database is misconfigured —, the owner's login (config.php keeps it too, and the section needs nothing read first),
- * the panel's look in this browser, which is no setting of the file, and AmoBot's own update, which reads its own. A
- * section per group, picked from the settings' sidebar (a select on a phone); the other sections stay mounted (hidden)
- * so an unsaved draft survives switching.
+ * «تنظیمات پنل» (the owner's): config.php's groups — kept in a file so they stay editable even when the database is
+ * broken —, the owner's login, the panel's look in this browser, and AmoBot's update.
  */
 export function SettingsPage() {
   const { data, error, refetch } = useQuery({ queryKey: queryKeys.configSettings, queryFn: () => api.get<ConfigSettingsResponse>('/settings/config'), staleTime: 60_000 })

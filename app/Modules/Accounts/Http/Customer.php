@@ -8,10 +8,10 @@ use App\Modules\Accounts\Models\CustomerSession;
 use App\Modules\Users\Models\User;
 use Psr\Http\Message\ServerRequestInterface;
 
-/** The customer a website's request was made for, and the session it came with — put on it by CustomerAuthMiddleware. */
+/** The signed-in customer of a website request and the session it came with, put on the request by CustomerAuthMiddleware. */
 final class Customer
 {
-    /** The request attribute the customer is put under. */
+    /** The request attribute it is put under. */
     public const ATTRIBUTE = 'customer';
 
     public function __construct(
@@ -22,8 +22,14 @@ final class Customer
     /** The customer of a request that passed CustomerAuthMiddleware. */
     public static function of(ServerRequestInterface $request): self
     {
+        return self::optional($request) ?? throw new \LogicException('The request did not pass the customer\'s auth middleware.');
+    }
+
+    /** The customer of a request that may come from a guest (OptionalCustomerMiddleware); null for a guest. */
+    public static function optional(ServerRequestInterface $request): ?self
+    {
         $customer = $request->getAttribute(self::ATTRIBUTE);
 
-        return $customer instanceof self ? $customer : throw new \LogicException('The request did not pass the customer\'s auth middleware.');
+        return $customer instanceof self ? $customer : null;
     }
 }

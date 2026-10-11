@@ -15,9 +15,8 @@ import { confirmLeave } from '@/lib/use-unsaved-guard'
 const SIGN_OUT = 'خروج از حساب'
 
 /**
- * Who is signed in, at the foot of the sidebar: their mark, name and role, and the button that signs out in one press —
- * an icon in the danger outline — with no menu, by decision: the theme and the owner's login are settings
- * («تنظیمات پنل»). On the rail, the button alone.
+ * Who is signed in, at the foot of the sidebar: their mark, name and role, and a sign-out button that works in one press.
+ * Deliberately no account menu: the theme and the owner's login live in «تنظیمات پنل». On the rail, the button alone.
  */
 export function AccountRow() {
   const { logout } = useAuth()
@@ -41,7 +40,7 @@ export function AccountRow() {
         await logout()
       } catch (error) {
         // The server did not take it (it could not be reached): the session is still open, its drafts too, and the admin
-        // is told.
+        // sees a toast.
         leave.keep()
         setLeaving(false)
         toastFailure(error, 'خروج انجام نشد')

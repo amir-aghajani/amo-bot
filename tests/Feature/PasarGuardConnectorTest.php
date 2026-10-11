@@ -11,8 +11,8 @@ use GuzzleHttp\Psr7\Response;
 use Tests\HttpTestCase;
 
 /**
- * A PasarGuard panel through the generic code, against a fake of its HTTP API: added and checked on the
- * servers screen, sold through a plan entry, and synced — nothing outside the driver knows which panel it is.
+ * A PasarGuard panel through the generic code, against a fake of its HTTP API: added and checked on the servers screen,
+ * sold through a plan entry, and synced — nothing outside the connector knows which panel it is.
  */
 final class PasarGuardConnectorTest extends HttpTestCase
 {
@@ -43,7 +43,7 @@ final class PasarGuardConnectorTest extends HttpTestCase
         self::assertSame('PasarGuard', $data['server']['driver_label']);
         self::assertSame(
             ['auth_mode' => 'token', 'api_token' => true, 'username' => '', 'password' => false, 'verify_tls' => true, 'timeout' => 30, 'subscription_url' => ''],
-            array_map(static fn(mixed $value): mixed => is_array($value) ? $value['set'] : $value, array_diff_key($data['server']['form'], array_flip(['name', 'base_url', 'capacity', 'notes', 'is_active']))),
+            array_map(static fn(mixed $value): mixed => is_array($value) ? $value['set'] : $value, array_diff_key($data['server']['form'], array_flip(['name', 'base_url', 'capacity', 'notes', 'is_active', 'button_style', 'button_row']))),
             'its connection as kept: its key, never shown, and no two-factor secret of its own',
         );
         self::assertTrue($data['probe']['ok']);
@@ -75,7 +75,7 @@ final class PasarGuardConnectorTest extends HttpTestCase
     {
         $server = $this->panelServer('PG', ['driver' => 'pasarguard', 'base_url' => 'https://pg.example:8000', 'api_token' => self::KEY, 'serves_subscriptions' => true]);
         $this->inbound($server, '3', ['remark' => 'VIP', 'protocol' => '', 'port' => 0]);
-        $plan = $this->plan(['traffic_gb' => 30, 'duration_days' => 30], $server);
+        $plan = $this->plan(['traffic_gb' => 30, 'duration_hours' => 720], $server);
         $customer = $this->customer(['username' => 'amir', 'telegram_id' => 4242]);
         $this->panelHttp()->raw(self::answer(self::user(['status' => 'on_hold', 'expire' => null, 'on_hold_expire_duration' => 30 * 86400]), 201));
 
@@ -94,7 +94,7 @@ final class PasarGuardConnectorTest extends HttpTestCase
         self::assertSame('amir_1', $subscription->remote_name);
         self::assertSame('https://pg.example:8000/sub/dG9rZW4.sig', $subscription->subscription_url);
         self::assertNull($subscription->expires_at, 'the clock waits for the first connection');
-        self::assertSame(30, $subscription->duration_days);
+        self::assertSame(30 * 24, $subscription->duration_hours);
 
         // The customer connected: the panel started the month and counted some traffic.
         $this->panelHttp()->raw(self::answer(['users' => [self::user(['status' => 'active', 'expire' => '2026-11-04T10:00:00Z', 'on_hold_expire_duration' => null, 'used_traffic' => 1024 ** 3])], 'total' => 1]));

@@ -20,8 +20,8 @@ export function firstOpen(status: InstallStatus): Step {
 }
 
 /**
- * Which steps are done, so the bar can show them and go back to them. The site's leaves no mark the server reports (its
- * name and address always have a value): it is done once the installer went past it — the end opens only from there.
+ * Which steps are done, for the step bar. The site step leaves no mark the server reports (its fields always have a
+ * value), so it counts as done once the installer moved past it.
  */
 export function isDone(step: Step, status: InstallStatus, current: Step): boolean {
   switch (step) {

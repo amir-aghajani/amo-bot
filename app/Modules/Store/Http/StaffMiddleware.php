@@ -26,24 +26,21 @@ use Slim\Interfaces\RouteInterface;
 use Slim\Routing\RouteContext;
 
 /**
- * The website's door for the shop's admins — its admin API, `/api/store/v1/{store}/admin/*`: the panels' own operations
- * of the shop's daily work (routes/api.php's `$operations`), worked by one of the shop's admins signed in on its website
- * with their bearer token (CustomerAuthMiddleware ran first: a session of this shop, its customer not banned). Shut by
- * default, asked in this order, each a 403 in the error shape: the customer must be an admin of the shop (`users.role`
- * admin) — whatever the website says, anyone else is told only that —; the website must let its admins in
- * (`staff_enabled`); while it asks them a strong sign-in (`staff_strong_sign_in`), the session must have been signed in
- * with Telegram, Google, or a password and its second step (CustomerSessions::isStrong() — a stronger way proven on it
- * since counts; the refusal's `WWW-Authenticate` names those ways); a way in must have been proven on it within
- * SIGN_IN_HOURS — a working day: an admin's token that leaked works for hours, not for the months a customer's session
- * lasts — (RecentSignInMiddleware's refusal); an operation the shop must grant (StaffGrant::ARGUMENT on its route) must
- * be granted (`staff_grants`), and it asks a recent sign-in too, the customers' own rule — as does an operation whose
- * route asks it without a grant (RECENT_SIGN_IN: approving a payment, which delivers a service). Then the request
- * carries the staff Principal — in the website's shop, its reader (CurrentPrincipal) — and every change it makes is
- * logged, with them on the line.
+ * The door of the website's admin API (`/api/store/v1/{store}/admin/*`): the panels' daily-work operations, used by one
+ * of the shop's admins signed in on its website (CustomerAuthMiddleware ran first). Shut by default; each check is a 403,
+ * asked in this order:
+ * 1. the customer is an admin of the shop (anyone else learns nothing more);
+ * 2. the website lets its admins in (`staff_enabled`);
+ * 3. while it asks a strong sign-in, the session is strong (Telegram, Google, or a password with its second step);
+ * 4. a way in was proven on the session within SIGN_IN_HOURS — a working day, so a leaked admin token works for hours,
+ *    not for the months a customer's session lasts;
+ * 5. an operation that needs a grant (StaffGrant::ARGUMENT on its route) is granted, and then asks a recent sign-in too,
+ *    as does one marked RECENT_SIGN_IN (approving a payment, which delivers a service by the admin's word alone).
+ * The request then carries the staff Principal, and every change it asks is logged with them on the line.
  */
 final class StaffMiddleware implements MiddlewareInterface
 {
-    /** What anyone but the shop's admins is told — a customer among them, so in the words a customer reads. */
+    /** The refusal anyone but the shop's admins gets, worded for a customer (they may be one). */
     public const NOT_STAFF = 'این بخش فقط برای پشتیبانی فروشگاه است.';
     public const STAFF_OFF = 'این وب‌سایت فعلا مدیران فروشگاه را راه نمی‌دهد.';
     public const SIGN_IN_STRONGLY = 'برای کار مدیریت، با تلگرام، گوگل یا رمز عبور همراه کد ورود دو مرحله‌ای وارد شوید.';
@@ -55,13 +52,10 @@ final class StaffMiddleware implements MiddlewareInterface
     /** How long a way in proven on an admin's session lets it work the admin API: a working day. */
     public const SIGN_IN_HOURS = 12;
 
-    /**
-     * The route argument of an operation that asks a recent sign-in without a grant (a granted one asks it anyway): what
-     * delivers something by the admin's word alone — approving a payment.
-     */
+    /** The route argument of an operation that asks a recent sign-in without needing a grant: approving a payment. */
     public const RECENT_SIGN_IN = 'staff_recent_sign_in';
 
-    /** The methods a change is made with: the reads alone go unlogged. */
+    /** The methods that change nothing, left out of the log. */
     private const READS = ['GET', 'HEAD'];
 
     public function __construct(
@@ -110,18 +104,15 @@ final class StaffMiddleware implements MiddlewareInterface
         });
     }
 
-    /**
-     * Until when the session's sign-in lets an admin work the admin API — SIGN_IN_HOURS after a way in was last proven on
-     * it (CustomerSessions::provenUntil()); null once it no longer does.
-     */
+    /** Until when the session may use the admin API: SIGN_IN_HOURS after a way in was last proven on it; null once past. */
     public static function signedInUntil(CustomerSession $session): ?Carbon
     {
         return CustomerSessions::provenUntil($session, self::SIGN_IN_HOURS * 3600);
     }
 
     /**
-     * A change the admin asked for, and how it was answered — done, or refused —, on a line of the log that names them
-     * (Core\Logging\ActorProcessor); a read leaves none. A failure of the server's is the error handler's line, named too.
+     * Log a change the admin asked for and its status (the log line names them); reads are not logged. A server failure
+     * is the error handler's own line.
      */
     private function changed(ServerRequestInterface $request, int $status): void
     {
@@ -143,7 +134,7 @@ final class StaffMiddleware implements MiddlewareInterface
         return Json::error($this->responses->createResponse(), $message, 403);
     }
 
-    /** A sign-in not proven lately enough: the customers' own refusal, its challenge asking a way in proven again (POST /me/reauthenticate). */
+    /** The customers' own "sign in again" refusal, asking for POST /me/reauthenticate. */
     private function signInAgain(): ResponseInterface
     {
         return $this->refuse(RecentSignInMiddleware::SIGN_IN_AGAIN)->withHeader('WWW-Authenticate', RecentSignInMiddleware::CHALLENGE);

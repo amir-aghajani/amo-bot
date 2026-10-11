@@ -22,11 +22,9 @@ use App\Support\Money;
 use Psr\Log\LoggerInterface;
 
 /**
- * What support decides about a customer's account — from either panel, or from the shop's website (its admins): a ban
- * or its end, the bot's admin role (the panels' alone), a credit or a debit of their wallet by hand, and their account on
- * the website taken in hand — two-factor sign-in turned off, every device signed out. Each held to who decides it (the
- * Actor): one of the shop's admins — its customer too — never changes their own wallet, and from the website never
- * touches an admin's account, their own included, nor an agent's. Logged with whoever did it.
+ * Support's decisions about a customer's account, from the panels or the website's admin side: ban, the admin role
+ * (panels only), a wallet adjustment, turning two-factor sign-in off, signing out everywhere. An admin never adjusts
+ * their own wallet, and from the website never touches an admin's or an agent's account. Each is logged with who did it.
  */
 final class UserActions
 {
@@ -40,7 +38,7 @@ final class UserActions
     ) {}
 
     /**
-     * Ban the customer, or end their ban (`status`).
+     * Bans the customer or lifts the ban.
      *
      * @param array<string, mixed> $input {status}
      * @throws ActorRefusedException 403 from the website, an admin's account or an agent's
@@ -58,8 +56,7 @@ final class UserActions
     }
 
     /**
-     * Give or take the bot's admin role (`role`: privileged commands, exempt from the bot's rules — and the shop's
-     * website's admin side, while the website lets its admins in).
+     * Gives or takes the admin role (UserRole).
      *
      * @param array<string, mixed> $input {role}
      * @throws ValidationException 422 on `role`
@@ -75,8 +72,8 @@ final class UserActions
     }
 
     /**
-     * Credit or debit the wallet by hand, with a note the customer sees in their ledger — a debit no further than the
-     * balance —, under the name of whoever wrote it.
+     * Credits or debits the wallet by hand (a debit no further than the balance), with a note the customer sees, under the
+     * actor's name.
      *
      * @param array<string, mixed> $input {type: credit|debit, amount, description?}
      * @throws ActorRefusedException 403 one of the shop's admins' own wallet
@@ -120,8 +117,7 @@ final class UserActions
     }
 
     /**
-     * Turn the customer's two-factor sign-in on the website off — the phone it was on lost (TwoFactor::turnOff(): they are
-     * told, the log says who did it).
+     * Turns the customer's website two-factor sign-in off (they lost the phone); they are notified.
      *
      * @throws ActorRefusedException 403 from the website, an admin's account or an agent's
      * @throws AccountRefusedException 422 it is not on
@@ -133,7 +129,7 @@ final class UserActions
     }
 
     /**
-     * Sign the customer out of the website on every device (CustomerSessions::signOutEverywhere(), logged).
+     * Signs the customer out of the website on every device.
      *
      * @throws ActorRefusedException 403 from the website, an admin's account or an agent's
      */
@@ -144,8 +140,7 @@ final class UserActions
     }
 
     /**
-     * An admin's account, and an agent's, are the panels' to change: the shop's admins on its website ban, unlock or sign
-     * out customers, never one of themselves — another, or their own — nor an agent, the owner's partner.
+     * From the website, an admin's or an agent's account is off limits (the panels' to change).
      *
      * @throws ActorRefusedException 403
      */

@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Channels;
 
 /**
- * What the admin pasted to name a channel, reduced to something getChat accepts: "@username" for a
- * public one (from "https://t.me/name", "t.me/name", "@name" or "name") or the numeric chat id of a
- * private one ("-1001234567890"). A private invite link ("t.me/+…", "t.me/joinchat/…") is recognised
- * but cannot be looked up — the Bot API has no call for it — so it is reported as such.
+ * What the admin pasted to name a channel, as getChat takes it: "@username" for a public one, or a private one's numeric
+ * id. A private invite link is recognised but cannot be looked up (the Bot API has no call for it).
  */
 final class ChannelReference
 {
@@ -17,6 +15,7 @@ final class ChannelReference
         private readonly bool $inviteLink,
     ) {}
 
+    /** What the admin pasted, read; null when it names no channel. */
     public static function parse(string $input): ?self
     {
         $input = trim($input);

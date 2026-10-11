@@ -1,8 +1,8 @@
 # Development
 
-Working on AmoBot itself: what you need, how to run it locally, the checks, and where things are. The engineers'
-handbook — every subsystem's rules and the decisions behind them — is
-[`CLAUDE.md`](https://github.com/amir-aghajani/amo-bot/blob/main/CLAUDE.md) at the repository's root: read the part you touch.
+Working on AmoBot itself: what you need, how to run it locally, the checks, and where things are. Start with
+[Architecture](Architecture.md) for the map and [Conventions](Conventions.md) for how the code is written; each area's
+rules are on its Internals page and in its classes' docblocks.
 
 ## The stack
 
@@ -77,19 +77,20 @@ Run them before a pull request; CI runs them all ([Testing](Testing.md)).
 
 ```
 app/
-  Core/            framework glue: Application, config.php, the database (schema, change feed, drivers), the HTTP kernel,
-                   drivers and forms, mail, captcha, security, sessions, scheduling
+  Core/            framework glue: Application, config.php, the database (schema, upgrades, change feed, drivers), the
+                   HTTP kernel and its own endpoints (/api/app, /health, /cron), drivers and forms, mail, captcha,
+                   security, sessions, scheduling
   Console/         bin/console's kernel and commands
   Modules/         one folder per domain (Controllers/ or Api/, Models/, Services/, …) — which modules each may name is
                    tests/Unit/Core/LayersTest's MODULES map
     Accounts       website customers' sign-in and accounts: sessions, OpenID Connect, email, two-factor, ways in, merging
     Admin          the panels' JSON API (/api/admin, /api/agent) and the dashboard
     Agency         resellers: requests, levels (a price per GB), credit, their own bots and the traffic they sell
-    Api            /api/app and /health
     Auth           the panels' sign-in: the owner's login and its recovery, an agent's one-time link, the throttle;
                    who acts — a principal, an Actor
     Bots           the bots, and whose shop the code works in
     Catalog        plans, their categories, which servers can sell them
+    Discounts      discount codes, timed sales, loyalty tiers, a customer's own discount
     Installer      the web installer's API (/api/install)
     Notifications  what the shop tells a customer: kept for their website, sent to Telegram or by email
     Orders         the order's lifecycle
@@ -97,22 +98,23 @@ app/
     Providers      the VPN panels: the contract, 3x-ui and PasarGuard, servers and inbounds
     Referrals      invite links and commissions
     Reviews        customers' reviews of the shop: written on its website, decided by support
-    Scheduling     the /cron/{token} trigger
+    Rewards        cashback, gift codes, the lucky wheel, the nightly draw
     Settings       the settings table, and the settings screens of config.php and the bot
     Store          the shops' websites' API (/api/store/v1)
     Subscriptions  services on the panels: provisioning, renewal, sync, moves, grants, reminders
     Support        support tickets
     Telegram       the Bot API client, the update dispatcher, handlers, keyboards, texts, broadcasts, the report group
+    Updates        the owner's one-press update from a signed GitHub release
     Users          customers, the wallet ledger, customer groups, pictures
   Support/         helpers: input, money, Persian, traffic, requirements
 bootstrap/         app.php (boot), container.php (the DI definitions and the driver registries), schedule.php (the tasks)
 config/            config.php's settings made into the app's parts
-database/          schema.php — every table (no migrations before the first release)
+database/          schema.php (every table) and upgrades/ (a release's changes for installed shops — see Database)
 docs/              this documentation
 public/            the web root: index.php, .htaccess and the built panels (admin/, agent/, assets/)
 resources/         panel/ (the panels' React source), api/openapi.yaml (the API's description), assets/
 routes/            web.php, api.php, webhooks.php, bot.php
-scripts/           release.php, docs.php, api-types.mjs, timezones.php
+scripts/           release.php and release-key.php, docs.php, api-types.mjs, timezones.php
 storage/           logs, cache, sessions, uploads, installed.lock
 tests/             PHPUnit: Feature/, Unit/, the fakes and the fixtures
 ```

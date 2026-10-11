@@ -16,20 +16,18 @@ use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Accounts\Services\EmailSignIn;
 use App\Modules\Accounts\Services\Reauthentication;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
+use App\Modules\Discounts\Services\Loyalty;
 use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Presenters\StaffPresenter;
 use App\Modules\Store\Services\CustomerNotifications;
 use App\Modules\Telegram\Api\TelegramUnreachableException;
-use App\Support\Input;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * A signed-in customer's own account on the shop's website (behind Accounts\Http\CustomerAuthMiddleware): who they
- * are — their names, which they set themselves unless Telegram's are theirs —, how many notices they have not read,
- * what the shop's admin API lets them do (one of its admins), their password, a way into the account proven again (what changing how it is signed in to asks of a session whose
- * sign-in is not recent), the devices they are signed in on — any of which they may end —, and signing out of this one.
+ * A signed-in customer's own account (`/me`): who they are and their names, their password, a way in proven again, the
+ * devices they are signed in on, and signing out.
  */
 final class MeController extends ApiController
 {
@@ -39,21 +37,19 @@ final class MeController extends ApiController
         private readonly EmailSignIn $email,
         private readonly Reauthentication $reauthentication,
         private readonly CustomerNotifications $notifications,
+        private readonly Loyalty $loyalty,
     ) {}
 
-    /**
-     * GET /me — the account, how many of the notices the shop told them they have not read, and — one of the shop's
-     * admins, while the website lets them in — what its admin API lets them do (`staff`).
-     */
+    /** GET /me — the account, its unread notices, what the admin API lets them do (`staff`) and their loyalty tier. */
     public function show(Request $request, Response $response): Response
     {
         return $this->account($request, $response);
     }
 
     /**
-     * PATCH /me — {first_name?, last_name?}: the names sent, the rest as they are; the account as GET /me answers it.
+     * PATCH /me — {first_name?, last_name?}: the names sent; answered as GET /me.
      *
-     * @throws ValidationException 422 under the field: too long, a first name blank, an account whose names are Telegram's
+     * @throws ValidationException 422 under the field: too long, a blank first name, or an account whose names are Telegram's
      */
     public function update(Request $request, Response $response): Response
     {
@@ -63,11 +59,10 @@ final class MeController extends ApiController
     }
 
     /**
-     * POST /me/reauthenticate — {method: password, password, code?} | {method: telegram, id_token, nonce} | {method:
-     * telegram, code, state, code_verifier} | {method: google, id_token, nonce}: a way into this account proven again;
-     * this session may change how the account is signed in to for the seconds answered.
+     * POST /me/reauthenticate — a way into this account proven again (see Reauthentication); the session is recent for
+     * the seconds answered.
      *
-     * @throws ValidationException 422 under the fields — a proof that does not hold, or is another account's
+     * @throws ValidationException 422 under the fields: a proof that does not hold, or is another account's
      * @throws SignInRefusedException 422 a way in the website has not set up; 502 Google out of reach
      * @throws TooManyAttemptsException 429
      * @throws TelegramUnreachableException 502
@@ -80,10 +75,10 @@ final class MeController extends ApiController
     }
 
     /**
-     * PUT /me/password — {current_password?, password}: set, or changed; every other session ends.
+     * PUT /me/password — {current_password?, password}: set or changed; every other session ends.
      *
      * @throws AccountRefusedException 422 no email on the account
-     * @throws ValidationException 422 under the fields — the current password wrong too
+     * @throws ValidationException 422 under the fields, the current password wrong too
      * @throws TooManyAttemptsException 429
      */
     public function password(Request $request, Response $response): Response
@@ -94,7 +89,7 @@ final class MeController extends ApiController
         return $this->json($response, ['customer' => AccountPresenter::present($user)]);
     }
 
-    /** GET /me/sessions — newest first, the one this request came with marked `current`. */
+    /** GET /me/sessions — newest first, the request's own marked `current`. */
     public function sessions(Request $request, Response $response): Response
     {
         $customer = Customer::of($request);
@@ -107,19 +102,19 @@ final class MeController extends ApiController
     }
 
     /**
-     * DELETE /me/sessions/{id} — one of theirs ended (this one too); another's is not there.
+     * DELETE /me/sessions/{id} — one of theirs ended, this one included; another customer's is a 404.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
      */
     public function endSession(Request $request, Response $response, array $args): Response
     {
-        $this->sessions->end(Customer::of($request)->user, Input::integerOf($args['id'] ?? null) ?? 0);
+        $this->sessions->end(Customer::of($request)->user, $this->routeId($args));
 
         return $this->noContent($response);
     }
 
-    /** POST /auth/logout — this device signed out: its token opens nothing from now on. */
+    /** POST /auth/logout — this device signed out. */
     public function logout(Request $request, Response $response): Response
     {
         $this->sessions->close(Customer::of($request)->session);
@@ -127,10 +122,7 @@ final class MeController extends ApiController
         return $this->noContent($response);
     }
 
-    /**
-     * The account, how many of the notices the shop told them they have not read, and what the shop's admin API on the
-     * website lets them do: what GET /me and PATCH /me answer.
-     */
+    /** What GET /me and PATCH /me answer. */
     private function account(Request $request, Response $response): Response
     {
         $customer = Customer::of($request);
@@ -139,6 +131,7 @@ final class MeController extends ApiController
             'customer' => AccountPresenter::present($customer->user),
             'unread_notifications' => $this->notifications->unread($customer->user),
             'staff' => StaffPresenter::present(StoreMiddleware::website($request), $customer),
+            'loyalty' => $this->loyalty->standing($customer->user),
         ]);
     }
 }

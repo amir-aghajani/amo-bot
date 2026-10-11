@@ -13,12 +13,9 @@ use App\Modules\Users\Services\CustomerPictures;
 use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * A payment's receipt, under the shop's one rule for a picture it is sent (Users\Services\CustomerPictures): the picture
- * the customer sent the bot — its Telegram file id (`receipt_file_id`): Telegram keeps it, nothing is copied to disk — or
- * the one they uploaded from the shop's website, kept in the receipts' folder (PictureFolder::Receipts, the container's
- * `receipts.path`, storage/uploads/receipts; `receipt_path` its name there). Either is fetched on demand for the payments
- * screen (fetch()). An upload is deleted once what made it is undone or over (discard()): a receipt that lost its
- * compare-and-swap, an order that expired.
+ * Receipt pictures, under the shop's one rule for customer pictures (CustomerPictures): one sent in the bot stays
+ * Telegram's (`receipt_file_id`); one uploaded from the website is kept in the receipts folder (`receipt_path`) until
+ * discarded — after losing its compare-and-swap, or when its order expired.
  */
 final class Receipts
 {
@@ -30,8 +27,7 @@ final class Receipts
     public function __construct(private readonly CustomerPictures $pictures) {}
 
     /**
-     * A picture the customer uploaded from the website as their receipt, judged by the shop's rule (CustomerPictures::
-     * judge()): its bytes, and the extension it is kept under (keep()).
+     * Judges a receipt uploaded from the website (CustomerPictures::judge()): its bytes and the extension to keep it under.
      *
      * @return array{bytes: string, extension: string}
      * @throws ValidationException 422 on `file`
@@ -46,8 +42,8 @@ final class Receipts
     }
 
     /**
-     * An uploaded receipt of the payment kept — under a name of the shop's own: the payment's bot, the payment and a
-     * random part, never the customer's file name —: its name, what the payment records (`receipt_path`).
+     * Keeps an uploaded receipt under a name the shop makes (bot, payment, random part — never the customer's file
+     * name) and returns that name for `receipt_path`.
      *
      * @throws \RuntimeException when the uploads folder cannot be written
      */
@@ -63,8 +59,7 @@ final class Receipts
     }
 
     /**
-     * The receipt's bytes, their type as the bytes say, and a name to save them under — the customer's file name, or
-     * one made up.
+     * The receipt's bytes, their sniffed type and a file name to save them under.
      *
      * @return array{body: string, mime: string, name: string}
      * @throws ReceiptUnavailableException 404: none was sent, or its file is no more — Telegram no longer hands it over,

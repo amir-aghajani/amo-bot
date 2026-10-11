@@ -7,7 +7,7 @@ namespace Tests\Unit\Support;
 use App\Support\Text;
 use PHPUnit\Framework\TestCase;
 
-/** Words cut to the room the shop gives them, by their characters — the one way a ticket's subject and a button's label are cut. */
+/** Words cut to the room the shop gives them, by their characters — how a ticket's subject and a button's label are cut. */
 final class TextTest extends TestCase
 {
     public function testWhatFitsStaysAsItIs(): void

@@ -7,9 +7,8 @@ namespace App\Modules\Telegram\Update;
 use App\Modules\Telegram\Handler;
 
 /**
- * Where routes/bot.php sends an update (Dispatcher): its handler, whether reaching it is navigation — the flow in
- * progress is left, as a command leaves it —, and whether only the bot's admins reach it (Dispatcher::route() says
- * what anyone else gets).
+ * One registered route: its handler, whether reaching it is navigation (the flow in progress is left), and whether only
+ * the bot's admins reach it.
  */
 final readonly class Route
 {

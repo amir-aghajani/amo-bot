@@ -6,7 +6,7 @@ import { blockStorage } from '@/test/browser'
 /** A tab opened before an upgrade asks for the old build's files, which are gone: it reloads once — never in a loop. */
 
 describe('a stale build', () => {
-  it('is told by the words each browser and Vite use for a page file that would not load', () => {
+  it('is recognised by the error messages each browser and Vite give for a page file that did not load', () => {
     const messages = [
       'Failed to fetch dynamically imported module: https://shop.example/admin/assets/plans-Bx1.js',
       'error loading dynamically imported module: https://shop.example/admin/assets/plans-Bx1.js',

@@ -8,10 +8,7 @@ use App\Core\Http\RequestId;
 use Monolog\LogRecord;
 use Monolog\Processor\ProcessorInterface;
 
-/**
- * Every line a request writes says which request it was (`request_id` among the line's extras, RequestId): the id the
- * panel shows on a failure finds them all — a failure's line, and what led up to it.
- */
+/** Adds `request_id` (RequestId) to every line a request writes, so the id a panel shows on a failure finds them. */
 final class RequestIdProcessor implements ProcessorInterface
 {
     public function __invoke(LogRecord $record): LogRecord

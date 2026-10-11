@@ -13,8 +13,8 @@ use Tests\DatabaseTestCase;
 use Tests\Fakes\ShopRecordingTask;
 
 /**
- * The shops the scheduler goes round are the bots': a shop's own work runs in the main bot's shop and then each agent's
- * bot that runs (not one without a token), the servers' work once across all of them.
+ * The scheduler's shops are the bots': a shop's task runs in the main bot's shop and then each running agent's bot (not
+ * one without a token); an installation-wide task runs once across all of them.
  */
 final class SchedulerShopsTest extends DatabaseTestCase
 {

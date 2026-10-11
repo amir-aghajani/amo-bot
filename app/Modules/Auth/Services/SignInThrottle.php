@@ -14,55 +14,35 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Failed sign-ins, counted per way in — the owner's password (`login`), an agent's link (`link`), the shops' websites
- * (`website`) — and per address: an address gets MAX_ATTEMPTS failures (a website's WEBSITE_ATTEMPTS) in a window of
- * DECAY_SECONDS, which opens with the first one, then waits for it to close (check() refuses it, a 429); a sign-in that
- * works closes it early. An IPv6 address counts by its /64 (RequestOrigin::clientNetwork()). A password guessed at from
- * many addresses is counted per account too (`$account`, the username or the email tried — a website's in its shop,
- * where it is one customer's): MAX_ACCOUNT_ATTEMPTS failures from every address together, and the account waits — its
- * own owner too, while someone is at it — until the window closes. That count is not closed by a sign-in that works:
- * whoever is guessing would get it all back.
+ * Every sign-in budget, on RateLimiter. Each try is counted before it is judged (RateLimiter::attempt()), so requests
+ * sent at once never pass a limit together; a right answer gives its count back where the budget is the wrong tries'.
  *
- * A website's second step has a budget of its own (secondStep()): the codes tried for one account, counted before each
- * is judged — SECOND_STEP_HOURLY an hour and SECOND_STEP_DAILY a day, whoever has its password and from wherever. So do
- * the codes a website emails (emailedCode()): CODE_FAILURES_HOURLY wrong ones an hour and CODE_FAILURES_DAILY a day for
- * an address, and for the account adding it, counted before each is judged; spent, no new code goes to the address
- * until it has room again (emailing()) — and its account is told, once a day.
- *
- * And what a website's sign-in costs the shop before anything is tried: a row kept (a nonce, a redirect's state) or an
- * email sent (a code, or the email in its place) — ISSUE_MAX in ISSUE_SECONDS an address (issuing()). An email costs
- * more, so it has budgets of its own (emailing()): the address it goes to has a turn once in CODE_EVERY_SECONDS (taken
- * before the email goes, given back when none went — emailNotSent()) and gets EMAIL_RECIPIENT_DAILY a day from every
- * shop together; the address network that asks, EMAIL_NETWORK_HOURLY an hour; a signed-in customer adding an email to
- * their account, EMAIL_LINK_DAILY a day; the shop, EMAIL_SHOP_HOURLY and EMAIL_SHOP_DAILY, and the installation —
- * every shop together —, EMAIL_INSTALLATION_HOURLY and EMAIL_INSTALLATION_DAILY: past those two, the host's mail quota
- * is spared for the rest of the shop's mail and no code goes out at all (a 503, the log told once a window). An address
- * that asked for a reset and has no account is told so once a day (noAccountEmail()). A sign-in form's captcha token is
- * counted in the issuing window before it is judged and keeps its count only when it was refused (issuedNothing()). A
- * website's backend asking the shop to judge its own forms' tokens has a budget of its own, never the sign-ins'
- * (verifyingCaptcha()): the website's CAPTCHA_CHECKS in CAPTCHA_SECONDS — a backend is one address for all its
- * visitors —, and CAPTCHA_REFUSALS refused tokens of a visitor's network in them. Each is counted as it is asked and
- * judged by its count (RateLimiter::attempt()): requests that come at the same moment never pass a limit together.
- *
- * A website's address limits are the looser ones, by decision: Iran's mobile networks put many customers behind one
- * address (carrier NAT), and the per-account counts are what stands against a guesser who aims at one account.
+ * - Failed sign-ins, per way in (`login`, `link`, `website`): per address network (an IPv6 /64) — MAX_ATTEMPTS, or the
+ *   looser WEBSITE_ATTEMPTS since Iran's mobile carriers put many customers behind one address — and, for a password,
+ *   per account (MAX_ACCOUNT_ATTEMPTS from all addresses; a success does not clear it, or a guesser would get it back).
+ * - A website's second-step codes per account (secondStep()) and its emailed codes per address and account
+ *   (emailedCode()), an hour's and a day's; a spent budget tells the customer once a day.
+ * - What a website's sign-in costs before anything is tried (issuing(): nonces, states, captcha tokens), and each email
+ *   (emailing(): the address's turn and day, the asking network's hour, a signed-in customer's day, the shop's and the
+ *   installation's hour and day — the last two a 503, sparing the host's mail quota).
+ * - A website backend's captcha checks (verifyingCaptcha()), never the sign-ins' budget.
  */
 final class SignInThrottle
 {
-    /** The way the shops' websites sign their customers in — Telegram, Google, an email and its password, a code: one count, apart from the panels'. */
+    /** The websites' customer sign-ins, all ways together: one count, apart from the panels'. */
     public const WEBSITE = 'website';
 
     /** Failures a panel's way in takes from one address in a window. */
     public const MAX_ATTEMPTS = 10;
 
-    /** Failures a website's sign-ins take from one address network in a window: many customers share one on a mobile network. */
+    /** Failures a website's sign-ins take from one address network in a window (many customers share one on mobile). */
     public const WEBSITE_ATTEMPTS = 30;
 
     public const MAX_ACCOUNT_ATTEMPTS = 50;
 
     public const DECAY_SECONDS = 900;
 
-    /** What a website's sign-ins may cost the shop from one address network — nonces, states, emails — in a window of ISSUE_SECONDS. */
+    /** What a website's sign-ins may cost from one address network (nonces, states, emails) in ISSUE_SECONDS. */
     public const ISSUE_MAX = 120;
 
     public const ISSUE_SECONDS = 600;
@@ -78,7 +58,7 @@ final class SignInThrottle
     /** The emails a website's sign-ins send at the asking of one address network, in an hour. */
     public const EMAIL_NETWORK_HOURLY = 20;
 
-    /** The emails one address gets from every shop's website together, in a day — however many networks ask. */
+    /** The emails one address gets from every shop's website together, in a day. */
     public const EMAIL_RECIPIENT_DAILY = 10;
 
     /** The codes one signed-in customer asks for, adding an email to their account, in a day. */
@@ -89,7 +69,7 @@ final class SignInThrottle
 
     public const EMAIL_SHOP_DAILY = 300;
 
-    /** The emails every shop's website together sends, in an hour and in a day: the rest of the host's mail quota is the shop's other mail. */
+    /** The emails all websites together send, in an hour and in a day, sparing the host's mail quota for other mail. */
     public const EMAIL_INSTALLATION_HOURLY = 150;
 
     public const EMAIL_INSTALLATION_DAILY = 1000;
@@ -97,21 +77,21 @@ final class SignInThrottle
     /** The emails telling an address it has no account (a reset asked for it) that it gets from one shop, in a day. */
     public const EMAIL_NO_ACCOUNT_DAILY = 1;
 
-    /** The wrong codes an address's emails take — and those an account adding an email tries —, in an hour and in a day. */
+    /** Wrong emailed codes an address (and an account adding an email) may try, in an hour and in a day. */
     public const CODE_FAILURES_HOURLY = 10;
 
     public const CODE_FAILURES_DAILY = 20;
 
-    /**
-     * The captcha tokens a website's backend asks the shop to judge for its own forms, in a window of CAPTCHA_SECONDS:
-     * the website's, whoever its visitors are — generous, since the backend is one address for all of them.
-     */
+    /** Tokens a website's backend may have judged in CAPTCHA_SECONDS — generous: it is one address for all visitors. */
     public const CAPTCHA_CHECKS = 3000;
 
-    /** The tokens of one visitor's network — the backend's own, when it does not name the visitor — refused in that window: then that network's next is not judged. */
+    /** Refused tokens of one visitor's network (the backend's own, when unnamed) in that window, before the next is not judged. */
     public const CAPTCHA_REFUSALS = 120;
 
     public const CAPTCHA_SECONDS = 600;
+
+    /** A sign-in's refusal past its budget of failures, its wait added. */
+    private const FAILURES = 'تلاش‌های ناموفق زیاد بود';
 
     /** The wrong codes' refusal, its wait added. */
     private const CODES_FAILED = 'کد اشتباه زیادی برای این ایمیل وارد شد';
@@ -126,14 +106,14 @@ final class SignInThrottle
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** Seconds this address — or this account, when named — must wait before signing in this way again; 0 while it may try. */
+    /** Seconds this address (or account) must wait before trying this way again; 0 while it may. */
     public function wait(string $way, ServerRequestInterface $request, ?string $account = null): int
     {
         return $this->waitOf($this->windows($way, $request, $account));
     }
 
     /**
-     * A sign-in this way, refused while the address — or the account, when named — must wait.
+     * Refuse a sign-in this way while the address (or account) must wait.
      *
      * @throws TooManyAttemptsException
      */
@@ -145,6 +125,7 @@ final class SignInThrottle
         }
     }
 
+    /** Count a failed sign-in this way against the address, and against the account when named. */
     public function failed(string $way, ServerRequestInterface $request, ?string $account = null): void
     {
         $this->limiter->hit($this->addressKey($way, $request), self::DECAY_SECONDS);
@@ -153,17 +134,16 @@ final class SignInThrottle
         }
     }
 
+    /** A sign-in worked: the address starts afresh; an account's count stays, or a guesser would get it back. */
     public function passed(string $way, ServerRequestInterface $request): void
     {
         $this->limiter->clear($this->addressKey($way, $request));
     }
 
     /**
-     * A password about to be judged for `$account` this way — a sign-in's, or one typed again to change what it guards:
-     * the try counted before `$verify` judges it, against the address and the account, each under its lock
-     * (RateLimiter::attempt()), so guesses sent at once never pass the limits; then a right one gives its counts back
-     * (the limits are the wrong tries'; a panel's address starts afresh, as passed() has it) and a wrong one keeps them.
-     * With a limit reached it is refused unjudged and uncounted (a 429). Whether `$verify` found it right.
+     * Judge a password for `$account`: counted against the address and the account first, so simultaneous guesses never
+     * pass the limits; a right one gives the counts back (a panel's address starts afresh), a wrong one keeps them. Past
+     * a limit it is refused (429) without being judged. Returns whether `$verify` found it right.
      *
      * @param \Closure(): bool $verify
      * @throws TooManyAttemptsException
@@ -171,10 +151,7 @@ final class SignInThrottle
     public function password(string $way, ServerRequestInterface $request, ?string $account, \Closure $verify): bool
     {
         $windows = $this->windows($way, $request, $account);
-        $wait = $this->limiter->attempt($windows);
-        if ($wait > 0) {
-            throw self::refused($wait);
-        }
+        $this->limiter->enforce($windows, self::FAILURES);
         if (!$verify()) {
             return false;
         }
@@ -188,35 +165,29 @@ final class SignInThrottle
     }
 
     /**
-     * A second-step code about to be tried for the account numbered `$account` — its authenticator app's, or a recovery
-     * code —: counted before it is judged, in an hour's window and a day's (RateLimiter::attempt()), so codes tried at
-     * once never pass SECOND_STEP_HOURLY an hour nor SECOND_STEP_DAILY a day, from however many addresses. With the
-     * budget spent the try is refused (a 429) and not counted, and the first refusal of a day runs `$spent` — its
-     * customer is told. A code that opened gives its count back (secondStepOpened()): the budget is the wrong codes'.
+     * Count a second-step code (app or recovery code) for account `$account` before it is judged, against
+     * SECOND_STEP_HOURLY and SECOND_STEP_DAILY from any address. Spent: a 429, and the day's first refusal runs `$spent`
+     * (the customer is told). A right code gives its count back (secondStepOpened()).
      *
      * @param \Closure(): void $spent
      * @throws TooManyAttemptsException
      */
     public function secondStep(int $account, \Closure $spent): void
     {
-        $this->budget(self::secondStepWindows($account), "second_step|told|{$account}", $spent, 'تلاش‌های ناموفق زیاد بود');
+        $this->budget(self::secondStepWindows($account), "second_step|told|{$account}", $spent, self::FAILURES);
     }
 
-    /** The code secondStep() counted opened: its count given back. */
+    /** Give back the count of a second-step code that was right. */
     public function secondStepOpened(int $account): void
     {
         $this->giveBack(self::secondStepWindows($account));
     }
 
     /**
-     * A code the website emailed to `$address` about to be tried — a sign-up's, a reset's, or one for an email the account
-     * numbered `$account` is adding —: counted before it is judged, against the address (in its shop) and that account,
-     * in an hour's window and a day's (RateLimiter::attempt()), so codes tried at once never pass CODE_FAILURES_HOURLY an
-     * hour nor CODE_FAILURES_DAILY a day, from however many addresses and whatever codes they were sent. With either
-     * spent the try is refused (a 429) and not counted, no new code goes to the address until it has room again
-     * (emailing()), and the first refusal of a day runs `$spent` — the address's account is told. Counted whether or not
-     * the address has an account, so a refusal gives none away. A code that opened gives its count back
-     * (emailedCodeOpened()): the budget is the wrong codes'.
+     * Count a code emailed to `$address` (a sign-up's, a reset's, or one for an email account `$account` is adding)
+     * before it is judged, against the address in its shop and the account, an hour's and a day's. Spent: a 429, no new
+     * code goes to the address until there is room (emailing()), and the day's first refusal runs `$spent`. Counted
+     * whether or not the address has an account, so a refusal gives nothing away.
      *
      * @param \Closure(): void $spent
      * @throws TooManyAttemptsException
@@ -226,30 +197,26 @@ final class SignInThrottle
         $this->budget(self::codeWindows($address, $account), 'code_fail|told|' . CurrentBot::id() . '|' . self::addressOf($address), $spent, self::CODES_FAILED);
     }
 
-    /** The code emailedCode() counted opened: its count given back. */
+    /** Give back the count of an emailed code that was right. */
     public function emailedCodeOpened(string $address, ?int $account): void
     {
         $this->giveBack(self::codeWindows($address, $account));
     }
 
     /**
-     * Something a website's sign-in costs the shop — a row kept, an email sent —, counted against the address that asked:
-     * refused, a 429, once it asked ISSUE_MAX in its window.
+     * Count something a website's sign-in costs the shop (a row kept, an email, a captcha judged) against the asking
+     * network: a 429 past ISSUE_MAX.
      *
      * @throws TooManyAttemptsException
      */
     public function issuing(ServerRequestInterface $request): void
     {
-        $wait = $this->limiter->attempt([[$this->issueKey($request), self::ISSUE_MAX, self::ISSUE_SECONDS]]);
-        if ($wait > 0) {
-            throw TooManyAttemptsException::wait('درخواست‌ها زیاد بود', $wait);
-        }
+        $this->limiter->enforce([[$this->issueKey($request), self::ISSUE_MAX, self::ISSUE_SECONDS]], 'درخواست‌ها زیاد بود');
     }
 
     /**
-     * What issuing() counted cost the shop nothing after all — a sign-in form's captcha token, counted before it was
-     * judged, that passed or could not be judged: a refused one keeps its count, so a bot's tokens cost it what asking
-     * for codes costs, and once that is spent the next is refused unjudged — its provider not asked.
+     * Give back what issuing() counted for a captcha token that passed or could not be judged; a refused one keeps it,
+     * so a bot's guesses spend its budget and are then refused without asking the provider.
      */
     public function issuedNothing(ServerRequestInterface $request): void
     {
@@ -257,39 +224,29 @@ final class SignInThrottle
     }
 
     /**
-     * A website's backend asking the shop to judge a token of its own form's captcha (POST /captcha/verify) — the
-     * website's by its store key, `$network` its visitor's (the address the backend named), else the backend's own —:
-     * counted, before it is judged, against the website's CAPTCHA_CHECKS and the network's CAPTCHA_REFUSALS, each in
-     * CAPTCHA_SECONDS; with either spent a 429, and the token is not judged — its provider not asked. One that passed or
-     * could not be judged gives the network's count back (captchaNotRefused()): its budget is the refused ones'. Never the
-     * sign-ins' budget (issuing()): a bot behind a site's forms keeps nobody from signing in.
+     * Count a token a website's backend asks the shop to judge (POST /captcha/verify) against the website's
+     * CAPTCHA_CHECKS and the visitor network's CAPTCHA_REFUSALS; spent, a 429 without asking the provider. Kept apart
+     * from the sign-ins' budget, so a bot behind a site's forms locks nobody out of signing in.
      *
      * @throws TooManyAttemptsException
      */
     public function verifyingCaptcha(string $website, string $network): void
     {
-        $wait = $this->limiter->attempt(self::captchaWindows($website, $network));
-        if ($wait > 0) {
-            throw TooManyAttemptsException::wait('درخواست تایید زیادی فرستاده شد', $wait);
-        }
+        $this->limiter->enforce(self::captchaWindows($website, $network), 'درخواست تایید زیادی فرستاده شد');
     }
 
-    /** The token verifyingCaptcha() counted was not refused — it passed, or could not be judged: the network's count given back. */
+    /** Give back the network's count for a token that passed or could not be judged. */
     public function captchaNotRefused(string $website, string $network): void
     {
         $this->limiter->release(self::captchaWindows($website, $network)[1][0]);
     }
 
     /**
-     * An email a website's sign-in is about to send to `$address` (in the current shop) — a code, or the email that goes
-     * in its place —, counted against every budget it spends before it goes, so requests that come while the mail server
-     * is still talking never send one each. Refused before anything is counted while the address's wrong codes are spent
-     * (emailedCode()); then what the asking network may cost (issuing()), the address's turn (CODE_EVERY_SECONDS) and its
-     * day (EMAIL_RECIPIENT_DAILY, from every shop), the network's hour (EMAIL_NETWORK_HOURLY) — and, `$askedBy` a
-     * signed-in customer adding an email to their account, their day (EMAIL_LINK_DAILY) —, each a 429; and the shop's
-     * and the installation's hour and day, a 503 (the log told once a window). Each is counted whether or not the
-     * address has an account, so a refusal gives none away; one refused gives back what the email had counted before it
-     * (but the network's ask). An email that did not go after all gives its counts back (emailNotSent()).
+     * Count an email a website's sign-in is about to send to `$address` against every budget before it goes, so requests
+     * arriving while the mail server talks never send one each. Refused first while the address's wrong codes are spent;
+     * then the network's issuing, the address's turn and day, the network's hour and a signed-in customer's day are each
+     * a 429; the shop's and the installation's hour and day a 503 (logged once a window). Counted whether or not the
+     * address has an account; a refusal gives back what this email counted before it (all but the network's ask).
      *
      * @throws TooManyAttemptsException 429
      * @throws SignInRefusedException 503: the shop's or the installation's budget is spent
@@ -318,7 +275,7 @@ final class SignInThrottle
         }
     }
 
-    /** No email went to `$address` after all — refused on the way, or the mail server did not take it —: what emailing() counted given back. */
+    /** Give back what emailing() counted for an email that did not go. */
     public function emailNotSent(ServerRequestInterface $request, string $address, ?int $askedBy = null): void
     {
         foreach ($this->emailBudgets($request, $address, $askedBy) as [$windows]) {
@@ -327,9 +284,8 @@ final class SignInThrottle
     }
 
     /**
-     * The email telling `$address` it has no account in this shop (a reset asked for it), by `$send` — at most
-     * EMAIL_NO_ACCOUNT_DAILY a day: a later ask that day sends nothing, every count and the answer the same. One `$send`
-     * did not send gives its turn back.
+     * Send (`$send`) the email telling `$address` it has no account here, at most EMAIL_NO_ACCOUNT_DAILY a day; a later
+     * ask that day sends nothing and looks the same. A failed send gives its turn back.
      *
      * @param \Closure(): void $send
      */
@@ -349,15 +305,15 @@ final class SignInThrottle
         }
     }
 
-    /** The refusal of a sign-in that must wait `$seconds`: a 429, the wait in words and in `Retry-After`. */
+    /** The 429 of a sign-in that must wait `$seconds`. */
     public static function refused(int $seconds): TooManyAttemptsException
     {
-        return TooManyAttemptsException::wait('تلاش‌های ناموفق زیاد بود', $seconds);
+        return TooManyAttemptsException::wait(self::FAILURES, $seconds);
     }
 
     /**
-     * A try held to a budget of its windows, counted before it is judged: with one spent it is refused (a 429, `$what`
-     * and the wait) and not counted, and the first refusal while `$told`'s day lasts runs `$spent`.
+     * Count a try in its windows before it is judged; with one spent, a 429 — and the first refusal of `$told`'s day
+     * runs `$spent`.
      *
      * @param non-empty-list<array{string, int, int}> $windows
      * @param \Closure(): void $spent
@@ -377,9 +333,7 @@ final class SignInThrottle
     }
 
     /**
-     * What an email to `$address` spends, in the order it is counted — each budget's windows, and its refusal given the
-     * wait: the address's turn and day, the asking network's hour (and a signed-in customer's day adding an email), the
-     * shop's and the installation's hour and day.
+     * The budgets an email to `$address` spends, in counting order, each with its refusal.
      *
      * @return list<array{non-empty-list<array{string, int, int}>, \Closure(int, non-empty-list<array{string, int, int}>): \Throwable}>
      */
@@ -406,8 +360,7 @@ final class SignInThrottle
     }
 
     /**
-     * The shop's or the installation's email budget spent: the log told of each window spent — once while it is —, and a
-     * 503 in the customer's words: no email goes from the shop for now.
+     * The 503 of a spent shop or installation email budget, logging each spent window once while it lasts.
      *
      * @param non-empty-list<array{string, int, int}> $windows
      */
@@ -448,8 +401,7 @@ final class SignInThrottle
     }
 
     /**
-     * The windows a try this way counts in: the address's, and the account's when one is named — key, most failures,
-     * seconds.
+     * A way's windows: the address's, and the account's when named — [key, most failures, seconds].
      *
      * @return non-empty-list<array{string, int, int}>
      */
@@ -463,11 +415,7 @@ final class SignInThrottle
         return $windows;
     }
 
-    /**
-     * @return array{array{string, int, int}, array{string, int, int}} The windows a website's captcha check counts in —
-     *                                                                 the website's, then its visitor's network's refused
-     *                                                                 tokens: key, most, seconds
-     */
+    /** @return array{array{string, int, int}, array{string, int, int}} The website's window, then the network's refusals */
     private static function captchaWindows(string $website, string $network): array
     {
         return [
@@ -485,10 +433,7 @@ final class SignInThrottle
         ];
     }
 
-    /**
-     * @return non-empty-list<array{string, int, int}> The wrong emailed codes' windows of an address in its shop — and of
-     *                                                 the account adding it, when one is named: key, most codes, seconds
-     */
+    /** @return non-empty-list<array{string, int, int}> The wrong emailed codes' windows of an address (and account) */
     private static function codeWindows(string $address, ?int $account): array
     {
         $to = CurrentBot::id() . '|' . self::addressOf($address);
@@ -521,8 +466,7 @@ final class SignInThrottle
     }
 
     /**
-     * One count however the name is typed (the panel's own check trims it, so the throttle does too); a website's in its
-     * shop — the same address in two shops is two customers, and an agent's website must not lock one out of another's.
+     * An account's key however its name is typed; a website's per shop, since one address in two shops is two customers.
      */
     private static function accountKey(string $way, string $account): string
     {

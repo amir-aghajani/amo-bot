@@ -16,8 +16,8 @@ final class ProbeResult
     ) {}
 
     /**
-     * Connect with a driver's connection — one of the probe's own, made by Illuminate's connector exactly as the shop's
-     * is (charset, session, options), closed afterwards — and say what answered.
+     * Open a connection of the probe's own with `$connection`, exactly as the shop would, report what answered, and
+     * close it.
      *
      * @param array<string, mixed> $connection DatabaseDriver::connection(), with whatever the probe adds (a timeout)
      * @param array<string, string> $minimum The oldest version taken of each server, by the connection's name for it

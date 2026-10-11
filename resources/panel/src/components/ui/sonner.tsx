@@ -5,10 +5,10 @@ import { useTopModal } from '@/components/portal-container'
 import { useTheme } from '@/lib/theme'
 
 /**
- * Toasts drawn as the Console's: a floating card on the popover surface, the outcome told by a coloured icon. One of the
- * panel's own (re-apply it if the component is reinstalled with the shadcn CLI): they are drawn in the modal on top
- * while one is open — above its backdrop, where they can be read and pressed — and on the page otherwise; a toast
- * keeps showing as they move (sonner's store is global, and a toaster that mounts replays what is still up).
+ * Toasts as the Console's: a floating card on the popover surface, the outcome shown by a coloured icon. Local change to
+ * re-apply after a shadcn reinstall: while a modal is open they are drawn inside the top one, above its backdrop, so
+ * they can be read and pressed; a toast stays up as they move (sonner's store is global, and a newly mounted toaster
+ * replays what is still showing).
  */
 const Toaster = (props: ToasterProps) => {
   const { theme } = useTheme()

@@ -7,10 +7,8 @@ namespace App\Core\Logging;
 use App\Core\Http\Urls;
 
 /**
- * Takes the secrets out of a text bound for a log line or an error message: a bot token (a transport error carries
- * Telegram's whole URL, `…/bot<token>/getUpdates`), and the secret the shop's machine addresses end with — the
- * webhooks' and the cron token (Urls::SECRET_PATHS), which a request's path carries. A log is something an admin pastes
- * into an issue; a token there is the bot itself.
+ * Takes secrets out of text bound for a log line or an error: bot tokens (Telegram's URLs carry them) and the secret
+ * segment the machine addresses end with (Urls::SECRET_PATHS). Logs get pasted into issues; a token there is the bot.
  */
 final class Redact
 {
@@ -35,8 +33,8 @@ final class Redact
     }
 
     /**
-     * Each machine address up to its secret — its own placeholders as any segment — and the secret, the last segment
-     * (another address's prefix, `/webhooks/telegram/bot/…`, is not mistaken for one).
+     * A pattern per machine address matching its last segment, the secret (an address that only shares a prefix, like
+     * `/webhooks/telegram/bot/…`, is not mistaken for one).
      *
      * @return array<string, string>
      */

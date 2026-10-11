@@ -11,9 +11,8 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
 /**
- * The master switch ("ربات فعال باشد"): while it is off customers get one notice per message and lose the
- * menu keyboard, so the shop looks closed rather than broken. Admins (role admin) are let through so
- * they can try things out before opening again; the next /start (or any text) brings the keyboard back.
+ * The master switch: while off, customers get BotText::BotOff and lose the menu keyboard, so the shop looks closed
+ * rather than broken. Bot admins pass, to try things out before opening again.
  */
 final class MaintenanceGate implements Gate
 {

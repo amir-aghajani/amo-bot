@@ -17,11 +17,8 @@ use Slim\Psr7\Factory\ServerRequestFactory;
 use Tests\HttpTestCase;
 
 /**
- * The Store API's door: its address's store key names a shop — the main bot's or an agent's — whose website is on, and
- * the request is worked in that shop; any other key is a 404 in the error shape. `GET /` introduces the shop. A page on
- * the website's own origin, or one it lists, may call it from a browser (CORS): a preflight is answered before routing,
- * and every answer — an error's too — says the origin may read it; any other origin, or a request without one (a
- * server's), gets nothing of the kind, and the panels' API answers no origin at all.
+ * The Store API's door (a store key opens its website's shop, any other key is a 404), `GET /`, and CORS: only the
+ * website's own origins, preflights answered before routing, error answers included; the panels' API answers no origin.
  */
 final class StoreApiTest extends HttpTestCase
 {

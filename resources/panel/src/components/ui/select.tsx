@@ -76,8 +76,8 @@ function SelectLabel({ className, ...props }: React.ComponentProps<typeof Select
 }
 
 /**
- * An option: its words (what the field shows once picked) and, one of the panel's own, a `hint` under them in secondary
- * ink — what the option carries (why a server cannot take a service) — which wraps in the list and stays out of the field.
+ * An option: its label (what the field shows once picked) and, a local addition, a `hint` under it in secondary ink
+ * (why a server cannot take a service), which wraps in the list and stays out of the field.
  */
 function SelectItem({ className, children, hint, ...props }: React.ComponentProps<typeof SelectPrimitive.Item> & { hint?: React.ReactNode }) {
   return (

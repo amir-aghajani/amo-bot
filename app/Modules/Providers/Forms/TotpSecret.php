@@ -10,10 +10,10 @@ use App\Core\Forms\FieldSpec;
 use App\Core\Forms\FieldType;
 
 /**
- * The secret of a panel's two-factor login, whose codes the shop signs in with (Core\Security\Totp): base32, typed the
- * way an authenticator app shows it — in groups, in either case — and kept in one form, without spaces or dashes, upper
- * case. Everything else is the Secret's: never shown, kept unless typed again or cleared, and only while what it is
- * bound to stays.
+ * The secret of a panel's two-factor login, which the shop makes its login codes from (Core\Security\Totp): base32,
+ * typed as an authenticator app shows it (in groups, either case) and kept upper case without spaces or dashes.
+ * Otherwise it behaves as the Secret it wraps: never shown, kept unless typed again or cleared, and only while what it
+ * is bound to stays.
  *
  * @extends Field<string>
  */

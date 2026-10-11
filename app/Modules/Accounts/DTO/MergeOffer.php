@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Accounts\DTO;
 
 /**
- * A way in being added to a customer's account is another account's of the same shop (Services\Identities): that
- * account as the customer may judge it is theirs, which of the two stays (the older), and the ticket that makes them
- * one (POST /me/merge, Services\MergeOffers::accept()).
+ * A merge offered because the way in being added is another account's (Services\MergeOffers): that account as the
+ * customer may recognise it, which of the two stays, and the ticket POST /me/merge takes.
  */
 final class MergeOffer
 {

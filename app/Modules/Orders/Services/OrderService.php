@@ -11,19 +11,27 @@ use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Services\AgencySettings;
 use App\Modules\Agency\Services\TrafficPool;
 use App\Modules\Catalog\Models\Plan;
+use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
+use App\Modules\Discounts\Services\DiscountCodes;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\DTO\OrderKey;
+use App\Modules\Orders\DTO\Quote;
+use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Orders\Exceptions\FirstPurchaseUsedException;
 use App\Modules\Orders\Exceptions\RenewalUnderWayException;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Orders\Exceptions\TooManyUnpaidOrdersException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\RequestKey;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Models\Payment;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
+use App\Modules\Rewards\Services\OrderRewards;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Telegram\Reports\ShopReports;
@@ -39,23 +47,18 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Order lifecycle: open -> (payment) -> paid -> processing -> fulfilled | failed — or cancelled while nobody paid it.
- * A customer's order is made when they pick how to pay, and a second pick of the same thing finds the open one
- * (open*()); a request the website makes again with its key (its Idempotency-Key) gets the order that key came to, and
- * the website leaves a customer UNPAID_MAX unpaid orders at most. Delivery provisions/renews a subscription, credits the wallet or adds an agent's traffic depending on the
- * order type; a purchase or a renewal in an agent's bot first takes the plan's traffic out of the agent's pool
- * (TrafficPool, once per order) and gets it back when the delivery failed — a pool that cannot cover it fails the
- * order, and the agent is told in the main bot.
- * Every step is a compare-and-swap (Transitions): one payment pays the order (the claim happens inside
- * the payment's own transaction), and the process that claims it for delivery is the only one
- * delivering it — an admin's approve racing the auto-approve timer, or a retry racing another retry,
- * never provisions twice; a delivery whose process died is resumed (resume(), ResumeDeliveriesTask).
- * What a delivery came to — the sale, the renewal, the charged wallet, or the failure that needs the
- * admin's retry — is reported to the admins' report group (ShopReports).
+ * The order lifecycle: pending → paid → processing → fulfilled | failed, or cancelled unpaid.
+ *
+ * An order is made when the customer picks how to pay; picking again finds the same open order (open()). It keeps the
+ * price it was made at (a Pricing quote). Every move is a compare-and-swap (Transitions): one payment pays the order, and
+ * only the process that claims it for delivery (paid → processing) delivers it, so two approvals or two retries never
+ * deliver twice; a delivery whose process died is resumed (resume()). Delivery makes or renews a service, adds extra
+ * traffic or time, credits the wallet or adds an agent's traffic; in an agent's shop it first draws the traffic from the
+ * agent's pool and gives it back if the delivery fails. Outcomes go to the report group in the same transaction.
  */
 final class OrderService
 {
-    /** `orders.notes` of a cancelled order: support's cancel without a note, nobody finishing the payment in time. */
+    /** `orders.notes` of a cancelled order: support's cancel without a note, and an unpaid order that expired. */
     public const NOTE_CANCELLED_BY_SUPPORT = 'لغو توسط پشتیبانی';
     public const NOTE_EXPIRED = 'پرداخت در مهلت کامل نشد';
 
@@ -65,16 +68,13 @@ final class OrderService
     /** A retry that found the order taken: another process is delivering it, or just did. */
     public const DELIVERY_TAKEN = 'تحویل این سفارش همین حالا جای دیگری انجام شد یا در حال انجام است.';
 
-    /** `orders.notes` of a delivery that broke on no panel's and no rule's refusal — a fault of the shop's own, which its log has in full. */
+    /** `orders.notes` of a delivery that broke on a bug rather than a panel's or a rule's refusal (the log has the detail). */
     public const DELIVERY_BROKEN = 'تحویل با خطای داخلی برنامه متوقف شد؛ جزئیات در لاگ برنامه است.';
 
     /** What a delivery reads of an order, for a list of orders delivered one after another to read with them. */
     public const DELIVERY_RELATIONS = ['payments', 'user.ownBot', 'plan', 'server', 'subscription'];
 
-    /**
-     * The unpaid orders a customer may have open when the website's checkout makes another (a request with its key): each
-     * one is a payment that takes a receipt — a picture kept on the host —, and they go only once paid or expired.
-     */
+    /** The most unpaid orders a website customer may have open (each may hold a receipt picture on the host). */
     public const UNPAID_MAX = 5;
 
     public function __construct(
@@ -85,37 +85,58 @@ final class OrderService
         private readonly AgencySettings $agencySettings,
         private readonly ShopReports $reports,
         private readonly CustomerNotifier $notifier,
+        private readonly Pricing $pricing,
+        private readonly DiscountCodes $codes,
+        private readonly OrderRewards $rewards,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
     ) {}
 
     /**
-     * The customer's purchase of the plan on the server they picked among its servers, at the plan's price — or, made
-     * again with its key, the order that key came to (open()).
+     * The customer's purchase of the plan on the chosen server, at `$quote` (the checkout's, with its code) or else at
+     * Pricing::purchase() without a code — or, made again with its key, the order that key came to.
      *
      * @throws RequestKeyReusedException the key came to an order of something else
      * @throws TooManyUnpaidOrdersException
+     * @throws DiscountCodeRefusedException the code's last use was taken meanwhile
      */
-    public function openPurchase(User $user, Plan $plan, Server $server, ?OrderKey $key = null): Order
+    public function openPurchase(User $user, Plan $plan, Server $server, ?OrderKey $key = null, ?Quote $quote = null): Order
     {
-        return $this->open($user, OrderType::Purchase, Money::normalize($plan->price), ['plan_id' => $plan->id, 'server_id' => $server->id], key: $key);
+        return $this->open($user, OrderType::Purchase, fn(): Quote => $quote ?? $this->pricing->purchase($user, $plan, $server), ['plan_id' => $plan->id, 'server_id' => $server->id], key: $key);
     }
 
-    /** Whether the wallet may be charged by `$amount` Toman: within the bot settings' bounds. */
+    /**
+     * A free service of the plan as a prize or gift (Rewards\Services\Rewards): always a new order at no price, `pricing`
+     * gift (so it is no purchase of the customer's), settled by the wallet row and delivered as any purchase.
+     */
+    public function openGift(User $user, Plan $plan, Server $server): Order
+    {
+        return Order::query()->create([
+            'user_id' => $user->id,
+            'type' => OrderType::Purchase,
+            'status' => OrderStatus::Pending,
+            'plan_id' => $plan->id,
+            'server_id' => $server->id,
+            'amount' => '0.00',
+            'pricing' => OrderPricing::Gift,
+        ]);
+    }
+
+    /** Whether a top-up of `$amount` Toman is within the wallet settings' bounds. */
     public function topUpAllowed(int $amount): bool
     {
         return $amount >= $this->walletSettings->topUpMin() && $amount <= WalletSettings::TOPUP_MAX;
     }
 
-    /** What a top-up may be (topUpAllowed()), in the customer's words: the bot settings' least and the most the shop takes. */
+    /** The top-up bounds (topUpAllowed()) worded for the customer. */
     public function topUpBounds(): string
     {
         return 'مبلغ شارژ باید بین ' . Money::format($this->walletSettings->topUpMin()) . ' و ' . Money::format(WalletSettings::TOPUP_MAX) . ' باشد.';
     }
 
     /**
-     * A wallet top-up of `$amount` Toman — or, made again with its key, the order that key came to: the bounds are a new
-     * order's, which they may have moved past since. Its amount is what it buys, so a key's order has it too.
+     * A wallet top-up of `$amount` Toman, never discounted — or, made again with its key, the order that key came to
+     * (the bounds are only checked for a new order).
      *
      * @throws ValidationException 422 on `amount` outside the bot settings' bounds
      * @throws RequestKeyReusedException the key came to an order of something else
@@ -123,21 +144,21 @@ final class OrderService
      */
     public function openTopUp(User $user, int $amount, ?OrderKey $key = null): Order
     {
-        return $this->open($user, OrderType::WalletTopUp, Money::normalize($amount), ['amount' => $amount], function () use ($amount): void {
+        return $this->open($user, OrderType::WalletTopUp, static fn(): Quote => new Quote(Money::normalize($amount), OrderPricing::Regular), ['amount' => $amount], function () use ($amount): void {
             if (!$this->topUpAllowed($amount)) {
                 throw ValidationException::on('amount', $this->topUpBounds());
             }
         }, $key);
     }
 
-    /** Whether an agent may buy `$gb` GB of traffic at once: within the agency program's bounds. */
+    /** Whether an agent may buy `$gb` GB of traffic at once (the agency settings' bounds). */
     public function trafficAllowed(int $gb): bool
     {
         return $gb >= $this->agencySettings->trafficMin() && $gb <= AgencySettings::TRAFFIC_MAX_GB;
     }
 
     /**
-     * `$gb` GB of traffic an agent buys for their bot (in the main bot), at their level's price per GB.
+     * `$gb` GB of traffic an agent buys for their bot, at their level's price per GB (never discounted).
      *
      * @throws ValidationException 422 on `gb` outside the agency program's bounds
      */
@@ -148,22 +169,22 @@ final class OrderService
             throw ValidationException::on('gb', 'حجم باید دست‌کم ' . Persian::number($this->agencySettings->trafficMin()) . ' گیگابایت باشد.');
         }
 
-        return $this->open($agent, OrderType::Traffic, $level->priceOf($gb), ['traffic_bytes' => Traffic::bytesOfGb($gb)]);
+        return $this->open($agent, OrderType::Traffic, static fn(): Quote => new Quote($level->priceOf($gb), OrderPricing::Regular), ['traffic_bytes' => Traffic::bytesOfGb($gb)]);
     }
 
     /**
-     * The customer's renewal of the service on the plan, at its price — «♻️ تمدید سرویس» in the bot, the service's renewal
-     * on the website. The service's row is locked first, as an automatic renewal locks it (AutoRenewal::claim()), so the
-     * two never both open one; and none is opened while another renewal of it is under way (renewalUnderWay()): the
-     * service would be renewed — and paid for — twice. Made again with its key, the order that key came to, under way or not.
+     * The customer's renewal of the service, at `$quote` or else Pricing::renewal(). The service's row is locked first,
+     * as automatic renewal locks it (AutoRenewal::claim()), and none is opened while another renewal is under way — it
+     * would be paid twice. Made again with its key: the key's order, under way or not.
      *
      * @throws RenewalUnderWayException
      * @throws RequestKeyReusedException the key came to an order of something else
      * @throws TooManyUnpaidOrdersException
+     * @throws DiscountCodeRefusedException the code's last use was taken meanwhile
      */
-    public function openRenewal(User $user, Subscription $subscription, Plan $plan, ?OrderKey $key = null): Order
+    public function openRenewal(User $user, Subscription $subscription, Plan $plan, ?OrderKey $key = null, ?Quote $quote = null): Order
     {
-        return $this->open($user, OrderType::Renewal, Money::normalize($plan->price), ['plan_id' => $plan->id, 'subscription_id' => $subscription->id], function () use ($subscription): void {
+        return $this->open($user, OrderType::Renewal, fn(): Quote => $quote ?? $this->pricing->renewal($user, $subscription, $plan), ['plan_id' => $plan->id, 'subscription_id' => $subscription->id], function () use ($subscription): void {
             Subscription::query()->whereKey($subscription->id)->lockForUpdate()->value('id');
             if ($this->renewalUnderWay($subscription)) {
                 throw new RenewalUnderWayException($subscription);
@@ -172,9 +193,29 @@ final class OrderService
     }
 
     /**
-     * Whether a renewal of the service is under way: its receipt with support, or paid and being delivered — or waiting
-     * for support's retry, the delivery having failed. Only a renewal still to be paid (Order::payable()) is not: the
-     * customer may pay it, or start another.
+     * `$quantity` GB or days of an extra for the customer's service, at `$quote` or else `$price` less the automatic
+     * discount (Pricing::extra()).
+     *
+     * @throws RequestKeyReusedException the key came to an order of something else
+     * @throws TooManyUnpaidOrdersException
+     * @throws DiscountCodeRefusedException the code's last use was taken meanwhile
+     */
+    public function openExtra(User $user, Subscription $subscription, ExtraKind $kind, int $quantity, string $price, ?OrderKey $key = null, ?Quote $quote = null): Order
+    {
+        $shape = ['subscription_id' => $subscription->id] + match ($kind) {
+            ExtraKind::Traffic => ['traffic_bytes' => Traffic::bytesOfGb($quantity)],
+            ExtraKind::Time => ['days' => $quantity],
+        };
+        if ($subscription->plan_id !== null) {
+            $shape['plan_id'] = $subscription->plan_id;
+        }
+
+        return $this->open($user, $kind->orderType(), fn(): Quote => $quote ?? $this->pricing->extra($user, $subscription, $kind, $price), $shape, key: $key);
+    }
+
+    /**
+     * Whether a renewal of the service is under way: its receipt with support, paid and being delivered, or failed and
+     * waiting for support's retry. A renewal still payable (Order::payable()) is not under way.
      */
     public function renewalUnderWay(Subscription $subscription): bool
     {
@@ -190,7 +231,7 @@ final class OrderService
             ->exists();
     }
 
-    /** A renewal of the service at its plan's price — «تمدید خودکار»'s, made once per due service (AutoRenewal::claim()). */
+    /** An automatic renewal's order (AutoRenewal::claim()), at Pricing::renewal() without a code. */
     public function createRenewal(User $user, Subscription $subscription, Plan $plan): Order
     {
         return Order::query()->create([
@@ -199,14 +240,12 @@ final class OrderService
             'status' => OrderStatus::Pending,
             'plan_id' => $plan->id,
             'subscription_id' => $subscription->id,
-            'amount' => Money::normalize($plan->price),
-        ]);
+        ] + $this->pricing->renewal($user, $subscription, $plan)->attributes());
     }
 
     /**
-     * A payment for this order succeeded: claim pending → paid. False when the order is not pending
-     * any more (paid by another payment, cancelled meanwhile) — PaymentService then unwinds the
-     * payment with it. The delivery is a separate step (deliver()), after the caller's commit.
+     * Claims the order for a payment that succeeded (pending → paid). False when it is no longer pending; PaymentService
+     * then rolls the payment back. Delivery is a separate step (deliver()) after the commit.
      */
     public function markPaid(Order $order): bool
     {
@@ -214,15 +253,11 @@ final class OrderService
     }
 
     /**
-     * Deliver what was bought: a paid order, a failed one again (a retry after a panel outage), or a stale processing one
-     * (isStale(): its process died mid-delivery). The claim → processing is what makes two deliveries impossible. True
-     * when this call did the delivery — took it to fulfilled or failed; false when another process has it or had it
-     * (delivering it this moment, or done with it): what came of it is that one's to tell.
+     * Delivers a paid order, a failed one again (support's retry), or a stale claim. The claim → processing makes two
+     * deliveries impossible. True when this call delivered (to fulfilled or failed); false when another process has it.
      *
-     * The order is fulfilled in the same transaction that writes what it delivered — the service's row, the wallet's or
-     * the traffic's line. A delivery the shop's rules or a panel refused — no server, the agent's traffic short, the
-     * panel's error — fails the order with that reason (for the admin, the report group and the retry); anything else is
-     * a fault: the order fails with the general reason, and the fault goes on up.
+     * The order is fulfilled in the same transaction that writes what it delivered. A panel's or a rule's refusal fails
+     * the order with that reason; any other exception fails it with DELIVERY_BROKEN and is rethrown.
      */
     public function deliver(Order $order): bool
     {
@@ -230,82 +265,83 @@ final class OrderService
     }
 
     /**
-     * Deliver what a process that died left behind: an order paid with nobody delivering it (isStale()) — its delivery
-     * never started, or its claim went quiet —, as deliver() would. Never a failed one: a failure waits for support. True
-     * when this call did the delivery; false when the order is not stale, or another process has it or had it.
+     * Delivers an order a dead process left behind (isStale()), as deliver() would — never a failed one, which waits for
+     * support. True when this call delivered.
      */
     public function resume(Order $order): bool
     {
         return self::isStale($order) && $this->claim($order, [OrderStatus::Paid]) && $this->carryOut($order);
     }
 
-    /** The customer or support drops an order nobody paid. True when this call cancelled it; anything else stays as it is. */
+    /** Cancels an unpaid order with `$reason` as its notes. True when this call cancelled it. */
     public function cancel(Order $order, string $reason): bool
     {
         return Transitions::move($order, 'status', [OrderStatus::Pending], OrderStatus::Cancelled, ['notes' => $reason]);
     }
 
-    /**
-     * Paid, and nobody is delivering it: a processing claim — or a payment whose delivery never started
-     * (its process died between the two) — untouched for STALE_PROCESSING_MINUTES.
-     */
+    /** Paid or processing, and untouched for STALE_PROCESSING_MINUTES: its process died (Order::stale() as a query). */
     public static function isStale(Order $order): bool
     {
         return in_array($order->status, [OrderStatus::Paid, OrderStatus::Processing], true)
             && $order->updated_at->lessThanOrEqualTo(now()->subMinutes(self::STALE_PROCESSING_MINUTES));
     }
 
-    /**
-     * The order the customer's request with this key (the website's Idempotency-Key) came to — made, or found open
-     * (`request_keys`); null while it came to none.
-     */
+    /** The order the customer's Idempotency-Key came to; null for none. */
     public function keyed(User $user, string $key): ?Order
     {
         return Order::query()->whereIn('id', RequestKey::query()->select('order_id')->where('user_id', $user->id)->where('key', $key))->first();
     }
 
     /**
-     * The customer's open order of this shape — one they started and may still pay (Order::payable()), at today's price;
-     * picked again, its expiry counts from now (ExpireOrdersTask) — or a new one, under a lock on their row: two taps at
-     * once make one order. `$first` runs first in the same transaction: a lock of the order's own, and its refusal.
+     * Finds the customer's payable order of this shape at the same price and code (touched, so its expiry restarts), or
+     * makes one — under a lock on the customer's row, so two taps make one order. A new order with a code takes one of
+     * its uses (DiscountCodes::reserve()). `$first` runs first in the same transaction (a lock and a check of its own).
      *
-     * With a request's key (the website's Idempotency-Key — `request_keys`, one a customer — and the way to pay it asks
-     * for) the order that key came to comes first, whatever became of it — paid, delivered, cancelled: the caller answers
-     * it as it stands — while it is the same thing asked again (its type and shape — never its price, which may have moved
-     * since — and the way to pay the key was first sent with; else RequestKeyReusedException): never a second order, nor
-     * the order paid another way. Otherwise the key is kept for the order the request comes to — the one it makes, or the
-     * open one it finds, whatever key that one came by —, with its way to pay, in the transaction that makes or finds it,
-     * so a request made again finds it however it was paid. Of two requests with one key in the same moment, the key's
-     * row (unique a customer) turns the second's away, and that one gets the first's order. Such a request — the
-     * website's — makes no new order while its customer has UNPAID_MAX unpaid ones open.
+     * With an Idempotency-Key, the key's order comes first whatever became of it, as long as it is the same request (type,
+     * shape and method — never the price, which may have moved); otherwise RequestKeyReusedException. A new key is kept
+     * for the order the request comes to, in the same transaction; of two requests with one key at once, the key's unique
+     * row turns the second away and it gets the first's order. A keyed request makes no new order while the customer has
+     * UNPAID_MAX unpaid ones.
      *
      * @param array<string, int> $shape What tells two orders of the type apart, and what a key's order must have too: the
-     *                                  plan and its server or its service, a top-up's amount (what it buys), the traffic
+     *                                  plan and its server or its service, a top-up's amount (what it buys), the traffic or
+     *                                  the days
+     * @param \Closure(): Quote $price What it costs; not asked when the key's order answers the request
      * @param (\Closure(): void)|null $first
+     * @param-immediately-invoked-callable $price
+     * @param-immediately-invoked-callable $first
      * @throws RequestKeyReusedException
      * @throws TooManyUnpaidOrdersException
+     * @throws DiscountCodeRefusedException the quote's code has no use left for a new order
      */
-    private function open(User $user, OrderType $type, string $amount, array $shape = [], ?\Closure $first = null, ?OrderKey $key = null): Order
+    private function open(User $user, OrderType $type, \Closure $price, array $shape = [], ?\Closure $first = null, ?OrderKey $key = null): Order
     {
         $keyed = $key === null ? null : $this->keyed($user, $key->key);
         if ($keyed !== null) {
             return self::same($user, $keyed, $key, $type, $shape);
         }
+        $priced = $price()->attributes();
 
         try {
-            return $this->db->transaction(function () use ($user, $type, $amount, $shape, $first, $key): Order {
+            return $this->db->transaction(function () use ($user, $type, $priced, $shape, $first, $key): Order {
                 if ($first !== null) {
                     $first();
                 }
                 User::query()->whereKey($user->id)->lockForUpdate()->value('id');
 
-                $order = Order::payable()->where(['user_id' => $user->id, 'type' => $type->value, 'amount' => $amount] + $shape)->latest('id')->lockForUpdate()->first();
+                $order = Order::payable()
+                    ->where(['user_id' => $user->id, 'type' => $type->value, 'amount' => $priced['amount']] + $shape)
+                    ->where('discount_code_id', $priced['discount_code_id'])
+                    ->latest('id')->lockForUpdate()->first();
                 if ($order !== null) {
                     $order->touch();
                 } elseif ($key !== null && Order::query()->where('user_id', $user->id)->where('status', OrderStatus::Pending->value)->count() >= self::UNPAID_MAX) {
                     throw new TooManyUnpaidOrdersException();
                 } else {
-                    $order = Order::query()->create(['user_id' => $user->id, 'type' => $type, 'status' => OrderStatus::Pending, 'amount' => $amount] + $shape);
+                    if ($priced['discount_code_id'] !== null) {
+                        $this->codes->reserve($priced['discount_code_id'], $user);
+                    }
+                    $order = Order::query()->create(['user_id' => $user->id, 'type' => $type, 'status' => OrderStatus::Pending] + $priced + $shape);
                 }
                 if ($key !== null) {
                     RequestKey::query()->create(['user_id' => $user->id, 'key' => $key->key, 'order_id' => $order->id, 'payment_method_id' => $key->method]);
@@ -314,7 +350,7 @@ final class OrderService
                 return $order;
             });
         } catch (UniqueConstraintViolationException $e) {
-            // The same request, made in the same moment, came to its order with this key first: that one is the answer.
+            // The same request made at the same moment kept its key first: its order is the answer.
             $keyed = $key === null ? null : $this->keyed($user, $key->key);
             if ($keyed === null || $key === null) {
                 throw $e;
@@ -325,11 +361,8 @@ final class OrderService
     }
 
     /**
-     * The order a request's key came to, when the request asks the same thing again: its type and what tells it apart
-     * (the plan and the server or the service, a top-up's amount) — never its price, which may have moved since: a
-     * request made again is answered by its own order, at the price it was made at —, and the way to pay the key was
-     * first sent with: another would pay the order another way, which no request made again asks. (A key kept before
-     * keys kept their way to pay — none, a week's at most — is answered whatever way is sent, as it was then.)
+     * The key's order, when the request asks the same thing again: the same type and shape (never the price) and the
+     * same payment method as the key was first sent with.
      *
      * @param array<string, int> $shape
      * @throws RequestKeyReusedException
@@ -351,8 +384,8 @@ final class OrderService
     }
 
     /**
-     * The claim → processing that makes two deliveries impossible: from one of `$from`, or a processing claim gone quiet
-     * (its process died). True when this call took it.
+     * Claims the order for delivery (→ processing) from one of `$from`, or takes over a stale claim. True when this call
+     * took it.
      *
      * @param list<OrderStatus> $from
      */
@@ -367,14 +400,17 @@ final class OrderService
         return $claimed;
     }
 
-    /** The delivery of an order this process claimed: true once it is fulfilled, or failed with its reason. */
+    /** Delivers an order this process claimed; true once it is fulfilled or failed with its reason. */
     private function carryOut(Order $order): bool
     {
         try {
             match ($order->type) {
                 // The panel is talked to outside any transaction: a slow panel must not hold locks.
-                OrderType::Purchase => $this->withTraffic($order, fn() => $this->provisioning->provision($order, fn() => $this->fulfilled($order))),
+                OrderType::Purchase => $this->deliverPurchase($order),
                 OrderType::Renewal => $this->withTraffic($order, fn() => $this->provisioning->renew($order, fn() => $this->fulfilled($order))),
+                OrderType::ExtraTraffic => $this->withTraffic($order, fn() => $this->provisioning->addExtra($order, fn() => $this->fulfilled($order))),
+                // Days cost an agent's pool nothing (as support's extension of a service does not).
+                OrderType::ExtraTime => $this->provisioning->addExtra($order, fn() => $this->fulfilled($order)),
                 OrderType::WalletTopUp => $this->db->transaction(function () use ($order): void {
                     $this->wallet->credit($order->user, $order->amount, WalletService::describeTopUp($order));
                     $this->fulfilled($order);
@@ -387,8 +423,7 @@ final class OrderService
             };
         } catch (ProviderException $e) {
             $this->logger->warning('Delivery of order {id} failed: {message}', ['id' => $order->id, 'message' => $e->getMessage()]);
-            // A connector's failure in a word for whoever of the shop reads the order (an agent, its admins on its website),
-            // and the owner's diagnosis apart — never a panel's address where anyone else reads it.
+            // A safe summary for any reader of the order, and the owner's diagnosis (the panel's address) kept apart.
             $this->failed($order, ProviderErrorPresenter::summary($e), $e, ProviderErrorPresenter::describe($e));
 
             return true;
@@ -402,14 +437,47 @@ final class OrderService
 
             throw $e;
         }
+        // Cashback and loyalty after the delivery's commit; they never affect it.
+        if ($order->status === OrderStatus::Fulfilled) {
+            $this->rewards->delivered($order);
+        }
 
         return true;
     }
 
     /**
-     * Inside the transaction that wrote what the order delivered: its completion — and the report group's word on it —,
-     * which land with it or not at all.
+     * Delivers a purchase. One made at the first-purchase price fails when another purchase of the customer's was paid
+     * before it (two ordered at that price before either was paid: only the first paid is the first purchase); a retry
+     * of a failed first purchase still counts as first, whatever was bought since.
+     *
+     * @throws FirstPurchaseUsedException
      */
+    private function deliverPurchase(Order $order): void
+    {
+        if ($order->pricing === OrderPricing::FirstPurchase && self::boughtBefore($order)) {
+            throw new FirstPurchaseUsedException();
+        }
+
+        $this->withTraffic($order, fn() => $this->provisioning->provision($order, fn() => $this->fulfilled($order)));
+    }
+
+    /**
+     * Whether another purchase of the customer's was paid before this one (by `paid_at`, then id): any purchase
+     * (Order::bought(), the first-purchase price's rule), or with `$withPrice` one with a price (Order::paidPurchases(),
+     * which purchase is a referral's first — ReferralGifts).
+     */
+    public static function boughtBefore(Order $order, bool $withPrice = false): bool
+    {
+        $paidAt = Payment::query()->where('order_id', $order->id)->whereNotNull('paid_at')->min('paid_at');
+        $before = Payment::query()->select('order_id')->whereNotNull('paid_at')->where(static fn(Builder $payment) => $payment
+            ->where('paid_at', '<', $paidAt)
+            ->orWhere(static fn(Builder $tie) => $tie->where('paid_at', $paidAt)->where('order_id', '<', $order->id)));
+        $purchases = $withPrice ? Order::paidPurchases() : Order::bought();
+
+        return $purchases->where('user_id', $order->user_id)->whereKeyNot($order->id)->whereIn('id', $before)->exists();
+    }
+
+    /** Inside the transaction that wrote what was delivered: marks the order fulfilled and reports it. */
     private function fulfilled(Order $order): void
     {
         if (!Transitions::move($order, 'status', [OrderStatus::Processing], OrderStatus::Fulfilled, ['fulfilled_at' => now()])) {
@@ -419,9 +487,8 @@ final class OrderService
     }
 
     /**
-     * The claimed delivery came to nothing: failed with the reason anyone of the shop may read, and the owner's diagnosis
-     * of a panel that failed it (`$diagnosis`) — told to the group in the same transaction, and to an agent short of
-     * traffic.
+     * Fails the claimed delivery with a reason anyone may read and the owner's `$diagnosis`, reported in the same
+     * transaction; an agent short of traffic is notified.
      */
     private function failed(Order $order, string $reason, \Throwable $cause, ?string $diagnosis = null): void
     {
@@ -442,8 +509,8 @@ final class OrderService
     }
 
     /**
-     * A delivery of an agent's bot takes the plan's traffic out of the agent's pool first, and puts it back when the
-     * delivery failed — a retry draws again; one that finds it drawn already (its process died) does not.
+     * In an agent's shop, draws the order's traffic from the agent's pool before delivering and gives it back if the
+     * delivery fails (TrafficPool::draw() never draws twice for one order).
      *
      * @param \Closure(): mixed $deliver
      */

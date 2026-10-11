@@ -17,7 +17,7 @@ use Tests\Support\FakeRelease;
 /**
  * The owner's one-press update, end to end on a shop of the test's own: the newest release found, begun, taken a step
  * a request — its signed manifest believed, its zip checked against it and unpacked, the host checked — and installed in
- * one request while the shop is held: the app's folders the release's, the shop's own (config.php, storage/) untouched,
+ * one request while the shop is held: the app's folders the release's, the shop's data (config.php, storage/) untouched,
  * the database brought along, the version recorded; or, anything after the swap failing, the swap taken back. Nothing
  * unsigned, nothing other than what was signed, and nothing from elsewhere than GitHub is installed.
  */

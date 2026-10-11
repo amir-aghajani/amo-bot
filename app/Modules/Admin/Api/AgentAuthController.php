@@ -10,47 +10,30 @@ use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Auth\Principal;
 use App\Modules\Auth\Services\AgentAuth;
 use App\Modules\Auth\Services\SessionPresenter;
-use App\Modules\Auth\Services\SignInThrottle;
-use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * An agent's panel session (/api/agent): signing in with the one-time link their account in the main bot gave them
- * («نمایندگی» ← «ورود به پنل») — failures throttled per address —, who is signed in and in which shop — their bot's —,
- * ending every other session of theirs, signing out.
+ * An agent's panel session (/api/agent, AgentAuth): signing in with the one-time link the main bot gave them, who is
+ * signed in, ending their other sessions, signing out. Their shop is always their own bot's.
  */
 final class AgentAuthController extends ApiController
 {
-    private const WAY = 'link';
-
     public function __construct(
         private readonly AgentAuth $auth,
-        private readonly SignInThrottle $throttle,
         private readonly SessionPresenter $sessions,
     ) {}
 
     /**
-     * POST /auth/link — {code, replace?}: `replace` lets the link take the place of another agent's session open in this
-     * browser, which it is refused without (the panel asks first).
+     * POST /auth/link — {code, replace?} (AgentAuth::login()): `replace` lets the link take the place of another agent's
+     * session open in this browser, which it is refused without (the panel asks first).
      *
      * @throws SignInRefusedException 401: a code no link of now carries; 409: another agent's session is open here
      * @throws TooManyAttemptsException 429 while this address must wait
      */
     public function link(Request $request, Response $response): Response
     {
-        $this->throttle->check(self::WAY, $request);
-
-        $input = $this->input($request);
-        $principal = $this->auth->attemptCode(Input::text($input, 'code'), Input::truthy($input['replace'] ?? false));
-        if ($principal === null) {
-            $this->throttle->failed(self::WAY, $request);
-
-            throw SignInRefusedException::linkRefused();
-        }
-        $this->throttle->passed(self::WAY, $request);
-
-        return $this->session($response, $principal);
+        return $this->session($response, $this->auth->login($this->input($request), $request));
     }
 
     /** GET /auth/me */

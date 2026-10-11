@@ -31,11 +31,9 @@ use Tests\Fakes\FakeProvider;
 use Tests\Support\FakeTelegram;
 
 /**
- * An agent's bot is a shop of its own run by this installation: its customers, plans, payment methods and texts, the
- * shop's servers; it speaks with its own token, and what it sells — a purchase or a renewal — is drawn from the agent's
- * traffic: a plan the traffic cannot cover is not offered, a delivery it cannot cover (or an unlimited plan, which no
- * pool pays for) fails and the agent hears it in the main bot, a delivery that failed gives its traffic back. The agent
- * is its admin; it has no agency of its own. (The scheduler going round the shops is SchedulerShopsTest's.)
+ * Agents' bots as shops of their own: their customers, plans, methods and texts with their own token; deliveries drawing
+ * the agent's traffic (plans it cannot cover not offered, a short or unlimited delivery failed and the agent told, a failed
+ * delivery's traffic given back); the agent is the bot's admin.
  */
 final class AgentBotsTest extends BotTestCase
 {

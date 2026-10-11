@@ -7,25 +7,19 @@ namespace App\Support;
 use App\Core\Exceptions\ValidationException;
 
 /**
- * Reading loosely typed request input (JSON bodies, forms, query strings, the bot's typed text) the
- * same way everywhere: Persian/Arabic digits are accepted for numbers, anything that is not a scalar
- * reads as empty, and a native number goes through the same rules as its text form. Text is UTF-8 whatever
- * the body: a JSON body cannot be anything else (one that is not reads as none), and a form's field or a
- * query's value that is not is refused under its name — never handed on to the database, which would refuse
- * it with a 500.
+ * Reads loosely typed input (JSON, forms, query strings, the bot's typed text) one way everywhere: Persian and Arabic
+ * digits count, a non-scalar reads as empty, a native number follows the rules of its text. Text that is not UTF-8 is
+ * refused under its field — the database would refuse it with a 500.
  */
 final class Input
 {
-    /** The longest note an admin writes on a payment or an order. */
+    /** The longest note an admin writes on a decision (a payment's, an order's). */
     public const NOTE_MAX = 300;
 
     /** Text that is not UTF-8: no browser sends it, and the database takes nothing else. */
     public const NOT_UTF8 = 'متن این فیلد درست نیست؛ آن را با کدگذاری UTF-8 بفرستید.';
 
-    /**
-     * The whole part of an amount: up to twelve digits, or digits set apart in thousands by commas or spaces — a separator
-     * between groups of three, never anywhere else («1,5» is no 15).
-     */
+    /** The whole part of an amount: up to twelve digits, or thousands separated by commas or spaces («1,5» is no 15). */
     private const WHOLE = '[0-9]{1,3}(?:[, ][0-9]{3})+|[0-9]{1,12}';
 
     /** Booleans as browsers and JSON send them: true/1/"1"/"true"/"on"/"yes"; everything else is false. */
@@ -34,7 +28,7 @@ final class Input
         return in_array(is_string($value) ? strtolower($value) : $value, [true, 1, '1', 'true', 'on', 'yes'], true);
     }
 
-    /** Whether the value reads as a boolean at all (true/false, 0/1 as numbers or text) — a switch that was not sent, or sent as garbage, is neither. */
+    /** Whether the value reads as a boolean at all (true/false, 0/1, as values or text). */
     public static function isBoolean(mixed $value): bool
     {
         return is_bool($value) || in_array(is_string($value) ? strtolower($value) : $value, [0, 1, '0', '1', 'true', 'false'], true);
@@ -54,8 +48,7 @@ final class Input
     }
 
     /**
-     * A password as typed: a space at either end is part of it, so nothing is trimmed; anything that is not text is none
-     * ("").
+     * A password as typed, not trimmed (a space at either end is part of it); "" for anything that is not text.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `$field`: not UTF-8
@@ -93,7 +86,7 @@ final class Input
         return self::integerOf($input[$field] ?? null);
     }
 
-    /** The same rule for one value (the bot's typed text, a callback's number). */
+    /** integer()'s rule for one value (the bot's typed text, a callback's number). */
     public static function integerOf(mixed $value): ?int
     {
         $text = self::digitsOf($value);
@@ -102,9 +95,8 @@ final class Input
     }
 
     /**
-     * A whole number an admin types into a form — "10000", "10,000", "۱۰٬۰۰۰" —: integerOf()'s, its thousands set apart
-     * as amountOf() reads them (only between groups of three), and nothing else around it — no unit, no fraction —; null
-     * otherwise.
+     * A whole number an admin types into a form ("10000", "10,000", "۱۰٬۰۰۰"): thousands separators allowed, no unit, no
+     * fraction; null otherwise.
      */
     public static function wholeOf(mixed $value): ?int
     {
@@ -114,9 +106,8 @@ final class Input
     }
 
     /**
-     * The numbers of a list an admin types — "50000, 100000", "50,000 100,000", "۵۰٬۰۰۰، ۱۰۰٬۰۰۰" —, each as typed, for
-     * wholeOf() to read: apart by spaces, «،» or a comma — but a comma between groups of three digits, which sets a
-     * number's thousands apart («50,000, 100,000» is two numbers; «1,5» is two as well, never 15).
+     * Split a typed list of numbers ("50,000, 100,000", "۵۰٬۰۰۰، ۱۰۰٬۰۰۰") on spaces, «،» and commas — except a comma
+     * between groups of three digits, a thousands separator — each part for wholeOf() to read.
      *
      * @return list<string>
      */
@@ -128,10 +119,8 @@ final class Input
     }
 
     /**
-     * A whole amount a customer typed in the bot or on the website — "۱۵۰٬۰۰۰ تومان", "150,000", "150 000", "۲۰ گیگ":
-     * digits in any script, thousands set apart the usual ways, a unit word after it —, or the API's own decimal form of
-     * one, which the Store API answers amounts in ("150000.00": a fraction of zero); anything else (a fraction, two
-     * numbers, words alone, past twelve digits) = null.
+     * A whole amount a customer types ("۱۵۰٬۰۰۰ تومان", "150 000", "۲۰ گیگ": a unit word allowed) or the API's own
+     * "150000.00"; null for a fraction, two numbers, words alone or more than twelve digits.
      */
     public static function amountOf(mixed $value): ?int
     {
@@ -145,9 +134,8 @@ final class Input
     }
 
     /**
-     * Money the admin types — a plan's price, a level's price per GB, a wallet set right by hand —: whole Toman, the
-     * shop's only unit, as amountOf() reads it ("120000", "۱۲۰٬۰۰۰ تومان", the API's own "120000.00"); a fraction of a
-     * Toman, or anything else, = null — for the field to refuse in its words.
+     * Money an admin types (a price, a wallet adjustment): whole Toman, read as amountOf() reads it; null otherwise, so
+     * the caller refuses the field with its own message.
      *
      * @param array<string, mixed> $input
      */
@@ -157,8 +145,8 @@ final class Input
     }
 
     /**
-     * A non-negative amount with up to two decimals, as a string — a quantity that may have a fraction (a GB of
-     * traffic); thousands set apart as amountOf() takes them; anything else = null.
+     * A non-negative amount with up to two decimals, as a string (GB of traffic); thousands separators allowed; null
+     * otherwise.
      *
      * @param array<string, mixed> $input
      */
@@ -167,7 +155,7 @@ final class Input
         return self::decimalOf($input[$field] ?? null);
     }
 
-    /** The same rule for one value. */
+    /** decimal()'s rule for one value. */
     public static function decimalOf(mixed $value): ?string
     {
         if (preg_match('/^(' . self::WHOLE . ')(\.[0-9]{1,2})?$/', self::numberOf($value), $match) !== 1) {
@@ -180,8 +168,7 @@ final class Input
     }
 
     /**
-     * A free-text note: trimmed, null when blank, refused past `$max` with the one wording every
-     * note field shares.
+     * A free-text note: trimmed, null when blank, refused past `$max` characters.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException
@@ -197,8 +184,7 @@ final class Input
     }
 
     /**
-     * The `is_active` switch of a create/edit form: what was sent, else what the row has
-     * (`$default`), else on — a new row starts active.
+     * The `is_active` switch of a create/edit form: what was sent, else the row's (`$default`), else on.
      *
      * @param array<string, mixed> $input
      */
@@ -214,8 +200,8 @@ final class Input
     }
 
     /**
-     * An amount as Latin-digit text, its thousands set apart as typed: the Persian separator «٬» kept, as the comma it is
-     * (Persian::latinDigits() drops it — «۱٬۵» is no 15 either).
+     * An amount as Latin-digit text with its separators kept: «٬» becomes a comma (Persian::latinDigits() would drop it,
+     * and «۱٬۵» is no 15).
      */
     private static function numberOf(mixed $value): string
     {
@@ -223,7 +209,7 @@ final class Input
     }
 
     /**
-     * `$text` as it came, while it is UTF-8 — what a form's field or a query's value need not be.
+     * `$text` unchanged when it is UTF-8 (a form's field or a query's value need not be).
      *
      * @throws ValidationException 422 on `$field`
      */

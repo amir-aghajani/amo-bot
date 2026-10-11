@@ -12,6 +12,7 @@ use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Exceptions\OrderNotPayableException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
+use App\Modules\Orders\Services\Pricing;
 use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Exceptions\ProviderException;
@@ -26,15 +27,17 @@ use Psr\Log\LoggerInterface;
 
 /**
  * «تمدید خودکار»: a service whose customer turned the switch on is renewed from their wallet once its deadline is within
- * the admin's number of days (RenewalSettings) — a renewal order at the plan's price, paid by the wallet (an agent's
- * credit too), delivered like any other (ProvisioningService::renew()) — and the customer is told what came of it:
- * renewed, the wallet short (once per renewal window), or paid but not delivered (support finishes it). Only a running
- * service with a deadline qualifies: one still waiting for its first connection has none yet, one that never ends needs
- * none, and an ended one is renewed by hand. Two runs never charge a service twice (claim()).
+ * the admin's days (RenewalSettings): a renewal order at the customer's price, paid by the wallet (an agent's credit
+ * counts), delivered like any renewal (ProvisioningService::renew()). The customer is notified of the outcome:
+ * renewed, the wallet short (once per renewal window), or paid but not delivered (support finishes it).
+ *
+ * Only a running service with a deadline qualifies — one waiting for its first connection has none yet, one that never
+ * ends needs none, an ended one is renewed by hand — and only on a plan whose term is at least the window (renews()):
+ * a shorter term would leave the service due again at once. Two runs never charge a service twice (claim()).
  */
 final class AutoRenewal
 {
-    /** `orders.notes` of a renewal the wallet could not pay after all (its balance dropped meanwhile). */
+    /** `orders.notes` of a renewal the wallet could not pay after all (its balance dropped between check and charge). */
     private const NOTE_UNPAID = 'تمدید خودکار: موجودی کیف پول کافی نبود';
 
     public function __construct(
@@ -44,19 +47,19 @@ final class AutoRenewal
         private readonly PaymentService $payments,
         private readonly PaymentMethods $methods,
         private readonly CustomerNotifier $notifier,
+        private readonly Pricing $pricing,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** Whether the customer is offered the switch: the service could renew itself, and the wallet — which pays — is on. */
+    /** Whether the customer is offered the switch: the service could renew itself and the wallet, which pays, is on. */
     public function offeredFor(Subscription $subscription): bool
     {
-        return self::renewable($subscription) && $this->walletOn();
+        return $this->renews($subscription) && $this->walletOn();
     }
 
     /**
-     * offeredFor() of several services at once — a page of a customer's on their website —, by id: the wallet asked
-     * once for them all.
+     * offeredFor() for a page of services, by id, asking about the wallet once.
      *
      * @param iterable<Subscription> $subscriptions
      * @return array<int, bool>
@@ -66,26 +69,31 @@ final class AutoRenewal
         $walletOn = $this->walletOn();
         $offered = [];
         foreach ($subscriptions as $subscription) {
-            $offered[$subscription->id] = $walletOn && self::renewable($subscription);
+            $offered[$subscription->id] = $walletOn && $this->renews($subscription);
         }
 
         return $offered;
     }
 
-    /** Whether the wallet, which pays every automatic renewal, is on — without it nothing is renewed. */
+    /** Whether the wallet, which pays every automatic renewal, is on; without it nothing is renewed. */
     public function walletOn(): bool
     {
         return $this->methods->enabledWallet() !== null;
     }
 
-    /** The service runs, ends some day, and still has its plan (the price). */
-    public static function renewable(Subscription $subscription): bool
+    /**
+     * Whether the service could renew itself: it runs, ends some day, and still has a plan whose term is at least the
+     * renewal window (RenewalSettings::autoRenews()).
+     */
+    public function renews(Subscription $subscription): bool
     {
-        return $subscription->isActive() && $subscription->duration_days > 0 && $subscription->plan_id !== null;
+        $plan = $subscription->plan;
+
+        return $subscription->isActive() && $subscription->duration_hours > 0 && $plan !== null && $this->settings->autoRenews($plan);
     }
 
     /**
-     * The customer's switch — the bot's button, their website's —, set only while it is offered (offeredFor()).
+     * Set the customer's switch (the bot's button, the website's), only while it is offered (offeredFor()).
      *
      * @throws AutoRenewUnavailableException 422 on `auto_renew`
      */
@@ -98,8 +106,8 @@ final class AutoRenewal
     }
 
     /**
-     * The services to renew now: the switch on, the deadline within the admin's days, the customer not banned — the
-     * nearest deadline first.
+     * The services to renew now, nearest deadline first: switch on, deadline within the admin's days, customer not
+     * banned, on a plan whose term is at least the window.
      *
      * @return list<Subscription>
      */
@@ -108,24 +116,25 @@ final class AutoRenewal
         return Subscription::expiringWithin($this->settings->autoRenewDays())
             ->where('auto_renew', true)
             ->whereHas('user', static fn(Builder $user) => $user->where('status', UserStatus::Active->value))
+            ->whereHas('plan', fn(Builder $plan) => $plan->where('duration_hours', '>=', $this->settings->autoRenewHours()))
             ->with(['user', 'plan', 'server'])
             ->oldest('expires_at')
             ->get()->values()->all();
     }
 
     /**
-     * Renew one service, if it is still due, and tell the customer what came of it. Its panel is asked first: the
-     * panel's deadline is the truth (an admin may have extended the client there), and a panel out of reach — or one the
-     * shop is leaving alone a while — waits for the next run with nothing charged. A wallet that cannot pay is told once
-     * per renewal window; one that can pays a renewal order, which is then delivered like any other — and one whose
-     * delivery broke on a fault of the shop's own (paid, the order failed for support's retry) is told so too, the fault
-     * going on up for the run to log.
+     * Renew one service if it is still due, and tell the customer the outcome. The panel is asked first — its deadline is
+     * the truth (an admin may have extended the client there) —; a panel out of reach or in backoff waits for the next
+     * run with nothing charged. A customer whose wallet cannot pay is notified once per renewal window, and one whose
+     * delivery broke on a bug (paid, the order failed for support's retry) too; that exception goes on up for the run
+     * to log.
      */
     public function renew(Subscription $subscription): void
     {
         $wallet = $this->methods->enabledWallet();
         $plan = $subscription->plan;
-        if ($wallet === null || $plan === null || $subscription->server->isBackingOff()) {
+        // A plan whose term was shortened below the window since is not renewed, whatever the switch says.
+        if ($wallet === null || $plan === null || !$this->settings->autoRenews($plan) || $subscription->server->isBackingOff()) {
             return;
         }
 
@@ -141,7 +150,8 @@ final class AutoRenewal
             return;
         }
 
-        $price = Money::normalize($plan->price);
+        // The customer's price (agent price where theirs, less the automatic discount), as createRenewal() orders it.
+        $price = $this->pricing->renewal($subscription->user, $subscription, $plan)->amount();
         if (Money::compare($subscription->user->refresh()->spendable(), $price) < 0) {
             $this->short($subscription, $deadline, $price);
 
@@ -159,8 +169,8 @@ final class AutoRenewal
             // Closed in the same moment (support cancelled it): nothing was charged.
             return;
         } catch (\Throwable $e) {
-            // Paid, and the delivery broke on a fault of the shop's own: the order failed for support's retry, and the
-            // customer hears it as of any renewal paid but not delivered. The fault goes on, to the run's log.
+            // Paid, but the delivery broke on a bug: the order failed for support's retry, and the customer hears it as
+            // any renewal paid but not delivered. The exception goes on to the run's log.
             if ($order->refresh()->status === OrderStatus::Failed) {
                 $this->notifier->renewalFailed($order);
             }
@@ -191,9 +201,9 @@ final class AutoRenewal
     }
 
     /**
-     * The renewal order, made under a lock on the service's row and only while no renewal of it is open — being paid,
-     * paid, in delivery, or paid but not delivered (a failed one waits for the admin's retry, never for a second charge)
-     * — and while the switch is still on: two runs never both charge.
+     * Make the renewal order under a lock on the service's row, only while the switch is still on and no renewal of it is
+     * open — pending, paid, processing, or failed (a failed one waits for support's retry, never a second charge) — so
+     * two runs never both charge.
      */
     private function claim(Subscription $subscription, Plan $plan): ?Order
     {
@@ -213,8 +223,8 @@ final class AutoRenewal
     }
 
     /**
-     * The wallet cannot pay: the customer hears it once per renewal window — the window moves with the deadline, so the
-     * next one tells them again —, the mark claimed first so two runs tell once.
+     * The wallet cannot pay: tell the customer once per renewal window (the window moves with the deadline, so the next
+     * one tells them again). The mark is claimed first, so two runs tell once.
      */
     private function short(Subscription $subscription, Carbon $deadline, string $price): void
     {

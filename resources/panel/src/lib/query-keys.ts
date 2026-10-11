@@ -1,9 +1,8 @@
 /*
- * Every react-query key of the panels, flat and in one place: a page invalidates exactly the keys it
- * names, and no key is a prefix of another — so nothing needs `exact` to avoid sweeping a neighbour.
- * A paged list (`usePagedList`) appends its own {search, status, page} object under its key. The keys
- * of one row (`server(id)`, `payment(id)`, …) have an `every…` prefix beside them, for the live updates,
- * which reload whatever row of a kind is on screen.
+ * Every react-query key of the panels, flat: no key is a prefix of another, so invalidating one never sweeps a
+ * neighbour. A paged list appends its view object under its key. A one-row key (`server(id)`) has an `every…` family
+ * key beside it, which the live updates invalidate to refetch whichever row of that kind is on screen (query-keys.test
+ * holds these rules).
  */
 export const queryKeys = {
   /** The shop's name and whether it is installed (lib/app-info) — the one key a new session keeps (lib/auth). */
@@ -56,6 +55,7 @@ export const queryKeys = {
   referrers: ['referrers'] as const,
   invitees: ['invitees'] as const,
   referralCommissions: ['referral-commissions'] as const,
+  referralAlerts: ['referral-alerts'] as const,
   agency: ['agency'] as const,
   agencySettings: ['agency-settings'] as const,
   agencyLevels: ['agency-levels'] as const,
@@ -81,6 +81,19 @@ export const queryKeys = {
   everyTicket: ['ticket'] as const,
   /** The customers' reviews of the shop (pages/reviews). */
   reviews: ['reviews'] as const,
+  /** The gift codes (pages/gift-codes), and their batches with their counts. */
+  giftCodes: ['gift-codes'] as const,
+  giftCodeBatches: ['gift-code-batches'] as const,
+  /** The lucky wheel's slices, and the spins customers made (pages/wheel). */
+  wheelPrizes: ['wheel-prizes'] as const,
+  wheelSpins: ['wheel-spins'] as const,
+  /** The loyalty tiers (pages/loyalty), the cashback rules (pages/cashback) and the nightly draws (pages/lottery). */
+  loyaltyTiers: ['loyalty-tiers'] as const,
+  cashbackRules: ['cashback-rules'] as const,
+  lotteryDraws: ['lottery-draws'] as const,
+  /** The discount codes (pages/discount-codes) and the timed sales (pages/sales). */
+  discountCodes: ['discount-codes'] as const,
+  sales: ['sales'] as const,
   /**
    * Whether a picture of the API's the browser did not draw — a receipt, a ticket message's — is there to download, or
    * why it is not (components/api-picture): by its address.

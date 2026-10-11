@@ -11,19 +11,19 @@ use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Subscriptions\Enums\MoveStep;
 
 /**
- * A move to another server that did not happen, and where it stopped (`step`). Nothing changed in any case. A panel that
- * failed is a 502 under its step (`errors.previous` is the screen's cue to offer leaving that server out), the service's
- * own state a 422 on `status`. A panel's failure is said in a word (ProviderErrorPresenter::summary()) until whoever
- * answers the screen words it for its reader (worded()): nothing of the panel reaches anyone it was not worded for.
+ * A move to another server that did not happen, and where it stopped (`step`); nothing changed. A panel that failed is
+ * a 502 under its step (`errors.previous` is the screen's cue to offer leaving that server out); the service's own state
+ * is a 422 on `status`. A panel failure is worded as the summary until the caller rewords it for its reader (worded()),
+ * so the owner's diagnosis never reaches anyone else.
  */
 final class MoveException extends DomainRuleException
 {
     private function __construct(
         public readonly MoveStep $step,
-        /** The server it names — the previous one, or the target —; null for the service's own state. */
+        /** The server it names (the previous one or the target); null for the service's own state. */
         private readonly ?string $server,
         string $reason,
-        /** The panel's failure behind it, which worded() words for its reader. */
+        /** The panel's failure behind it, which worded() rewords for the reader. */
         private readonly ?ProviderException $panel = null,
     ) {
         parent::__construct(self::text($step, $server, $reason), 0, $panel);
@@ -34,7 +34,7 @@ final class MoveException extends DomainRuleException
         return new self(MoveStep::Previous, $server->name, ProviderErrorPresenter::summary($e), $e);
     }
 
-    /** The target could not take the service: its panel failed, or a reason of the shop's own (`$why`). */
+    /** The target could not take the service: its panel failed, or another reason (`$why`). */
     public static function targetServer(Server $server, ProviderException|string $why): self
     {
         return $why instanceof ProviderException
@@ -48,8 +48,8 @@ final class MoveException extends DomainRuleException
     }
 
     /**
-     * The same failure, its panel's said in `$words`' words — the reader's (the owner the diagnosis, anyone else the
-     * word) —; one no panel failed is as it was.
+     * The same failure with the panel's part reworded by `$words` for the reader (the owner the diagnosis, anyone else
+     * the summary); one with no panel failure is returned as it was.
      *
      * @param \Closure(ProviderException): string $words
      */

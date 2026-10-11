@@ -11,11 +11,8 @@ use chillerlan\QRCode\QROptions;
 use Psr\Log\LoggerInterface;
 
 /**
- * The picture a delivered service comes with: the subscription link as a QR code, drawn on the
- * background (QrBackground) — a white plate with the code and its quiet zone, centred, sized to the
- * picture, so any background works and the shipped one's own white square is covered exactly.
- * Needs GD; without it (or with a background GD cannot read) `render()` gives null and the customer
- * gets the text alone — a missing picture must never cost them the link.
+ * The QR card a delivered service comes with: the subscription link as a QR code on a white plate centred on the
+ * background. Needs GD; without it (or with a background GD cannot read) render() gives null and the text goes alone.
  */
 final class QrCard
 {

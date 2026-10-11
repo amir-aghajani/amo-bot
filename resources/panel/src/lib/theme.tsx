@@ -14,8 +14,8 @@ interface ThemeState {
 const ThemeContext = createContext<ThemeState | null>(null)
 
 /**
- * The theme on the page: the class the tokens of index.css hang on, the browser's own controls, and the phone's chrome
- * in the page's background (--surface-1 — each index.html's inline script sets all three before the first paint).
+ * Apply a theme: the `dark` class index.css's tokens hang on, the browser's own controls (color-scheme), and the phone's
+ * browser chrome (theme-color, the page background). Each index.html's inline script does the same before first paint.
  */
 function apply(theme: Theme) {
   const root = document.documentElement
@@ -24,7 +24,7 @@ function apply(theme: Theme) {
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(root).getPropertyValue('--surface-1').trim())
 }
 
-/** Dark unless the admin chose light — there is no "system" theme, by decision. */
+/** Dark unless this browser chose light. There is deliberately no "follow the system" theme. */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => (readStored(STORAGE_KEYS.theme) === 'light' ? 'light' : 'dark'))
 

@@ -4,11 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Auth;
 
-/**
- * Who decided something (Actor): a principal of the panels or of a shop's website — the owner, an agent, one of the
- * shop's admins on its website —, one of the shop's admins pressing the report group's buttons or answering a ticket
- * there, or the shop itself — a task, a timer: nobody's name.
- */
+/** The kinds of Actor: the three principals, an admin in the report group, and the shop itself. */
 enum ActorKind: string
 {
     case Owner = 'owner';

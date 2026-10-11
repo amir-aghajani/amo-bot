@@ -79,19 +79,19 @@ describe('a server’s connection', () => {
     expect(await fact('تایم‌اوت')).toBe('۴۵ ثانیه')
   })
 
-  it('names a token way in by its connector’s own word, once that is read', async () => {
+  it('names the token sign-in with its connector’s label, once that is read', async () => {
     const fact = facts(serverRow(), keyedConnector())
     expect(await fact('احراز هویت')).toBe('کلید API')
   })
 
-  it('says nothing of a token way in before its connector’s word is read', async () => {
+  it('says nothing about the token sign-in before its connector’s label is read', async () => {
     facts(serverRow())
 
     expect(await screen.findByText('گواهی TLS')).toBeTruthy()
     expect(screen.queryByText('احراز هویت')).toBeNull()
   })
 
-  it('is said of nothing while this installation has not its connector', async () => {
+  it('is not shown while this installation lacks its connector', async () => {
     facts(serverRow({ driver: 'marzban', form: null }))
 
     expect(await screen.findByText('اشتراک‌های فعال')).toBeTruthy()

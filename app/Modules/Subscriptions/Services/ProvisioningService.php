@@ -22,7 +22,9 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Providers\Services\ServerHealth;
 use App\Modules\Providers\Support\PanelConnection;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Exceptions\ExtraUnavailableException;
 use App\Modules\Subscriptions\Exceptions\MoveException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
 use App\Modules\Subscriptions\Exceptions\ServiceNotReadException;
@@ -35,35 +37,35 @@ use Illuminate\Support\Carbon;
 use Psr\Log\LoggerInterface;
 
 /**
- * The shop's services on their panels: made for a purchase, renewed, given days and traffic, started on a renewed
- * period, re-linked, switched, moved, deleted — and read back.
+ * Every change of a service on its panel — created for a purchase, renewed, given days and traffic, sold extras, started
+ * on a queued period, re-linked, switched, moved, deleted — and every read back.
  *
- * The panel is the truth about a client: whatever it answers is kept on the row by one mapping (apply()), with the
- * moment it was asked, and only over the row as it was read — so a sync that read the panel before a renewal never puts
- * its older numbers back, and never marks deleted a service that moved meanwhile. A change made on the panel holds the
- * service for its length (a lease on the row, holding()): two of them — a renewal while a grant runs, an admin's move
- * — never interleave, the second working on what the first left. The hold is renewed before every call to a panel, for
- * as long as that call may take (holdSeconds()), so a holder at work keeps it; a change that loses it all the same once
- * the panel took it (it stalled past its time, and another took the service) records what the panel answered on the row
- * by its key and is done — never undone, never done again (record()). Every contact is recorded on the server
- * (ServerHealth), so a panel that stops answering is left alone a while.
+ * The panel is the truth about a client: its answers reach the row through one mapping (values()), stamped with when
+ * the panel was asked. Three rules keep concurrent work safe:
+ * - A change holds the service with a lease on its row (holding()), renewed before every panel call for as long as the
+ *   call may take (holdSeconds()), so two changes never interleave; the second waits, then works on what the first left.
+ * - A read that is not a change only writes over the row as it read it (apply()), so a sync that read the panel before
+ *   a renewal never puts older numbers back, nor marks deleted a service that moved meanwhile.
+ * - A change the panel took is always recorded, even when its lease was lost meanwhile (record()): undoing or retrying
+ *   it would apply it twice.
+ * Every contact is recorded on the server (ServerHealth), so a panel that stops answering is left alone a while.
  */
 final class ProvisioningService
 {
     /**
-     * The most HTTP requests one call to a panel makes: a 3x-ui update reads the client, writes it and reads it back with
-     * its counters and its link — and signs in again on the way when its session ran out.
+     * The most HTTP requests one call to a panel makes: a 3x-ui update reads the client, writes it, reads it back with
+     * its counters and link, and may sign in again on the way.
      */
     private const REQUESTS_A_CALL = 8;
 
-    /** What a hold keeps on top of the call it covers: the shop's own reads and writes around it. */
+    /** Seconds a hold keeps on top of the panel call it covers, for the shop's reads and writes around it. */
     private const HOLD_MARGIN = 30;
 
-    /** How long a change waits for another one of the same service to end: tries, and the pause between them (5 s). */
+    /** How long a change waits for another change of the same service: tries, and the pause between them (5 s in all). */
     private const WAIT_TRIES = 20;
     private const WAIT_MICROSECONDS = 250_000;
 
-    /** Why a service's link is not changed (rotateLink()): it does not run, or its panel cannot. */
+    /** Why rotateLink() refuses: the service does not run, or its panel cannot rotate. */
     public const ROTATE_INACTIVE = 'لینک فقط برای سرویس فعال عوض می‌شود.';
     public const ROTATE_UNSUPPORTED = 'سرور این سرویس تغییر لینک را پشتیبانی نمی‌کند.';
 
@@ -79,10 +81,9 @@ final class ProvisioningService
     ) {}
 
     /**
-     * How long a change holds a service at a time (holding()): the longest one call to the panels it asks may take —
-     * their timeout for each request the call makes — and a margin. Renewed before every call (held()), the hold is never
-     * lost by a holder at work, and one that died lets go of the service this long after its last call. A grant holds
-     * its part on a server as long (Grants): a service's turn there is one call between two of its steps.
+     * How long a change holds a service at a time: the panel's timeout for each request one call may make, plus a margin
+     * — the slowest of the servers involved (a move's two). A holder that died lets go this long after its last call.
+     * Grants hold their part on a server as long: a service's turn there is one call between two steps.
      */
     public static function holdSeconds(Server $server, Server ...$others): int
     {
@@ -92,9 +93,9 @@ final class ProvisioningService
     }
 
     /**
-     * A new client on a panel for a paid purchase, and its service. `$complete` (the order's completion) runs in the
-     * transaction that writes the service: both land, or neither — and then the client is taken back off the panel, so a
-     * retry leaves no stray one behind.
+     * Create the client for a paid purchase and its service row. `$complete` (the order's completion) runs in the
+     * transaction that writes the row; if that transaction fails, the client is deleted from the panel again so a retry
+     * leaves nothing behind.
      *
      * @param \Closure(Subscription): void $complete
      * @throws NoServerAvailableException when the plan cannot be delivered now, or the panel gave no link
@@ -106,15 +107,14 @@ final class ProvisioningService
         $user = $order->user;
         ['server' => $server, 'inbounds' => $inbounds] = $this->selector->resolve($plan, $order->server_id);
 
-        // The customer gets one subscription link and nothing else: a panel that stopped serving them since the last
-        // check gets no client — the order fails with the reason instead.
+        // The customer gets one subscription link and nothing else: a panel that stopped serving links since its last
+        // check gets no client, and the order fails with the reason.
         if (!$this->onPanel($server, static fn(ProviderInterface $panel): bool => $panel->servesSubscriptions())) {
             throw new NoServerAvailableException("سرور اشتراک (Subscription) در پنل «{$server->name}» فعال نیست؛ آن را فعال کنید و سرور را دوباره بررسی کنید.");
         }
 
-        // The term starts counting at the customer's first connection (the panel keeps the clock); a plan without one
-        // never ends. One client on every inbound the plan sells there: the customer gets one link for all of them.
-        $spec = $this->spec($user, $this->naming->next($user, $server), $plan->trafficBytes(), ServiceTerms::termOf($plan->duration_days), $plan->ip_limit);
+        // One client on every inbound the plan sells there; its term starts at the first connection.
+        $spec = $this->spec($user, $this->naming->next($user, $server), $plan->trafficBytes(), ServiceTerms::termOf($plan->duration_hours), $plan->ip_limit);
         $observed = now();
         $client = $this->onPanel($server, static fn(ProviderInterface $panel): ClientInfo => $panel->createClient($inbounds->pluck('remote_key')->values()->all(), $spec));
         if ($client->subscriptionUrl === null) {
@@ -132,13 +132,13 @@ final class ProvisioningService
                     'remote_name' => $client->name,
                     'status' => SubscriptionStatus::Active,
                     'ip_limit' => $spec->ipLimit,
-                    'duration_days' => $plan->duration_days,
-                    // The customer's «تمدید خودکار» starts as the admin set it for new services.
-                    'auto_renew' => $this->renewal->autoRenewByDefault(),
+                    'duration_hours' => $plan->duration_hours,
+                    // «تمدید خودکار» starts as the admin set it for new services, on a plan that can renew itself at all.
+                    'auto_renew' => $this->renewal->autoRenewByDefault() && $this->renewal->autoRenews($plan),
                 ]);
                 $subscription->fill(self::mirror($subscription, $client, $observed))->save();
                 $order->forceFill(['subscription_id' => $subscription->id])->save();
-                // The order at hand knows its service from now on — whoever words its delivery reads this one.
+                // Whoever words the delivery reads the service off this order.
                 $order->setRelation('subscription', $subscription);
                 $complete($subscription);
 
@@ -156,7 +156,7 @@ final class ProvisioningService
     }
 
     /**
-     * The renewal order's plan onto its service (ServiceTerms::renewal()), from what its panel says right now — the
+     * Apply the renewal order's plan to its service (ServiceTerms::renewal()), from what the panel says right now — the
      * traffic left and the deadline are the panel's. `$complete` runs in the transaction that writes the row.
      *
      * @param \Closure(Subscription): void $complete
@@ -172,28 +172,16 @@ final class ProvisioningService
             $this->read($subscription, $lease);
 
             $terms = ServiceTerms::renewal($subscription, $plan, $this->renewal->carriesTraffic());
-            [$client, $observed] = $this->change($subscription, $terms, $lease);
-            $this->db->transaction(function () use ($subscription, $plan, $terms, $client, $observed, $lease, $complete): void {
-                $this->record($subscription, $client, $observed, $lease, [
-                    'plan_id' => $plan->id,
-                    'status' => SubscriptionStatus::Active,
-                    'ip_limit' => $terms->ipLimit,
-                    'duration_days' => $terms->durationDays,
-                    'disabled_at' => null,
-                    'period_ends_at' => $terms->periodEndsAt,
-                    'next_period_bytes' => $terms->nextPeriodBytes,
-                ]);
-                $complete($subscription);
-            });
+            $this->applyTerms($subscription, $terms, $lease, ['plan_id' => $plan->id, 'status' => SubscriptionStatus::Active, 'ip_limit' => $terms->ipLimit, 'disabled_at' => null] + $terms->columns(), $complete);
 
             return $subscription;
         });
     }
 
     /**
-     * The period a renewal was queued behind has ended (`period_ends_at`): what remains is capped at the renewed traffic
-     * and counted afresh (ServiceTerms::nextPeriod()), by the panel's counters read now. A client the panel no longer
-     * has, or a service that used everything, has nothing to cap: the queued period just goes.
+     * Start the period a renewal was queued behind, once `period_ends_at` has passed: what remains is capped at the
+     * renewed traffic and counted afresh (ServiceTerms::nextPeriod()), by the panel's counters now. A client the panel
+     * no longer has, or a service that used everything, has nothing to cap: the queued period is just dropped.
      *
      * @throws ProviderException|ServiceBusyException
      * @throws ModelNotFoundException when the service is gone
@@ -214,15 +202,14 @@ final class ProvisioningService
                 return;
             }
 
-            [$client, $observed] = $this->change($subscription, $terms, $lease);
-            $this->record($subscription, $client, $observed, $lease, $over);
+            $this->applyTerms($subscription, $terms, $lease, $over);
             $this->logger->info('Subscription {id} began its renewed period with {bytes} bytes', ['id' => $subscription->id, 'bytes' => $terms->totalBytes]);
         });
     }
 
     /**
-     * Days and traffic on top of what the service has — its share of a grant (Grants), or support's extension of it
-     * (SubscriptionActions::extend()) — worked out from the row as its panel last reported it (ServiceTerms::grant()).
+     * Add days and traffic to a service — its share of a grant, or support's extension — worked out from the row as the
+     * panel last reported it (ServiceTerms::grant()).
      *
      * @throws ProviderException|ServiceBusyException
      */
@@ -230,19 +217,44 @@ final class ProvisioningService
     {
         $this->holding($subscription, function (Lease $lease) use ($subscription, $days, $bytes): void {
             $terms = ServiceTerms::grant($subscription, $days, $bytes);
-            [$client, $observed] = $this->change($subscription, $terms, $lease);
-            $this->record($subscription, $client, $observed, $lease, [
-                'duration_days' => $terms->durationDays,
-                'period_ends_at' => $terms->periodEndsAt,
-                'next_period_bytes' => $terms->nextPeriodBytes,
-            ]);
+            $this->applyTerms($subscription, $terms, $lease, $terms->columns());
         });
     }
 
     /**
-     * The service as its panel has it right now — with whether it is connected when `$presence` is asked (the customer's
-     * own screen) —, or null when the panel no longer has it. The row is brought up to date on the way (apply()): marked
-     * deleted in that case.
+     * Deliver the extra traffic or time an order bought onto its service (ServiceTerms::extra()), from what the panel
+     * says right now. The service must still be able to take it by the panel's numbers (CustomerExtras::problem()):
+     * switched off by support since, or ended on the other count, the order fails with the reason. `$complete` runs in
+     * the transaction that writes the row.
+     *
+     * @param \Closure(Subscription): void $complete
+     * @throws NotFoundException when the panel no longer has the client
+     * @throws ExtraUnavailableException
+     * @throws ProviderException|ServiceBusyException
+     */
+    public function addExtra(Order $order, \Closure $complete): Subscription
+    {
+        $subscription = $order->subscription ?? throw new \LogicException("Extra order #{$order->id} has no subscription.");
+        $kind = ExtraKind::of($order->type) ?? throw new \LogicException("Order #{$order->id} buys no extra.");
+
+        return $this->holding($subscription, function (Lease $lease) use ($order, $subscription, $kind, $complete): Subscription {
+            $this->read($subscription, $lease);
+            $problem = CustomerExtras::problem($subscription, $kind);
+            if ($problem !== null) {
+                throw new ExtraUnavailableException($problem);
+            }
+
+            $terms = ServiceTerms::extra($subscription, (int) $order->days, (int) $order->traffic_bytes);
+            $this->applyTerms($subscription, $terms, $lease, $terms->columns(), $complete);
+            $this->logger->info('Subscription {id} got {extra} from order {order}', ['id' => $subscription->id, 'extra' => $kind->words($kind->quantityOf($order)), 'order' => $order->id]);
+
+            return $subscription;
+        });
+    }
+
+    /**
+     * Read the service from its panel now and bring the row up to date (apply()); null when the panel no longer has the
+     * client, in which case the row is marked deleted. `$presence` also asks whether it is connected (a customer's screen).
      *
      * @throws ProviderException when the panel cannot be asked
      */
@@ -256,11 +268,9 @@ final class ProvisioningService
     }
 
     /**
-     * The service as its customer's own screen shows it — the bot's, their website's —: read from its panel now, with
-     * whether it is connected (inspect(), presence asked); null when the panel no longer has the client (the row is
-     * marked deleted). A panel the shop leaves alone a while after it failed (Server::isBackingOff()) is not asked — a
-     * customer does not wait out its timeout —, and one that fails is logged: either way the screen could not read it, and
-     * says so — the row's copy is never passed off as fresh.
+     * The service for its customer's own screen (the bot's, the website's): inspect() with presence. A panel in backoff
+     * (Server::isBackingOff()) is not asked, so the customer does not wait out its timeout; a panel that fails is logged.
+     * Either way the caller learns it could not read the service — the row's copy is never passed off as fresh.
      *
      * @throws ServiceNotReadException
      */
@@ -280,9 +290,9 @@ final class ProvisioningService
     }
 
     /**
-     * inspect() for every active service on the server — every bot's — from one read of its panel (listClients()). A
-     * client the list does not show is asked for on its own: only that answer marks a service deleted, never a list that
-     * came back short; a panel that cannot list its clients is asked for each. Answers how many it read.
+     * inspect() for every active service on the server (every bot's) from one list of the panel's clients. A client the
+     * list does not show is asked for on its own — only that answer marks a service deleted, never a list that came back
+     * short —; a panel that cannot list its clients is asked for each. Returns how many services it read.
      *
      * @throws ProviderException when the panel cannot be asked
      */
@@ -313,27 +323,23 @@ final class ProvisioningService
         return $subscriptions->count();
     }
 
-    /**
-     * Whether the service's panel can give its client a new link («تغییر لینک»): the bot offers the button, and the hint
-     * that points at it, by it.
-     */
+    /** Whether the service's panel can give its client a new link («تغییر لینک»): the bot shows the button by it. */
     public function rotates(Subscription $subscription): bool
     {
         return $this->providers->capabilities($subscription->server->driver)->linkRotation;
     }
 
-    /** Whether the service's link may be changed now (rotateLink()): it runs, and its panel can give it a new one. */
+    /** Whether rotateLink() would work now: the service runs and its panel can rotate. */
     public function rotatable(Subscription $subscription): bool
     {
         return $subscription->isActive() && $this->rotates($subscription);
     }
 
     /**
-     * «تغییر لینک»: fresh credentials and a fresh subscription link for the client, so the link handed out so far — and
-     * every device on it — stops working; limits, expiry and counters stay. The row learns the new link; the customer
-     * gets it from the caller. Only a service that runs, on a panel that can (rotatable()).
+     * «تغییر لینک»: fresh credentials and a fresh subscription link for the client, so the old link — and every device
+     * on it — stops working; limits, expiry and counters stay. The row learns the new link; the caller sends it.
      *
-     * @throws ValidationException 422 on `status`: the service does not run, or its panel cannot give it a new link
+     * @throws ValidationException 422 on `status`: the service does not run, or its panel cannot rotate
      * @throws ProviderException|ServiceBusyException
      */
     public function rotateLink(Subscription $subscription): Subscription
@@ -358,8 +364,8 @@ final class ProvisioningService
     }
 
     /**
-     * Switch the client off (or back on) on the panel, then the row: active → disabled with the moment it was switched
-     * off, disabled → active. False when the service is no longer in the state the switch is for (someone just did it).
+     * Switch the client off (or back on) on the panel, then the row: active → disabled (stamped), disabled → active.
+     * False when the service is no longer in the state the switch is for (someone just did it).
      *
      * @throws ProviderException|ServiceBusyException
      */
@@ -379,12 +385,11 @@ final class ProvisioningService
     }
 
     /**
-     * Move the service to another server: a new client there with what is left — the rest of the traffic as its quota,
-     * the same deadline (or, while the clock has not started, the same term from the first connection) — then the old
-     * client deleted and the row pointed at the new one, with its new link. The old panel is read first, so what is left
-     * is its latest word. With `$leavePrevious` (it cannot be reached) it is not contacted at all: the row's last numbers
-     * are carried over and the old client stays there for the admin to delete. A delete the old panel refuses takes the
-     * new client back — nothing moved.
+     * Move the service to another server: a new client there with what is left (the remaining traffic as its quota, the
+     * same deadline, or the same pending term), then the old client deleted and the row pointed at the new one. The old
+     * panel is read first so what is left is current. With `$leavePrevious` (that panel is out of reach) it is not
+     * contacted: the row's last numbers are carried over and the old client stays there for the admin to delete. A
+     * delete the old panel refuses takes the new client back — nothing moved.
      *
      * @throws NoServerAvailableException when the target cannot take the service
      * @throws MoveException naming the step that failed
@@ -399,6 +404,7 @@ final class ProvisioningService
             }
             $inbounds = $this->selector->moveTarget($subscription->plan, $target);
 
+            // What is left, as the old panel says now.
             if (!$leavePrevious) {
                 try {
                     $this->read($subscription, $lease, required: false);
@@ -410,6 +416,7 @@ final class ProvisioningService
                 throw MoveException::service("سرویس {$subscription->remote_name} دیگر فعال نیست؛ چیزی برای انتقال نمانده.");
             }
 
+            // The new client on the target.
             $spec = $this->spec($subscription->user, $this->naming->nameOn($subscription, $target), $subscription->remainingBytes() ?? 0, ServiceTerms::expiryOf($subscription), $subscription->ip_limit);
             $observed = now();
             try {
@@ -423,13 +430,13 @@ final class ProvisioningService
                 throw MoveException::targetServer($target, 'برای کلاینت لینک اشتراک نساخت؛ سرور اشتراک پنلش را بررسی کنید.');
             }
 
+            // The old client off its panel; if that fails, the new one goes again and nothing moved.
             if (!$leavePrevious) {
                 try {
                     $this->held($lease, $source, static fn(ProviderInterface $panel) => $panel->deleteClient($subscription->remote_name));
                 } catch (NotFoundException) {
                     // Gone from the old panel already.
                 } catch (ProviderException|ServiceBusyException $e) {
-                    // Nothing moved: the new client goes again.
                     $this->takeBack($target, $spec->name);
 
                     throw $e instanceof ProviderException ? MoveException::previousServer($source, $e) : $e;
@@ -456,10 +463,10 @@ final class ProvisioningService
     }
 
     /**
-     * The admin's delete: the client off the panel and the row gone for good. The orders that sold or renewed it stay —
-     * the sales record — pointing at nothing. A client the panel no longer has is gone already (and one the last sync
-     * found gone is not asked about again); with `$leavePanel` (the panel is out of reach and the admin said so) the
-     * panel is not contacted and the client stays there for the admin to remove. True when this call removed the row.
+     * The admin's delete: the client off the panel and the row gone for good. The orders that sold or renewed it stay
+     * (the sales record) and point at nothing. A client the panel no longer has counts as deleted, and one already found
+     * gone is not asked about again; with `$leavePanel` (the panel is out of reach) the panel is not contacted and the
+     * client stays there for the admin to remove. True when this call removed the row.
      *
      * @throws ProviderException|ServiceBusyException
      */
@@ -475,7 +482,7 @@ final class ProvisioningService
             }
 
             $deleted = $this->db->transaction(static function () use ($subscription): bool {
-                // The foreign key lets the orders go by itself, but a database's own cascade is no statement the change
+                // The foreign key would let the orders go by itself, but a database cascade is no statement the change
                 // feed sees: written here, the orders screen follows.
                 Order::query()->where('subscription_id', $subscription->id)->update(['subscription_id' => null]);
 
@@ -495,9 +502,9 @@ final class ProvisioningService
     }
 
     /**
-     * Do `$work` holding the service (a lease on its row, as long as a call to its panel — or to `$others`, a move's
-     * target — may take, renewed before each: held()): of two changes of one service at once, the second waits for the
-     * first — a few seconds at most, then ServiceBusyException — and works on the row as the first left it.
+     * Run `$work` holding the service: a lease on its row, as long as a call to its panel — or to `$others`, a move's
+     * target — may take. A second change of the same service waits a few seconds for the first, then gives up with
+     * ServiceBusyException; once it gets the lease it works on the row as the first left it.
      *
      * @template T
      * @param \Closure(Lease): T $work
@@ -529,7 +536,7 @@ final class ProvisioningService
     }
 
     /**
-     * The held service read from its panel and kept (apply()) — what a change that adds to it starts from.
+     * Read the held service from its panel and keep the answer (apply()) — what a change that adds to it starts from.
      *
      * @throws NotFoundException when the panel no longer has the client and one is `$required`
      * @throws ProviderException|ServiceBusyException
@@ -547,28 +554,39 @@ final class ProvisioningService
     }
 
     /**
-     * The terms onto the held service's client — its counters reset first when they start afresh — and the client as the
-     * panel answered, with the moment it was asked.
+     * Send the terms to the held service's client (resetting its counters first when the terms start afresh) and record
+     * the panel's answer together with what the change decides itself (`$own`). With `$complete`, the row and the
+     * order's completion are written in one transaction.
      *
-     * @return array{ClientInfo, Carbon}
+     * @param array<string, mixed> $own
+     * @param (\Closure(Subscription): void)|null $complete
      * @throws ProviderException|ServiceBusyException
      */
-    private function change(Subscription $subscription, ServiceTerms $terms, Lease $lease): array
+    private function applyTerms(Subscription $subscription, ServiceTerms $terms, Lease $lease, array $own, ?\Closure $complete = null): void
     {
         $observed = now();
         if ($terms->resetCounters) {
             $this->held($lease, $subscription->server, static fn(ProviderInterface $panel) => $panel->resetClientTraffic($subscription->remote_name));
         }
         $spec = $this->spec($subscription->user, $subscription->remote_name, $terms->totalBytes, $terms->expiry, $terms->ipLimit);
+        $client = $this->held($lease, $subscription->server, static fn(ProviderInterface $panel): ClientInfo => $panel->updateClient($spec));
 
-        return [$this->held($lease, $subscription->server, static fn(ProviderInterface $panel): ClientInfo => $panel->updateClient($spec)), $observed];
+        if ($complete === null) {
+            $this->record($subscription, $client, $observed, $lease, $own);
+
+            return;
+        }
+        $this->db->transaction(function () use ($subscription, $client, $observed, $lease, $own, $complete): void {
+            $this->record($subscription, $client, $observed, $lease, $own);
+            $complete($subscription);
+        });
     }
 
     /**
-     * One call to a held service's panel — or to the panel it moves to —, the hold renewed first for as long as a call may
-     * take (holdSeconds()): a holder at work keeps the service. One that lost it meanwhile — it stalled past its time, and
-     * another change took the service — stops before the call, busy: the panel has not taken this change (at most its
-     * first step, a counters reset, which the next try reads back), and the change is tried again.
+     * One call to the panel of a held service — or of the server it moves to —, the lease renewed first for as long as a
+     * call may take. A holder that lost the lease meanwhile (it stalled past its time and another change took the
+     * service) stops before the call with ServiceBusyException: the panel has not taken this change (at most its first
+     * step, a counters reset, which the next try reads back).
      *
      * @template T
      * @param \Closure(ProviderInterface): T $call
@@ -586,11 +604,10 @@ final class ProvisioningService
     }
 
     /**
-     * What the panel answered about the client, onto the row (values()), in one write and only over the row as it was
-     * read: the same client on the same server in the same status. Held (`$lease`), the write is the holder's; otherwise
-     * nobody may be changing the service right now and the row's copy may not be fresher than this answer — so a sync
-     * that read the panel before a renewal does not put its older numbers back, nor mark deleted a service that moved
-     * meanwhile. A client the panel no longer has (`$client` null) marks the row deleted. True when the row was written.
+     * Write the panel's answer onto the row (values()). Under a lease the write is the holder's. Otherwise it only lands
+     * over the row as it was read — same server, client and status, nobody holding it, its copy not fresher than this
+     * answer — so a sync that read the panel before a renewal cannot overwrite it. A client the panel no longer has
+     * (`$client` null) marks the row deleted. True when the row was written.
      */
     private function apply(Subscription $subscription, ?ClientInfo $client, Carbon $observedAt, ?Lease $lease = null): bool
     {
@@ -614,11 +631,9 @@ final class ProvisioningService
     }
 
     /**
-     * A held change's outcome onto the row — what the panel answered, with what the change decided itself (`$own`: a
-     * renewal's plan and its queued period, a move's new server and client) — under the hold. Lost since the last call
-     * (the change stalled past its time, and another took the service), it is written by the row's key all the same: the
-     * panel has the change, so the row says so, and the change is done — undone or tried again, it would be done twice.
-     * That is logged: two changes of the service overlapped.
+     * Write a change's outcome onto the held row: the panel's answer plus what the change decided itself (`$own`). If the
+     * lease was lost since the last panel call, it is written by the row's key anyway and logged: the panel has the
+     * change, so the row must say so — undoing or retrying it would apply it twice.
      *
      * @param array<string, mixed> $own
      * @throws ModelNotFoundException when the service is gone meanwhile
@@ -641,8 +656,8 @@ final class ProvisioningService
     }
 
     /**
-     * The row as the panel's answer leaves it (mirror(); deleted when the panel no longer has the client), with what a
-     * change decided itself (`$own`) — and its status, by both.
+     * The row's new values from the panel's answer (mirror(); deleted when the panel no longer has the client) and the
+     * change's own (`$own`), with the status that follows from both.
      *
      * @param array<string, mixed> $own
      * @return array<string, mixed>
@@ -659,9 +674,9 @@ final class ProvisioningService
     }
 
     /**
-     * The row's columns that mirror the panel, from what it answered about the client: counters, quota, link, and the term
-     * — the deadline once the panel has started the clock, the term still waiting for the first connection, or none.
-     * A deadline the panel moved (an extension there) moves a queued renewal's period with it.
+     * The columns that mirror the panel: counters, quota, link, and the term — the deadline once the panel started the
+     * clock, the term still waiting for the first connection, or none. A deadline the panel moved (an extension made
+     * there) moves a queued renewal period with it.
      *
      * @return array<string, mixed>
      */
@@ -671,7 +686,7 @@ final class ProvisioningService
             'upload_bytes' => $client->uploadBytes,
             'download_bytes' => $client->downloadBytes,
             'traffic_limit_bytes' => $client->totalBytes,
-            // The panel's subscription server may move (another domain, port or path): the kept link follows it. A panel
+            // The panel's subscription server may move (another domain, port or path): the kept link follows. A panel
             // that stopped serving links leaves the last one known.
             'subscription_url' => $client->subscriptionUrl ?? $row->subscription_url,
             'last_synced_at' => $observedAt,
@@ -681,7 +696,8 @@ final class ProvisioningService
         if ($deadline === null) {
             $pending = $client->expiry->pendingSeconds();
 
-            return $values + ['expires_at' => null, 'starts_at' => null, 'duration_days' => $pending !== null ? (int) ceil($pending / ServiceTerms::DAY) : 0];
+            // The term waiting for the first connection, in whole hours (a part of one counts as one).
+            return $values + ['expires_at' => null, 'starts_at' => null, 'duration_hours' => $pending !== null ? (int) ceil($pending / ServiceTerms::HOUR) : 0];
         }
 
         $expiresAt = Carbon::instance($deadline);
@@ -698,8 +714,8 @@ final class ProvisioningService
     }
 
     /**
-     * Where the service stands once the panel's numbers are in: an active one whose time or traffic ran out has ended;
-     * an ended one the panel extended (time and traffic left) runs again. Support's switch, and a deleted one, stay.
+     * The status once the panel's numbers are in: an active service whose time or traffic ran out has ended; an ended one
+     * the panel extended runs again. Support's switch and a deleted row stay as they are.
      */
     private static function statusOf(Subscription $row): SubscriptionStatus
     {

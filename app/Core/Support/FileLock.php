@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Support;
 
 /**
- * "Only one of us at a time" between processes, with nothing but a file — shared hosting has no lock server: the
- * scheduler's run (the cron, the /cron address and the poller's tick never overlap), the poller itself (one process
- * talks to Telegram), and config.php's writers, each in its turn. The lock is the operating system's, so a process that
- * dies lets go of it with its last breath.
+ * A lock between processes using only a file (shared hosting has no lock server): the scheduler's run, the poller, and
+ * config.php's writers. It is the operating system's lock, so a process that dies lets go of it.
  */
 final class FileLock
 {
@@ -16,8 +14,7 @@ final class FileLock
     private function __construct(private $handle) {}
 
     /**
-     * The lock on `$path` (the file and its folder made when missing) when nobody holds it; null when another process
-     * does.
+     * Take the lock on `$path` (making the file and folder) if nobody holds it; null when another process does.
      *
      * @throws \RuntimeException when there is no file to lock: its folder is not writable
      */
@@ -34,8 +31,7 @@ final class FileLock
     }
 
     /**
-     * The lock on `$path` (the file and its folder made when missing), once whoever holds it lets go — writers that each
-     * must have their turn; null when there is no file to lock: its folder is not writable.
+     * Wait for the lock on `$path` (making the file and folder); null when its folder is not writable.
      */
     public static function wait(string $path): ?self
     {
@@ -57,7 +53,7 @@ final class FileLock
         }
     }
 
-    /** @return resource|null The lock's file, opened — made, and its folder, when missing; null when its folder is not writable */
+    /** @return resource|null The lock's file, opened (made if missing); null when its folder is not writable */
     private static function open(string $path)
     {
         $handle = Files::writableDirectory(dirname($path)) ? @fopen($path, 'c') : false;

@@ -11,9 +11,8 @@ use Illuminate\Database\Eloquent\Model;
 use Psr\Log\LoggerInterface;
 
 /**
- * Stores an attribute encrypted at rest (a panel's password, a bot's token): `protected $casts = ['token' => Encrypted::class]`.
- * A value that no longer decrypts — APP_KEY changed since it was written — reads as empty, with a warning in the log:
- * the server or bot then asks for its secret again instead of taking the whole shop down.
+ * An attribute encrypted at rest (a panel's password, a bot's token). A value that no longer decrypts (APP_KEY changed)
+ * reads as empty with a logged warning: the secret is asked for again instead of taking the shop down.
  *
  * @implements CastsAttributes<string|null, string|null>
  */
@@ -23,7 +22,7 @@ final class Encrypted implements CastsAttributes
 
     private static ?LoggerInterface $logger = null;
 
-    /** Eloquent makes its casts itself, so they are handed the encrypter and the log once, at boot (Application). */
+    /** Eloquent instantiates casts itself, so the encrypter and logger are handed over once, at boot. */
     public static function use(Encrypter $encrypter, LoggerInterface $logger): void
     {
         self::$encrypter = $encrypter;

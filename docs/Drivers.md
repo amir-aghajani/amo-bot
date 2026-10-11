@@ -93,7 +93,9 @@ folder but its registration and its request shape.
    subscription link, presence); inbounds are `InboundInfo` with an opaque `key` your connector understands. What a
    panel cannot answer is a `null` on the DTO, or an `UnsupportedOperationException` (`status()`, `listClients()` —
    the sync then asks client by client —, `rotateClientCredentials()`). Talk to the panel through `Support\PanelHttp`,
-   the shop's one outgoing client with the connection's TLS rule and timeouts, no redirects followed.
+   the shop's one outgoing client with the connection's TLS rule and timeouts, no redirects followed; it also reads an
+   answer that is not the API (`PanelHttp::redirected()`, `notTheApi()`), and `Support\Raw` reads the panel's loosely
+   typed JSON.
 3. **Its failures** are the typed exceptions of `Providers\Exceptions`: `ConnectionException` (built with
    `fromTransport()`: dns, refused, timeout, TLS — never repeating the panel's address), `AuthenticationException` (its
    named constructors: a missing or refused token, a missing scope, a refused login, a two-factor code, a session, a CSRF
@@ -212,8 +214,8 @@ Telegram cannot reach.
    - `key()` — what `MAIL_TRANSPORT` holds (`none` is no driver: no email);
    - `describe()` — its label and description, its form (its own `MAIL_*` settings, each kept under its `config.php`
      setting; a password or a key a `Secret` — bound to the fields of the account it belongs to, when there are any —,
-     with `missing` when it cannot go without one), and the `MailDriver::SENDER` trait: in the owner's words, which
-     address its emails may come from;
+     with `missing` when it cannot go without one), and the `MailDriver::SENDER` trait: which address its emails may
+     come from, worded for the owner;
    - `transport(values)` — the symfony/mailer transport those settings make, or a `MailSettingsException` when they
      make none (the log says why, and no email goes out). An email API is a transport of the app's own over the shop's
      one outgoing client, `GuzzleHttp\ClientInterface` (as `Core\Mail\ResendTransport` is), so the tests answer it as

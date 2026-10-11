@@ -2,9 +2,8 @@ import { ConfirmModal } from '@/components/confirm-modal'
 import { useLeaveQuestion } from '@/lib/use-unsaved-guard'
 
 /**
- * The unsaved-changes question (lib/use-unsaved-guard) — before a navigation to another page, signing out, opening
- * another shop, a dialog's ✕ —, drawn once by the panels' root route: the panel's own dialog, as every "are you sure",
- * in its words and its direction — over a dialog it is asked from too. Staying is the default.
+ * The unsaved-changes question (lib/use-unsaved-guard), drawn once by the root route: the panel's own dialog rather than
+ * `window.confirm`, so it is Persian, right to left, and shows over a dialog it is asked from. Staying is the default.
  */
 export function LeaveQuestion() {
   const { asking, answer } = useLeaveQuestion()

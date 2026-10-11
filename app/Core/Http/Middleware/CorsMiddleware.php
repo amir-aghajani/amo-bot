@@ -12,13 +12,10 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Cross-origin requests (CORS), for the addresses a CorsPolicy opens to pages on other origins — the shop's website
- * calling the Store API from the visitor's browser. A request without an `Origin` (a server's, a same-origin page's) is
- * none of its business. One from an origin the policy allows: a preflight (OPTIONS) is answered here, before routing —
- * no route takes OPTIONS —, and every other answer, an error's too (this sits around the error handler), says the
- * browser may read it, with the headers it may read besides (the request's id, a 429's wait, what a 401 or a 403 asks of
- * the bearer token — a sign-in, a more recent one). An origin the policy does not allow gets nothing added, and the
- * browser keeps the answer from the page. No credentials: the API is called with a bearer token, never a cookie.
+ * CORS for the addresses a CorsPolicy opens to other origins (a shop's website calling the Store API). For an allowed
+ * origin a preflight is answered here, before routing, and every other answer — errors too, since this wraps the error
+ * handler — may be read, with the extra headers a client needs. Any other origin gets nothing added. Never credentials:
+ * the API uses bearer tokens, not cookies.
  */
 final class CorsMiddleware implements MiddlewareInterface
 {

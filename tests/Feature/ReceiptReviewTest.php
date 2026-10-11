@@ -404,7 +404,7 @@ final class ReceiptReviewTest extends BotTestCase
         self::assertSame([], $this->calls(), "none of the replies' readers' business");
     }
 
-    /** A report as Telegram hands it back in a reply: its words, without their markup. */
+    /** A report as Telegram hands it back in a reply: its text, without the markup. */
     private static function plain(string $html): string
     {
         return html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');

@@ -7,10 +7,8 @@ namespace App\Modules\Installer\Services;
 use App\Core\Security\HostKey;
 
 /**
- * The installer's one-time key. A fresh upload answers its installer to whoever reaches it first; with the key, only
- * someone who can read the host's files can install the shop as theirs. It is made the first time the installer is
- * asked for (storage/install-key.txt), every /api/install request carries it (`X-Install-Key`, InstallKeyMiddleware),
- * and it is gone once the installation ends.
+ * The installer's one-time key (storage/install-key.txt). A fresh upload would answer its installer to whoever comes
+ * first; with the key, only someone who can read the host's files can install the shop. Deleted when installation ends.
  */
 final class InstallKey extends HostKey
 {

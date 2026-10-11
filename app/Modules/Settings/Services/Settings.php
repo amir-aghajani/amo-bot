@@ -11,13 +11,9 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Settings\Models\Setting;
 
 /**
- * The settings the admin changes at runtime from a panel, kept in the `settings` table as JSON — each bot's its own (its
- * rules, its texts, its keyboards): the current bot's (CurrentBot) unless `$bot` names another. A key nobody wrote
- * reads as the default its reader passes. A process reads a bot's rows once and keeps them; one that lives long
- * (bot:poll) calls refresh() to see what the panel changed since.
- *
- * Settings groups (Core\Forms\Form) are read and saved here field by field: read() is a field's value as it holds it,
- * present() a group as its screen shows it, save() a group's form checked and kept — all of it or nothing.
+ * Runtime settings kept as JSON in the `settings` table, each bot its own (the current bot unless `$bot` says). A key
+ * nobody wrote reads as the caller's default. A process reads a bot's rows once; a long-lived one (bot:poll) calls
+ * refresh() to see a panel's changes. Forms are read (read(), present()) and saved whole or not at all (save()).
  */
 final class Settings
 {
@@ -32,7 +28,7 @@ final class Settings
     }
 
     /**
-     * A field's value as it holds it — its default while nothing is kept.
+     * A field's value, its default while nothing is kept.
      *
      * @template T
      * @param Field<T> $field
@@ -50,7 +46,7 @@ final class Settings
     }
 
     /**
-     * The group's form checked and kept — every field of it, or nothing.
+     * Check the group's form and keep every field of it, or nothing.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException

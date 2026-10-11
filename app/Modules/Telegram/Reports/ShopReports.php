@@ -9,6 +9,8 @@ use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
+use App\Modules\Discounts\DTO\DiscountLine;
+use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
@@ -16,8 +18,12 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Referrals\Models\ReferralAlert;
 use App\Modules\Referrals\Models\ReferralCommission;
 use App\Modules\Reviews\Models\Review;
+use App\Modules\Rewards\Models\LotteryDraw;
+use App\Modules\Rewards\Models\LotteryWinner;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Support\Enums\TicketAuthor;
 use App\Modules\Support\Models\Ticket;
@@ -31,24 +37,20 @@ use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\CustomerPictures;
 use App\Support\Money;
 use App\Support\Persian;
+use App\Support\Text;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Psr\Log\LoggerInterface;
 
 /**
- * What the shop tells its admins' report group — a sale delivered, a renewal, a wallet charged, a card-to-card receipt
- * and what was decided about it, a newcomer, a request to become an agent and its verdict, an agent's traffic bought,
- * a delivery that failed, a panel that stopped answering, a support ticket and its conversation (every report of it a
- * reply to the last; a burst of its messages one report while the last still waits — folded()), a review written on the
- * shop's website — each queued as a report_messages row for its topic, at its topic's place in the queue
- * (Topic::priority()), in the group of the bot it happened in (an agent's sales go to the agent's own group; the
- * servers and the agency are the main bot's), which
- * ReportSender delivers at Telegram's pace. A row is written only while a group is connected and the admin wants that
- * topic, in a savepoint of the caller's transaction when there is one, so a report stands or falls with what it reports.
- * Nothing here talks to Telegram. A report whose words cannot be composed is logged and the flow that reported goes on;
- * a database that fails it — reading for its words, or writing it — fails that flow too: inside its transaction, the
- * transaction is the database's to keep or lose, never carried on as if it stood. The words are the admin's own
- * reading, not a customer's — fixed here, not BotTexts.
+ * Queues what the shop tells its admins' report group (report_messages, sent by ReportSender): sales, renewals,
+ * top-ups, receipts and their verdicts, newcomers, agency requests, failed deliveries, panels down and up, ticket
+ * conversations and reviews. Each goes to the group of the bot it happened in (servers and the agency to the main bot's),
+ * only while a group is connected and the admin wants the topic. Nothing here talks to Telegram.
+ *
+ * A report is written in a savepoint of the caller's transaction, so it stands or falls with what it reports. Words
+ * that cannot be composed are logged and dropped; a database error goes up to the caller. The wording is fixed here (the
+ * admins read it, not customers).
  */
 final class ShopReports
 {
@@ -68,9 +70,8 @@ final class ShopReports
     private const AGENCY_REF = 'agency:';
 
     /**
-     * What `ref` every report of a ticket carries: the next replies to the last (and takes its «بستن تیکت» over). Each
-     * names its ticket too (`ticket_id`): a bot admin's reply to any of them is support's answer (TicketReplies), and they
-     * are kept while the ticket is not closed (ReportSender::pruneTickets()).
+     * What `ref` every report of a ticket carries: each replies to the last and takes over its «بستن تیکت». Each also
+     * names its ticket (`ticket_id`), so a reply to any of them answers the ticket (TicketReplies).
      */
     private const TICKET_REF = 'ticket:';
 
@@ -80,10 +81,7 @@ final class ShopReports
     /** Under a review's report: where support decides it, and that the website shows it only then. */
     private const REVIEW_PENDING = "\n\n⏳ در انتظار بررسی؛ تا در صفحه «نظرات» پنل تایید نشود، در وب‌سایت دیده نمی‌شود.";
 
-    /**
-     * A margin kept under Telegram's limit, beside what it counts (Limits counts as it does: an emoji two units), when a
-     * customer's own words are cut to the room a report has: a ticket's message, a review.
-     */
+    /** A margin under Telegram's limit when a customer's words are cut to fit a report (a ticket's message, a review). */
     private const ROOM = 64;
 
     /** Whose words follow: the customer's (a receipt's caption, an agency request), support's (a verdict's reason). */
@@ -109,6 +107,17 @@ final class ShopReports
 
             return ['text' => implode("\n", $lines)];
         });
+    }
+
+    /** A referrer whose referrals look made up (ReferralAlerts): who, why, and what is held back until support clears it. */
+    public function referralAlert(ReferralAlert $alert, int $minutes): void
+    {
+        $this->report($alert->shop(), Topic::Users, static fn(): array => ['text' => implode("\n", [
+            '⚠️ <b>هشدار زیرمجموعه‌گیری</b>',
+            '👥 معرف: ' . self::customer($alert->referrer),
+            '🔎 ' . $alert->reason->words(Persian::number($alert->count), Persian::number($minutes)),
+            'تا این هشدار در صفحه «زیرمجموعه‌گیری» پنل رفع نشود، هدیه شروع و جایزه دعوت به این معرف داده نمی‌شود؛ پورسانت‌ها مثل قبل است.',
+        ])]);
     }
 
     /** A customer asked to become an agent: what they wrote, with the bot admins' «تایید» / «رد» buttons (AgencyReview). */
@@ -148,9 +157,8 @@ final class ShopReports
     }
 
     /**
-     * A customer sent the receipt of a card-to-card payment: their picture — a copy of their message in the bot, or the
-     * one they uploaded from the website, sent from the shop's own files —, with what it pays for under it and the bot
-     * admins' «تایید» / «رد» buttons (ReceiptReview); the verdict will be a reply to it.
+     * A card-to-card receipt: the customer's picture (copied from the bot, or the website's upload) captioned with what
+     * it pays for, with «تایید» / «رد» (ReceiptReview); its verdict will reply to it.
      */
     public function receiptSubmitted(Payment $payment): void
     {
@@ -164,7 +172,7 @@ final class ShopReports
                 sprintf('💳 مبلغ: %s · %s', Money::format($payment->amount), self::name($method->label)),
                 ...self::note(self::CUSTOMER_NOTE, $payment->receipt_note),
             ];
-            // The method's review window takes a receipt sent in the bot alone: one uploaded from the website waits for support.
+            // Only a receipt sent in the bot is approved on a timer; a website upload always waits for support.
             $window = $this->gateways->isManual($method) ? ManualGateway::reviewWindow($method) : 0;
             $lines[] = match (true) {
                 $window === 0 => '⏳ در انتظار بررسی در پنل مدیریت',
@@ -191,27 +199,30 @@ final class ShopReports
             : sprintf('✅ رسید پرداخت #%d تایید شد.', $payment->id));
     }
 
+    /** The receipt was rejected, with support's reason. */
     public function receiptRejected(Payment $payment, ?string $reason): void
     {
         $this->verdict($payment, sprintf('❌ رسید پرداخت #%d رد شد.', $payment->id), $reason);
     }
 
+    /** The payment was cancelled, with support's note. */
     public function receiptCancelled(Payment $payment, ?string $note): void
     {
         $this->verdict($payment, sprintf('🚫 پرداخت #%d لغو شد.', $payment->id), $note);
     }
 
     /**
-     * An order was delivered: the sale, the renewal or the charged wallet, each in its topic — and, when its delivery had
-     * failed before, that it was delivered after all, under the failure's report, whose retry button goes.
+     * An order was delivered: reported in its topic and, when its delivery had failed before, a word under the failure's
+     * report, whose retry button goes.
      */
     public function orderDelivered(Order $order): void
     {
         match ($order->type) {
             OrderType::Purchase => $this->report($order->shop(), Topic::Purchases, static fn(): array => ['text' => self::purchaseText($order)]),
             OrderType::Renewal => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::renewalText($order)]),
+            OrderType::ExtraTraffic, OrderType::ExtraTime => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::extraText($order)]),
             OrderType::WalletTopUp => $this->report($order->shop(), Topic::Wallet, static fn(): array => ['text' => self::topUpText($order)]),
-            // An agent bought traffic for their bot: the shop's own group, under the agency.
+            // An agent bought traffic for their bot: the main bot's group, under the agency.
             OrderType::Traffic => $this->report(Bot::MAIN, Topic::Agency, static fn(): array => ['text' => self::trafficText($order)]),
         };
 
@@ -223,8 +234,8 @@ final class ShopReports
     }
 
     /**
-     * An order was paid but its delivery failed: why (failure()), with the bot admins' retry button (DeliveryRetry). A
-     * failure after an earlier one is a reply to that one's report, which loses its button to this.
+     * A paid order's delivery failed: why (failure()), with the retry button (DeliveryRetry). A repeated failure replies
+     * to the earlier report, which loses its button.
      */
     public function orderFailed(Order $order): void
     {
@@ -233,7 +244,7 @@ final class ShopReports
                 sprintf('⚠️ <b>تحویل سفارش #%d ناموفق بود</b> (%s)', $order->id, $order->type->label()),
                 '👤 ' . self::customer($order->user),
             ];
-            $server = $order->type === OrderType::Renewal ? self::subscriptionOf($order)?->server : $order->server;
+            $server = $order->type->forService() ? self::subscriptionOf($order)?->server : $order->server;
             if ($server !== null) {
                 $lines[] = '📍 سرور: ' . self::name($server->name);
             }
@@ -251,20 +262,15 @@ final class ShopReports
     }
 
     /**
-     * Why an order's delivery failed, as its shop's group reads it — this report, a retry's or an approval's popup: the
-     * main bot's group is the owner's, which reads the diagnosis of a panel that failed it; an agent's, the words anyone
-     * of the shop may read (the panels decide by who reads the screen: OrderDirectory::notes()).
+     * Why an order's delivery failed, as its group may read it: the main bot's group is the owner's and gets the panel's
+     * diagnosis; an agent's group gets the plain summary.
      */
     public static function failure(Order $order): ?string
     {
         return $order->shop()->isMain() ? $order->diagnosis ?? $order->notes : $order->notes;
     }
 
-    /**
-     * A customer opened a ticket: who, about what — its subject, the service —, where from, and its first message (its
-     * picture as the photo the report captions), with the bot admins' «بستن تیکت» (TicketClose). A bot admin's reply to it,
-     * or to any of the ticket's reports, is support's answer (TicketReplies).
-     */
+    /** A ticket opened: who, its subject and service, where from, and its first message, with «بستن تیکت» (TicketClose). */
     public function ticketOpened(Ticket $ticket, TicketMessage $message): void
     {
         $this->report($ticket->shop(), Topic::Tickets, static function () use ($ticket, $message): array {
@@ -283,9 +289,8 @@ final class ShopReports
     }
 
     /**
-     * Another message of a ticket — the customer's (one that opened a closed ticket again says so), or support's answer
-     * written elsewhere than in the group — under the ticket's last report, which hands its «بستن تیکت» down to this one;
-     * or, while that report still waits in the queue, in it (folded()).
+     * Another message of a ticket (the customer's, or support's from elsewhere than the group) as a reply to its last
+     * report — or folded into that report while it still waits in the queue (folded()).
      */
     public function ticketMessage(Ticket $ticket, TicketMessage $message, bool $reopened): void
     {
@@ -301,7 +306,7 @@ final class ShopReports
         }, fold: true);
     }
 
-    /** The ticket was closed — by the customer, or by support —: under its last report, which loses its button. */
+    /** The ticket was closed (by the customer or by support), under its last report, which loses its button. */
     public function ticketClosed(Ticket $ticket, bool $byCustomer): void
     {
         $this->ticketNews($ticket, sprintf('🔒 تیکت #%d بسته شد — %s.', $ticket->id, $byCustomer ? 'مشتری آن را بست' : 'پشتیبانی آن را بست'), false);
@@ -313,7 +318,7 @@ final class ShopReports
         $this->ticketNews($ticket, sprintf('🔓 تیکت #%d دوباره باز شد.', $ticket->id), true);
     }
 
-    /** The customer rated their closed ticket — a first rating, or one that changed (Tickets::rate()) —: under its last report. */
+    /** The customer rated their closed ticket (a first rating, or a changed one), under its last report. */
     public function ticketRated(Ticket $ticket): void
     {
         $this->ticketNews($ticket, implode("\n", [
@@ -322,11 +327,7 @@ final class ShopReports
         ]), false);
     }
 
-    /**
-     * A review written on the shop's website, waiting on support: the name it is signed with, its stars, where they use
-     * the service from, who wrote it — the customer signed in, or a guest — and its words, as many as a message holds
-     * with the rest. No buttons: support decides it on the panel's «نظرات» page.
-     */
+    /** A review written on the website, waiting on support (decided on the panel's «نظرات» page, so no buttons). */
     public function reviewWritten(Review $review): void
     {
         $this->report($review->shop(), Topic::Reviews, static function () use ($review): array {
@@ -347,6 +348,32 @@ final class ShopReports
         });
     }
 
+    /**
+     * The nightly draw among buyers («قرعه‌کشی شبانه»), under «خریدها»: its entries, its prize and its winners.
+     *
+     * @param list<LotteryWinner> $winners Their customers loaded
+     */
+    public function lotteryDrawn(LotteryDraw $draw, array $winners): void
+    {
+        $this->report($draw->shop(), Topic::Purchases, static function () use ($draw, $winners): array {
+            $lines = [
+                '🎲 <b>قرعه‌کشی شبانه</b> · ' . Persian::date($draw->created_at),
+                '🎟 شانس‌ها: ' . Persian::number($draw->entries),
+                '🎁 جایزه: ' . self::name($draw->reward()?->words() ?? $draw->prize_kind->label()),
+            ];
+            if ($winners === []) {
+                $lines[] = '⚠️ جایزه به هیچ‌کدام از شرکت‌کننده‌ها داده نشد؛ جزئیات در لاگ برنامه است.';
+            } else {
+                $lines[] = '🏆 برنده‌ها:';
+                foreach ($winners as $winner) {
+                    $lines[] = '• ' . self::customer($winner->user);
+                }
+            }
+
+            return ['text' => implode("\n", $lines)];
+        });
+    }
+
     /** A server's panel that answered stopped answering. */
     public function serverDown(Server $server, string $reason): void
     {
@@ -363,10 +390,7 @@ final class ShopReports
         ]);
     }
 
-    /**
-     * A message of the group's own — a topic's introduction, the screen's test — queued whatever the topic's switch
-     * says, while a group is connected.
-     */
+    /** A message of the group's own (a topic's introduction, the screen's test), queued whatever the topic's switch says. */
     public function notice(Topic $topic, string $text): void
     {
         if ($this->group->chatId() === null) {
@@ -376,10 +400,7 @@ final class ShopReports
         ReportMessage::query()->create(['topic' => $topic, 'priority' => $topic->priority(), 'text' => $text]);
     }
 
-    /**
-     * A verdict on a receipt, as a reply to the receipt's report that takes its buttons off — whoever decided, here or
-     * on the screen or by the timer; a payment that had no receipt has nothing to answer.
-     */
+    /** A receipt's verdict, replying to its report and taking its buttons off; nothing for a payment without a receipt. */
     private function verdict(Payment $payment, string $text, ?string $note = null): void
     {
         if ($payment->receipt_at === null) {
@@ -393,10 +414,7 @@ final class ShopReports
         ]);
     }
 
-    /**
-     * A word about a ticket under its last report — which loses its «بستن تیکت», or hands it down to this one
-     * (`$closable`, the ticket open again).
-     */
+    /** A word about a ticket under its last report, carrying «بستن تیکت» on when `$closable` (the ticket is open). */
     private function ticketNews(Ticket $ticket, string $text, bool $closable): void
     {
         $this->report($ticket->shop(), Topic::Tickets, static fn(): array => [
@@ -409,9 +427,8 @@ final class ShopReports
     }
 
     /**
-     * A report of one of a ticket's messages: `$lines` above its words — as many of them as Telegram takes with the rest
-     * (a photo's caption holds a quarter of a message), cut short with «…»: the whole is the panels' — and `$footer` under
-     * them; its picture, uploaded, as the photo the report captions; the ticket's `ref`, which every report of it carries.
+     * A report of one ticket message: `$lines`, then its text cut to the room left (a caption holds a quarter of a
+     * message), then `$footer`; an uploaded picture goes as the report's photo.
      *
      * @param list<string> $lines
      * @return array<string, mixed>
@@ -434,11 +451,9 @@ final class ShopReports
     }
 
     /**
-     * Queue one report in the group of the bot it is about — a sale in an agent's bot goes to the agent's group, a
-     * server's or the agency's to the shop's own: nothing while no group is connected or the admin switched the topic
-     * off. Words that cannot be composed are logged, and the report is let go — never what it reports. The row is written
-     * in a savepoint of the caller's transaction (its own transaction when there is none); what the database refuses —
-     * there, or as the words read it — goes up to the caller, whose transaction it is.
+     * Queue one report in `$bot`'s group, unless none is connected or the topic is switched off. Words that cannot be
+     * composed are logged and the report dropped — never what it reports. The row goes in a savepoint of the caller's
+     * transaction; a database error goes up to the caller, whose transaction it is.
      *
      * @param \Closure(): (array<string, mixed>|null) $compose The row's attributes (text, copy_*, keyboard, ref, reply_ref,
      *                                                         clears_buttons), or null when there is nothing to say after all
@@ -474,11 +489,9 @@ final class ShopReports
     }
 
     /**
-     * A ticket's message (its report's `$attributes`) folded into the ticket's last report while that one still waits in
-     * the queue — no sender holds it, it carries no picture and has the close button, the two fit one message —: a burst
-     * of a ticket's messages is one report, not a queue of them crowding the rest of the group's out. One conditional
-     * update of the report as it was read: one sent, taken by a sender or changed meanwhile is left as it is, and the
-     * message goes as a report of its own. False when it was not folded.
+     * Fold a ticket message's report into the ticket's last report while that one still waits unsent and unheld, has no
+     * picture, the same buttons, and room — so a burst of messages is one report, not a queue crowding out the rest.
+     * One conditional update of the report as read: one taken or changed meanwhile is left, and false is returned.
      *
      * @param array<string, mixed> $attributes
      */
@@ -503,7 +516,6 @@ final class ShopReports
     private static function purchaseText(Order $order): string
     {
         $subscription = self::subscriptionOf($order);
-        $payment = self::paymentOf($order);
         $lines = [
             sprintf('🛍️ <b>خرید جدید</b> · سفارش #%d', $order->id),
             '👤 ' . self::customer($order->user),
@@ -513,26 +525,68 @@ final class ShopReports
         if ($subscription !== null) {
             $lines[] = '🔖 سرویس: <code>' . htmlspecialchars($subscription->remote_name) . '</code>';
         }
-        $lines[] = self::paid($order, $payment);
 
-        return implode("\n", [...$lines, ...self::commission($payment)]);
+        return implode("\n", [...$lines, ...self::takings($order)]);
     }
 
     private static function renewalText(Order $order): string
     {
         $subscription = self::subscriptionOf($order);
-        $payment = self::paymentOf($order);
         $lines = [
             sprintf('♻️ <b>تمدید سرویس</b> · سفارش #%d', $order->id),
             '👤 ' . self::customer($order->user),
         ];
         if ($subscription !== null) {
             $lines[] = sprintf('🔖 سرویس: <code>%s</code> · %s · %s', htmlspecialchars($subscription->remote_name), self::name($order->plan->name ?? $subscription->plan->name ?? '—'), self::name($subscription->server->name));
-            $lines[] = '📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_days);
+            $lines[] = '📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours);
         }
-        $lines[] = self::paid($order, $payment);
 
-        return implode("\n", [...$lines, ...self::commission($payment)]);
+        return implode("\n", [...$lines, ...self::takings($order)]);
+    }
+
+    /** Extra traffic or time a customer bought for a service: what, onto which service, and the service as it now stands. */
+    private static function extraText(Order $order): string
+    {
+        $subscription = self::subscriptionOf($order);
+        $lines = [
+            sprintf('%s <b>%s</b> · سفارش #%d', self::extraIcon($order), $order->type->label(), $order->id),
+            '👤 ' . self::customer($order->user),
+        ];
+        if ($subscription !== null) {
+            $lines[] = sprintf('🔖 سرویس: <code>%s</code> · %s', htmlspecialchars($subscription->remote_name), self::name($subscription->server->name));
+        }
+        $lines[] = '➕ ' . self::quantity($order);
+        if ($subscription !== null) {
+            $remaining = $subscription->remainingBytes();
+            $lines[] = '📥 حجم باقی‌مانده: ' . ($remaining === null ? Messages::UNLIMITED : Messages::bytes($remaining));
+            $lines[] = '📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours);
+        }
+
+        return implode("\n", [...$lines, ...self::takings($order, pricing: false)]);
+    }
+
+    /**
+     * @return list<string> What was paid and how (with the price it was made at, unless `$pricing` is false), the
+     *                      discounts, and the referrer's commission
+     */
+    private static function takings(Order $order, bool $pricing = true): array
+    {
+        $payment = self::paymentOf($order);
+
+        return [self::paid($order, $payment) . ($pricing ? self::pricing($order) : ''), ...self::discounts($order), ...self::commission($payment)];
+    }
+
+    /** How much an order of extra traffic or time brings, in words: «۱۰ گیگابایت», «۷ روز». */
+    private static function quantity(Order $order): string
+    {
+        $kind = ExtraKind::of($order->type) ?? throw new \LogicException("Order #{$order->id} buys no extra.");
+
+        return $kind->words($kind->quantityOf($order));
+    }
+
+    private static function extraIcon(Order $order): string
+    {
+        return $order->type === OrderType::ExtraTraffic ? '🔋' : '⏳';
     }
 
     private static function trafficText(Order $order): string
@@ -565,6 +619,29 @@ final class ShopReports
         return implode("\n", [...$lines, ...self::commission($payment)]);
     }
 
+    /** « · 🎁 قیمت خرید اول» or « · 🤝 قیمت نماینده» for an order made at another price than the plan's; '' otherwise. */
+    private static function pricing(Order $order): string
+    {
+        $label = $order->pricing->label();
+
+        return $label === null ? '' : ' · ' . ($order->pricing === OrderPricing::FirstPurchase ? '🎁 ' : '🤝 ') . $label;
+    }
+
+    /**
+     * «🏷 تخفیف: ۲۴٬۰۰۰ تومان · فروش ویژه نوروز ۲۰٪ · کد NOWRUZ»: what the order's discounts took off; none without any.
+     *
+     * @return list<string>
+     */
+    private static function discounts(Order $order): array
+    {
+        $lines = $order->discountLines();
+        if ($lines === []) {
+            return [];
+        }
+
+        return ['🏷 تخفیف: ' . Money::format($order->discount_amount) . ' · ' . implode(' · ', array_map(static fn(DiscountLine $line): string => self::name($line->label), $lines))];
+    }
+
     /** "💳 مبلغ: ۱۲۰٬۰۰۰ تومان · کارت به کارت (ملت)" — what was paid and how. */
     private static function paid(Order $order, ?Payment $payment): string
     {
@@ -573,7 +650,7 @@ final class ShopReports
         return '💳 مبلغ: ' . Money::format($payment->amount ?? $order->amount) . ($method !== null ? ' · ' . self::name($method) : '');
     }
 
-    /** @return list<string> The line saying what the payment earned the customer's referrer — whom it was credited to —, when it earned anything. */
+    /** @return list<string> The line saying what the payment earned the customer's referrer, when it earned anything. */
     private static function commission(?Payment $payment): array
     {
         $commission = $payment === null ? null : ReferralCommission::query()->with('referrer')->where('payment_id', $payment->id)->first();
@@ -584,22 +661,21 @@ final class ShopReports
         return [sprintf('👥 پورسانت معرف: %s برای %s', Money::format($commission->commission), self::customer($commission->referrer))];
     }
 
-    /** What an order is for, on one line: the plan and the server, the service renewed, or the wallet. */
+    /** What an order is for, on one line: the plan and the server, the service renewed or given extras, or the wallet. */
     private static function purpose(Order $order): string
     {
         return match ($order->type) {
             OrderType::Purchase => sprintf('📦 خرید %s · %s · سفارش #%d', self::name($order->plan->name ?? '—'), self::name($order->server->name ?? '—'), $order->id),
             OrderType::Renewal => sprintf('♻️ تمدید <code>%s</code> · سفارش #%d', htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
+            OrderType::ExtraTraffic, OrderType::ExtraTime => sprintf('%s %s %s برای <code>%s</code> · سفارش #%d', self::extraIcon($order), $order->type->label(), self::quantity($order), htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
             OrderType::WalletTopUp => sprintf('💰 شارژ کیف پول · سفارش #%d', $order->id),
             OrderType::Traffic => sprintf('💾 خرید حجم نمایندگی (%s) · سفارش #%d', Messages::bytes((int) $order->traffic_bytes), $order->id),
         };
     }
 
     /**
-     * A customer as the group reads them: the name (a link that opens their profile), the handle and the Telegram id —
-     * three identifiers side by side, never one standing in for another. One without Telegram (who signed up on the
-     * website) has no profile to open: the name alone, their email, and their number in the shop («#12», as the panel's
-     * search finds them).
+     * A customer as the group reads them: the name (a profile link), the handle and the Telegram id side by side. One
+     * without Telegram shows the name, their email and their number in the shop («#12»).
      */
     private static function customer(User $user): string
     {
@@ -631,9 +707,7 @@ final class ShopReports
 
     private static function field(string $text): string
     {
-        $text = trim($text);
-
-        return htmlspecialchars(mb_strlen($text) > self::FIELD_MAX ? mb_substr($text, 0, self::FIELD_MAX) . '…' : $text);
+        return htmlspecialchars(Text::fit(trim($text), self::FIELD_MAX));
     }
 
     /** @return list<string> Someone's words on a line of their own, after whose they are (`$label`); none when there are none. */

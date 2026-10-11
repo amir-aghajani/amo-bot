@@ -20,7 +20,7 @@ use ShipMonk\PHPStan\DeadCode\Provider\MemberUsageProvider;
 
 /**
  * The constructors PHP-DI calls: the container builds a service by its constructor (autowiring), so the detector, which
- * sees only `new`, is told where a class is asked of it — named (`X::class`: a container's get, a definition, a route's
+ * sees only `new`, learns here where a class is asked of it — named (`X::class`: a container's get, a definition, a route's
  * or a task's or a handler's registration, an Eloquent model a relation reads) or injected (a constructor's parameter
  * types; a top-level closure's — bootstrap/container.php's factories, routes/bot.php's labels). Each usage starts where
  * it is written, so a class only a dead service injects is dead as well.

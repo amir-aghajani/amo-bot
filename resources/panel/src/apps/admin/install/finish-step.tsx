@@ -32,7 +32,7 @@ export function FinishStep({ status }: { status: InstallStatus }) {
     { label: 'پیش‌نیازها', value: status.ready ? 'فراهم است' : 'کامل نیست', ok: status.ready },
     {
       label: 'دیتابیس',
-      // One element: the row's value sits beside its icon with a gap, which must not open between the driver and its words.
+      // One element: the row's value sits beside its icon with a gap, which must not open between the driver and its label.
       value: status.database.tables ? (
         <span>
           <bdi dir="ltr">{databaseDriver(status.database, status.database.driver).label}</bdi>، جدول‌ها ساخته شده

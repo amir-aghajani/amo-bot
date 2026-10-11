@@ -13,9 +13,14 @@ import { lazyPage } from '@/lib/lazy-page'
 import {
   BotSettingsPage,
   BotTextsPage,
+  CashbackPage,
   CustomerPage,
   DashboardPage,
+  DiscountCodesPage,
+  GiftCodesPage,
   KeyboardsPage,
+  LotteryPage,
+  LoyaltyPage,
   OrdersPage,
   PaymentMethodsPage,
   PaymentsPage,
@@ -23,11 +28,13 @@ import {
   PlansPage,
   ReferralsPage,
   ReviewsPage,
+  SalesPage,
   SubscriptionsPage,
   TicketPage,
   TicketsPage,
   UsersPage,
   WebsiteSettingsPage,
+  WheelPage,
 } from '@/pages/lazy'
 
 /*
@@ -93,6 +100,13 @@ export const AGENT_ROUTES: RouteObject[] = [
                   { path: 'payments', element: <PaymentsPage /> },
                   { path: 'subscriptions', element: <AgentSubscriptionsPage /> },
                   { path: 'referrals/:section?', element: <ReferralsPage /> },
+                  { path: 'discounts/:section?', element: <DiscountCodesPage /> },
+                  { path: 'sales', element: <SalesPage /> },
+                  { path: 'loyalty', element: <LoyaltyPage /> },
+                  { path: 'cashback', element: <CashbackPage /> },
+                  { path: 'gift-codes', element: <GiftCodesPage /> },
+                  { path: 'wheel/:section?', element: <WheelPage /> },
+                  { path: 'lottery', element: <LotteryPage /> },
                   { path: 'keyboards', element: <KeyboardsPage /> },
                   { path: 'bot-texts', element: <BotTextsPage /> },
                   { path: 'broadcasts', element: <BroadcastsPage /> },
@@ -115,14 +129,14 @@ function useBotTraffic(): number | undefined {
   return useQuery({ ...accountQuery, select: (data) => data.account.bot.traffic_balance }).data
 }
 
-/** The shop's subscriptions screen, told the traffic the agent's bot has left. */
+/** The shop's subscriptions screen, given the traffic the agent's bot has left. */
 function AgentSubscriptionsPage() {
   return <SubscriptionsPage traffic={useBotTraffic()} />
 }
 // Loaded ahead as the page it draws is (lib/prefetch).
 AgentSubscriptionsPage.preload = SubscriptionsPage.preload
 
-/** A customer's page, told the traffic the agent's bot has left (their services are extended from it). */
+/** A customer's page, given the traffic the agent's bot has left (their services are extended from it). */
 function AgentCustomerPage() {
   return <CustomerPage traffic={useBotTraffic()} />
 }

@@ -22,24 +22,21 @@ use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Messages;
 
 /**
- * An agent's prepaid traffic, line by line (`traffic_transactions`) — the one writer of the ledger, whose last line is
- * what their bot may still sell (Bot::trafficBalance()), written the ledgers' one way (Core\Database\Ledger). The agent
- * buys it from the main bot at their level's price per GB (a traffic order, add()) — and loses it again when that
- * order is refunded (takeBack()); every purchase and renewal their bot delivers takes the plan's traffic out of it
- * (draw(), once per order — a delivery that is retried does not draw twice) and gets it back when the delivery failed
- * (giveBack()); the traffic the shop gives one of their bot's services from its subscriptions screen comes out of it
- * too, and back when that fails (extending()); the shop may set it right from the panel (adjust()). The balance never
- * goes below zero: a delivery the pool cannot cover fails with TrafficShortException, and waits for the agent's next
- * purchase and the retry; an extension it cannot cover is refused.
+ * An agent's prepaid traffic: the one writer of `traffic_transactions` (through Core\Database\Ledger), whose last line
+ * is what their bot may still sell. Bought from the main bot (add(), taken back by a refund); drawn by every delivery
+ * of their bot, once per order, and given back if it fails (draw(), giveBack()); drawn for an extension a shop gives one
+ * of their services (extending()); set right by the owner (adjust()). The balance never goes below zero: what it cannot
+ * cover fails with TrafficShortException.
  */
 final class TrafficPool
 {
     public const LINE_PURCHASE = 'خرید %s · سفارش #%d';
     public const LINE_SALE = 'فروش · سفارش #%d';
     public const LINE_RENEWAL = 'تمدید · سفارش #%d';
+    public const LINE_EXTRA = 'حجم اضافه · سفارش #%d';
     public const LINE_GIVEN_BACK = 'بازگشت حجم سفارش ناموفق #%d';
     public const LINE_TAKEN_BACK = 'برگشت خرید حجم · سفارش #%d';
-    /** The service's name on its panel — after the kind's own word in the ledgers («افزایش حجم», «بازگشت حجم»). */
+    /** The service's panel name; the panels put the line's kind («افزایش حجم», «بازگشت حجم») before it. */
     public const LINE_EXTENSION = 'سرویس %s';
     public const LINE_EXTENSION_GIVEN_BACK = 'افزایش ناموفق · سرویس %s';
     /** An adjustment the shop wrote no note for. */
@@ -50,16 +47,19 @@ final class TrafficPool
         private readonly Reviewers $reviewers,
     ) {}
 
-    /** What an order of an agent's bot takes out of the pool: its plan's traffic (a renewal's: its plan's, else its service's). */
+    /** What an order of an agent's bot draws: extra traffic's own bytes, else its plan's traffic (a renewal: its service's plan). */
     public static function bytesFor(Order $order): int
     {
+        if ($order->type === OrderType::ExtraTraffic) {
+            return (int) $order->traffic_bytes;
+        }
         $planId = $order->plan_id ?? Subscription::query()->withoutGlobalScope(CurrentBot::SCOPE)->whereKey($order->subscription_id)->value('plan_id');
         $plan = $planId === null ? null : Plan::query()->withoutGlobalScope(CurrentBot::SCOPE)->find($planId);
 
         return $plan?->trafficBytes() ?? 0;
     }
 
-    /** Traffic bought from the main bot — the traffic order that bought it delivered —, in the caller's transaction when there is one. */
+    /** Adds traffic the agent bought (its traffic order delivered), in the caller's transaction when there is one. */
     public function add(Bot $bot, int $bytes, ?Order $order = null): void
     {
         $description = $order !== null ? sprintf(self::LINE_PURCHASE, Messages::bytes($bytes), $order->id) : null;
@@ -67,10 +67,7 @@ final class TrafficPool
         $this->write($bot, static fn(): array => [TrafficTransactionType::Purchase, $bytes, $order, $description]);
     }
 
-    /**
-     * A refunded traffic order takes back what it added — in the caller's transaction. False, with nothing written, when
-     * the pool no longer has that much: its bot sold it since.
-     */
+    /** Takes back what a refunded traffic order added, in the caller's transaction; false when it was sold since. */
     public function takeBack(Order $order, Bot $bot): bool
     {
         $bytes = (int) $order->traffic_bytes;
@@ -79,8 +76,7 @@ final class TrafficPool
     }
 
     /**
-     * The shop sets the pool right — more (`$bytes` > 0) or less — with the reason the agent reads, under the name of
-     * whoever did it.
+     * Adds (or, negative, removes) `$bytes` with the reason the agent reads, under the actor's name.
      *
      * @throws ValidationException 422 on `gb` when it would take the pool below zero
      */
@@ -96,8 +92,8 @@ final class TrafficPool
     }
 
     /**
-     * Take what the order delivers out of its bot's pool — once: an order whose traffic is out already (a delivery
-     * retried after its process died) draws nothing more.
+     * Draws the order's traffic from its bot's pool — once: an order whose traffic is already out (a delivery resumed
+     * after its process died) draws nothing more.
      *
      * @throws TrafficShortException when the pool does not have it
      */
@@ -116,13 +112,15 @@ final class TrafficPool
                 throw new TrafficShortException(sprintf(TrafficShortException::SHORT, Messages::bytes($bytes), Messages::bytes(max(0, $balance))));
             }
 
-            return $order->type === OrderType::Renewal
-                ? [TrafficTransactionType::Renewal, -$bytes, $order, sprintf(self::LINE_RENEWAL, $order->id)]
-                : [TrafficTransactionType::Sale, -$bytes, $order, sprintf(self::LINE_SALE, $order->id)];
+            return match ($order->type) {
+                OrderType::Renewal => [TrafficTransactionType::Renewal, -$bytes, $order, sprintf(self::LINE_RENEWAL, $order->id)],
+                OrderType::ExtraTraffic => [TrafficTransactionType::Sale, -$bytes, $order, sprintf(self::LINE_EXTRA, $order->id)],
+                default => [TrafficTransactionType::Sale, -$bytes, $order, sprintf(self::LINE_SALE, $order->id)],
+            };
         });
     }
 
-    /** The order's delivery failed: what it drew goes back to the pool — once, and nothing for one that drew nothing. */
+    /** Gives back what a failed delivery drew (once; nothing when it drew nothing). */
     public function giveBack(Order $order, Bot $bot): void
     {
         $this->write($bot, static function () use ($order): ?array {
@@ -133,9 +131,8 @@ final class TrafficPool
     }
 
     /**
-     * `$work` — the shop giving one of the bot's services `$bytes` on top of what it has (the subscriptions screen's
-     * «افزایش زمان و حجم») — with that traffic out of the bot's pool: drawn first, a line of its own under whoever gave
-     * it, and given back when the work fails, as a failed delivery's is.
+     * Runs `$work` — giving one of the bot's services `$bytes` more — with that traffic drawn from the pool first and
+     * given back if the work throws.
      *
      * @template T
      * @param \Closure(): T $work
@@ -163,7 +160,7 @@ final class TrafficPool
         }
     }
 
-    /** The pool's lines, newest first — who wrote one as its reader may see it (Reviewers: the agent reads «پشتیبانی» for the owner). */
+    /** The pool's lines, newest first, each reviewer as its reader may see it (Reviewers). */
     public function ledger(Bot $bot, PageRequest $list): Page
     {
         return Page::fetch(TrafficTransaction::query()->where('bot_id', $bot->id)->orderByDesc('id'), $list, fn(TrafficTransaction $line): array => [
@@ -178,7 +175,7 @@ final class TrafficPool
         ]);
     }
 
-    /** What the delivery lines of an order — drawn, given back — add up to: below zero while its traffic is out of the pool. */
+    /** The sum of an order's delivery lines: below zero while its traffic is out of the pool. */
     private static function netFor(Order $order): int
     {
         return (int) TrafficTransaction::query()
@@ -188,7 +185,8 @@ final class TrafficPool
     }
 
     /**
-     * The bot's next line, as `$line` makes it from the balance now: [type, bytes, order, description], or null for no line.
+     * Appends the bot's next line, which `$line` builds from the current balance ([type, bytes, order, description], or
+     * null for none), under the ledger's lock.
      *
      * @param \Closure(int): (array{TrafficTransactionType, int, Order|null, string|null}|null) $line
      */

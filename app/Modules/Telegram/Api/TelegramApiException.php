@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Api;
 
 /**
- * Telegram said no to a Bot API call, or could not be asked: its error code (0 when there was no answer), its
- * description as the message, the parameters it attached (`retry_after`) — and what kind of refusal that is
- * (refusal(), is()), the one reading of it every caller shares.
+ * Telegram refused a Bot API call, or could not be reached (error code 0): its description, its parameters
+ * (`retry_after`), and what kind of refusal it is (refusal(), is()).
  */
 final class TelegramApiException extends \RuntimeException
 {

@@ -17,12 +17,8 @@ use Tests\Fakes\RecordingMailTransport;
 use Tests\HttpTestCase;
 
 /**
- * Whoever asks codes for an address — a reset's, a sign-up's, an email being added to an account — guesses at them no
- * further than a budget of the address's own, however many codes they have sent: ten wrong codes an hour and twenty a day,
- * each counted before it is judged; spent, the next is a 429 whatever it is, no new code goes to the address until it has
- * room again, and the address's account is told — once a day. A code that opens gives its room back; a code of no six
- * digits takes none of it; an address without an account has its budget all the same, so a refusal gives none away;
- * and an account adding emails guesses at their codes from a budget of its own too.
+ * The budget of wrong emailed codes per address (ten an hour, twenty a day, counted before judging): spent, a 429 and no
+ * new code, the account notified once a day. A right code gives its room back; an address without an account is held too.
  */
 final class EmailedCodesBudgetTest extends HttpTestCase
 {

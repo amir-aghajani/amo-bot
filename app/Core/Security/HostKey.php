@@ -7,11 +7,9 @@ namespace App\Core\Security;
 use App\Core\Support\Files;
 
 /**
- * A one-time key the app writes to a file of the host's (in storage/, which the web server never serves): whoever types
- * it in proves they can read the host's files — its File Manager, FTP, a shell —, the one proof a shop on shared hosting
- * has of its owner. The web installer opens with one (InstallKey), and the panel's way back in for a lost login does
- * (RecoveryKey). Four groups of four characters without look-alikes; one with a lifetime opens nothing once it is over,
- * counted from when it was made.
+ * A one-time key written to a file under storage/ (never served): typing it in proves access to the host's files — the
+ * one proof of ownership a shop on shared hosting has. The installer (InstallKey) and a lost login's recovery
+ * (RecoveryKey) use one. An optional lifetime counts from when the key was made.
  */
 abstract class HostKey
 {
@@ -22,8 +20,7 @@ abstract class HostKey
     ) {}
 
     /**
-     * The key — made now when there is none that still opens (of two first requests at once, one makes it and the other
-     * reads it).
+     * The key, made now when there is none that still opens (of two requests at once, one makes it, the other reads it).
      *
      * @throws \RuntimeException when its folder cannot be written
      */
@@ -32,7 +29,7 @@ abstract class HostKey
         return $this->kept() ?? trim(Files::rewrite($this->path, fn(string $kept): string => trim($kept) !== '' && !$this->expired() ? $kept : self::generate() . "\n"));
     }
 
-    /** Whether `$given` is the key there is now, as typed: case and the spaces around it do not matter. */
+    /** Whether `$given` is the current key, ignoring case and surrounding spaces. */
     public function matches(string $given): bool
     {
         $key = $this->kept();
@@ -41,7 +38,7 @@ abstract class HostKey
         return $key !== null && $given !== '' && hash_equals($key, $given);
     }
 
-    /** When the key there is now stops opening anything (unix seconds); null while there is none, or it never does. */
+    /** When the current key expires (unix seconds); null when there is none or it never does. */
     public function expiresAt(): ?int
     {
         $made = $this->kept() !== null && $this->lifetime !== null ? Files::modifiedAt($this->path) : null;
@@ -49,7 +46,7 @@ abstract class HostKey
         return $made === null ? null : $made + (int) $this->lifetime;
     }
 
-    /** The key opens nothing any more. */
+    /** Delete the key. */
     public function forget(): void
     {
         Files::delete($this->path);
@@ -74,10 +71,7 @@ abstract class HostKey
         return $made === null || $made + $this->lifetime <= time();
     }
 
-    /**
-     * Four groups of four (some 79 random bits) without look-alikes (ReadableCode): easy to copy, and to type off a phone's
-     * file manager when it must be.
-     */
+    /** Four groups of four ReadableCode characters (~79 random bits): easy to copy, and to type off a phone. */
     private static function generate(): string
     {
         $groups = [];

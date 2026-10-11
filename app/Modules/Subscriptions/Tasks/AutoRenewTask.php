@@ -10,10 +10,9 @@ use App\Modules\Subscriptions\Services\AutoRenewal;
 use Psr\Log\LoggerInterface;
 
 /**
- * «تمدید خودکار» on the clock: the services that came within the admin's days of their deadline are renewed from the
- * wallet, and each customer told what came of theirs (AutoRenewal). Each renewal asks its panel, so the run stops at its
- * share of the scheduler's time; the rest are renewed on the next run, as is a customer who tops up meanwhile. One
- * renewal that breaks on a fault of the shop's own is logged, and stops no other.
+ * «تمدید خودکار» on the clock (every 30 minutes, each shop): renews the services that came within the admin's days of
+ * their deadline (AutoRenewal). Each renewal asks its panel, so the run stops at its share of the scheduler's time and
+ * the rest wait for the next. One renewal that breaks is logged and stops no other.
  */
 final class AutoRenewTask implements Task
 {

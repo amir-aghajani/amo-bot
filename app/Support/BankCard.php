@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * Iranian bank card numbers: 16 digits with a Luhn check digit. Input may carry Persian/Arabic digits,
- * spaces or dashes; storage is the bare digits.
+ * Iranian bank card numbers: 16 digits with a Luhn check digit, typed with any digits, spaces or dashes, kept as bare
+ * digits.
  */
 final class BankCard
 {

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { GroupsModal } from '@/components/users/groups-modal'
 import type { CustomerGroupRow, CustomerGroupsResponse } from '@/lib/api-types'
 import { providers } from '@/test/render'
-import { userRow } from '@/test/rows'
+import { groupRow, userRow } from '@/test/rows'
 import { json, server } from '@/test/server'
 
 /*
@@ -12,8 +12,8 @@ import { json, server } from '@/test/server'
  * ticked off and on again is no change, wherever it came back in the list.
  */
 
-const VIP: CustomerGroupRow = { id: 1, name: 'VIP', sort: 1, counts: { users: 3 }, created_at: '2026-10-01T10:00:00Z' }
-const COLLEAGUES: CustomerGroupRow = { id: 3, name: 'همکاران', sort: 2, counts: { users: 1 }, created_at: '2026-10-01T10:00:00Z' }
+const VIP = groupRow()
+const COLLEAGUES = groupRow({ id: 3, name: 'همکاران', sort: 2, counts: { users: 1 } })
 
 /** The dialog over the customer — in VIP and «همکاران» —, the shop's groups as `groups`. */
 function show(groups: CustomerGroupRow[]) {

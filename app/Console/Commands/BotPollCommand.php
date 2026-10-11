@@ -19,14 +19,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Long polling (Telegram\Polling\Poller) for local development, where there is no public URL, and for a server without
- * a webhook — one process for every bot, held to one at a time by a lock file (two pollers would take each other's
- * updates).
+ * Long polling for every bot (Telegram\Polling\Poller) — for development, or a server without webhooks. One poller at
+ * a time (a lock file): two would take each other's updates.
  *
- * `--watch` runs a supervisor that keeps a worker process alive: the worker ends when the code or config.php on disk
- * changes — a file edited, added, deleted or rolled back to an older copy (fingerprint()); a long-running PHP process
- * would go on serving the classes and the settings it started with — or when it crashes, and the supervisor starts a
- * fresh one.
+ * `--watch` runs a supervisor that restarts the worker when it crashes or when the code or config.php changes
+ * (fingerprint()) — a long-running PHP process would keep serving the classes and settings it started with.
  */
 #[AsCommand(name: 'bot:poll', description: 'Receive updates with long polling for every bot (development / no-webhook mode)')]
 final class BotPollCommand extends Command
@@ -117,9 +114,8 @@ final class BotPollCommand extends Command
     }
 
     /**
-     * Keep a worker alive: started again on a reload (the code changed) and, after a short pause, on a crash. The worker
-     * gets the options that shape its run; `--drop-pending` only the first time, or every restart would throw updates
-     * away.
+     * Keep a worker alive: restarted at once on a reload, after a short pause on a crash. `--drop-pending` goes to the
+     * first worker only, or every restart would throw updates away.
      */
     private function supervise(InputInterface $input, SymfonyStyle $io): int
     {
@@ -158,9 +154,8 @@ final class BotPollCommand extends Command
     }
 
     /**
-     * The source as it stands, in one string: every PHP file of the watched `$paths` (folders, and files such as
-     * config.php) by its name, its size and its modification time — so a file changed, added, deleted or put back as an
-     * older copy (a rollback) changes it, which the newest time alone would not tell.
+     * A hash of every PHP file under `$paths` by name, size and modification time — so a file changed, added, deleted
+     * or rolled back to an older copy changes it (the newest time alone would miss the last two).
      *
      * @param list<string> $paths Absolute
      */

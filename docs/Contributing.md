@@ -15,8 +15,9 @@ shop is reported privately instead: [Security](Security.md).
 
 ## The rules a change keeps
 
-The engineers' handbook, [`CLAUDE.md`](https://github.com/amir-aghajani/amo-bot/blob/main/CLAUDE.md) at the repository's
-root, has every subsystem's rules and the decisions behind them: read the part your change touches. In brief:
+Each area's rules and the decisions behind them are on its developer page — [Architecture](Architecture.md),
+[Conventions](Conventions.md), and the internals of the area you touch — and in the code itself: every class and every
+function that is not obvious says in a short comment what it does. In brief:
 
 - **Every change of behaviour comes with its tests**, in the suites' own way ([Testing](Testing.md)): strict, in random
   order, off the network, their rows from `Tests\Support\Fixtures`.
@@ -25,9 +26,12 @@ root, has every subsystem's rules and the decisions behind them: read the part y
 - **Nothing without a caller.** Dead code fails the analysis (PHPStan's dead-code check, knip), and a test is no caller.
 - **One rule, one place.** A business rule lives in the domain service the bot, the panels and the website all call;
   look for the helper that exists before writing another.
-- **A module leans on another by decision.** Which modules each module names is one map, `MODULES` in
-  `tests/Unit/Core/LayersTest.php`: a new dependency fails the test until the map says it, with a word on why when it is
+- **A module depends on another only on purpose.** Which modules each module names is one map, `MODULES` in
+  `tests/Unit/Core/LayersTest.php`: a new dependency fails the test until the map lists it, with a note on why when it is
   more than a plain use of the other module's rows or services ([Architecture](Architecture.md#modules)).
+- **The code explains itself where it is.** A class and a non-obvious function get a short comment saying what they do
+  (and why, when that is not obvious); a long function gets a line above each step. No line-by-line comments
+  ([Conventions](Conventions.md)).
 - **Where a new piece goes**: [Extending](Extending.md); a new VPN panel, payment gateway, database, mail service or
   captcha: [Drivers](Drivers.md).
 
@@ -37,9 +41,8 @@ root, has every subsystem's rules and the decisions behind them: read the part y
    shape is agreed before the work. For a bug, say the version (`Application::VERSION`, or the commit), the host, where
    it happens and how to make it happen: the issue forms ask for each.
 2. Branch from `main`, keep the change to one subject, and run the checks. A change a shop's owner, its customers or a
-   website's developer would notice gets a line in the
-   [changelog](https://github.com/amir-aghajani/amo-bot/blob/main/CHANGELOG.md), under `## Unreleased` at its top —
-   the section a release renames to its version, and publishes as its notes.
+   website's developer would notice gets a line in [Releases](Releases.md), under `## Unreleased` at its top — the
+   section a release renames to its version, and publishes as its notes.
 3. Open a pull request that says what changes for the shop's owner, its customers or a website's developer, why, and how
    it is tested — its template lists the checks. CI must pass.
 
@@ -60,8 +63,9 @@ comments, console output and these pages are English.
 
 ## Documentation
 
-These pages are one tree, `docs/`, and three places read it as it is: the repository's own view on GitHub, the
-project's GitHub wiki, and GitHub Pages.
+These pages are the project's one documentation system — there is no separate handbook or changelog: what a
+maintainer needs is here or in the code's own comments. They are one tree, `docs/`, and three places read it as it is:
+the repository's own view on GitHub, the project's GitHub wiki, and GitHub Pages.
 
 - **The pages** are flat — the wiki has one namespace — English, GitHub-flavoured Markdown, one subject a page, named
   `Title-Case-With-Dashes.md`. `Home.md` is the front page, `_Sidebar.md` the navigation (the wiki and Docsify both read
@@ -82,8 +86,7 @@ project's GitHub wiki, and GitHub Pages.
   the shared page, and a request's body field by field at its operation.
 - **The check** — `php scripts/docs.php --check`, which CI runs — fails while a generated page is stale, a link leads to
   no page or no heading, a page is not in the sidebar or its name is not of the tree's form, or a heading would get two
-  anchors; it checks the links of the repository's own `README.md`, `CONTRIBUTING.md`, `SECURITY.md` and `CHANGELOG.md`
-  too.
+  anchors; it checks the links of the repository's `README.md` too.
 - **The wiki** is published by `.github/workflows/wiki.yml` on every push to the default branch that changes `docs/`:
   it checks out the wiki's repository, runs `php scripts/docs.php --wiki <dir>` — every page, its links written without
   `.md`, and a page the tree no longer has taken out — and pushes. GitHub makes a wiki's repository only once its first

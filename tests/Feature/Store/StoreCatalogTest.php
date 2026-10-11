@@ -15,10 +15,8 @@ use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
 /**
- * What the shop's website sells is exactly what its bot's «خرید اشتراک» offers now — the same categories in the same
- * order, an empty one too, the plans of none (or of one switched off) last, each plan only while it can be delivered and
- * with the servers a customer may pick it on; in an agent's shop, only what the agent's traffic covers. One plan is the
- * catalogue's or a 404. How the servers stand is anyone's to read — never their addresses, connectors or errors.
+ * The website's catalogue is exactly what the bot offers (categories, order, deliverable plans and their servers, an
+ * agent's traffic), one plan or a 404, and the servers' status without their internals.
  */
 final class StoreCatalogTest extends HttpTestCase
 {
@@ -41,7 +39,7 @@ final class StoreCatalogTest extends HttpTestCase
         $special = $this->category(['name' => 'ویژه']);
         $retired = $this->category(['name' => 'قدیمی', 'is_active' => false]);
         $monthly = $this->plan(['name' => 'یک‌ماهه', 'category_id' => $economy->id, 'description' => 'برای یک ماه'], $this->berlin);
-        $loose = $this->plan(['name' => 'بی‌دسته', 'traffic_gb' => 0, 'duration_days' => 0, 'ip_limit' => 0], $this->berlin);
+        $loose = $this->plan(['name' => 'بی‌دسته', 'traffic_gb' => 0, 'duration_hours' => 0, 'ip_limit' => 0], $this->berlin);
         $filedAway = $this->plan(['name' => 'دسته خاموش', 'category_id' => $retired->id, 'traffic_gb' => 0.5], $this->berlin);
         $this->plan(['name' => 'خاموش', 'category_id' => $economy->id, 'is_active' => false], $this->berlin);
         $this->plan(['name' => 'بی‌سرور', 'category_id' => $economy->id]);
@@ -54,9 +52,15 @@ final class StoreCatalogTest extends HttpTestCase
                 'id' => $monthly->id,
                 'name' => 'یک‌ماهه',
                 'description' => 'برای یک ماه',
+                'checkout_note' => null,
                 'price' => '120000.00',
+                'first_purchase_price' => null,
+                'agent_price' => null,
+                'offer_price' => '120000.00',
+                'discount' => null,
                 'traffic_gb' => 30,
                 'duration_days' => 30,
+                'duration_hours' => 720,
                 'devices' => 1,
                 'category_id' => $economy->id,
                 'locations' => [['id' => $this->berlin->id, 'name' => 'Berlin']],
@@ -179,23 +183,33 @@ final class StoreCatalogTest extends HttpTestCase
     }
 
     /**
-     * The plan as the catalogue offers it on Berlin alone, under `$category`, with `$overrides` over what it would say.
+     * The plan as the catalogue offers it on Berlin alone, under `$category`, with `$overrides` over what it would say —
+     * a term overridden in whole days is as many hours (24 a day) unless they say otherwise.
      *
      * @param array<string, mixed> $overrides
      * @return array<string, mixed>
      */
     private function offered(Plan $plan, ?PlanCategory $category, array $overrides = []): array
     {
-        return array_replace([
+        $offered = array_replace([
             'id' => $plan->id,
             'name' => $plan->name,
             'description' => null,
+            'checkout_note' => null,
             'price' => '120000.00',
+            'first_purchase_price' => null,
+            'agent_price' => null,
+            'offer_price' => '120000.00',
+            'discount' => null,
             'traffic_gb' => 30,
             'duration_days' => 30,
+            'duration_hours' => 720,
             'devices' => 1,
             'category_id' => $category?->id,
             'locations' => [['id' => $this->berlin->id, 'name' => 'Berlin']],
         ], $overrides);
+        $offered['duration_hours'] = $overrides['duration_hours'] ?? $offered['duration_days'] * 24;
+
+        return $offered;
     }
 }

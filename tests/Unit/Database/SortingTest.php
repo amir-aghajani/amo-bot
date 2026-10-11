@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Database;
 
 use App\Core\Database\Sorting;
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\PlanCategory;
 use Tests\DatabaseTestCase;
@@ -39,6 +40,23 @@ final class SortingTest extends DatabaseTestCase
         self::assertSame(['y', 'x'], $this->order());
         self::assertSame(1, CurrentBot::run($bot, static fn(): int => PlanCategory::query()->findOrFail($theirs->id)->sort), 'another shop\'s row is not reordered from here');
         self::assertSame(2, CurrentBot::run($bot, static fn(): int => Sorting::next(PlanCategory::class)), 'nor does it count in where theirs go');
+    }
+
+    public function testAListLongerThanAnyTheAdminOrdersIsRefusedBeforeAnythingIsWritten(): void
+    {
+        $category = $this->category();
+        $sort = $category->sort;
+
+        try {
+            Sorting::reorder(PlanCategory::class, range(1, Sorting::MAX_IDS + 1));
+            self::fail('a body of ids past any list was taken');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('ids', $e->errors());
+        }
+        self::assertSame($sort, $category->refresh()->sort);
+
+        Sorting::reorder(PlanCategory::class, range(1, Sorting::MAX_IDS));
+        self::assertSame(1, $category->refresh()->sort, 'as many as a list may have');
     }
 
     /** @return list<string> The current shop's categories, in the admin's order */

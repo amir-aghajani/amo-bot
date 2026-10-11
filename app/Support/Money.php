@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * Money is stored as decimal(14,2) strings and handled with bcmath; this is the one place that
- * normalises and formats amounts, so the bot, the API and the ledger never disagree on rounding.
- *
- * The shop trades in one currency, Toman: amounts are whole and are always shown as "۱۲۰٬۰۰۰ تومان".
+ * Money: decimal(14,2) strings handled with bcmath, normalised and formatted here alone so nothing disagrees on
+ * rounding. The one currency is Toman, in whole amounts, shown as "۱۲۰٬۰۰۰ تومان".
  */
 final class Money
 {
@@ -18,9 +16,8 @@ final class Money
     public const UNIT = 'تومان';
 
     /**
-     * "12.5" → "12.50": the canonical string form for storage and bcmath. Text may carry Persian
-     * digits; a third decimal rounds half up. Floats and ints are cast, nothing else is: an amount that
-     * is not a number is a programming error, not something to guess at.
+     * "12.5" → "12.50", the form for storage and bcmath. Persian digits allowed; a third decimal rounds half up. Text
+     * that is no number is a programming error, not something to guess at.
      *
      * @return numeric-string
      */

@@ -15,12 +15,9 @@ use App\Modules\Telegram\Exceptions\WebhookAddressException;
 use Psr\Log\LoggerInterface;
 
 /**
- * How the shop's bots get their updates, all of them at once: on webhooks — each at its address under APP_URL, the main
- * bot first, so an agent's bot handed over later follows the mode it is in (BotLifecycle::follow()) — or off them, back
- * to polling (bot:poll takes the updates). The work of bot:webhook:set and bot:webhook:delete, and of the owner's panel
- * for a host without a shell (POST|DELETE /api/admin/system/webhook): one bot that fails keeps it from none of the
- * others, an agent's bot Telegram refuses gets the reason on its row (BotHealth), and each bot's outcome is told —
- * present() words it for the owner, never with a token nor the secret a webhook's address ends with.
+ * Puts every bot on webhooks or takes them all off (back to polling) — bot:webhook:set/delete and the owner's panel,
+ * for hosts without a shell. One bot failing stops none of the others; each bot's outcome is worded for the owner
+ * (present()), never with a token or a webhook secret.
  */
 final class BotWebhooks
 {
@@ -30,7 +27,7 @@ final class BotWebhooks
     /** What the owner reads of a bot taken off its webhook. */
     public const DISABLED = 'Webhook برداشته شد؛ پیام‌ها فقط وقتی می‌رسند که bot:poll روی سرور اجرا باشد.';
 
-    /** A failure of the shop's own (its config.php, the database): the log has it. */
+    /** A failure in the shop itself (its config.php, the database): the log has it. */
     private const FAILED = 'انجام نشد؛ جزئیات در لاگ برنامه است.';
 
     public function __construct(
@@ -83,7 +80,7 @@ final class BotWebhooks
 
     /**
      * Each bot's outcome as the owner reads it: which bot, and `$done` (ENABLED, DISABLED) — or why it did not go
-     * through, in the words a refusal of Telegram's is told in elsewhere.
+     * through, worded as the shop words Telegram's refusals elsewhere.
      *
      * @param list<BotOutcome<mixed>> $outcomes
      * @return list<array{bot: array{id: int, username: string|null}, done: bool, message: string}>

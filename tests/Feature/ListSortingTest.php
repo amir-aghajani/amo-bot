@@ -17,7 +17,7 @@ use Tests\HttpTestCase;
 /**
  * The paged lists the panels sort by a column's header, on the server: each of a list's keys both ways — the other
  * direction exactly the reverse, rows that tie in the order of their ids —, the list's own order when the request names
- * no key of it, and the order said in the meta (closed in the API description, which every answer here is checked
+ * no key of it, and the order given in the meta (closed in the API description, which every answer here is checked
  * against). What a key orders by is what the row shows: a balance or a traffic with no ledger at all is 0.
  */
 final class ListSortingTest extends HttpTestCase
@@ -82,7 +82,7 @@ final class ListSortingTest extends HttpTestCase
         $later = $this->subscription($customer, $plan, $server, 'later', ['expires_at' => now()->addDays(10), 'upload_bytes' => Traffic::bytesOfGb(2), 'download_bytes' => Traffic::bytesOfGb(3)]);
         $soon = $this->subscription($customer, $plan, $server, 'soon', ['expires_at' => now()->addDays(2), 'download_bytes' => Traffic::bytesOfGb(1)]);
         $waiting = $this->subscription($customer, $plan, $server, 'waiting', ['starts_at' => null, 'expires_at' => null]);
-        $never = $this->subscription($customer, $plan, $server, 'never', ['duration_days' => 0, 'expires_at' => null, 'download_bytes' => Traffic::bytesOfGb(3)]);
+        $never = $this->subscription($customer, $plan, $server, 'never', ['duration_hours' => 0, 'expires_at' => null, 'download_bytes' => Traffic::bytesOfGb(3)]);
         [$later, $soon, $waiting, $never] = self::ids($later, $soon, $waiting, $never);
 
         $this->assertOrders('/api/admin/subscriptions', 'subscriptions', 'created', [$never, $waiting, $soon, $later]);

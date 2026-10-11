@@ -13,13 +13,11 @@ import { useDocumentTitle } from '@/lib/document-title'
 import { useLiveUpdates } from '@/lib/use-live-updates'
 
 /**
- * Two columns, as the Console: the sidebar on the inline-start edge and the page beside it, which owns the scroll and
- * sets its own width (components/page). On a phone the sidebar becomes a drawer under a slim topbar — one column or the
- * other, never both. Each panel draws it with its own navigation and what only it has (`panel`). Over the page, a strip
- * while the panel cannot follow the shop (offline, or the server not answering).
+ * The signed-in layout: the sidebar at the inline start and the page beside it, which owns the scroll and sets its own
+ * width (components/page); on a phone the sidebar is a drawer under a slim topbar. Each panel passes its own navigation
+ * and extras (`panel`). Also runs the live updates, and a strip over the page while they cannot reach the server.
  */
 export function AppShell({ panel }: { panel: PanelShell }) {
-  // Signed in, the panel follows the shop: what changes anywhere reloads on the screens that show it.
   const live = useLiveUpdates()
 
   // The tab and the history name the page — and its section —, not just the panel.

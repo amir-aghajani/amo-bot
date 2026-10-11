@@ -9,10 +9,8 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Bots\Services\Bots;
 
 /**
- * What a panel is told about its session (`GET /auth/me`, and every sign-in): who is signed in and whose shop the
- * panel shows — and how a shop is named, there, in the owner's shop picker and when the owner opens one: the main
- * bot's by that, an agent's by its bot's title (what Telegram shows its customers), else — a bot not handed over yet —
- * by its agent; whether it runs beside it (an agent's goes off when their agency ends).
+ * A panel's session as `GET /auth/me` and the sign-ins answer it: who is signed in and the shop shown. A shop is named
+ * «فروشگاه اصلی», an agent's by its bot's title, else (no bot handed over yet) by its agent.
  */
 final class SessionPresenter
 {

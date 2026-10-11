@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $text HTML; the caption when a message is copied
  * @property int|null $copy_chat_id A customer's chat holding the message to copy (a receipt)
  * @property int|null $copy_message_id That message
- * @property string|null $photo_path A picture of the shop's own — a receipt, a ticket's picture, uploaded from a website or a panel — sent as a photo with `text` as its caption: where it is kept (Users\Services\CustomerPictures::reference())
+ * @property string|null $photo_path A picture the shop keeps — a receipt, a ticket's picture, uploaded from a website or a panel — sent as a photo with `text` as its caption: where it is kept (Users\Services\CustomerPictures::reference())
  * @property list<list<array<string, mixed>>>|null $keyboard The rows of inline buttons it carries (a receipt's «تایید» / «رد»)
  * @property string|null $ref What it is about ("receipt:12", "ticket:5"), for a later report to reply to
  * @property int|null $ticket_id The support ticket it is about: what a bot admin's reply to it answers (Reports\TicketReplies), and kept while that ticket is not closed (ReportSender::pruneTickets())
@@ -68,9 +68,8 @@ class ReportMessage extends Model
     }
 
     /**
-     * A message the bot wrote in the group itself, not through the queue — a receipt's prompt for a reason —, recorded as
-     * sent there: what `ref` says it is about is how a reply to it is told apart, by the message it answers, never by its
-     * words.
+     * Record a message the bot posted in the group directly (a prompt for a rejection's reason), so a reply to it is
+     * recognised by the message it answers — never by its text.
      */
     public static function posted(Topic $topic, string $text, string $ref, int $chatId, int $messageId): void
     {

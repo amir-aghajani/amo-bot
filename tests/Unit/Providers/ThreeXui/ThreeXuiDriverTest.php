@@ -10,10 +10,9 @@ use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
 use Tests\TestCase;
 
 /**
- * The 3x-ui connector: its card — the versions it needs, the two letters the picker draws, what its panels can do — and
- * its form: the address with its web base path, a token or a username and password with the TOTP secret of a two-factor
- * login, the connection's options; and what an edit keeps of the stored secrets: only what was given for the host the
- * address keeps.
+ * The 3x-ui connector's card (versions, mark, capabilities) and form: the address with its web base path, a token or a
+ * username and password with a TOTP secret, the shared options; and which stored secrets an edit keeps — only those given
+ * for the host the address keeps.
  */
 final class ThreeXuiDriverTest extends TestCase
 {

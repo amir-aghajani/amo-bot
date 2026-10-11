@@ -1,58 +1,109 @@
 # Testing
 
-> This page is the outline; CLAUDE.md's "Conventions" has every test helper in full.
+How the test suites are built, what each base class and helper gives you, and what keeps the code honest beyond the
+tests themselves. Run everything with `composer check` and `pnpm check` before a pull request
+([Development](Development.md#the-checks)).
 
 ## The PHP suite
 
-`composer test` (or `vendor/bin/phpunit`) runs the PHPUnit suite — `tests/Feature` and `tests/Unit`:
+`vendor/bin/phpunit` (or `composer test`) runs `tests/Unit` and `tests/Feature`, some 2,700 tests:
 
-- **On its own configuration and an in-memory SQLite database**: the app boots once a test process on a `config.php` of
-  the suite's own (a fixed `APP_KEY`, UTC, no bot token, no panel login), never this machine's; every file it writes
-  goes to a folder of the run's own.
-- **Off the network**: every outgoing call — Telegram, the VPN panels, the OpenID providers, Cloudflare, the mail server
-  — goes through a transport the suite swaps for a fake (`tests/Support`: `FakeTelegram`, `FakePanel`,
-  `FakeTelegramLogin`, `FakeGoogleLogin`, `FakeTurnstile`, and `AltchaWidget` to solve the shop's own captcha;
-  `tests/Fakes`: `FakeProvider` and `FakePanelDriver` — a panel connector the tests answer —, `ProbedDriver` — a database
-  whose probe a test answers —, the recording mail transport), and nothing sleeps.
-- **Strict**: tests run in random order, and a deprecation, a notice or stray output fails one.
-- **Held to the API's description**: every request an HTTP test sends and every answer it gets back is validated against
-  `resources/api/openapi.yaml`, as `tests/Support/ApiDescription.php` reads it (every operation the shop's admins also
-  have given its path on the website): a new field, or a new answer shape, fails until the description has it. A test
-  whose point is a request no client sends passes it through `unchecked()`. `tests/Unit/Drivers/DriverFormsTest` holds
-  each driver's request shape to its form ([Drivers](Drivers.md#the-kernel)).
-- **Held to their cost**: `ListQueriesTest` reads every list with a few rows and with many and fails when the second
-  asks more queries; `BotQueryBudgetTest` holds each common bot screen to its budget of queries and Telegram calls.
-- **Held to their layers**: `tests/Unit/Core/LayersTest` fails when Core or Support names a module, and when the modules
-  each module names differ from its `MODULES` map — a new dependency between modules is an edit of the map, by decision
-  ([Architecture](Architecture.md#modules)).
+- **On its own configuration**: the app boots once per test process on a `config.php` of the suite's own
+  (`TestCase::CONFIG`: an in-memory SQLite database, a fixed `APP_KEY`, UTC, no bot token, no panel login), deleted as
+  soon as it is read — never this machine's. Every file the app writes (`TestCase::FILES`: the install lock and keys, the
+  throttle's counts, uploads, the scheduler's state…) goes to a folder of the run's own, emptied after each test.
+- **Off the network**: every outgoing transport answers "no network" until a test hands it a fake, and nothing sleeps.
+- **Strict**: random order, and a deprecation, a notice or stray output fails a test. PHPStan checks the tests too.
 
-Writing one: a feature test extends `DatabaseTestCase` (every case in a transaction), `HttpTestCase` (`postJson()`,
-`loginAsAdmin()`, `loginAsAgent()`, `bearer()` for a website's customer, `loginAsStaff()` for one of its admins,
-`upload()` for a form) or `BotTestCase` (`send($this->message(…))`, `tap()`, `said()`, `popup()`); its rows come from
-`Tests\Support\Fixtures`
-(`customer()`, `plan()`, `sellingServer()`, `buy()`, `agent()`, `website()`, `ticket()` …), never `Model::create()` by
-hand.
+## The base classes
 
-## Static analysis and style
+| Class | For | Gives |
+|---|---|---|
+| `Tests\TestCase` | a unit test that needs the app | `app()`, `service()`, `config()`, `swap()`, `logs()`, `configFile()`, `scratchDir()`, and the fakes below |
+| `Tests\DatabaseTestCase` | anything that touches the database | the tables made once a process, every test in a transaction rolled back after it, the `Fixtures` |
+| `Tests\HttpTestCase` | the API | `get()`, `postJson()`… (with the CSRF header), `send()` (without), `upload()`, `loginAsAdmin()`, `loginAsAgent()`, `openShop()`, `bearer()`, `loginAsStaff()`, `storeApi()`, `unchecked()`, `decode()` |
+| `Tests\BotTestCase` | the Telegram bot | `send($this->message(…))`, `tap()`, `contact()`, the report group's `groupTap()`, `groupText()`, `groupReply()`, `botMembership()`; then `calls()`, `params()`, `said()`, `popup()`, `inlineKeyboard()`, `callbacks()`, `buttonsUnder()` |
 
-`composer analyse` runs PHPStan at level 6 over all the PHP there is — the app, the tests, the scripts — with
-shipmonk's dead-code detector: a method, constant or property nothing uses fails it, and so does what only the tests
-use. `composer lint` (a dry run) and `composer fix` keep PER-CS 2. `composer check` is the three together.
+A few things to know:
+
+- **Swap a leaf, not a service.** The container is one per process. A test hands the app its double by replacing a
+  transport or a file path, never a service that others hold. `swap($id, $double, ...$rebuild)` exists for the rare
+  one-off double, listing the entries that hold it so they are rebuilt and restored.
+- **The change feed** counts the test's transaction as the database (`ChangeFeed::countAsCommitted()`), so writes in a
+  test move the panels' areas as committed writes would.
+- **Event listeners** are as each test found them: a test that changed them fails. To act at a precise moment — another
+  process's move in a race — use `whileListening($event, $listener, $work)`, which puts the listeners back;
+  `whileTheOrderClosesOnceRead()` is the settlement's race. `withTheTurnOver($work)` runs work as at the end of a
+  scheduler's turn.
+- **HTTP tests validate both ways** against the API description ([API contract](API-Contract.md)). A request no client
+  sends goes through `unchecked()`.
+- **The shop counts as installed** in an HTTP test; `installed(false)` plays a fresh one, `configureAdmin(null)` one
+  without a login. `loginAsAdmin()` opens the session directly — signing in over HTTP is the auth tests' business.
+- **Time** is moved with `Carbon::setTestNow()`; the throttle, the TOTP codes and the leases all read the shop's clock.
+
+## Fixtures
+
+Rows come from `Tests\Support\Fixtures`, never from `Model::create()` in a test. Each maker has the defaults a test
+rarely cares about and `$overrides`, merged last, for the ones it does: `customer()`, `webCustomer()`, `admin()`,
+`plan()`, `sellingServer()` (on the fake panel, ready to sell), `fakeServer()`, `panelServer()`, `cardMethod()`,
+`purchaseOrder()`, `cardPayment()`, `receipt()`, `subscription()`, `agent()`, `agentBot()`, `website()`,
+`customerSession()`, `ticket()`, `review()` and more. Some build a whole scenario: `buy()` (paid from the wallet),
+`renew()`, `paidByCard()` (a receipt sent and approved), `reportGroup()` (connected, every topic made), the programs'
+switches (`referralProgram()`, `agencyProgram()`, `extrasOnSale()`…). Balances are ledgers: `wallet($user, $balance)` and
+`traffic($bot, $gb)` add the one line that brings them there. A fixture builds in the current shop; wrap it in
+`CurrentBot::run($bot, …)` for an agent's. `panelActor()` and `groupAdminActor()` are the actors for a test that calls a
+service directly.
+
+## Fakes
+
+Each fake stands in for one outside party and records what the app sent it.
+
+| Fake | Stands for | Reach it with |
+|---|---|---|
+| `Support\FakeTelegram` | the Bot API and bot:poll's long polls | `telegram()` — `reply()`, `fail()`, `on($method, …)`, `calls()`, `params()`, `sentTo()` |
+| `Support\FakePanel` | any other outgoing HTTP: a VPN panel, Resend, GitHub | `panelHttp()` — `ok()`, `fail()`, `raw()`, `refuse()`, `calls()`, `request()` |
+| `Fakes\FakePanelDriver`, `Fakes\FakeProvider` | a VPN panel connector, for everything above the connector | `fakePanel()`, then a server with `driver: fake` |
+| `Support\FakeTelegramLogin`, `FakeGoogleLogin` | the OpenID providers (keys signed by `SigningKey`) | `telegramLogin()`, `googleLogin()` |
+| `Support\FakeTurnstile`, `AltchaWidget` | Cloudflare's siteverify; a visitor's browser solving ALTCHA | `turnstile()`; `AltchaWidget::solve()` |
+| `Fakes\RecordingMailTransport` | the mail server | `mail()` — `sent()`, `to()`, `codeIn()`, `failing()` |
+| `Fakes\ProbedDriver` | a database whose probe the test answers | `probedDatabase($key)` |
+| `Support\FakeGitHub`, `FakeRelease` | GitHub and a signed release | the update tests' `UpdateTestCase` |
+| `Fakes\NullSleeper`, `RecordingSleeper` | waiting | in place from the boot; the recording one when a test asserts the waits |
+
+`tests/Fakes` also holds small stand-ins a single test needs as a named class (a handler that throws, a task that
+counts its runs, a leased table).
+
+## Guards beyond the tests
+
+- **Query budgets**: `tests/Feature/ListQueriesTest` reads every list of the panels and the Store API with a few rows
+  and with many and fails when the second asks more queries; `BotQueryBudgetTest` holds each common bot screen to its
+  queries and Telegram calls. Raising a budget says what the new query buys.
+- **Layers**: `tests/Unit/Core/LayersTest` fails when Core or Support names a module, or when the modules a module
+  names differ from its `MODULES` map ([Architecture](Architecture.md#modules)).
+- **Routes**: `tests/Feature/RouteGuardsTest` walks every route through every guard in order, and with another shop's
+  row.
+- **Upgrades**: `tests/Unit/Database/UpgradesTest` holds every schema change to its upgrade ([Database](Database.md#upgrades)).
+- **Drivers**: `tests/Unit/Drivers/DriverFormsTest` holds each driver's request shape to its form
+  ([Drivers](Drivers.md#the-kernel)).
+- **Dead code**: PHPStan's dead-code detector fails on anything nothing calls — a test is no caller.
 
 ## The panels
 
-`pnpm test` runs the panels' Vitest suite (happy-dom): tests sit beside what they test as `*.test.ts[x]`. Every test
-gets a fake server in place of `fetch`, and a request no route of the test answers — or one the API description does
-not take — fails it. `pnpm check` is the whole of it: the API types current, the type check, oxlint, knip (unused files,
-exports and dependencies), Prettier, and the tests.
+`pnpm test` runs the panels' Vitest suite (happy-dom). Tests sit beside what they test as `*.test.ts[x]` and test
+behaviour the way a screen uses it. Every test gets a fake server in place of `fetch` (`src/test/server`:
+`server().on(method, path, answer)`, `hold()`, `sent()`); a request no route answers fails the test, and so does one
+the API description does not take. `src/test/render` renders a screen with the app's providers (`providers()`,
+`signedIn()`), `src/test/rows` makes whole API rows, and time is faked — nothing waits for real.
+[Internals: panels](Internals-Panels.md) has more.
 
 ## The documentation
 
-`php scripts/docs.php --check` fails while a generated page is stale or a link between pages leads nowhere
+`php scripts/docs.php --check` fails while a generated page is stale, or a link between pages leads nowhere
 ([Contributing](Contributing.md#documentation)).
 
 ## CI
 
-Every push to `main` and every pull request to it runs, on GitHub Actions (`.github/workflows/ci.yml`):
-`composer check` and the documentation's check on PHP 8.2, 8.3 and 8.4 — the versions a shop is supported on —, and the
-panels' `pnpm check` and a production build.
+Every push to `main` and every pull request to it runs on GitHub Actions (`.github/workflows/ci.yml`): `composer check`
+and the documentation's check on PHP 8.2, 8.3 and 8.4 — every version a shop may run, each held to the whole suite —,
+and the panels' `pnpm check` and a production build. The update tests need the `sodium` and `zip` extensions, which CI
+has; locally, `php -d extension=sodium -d extension=zip vendor/bin/phpunit` runs them.

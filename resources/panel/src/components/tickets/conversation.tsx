@@ -12,11 +12,9 @@ import { cn } from '@/lib/utils'
 const SUPPORT = 'پشتیبانی'
 
 /**
- * A ticket's conversation, the first message first: the customer's at the start, support's at the end on a quiet fill —
- * the two told apart by their place and their surface, as the Console sets a conversation, no coloured bubbles —, each
- * saying who wrote it (support's writer as the decision's reviewer is shown), where it was written and when, its words as
- * typed (each line in its own direction), and its picture, which opens at full size — or, once the shop no longer keeps
- * it (an upload of a ticket closed 30 days), a word that it had one.
+ * A ticket's conversation, oldest first: the customer's messages at the start, support's at the end on a quiet fill (no
+ * coloured bubbles). Each says who wrote it, where and when, and shows its picture — or that it had one the shop no
+ * longer keeps (uploads go 30 days after a ticket closes).
  */
 export function Conversation({ ticket }: { ticket: TicketDetail }) {
   return (

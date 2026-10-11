@@ -10,10 +10,8 @@ use App\Modules\Telegram\Api\TelegramApiException;
 use Psr\Log\LoggerInterface;
 
 /**
- * What keeps an agent's bot from running, on its row (`bots.problem`) for the agent — their account in the main bot —
- * and the owner — the agents page — to read: written by whoever hears it from Telegram, the poller or the webhook's
- * registration, and cleared once the bot runs again. The main bot's own trouble is the operator's: the console and the
- * log say it.
+ * What keeps an agent's bot from running (its token refused, its updates taken elsewhere), kept on its row
+ * (`bots.problem`) for the agent and the owner, and cleared once it runs again. The main bot's trouble goes to the log.
  */
 final class BotHealth
 {
@@ -26,9 +24,8 @@ final class BotHealth
     public function __construct(private readonly LoggerInterface $logger) {}
 
     /**
-     * Telegram said no to one of the bot's calls. When it means the bot cannot run — its token refused, its updates
-     * taken elsewhere — it is logged and, for an agent's bot, kept on its row; true then. Anything else (Telegram out of
-     * reach, a flood limit) is the caller's to wait out: false.
+     * A refusal that means the bot cannot run (token refused, updates taken elsewhere) is logged and kept on an agent's
+     * row; true then. Anything else (out of reach, a flood) is the caller's to wait out: false.
      */
     public function refused(Bot $bot, TelegramApiException $e): bool
     {

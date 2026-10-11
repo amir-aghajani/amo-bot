@@ -28,14 +28,9 @@ use Tests\Support\AltchaWidget;
 use Tests\Support\FakeTurnstile;
 
 /**
- * The customers' reviews on the shop's website, while it shows them (its switch, off at first: a 404 both ways): the
- * approved ones anyone reads — the newest first, with how many there are and their average —, the shop's own and no
- * other's; and a review anyone writes — a guest only while the website asks a captcha, or the customer whose bearer
- * token comes with it (theirs then; a token that opens nothing a 401, never a guest's review) —, every refusal of its
- * fields at once, behind the website's captcha for the review's action (Turnstile's and ALTCHA's alike), held to what an
- * address network (an IPv6 one by its /48), a customer and every guest together may write (a refused captcha counted
- * against its network, one that could not be judged not), and to what the shop keeps waiting on support; kept waiting
- * on support, the report group told — after everything else in its queue.
+ * Reviews on the website: the switch (404 while off), the approved list and its summary, writing one (a guest only
+ * behind a captcha, a signed-in customer as themselves), field refusals, the captcha per action, the rate limits per
+ * network, customer and guests, the waiting-room limit, and the report group told last.
  */
 final class StoreReviewsTest extends HttpTestCase
 {

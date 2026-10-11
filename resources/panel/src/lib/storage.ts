@@ -1,7 +1,7 @@
 /*
- * The browser storage the panels keep their conveniences in — the theme, the sidebar, its folds, the stale-build reload.
- * Storage may refuse (private mode, blocked site data, a full quota): a read then has nothing, a write is lost, and the
- * panel carries on with its defaults.
+ * Browser storage, for conveniences only (the theme, the sidebar, its folds, the stale-build reload). Storage may refuse
+ * (private mode, blocked site data, a full quota): a read then returns null, a write is lost, and the panel carries on
+ * with its defaults.
  */
 
 /** Every key, shared by both panels. The theme's is read by each index.html's inline script too, before React loads. */

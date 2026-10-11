@@ -7,12 +7,9 @@ namespace App\Modules\Updates;
 use App\Core\Support\Files;
 
 /**
- * The key AmoBot's releases are signed with — its public half, resources/release-key.pub (base64), which every release
- * carries: the updater installs only what this key's owner signed, so neither GitHub nor anyone between it and the shop
- * — a hijacked account included — can hand the shop code of their own. A copy without the key (a development checkout,
- * a build made without one) is updated by hand. An Ed25519 key, checked with PHP's sodium extension; the key the next
- * update is checked with is the one the release installed now brings — how a new key reaches the shops
- * (scripts/release-key.php --rotate).
+ * The Ed25519 public key releases are signed with (resources/release-key.pub, base64), checked with sodium. Only what
+ * it signed is installed, so neither GitHub nor anyone in between — a hijacked account included — can ship code to the
+ * shops. Each release carries the key the next one is checked with, which is how a new key reaches the shops.
  */
 final class ReleaseKey
 {
@@ -28,7 +25,7 @@ final class ReleaseKey
         return $this->key() !== null;
     }
 
-    /** Whether the key signed `$message`: `$signature` the detached signature in base64, as release.json.sig holds it. */
+    /** Whether the key signed `$message` (`$signature`: the detached signature, base64). */
     public function signed(string $message, string $signature): bool
     {
         $key = $this->key();

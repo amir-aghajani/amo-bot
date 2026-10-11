@@ -71,6 +71,7 @@ screens, a wallet purchase's or renewal's own confirmation (the website's checko
 | `auto_renew_short` | the wallet short of an automatic renewal | subscription |
 | `renewal_failed` | a renewal paid but not delivered — support finishes it | order |
 | `referral_joined`, `referral_commission` | a newcomer by their invite code; a commission earned | `null` |
+| `referral_start_gift`, `referral_reward` | a start gift in their wallet (the referrer's for a newcomer, the newcomer's own); a service given free for their invitations — the service itself comes as a `payment_settled` | `null` |
 | `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked`, `agency_traffic_short` | an agent's agency, and their bot's traffic | `null` |
 | `way_in_added`, `way_in_removed` | a Telegram account, a Google account or an email added to their account, or taken off it | `null` |
 | `password_changed` | their password set or changed (`PUT /me/password`), reset, or set by a merge ([the merge offer](Store-API-Account.md#the-merge-offer)); an email added with its password is told as `way_in_added` | `null` |
@@ -80,13 +81,16 @@ screens, a wallet purchase's or renewal's own confirmation (the website's checko
 | `email_codes_failed` | the codes emailed to their address failed until none goes for a while | `null` |
 | `ticket_answered` | support answered their ticket — the words cut to what a Telegram message holds; the whole is in the ticket | ticket |
 | `ticket_closed` | support closed their ticket | ticket |
+| `loyalty_tier_up` | a delivered order moved them up to a higher loyalty tier, with its perks ([loyalty tiers](Loyalty-Cashback-And-Draws.md#loyalty-tiers)) | `null` |
+| `cashback_earned` | a delivered order earned them cashback in their wallet ([cashback](Loyalty-Cashback-And-Draws.md#cashback)) | order |
+| `lottery_won` | they won the shop's nightly draw among its buyers, and were given its prize ([the nightly draw](Loyalty-Cashback-And-Draws.md#the-nightly-draw)) | `null` |
 
 The notices of how the account is signed in to — `way_in_added`, `way_in_removed`, `password_changed`,
 `two_factor_enabled`, `two_factor_disabled`, `account_merged`, `second_step_locked`, `email_codes_failed` — go to their
 Telegram chat and their email both.
 
 Link a `null`-subject notice by its type: the referral page, the security settings, the wallet. The list grows with the
-shop: show a notice of a type you do not know by its words, and link it only by a subject type you know.
+shop: show a notice of a type you do not know by its text, and link it only by a subject type you know.
 
 ## Marking read
 

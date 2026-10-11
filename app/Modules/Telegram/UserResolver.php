@@ -10,15 +10,10 @@ use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\Customers;
 
 /**
- * Finds (or registers) the shop User behind a Telegram update and keeps their profile fresh — a customer of the bot the
- * update came to (CurrentBot): one person who talks to two bots is a customer of each. A customer who is not in the
- * database yet and arrives with /start and someone's referral link (`/start ref_…`) becomes that someone's referral as
- * they are registered — here, before any gate, so a first /start the phone or channel rule holds back still counts.
- * Registering is Users\Services\Customers' — the shop's website registers its newcomers the same way: reported to the
- * admins' report group with whoever brought them, the agent who owns a bot its admin there.
- *
- * The row is written only when something on it changes — the profile, a block lifted — or `last_seen_at` is a minute
- * old, and a visit alone quietly (Customers::seen()).
+ * Finds or registers the customer behind an update, in the current bot's shop (one person in two bots is two
+ * customers), and keeps their profile fresh. A newcomer arriving with `/start ref_…` becomes that code's referral as
+ * they register — before any gate, so a first /start held back by a gate still counts. Registration and the write-only-
+ * when-changed rule are Users\Services\Customers'.
  */
 final class UserResolver
 {
@@ -40,7 +35,7 @@ final class UserResolver
             return $user;
         }
 
-        // Whoever writes to the bot has not blocked it; a my_chat_member update says either way itself (recordMembership()).
+        // Whoever writes to the bot has not blocked it; a my_chat_member update is recorded by recordMembership().
         if ($update->type() !== 'my_chat_member') {
             $user->bot_blocked = false;
         }
@@ -49,10 +44,7 @@ final class UserResolver
         return $user;
     }
 
-    /**
-     * Whether the customer blocked the bot, as a my_chat_member update says — so what the bot sends on its own skips
-     * them instead of failing.
-     */
+    /** Record whether the customer blocked the bot (a my_chat_member update), so bulk sends skip them. */
     public function recordMembership(User $user, Update $update): void
     {
         $status = $update->memberStatus();

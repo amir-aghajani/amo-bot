@@ -164,10 +164,7 @@ export function SubscriptionsPage({ servers: readServers = shopServerChoices, se
   )
 }
 
-/**
- * The rows ticked, kept across the list's pages; another `scope` (a tab, a filter, a search) starts with none. A row
- * an operation handed back replaces its ticked copy (`refresh`).
- */
+/** The rows ticked, kept across pages and cleared by another `scope` (tab, filter, search); `refresh` swaps in a returned row. */
 function useSelection<Row extends { id: number }>(scope: string) {
   const [selected, setSelected] = useState<{ scope: string; rows: ReadonlyMap<number, Row> }>({ scope, rows: new Map() })
   const rows = selected.scope === scope ? selected.rows : new Map<number, Row>()

@@ -10,16 +10,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
- * The order a paged list is read in: one of the list's keys and its direction, as PageRequest::sort() read them, with
- * what the key orders by — never anything the request names. Page::fetch() puts it on the query, the row's id after it
- * in the same direction, so rows that tie keep one place from page to page and the other direction is the exact
- * reverse; and says it in the list's meta.
+ * The order a paged list is read in: a key, its direction, and what the key orders by. The row's id follows in the same
+ * direction, so ties keep their place from page to page and the other direction is the exact reverse.
  */
 final class Sort
 {
     /**
-     * `$by` is what the key orders by, in turn: a column, or an alias the rows read with them (a count); SQL of the
-     * directory's own (a balance with none at 0, a deadline with "never" last); a subquery, none counting as 0.
+     * `$by`, in turn: a column or an alias the rows select (a count); raw SQL (a deadline with "never" last); or a
+     * subquery, where none counts as 0.
      *
      * @param list<string|Expression|QueryBuilder> $by
      */

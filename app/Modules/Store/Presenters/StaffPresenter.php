@@ -10,17 +10,15 @@ use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Models\Website;
 
 /**
- * A signed-in customer as one of the shop's admins on its website (`GET /me`'s `staff`), so the site knows what of the
- * admin API (`/admin/*`, Http\StaffMiddleware) to offer them: null for a customer who is no admin of the shop, and while
- * the website lets no admin in.
+ * `GET /me`'s `staff`: what the admin API (Http\StaffMiddleware) will let this customer do, so the site offers only that.
+ * Null for a customer who is no admin, and while the website lets no admin in.
  */
 final class StaffPresenter
 {
     /**
-     * What the website grants its admins beyond the shop's daily work; whether it asks them a strong sign-in, and whether
-     * this session is one (CustomerSessions::isStrong() — POST /me/reauthenticate makes one of a password alone); until
-     * when its sign-in lets it work the admin API at all (StaffMiddleware::SIGN_IN_HOURS), and until when it counts as
-     * recent, which a granted operation — and approving a payment — asks too (either null: prove a way in again first).
+     * The grants; whether a strong sign-in is asked and whether this session is one; until when the session may use the
+     * admin API at all (StaffMiddleware::SIGN_IN_HOURS) and until when it counts as recent (granted operations and payment
+     * approvals ask that). A null time means: prove a way in again first.
      *
      * @return array{grants: list<string>, strong_sign_in: bool, signed_in_strongly: bool, signed_in_until: string|null, recent_until: string|null}|null
      */

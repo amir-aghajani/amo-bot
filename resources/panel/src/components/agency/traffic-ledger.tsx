@@ -19,11 +19,7 @@ const TYPES: Record<TrafficLine['type'], string> = {
   adjust: 'اصلاح پشتیبانی',
 }
 
-/**
- * An agent's traffic, line by line, newest first — bought from the main bot, drawn by a sale or a renewal of their bot or
- * by the traffic given one of its services, given back when a delivery or an extension failed, set right by the shop —
- * with what was left after each. Paged.
- */
+/** An agent's traffic ledger, newest first: purchases, sales, renewals, extensions, refunds and adjustments, with the balance after each. */
 export function TrafficLedger({ queryKey, url }: { queryKey: QueryKey; url: string }) {
   const list = usePagedList({ queryKey, read: (query) => api.get<TrafficLinesResponse>(url, query), list: 'lines' })
 

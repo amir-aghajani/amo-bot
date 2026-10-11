@@ -7,10 +7,8 @@ import { Button } from '@/components/ui/button'
 import { useForm } from '@/lib/use-form'
 
 /**
- * The installer's first question, before anything about the shop: its key — the text of storage/install-key.txt, which
- * the first visit wrote on the host —, so nobody but the host's owner can install the shop. `refusal` is the server's
- * word on the key it had: a wrong one (`tried`) is said as the field's error; none yet is what the panel's paragraph
- * already says, so it is not said twice. Asking again (`recheck`) tells whether the typed one is right.
+ * The install key step: the text of storage/install-key.txt, written on the first visit, so only the host's owner can
+ * install. A wrong key (`tried`) shows as the field's error; `recheck` asks the server about the typed one.
  */
 export function KeyStep({ refusal, tried, checking, recheck }: { refusal: string; tried: boolean; checking: boolean; recheck: () => void }) {
   const { values, set, handleSubmit } = useForm({ key: '' })

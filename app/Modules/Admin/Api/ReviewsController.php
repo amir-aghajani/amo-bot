@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
@@ -16,9 +15,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The reviews screen (both panels, and the shop's website for its admins): the list, and what support decides about a
- * review — approve it (the website shows it), reject it (it does not), delete it —, each Reviews\Services\Reviews', the
- * request's principal the one who did it; the answer is the review as it stands after it.
+ * The reviews screen (both panels, and the website's admin API): the list, and approving (the website shows it),
+ * rejecting or deleting a review — each Reviews\Services\Reviews', by the request's principal.
  */
 final class ReviewsController extends ApiController
 {
@@ -30,7 +28,7 @@ final class ReviewsController extends ApiController
     /** GET /reviews?status=&search=&page= */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->directory->search(PageRequest::fromQuery($request->getQueryParams()))->toArray('reviews'));
+        return $this->json($response, $this->directory->search($this->pageRequest($request))->toArray('reviews'));
     }
 
     /**

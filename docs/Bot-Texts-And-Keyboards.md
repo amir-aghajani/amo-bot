@@ -5,9 +5,9 @@ shop its own.
 
 ## The bot's texts
 
-Everything the bot says to a customer is a text you may reword — 231 of them in the main shop (an agent's has no agency
-texts) —, listed by group, each with its kind, its title and where the customer meets it. Search by a title or a piece
-of the wording; «تغییر یافته» lists the ones you changed. Every text, its kind and its variables:
+Everything the bot says to a customer is a text you may reword — over 300 of them in the main shop (an agent's has no
+agency texts) —, listed by group, each with its kind, its title and where the customer meets it. Search by a title or a
+piece of the wording; «تغییر یافته» lists the ones you changed. Every text, its kind and its variables:
 [the bot texts reference](Bot-Texts-Reference.md). The words of `/broadcast`, `/emoji` and the report group are fixed:
 only the bot's admins read them.
 
@@ -59,7 +59,7 @@ the last `/emoji` found them refused.
   anywhere — under the last row to make a new one —, or use its dialog. ▲▼ moves a row; its bin removes it.
 - **A button** — «افزودن دکمه», or a tap on one:
   - «دکمه» — what it does: «خرید اشتراک», «سرویس‌های من», «تمدید سرویس», «کیف پول + شارژ», «زیرمجموعه‌گیری», «نمایندگی»,
-    «آموزش» (the text «آموزش», a short guide you may reword) or «پشتیبانی». Each once.
+    «آموزش» (the text «آموزش», a short guide you may reword), «پشتیبانی», «کد هدیه» or «گردونه شانس». Each once.
   - «متن دکمه» — its label, 64 characters, an emoji welcome; no two alike (a keyboard's tap arrives as its label).
   - «آیکون دکمه» — a premium emoji before the label (seen only as above). A premium emoji's tag pasted into the label is
     offered «انتقال به آیکون دکمه».
@@ -70,9 +70,9 @@ The preview shows the menu under your greeting. «ذخیره» checks the keyboa
 row; «بازگشت به پیش‌فرض» brings the shop's own layout back — saved at once, asked first, no way back.
 
 The shop's layout: «خرید اشتراک»; «سرویس‌های من» | «تمدید سرویس»; «آموزش» | «کیف پول + شارژ»; «پشتیبانی» |
-«زیرمجموعه‌گیری»; «نمایندگی». **«زیرمجموعه‌گیری» and «نمایندگی» show only while their programs run** (an agent keeps
-«نمایندگی», their account), so they can stay on the layout; a layout without one is pointed out on its program's page. An agent's
-bot has no «نمایندگی».
+«زیرمجموعه‌گیری»; «نمایندگی»; «کد هدیه» | «گردونه شانس». **«زیرمجموعه‌گیری», «نمایندگی», «کد هدیه» and «گردونه شانس» show
+only while their programs run** (an agent keeps «نمایندگی», their account), so they can stay on the layout; a layout
+without one is pointed out on its program's page. An agent's bot has no «نمایندگی».
 
 ## Watch out for
 

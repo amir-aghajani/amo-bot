@@ -24,7 +24,7 @@ use Tests\Support\FakePanel;
 use Tests\TestCase;
 
 /**
- * The generic ProviderInterface on top of the 3x-ui v3 clients API, and the mapping it relies on.
+ * The generic ProviderInterface on the 3x-ui v3 clients API, and the mapping it relies on.
  */
 final class ThreeXuiProviderTest extends TestCase
 {

@@ -19,15 +19,9 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegramLogin;
 
 /**
- * Signing in on the shop's website with Telegram's redirect (authorization code + PKCE), bound to the browser that began
- * it: the site makes the PKCE verifier, keeps it, and sends the shop only its challenge; the shop hands the site
- * Telegram's authorization address — the site's Client ID, its return address on one of its origins, the challenge, a
- * one-time state keeping the challenge, the address and a nonce —, Telegram sends the browser back with a code, which the
- * site posts with the state and its verifier; the shop holds the verifier to the challenge — a code and state brought
- * back to another browser come without it and open nothing —, exchanges the code at Telegram's token endpoint with the
- * site's client secret (HTTP Basic) and that verifier, and checks the id_token it gets as the popup's is checked, its
- * nonce the one kept. The state is spent once; a code Telegram refuses signs nobody in; Telegram out of reach is a 502.
- * Only a website that keeps a client secret has the flow.
+ * Telegram's redirect sign-in (code + PKCE): the site keeps the verifier and sends only its challenge; the state is spent
+ * once; a code carried to another browser (no verifier) opens nothing; the code is exchanged with the client secret and
+ * the token checked like the popup's. Refused codes and Telegram out of reach; only sites with a secret have the flow.
  */
 final class TelegramRedirectSignInTest extends HttpTestCase
 {

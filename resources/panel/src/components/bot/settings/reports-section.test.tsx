@@ -12,7 +12,7 @@ import { json, refusal, server } from '@/test/server'
  * labelled by the group's read — which, failing, the switches' card says too, with a way to ask again; never a skeleton
  * that pulses for ever. The group's card says what the group gets — the agency's requests in the main bot's shop alone
  * —, where a bot not known yet gets its name — an agent's with its token, never the owner's settings —, sends a «پیام
- * تست», and a refused action is told once, by the panel's toast, in the server's words.
+ * تست», and a refused action is shown once, as the panel's toast, with the server's message.
  */
 
 const SETTINGS = botSettingsRow()
@@ -60,7 +60,7 @@ describe('the report group', () => {
     expect(screen.queryByText(/درخواست‌های نمایندگی/)).toBeNull()
   })
 
-  it('sends a test message to every topic, said in a toast', async () => {
+  it('sends a test message to every topic, confirmed in a toast', async () => {
     vi.spyOn(toast, 'success')
     server()
       .on('GET', '/api/admin/bot/report-group', json({ group: GROUP } satisfies ReportGroupResponse))
@@ -81,7 +81,7 @@ describe('the report group', () => {
     expect(screen.queryByText(/بررسی توکن/)).toBeNull()
   })
 
-  it('tells a refusal once, in the server’s words', async () => {
+  it('shows a refusal once, with the server’s message', async () => {
     vi.spyOn(toast, 'error')
     const refused = 'نام کاربری ربات هنوز مشخص نیست؛ ربات را یک بار اجرا کنید.'
     server()

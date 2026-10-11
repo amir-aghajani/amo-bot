@@ -21,9 +21,8 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
- * «نمایندگان» on the owner's panel, and the agent's own account on theirs: the program's numbers, the requests — newest
- * first, by status —, and the agents, each with their bot, its traffic and what it sold, and what they owe. What is
- * decided about them is AgencyActions'. Agents are customers of the main bot.
+ * The owner's «نمایندگان» page and the agent's own account page: the program's numbers, the requests, and the agents with
+ * their bot, its traffic, what it sold and what they owe. Agents are customers of the main bot.
  */
 final class AgencyDirectory
 {

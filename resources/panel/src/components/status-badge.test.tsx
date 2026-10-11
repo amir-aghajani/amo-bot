@@ -6,7 +6,7 @@ import { ORDER_STATUS } from '@/lib/statuses'
 /** A status queue's tabs (components/status-badge): «همه» first, then each status in its vocabulary's words, a count beside the ones that wait. */
 
 describe('a status queue’s tabs', () => {
-  it('start with «همه», then the statuses in the order asked, in their own words', () => {
+  it('start with «همه», then the statuses in the given order, with their labels', () => {
     const tabs = statusTabs(ORDER_STATUS, ['pending', 'failed', 'fulfilled'])
 
     expect(tabs.map((tab) => tab.value)).toEqual(['', 'pending', 'failed', 'fulfilled'])

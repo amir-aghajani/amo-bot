@@ -15,8 +15,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The website's captcha for forms of its own (Store\Services\WebsiteCaptcha): a challenge for a widget that asks the
- * shop for one — fresh every time, never kept by a cache —, and a token its backend asks the shop to judge.
+ * The website's captcha for its own forms (Store\Services\WebsiteCaptcha): a fresh challenge for a widget that asks the
+ * shop for one, and a token its backend asks the shop to judge.
  */
 final class CaptchaController extends ApiController
 {

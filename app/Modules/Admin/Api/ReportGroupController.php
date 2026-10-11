@@ -11,9 +11,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The admins' report group («گروه گزارش‌ها» on the bot settings screen): the group connected and its topics, the link
- * that connects one, a check and a test, and disconnecting. Which topics get reports is the bot settings' `reports`
- * group.
+ * The admins' report group («گروه گزارش‌ها» on the bot settings screen): the connected group and its topics, the link that
+ * connects one, a check, a test, and disconnecting.
  */
 final class ReportGroupController extends ApiController
 {

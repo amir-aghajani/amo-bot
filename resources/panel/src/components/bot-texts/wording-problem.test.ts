@@ -100,7 +100,7 @@ describe('a wording', () => {
     expect(wordingProblem({ kind: 'part', html: true, variables: [] }, '')).toBeNull()
   })
 
-  it('names what the server would refuse beside the HTML, in its words', () => {
+  it('names what the server would refuse besides the HTML, with the server’s message', () => {
     expect(wordingProblem(MESSAGE, '   ')).toBe('متن نمی‌تواند خالی باشد.')
     expect(wordingProblem(MESSAGE, '%subscription% %days%')).toBe('متغیر %days% در این متن وجود ندارد.')
     expect(wordingProblem({ kind: 'popup', html: false, variables: [] }, 'باشه %name%')).toBe('این متن متغیری ندارد؛ %name% را بردارید.')

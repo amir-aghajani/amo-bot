@@ -17,7 +17,7 @@ interface DriverPickerProps {
 /**
  * Which driver a setting goes by (the database, the way email goes out): a list of the drivers by name — no driver at
  * all first, when that is a choice —, the one picked described under it with its notes. A single driver with nothing
- * else to pick is said, not offered.
+ * else to pick is named, not offered.
  */
 export function DriverPicker({ id, label, drivers, value, onChange, error, none }: DriverPickerProps) {
   const picked = drivers.find((driver) => driver.key === value)

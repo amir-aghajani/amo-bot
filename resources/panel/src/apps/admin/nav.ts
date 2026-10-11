@@ -5,6 +5,8 @@ import {
   BOT_SETTINGS,
   BROADCAST_MESSAGES,
   DASHBOARD,
+  DISCOUNT_SECTIONS,
+  MARKETING_GROUP,
   panelSettings,
   REFERRAL_SECTIONS,
   REVIEWS,
@@ -14,15 +16,16 @@ import {
   SUPPORT,
   USER_SECTIONS,
   WEBSITE_SETTINGS,
+  WHEEL_SECTIONS,
   type NavSection,
   type PanelNav,
 } from '@/components/shell/nav'
 import type { ConfigGroup } from '@/lib/api-types'
 
 /*
- * The owner's panel: the shop's pages, and the shop's own — its servers, the agents (their requests, the agents
- * themselves, the levels and the program's rules), the mass gift beside the broadcasts, and the panel's own settings
- * (config.php, the owner's login, the panel's look) beside the bot's and the website's.
+ * The owner's menu: the shared shop pages plus what only the owner has — the servers, the agency (requests, agents,
+ * levels, rules), the mass gift beside the broadcasts, and the panel's own settings (config.php, the login, the look,
+ * the update).
  */
 
 export const AGENCY_SECTIONS: NavSection<'requests' | 'agents' | 'levels' | 'settings'>[] = [
@@ -59,6 +62,7 @@ export const ADMIN_NAV: PanelNav = {
     { id: 'servers', title: 'سرورها', to: '/servers', icon: Server },
     SHOP_GROUP,
     { ...SALES_GROUP, items: [...SALES_GROUP.items, { id: 'agents', title: 'نمایندگان', to: '/agents', icon: Handshake }] },
+    MARKETING_GROUP,
     BOT_GROUP,
   ],
   sections: {
@@ -66,6 +70,8 @@ export const ADMIN_NAV: PanelNav = {
     referrals: REFERRAL_SECTIONS,
     agents: AGENCY_SECTIONS,
     broadcasts: [BROADCAST_MESSAGES, GIFTS_SECTION],
+    wheel: WHEEL_SECTIONS,
+    discounts: DISCOUNT_SECTIONS,
   },
   settings: {
     item: SETTINGS,

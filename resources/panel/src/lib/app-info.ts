@@ -5,8 +5,8 @@ import { setShopTimeZone } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 
 /**
- * GET /api/app, asked once per load (and again when the owner saves it): the shop's name for the brand, whether it is
- * installed, and its time zone — every date the panel shows reads in it from the moment it is known.
+ * GET /api/app, asked once per load (and again when the owner saves the settings it shows): the shop's name, whether it
+ * is installed, and its time zone, which every date is shown in from then on.
  */
 export function useAppInfo() {
   return useQuery({ queryKey: queryKeys.app, queryFn: readAppInfo, staleTime: Infinity })

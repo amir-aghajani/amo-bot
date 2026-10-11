@@ -6,7 +6,7 @@ namespace App\Modules\Accounts\DTO;
 
 use App\Modules\Accounts\Models\CustomerSession;
 
-/** A sign-in that worked: the session it opened, and its bearer token — handed to the site once, kept nowhere. */
+/** A sign-in that worked: the session it opened and its bearer token, handed to the site once and kept nowhere. */
 final class SignedIn
 {
     public function __construct(

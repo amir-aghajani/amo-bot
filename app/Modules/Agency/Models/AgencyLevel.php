@@ -12,8 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * A level of the shop's agents («برنزی», «طلایی» …): the price, in Toman, its agents pay for each GB of traffic their
- * bots sell (Agency\Services\TrafficPool).
+ * An agency level («برنزی», «طلایی» …): the price per GB its agents pay for the traffic their bots sell.
  *
  * @property int $id
  * @property string $name
@@ -41,7 +40,7 @@ class AgencyLevel extends Model
         return Money::times($this->price_per_gb, $gb);
     }
 
-    /** @return HasMany<User, $this> The agents on it — customers of the main bot, whichever shop is being worked in. */
+    /** @return HasMany<User, $this> The agents on it — customers of the main bot, whichever shop the code runs in. */
     public function agents(): HasMany
     {
         $agents = $this->hasMany(User::class, 'agency_level_id');

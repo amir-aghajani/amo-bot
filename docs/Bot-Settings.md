@@ -60,9 +60,40 @@ are fine). A top-up is paid by any way to pay but the wallet.
 - **«تمدید خودکار»** — the customer's switch on a service's screen («🔁 تمدید خودکار»): «چند روز پیش از پایان سرویس» (1 to
   30, 2 by default) the plan's price is taken from their wallet and the service renewed. «برای سرویس‌های جدید روشن باشد»
   (off) starts services bought from then on with it on. The switch is offered on a service that is active, ends some
-  day and still has its plan — **and only while the wallet is switched on** («روش‌های پرداخت»). A wallet short of it is
+  day and still has its plan — a plan whose term is those days at least (an hourly plan's never is: a renewal adds its
+  term, and a shorter one would leave the service due again at once) — **and only while the wallet is switched on**
+  («روش‌های پرداخت»). A wallet short of it is
   told once, and tried every half hour until it can pay; the panel's word on the end is asked first, so nothing is
   charged while a panel does not answer.
+
+## Extra traffic and time
+
+«حجم و زمان اضافه» — what a customer buys on top of a service they have, each on its own, from the service's screen in
+the bot ([Bot guide](Bot-Guide.md#extra-traffic-and-time)) or on the shop's website
+([Store API](Store-API-Buying.md#extra-traffic-and-time)): more traffic, by the GB, and more time, by the day. Paid like
+a purchase — the wallet adds it at once, a card waits for its receipt —, each an order of its own («حجم اضافه», «زمان
+اضافه» on [the orders screen](Orders-And-Payments.md#orders)).
+
+- **«فروش حجم و زمان اضافه»** (off) — the switch. Off, nothing of either is sold: not at these prices, nor at a plan's own.
+- **The shop's prices** — a block for each, «حجم اضافه» and «زمان اضافه», side by side where there is room:
+  - «قیمت هر گیگابایت (تومان)» / «قیمت هر روز (تومان)» — the price of one unit, whole Toman (`3000`, `3,000` or `۳٬۰۰۰`), up
+    to 100,000,000. Empty, that extra is sold only as the amounts below with a price of their own, and none is typed.
+  - «حجم‌های پیشنهادی» / «زمان‌های پیشنهادی» — the amounts the customer gets as buttons, 8 at most («افزودن مقدار», ✕ to
+    take one away): an amount — 1 to 10,000 GB, 1 to 365 days, each once — and its own price. Left empty, its price is the
+    unit price times the amount, which the field shows; without a unit price, every amount needs its own. A row left
+    empty is nothing.
+  - «حجم دلخواه» / «زمان دلخواه» — «کمترین» and «بیشترین»: with a unit price, the customer may type any amount between them
+    instead (1 to 100 GB and 1 to 30 days by default; 10,000 GB and 365 days at most). Without one, they are kept unused.
+  - «پیش‌نمایش در ربات» — the buttons the prices make as they are typed, each with what it costs, and what may be typed —
+    or that nothing of that extra is sold. An amount that would have no price is drawn «بدون قیمت» and said so: the save
+    refuses it.
+- **A plan's own prices** stand in for these, for its services alone ([Plans](Plans.md#extra-traffic-and-time)); these
+  are every other plan's.
+
+What counts as a change is what the save would keep: an empty row, the rows' order or how a number is written is none.
+Traffic is offered for a service with a quota, days for one with a term — neither for one switched off by support, nor
+for one ended on both counts, which a renewal is for. In an agent's shop the extra traffic its customers buy comes out of
+the agent's traffic, and no more is offered than is left ([Agency](Agency.md)); extra days cost it nothing.
 
 ## Reminders
 
@@ -70,14 +101,16 @@ are fine). A top-up is paid by any way to pay but the wallet.
 renewal or more traffic:
 
 - **«یادآوری نزدیک شدن تاریخ پایان»** — «چند روز پیش از پایان سرویس», 1 to 30, 3 by default. A service whose «تمدید
-  خودکار» is on hears from the renewal instead.
+  خودکار» is on hears from the renewal instead, and one whose term is no longer than those days (an hourly plan's) is
+  not reminded at all: it would be the moment its clock started.
 - **«یادآوری تمام شدن حجم»** — «بعد از مصرف چند درصد حجم», 50 to 99, 80 by default. Unlimited services never.
 
 Each comes with «📊 مشاهده سرویس». The services are read from their panels every 15 minutes, and the reminders follow.
 
 ## Referrals
 
-«زیرمجموعه‌گیری» — the program's switch, its share and «فقط اولین پرداخت هر زیرمجموعه» ([Referrals](Referrals.md)).
+«زیرمجموعه‌گیری» — the program's switch, and in four parts: its commissions (the share, a renewal's own, «فقط اولین پرداخت هر
+زیرمجموعه»), «هدیه شروع», «جایزه دعوت» and «هشدار زیرمجموعه‌گیری فیک» ([Referrals](Referrals.md)).
 
 ## The report group
 

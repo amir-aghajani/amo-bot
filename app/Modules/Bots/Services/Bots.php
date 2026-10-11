@@ -12,8 +12,8 @@ use App\Modules\Telegram\Api\BotToken;
 use Illuminate\Support\Collection;
 
 /**
- * The bots this installation runs and what is known of each: the main one's token and @username live in config.php
- * (the settings screen and bot:poll keep them there), an agent's in its row.
+ * The bots this installation runs and what is known of each: the main bot's token and @username live in config.php, an
+ * agent's in its row.
  */
 final class Bots
 {
@@ -29,8 +29,8 @@ final class Bots
     }
 
     /**
-     * The shop's name to its customers — its website's, its emails' signature: the main shop's APP_NAME; an agent's,
-     * their bot's title (else its @username).
+     * The shop's name for its customers (its website, its emails' signature): APP_NAME for the main shop; an agent's bot's
+     * title, else its @username.
      */
     public function name(Bot $bot): string
     {
@@ -44,8 +44,8 @@ final class Bots
     }
 
     /**
-     * The bot's own Telegram id — the main bot's off its token in config.php, an agent's as Telegram said it when the
-     * token was handed over —; null while it has none. The current bot's when none is named.
+     * The bot's own Telegram id — the main bot's read off its token in config.php, an agent's as recorded when its token
+     * was handed over —; null while it has none. The current bot's when none is named.
      */
     public function telegramId(?Bot $bot = null): ?int
     {
@@ -61,8 +61,8 @@ final class Bots
     }
 
     /**
-     * The bots that run now: the main one when it has a token, and every agent's that is switched on with a token — in
-     * that order. Read afresh each time: an agent hands a token over, or their agency ends, while the poller runs.
+     * The bots that run now, in order: the main one when it has a token, then every agent's switched on with a token.
+     * Read afresh each time: an agent may hand a token over, or lose their agency, while the poller runs.
      *
      * @return Collection<int, Bot>
      */
@@ -76,7 +76,7 @@ final class Bots
     }
 
     /**
-     * `$work` for every bot that runs (serving()), each in its own shop: one that fails keeps it from none of the others.
+     * Run `$work` for every bot that runs (serving()), each in its own shop; one that fails stops none of the others.
      *
      * @template T
      * @param \Closure(Bot): T $work
@@ -97,8 +97,8 @@ final class Bots
     }
 
     /**
-     * The shops whose own work the scheduler does one by one — their receipts, renewals, reminders, broadcasts and
-     * report groups: the main bot's always (its rows are there, a token or not), then every agent's bot that runs.
+     * The shops the scheduler works through one by one (receipts, renewals, reminders, broadcasts, report groups): the main
+     * bot's always (its rows are there, token or not), then every agent's bot that runs.
      *
      * @return Collection<int, Bot>
      */

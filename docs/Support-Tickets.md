@@ -67,7 +67,7 @@ panel ([Report group](Telegram-Group.md)).
   hour — receipts and tickets' together —, and a ticket takes 20 pictures uploaded by them. You are never held.
 - A picture is taken while the server's disk has 200 MB free, and up to a gigabyte of pictures a day for the shop;
   past either, «… تصویری پذیرفته نمی‌شود» — send the words alone.
-- **A closed ticket's uploaded pictures are deleted 30 days after it closed**; the message keeps its words and says it had
+- **A closed ticket's uploaded pictures are deleted 30 days after it closed**; the message keeps its text and says it had
   one. Pictures sent in the bot are Telegram's.
 
 ## Watch out for

@@ -5,21 +5,19 @@ declare(strict_types=1);
 namespace App\Modules\Updates;
 
 /**
- * What the updater does on the disk — moving the app's folders, writing what it downloads and unpacks, deleting what it
- * no longer needs —, the file system's no an exception with its reason, never a PHP warning (Core\Support\Files does
- * the same for the app's own files). What it puts in the app's place is the web server's to read, as an upload
- * extracted in the host's file manager is: folders FOLDER_MODE, files FILE_MODE — the panels' pages, its .htaccess.
+ * The updater's file operations: a refusal is a RuntimeException with PHP's reason, never a warning. What it puts in the
+ * app's place must be readable by the web server, as an upload extracted in a file manager is: 0755 folders, 0644 files.
  */
 final class Disk
 {
-    /** A folder of the app's: its owner's to change, everyone's to enter — the web server serves public/ from it. */
+    /** A release folder's mode: the web server serves public/ from it. */
     public const FOLDER_MODE = 0o755;
 
-    /** A file of the app's: its owner's to change, everyone's to read. */
+    /** A release file's mode. */
     public const FILE_MODE = 0o644;
 
     /**
-     * `$from` under the name `$to` — on one file system, at once: a folder whole, a file in place of the one there.
+     * Rename `$from` to `$to` (a folder whole, a file over the one there).
      *
      * @throws \RuntimeException when it cannot be moved
      */
@@ -29,8 +27,7 @@ final class Disk
     }
 
     /**
-     * A copy of the file `$from` at `$to`, with its permissions — written beside it first, so `$to` is the whole of it or
-     * what it was.
+     * Copy a file with its permissions, through a temporary file, so `$to` is either whole or as it was.
      *
      * @throws \RuntimeException when it cannot be copied
      */
@@ -48,7 +45,7 @@ final class Disk
     }
 
     /**
-     * The folder, made with its parents (FOLDER_MODE) when it is not there.
+     * Make the folder and its parents when missing.
      *
      * @throws \RuntimeException when it cannot be made
      */
@@ -61,7 +58,7 @@ final class Disk
     }
 
     /**
-     * The file opened to write, made new (FILE_MODE) or emptied.
+     * Open the file for writing, made new or emptied.
      *
      * @return resource
      * @throws \RuntimeException when it cannot be
@@ -75,7 +72,7 @@ final class Disk
     }
 
     /**
-     * `$bytes` written to the open file, every one of them.
+     * Write all of `$bytes` to the open file.
      *
      * @param resource $handle
      * @throws \RuntimeException when they are not: the disk full, the file gone
@@ -86,8 +83,8 @@ final class Disk
     }
 
     /**
-     * The file or folder gone, with everything in it — as much of it as goes before `$until` (microtime); a folder of
-     * many files (a release's vendor/) may take a few calls.
+     * Delete the file or folder recursively, as much as goes before `$until` (microtime): a big folder (vendor/) may
+     * take a few calls. Links are deleted, never followed.
      *
      * @return bool Whether it is gone
      * @throws \RuntimeException when something of it cannot be deleted
@@ -123,7 +120,7 @@ final class Disk
     }
 
     /**
-     * What `$work` gives, PHP's warnings on the way caught: false from it is the file system's no.
+     * Run `$work` with warnings caught; false from it is a failure.
      *
      * @template T
      * @param \Closure(): (T|false) $work

@@ -179,7 +179,7 @@ final class BotDispatchTest extends BotTestCase
     public function testABannedCustomerIsToldSoAndNothingElse(): void
     {
         $this->customer(['status' => UserStatus::Banned]);
-        // Gates that would hold anyone else back: the ban is told before them.
+        // Gates that would hold anyone else back: the ban is answered before them.
         $this->botSettings('general', ['enabled' => false, 'phone_required' => true]);
 
         $this->send($this->message('/start'));

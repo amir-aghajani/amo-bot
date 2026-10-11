@@ -12,9 +12,8 @@ use App\Modules\Payments\Enums\GatewayKind;
 use App\Modules\Users\Services\WalletService;
 
 /**
- * The wallet: an order paid from the customer's balance, settled at once. Part of the shop itself — every shop has its
- * one row (database/schema.php's starting row; an agent's shop's, PaymentMethods::createBuiltins()), nothing to set but
- * its switch: no field. Its gateway is WalletGateway.
+ * The wallet: pays from the customer's balance and settles at once. Built in — every shop has exactly one row
+ * (PaymentMethods::createBuiltins()) — with nothing to set but its switch.
  */
 final class WalletDriver implements GatewayDriver
 {

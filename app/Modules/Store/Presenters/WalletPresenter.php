@@ -7,16 +7,12 @@ namespace App\Modules\Store\Presenters;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Models\WalletTransaction;
 
-/**
- * A customer's wallet as their website shows it: what is in it and what it can pay, and the lines of its ledger — the
- * lines the bot's «کیف پول» shows them too. Amounts are Toman, as decimal strings.
- */
+/** A customer's wallet as their website shows it: its balance and what it can pay, and its ledger lines (Toman, decimal strings). */
 final class WalletPresenter
 {
     /**
-     * The balance (the ledger's last line — below zero an agent's debt), an agent's credit (none for anyone else) and
-     * what the two can pay now (User::spendable()). Read the balance with the customer (User::balanceColumn()), or it is
-     * read twice.
+     * The balance (below zero: an agent's debt), an agent's credit, and what the two can pay now. Read the balance with
+     * the customer (User::balanceColumn()), or it is read twice.
      *
      * @return array{balance: string, credit: string, spendable: string}
      */

@@ -14,10 +14,8 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 
 /**
- * The gateway drivers (the container's `payment.drivers`: register another in bootstrap/container.php), and what the
- * shop reads of a method row through its driver: how it settles, its one line, and its gateway — made from the row's
- * settings, what its driver's form reads of the row's config: every field, one the row lacks (kept before the field
- * existed) at its default.
+ * The gateway drivers (`payment.drivers` in bootstrap/container.php) and what the shop reads of a method row through
+ * its driver: its kind, its one-line summary and its gateway, built from the row's config as the driver's form reads it.
  */
 final class GatewayRegistry
 {

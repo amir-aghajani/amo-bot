@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Security;
 
 /**
- * Random codes a person reads off one screen and types into another — the installer's and a lost login's key off a host's
- * File Manager (HostKey), a website customer's two-factor recovery codes off the sheet they kept them on: capital letters
- * and digits without the ones that look alike (0/O, 1/I/L), each character some five random bits.
+ * Random codes a person reads off one screen and types into another (host keys, two-factor recovery codes): capitals
+ * and digits without look-alikes (0/O, 1/I/L), about five random bits a character.
  */
 final class ReadableCode
 {

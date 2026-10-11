@@ -11,16 +11,13 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * The headers every answer PHP gives carries, whatever serves it (Apache's .htaccess sets some of them, but nginx and
- * `php -S` read no .htaccess): no type sniffing, never framed, no referrer to other sites, not indexed. PHP answers only
- * JSON and the bytes the panels show (a receipt, a picture) — the panels' pages are static files the web server hands
- * out itself — so every answer also gets a policy that lets nothing run: opened on its own in a tab, whatever it holds
- * cannot script the panels' origin. What PHP answers is the shop's private data, never kept by a browser or proxy cache
- * (an answer that says how it may be cached — a picture — keeps its own word). Over HTTPS, HSTS.
+ * Security headers on every answer PHP gives, whatever web server is in front: no sniffing, no framing, no indexing, a
+ * sandboxing policy that lets nothing run (PHP answers only JSON and files, never a page), no caching unless the answer
+ * set its own (a picture), and HSTS over HTTPS.
  */
 final class SecurityHeadersMiddleware implements MiddlewareInterface
 {
-    /** Every answer's — the front controller's last resort, which answers without the app, sends them too. */
+    /** Also sent by public/index.php's last-resort answer, which runs without the app. */
     public const HEADERS = [
         'X-Content-Type-Options' => 'nosniff',
         'X-Frame-Options' => 'DENY',

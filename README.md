@@ -11,17 +11,21 @@ It runs on shared hosting — cPanel, DirectAdmin and the like —, the one way 
 nothing else, the panels ship as static files, a web installer sets the shop up from the browser, the host's cron runs
 its scheduler and Telegram reaches its bots through webhooks — no shell, Composer or Node on the host.
 
-> **Status:** pre-release (0.1.1). The [Roadmap](docs/Roadmap.md) says what is done and what is left, the
-> [changelog](CHANGELOG.md) what each release brought.
+> **Status:** pre-release (0.2.0). The [Roadmap](docs/Roadmap.md) says what is done and what is left,
+> [Releases](docs/Releases.md) what each release brought.
 
 ## Features
 
 - **A bot that sells** — plans by category and location, the wallet and card-to-card payments with a receipt, the
-  subscription link delivered as a QR card, renewals by hand and automatic, reminders before a service ends, referrals,
-  and support tickets. Every word it says and its whole menu are the owner's to reword.
+  subscription link delivered as a QR card, renewals by hand and automatic, extra traffic or time for a service, each
+  on its own, at the owner's prices, reminders before a service ends, referrals, and support tickets. Every word it says
+  and its whole menu are the owner's to reword.
 - **The owner's panel** — servers, plans, payment methods, customers, orders and payments (receipts reviewed one after
   another), services (extended, switched, moved between servers), support, broadcasts, gifts of days and traffic, the
   bot's texts, menu and rules; live as the shop moves, light and dark, on a phone too.
+- **Discounts and rewards** — discount codes, timed sales, a customer's own discount, loyalty tiers by what a customer
+  spent, cashback, gift codes, a lucky wheel in the bot, a nightly draw among the day's buyers, and referral gifts with
+  an alert for fake referrals.
 - **Resellers** — agents with a bot, a shop and a panel of their own on the same servers, who buy the traffic their bot
   sells.
 - **VPN panels through connectors** — 3X-UI v3 and PasarGuard 3.1+. A new panel, payment gateway, database, mail service
@@ -59,19 +63,22 @@ developer's way: a shop on its host runs on webhooks ([Development](docs/Develop
 
 ## Documentation
 
-The [`docs/`](docs/Home.md) folder — the same pages the project's GitHub wiki and its GitHub Pages site show (a release
-zip carries no `docs/`: https://github.com/amir-aghajani/amo-bot/tree/main/docs):
+All of it is one wiki: the [`docs/`](docs/Home.md) folder, which the project's GitHub wiki and its GitHub Pages site
+show as well (a release zip carries no `docs/`: https://github.com/amir-aghajani/amo-bot/tree/main/docs). Start at
+[Home](docs/Home.md):
 
 - running a shop: [Installation](docs/Installation.md), [Running in production](docs/Running-In-Production.md),
   [Configuration](docs/Configuration.md), [Upgrading](docs/Upgrading.md), [Backups](docs/Backups.md);
 - the [Owner's guide](docs/Owners-Guide.md) and the [Bot guide](docs/Bot-Guide.md);
 - the [Store API](docs/Store-API.md), for a shop's website, and the API's [reference](docs/Store-API-Reference.md);
-- [Architecture](docs/Architecture.md), [Drivers](docs/Drivers.md), [Development](docs/Development.md).
+- working on the code: [Architecture](docs/Architecture.md), [Conventions](docs/Conventions.md),
+  [Development](docs/Development.md) and the internals of each area — the code's own comments say what each class and
+  function does.
 
 ## Contributing
 
-Issues and pull requests are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) says how to set up, the checks to run and the
-rules a change keeps. A security weakness is reported privately: [SECURITY.md](SECURITY.md).
+Issues and pull requests are welcome: [Contributing](docs/Contributing.md) says how to set up, the checks to run and the
+rules a change keeps. A security weakness is reported privately: [Security](docs/Security.md).
 
 ## License
 

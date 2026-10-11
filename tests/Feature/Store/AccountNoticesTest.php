@@ -19,14 +19,14 @@ use Tests\Support\FakeGoogleLogin;
 use Tests\Support\FakeTelegramLogin;
 
 /**
- * Every change of how a customer's account on the shop's website is signed in to is told them — a way in added or taken
- * away (which kind), the password set or changed, two-factor sign-in on or off, two accounts made one — on every door the
- * account has: kept in their website's feed, and sent to their Telegram chat and their email both, so whoever made the
- * change holding one of them leaves the other to tell. An address taken off the account is emailed too: the account's
- * notices reach it no more.
+ * Every change to how a website account is signed in to (a way in added or removed, the password, two-factor sign-in, a
+ * merge) is sent on every channel the account has — its feed, Telegram and email both, since whoever made the change may
+ * hold one of them — and an address taken off the account is emailed too.
  */
 final class AccountNoticesTest extends HttpTestCase
 {
+    use WebsiteSignIns;
+
     private const ALI_EMAIL = 'ali@example.com';
 
     private Website $website;
@@ -178,10 +178,5 @@ final class AccountNoticesTest extends HttpTestCase
         $notice = Notification::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
 
         self::assertSame([$type, $words, null], [$notice->type, $notice->text, $notice->subject_type], "kept for their website's feed — about their account, nothing else");
-    }
-
-    private function nonce(): string
-    {
-        return $this->decode($this->postJson($this->storeApi($this->website, '/auth/nonce')))['nonce'];
     }
 }

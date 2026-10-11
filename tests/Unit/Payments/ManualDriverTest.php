@@ -17,9 +17,8 @@ use App\Support\Validation;
 use Tests\TestCase;
 
 /**
- * The card-to-card driver: its form — the card's number by BankCard's rule, whose card it is, the note under it, and the
- * review window in minutes up to a week, blank by hand —, a kept card read back by it, the line a card method shows, and
- * the gateway it makes of a method's settings.
+ * The card-to-card driver: its form (card number by BankCard's rule, holder, note, review window up to a week), a kept card
+ * read back, the summary line, and the gateway it makes.
  */
 final class ManualDriverTest extends TestCase
 {

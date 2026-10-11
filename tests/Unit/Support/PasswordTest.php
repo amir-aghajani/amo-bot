@@ -8,7 +8,7 @@ use App\Support\Password;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The one rule for a password — the panel's owner's and a customer's alike: eight characters at least, and no more than
+ * The password rule — the panel's owner's and a customer's alike: eight characters at least, and no more than
  * bcrypt reads (72 bytes — a Persian letter is two) nor a NUL byte, where it stops reading, else it would open with its
  * start alone; kept as PHP's own hash.
  */

@@ -22,16 +22,14 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeGoogleLogin;
 
 /**
- * Signing in on the shop's website with a Google account: Google Identity Services hands the page an id_token for a
- * nonce the shop gave the site, checked the one way — Google's keys, either spelling of its issuer, the website's client
- * id, the nonce spent once. The customer is the shop's with that Google account; else the one with the address Google
- * speaks for — verified, and an @gmail.com address or a Workspace account's — (which takes the Google account on, its
- * customer told; not one with two-factor sign-in on, nor one another Google account signs in to: a 409); else a
- * newcomer — the address theirs only when Google speaks for it. A banned customer is refused; Google sign-in off is a
- * 422; Google out of reach a 502 that counts for nothing.
+ * Google sign-in: the id_token and nonce checks, finding the customer by Google account then by a trusted address
+ * (@gmail.com or Workspace only; a 409 for an account with two-factor sign-in or another Google account), newcomers,
+ * banned customers, Google off (422) and out of reach (502).
  */
 final class GoogleSignInTest extends HttpTestCase
 {
+    use WebsiteSignIns;
+
     private Website $website;
 
     protected function setUp(): void
@@ -247,10 +245,5 @@ final class GoogleSignInTest extends HttpTestCase
         $nonce = $this->nonce();
 
         return $this->postJson($this->storeApi($this->website, '/auth/google'), ['id_token' => FakeGoogleLogin::idToken(FakeGoogleLogin::claims(self::GOOGLE_CLIENT_ID, $nonce, $claims)), 'nonce' => $nonce] + $more);
-    }
-
-    private function nonce(): string
-    {
-        return $this->decode($this->postJson($this->storeApi($this->website, '/auth/nonce')))['nonce'];
     }
 }

@@ -54,7 +54,7 @@ beforeEach(() => {
 })
 
 describe('a run’s controls', () => {
-  it('put the run the server answers in its place — the list not read again for it', async () => {
+  it('replace the run with the server’s answer, without reading the list again', async () => {
     const sending = broadcast({ status: 'sending', pin: false, pinned: 0, actions: { pause: true, resume: false, cancel: true, unpin: false } })
     server()
       .on('GET', '/api/admin/broadcasts', runs(sending))
@@ -67,7 +67,7 @@ describe('a run’s controls', () => {
     expect(reads()).toBe(1)
   })
 
-  it('start «لغو پین» after a second look as a run of its own: the list is read again', async () => {
+  it('start «لغو پین» after confirmation as a new run, and read the list again', async () => {
     const pinned = broadcast()
     const unpinning = broadcast({ id: 6, kind: 'unpin', source_id: 5, status: 'sending', sent: 0, pinned: 0, actions: { pause: true, resume: false, cancel: true, unpin: false } })
     let latest = [pinned]

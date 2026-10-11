@@ -14,13 +14,8 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * «وب‌سایت» in both panels (`/api/{panel}/website`): the shop's website is made, switched off with a store key of its
- * own, the first time the panel asks; the panel turns it on with its address and the other origins its pages call from,
- * and sets the ways its customers sign in — Telegram with the Client ID @BotFather shows and a secret it never gets back,
- * email sign-up, Google, the captcha its forms ask — a driver and its form, its secret never back either. A change is a
- * PATCH of the fields a card has: one sent is changed, one left
- * out stays as it is kept, and the change is judged as the website would stand after it — every refusal at once, under
- * its field. A new key ends the old base address. An agent's panel sets their own shop's website.
+ * The website settings in both panels: the row made off with a key on first read, partial saves judged on the result
+ * (every refusal at once), secrets never sent back, the captcha card, a new key, and an agent's own shop's website.
  */
 final class WebsitePanelApiTest extends HttpTestCase
 {

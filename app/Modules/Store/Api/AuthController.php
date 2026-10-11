@@ -12,6 +12,7 @@ use App\Core\Mail\MailFailedException;
 use App\Modules\Accounts\DTO\SignedIn;
 use App\Modules\Accounts\DTO\TwoFactorChallenge;
 use App\Modules\Accounts\Exceptions\SignInsBusyException;
+use App\Modules\Accounts\Http\Customer;
 use App\Modules\Accounts\Services\AccountPresenter;
 use App\Modules\Accounts\Services\AuthChallenges;
 use App\Modules\Accounts\Services\EmailSignIn;
@@ -27,12 +28,10 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * How a customer signs in on the shop's website (the Store API's `/auth/*`): a nonce for an id_token; Telegram's
- * sign-in — its popup's id_token, or its redirect's authorization address and then the code it brings back —; Google's;
- * and an email with a password — a sign-up and its code, a sign-in, a forgotten password and its code —, and the second
- * step an account with two-factor sign-in on is asked for. A sign-in answers the customer's bearer token, shown this
- * once, and their account — or, its second step asked, its challenge (202); what sends a code answers how long it waits
- * (202), whether or not the address has an account.
+ * The website's sign-in routes (`/auth/*`): a nonce for an id_token, Telegram (popup or redirect), Google, and an email
+ * with a password — sign-up, sign-in, its second step, a forgotten password. A sign-in answers the bearer token (shown
+ * this once) and the account, or a 202 with the second step's challenge; what emails a code answers a 202 with how long
+ * it waits, whether or not the address has an account.
  */
 final class AuthController extends ApiController
 {
@@ -46,10 +45,10 @@ final class AuthController extends ApiController
     ) {}
 
     /**
-     * POST /auth/nonce — for an id_token sign-in: the site hands it to the provider, the sign-in brings it back once.
+     * POST /auth/nonce — the nonce the site hands the provider; the sign-in brings it back once.
      *
      * @throws TooManyAttemptsException 429 while this address asked too much
-     * @throws SignInsBusyException 503 while the shop keeps as many as it takes
+     * @throws SignInsBusyException 503 while the shop holds as many as it takes
      */
     public function nonce(Request $request, Response $response): Response
     {
@@ -59,8 +58,9 @@ final class AuthController extends ApiController
     }
 
     /**
-     * POST /auth/telegram/authorize — {redirect_uri, code_challenge}: where to send the browser to sign in with Telegram,
-     * back to the site — the PKCE challenge of the verifier the site keeps.
+     * POST /auth/telegram/authorize and POST /me/telegram/authorize — {redirect_uri, code_challenge}: Telegram's
+     * authorization address for the redirect flow. On the /me route (a signed-in customer linking or proving their
+     * Telegram account) the state belongs to that session alone.
      *
      * @throws SignInRefusedException 422 Telegram sign-in, or its redirect flow, not set up
      * @throws ValidationException 422 on `redirect_uri`, on `code_challenge`
@@ -70,7 +70,7 @@ final class AuthController extends ApiController
     public function authorize(Request $request, Response $response): Response
     {
         $input = $this->input($request);
-        $url = $this->telegram->authorize(StoreMiddleware::website($request), $request, Input::text($input, 'redirect_uri'), Input::text($input, 'code_challenge'));
+        $url = $this->telegram->authorize(StoreMiddleware::website($request), $request, Input::text($input, 'redirect_uri'), Input::text($input, 'code_challenge'), Customer::optional($request));
 
         return $this->json($response, ['url' => $url]);
     }
@@ -79,7 +79,7 @@ final class AuthController extends ApiController
      * POST /auth/telegram — {id_token, nonce, referral_code?} (popup) or {code, state, code_verifier, referral_code?} (redirect).
      *
      * @throws SignInRefusedException 401 not signed in, 403 banned, 422 not set up
-     * @throws TooManyAttemptsException 429 while this address must wait
+     * @throws TooManyAttemptsException 429
      * @throws TelegramUnreachableException 502
      */
     public function telegram(Request $request, Response $response): Response
@@ -90,8 +90,8 @@ final class AuthController extends ApiController
     /**
      * POST /auth/google — {id_token, nonce, referral_code?}.
      *
-     * @throws SignInRefusedException 401 not signed in, 403 banned, 422 not set up, 502 Google out of reach
-     * @throws TooManyAttemptsException 429 while this address must wait
+     * @throws SignInRefusedException 401 not signed in, 403 banned, 409 the address's account takes no Google account this way, 422 not set up, 502 Google out of reach
+     * @throws TooManyAttemptsException 429
      */
     public function google(Request $request, Response $response): Response
     {
@@ -113,7 +113,7 @@ final class AuthController extends ApiController
     }
 
     /**
-     * POST /auth/register/verify — {email, code}: the account made, signed in.
+     * POST /auth/register/verify — {email, code}: the account made and signed in.
      *
      * @throws SignInRefusedException 409 the address has an account since, 422 email sign-up off
      * @throws ValidationException 422 on `email`, on `code`
@@ -138,7 +138,7 @@ final class AuthController extends ApiController
     }
 
     /**
-     * POST /auth/login/2fa — {challenge, code}: the second step, its app's code or a recovery code.
+     * POST /auth/login/2fa — {challenge, code}: the second step, with the app's code or a recovery code.
      *
      * @throws SignInRefusedException 401 the challenge opens nothing any more, 403 banned
      * @throws ValidationException 422 a field missing, the code wrong
@@ -150,7 +150,7 @@ final class AuthController extends ApiController
     }
 
     /**
-     * POST /auth/password/forgot — {email, captcha?}: a code to the address, when it has an account.
+     * POST /auth/password/forgot — {email, captcha?}: a reset code to the address when it has an account.
      *
      * @throws SignInRefusedException 503 no email goes out
      * @throws ValidationException 422 on `email`, on `captcha`
@@ -164,8 +164,7 @@ final class AuthController extends ApiController
     }
 
     /**
-     * POST /auth/password/reset — {email, code, password}: the new password kept, every other session ended, signed in —
-     * or the second step's challenge (202).
+     * POST /auth/password/reset — {email, code, password}: the new password set and signed in, or the second step's challenge (202).
      *
      * @throws SignInRefusedException 403 banned
      * @throws ValidationException 422 under the fields
@@ -176,10 +175,7 @@ final class AuthController extends ApiController
         return $this->signedIn($response, $this->email->reset(StoreMiddleware::website($request), $request, $this->input($request)));
     }
 
-    /**
-     * A sign-in's answer: the bearer token, this once, and the account — or, the account asking a second step, its
-     * challenge (202), no session opened yet.
-     */
+    /** A sign-in's answer: the bearer token and the account — or a 202 with the second step's challenge, no session yet. */
     private function signedIn(Response $response, SignedIn|TwoFactorChallenge $signedIn): Response
     {
         if ($signedIn instanceof TwoFactorChallenge) {

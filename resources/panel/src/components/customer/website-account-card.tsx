@@ -28,10 +28,9 @@ interface WebsiteAccountCardProps {
 }
 
 /**
- * «ورود به وب‌سایت» — the ways the customer signs in on the shop's website (their Telegram account, a Google account, an
- * email with or without a password, the second step), the devices signed in, and the accounts merged into theirs. Support
- * turns two-factor sign-in off for one who lost the phone it was on, and signs them out of every device — each after a
- * second look; the account the server answers (or no device left) put in place on the page.
+ * «ورود به وب‌سایت»: how the customer signs in on the website (Telegram, Google, email and password, two-factor), their
+ * signed-in devices and the accounts merged into theirs. Support can turn two-factor off (a lost phone) and sign them out
+ * everywhere, each after a confirmation.
  */
 export function WebsiteAccountCard({ customer, account }: WebsiteAccountCardProps) {
   const queryClient = useQueryClient()
@@ -158,10 +157,7 @@ function Missing({ children }: { children: string }) {
   return <span className="text-muted-foreground">{children}</span>
 }
 
-/**
- * An account merged into this one: who it was — its name, its handle or email —, its former number and when the customer
- * merged it (from their website: the one way two accounts are made one).
- */
+/** An account merged into this one (the customer did it on the website): who it was, its old number and when. */
 function MergedAccount({ merge }: { merge: CustomerMerge }) {
   const { merged } = merge
 

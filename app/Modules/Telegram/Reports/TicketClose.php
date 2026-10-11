@@ -8,16 +8,14 @@ use App\Core\Exceptions\ValidationException;
 use App\Modules\Auth\Actor;
 use App\Modules\Support\Models\Ticket;
 use App\Modules\Support\Services\Tickets;
-use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Telegram\Update\GroupHandler;
 use App\Modules\Telegram\Update\Update;
 
 /**
- * «🔒 بستن تیکت» under a ticket's last report in the tickets topic: the ticket closed — by the bot's admins only
- * (GroupButtons::admin()), as a panel closes it (Tickets::close(): the customer told, the group's report of it, which
- * takes the button off). A ticket closed already, or gone, loses the button with a word.
+ * «🔒 بستن تیکت» under a ticket's last report, for bot admins only: closes it as a panel does (Tickets::close()). A
+ * ticket already closed, or gone, loses the button with a word.
  */
 final class TicketClose implements GroupHandler
 {
@@ -30,7 +28,6 @@ final class TicketClose implements GroupHandler
     private const CLOSED = '🔒 تیکت بسته شد.';
 
     public function __construct(
-        private readonly BotApi $api,
         private readonly GroupButtons $groupButtons,
         private readonly Tickets $tickets,
     ) {}
@@ -41,30 +38,24 @@ final class TicketClose implements GroupHandler
         return InlineKeyboard::make()->row(InlineKeyboard::callback(self::LABEL, CallbackData::build(self::PREFIX, $ticketId), 'danger'))->build()['inline_keyboard'];
     }
 
-    /** A press on the button, from a group. */
+    /** A press on the button. */
     public function handle(Update $update): void
     {
-        $callbackId = (string) $update->callbackId();
         $args = $update->callbackArgs(self::PREFIX) ?? [];
         if (count($args) !== 1 || !ctype_digit($args[0])) {
-            $this->api->answerCallbackQuery($callbackId);
+            $this->groupButtons->answer($update);
 
             return;
         }
 
-        $admin = GroupButtons::admin($update->from());
+        $admin = $this->groupButtons->presser($update, self::NOT_ADMIN);
         if ($admin === null) {
-            $this->api->answerCallbackQuery($callbackId, self::NOT_ADMIN, alert: true);
-
             return;
         }
 
-        $chatId = (int) $update->chatId();
-        $messageId = (int) $update->messageId();
         $ticket = Ticket::query()->with(['user', 'subscription'])->find((int) $args[0]);
         if ($ticket === null) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, self::NOT_FOUND, alert: true);
+            $this->groupButtons->dismiss($update, self::NOT_FOUND);
 
             return;
         }
@@ -72,14 +63,13 @@ final class TicketClose implements GroupHandler
         try {
             $this->tickets->close($ticket, Actor::groupAdmin($admin));
         } catch (ValidationException $e) {
-            // Closed meanwhile — here, on a panel, by the customer: nothing to close.
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $e->getMessage(), alert: true);
+            // Closed meanwhile (here, on a panel, or by the customer): nothing to close.
+            $this->groupButtons->dismiss($update, $e->getMessage());
 
             return;
         }
 
-        $this->groupButtons->set($chatId, $messageId, null);
-        $this->api->answerCallbackQuery($callbackId, self::CLOSED);
+        $this->groupButtons->buttons($update, null);
+        $this->groupButtons->answer($update, self::CLOSED);
     }
 }

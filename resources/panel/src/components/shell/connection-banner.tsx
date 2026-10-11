@@ -1,14 +1,17 @@
+import { useSyncExternalStore } from 'react'
+import { onlineManager } from '@tanstack/react-query'
 import { CloudOff, WifiOff } from 'lucide-react'
-import { useOnline } from '@/lib/use-online'
+
+const subscribeOnline = (changed: () => void) => onlineManager.subscribe(changed)
 
 /**
- * A quiet strip over the page while the panel cannot follow the shop: the browser offline (its reads and changes wait
- * for the connection), or the server not answering the live poll (`unreachable`, useLiveUpdates) — the screens stay as
- * last read until it is back, and the strip goes by itself. Its region is always there, empty, so assistive tech hears
- * the strip as it comes.
+ * A quiet strip over the page while the panel cannot follow the shop: the browser is offline (react-query's
+ * onlineManager — reads, writes and the live poll wait meanwhile), or the server is not answering the live poll
+ * (`unreachable`, useLiveUpdates). It goes by itself. Its live region is always there, empty, so assistive tech
+ * announces the strip when it comes.
  */
 export function ConnectionBanner({ unreachable }: { unreachable: boolean }) {
-  const online = useOnline()
+  const online = useSyncExternalStore(subscribeOnline, () => onlineManager.isOnline())
   const Icon = online ? CloudOff : WifiOff
   const words = !online ? 'اتصال اینترنت قطع است؛ تا برگشتن آن صفحه‌ها به‌روز نمی‌شوند و تغییرها منتظر می‌مانند.' : unreachable ? 'سرور پاسخ نمی‌دهد؛ صفحه‌ها تا برگشتن ارتباط به‌روز نمی‌شوند.' : null
 

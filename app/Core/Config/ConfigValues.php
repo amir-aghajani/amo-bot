@@ -7,12 +7,9 @@ namespace App\Core\Config;
 use App\Support\Input;
 
 /**
- * config.php as config/*.php read it: each setting as its type (its ConfigKeys default says which), and the default
- * for one the file does not set — or sets to something it cannot be: written by hand, `'SESSION_LIFETIME' => 'long'`
- * reads as the default, `'SESSION_LIFETIME' => '60'` as 60 and `'APP_DEBUG' => 'false'` as false, read by the rules the
- * settings screen reads the file with (App\Support\Input), so it shows what the shop runs with. Nothing is read from the
- * environment, so no request can spell a setting (under a web server a request's headers are variables beside the
- * environment's).
+ * config.php's settings as config/*.php read them: each as its type, by the same rules the settings screen uses
+ * (`'60'` is 60, `'false'` is false), and the default for one unset or unreadable. Nothing is read from the environment,
+ * so no request header can spell a setting.
  */
 final class ConfigValues
 {
@@ -41,8 +38,8 @@ final class ConfigValues
     }
 
     /**
-     * Every setting under `$prefix` the file sets, as text and as it is written (a password that reads "null" stays
-     * one): a database driver's DB_* settings, which it reads with defaults of its own.
+     * Every setting under `$prefix` as written, as text (a password reading "null" stays one) — a driver's own settings,
+     * which its form reads with its defaults.
      *
      * @return array<string, string>
      */

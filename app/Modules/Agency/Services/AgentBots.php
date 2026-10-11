@@ -19,9 +19,8 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Psr\Log\LoggerInterface;
 
 /**
- * An agent's own bot, as the shop runs it beside the main one — the agency's one part that talks to Telegram: its token
- * handed over from the main bot (connect()), the one-time link to its panel (loginLink()), and its wiring to Telegram as
- * the agency starts again (resume()) or ends (takeDown()).
+ * An agent's own bot — the agency's only part that talks to Telegram: connecting its token, the one-time panel login
+ * link, and resuming or taking down its webhook as the agency returns or ends.
  */
 final class AgentBots
 {
@@ -41,10 +40,8 @@ final class AgentBots
     ) {}
 
     /**
-     * The agent hands their bot's token over (from the main bot): Telegram is asked who the bot is, and it becomes their
-     * shop's bot — the same bot again with a new token (one revoked in @BotFather), never another one in its place (its
-     * customers know the old one). It starts serving at once: a webhook of its own when the shop runs on webhooks, the
-     * poller's next round otherwise.
+     * Connects the agent's bot by its token: Telegram says which bot it is; a new token for the same bot is accepted,
+     * another bot is not (its customers know the old one). It starts serving at once (BotLifecycle::follow()).
      *
      * @throws AgencyException with the Persian reason it was refused
      */
@@ -90,10 +87,8 @@ final class AgentBots
     }
 
     /**
-     * A one-time link that signs the agent in to their panel (/agent/, their bot's shop) — good for LOGIN_MINUTES,
-     * once; a new link replaces the last. Null while their bot is not on. The code rides in the fragment (`#code=`),
-     * which a browser never sends: no server's or proxy's access log holds it, and the panel takes it off the address
-     * bar before it signs in with it.
+     * A one-time panel login link, good for LOGIN_MINUTES (a new one replaces the last); null while their bot is off.
+     * The code rides in the URL fragment, which browsers never send, so no access log holds it.
      */
     public function loginLink(User $agent): ?string
     {
@@ -109,10 +104,7 @@ final class AgentBots
         return $this->urls->panel('agent', '/login#code=' . $code);
     }
 
-    /**
-     * The agency was given back: what kept the bot from running is forgotten, and — once it has a token — it follows
-     * the shop's mode again.
-     */
+    /** The agency returned: clears the bot's last problem and, once it has a token, puts it back on the shop's update mode. */
     public function resume(Bot $bot): void
     {
         $bot->forceFill(['problem' => null])->save();
@@ -121,10 +113,7 @@ final class AgentBots
         }
     }
 
-    /**
-     * The agency ended and the bot with it (Bot::status()): its webhook is taken down so Telegram stops calling. Best
-     * effort — the bot is off whatever Telegram answers, and its webhook answers nothing while it is.
-     */
+    /** The agency ended: takes the bot's webhook down, best effort (the bot is off whatever Telegram answers). */
     public function takeDown(Bot $bot): void
     {
         if (($bot->token ?? '') === '') {

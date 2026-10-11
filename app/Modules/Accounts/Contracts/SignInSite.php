@@ -8,15 +8,13 @@ use App\Core\Captcha\CaptchaSite;
 use App\Modules\Bots\Models\Bot;
 
 /**
- * The website a customer signs in on, as signing in needs it: the shop it is, the ways in its owner set up — Telegram
- * (its Client ID, and the secret the redirect flow exchanges a code with), Google, an email and a password —, the
- * captcha it asks (CaptchaSite: the driver, its settings, the hosts its pages are on), and the origins its pages are on.
- * The Accounts module owns it and the shop's website implements it (the Store module's Website), so the dependency runs
- * one way: the website's API calls the account's services, and those name no website.
+ * The website a customer signs in on, as the sign-in services need it: its shop, the ways in its owner set up, its
+ * captcha and its origins. Accounts owns this interface and Store's Website implements it, so the dependency runs one
+ * way: the website's API calls the account services, which name no website (LayersTest holds it).
  */
 interface SignInSite extends CaptchaSite
 {
-    /** The shop the site is: its name signs the emails a sign-in sends and names the two-factor app's entry. */
+    /** The site's shop: its name signs the sign-in emails and names the two-factor app's entry. */
     public function shop(): Bot;
 
     /** The Client ID customers sign in with Telegram under, while that sign-in is on and one is kept; null otherwise. */

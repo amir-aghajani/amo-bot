@@ -7,9 +7,8 @@ namespace App\Modules\Subscriptions\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * The customer's «تمدید خودکار» switch, set while the service is not offered it (AutoRenewal::offeredFor()): it does not
- * run, never ends, has lost its plan, or the wallet that pays every automatic renewal is off. Nothing was changed; the
- * bot words it its own way.
+ * The «تمدید خودکار» switch set while the service is not offered it (AutoRenewal::offeredFor()): it does not run, never
+ * ends, has lost its plan, or the wallet is off. A 422 on `auto_renew`; nothing changed.
  */
 final class AutoRenewUnavailableException extends DomainRuleException
 {

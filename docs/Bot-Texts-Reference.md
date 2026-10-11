@@ -2,28 +2,28 @@
 
 # Bot texts reference
 
-Everything the bot says to a customer is one of these texts. The owner — or an agent, in their own shop — rewords any
-of them on «متن‌های ربات» in the panel, which shows each text's title and where the customer meets it, and checks
-every wording before it is kept: [Bot texts and keyboards](Bot-Texts-And-Keyboards.md). A text is filled with its
-variables as it is sent; a required one cannot be left out of a wording. The words in «» are the panel's own.
+Everything the bot says to a customer is one of these texts. The owner, or an agent in their own shop, can reword any
+of them on the panel's «متن‌های ربات» screen, which shows each text's title and where the customer sees it, and
+validates every wording before saving it ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)). Variables are
+filled in when a text is sent; a required variable cannot be left out of a wording. Words in «» are the panel's labels.
 
 ## Kinds
 
-What a text is decides what it may hold: Telegram HTML (and premium emoji) in a message, a caption or a part; plain
-text in a notice or a button. Its length is counted as Telegram counts it — the text without its tags.
+A text's kind decides what it may contain: Telegram HTML (and premium emoji) in a message, a caption or a part; plain
+text in a popup or a button. Length is counted as Telegram counts it: the visible text, without tags.
 
-| Kind | Where it ends up | Telegram HTML | At most |
+| Kind | Where it is used | Telegram HTML | Maximum length |
 |---|---|---|---|
 | `message` | A message the bot sends. | yes | 3500 |
-| `caption` | The caption of the QR card a service is delivered on. | yes | 850 |
+| `caption` | The caption of the QR card a service is delivered with. | yes | 850 |
 | `popup` | The short notice a tapped button shows. | no | 190 |
 | `button` | A button's label. | no | 60 |
-| `part` | A piece another text takes in (a status, a note, a hint under a screen); emptied, it leaves nothing. | yes | 500 |
+| `part` | A piece included in other texts (a status, a note, a hint under a screen); if emptied, it is left out. | yes | 500 |
 
 ## Variables
 
-A variable means the same thing in every text that offers it; a text may describe one its own way (said beside it
-below). The example is what the panel's preview fills it with.
+A variable means the same in every text that offers it; a text may describe it differently (shown beside it below).
+The example is the value the panel's preview uses.
 
 | Variable | What it holds | Example |
 |---|---|---|
@@ -44,6 +44,8 @@ below). The example is what the panel's preview fills it with.
 | `%description%` | «توضیح پلن در خط جدا، اگر پلن توضیح داشته باشد» |  ↵ مناسب استفاده روزانه |
 | `%devices%` | «تعداد دستگاه» | ۲ دستگاه |
 | `%price%` | «قیمت پلن» | ۱۲۰٬۰۰۰ تومان |
+| `%regular%` | «قیمت عادی پلن، بدون قیمت خرید اول یا قیمت نماینده» | ۱۵۰٬۰۰۰ تومان |
+| `%plan_note%` | «یادداشت پیش‌فاکتور پلن، از فرم پلن» | این سرویس روی اپلیکیشن‌های Happ و v2rayNG تست شده است. |
 | `%order%` | «شماره سفارش» | 142 |
 | `%amount%` | «مبلغ» | ۱۲۰٬۰۰۰ تومان |
 | `%balance%` | «موجودی کیف پول» | ۸۰٬۰۰۰ تومان |
@@ -72,13 +74,18 @@ below). The example is what the panel's preview fills it with.
 | `%min%` | «حداقل مبلغ شارژ» | ۱۰٬۰۰۰ تومان |
 | `%contact%` | «راه تماس با پشتیبانی، از تنظیمات ربات» | @amo_support |
 | `%title%` | «نام کانال» | کانال ما |
-| `%terms%` | «شرط پورسانت (یکی از دو متن شرط پورسانت)» | دوستانتان را با لینک زیر به ربات دعوت کنید؛ از هر پرداخت موفق آن‌ها ۱۰٪ به عنوان پورسانت به کیف پول شما اضافه می‌شود. |
+| `%terms%` | «شرط‌های زیرمجموعه‌گیری: شرط پورسانت (یکی از دو متن شرط پورسانت)، پورسانت تمدید، و هدیه شروع و جایزه دعوت وقتی روشن‌اند» | دوستانتان را با لینک زیر به ربات دعوت کنید؛ از هر پرداخت موفق آن‌ها ۱۰٪ به عنوان پورسانت به کیف پول شما اضافه می‌شود. ↵  ↵ 🎁 هدیه شروع: با اولین خرید هر دوستتان، ۲۰٬۰۰۰ تومان به کیف پول شما و ۱۰٬۰۰۰ تومان به کیف پول خود او اضافه می‌شود. |
 | `%link%` | «لینک دعوت مشتری» | https://t.me/amo_shop_bot?start=ref_k7m2p9qa |
 | `%referrals%` | «تعداد زیرمجموعه‌ها» | ۱۲ |
 | `%earned%` | «جمع پورسانت‌های دریافتی» | ۸۴٬۰۰۰ تومان |
 | `%rate%` | «درصد پورسانت، از تنظیمات ربات» | ۱۰٪ |
 | `%commission%` | «مبلغ پورسانت» | ۱۲٬۰۰۰ تومان |
 | `%paid%` | «مبلغی که زیرمجموعه پرداخت کرد» | ۱۲۰٬۰۰۰ تومان |
+| `%trigger%` | «زمان هدیه شروع: با عضویت یا با اولین خرید» | با اولین خرید |
+| `%you%` | «هدیه شروع معرف» | ۲۰٬۰۰۰ تومان |
+| `%friend%` | «هدیه شروع زیرمجموعه» | ۱۰٬۰۰۰ تومان |
+| `%invites%` | «هر چند زیرمجموعه خریدار یک جایزه» | ۵ |
+| `%buyers%` | «تعداد زیرمجموعه‌هایی که خرید کرده‌اند» | ۱۰ |
 | `%levels%` | «سطح‌های نمایندگی با قیمت هر گیگابایت هر کدام، هر کدام در یک خط» | • برنزی: هر گیگابایت ۴٬۰۰۰ تومان ↵ • طلایی: هر گیگابایت ۳٬۰۰۰ تومان |
 | `%level%` | «سطح نمایندگی» | طلایی |
 | `%credit%` | «اعتبار خرید نماینده (تا چه اندازه موجودی‌اش می‌تواند منفی شود)» | ۵۰۰٬۰۰۰ تومان |
@@ -102,12 +109,38 @@ below). The example is what the panel's preview fills it with.
 | `%number%` | «شماره تصویر در صفحه تیکت؛ دکمه «تصویر» با همین شماره آن را می‌فرستد» | ۱ |
 | `%kept%` | «اینکه تصویر همراه پیام نگه داشته شد و با پیام بعدی می‌رود (متن «تصویر نگه داشته شد»)، یا خالی» |  ↵  ↵ 🖼️ تصویر شما نگه داشته شد و با پیام بعدی‌تان به تیکت فرستاده می‌شود. |
 | `%way%` | «روش ورود (تلگرام، گوگل یا ایمیل)» | گوگل |
+| `%extra%` | «حجم یا زمان اضافه» | ۱۰ گیگابایت |
+| `%extra_traffic%` | «حجم اضافه» | ۱۰ گیگابایت |
+| `%extra_time%` | «زمان اضافه» | ۷ روز |
+| `%unit_price%` | «قیمت هر گیگابایت یا هر روز» | ۳٬۰۰۰ تومان |
+| `%least%` | «کمترین مقدار دلخواه» | ۱ |
+| `%most%` | «بیشترین مقدار دلخواه» | ۱۰۰ |
+| `%typed%` | «متن مقدار دلخواه، یا خالی» |  ↵  ↵ ✏️ برای حجم دلخواه، عددی بین ۱ تا ۱۰۰ گیگابایت بنویسید؛ هر گیگابایت ۳٬۰۰۰ تومان. |
+| `%restart%` | «متن «زمان تمام‌شده»، یا خالی» |  ↵  ↵ ⏳ زمان این سرویس تمام شده است؛ روزهایی که می‌خرید از اولین اتصال بعدی شما شمرده می‌شود. |
+| `%discount%` | «تخفیف، با نام و درصدش» | فروش ویژه نوروز ۲۰٪ |
+| `%prize%` | «جایزه گردونه، همان‌طور که گردونه نشانش می‌دهد» | ۱۰ گیگ حجم |
+| `%prizes%` | «جایزه‌های گردونه، هر کدام در یک خط (متن «جایزه گردونه»)» | 🎁 ۱۰ گیگ حجم ↵ 🎁 ۵۰ هزار تومان شارژ ↵ 🎁 پوچ |
+| `%cost%` | «هزینه و فاصله چرخش‌ها (یکی از دو متن «هزینه گردونه» و «گردونه رایگان»)» |  ↵  ↵ 🎁 چرخیدن رایگان است؛ هر ۲۴ ساعت یک بار می‌توانید بچرخانید. |
+| `%turn%` | «زمان چرخش بعدی (متن «چرخش بعدی»)، یا خالی وقتی همین حالا می‌شود چرخاند» |  ↵  ↵ 🕒 چرخش بعدی شما: ۲۵ آبان ۱۴۰۵، ۱۸:۳۰ (۵ ساعت دیگر) |
+| `%every%` | «فاصله دو چرخش، از تنظیمات گردونه» | ۲۴ ساعت |
+| `%left%` | «زمان مانده تا چرخش بعدی» | ۵ ساعت |
+| `%given%` | «آنچه جایزه داد و کجا رفت (یکی از متن‌های «جایزه داده شد»)» | ۵۰٬۰۰۰ تومان به کیف پول شما اضافه شد؛ موجودی: ۸۰٬۰۰۰ تومان. |
+| `%refund%` | «برگشت هزینه چرخش (متن «برگشت هزینه چرخش»)، یا خالی» |  ↵ 💰 هزینه چرخش به کیف پول شما برگشت. |
+| `%loyalty_tier%` | «سطح وفاداری مشتری» | طلایی |
+| `%next_tier%` | «سطح وفاداری بعدی» | الماس |
+| `%to_next_tier%` | «مبلغ خریدی که تا سطح بعدی مانده» | ۲۵۰٬۰۰۰ تومان |
+| `%tier_climb%` | «فاصله تا سطح بعدی (متن «تا سطح بعدی»)، یا خالی در بالاترین سطح» |  — ۲۵۰٬۰۰۰ تومان تا سطح الماس |
+| `%tier_discount%` | «درصد تخفیف سطح» | ۵٪ |
+| `%tier_cashback%` | «درصد کش‌بک اضافه سطح» | ۲٪ |
+| `%tier_perks%` | «مزیت‌های سطح، هر کدام در یک خط (متن‌های «تخفیف سطح» و «کش‌بک سطح»)، یا خالی» |  ↵ 🏷️ ۵٪ تخفیف روی خریدهای شما ↵ 💸 ۲٪ کش‌بک اضافه از هر پرداخت |
+| `%cashback_amount%` | «مبلغ کش‌بک» | ۶٬۰۰۰ تومان |
+| `%draw_prize%` | «جایزه قرعه‌کشی شبانه» | ۵۰٬۰۰۰ تومان شارژ کیف پول |
 
 ## Group: general
 
 «عمومی» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `welcome` | «خوش‌آمدگویی» | `message` | «وقتی مشتری ربات را استارت می‌کند و در تلگرام نام دارد؛ منوی اصلی همراه آن می‌آید.» | `%name%` |
 | `welcome_nameless` | «خوش‌آمدگویی بدون نام» | `message` | «همان خوش‌آمدگویی، برای حسابی که در تلگرام نامی ندارد.» | — |
@@ -124,7 +157,7 @@ below). The example is what the panel's preview fills it with.
 
 «شماره موبایل و عضویت در کانال» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `phone_prompt` | «درخواست شماره موبایل» | `message` | «وقتی تایید شماره موبایل روشن است و مشتری هنوز شماره‌اش را نفرستاده.» | — |
 | `phone_button` | «دکمه ارسال شماره» | `button` | «دکمه‌ای که شماره تلگرام مشتری را می‌فرستد.» | — |
@@ -140,7 +173,7 @@ below). The example is what the panel's preview fills it with.
 
 «خرید اشتراک» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `categories_title` | «انتخاب دسته» | `message` | «بالای دکمه‌های دسته‌ها در «خرید اشتراک».» | — |
 | `category_other` | «دسته «سایر پلن‌ها»» | `button` | «نام دسته پلن‌هایی که دسته‌ای ندارند.» | — |
@@ -148,8 +181,13 @@ below). The example is what the panel's preview fills it with.
 | `plans_title` | «انتخاب پلن» | `message` | «بالای دکمه‌های پلن‌ها.» | — |
 | `plans_empty` | «پلنی نیست» | `message` | «وقتی هیچ پلنی برای فروش نیست.» | — |
 | `category_plans` | «انتخاب پلن در دسته» | `message` | «بالای دکمه‌های پلن‌های یک دسته.» | `%category%` |
-| `plan_button` | «دکمه پلن» | `button` | «هر پلن در لیست پلن‌ها یک دکمه است.» | `%plan%` (required), `%traffic%` («حجم پلن»), `%duration%` («مدت پلن»), `%price%` |
-| `plan_details` | «جزئیات پلن» | `message` | «بعد از انتخاب پلن؛ «انتخاب سرور» یا «سروری در دسترس نیست» زیر آن می‌آید.» | `%plan%`, `%description%`, `%traffic%` («حجم پلن»), `%duration%` («مدت پلن»), `%devices%`, `%price%` |
+| `plan_button` | «دکمه پلن» | `button` | «هر پلن در لیست پلن‌ها یک دکمه است.» | `%plan%` (required), `%traffic%` («حجم پلن»), `%duration%` («مدت پلن»), `%price%` («قیمت پلن برای این مشتری: قیمت خرید اول اگر هنوز سرویسی نخریده، یا قیمت نماینده اگر نماینده یا همکار است، و بعد از بیشترین تخفیف خودکار او (فروش ویژه، تخفیف اختصاصی یا سطح وفاداری)») |
+| `plan_details` | «جزئیات پلن» | `message` | «بعد از انتخاب پلن؛ «انتخاب سرور» یا «سروری در دسترس نیست» زیر آن می‌آید.» | `%plan%`, `%description%`, `%traffic%` («حجم پلن»), `%duration%` («مدت پلن»), `%devices%`, `%price%` («قیمت پلن برای این مشتری: قیمت خرید اول اگر هنوز سرویسی نخریده، یا قیمت نماینده اگر نماینده یا همکار است، و بعد از بیشترین تخفیف خودکار او (فروش ویژه، تخفیف اختصاصی یا سطح وفاداری)») |
+| `plan_first_purchase` | «قیمت خرید اول» | `part` | «زیر جزئیات پلنی که قیمت خرید اول دارد، برای مشتری‌ای که هنوز سرویسی نخریده است؛ قیمت جزئیات همان قیمت خرید اول است.» | `%regular%` |
+| `plan_agent_price` | «قیمت نماینده» | `part` | «زیر جزئیات پلنی که قیمت نماینده دارد، برای نماینده‌ها و مشتری‌های گروه‌های همکار؛ قیمت جزئیات همان قیمت نماینده است.» | `%regular%` |
+| `plan_sale` | «فروش ویژه پلن» | `part` | «زیر جزئیات پلنی که فروش ویژه‌ای روی آن است، وقتی تخفیف آن از تخفیف‌های خودکار دیگر مشتری بیشتر است؛ قیمت جزئیات بعد از این تخفیف است.» | `%discount%` («نام فروش ویژه و درصد آن»), `%regular%` («قیمت پلن برای این مشتری پیش از این تخفیف») |
+| `plan_personal_discount` | «تخفیف اختصاصی مشتری» | `part` | «زیر جزئیات پلن برای مشتری‌ای که پشتیبانی برایش تخفیف اختصاصی گذاشته است، وقتی از تخفیف‌های خودکار دیگر بیشتر است؛ قیمت جزئیات بعد از این تخفیف است.» | `%discount%` («تخفیف اختصاصی مشتری و درصد آن»), `%regular%` («قیمت پلن برای این مشتری پیش از این تخفیف») |
+| `plan_tier_discount` | «تخفیف سطح وفاداری» | `part` | «زیر جزئیات پلن برای مشتری‌ای که سطح وفاداری‌اش تخفیف دارد، وقتی از تخفیف‌های خودکار دیگر بیشتر است؛ قیمت جزئیات بعد از این تخفیف است.» | `%discount%` («سطح وفاداری مشتری و درصد تخفیف آن»), `%regular%` («قیمت پلن برای این مشتری پیش از این تخفیف») |
 | `plan_pick_server` | «انتخاب سرور» | `part` | «زیر جزئیات پلن، بالای دکمه‌های سرورها.» | — |
 | `server_button` | «دکمه سرور» | `button` | «زیر جزئیات پلن، یک دکمه برای هر سرور.» | `%server%` (required) |
 | `plan_no_server` | «سروری در دسترس نیست» | `message` | «وقتی هیچ سرور این پلن فعلا قابل فروش نیست.» | — |
@@ -159,11 +197,21 @@ below). The example is what the panel's preview fills it with.
 
 «پرداخت و رسید» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `checkout` | «صفحه پرداخت» | `message` | «بعد از انتخاب سرور؛ دکمه روش‌های پرداخت زیر آن می‌آید. سفارش وقتی ثبت می‌شود که مشتری روش پرداخت را انتخاب کند.» | `%plan%`, `%server%`, `%amount%` («مبلغ سفارش») |
 | `topup_checkout` | «صفحه پرداخت شارژ کیف پول» | `message` | «همان صفحه پرداخت، برای شارژ کیف پول.» | `%amount%` («مبلغ شارژ») |
 | `checkout_no_gateway` | «روش پرداختی فعال نیست» | `message` | «وقتی هیچ روش پرداختی فعال نیست.» | — |
+| `checkout_free` | «دکمه دریافت رایگان» | `button` | «در صفحه پرداخت پلن رایگان (قیمت صفر)، به جای دکمه‌های روش پرداخت؛ سرویس بدون پرداخت تحویل می‌شود.» | — |
+| `checkout_plan_note` | «یادداشت پیش‌فاکتور پلن» | `part` | «زیر صفحه پرداخت پلنی که یادداشت پیش‌فاکتور دارد (فرم پلن)، چه خرید و چه تمدید، درست بالای دکمه‌های روش پرداخت.» | `%plan_note%` |
+| `checkout_discount` | «خط تخفیف» | `part` | «زیر صفحه پرداخت خرید، تمدید، حجم یا زمان اضافه، یک خط برای هر تخفیفی که روی مبلغ آمده است: تخفیف خودکار (فروش ویژه، تخفیف اختصاصی یا سطح وفاداری) و کد تخفیف.» | `%discount%` («تخفیف، با نام و درصدش، یا کد تخفیف»), `%amount%` («مبلغی که این تخفیف کم کرد») |
+| `checkout_before_discount` | «مبلغ پیش از تخفیف» | `part` | «زیر خط‌های تخفیف صفحه پرداخت؛ مبلغ صفحه پرداخت بعد از همه تخفیف‌هاست.» | `%regular%` («مبلغ پیش از تخفیف‌ها») |
+| `discount_code_button` | «دکمه کد تخفیف» | `button` | «زیر صفحه پرداخت خرید، تمدید، حجم یا زمان اضافه؛ مشتری با آن کد تخفیفش را می‌فرستد.» | — |
+| `discount_code_remove` | «دکمه حذف کد تخفیف» | `button` | «زیر صفحه پرداختی که کد تخفیف روی آن آمده است، به جای «کد تخفیف دارم».» | — |
+| `discount_code_ask` | «درخواست کد تخفیف» | `message` | «بعد از دکمه «کد تخفیف دارم»؛ پیام بعدی مشتری کد تخفیف اوست.» | — |
+| `discount_code_refused` | «کد تخفیف پذیرفته نشد» | `message` | «وقتی کدی که مشتری فرستاده برای این خرید معتبر نیست؛ ربات منتظر کد دیگری می‌ماند و دکمه «بازگشت» به صفحه پرداخت برمی‌گردد.» | `%reason%` («چرا کد پذیرفته نشد») |
+| `discount_code_dropped` | «کد تخفیف برداشته شد» | `part` | «زیر صفحه پرداخت، وقتی کد تخفیفی که مشتری برای همین خرید فرستاده بود دیگر معتبر نیست و برداشته شد.» | `%reason%` («چرا کد دیگر معتبر نیست») |
+| `discount_code_lost` | «کد تخفیف هنگام پرداخت» | `message` | «وقتی مشتری روش پرداخت را انتخاب می‌کند و کد تخفیفش همان لحظه دیگر معتبر نیست (مثلا ظرفیتش پر شد)؛ چیزی سفارش داده نمی‌شود و دکمه «بازگشت» صفحه پرداخت را بدون کد نشان می‌دهد.» | `%reason%` («چرا کد دیگر معتبر نیست») |
 | `order_not_pending` | «سفارش دیگر باز نیست» | `message` | «وقتی مشتری سفارشی را پرداخت می‌کند که پرداخت یا لغو شده است.» | — |
 | `pay_insufficient` | «موجودی کافی نیست» | `message` | «وقتی مشتری با کیف پول پرداخت می‌کند و موجودی کم است؛ دکمه افزایش موجودی زیر آن می‌آید.» | `%balance%`, `%missing%`, `%amount%` («مبلغ سفارش») |
 | `pay_failed` | «پرداخت ناموفق» | `message` | «وقتی پرداخت انجام نمی‌شود.» | `%reason%` |
@@ -176,13 +224,15 @@ below). The example is what the panel's preview fills it with.
 | `receipt_outcome_subscription` | «نتیجه رسید: اشتراک» | `part` | «مقدار %outcome% در پیام دریافت رسید و پیام «پرداخت انجام شد»، وقتی سفارش خرید اشتراک است.» | — |
 | `receipt_outcome_renewal` | «نتیجه رسید: تمدید» | `part` | «مقدار %outcome% در پیام دریافت رسید و پیام «پرداخت انجام شد»، وقتی سفارش تمدید سرویس است.» | — |
 | `receipt_outcome_topup` | «نتیجه رسید: شارژ کیف پول» | `part` | «مقدار %outcome% در پیام دریافت رسید و پیام «پرداخت انجام شد»، وقتی سفارش شارژ کیف پول است.» | — |
+| `receipt_outcome_extra_traffic` | «نتیجه رسید: حجم اضافه» | `part` | «مقدار %outcome% در پیام دریافت رسید و پیام «پرداخت انجام شد»، وقتی سفارش خرید حجم اضافه برای سرویس است.» | — |
+| `receipt_outcome_extra_time` | «نتیجه رسید: زمان اضافه» | `part` | «مقدار %outcome% در پیام دریافت رسید و پیام «پرداخت انجام شد»، وقتی سفارش خرید زمان اضافه برای سرویس است.» | — |
 | `pay_processing` | «پرداخت انجام شد» | `message` | «وقتی پرداخت از کیف پول انجام شد ولی تحویل سفارش هنوز در جریان است؛ نتیجه‌اش بعدا همین‌جا فرستاده می‌شود.» | `%order%`, `%outcome%` («نتیجه پرداخت (یکی از متن‌های نتیجه رسید)») |
 
 ## Group: delivery
 
 «تحویل و نتیجه پرداخت» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `pay_success` | «تحویل سرویس» | `caption` | «بعد از پرداخت موفق؛ همراه عکس کد QR لینک، وقتی ساخت آن روشن است.» | `%client%`, `%plan%`, `%server%`, `%duration%`, `%expires%`, `%traffic%`, `%remaining%`, `%subscription%` (required) |
 | `pay_provision_failed` | «ساخت سرویس ناموفق» | `message` | «وقتی پرداخت انجام شد ولی ساخت سرویس روی سرور ناموفق بود.» | — |
@@ -201,7 +251,7 @@ below). The example is what the panel's preview fills it with.
 
 «سرویس‌های من» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `subscriptions_title` | «لیست سرویس‌ها» | `message` | «بالای دکمه‌های سرویس‌ها در «سرویس‌های من».» | — |
 | `subscriptions_page` | «شماره صفحه» | `part` | «زیر لیست سرویس‌ها و لیست تیکت‌ها، وقتی بیش از یک صفحه است.» | `%page%`, `%pages%` |
@@ -214,7 +264,7 @@ below). The example is what the panel's preview fills it with.
 
 «صفحه سرویس» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `service_details` | «صفحه سرویس» | `message` | «وقتی مشتری یک سرویس را باز می‌کند؛ اطلاعات همان لحظه از پنل خوانده می‌شود.» | `%status%`, `%client%`, `%plan%`, `%server%`, `%traffic%`, `%used%`, `%remaining%`, `%expires%`, `%last_online%`, `%connection%` |
 | `service_rotate_hint` | «راهنمای تغییر لینک» | `part` | «زیر صفحه سرویس، وقتی سرور امکان تغییر لینک دارد.» | — |
@@ -245,7 +295,7 @@ below). The example is what the panel's preview fills it with.
 
 «تغییر لینک» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `service_rotate_confirm` | «پرسش تغییر لینک» | `message` | «پیش از تغییر لینک، برای تایید مشتری؛ دکمه‌های تایید و انصراف زیر آن می‌آید.» | `%client%` |
 | `service_rotate_yes` | «دکمه تایید تغییر لینک» | `button` | «زیر پرسش تغییر لینک.» | — |
@@ -259,7 +309,7 @@ below). The example is what the panel's preview fills it with.
 
 «کارهای پشتیبانی روی سرویس» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `service_disabled_by_support` | «غیرفعال شدن سرویس» | `message` | «وقتی پشتیبانی سرویس را غیرفعال می‌کند.» | `%client%`, `%note%` |
 | `service_enabled_by_support` | «فعال شدن دوباره سرویس» | `message` | «وقتی پشتیبانی سرویس را دوباره فعال می‌کند.» | `%client%` |
@@ -271,7 +321,7 @@ below). The example is what the panel's preview fills it with.
 
 «تمدید» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `renew_choose` | «انتخاب سرویس برای تمدید» | `message` | «بعد از دکمه «تمدید سرویس» منوی اصلی؛ دکمه سرویس‌هایی که می‌شود تمدید کرد، فعال یا منقضی، زیر آن می‌آید.» | — |
 | `renew_nothing` | «سرویسی برای تمدید نیست» | `message` | «وقتی مشتری دکمه «تمدید سرویس» منوی اصلی را می‌زند و سرویسی ندارد که بشود تمدید کرد.» | — |
@@ -290,22 +340,44 @@ below). The example is what the panel's preview fills it with.
 | `renewal_leftover_carried` | «انتقال حجم باقی‌مانده» | `part` | «مقدار %leftover% در پیام‌های تمدید، وقتی حجم باقی‌مانده به دوره جدید منتقل شد.» | — |
 | `renew_failed` | «تمدید ناموفق» | `message` | «وقتی تمدید پرداخت شد ولی روی سرور انجام نشد.» | `%client%` |
 
+## Group: extras
+
+«حجم و زمان اضافه» on the screen.
+
+| Text | Title | Kind | Where the customer sees it | Variables |
+|---|---|---|---|---|
+| `service_extra_traffic` | «دکمه حجم اضافه» | `button` | «در صفحه سرویس، و در صفحه پرداخت تمدیدی که از فهرست «♻️ تمدید سرویس» باز شده، وقتی فروشگاه برای این سرویس حجم اضافه می‌فروشد.» | — |
+| `service_extra_time` | «دکمه زمان اضافه» | `button` | «در صفحه سرویس، و در صفحه پرداخت تمدیدی که از فهرست «♻️ تمدید سرویس» باز شده، وقتی فروشگاه برای این سرویس زمان اضافه می‌فروشد.» | — |
+| `extra_traffic_menu` | «صفحه حجم اضافه» | `message` | «بعد از دکمه «حجم اضافه» صفحه سرویس؛ دکمه حجم‌های پیشنهادی، هر کدام با قیمتش، زیر آن می‌آید. سفارش وقتی ثبت می‌شود که مشتری روش پرداخت را انتخاب کند.» | `%client%`, `%remaining%`, `%expires%`, `%typed%` («متن «حجم دلخواه»، وقتی مشتری می‌تواند حجم دلخواه بنویسد؛ یا خالی») |
+| `extra_traffic_typed` | «حجم دلخواه» | `part` | «مقدار %typed% در صفحه حجم اضافه، وقتی قیمت هر گیگابایت تعیین شده و مشتری می‌تواند حجم دلخواه بنویسد.» | `%least%` («کمترین حجم دلخواه»), `%most%` («بیشترین حجم دلخواه»), `%unit_price%` («قیمت هر گیگابایت») |
+| `extra_time_menu` | «صفحه زمان اضافه» | `message` | «بعد از دکمه «زمان اضافه» صفحه سرویس؛ دکمه زمان‌های پیشنهادی، هر کدام با قیمتش، زیر آن می‌آید. سفارش وقتی ثبت می‌شود که مشتری روش پرداخت را انتخاب کند.» | `%client%`, `%expires%`, `%remaining%`, `%restart%`, `%typed%` («متن «زمان دلخواه»، وقتی مشتری می‌تواند تعداد روز دلخواه بنویسد؛ یا خالی») |
+| `extra_time_restart` | «زمان تمام‌شده» | `part` | «مقدار %restart% در صفحه زمان اضافه، وقتی زمان سرویس تمام شده است.» | — |
+| `extra_time_typed` | «زمان دلخواه» | `part` | «مقدار %typed% در صفحه زمان اضافه، وقتی قیمت هر روز تعیین شده و مشتری می‌تواند تعداد روز دلخواه بنویسد.» | `%least%` («کمترین تعداد روز دلخواه»), `%most%` («بیشترین تعداد روز دلخواه»), `%unit_price%` («قیمت هر روز») |
+| `extra_option` | «دکمه مقدار پیشنهادی» | `button` | «دکمه‌های صفحه حجم اضافه و صفحه زمان اضافه: هر حجم یا زمان پیشنهادی با قیمتش.» | `%extra%`, `%amount%` («قیمت آن») |
+| `extra_invalid` | «مقدار دلخواه نامعتبر» | `message` | «وقتی مشتری در صفحه حجم یا زمان اضافه عددی می‌نویسد که فروخته نمی‌شود.» | `%least%`, `%most%` |
+| `extra_traffic_checkout` | «صفحه پرداخت حجم اضافه» | `message` | «بعد از انتخاب یا نوشتن حجم در صفحه حجم اضافه؛ دکمه روش‌های پرداخت زیر آن می‌آید.» | `%client%`, `%extra_traffic%`, `%amount%` («مبلغ خرید»), `%remaining%` («حجم باقی‌مانده بعد از خرید»), `%expires%` («تاریخ پایان سرویس») |
+| `extra_time_checkout` | «صفحه پرداخت زمان اضافه» | `message` | «بعد از انتخاب یا نوشتن تعداد روز در صفحه زمان اضافه؛ دکمه روش‌های پرداخت زیر آن می‌آید.» | `%client%`, `%extra_time%`, `%amount%` («مبلغ خرید»), `%expires%` («تاریخ پایان سرویس بعد از خرید»), `%remaining%` («حجم باقی‌مانده») |
+| `extra_unavailable` | «خرید حجم یا زمان ممکن نیست» | `popup` | «اعلان وقتی مشتری برای سرویسی حجم یا زمان اضافه می‌خرد که الان نمی‌شود: پشتیبانی آن را غیرفعال کرده، تمام شده، یا فروشگاه دیگر برایش نمی‌فروشد — و همین به‌صورت پیام، وقتی مقداری را نوشته است.» | — |
+| `extra_traffic_added` | «حجم اضافه شد» | `message` | «بعد از خرید حجم اضافه — همان لحظه وقتی از کیف پول پرداخت شد، یا بعد از تایید رسید —، و وقتی خریدی که پرداخت شده بود بعدا تحویل می‌شود.» | `%client%`, `%plan%`, `%server%`, `%duration%`, `%expires%`, `%traffic%`, `%remaining%`, `%subscription%`, `%extra_traffic%` |
+| `extra_time_added` | «زمان اضافه شد» | `message` | «بعد از خرید زمان اضافه — همان لحظه وقتی از کیف پول پرداخت شد، یا بعد از تایید رسید —، و وقتی خریدی که پرداخت شده بود بعدا تحویل می‌شود.» | `%client%`, `%plan%`, `%server%`, `%duration%`, `%expires%`, `%traffic%`, `%remaining%`, `%subscription%`, `%extra_time%` |
+| `extra_failed` | «خرید حجم یا زمان ناموفق» | `message` | «وقتی خرید حجم یا زمان اضافه پرداخت شد ولی روی سرور انجام نشد.» | `%client%`, `%extra%` |
+
 ## Group: reminders
 
 «یادآوری» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `expiry_reminder` | «یادآوری پایان سرویس» | `message` | «چند روز پیش از پایان سرویس، وقتی این یادآوری روشن است؛ دکمه «مشاهده سرویس» زیر آن می‌آید.» | `%client%`, `%plan%`, `%server%`, `%duration%`, `%expires%`, `%traffic%`, `%remaining%`, `%subscription%`, `%hint%` |
 | `traffic_reminder` | «یادآوری پایان حجم» | `message` | «وقتی بیشتر حجم سرویس مصرف شده، وقتی این یادآوری روشن است؛ دکمه «مشاهده سرویس» زیر آن می‌آید.» | `%client%`, `%plan%`, `%server%`, `%duration%`, `%expires%`, `%traffic%`, `%remaining%`, `%subscription%`, `%percent%` |
 | `reminder_auto_renew_hint` | «نکته تمدید خودکار» | `part` | «مقدار %hint% در یادآوری پایان سرویس، وقتی سرویس می‌تواند خودکار تمدید شود و تمدید خودکارش خاموش است.» | — |
-| `reminder_open_service` | «دکمه مشاهده سرویس» | `button` | «زیر پیام‌های یادآوری، و زیر پیام تمدید وقتی سرویس از ربات با کیف پول تمدید شد.» | — |
+| `reminder_open_service` | «دکمه مشاهده سرویس» | `button` | «زیر پیام‌های یادآوری، و زیر پیام تمدید یا حجم و زمان اضافه وقتی از ربات با کیف پول پرداخت شد.» | — |
 
 ## Group: wallet
 
 «کیف پول» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `wallet_balance` | «موجودی کیف پول» | `message` | «بالای صفحه کیف پول؛ تراکنش‌ها و دکمه افزایش موجودی زیر آن می‌آید.» | `%balance%` |
 | `wallet_history` | «آخرین تراکنش‌ها» | `part` | «زیر موجودی در صفحه کیف پول.» | `%history%` (required) |
@@ -319,67 +391,76 @@ below). The example is what the panel's preview fills it with.
 | `topup_ask` | «پرسش مبلغ دلخواه» | `message` | «بعد از «مبلغ دلخواه».» | `%min%` |
 | `topup_invalid` | «مبلغ نامعتبر» | `message` | «وقتی مبلغی که مشتری فرستاده عدد درستی نیست یا از حداقل کمتر است.» | `%min%` |
 | `topup_failed` | «شارژ ناموفق» | `message` | «وقتی پرداخت انجام شد ولی شارژ کیف پول انجام نشد.» | — |
-| `wallet_credit` | «اعتبار نمایندگی» (the main bot's only) | `part` | «زیر موجودی در صفحه کیف پول، برای نماینده‌ای که اعتبار خرید دارد.» | `%credit%` |
+| `wallet_credit` | «اعتبار نمایندگی» (main bot only) | `part` | «زیر موجودی در صفحه کیف پول، برای نماینده‌ای که اعتبار خرید دارد.» | `%credit%` |
 
 ## Group: referral
 
 «زیرمجموعه‌گیری» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `referral_screen` | «زیرمجموعه‌گیری» | `message` | «صفحه «زیرمجموعه‌گیری»: لینک دعوت مشتری، شرط پورسانت و آمار او؛ دکمه ارسال لینک زیر آن می‌آید.» | `%terms%`, `%link%` (required), `%referrals%`, `%earned%` |
 | `referral_terms_every` | «شرط پورسانت: هر پرداخت» | `part` | «مقدار %terms% در صفحه زیرمجموعه‌گیری، وقتی هر پرداخت زیرمجموعه پورسانت دارد.» | `%rate%` |
 | `referral_terms_first` | «شرط پورسانت: اولین پرداخت» | `part` | «مقدار %terms% در صفحه زیرمجموعه‌گیری، وقتی فقط اولین پرداخت هر زیرمجموعه پورسانت دارد.» | `%rate%` |
+| `referral_terms_renewal` | «پورسانت تمدید» | `part` | «زیر شرط پورسانت در صفحه زیرمجموعه‌گیری، وقتی هر پرداخت پورسانت دارد و درصد پورسانت تمدید سرویس با درصد پورسانت فرق دارد.» | `%rate%` («درصد پورسانت تمدید، از تنظیمات ربات») |
+| `referral_terms_no_renewal` | «تمدید بدون پورسانت» | `part` | «زیر شرط پورسانت در صفحه زیرمجموعه‌گیری، وقتی هر پرداخت پورسانت دارد ولی تمدید سرویس پورسانت ندارد.» | — |
+| `referral_terms_gift_both` | «هدیه شروع: هر دو» | `part` | «در صفحه زیرمجموعه‌گیری، وقتی هدیه شروع هم به معرف و هم به زیرمجموعه داده می‌شود.» | `%trigger%`, `%you%`, `%friend%` |
+| `referral_terms_gift_you` | «هدیه شروع: معرف» | `part` | «در صفحه زیرمجموعه‌گیری، وقتی هدیه شروع فقط به معرف داده می‌شود.» | `%trigger%`, `%you%` |
+| `referral_terms_gift_friend` | «هدیه شروع: زیرمجموعه» | `part` | «در صفحه زیرمجموعه‌گیری، وقتی هدیه شروع فقط به زیرمجموعه داده می‌شود.» | `%trigger%`, `%friend%` |
+| `referral_terms_reward` | «جایزه دعوت» | `part` | «در صفحه زیرمجموعه‌گیری، وقتی جایزه دعوت روشن است: به ازای هر چند زیرمجموعه‌ای که خرید کنند، یک سرویس رایگان.» | `%invites%`, `%plan%` («پلن جایزه دعوت») |
 | `referral_share` | «دکمه ارسال لینک» | `button` | «زیر صفحه زیرمجموعه‌گیری؛ پنجره اشتراک‌گذاری تلگرام را با لینک دعوت باز می‌کند.» | — |
 | `referral_off` | «زیرمجموعه‌گیری خاموش» | `message` | «صفحه «زیرمجموعه‌گیری»، وقتی زیرمجموعه‌گیری در تنظیمات ربات خاموش است.» | — |
 | `referral_joined` | «زیرمجموعه جدید» | `message` | «به معرف، وقتی کسی اولین بار با لینک دعوت او وارد ربات می‌شود.» | `%name%` («نام زیرمجموعه جدید») |
 | `referral_commission` | «دریافت پورسانت» | `message` | «به معرف، وقتی پرداخت یکی از زیرمجموعه‌هایش پورسانت دارد و به کیف پول او اضافه می‌شود.» | `%commission%`, `%paid%`, `%balance%` |
+| `referral_start_gift_referrer` | «هدیه شروع معرف» | `message` | «به معرف، وقتی هدیه شروع یک زیرمجموعه (با عضویت یا اولین خرید او، به انتخاب تنظیمات ربات) به کیف پولش اضافه می‌شود.» | `%amount%` («هدیه شروع معرف»), `%name%` («نام زیرمجموعه»), `%balance%` |
+| `referral_start_gift_invitee` | «هدیه شروع زیرمجموعه» | `message` | «به زیرمجموعه، وقتی هدیه شروع او (با عضویت یا اولین خرید، به انتخاب تنظیمات ربات) به کیف پولش اضافه می‌شود.» | `%amount%` («هدیه شروع زیرمجموعه»), `%balance%` |
+| `referral_rewarded` | «جایزه دعوت» | `message` | «به معرف، وقتی زیرمجموعه‌های خریدارش به تعداد جایزه دعوت می‌رسند و یک سرویس رایگان به او داده می‌شود؛ خود سرویس جدا می‌آید.» | `%buyers%`, `%plan%` («پلن جایزه دعوت») |
 
 ## Group: agency
 
 «نمایندگی» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
-| `agency_off` | «نمایندگی خاموش» (the main bot's only) | `message` | «صفحه «نمایندگی»، وقتی نمایندگی در تنظیمات ربات خاموش است.» | — |
-| `agency_terms` | «معرفی نمایندگی» (the main bot's only) | `message` | «صفحه «نمایندگی» برای کسی که هنوز نماینده نیست؛ دکمه «درخواست نمایندگی» زیر آن می‌آید.» | `%levels%` |
-| `agency_level_line` | «سطح نمایندگی در معرفی» (the main bot's only) | `part` | «یک خط از %levels% در معرفی نمایندگی، برای هر سطح.» | `%level%`, `%price%` («قیمت هر گیگابایت این سطح») |
-| `agency_no_levels` | «هنوز سطحی نیست» (the main bot's only) | `part` | «مقدار %levels% در معرفی نمایندگی، وقتی هنوز سطحی ساخته نشده است.» | — |
-| `agency_apply` | «دکمه درخواست نمایندگی» (the main bot's only) | `button` | «زیر معرفی نمایندگی.» | — |
-| `agency_ask_note` | «پرسش توضیح درخواست» (the main bot's only) | `message` | «بعد از «درخواست نمایندگی»؛ آنچه مشتری می‌نویسد همراه درخواست به پشتیبانی می‌رسد.» | — |
-| `agency_note_invalid` | «توضیح نامعتبر» (the main bot's only) | `message` | «وقتی مشتری به جای متن چیز دیگری می‌فرستد یا متنش بلند است.» | — |
-| `agency_requested` | «ثبت درخواست» (the main bot's only) | `message` | «بعد از اینکه درخواست نمایندگی ثبت شد.» | — |
-| `agency_pending` | «درخواست در حال بررسی» (the main bot's only) | `message` | «صفحه «نمایندگی»، وقتی درخواست مشتری هنوز بررسی نشده است.» | — |
-| `agency_approved` | «تایید نمایندگی» (the main bot's only) | `message` | «وقتی پشتیبانی درخواست نمایندگی را تایید می‌کند.» | `%level%`, `%credit%`, `%price%` («قیمت هر گیگابایت برای نماینده») |
-| `agency_rejected` | «رد درخواست نمایندگی» (the main bot's only) | `message` | «وقتی پشتیبانی درخواست نمایندگی را رد می‌کند.» | `%note%` |
-| `agency_changed` | «تغییر نمایندگی» (the main bot's only) | `message` | «وقتی پشتیبانی سطح یا اعتبار نماینده را تغییر می‌دهد.» | `%level%`, `%credit%`, `%price%` («قیمت هر گیگابایت برای نماینده») |
-| `agency_revoked` | «لغو نمایندگی» (the main bot's only) | `message` | «وقتی پشتیبانی نمایندگی را لغو می‌کند.» | `%note%` |
-| `agency_panel` | «حساب نمایندگی» (the main bot's only) | `message` | «صفحه «نمایندگی» برای نماینده؛ دکمه‌های خرید حجم، ربات من، ورود به پنل و افزایش موجودی زیر آن می‌آید.» | `%level%`, `%balance%`, `%credit%`, `%bot%`, `%customers%`, `%sold%`, `%active%`, `%price%` («قیمت هر گیگابایت برای نماینده»), `%traffic%` («حجم باقی‌مانده ربات نماینده») |
-| `agency_buy_traffic` | «دکمه خرید حجم» (the main bot's only) | `button` | «در حساب نمایندگی، و زیر خبر کم آمدن حجم.» | — |
-| `agency_my_bot` | «دکمه ربات من» (the main bot's only) | `button` | «در حساب نمایندگی.» | — |
-| `agency_panel_login` | «دکمه ورود به پنل» (the main bot's only) | `button` | «در حساب نمایندگی و زیر لینک ورود.» | — |
-| `agency_traffic` | «خرید حجم» (the main bot's only) | `message` | «بعد از «خرید حجم»؛ دکمه حجم‌های پیشنهادی زیر آن می‌آید.» | `%price%` («قیمت هر گیگابایت برای نماینده»), `%traffic%` («حجم باقی‌مانده ربات نماینده»), `%min%` («کمترین خرید حجم، به گیگابایت») |
-| `agency_traffic_button` | «دکمه حجم پیشنهادی» (the main bot's only) | `button` | «زیر صفحه خرید حجم، یکی برای هر حجم پیشنهادی.» | `%traffic%` («حجم»), `%amount%` («قیمت این حجم») |
-| `agency_traffic_invalid` | «حجم نامعتبر» (the main bot's only) | `message` | «وقتی عددی که نماینده برای حجم فرستاده درست نیست.» | `%min%` («کمترین خرید حجم، به گیگابایت») |
-| `agency_traffic_checkout` | «صفحه پرداخت خرید حجم» (the main bot's only) | `message` | «همان صفحه پرداخت، برای خرید حجم نمایندگی.» | `%traffic%` («حجمی که خریده می‌شود»), `%amount%` («مبلغ») |
-| `agency_traffic_added` | «حجم اضافه شد» (the main bot's only) | `message` | «بعد از پرداخت موفق خرید حجم.» | `%traffic%` («حجمی که خریده شد»), `%remaining%` («حجم باقی‌مانده ربات نماینده») |
-| `agency_traffic_failed` | «خرید حجم ناموفق» (the main bot's only) | `message` | «وقتی پرداخت انجام شد ولی حجم اضافه نشد.» | — |
-| `agency_traffic_short` | «حجم ربات کم است» (the main bot's only) | `message` | «به نماینده، وقتی ربات او سفارشی را به خاطر کم بودن حجم تحویل نداد؛ دکمه خرید حجم زیر آن می‌آید.» | `%order%`, `%traffic%` («حجم باقی‌مانده ربات نماینده») |
-| `receipt_outcome_traffic` | «نتیجه رسید: خرید حجم» (the main bot's only) | `part` | «مقدار %outcome% در پیام دریافت رسید و پیام «پرداخت انجام شد»، وقتی سفارش خرید حجم نمایندگی است.» | — |
-| `agency_no_bot` | «ربات هنوز وصل نشده» (the main bot's only) | `part` | «مقدار %bot% در حساب نمایندگی، وقتی نماینده هنوز رباتش را وصل نکرده است.» | — |
-| `agency_bot_none` | «وصل کردن ربات» (the main bot's only) | `message` | «بعد از «ربات من»، وقتی نماینده هنوز رباتش را وصل نکرده است.» | — |
-| `agency_bot_info` | «ربات من» (the main bot's only) | `message` | «بعد از «ربات من»، وقتی ربات نماینده وصل است.» | `%bot%`, `%status%` («وضعیت ربات (یکی از دو متن وضعیت ربات)») |
-| `agency_bot_running` | «وضعیت ربات: فعال» (the main bot's only) | `part` | «مقدار %status% در صفحه ربات من، وقتی ربات بدون مشکل کار می‌کند.» | — |
-| `agency_bot_problem` | «وضعیت ربات: مشکل» (the main bot's only) | `part` | «در صفحه ربات من و حساب نمایندگی، وقتی چیزی جلوی کار ربات را گرفته است.» | `%reason%` («آنچه جلوی کار ربات را گرفته») |
-| `agency_bot_saved` | «ربات وصل شد» (the main bot's only) | `message` | «بعد از اینکه نماینده توکن درست را فرستاد.» | `%bot%` |
-| `agency_bot_refused` | «توکن پذیرفته نشد» (the main bot's only) | `message` | «وقتی توکنی که نماینده فرستاده پذیرفته نمی‌شود.» | `%reason%` («چرا توکن پذیرفته نشد») |
-| `agency_login` | «لینک ورود به پنل» (the main bot's only) | `message` | «بعد از «ورود به پنل»؛ لینکی که یک بار و برای چند دقیقه کار می‌کند.» | `%minutes%`, `%login%` (required) |
+| `agency_off` | «نمایندگی خاموش» (main bot only) | `message` | «صفحه «نمایندگی»، وقتی نمایندگی در تنظیمات ربات خاموش است.» | — |
+| `agency_terms` | «معرفی نمایندگی» (main bot only) | `message` | «صفحه «نمایندگی» برای کسی که هنوز نماینده نیست؛ دکمه «درخواست نمایندگی» زیر آن می‌آید.» | `%levels%` |
+| `agency_level_line` | «سطح نمایندگی در معرفی» (main bot only) | `part` | «یک خط از %levels% در معرفی نمایندگی، برای هر سطح.» | `%level%`, `%price%` («قیمت هر گیگابایت این سطح») |
+| `agency_no_levels` | «هنوز سطحی نیست» (main bot only) | `part` | «مقدار %levels% در معرفی نمایندگی، وقتی هنوز سطحی ساخته نشده است.» | — |
+| `agency_apply` | «دکمه درخواست نمایندگی» (main bot only) | `button` | «زیر معرفی نمایندگی.» | — |
+| `agency_ask_note` | «پرسش توضیح درخواست» (main bot only) | `message` | «بعد از «درخواست نمایندگی»؛ آنچه مشتری می‌نویسد همراه درخواست به پشتیبانی می‌رسد.» | — |
+| `agency_note_invalid` | «توضیح نامعتبر» (main bot only) | `message` | «وقتی مشتری به جای متن چیز دیگری می‌فرستد یا متنش بلند است.» | — |
+| `agency_requested` | «ثبت درخواست» (main bot only) | `message` | «بعد از اینکه درخواست نمایندگی ثبت شد.» | — |
+| `agency_pending` | «درخواست در حال بررسی» (main bot only) | `message` | «صفحه «نمایندگی»، وقتی درخواست مشتری هنوز بررسی نشده است.» | — |
+| `agency_approved` | «تایید نمایندگی» (main bot only) | `message` | «وقتی پشتیبانی درخواست نمایندگی را تایید می‌کند.» | `%level%`, `%credit%`, `%price%` («قیمت هر گیگابایت برای نماینده») |
+| `agency_rejected` | «رد درخواست نمایندگی» (main bot only) | `message` | «وقتی پشتیبانی درخواست نمایندگی را رد می‌کند.» | `%note%` |
+| `agency_changed` | «تغییر نمایندگی» (main bot only) | `message` | «وقتی پشتیبانی سطح یا اعتبار نماینده را تغییر می‌دهد.» | `%level%`, `%credit%`, `%price%` («قیمت هر گیگابایت برای نماینده») |
+| `agency_revoked` | «لغو نمایندگی» (main bot only) | `message` | «وقتی پشتیبانی نمایندگی را لغو می‌کند.» | `%note%` |
+| `agency_panel` | «حساب نمایندگی» (main bot only) | `message` | «صفحه «نمایندگی» برای نماینده؛ دکمه‌های خرید حجم، ربات من، ورود به پنل و افزایش موجودی زیر آن می‌آید.» | `%level%`, `%balance%`, `%credit%`, `%bot%`, `%customers%`, `%sold%`, `%active%`, `%price%` («قیمت هر گیگابایت برای نماینده»), `%traffic%` («حجم باقی‌مانده ربات نماینده») |
+| `agency_buy_traffic` | «دکمه خرید حجم» (main bot only) | `button` | «در حساب نمایندگی، و زیر خبر کم آمدن حجم.» | — |
+| `agency_my_bot` | «دکمه ربات من» (main bot only) | `button` | «در حساب نمایندگی.» | — |
+| `agency_panel_login` | «دکمه ورود به پنل» (main bot only) | `button` | «در حساب نمایندگی و زیر لینک ورود.» | — |
+| `agency_traffic` | «خرید حجم» (main bot only) | `message` | «بعد از «خرید حجم»؛ دکمه حجم‌های پیشنهادی زیر آن می‌آید.» | `%price%` («قیمت هر گیگابایت برای نماینده»), `%traffic%` («حجم باقی‌مانده ربات نماینده»), `%min%` («کمترین خرید حجم، به گیگابایت») |
+| `agency_traffic_button` | «دکمه حجم پیشنهادی» (main bot only) | `button` | «زیر صفحه خرید حجم، یکی برای هر حجم پیشنهادی.» | `%traffic%` («حجم»), `%amount%` («قیمت این حجم») |
+| `agency_traffic_invalid` | «حجم نامعتبر» (main bot only) | `message` | «وقتی عددی که نماینده برای حجم فرستاده درست نیست.» | `%min%` («کمترین خرید حجم، به گیگابایت») |
+| `agency_traffic_checkout` | «صفحه پرداخت خرید حجم» (main bot only) | `message` | «همان صفحه پرداخت، برای خرید حجم نمایندگی.» | `%traffic%` («حجمی که خریده می‌شود»), `%amount%` («مبلغ») |
+| `agency_traffic_added` | «حجم اضافه شد» (main bot only) | `message` | «بعد از پرداخت موفق خرید حجم.» | `%traffic%` («حجمی که خریده شد»), `%remaining%` («حجم باقی‌مانده ربات نماینده») |
+| `agency_traffic_failed` | «خرید حجم ناموفق» (main bot only) | `message` | «وقتی پرداخت انجام شد ولی حجم اضافه نشد.» | — |
+| `agency_traffic_short` | «حجم ربات کم است» (main bot only) | `message` | «به نماینده، وقتی ربات او سفارشی را به خاطر کم بودن حجم تحویل نداد؛ دکمه خرید حجم زیر آن می‌آید.» | `%order%`, `%traffic%` («حجم باقی‌مانده ربات نماینده») |
+| `receipt_outcome_traffic` | «نتیجه رسید: خرید حجم» (main bot only) | `part` | «مقدار %outcome% در پیام دریافت رسید و پیام «پرداخت انجام شد»، وقتی سفارش خرید حجم نمایندگی است.» | — |
+| `agency_no_bot` | «ربات هنوز وصل نشده» (main bot only) | `part` | «مقدار %bot% در حساب نمایندگی، وقتی نماینده هنوز رباتش را وصل نکرده است.» | — |
+| `agency_bot_none` | «وصل کردن ربات» (main bot only) | `message` | «بعد از «ربات من»، وقتی نماینده هنوز رباتش را وصل نکرده است.» | — |
+| `agency_bot_info` | «ربات من» (main bot only) | `message` | «بعد از «ربات من»، وقتی ربات نماینده وصل است.» | `%bot%`, `%status%` («وضعیت ربات (یکی از دو متن وضعیت ربات)») |
+| `agency_bot_running` | «وضعیت ربات: فعال» (main bot only) | `part` | «مقدار %status% در صفحه ربات من، وقتی ربات بدون مشکل کار می‌کند.» | — |
+| `agency_bot_problem` | «وضعیت ربات: مشکل» (main bot only) | `part` | «در صفحه ربات من و حساب نمایندگی، وقتی چیزی جلوی کار ربات را گرفته است.» | `%reason%` («آنچه جلوی کار ربات را گرفته») |
+| `agency_bot_saved` | «ربات وصل شد» (main bot only) | `message` | «بعد از اینکه نماینده توکن درست را فرستاد.» | `%bot%` |
+| `agency_bot_refused` | «توکن پذیرفته نشد» (main bot only) | `message` | «وقتی توکنی که نماینده فرستاده پذیرفته نمی‌شود.» | `%reason%` («چرا توکن پذیرفته نشد») |
+| `agency_login` | «لینک ورود به پنل» (main bot only) | `message` | «بعد از «ورود به پنل»؛ لینکی که یک بار و برای چند دقیقه کار می‌کند.» | `%minutes%`, `%login%` (required) |
 
 ## Group: account
 
 «حساب وب‌سایت» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `two_factor_disabled` | «خاموش شدن ورود دو مرحله‌ای» | `message` | «وقتی پشتیبانی ورود دو مرحله‌ای حساب مشتری در وب‌سایت را خاموش می‌کند (مثلا گوشی‌اش گم شده است).» | — |
 | `two_factor_turned_on` | «روشن کردن ورود دو مرحله‌ای» | `message` | «وقتی مشتری ورود دو مرحله‌ای حسابش در وب‌سایت را روشن می‌کند.» | — |
@@ -395,7 +476,7 @@ below). The example is what the panel's preview fills it with.
 
 «پشتیبانی» on the screen.
 
-| Text | Title | Kind | Where the customer meets it | Variables |
+| Text | Title | Kind | Where the customer sees it | Variables |
 |---|---|---|---|---|
 | `support_contact` | «پشتیبانی» | `message` | «صفحه «پشتیبانی»؛ راه تماس از تنظیمات ربات می‌آید.» | `%contact%` (required) |
 | `support_unavailable` | «پشتیبانی بدون راه تماس» | `message` | «صفحه «پشتیبانی»، وقتی راه تماسی در تنظیمات ربات نیست؛ دکمه‌های «تیکت جدید» و «تیکت‌های من» زیر آن می‌آید.» | — |
@@ -447,3 +528,65 @@ below). The example is what the panel's preview fills it with.
 | `ticket_answered` | «پاسخ پشتیبانی به تیکت» | `message` | «وقتی پشتیبانی — از پنل یا گروه گزارش‌ها — به تیکت مشتری پاسخ می‌دهد؛ دکمه‌های «پاسخ» و «مشاهده تیکت» زیر آن می‌آید، و مشتری بدون تلگرام آن را با ایمیل می‌گیرد. پاسخی که تصویر دارد همراه تصویرش فرستاده می‌شود و این متن توضیح تصویر است، تا وقتی در توضیح یک تصویر جا شود.» | `%ticket%`, `%subject%`, `%answer%` (required), `%picture%` |
 | `ticket_answer_picture` | «تصویر همراه پاسخ» | `part` | «مقدار %picture% در پاسخ پشتیبانی به تیکت، وقتی پاسخ تصویری هم دارد.» | — |
 | `ticket_closed` | «بسته شدن تیکت» | `message` | «وقتی پشتیبانی تیکت مشتری را می‌بندد؛ دکمه‌های «امتیاز» و «مشاهده تیکت» زیر آن می‌آید.» | `%ticket%`, `%subject%` |
+
+## Group: gift_codes
+
+«کد هدیه» on the screen.
+
+| Text | Title | Kind | Where the customer sees it | Variables |
+|---|---|---|---|---|
+| `gift_code_ask` | «کد هدیه» | `message` | «صفحه «کد هدیه» منوی اصلی؛ پیام بعدی مشتری کد هدیه‌ای است که دارد.» | — |
+| `gift_code_off` | «کد هدیه خاموش» | `message` | «صفحه «کد هدیه»، وقتی کد هدیه در تنظیمات خاموش است.» | — |
+| `gift_code_wallet` | «شارژ با کد هدیه» | `message` | «وقتی کد هدیه‌ای که مبلغ دارد پذیرفته می‌شود.» | `%amount%` («مبلغ کد هدیه»), `%balance%` |
+| `gift_code_plan` | «سرویس با کد هدیه» | `message` | «وقتی کد هدیه‌ای که سرویس رایگان دارد پذیرفته می‌شود؛ خود سرویس جدا و پیش از این پیام فرستاده می‌شود.» | `%plan%` |
+| `gift_code_plan_pending` | «سرویس کد هدیه در راه» | `message` | «وقتی کد هدیه پذیرفته شد ولی ساخت سرویسش روی سرور ناموفق بود؛ پشتیبانی آن را تحویل می‌دهد.» | `%plan%`, `%order%` |
+| `gift_code_unknown` | «کد پیدا نشد» | `message` | «وقتی کدی که مشتری فرستاده در فروشگاه نیست؛ می‌تواند کد دیگری بفرستد.» | — |
+| `gift_code_taken` | «کد استفاده‌شده» | `message` | «وقتی کد را کس دیگری پیش‌تر استفاده کرده است.» | — |
+| `gift_code_yours` | «کد استفاده‌شده توسط خود مشتری» | `message` | «وقتی مشتری کدی را دوباره می‌فرستد که خودش پیش‌تر استفاده کرده است.» | — |
+| `gift_code_expired` | «کد منقضی» | `message` | «وقتی مهلت استفاده از کد تمام شده است.» | — |
+| `gift_code_unavailable` | «کد فعلا قابل استفاده نیست» | `message` | «وقتی جایزه کد همین الان داده نمی‌شود (مثلا سروری سرویس هدیه را تحویل نمی‌دهد)؛ کد برای مشتری می‌ماند.» | `%reason%` |
+| `gift_code_wait` | «کد اشتباه زیاد» | `message` | «وقتی مشتری در یک ساعت کد اشتباه زیادی فرستاده است.» | `%minutes%` |
+
+## Group: wheel
+
+«گردونه شانس» on the screen.
+
+| Text | Title | Kind | Where the customer sees it | Variables |
+|---|---|---|---|---|
+| `wheel_screen` | «گردونه شانس» | `message` | «صفحه «گردونه شانس» منوی اصلی؛ دکمه «بچرخان» زیر آن می‌آید، یا وقتی نوبت نرسیده زمان چرخش بعدی در آن است.» | `%prizes%`, `%cost%`, `%turn%` |
+| `wheel_prize_line` | «جایزه گردونه» | `part` | «مقدار %prizes% در صفحه گردونه شانس، یک خط برای هر جایزه.» | `%prize%` |
+| `wheel_cost` | «هزینه گردونه» | `part` | «مقدار %cost% در صفحه گردونه شانس، وقتی هر چرخش هزینه دارد.» | `%amount%` («هزینه هر چرخش»), `%every%` |
+| `wheel_free` | «گردونه رایگان» | `part` | «مقدار %cost% در صفحه گردونه شانس، وقتی چرخش رایگان است.» | `%every%` |
+| `wheel_next` | «چرخش بعدی» | `part` | «مقدار %turn% در صفحه گردونه شانس و نتیجه چرخش، وقتی نوبت چرخش بعدی مشتری هنوز نرسیده.» | `%when%` («زمان چرخش بعدی»), `%left%` |
+| `wheel_spin_button` | «دکمه بچرخان» | `button` | «زیر صفحه گردونه شانس، وقتی نوبت مشتری است.» | — |
+| `wheel_off` | «گردونه خاموش» | `message` | «صفحه «گردونه شانس»، وقتی گردونه در تنظیمات خاموش است.» | — |
+| `wheel_buyers_only` | «گردونه فقط برای خریداران» | `message` | «صفحه «گردونه شانس»، وقتی گردونه فقط برای مشتری‌هایی است که سرویس خریده‌اند و این مشتری هنوز نخریده است.» | — |
+| `wheel_empty` | «گردونه بدون جایزه» | `message` | «وقتی گردونه جایزه‌ای ندارد، یا هیچ‌کدام از جایزه‌هایش الان به این مشتری نمی‌رسد (مثلا همه حجم یا زمان‌اند و او سرویس فعالی ندارد).» | — |
+| `wheel_too_soon` | «هنوز نوبت نیست» | `popup` | «اعلان وقتی مشتری پیش از رسیدن نوبتش «بچرخان» را می‌زند.» | `%left%` |
+| `wheel_short` | «موجودی کم برای چرخش» | `message` | «وقتی کیف پول مشتری هزینه چرخش را ندارد؛ دکمه افزایش موجودی زیر آن می‌آید.» | `%amount%` («هزینه هر چرخش»), `%missing%` |
+| `wheel_slice` | «خانه گردونه» | `part` | «بالای نتیجه چرخش، یک خط برای هر جایزه گردونه که گردونه رویش نایستاد.» | `%prize%` |
+| `wheel_slice_current` | «خانه زیر نشانگر» | `part` | «بالای نتیجه چرخش، خط جایزه‌ای که گردونه رویش ایستاد.» | `%prize%` |
+| `wheel_won` | «برنده گردونه» | `message` | «وقتی گردونه روی جایزه‌ای می‌ایستد و جایزه داده می‌شود.» | `%prize%`, `%given%`, `%turn%` |
+| `wheel_given_wallet` | «جایزه به کیف پول» | `part` | «مقدار %given%، وقتی جایزه شارژ کیف پول است.» | `%amount%` («مبلغ جایزه»), `%balance%` |
+| `wheel_given_service` | «جایزه به سرویس» | `part` | «مقدار %given%، وقتی جایزه حجم یا زمان است.» | `%extra%` («حجم یا زمانی که جایزه داد»), `%client%` |
+| `wheel_given_plan` | «جایزه سرویس» | `part` | «مقدار %given%، وقتی جایزه یک سرویس است؛ خود سرویس جدا و پیش از این پیام فرستاده می‌شود.» | `%plan%` |
+| `wheel_given_plan_pending` | «جایزه سرویس در راه» | `part` | «مقدار %given%، وقتی ساخت سرویس جایزه روی سرور ناموفق بود؛ پشتیبانی آن را تحویل می‌دهد.» | `%plan%`, `%order%` |
+| `wheel_nothing` | «پوچ» | `message` | «وقتی گردونه روی جایزه «پوچ» می‌ایستد.» | `%turn%` |
+| `wheel_failed` | «جایزه داده نشد» | `message` | «وقتی گردونه روی جایزه‌ای ایستاد ولی جایزه همان لحظه داده نشد (مثلا سرور در دسترس نبود)؛ این چرخش حساب نمی‌شود.» | `%prize%`, `%reason%`, `%refund%` |
+| `wheel_refunded` | «برگشت هزینه چرخش» | `part` | «مقدار %refund%، وقتی چرخشی که جایزه‌اش داده نشد هزینه داشت.» | — |
+
+## Group: loyalty
+
+«سطح وفاداری، کش‌بک و قرعه‌کشی» on the screen.
+
+| Text | Title | Kind | Where the customer sees it | Variables |
+|---|---|---|---|---|
+| `loyalty_tier_line` | «سطح وفاداری در کیف پول» | `part` | «زیر موجودی در صفحه کیف پول، برای مشتری‌ای که روی یکی از سطح‌های وفاداری است؛ بدون سطح، این خط نمی‌آید.» | `%loyalty_tier%`, `%tier_climb%`, `%tier_discount%`, `%tier_cashback%` |
+| `loyalty_tier_climb` | «تا سطح بعدی» | `part` | «مقدار %tier_climb% کنار سطح مشتری، تا وقتی سطح بالاتری هست.» | `%to_next_tier%`, `%next_tier%` |
+| `loyalty_no_tier` | «هنوز بدون سطح» | `part` | «زیر موجودی در صفحه کیف پول، برای مشتری‌ای که هنوز به اولین سطح وفاداری نرسیده است.» | `%to_next_tier%`, `%next_tier%` |
+| `loyalty_tier_up` | «رسیدن به سطح بالاتر» | `message` | «وقتی تحویل یک خرید، مشتری را به سطح وفاداری بالاتری می‌رساند.» | `%loyalty_tier%` (required), `%tier_perks%`, `%tier_discount%`, `%tier_cashback%` |
+| `loyalty_perk_discount` | «تخفیف سطح» | `part` | «یک خط از %tier_perks%، وقتی سطح تخفیف دارد.» | `%tier_discount%` |
+| `loyalty_perk_cashback` | «کش‌بک سطح» | `part` | «یک خط از %tier_perks%، وقتی سطح کش‌بک اضافه دارد.» | `%tier_cashback%` |
+| `cashback_earned` | «کش‌بک» | `message` | «وقتی سفارش تحویل شد و بخشی از مبلغش به عنوان کش‌بک به کیف پول مشتری برگشت.» | `%order%`, `%cashback_amount%` (required), `%balance%` |
+| `cashback_taken_back` | «کسر کش‌بک از مبلغ برگشتی» | `part` | «زیر پیام برگشت مبلغ به کیف پول، وقتی کش‌بک آن سفارش از مبلغ برگشتی کم شد.» | `%cashback_amount%` |
+| `lottery_won` | «برنده قرعه‌کشی شبانه» | `message` | «وقتی مشتری در قرعه‌کشی شبانه خریداران برنده می‌شود و جایزه‌اش داده می‌شود.» | `%draw_prize%` (required) |

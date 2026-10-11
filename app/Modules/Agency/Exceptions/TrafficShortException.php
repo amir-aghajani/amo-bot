@@ -7,9 +7,8 @@ namespace App\Modules\Agency\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * An agent's bot cannot deliver: its traffic pool does not have what the plan sells (or the plan sells unlimited
- * traffic, which a pool cannot pay for) — or what the shop would give one of its services. Its message is Persian: it
- * becomes the failed order's notes, or the refusal of the extension.
+ * An agent's traffic pool does not hold what a delivery or an extension needs (or the plan is unlimited, which prepaid
+ * traffic cannot pay for). The message becomes the failed order's notes, or the extension's refusal.
  */
 final class TrafficShortException extends DomainRuleException
 {

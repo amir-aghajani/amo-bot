@@ -39,13 +39,13 @@ describe('a card', () => {
     expect(screen.queryByRole('button', { name: 'تلاش دوباره' })).toBeNull()
   })
 
-  it('says why in the server’s words when they say it', () => {
+  it('shows the server’s explanation when it gives one', () => {
     render(<ErrorState what="رسید" error={new ApiError(404, 'فایل این رسید دیگر در تلگرام نیست.')} />)
 
     expect(screen.getByRole('alert').textContent).toContain('رسید پیدا نشد. فایل این رسید دیگر در تلگرام نیست.')
   })
 
-  it('offers to load the page again — not to ask again — for an answer the panel cannot read, as its words say', () => {
+  it('offers to reload the page, not to retry, for an answer the panel cannot read, as its text says', () => {
     const retry = vi.fn()
     render(<ErrorState what="لیست پلن‌ها" error={new ApiError(200, 'HTTP 200 that is not JSON', {}, { foreign: true })} onRetry={retry} />)
 
@@ -91,7 +91,7 @@ describe('a page in the shell', () => {
     expect(screen.getByRole('link', { name: 'رفتن به داشبورد' }).getAttribute('href')).toBe('/')
   })
 
-  it('words an address no page has in its own words, the way back and to the dashboard', () => {
+  it('describes an address no page has, with ways back and to the dashboard', () => {
     vi.spyOn(window.history, 'length', 'get').mockReturnValue(3)
     const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined)
     render(

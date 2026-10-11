@@ -7,16 +7,14 @@ namespace App\Modules\Updates;
 use App\Modules\Updates\Exceptions\UpdateRefusedException;
 
 /**
- * A release's zip unpacked into a folder of the updater's (Workspace::release()), with nothing in it taken beyond what
- * the manifest signed: every entry under the zip's one top folder (amobot-<version>/) and inside one of the release's
- * top-level paths — none absolute, none climbing out with `..`, none spelled with a backslash or a drive (zip-slip), no
- * link —, each written as a plain file of the app's (Disk), its storage/ left out (a shop's own is never replaced), the
- * whole held to a size and a count. The zip is checked whole before a byte of it is written (check()), then unpacked a
- * slice at a time (extract()), as far as a host's time limit allows.
+ * A release's zip, checked whole before a byte is written (check()) and then unpacked a slice per request (extract()).
+ * The zip-slip guard: every entry under amobot-<version>/ and inside one of the manifest's paths — none absolute, none
+ * with `..`, a backslash or a drive, no links — and the whole held to MAX_UNPACKED and MAX_ENTRIES. Its storage/ is
+ * skipped.
  */
 final class Package
 {
-    /** The most a release unpacks to, and its most entries: one is about a hundred MB in some ten thousand files. */
+    /** Limits on a release unpacked (one is about 100 MB in some ten thousand files). */
     public const MAX_UNPACKED = 600 * 1024 * 1024;
     public const MAX_ENTRIES = 60000;
 
@@ -72,8 +70,8 @@ final class Package
     }
 
     /**
-     * The entries from `$from` on unpacked into `$folder` — at least one, and more while `$until` (microtime) has not
-     * come: the number of the next entry, count() once every one is.
+     * Unpack entries from `$from` into `$folder` — at least one, more until `$until` (microtime). Returns the next
+     * entry's number, count() when done.
      *
      * @throws UpdateRefusedException when an entry cannot be read or written, or may not go where it says
      */
@@ -104,7 +102,7 @@ final class Package
     }
 
     /**
-     * The path inside the release where an entry goes; null for one left out — the zip's top folder itself, storage/.
+     * An entry's path inside the release; null for one skipped (the top folder itself, storage/).
      *
      * @throws UpdateRefusedException when it may not go anywhere: outside the release, or outside its paths
      */
@@ -122,7 +120,7 @@ final class Package
     }
 
     /**
-     * The entry's bytes into the file `$path`: all `$size` of them, and no more.
+     * Write the entry to `$path`: exactly `$size` bytes.
      *
      * @throws UpdateRefusedException when the entry cannot be read whole
      * @throws \RuntimeException when the file cannot be written

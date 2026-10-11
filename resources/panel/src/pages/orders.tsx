@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
 import { ListTotal } from '@/components/list-total'
 import { ListView, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
+import { OrderAmount } from '@/components/orders/order-amount'
 import { OrderModal } from '@/components/orders/order-modal'
 import { OrderSubject } from '@/components/orders/order-subject'
 import { Page } from '@/components/page'
@@ -19,7 +20,7 @@ import { UserIdentity } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { OrderResponse, OrderRow, OrderSort, OrdersResponse, OrderStatus, OrderType } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
-import { formatMoney, timeAgo } from '@/lib/format'
+import { timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { ORDER_STATUS, ORDER_STUCK, ORDER_TYPE, type Status } from '@/lib/statuses'
 import { useOpenRow } from '@/lib/use-open-row'
@@ -35,7 +36,7 @@ const TABS: Record<Filter, Status> = { ...ORDER_STATUS, stuck: ORDER_STUCK }
 /** What the headers sort the orders by — the list's own order, the newest first, leads. */
 const SORTS: OrderSort[] = ['created', 'amount']
 
-/** Every order — purchases, renewals, wallet top-ups — with those paid and not delivered up front: open one to deliver it again or drop it. */
+/** «سفارش‌ها»: every order, with the stuck ones (paid, not delivered) as the first tab; a dialog retries or cancels one. */
 export function OrdersPage() {
   const tabs = useId()
   // An agent's traffic is bought in the main bot alone: an agent's shop has no such orders.
@@ -61,7 +62,7 @@ export function OrdersPage() {
     <Page>
       <PageHeader
         title="سفارش‌ها"
-        description="هر خرید، تمدید و شارژ کیف پولی که مشتری‌ها ثبت کرده‌اند. سفارشی که پرداخت شده ولی تحویل نشده در «نیازمند رسیدگی» است و همین‌جا دوباره تحویل داده می‌شود؛ سفارش پرداخت‌نشده لغو می‌شود و رسیدها در صفحه پرداخت‌ها بررسی می‌شوند."
+        description="هر خرید، تمدید، حجم و زمان اضافه و شارژ کیف پولی که مشتری‌ها ثبت کرده‌اند. سفارشی که پرداخت شده ولی تحویل نشده در «نیازمند رسیدگی» است و همین‌جا دوباره تحویل داده می‌شود؛ سفارش پرداخت‌نشده لغو می‌شود و رسیدها در صفحه پرداخت‌ها بررسی می‌شوند."
       />
 
       <PageTabs id={tabs} value={list.filter} tabs={statusTabs(TABS, QUEUE, { stuck: list.meta?.stuck })} onChange={list.setFilter} aria-label="وضعیت سفارش" />
@@ -156,7 +157,9 @@ function OrdersTable({ orders, sorting, onOpen }: { orders: OrderRow[]; sorting:
             <TableCell className="hidden md:table-cell">
               <OrderSubject order={order} />
             </TableCell>
-            <TableCell className="tabular">{formatMoney(order.amount)}</TableCell>
+            <TableCell className="tabular">
+              <OrderAmount order={order} />
+            </TableCell>
             <TableCell>
               <StatusBadge status={ORDER_STATUS[order.status]} />
             </TableCell>

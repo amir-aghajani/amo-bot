@@ -7,6 +7,7 @@ namespace App\Modules\Providers\Services;
 use App\Core\Database\Sorting;
 use App\Core\Drivers\Descriptor;
 use App\Core\Exceptions\ValidationException;
+use App\Core\Forms\Fields\Choice;
 use App\Core\Forms\Fields\Field;
 use App\Core\Forms\Fields\Text;
 use App\Core\Forms\Fields\Toggle;
@@ -28,16 +29,17 @@ use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Providers\Support\PanelCredentials;
 use App\Modules\Subscriptions\Models\GrantPart;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Support\Input;
 use App\Support\Persian;
 use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
 
 /**
- * Everything the owner does with a server: add and edit it — by its form, one for every connector: the server's own
- * columns around its connector's connection form (form()), checked as one, every refusal at once, and kept in the
- * server's columns and `meta` (columns()) —, probe it (stored or not), keep its inbound copy fresh, and present it
- * without its secrets. What a check finds is recorded on the server (ServerHealth).
+ * Everything the owner does with a server: add and edit it through one form for every connector — the server's own
+ * fields around its connector's connection form (form()), checked as one with every refusal at once, kept in its
+ * columns and `meta` (columns()) —, probe it (saved or not), keep its inbound copy fresh, and present it without its
+ * secrets. What a check finds is recorded on the server (ServerHealth).
  */
 final class ServerService
 {
@@ -46,8 +48,10 @@ final class ServerService
     /** The owner's notes on a server: a few lines. */
     private const NOTES_MAX = 1000;
 
-    /** Where a field of the form is kept when the server has no column of its name: `meta.<name>`. */
+    /** Where a field is kept when the server has no column of its name: `meta.<name>`. */
     private const META = 'meta.';
+    private const BUTTON_STYLE_REFUSED = 'رنگ دکمه را از میان آبی، سبز و قرمز انتخاب کنید، یا پیش‌فرض تلگرام.';
+    private const BUTTON_ROW_REFUSED = 'جای دکمه یک ردیف کامل، دو یا سه دکمه در ردیف است.';
 
     /** A form naming no connector this installation has. */
     private const NO_DRIVER = 'کانکتور انتخاب‌شده وجود ندارد.';
@@ -68,8 +72,8 @@ final class ServerService
     // ---------------------------------------------------------------- the connectors
 
     /**
-     * Every connector a server can be added with, in their order, as the add-server picker shows it: its description,
-     * its form a server's on it (form()).
+     * Every connector a server can be added with, in order, as the add-server picker shows it: its description with the
+     * whole server form (form()).
      *
      * @return list<array<string, mixed>>
      */
@@ -90,7 +94,7 @@ final class ServerService
         return array_values(array_map($this->present(...), self::withCounts(Server::query())->oldest('sort')->oldest('id')->get()->all()));
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<string, mixed> The server for the screens, its secrets as whether one is kept (its counts read when missing). */
     public function present(Server $server): array
     {
         if (!$server->hasAttribute('inbounds_count')) {
@@ -104,7 +108,7 @@ final class ServerService
             'driver' => $server->driver,
             'driver_label' => $about->label ?? $server->driver,
             'base_url' => $server->base_url,
-            // The form as the server keeps it — none while this installation has not its connector.
+            // The form as the server keeps it; none while this installation lacks its connector.
             'form' => $about === null ? null : self::form($about->form)->present(self::kept($server)),
             'is_active' => $server->is_active,
             'capacity' => $server->capacity,
@@ -125,7 +129,7 @@ final class ServerService
         ];
     }
 
-    /** @return list<array<string, mixed>> The inbounds the shop keeps for the server, in the order they were first seen. */
+    /** @return list<array<string, mixed>> The shop's copy of the server's inbounds, first seen first. */
     public function presentInbounds(Server $server): array
     {
         return array_values(array_map(static fn(ServerInbound $row): array => self::presentInbound(self::infoOf($row)) + [
@@ -139,7 +143,7 @@ final class ServerService
 
     /**
      * Check the whole form of the connector it names — every refusal at once — and store the server, last in the owner's
-     * order. check() it next.
+     * order. It cannot be sold until its first check().
      *
      * @param array<string, mixed> $input
      * @throws ValidationException
@@ -153,8 +157,8 @@ final class ServerService
     }
 
     /**
-     * Same check as create(), of the server's own connector; a blank secret keeps the stored one while the address stays
-     * on its host.
+     * Same check as create(), on the server's own connector (another one is refused); a blank secret keeps the stored one
+     * while the address stays on its host.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException
@@ -168,9 +172,9 @@ final class ServerService
     }
 
     /**
-     * Refused while services — any bot's — are on the server: moved elsewhere or deleted first, or the server switched
-     * off instead. The orders that sold them keep their record either way; the grants' parts on it go with it — here,
-     * since no foreign key can cascade there (database/schema.php, grant_parts).
+     * Delete the server; refused while any bot's services are on it (move or delete them first, or switch the server off
+     * instead). Its grant parts go with it here: MySQL allows no cascading foreign key on a column a generated column is
+     * computed from (grant_parts.running_server_id).
      *
      * @throws ServerInUseException
      */
@@ -191,7 +195,7 @@ final class ServerService
     }
 
     /**
-     * The owner opting an inbound in for sale — only one the panel still has enabled.
+     * Opt an inbound in or out for sale; only one the panel has enabled may be opted in.
      *
      * @throws ValidationException
      */
@@ -207,11 +211,10 @@ final class ServerService
     // ---------------------------------------------------------------- probing
 
     /**
-     * Talk to the panel and report what the connector sees. Works on a server not stored yet, built from the form's
-     * input, so credentials are tried before anything is saved. Once the connection is good, each further question is
-     * asked on its own, so one flaky endpoint loses only its own answer: `status` null (or a panel without host
-     * statistics), `inbounds` null when they could not be listed, `serves_subscriptions` null (`subscription_probed`
-     * false) when that could not be asked. Inbounds carry no client secrets.
+     * Talk to the panel and report what the connector sees; works on a server not stored yet, so credentials are tried
+     * before anything is saved. Once the connection is good each further question is asked on its own, so one flaky
+     * endpoint loses only its answer: `status` null (or a panel without host statistics), `inbounds` null when they could
+     * not be listed, `serves_subscriptions` null (`subscription_probed` false) when that could not be asked.
      *
      * @return array{ok: bool, error: string|null, error_detail: string|null, status: array<string, mixed>|null, inbounds: list<array<string, mixed>>|null, serves_subscriptions: bool|null, subscription_probed: bool}
      */
@@ -243,8 +246,8 @@ final class ServerService
     }
 
     /**
-     * Probe the form's input without saving anything; `id` names the server being edited, so blank secrets fall back to
-     * what it keeps (while the address stays on its host).
+     * Probe the form's input without saving anything; `id` names the server being edited, whose stored secrets the blank
+     * ones stand for (while the address stays on its host).
      *
      * @param array<string, mixed> $input
      * @return array{ok: bool, error: string|null, error_detail: string|null, status: array<string, mixed>|null, inbounds: list<array<string, mixed>>|null, serves_subscriptions: bool|null, subscription_probed: bool}
@@ -263,11 +266,11 @@ final class ServerService
 
     /**
      * Probe a stored server and keep what it found: how the contact went, whether the panel serves subscription links
-     * (which decides whether the server can be sold at all — a probe that could not ask leaves the last answer), and
-     * its inbounds — only when they were listed: a listing that failed changes nothing.
+     * (which decides whether it can be sold; a probe that could not ask leaves the last answer), and its inbounds — only
+     * when they were listed, so a failed listing changes nothing.
      *
      * @return array{ok: bool, error: string|null, error_detail: string|null, status: array<string, mixed>|null, inbounds: list<array<string, mixed>>|null, serves_subscriptions: bool|null, subscription_probed: bool}
-     * @throws ValidationException on `driver`: this installation has not its connector
+     * @throws ValidationException on `driver`: this installation lacks its connector
      */
     public function check(Server $server): array
     {
@@ -288,8 +291,8 @@ final class ServerService
     /**
      * Read the panel's inbounds into the shop's copy (storeInbounds()).
      *
-     * @throws ValidationException on `driver`: this installation has not its connector
-     * @throws PanelFailedException when the panel could not list them, in the owner's words
+     * @throws ValidationException on `driver`: this installation lacks its connector
+     * @throws PanelFailedException when the panel could not list them (worded for the owner)
      */
     public function syncInbounds(Server $server): void
     {
@@ -309,8 +312,7 @@ final class ServerService
     // ---------------------------------------------------------------- internals
 
     /**
-     * A saved server's panel is talked to only through its connector: one left from an installation that had it is
-     * refused in words (ServerReadiness's), nothing asked nor recorded.
+     * Refuse a server whose connector this installation lacks, before anything is asked or recorded.
      *
      * @throws ValidationException on `driver`
      */
@@ -322,7 +324,7 @@ final class ServerService
     }
 
     /**
-     * The connector a form names (`driver`): one this installation has — a saved server's own, which never changes.
+     * The connector a form names (`driver`): one this installation has, and a saved server's own (it never changes).
      *
      * @param array<string, mixed> $input
      * @throws ValidationException on `driver`
@@ -338,8 +340,9 @@ final class ServerService
     }
 
     /**
-     * A server's form on a connector: its name, the connector's connection form, then — under «تنظیمات پیشرفته», after
-     * the connection's own options — how many services it takes, the owner's notes and its switch.
+     * A server's whole form on a connector: its name, the connector's connection form, then under «تنظیمات پیشرفته» its
+     * capacity, the owner's notes, its switch, and its button among a plan's locations in the bot (colour, and how many
+     * share its row).
      */
     private static function form(Form $connection): Form
     {
@@ -349,14 +352,25 @@ final class ServerService
             new Capacity('capacity', 'capacity', spec: new FieldSpec('ظرفیت', hint: 'حداکثر اشتراک فعال روی این سرور؛ خالی = نامحدود.', placeholder: '200', advanced: true)),
             new Text('notes', 'notes', '', label: 'یادداشت', max: self::NOTES_MAX, type: FieldType::Textarea, spec: new FieldSpec('یادداشت', placeholder: 'مثلا محل دیتاسنتر، تاریخ تمدید، …', advanced: true)),
             new Toggle('is_active', 'is_active', true, spec: new FieldSpec('فعال', hint: 'سرورهای غیرفعال برای اشتراک‌های جدید انتخاب نمی‌شوند.', advanced: true)),
+            new Choice('button_style', self::META . 'button_style', '', ['', ...KeyboardLayout::STYLES], self::BUTTON_STYLE_REFUSED, required: false, spec: new FieldSpec(
+                'رنگ دکمه در ربات',
+                hint: 'دکمه این لوکیشن در صفحه انتخاب سرور هر پلن، در ربات همه فروشگاه‌ها.',
+                advanced: true,
+                options: ['' => 'پیش‌فرض تلگرام', 'primary' => 'آبی', 'success' => 'سبز', 'danger' => 'قرمز'],
+            )),
+            new Choice('button_row', self::META . 'button_row', '1', ['1', '2', '3'], self::BUTTON_ROW_REFUSED, required: false, spec: new FieldSpec(
+                'جای دکمه در ربات',
+                hint: 'دکمه‌های پشت سر هم با یک اندازه کنار هم در یک ردیف می‌نشینند.',
+                advanced: true,
+                options: ['1' => 'یک ردیف کامل', '2' => 'دو دکمه در ردیف', '3' => 'سه دکمه در ردیف'],
+            )),
         ]);
     }
 
     /**
-     * The server's columns a checked form goes to: each field's value under its key — a column of the server's, or a key
-     * of its `meta` (`meta.<name>`, left out while blank) —, a blank one null, and every field the check did not read
-     * emptied: the other way in's credentials, which the form shows only with their way — a server keeps one way in. The
-     * way in itself is no column (PanelCredentials::MODE): it is which credentials are kept.
+     * The server's columns from a checked form: each field's value under its key — a column, or a key of `meta` (left
+     * out while blank) —, blank as null. Fields the check did not read (the other way in's credentials) are emptied, so a
+     * server keeps one way in. The way in itself is no column (PanelCredentials::MODE).
      *
      * @param array<string, mixed> $values Form::check()'s, by key
      * @return array<string, mixed>
@@ -382,8 +396,8 @@ final class ServerService
     }
 
     /**
-     * What a stored server keeps under its form's keys (columns()'s other way): a column of its, a key of its `meta` —
-     * and, for the way in, which credentials it keeps.
+     * What a stored server keeps under its form's keys (columns() in reverse); the way in is read off which credentials
+     * it keeps.
      *
      * @return \Closure(Field<mixed>): mixed
      */
@@ -397,8 +411,8 @@ final class ServerService
     }
 
     /**
-     * One question to a panel whose connection is good: its answer, or null when it could not give one — logged, except
-     * from a panel that has no such answer at all (host statistics on a panel that reports none).
+     * One question to a panel whose connection is good: its answer, or null when it gave none — logged, unless the panel
+     * simply has no such answer (UnsupportedOperationException).
      *
      * @template T
      * @param \Closure(): T $question
@@ -418,9 +432,9 @@ final class ServerService
     }
 
     /**
-     * The panel's inbounds into the shop's copy: new ones are added (not for sale until the owner opts them in), known
-     * ones refreshed, and one the panel no longer lists is switched off — kept, with the owner's choice, since services
-     * and plans may point at it, and sold again should it come back.
+     * Store the panel's inbounds: new ones added (not for sale until the owner opts them in), known ones refreshed, and
+     * one the panel no longer lists switched off — kept with the owner's choice, since services and plans may point at
+     * it, and sold again should it come back.
      *
      * @param list<array<string, mixed>> $inbounds As presentInbound() makes them
      */
@@ -441,8 +455,7 @@ final class ServerService
     }
 
     /**
-     * The one shape an inbound has in the API, whether it came straight from the panel (a probe) or from the shop's
-     * copy (a stored row).
+     * An inbound in the API's one shape, straight from the panel (a probe) or from the shop's copy.
      *
      * @return array{remote_key: string, tag: string, protocol: string|null, port: int|null, remark: string, enabled: bool, network: string|null, security: string|null, client_count: int}
      */
@@ -495,9 +508,8 @@ final class ServerService
     }
 
     /**
-     * Its inbounds, and its running services — every shop's, and the shop's the panel has open (CurrentBot: the servers
-     * are worked on everywhere(), whose rows it hides none of, but the panel still has a shop open), the ones its
-     * subscriptions screen lists.
+     * Read with each server: its inbounds, and its active services — every shop's (what its capacity counts), and the
+     * open shop's (what that shop's subscriptions screen lists; CurrentBot still names it while working everywhere()).
      *
      * @param Builder<Server> $query
      * @return Builder<Server>

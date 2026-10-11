@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
 use App\Modules\Telegram\Broadcasts\BroadcastControl;
@@ -14,9 +13,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * «پیام همگانی» on the broadcasts page: every run, newest first, live through the change feed; pause, resume and cancel
- * one under way, and take a finished pinned one's pins off («لغو پین»). A refused state is a 422 on `status`. Sending
- * is the bot's (/broadcast): the message is the admin's own Telegram message.
+ * «پیام همگانی»: every broadcast run, newest first; pause, resume or cancel one under way, unpin a finished pinned one
+ * («لغو پین»). A refused state is a 422 on `status`. Broadcasts are composed in the bot (/broadcast), not here.
  */
 final class BroadcastsController extends ApiController
 {
@@ -25,7 +23,7 @@ final class BroadcastsController extends ApiController
     /** GET /broadcasts?page= */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->broadcasts->page(PageRequest::fromQuery($request->getQueryParams()))->toArray('broadcasts'));
+        return $this->json($response, $this->broadcasts->page($this->pageRequest($request))->toArray('broadcasts'));
     }
 
     /**

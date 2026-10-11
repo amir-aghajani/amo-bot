@@ -2,62 +2,62 @@
 
 # API schemas
 
-The shapes more than one of the API's reference pages use — the [Store API](Store-API-Reference.md), its
-[admin API](Store-Admin-API-Reference.md) and the [panels' API](Panels-API-Reference.md) —, each told once, and the
-answers the description names once for many operations (a refusal's, a picture's). A shape one page alone uses is
-on that page. Every object is closed: an answer holds the fields listed and no other — each of them, `null` where its
-type says so —, and a request sends none but these.
+The schemas used by more than one API reference page (the [Store API](Store-API-Reference.md), its
+[admin API](Store-Admin-API-Reference.md) and the [panels' API](Panels-API-Reference.md)), each documented once, and
+the shared responses many operations use (an error, a picture). A schema only one page uses is documented on that
+page. Every object is closed: an answer has exactly the fields listed (each one present, `null` where its type
+allows), and a request may send only these fields.
 
 ## Responses
 
 ### Response: Error
 
-Refused or failed, in the one error shape
+A refusal or failure, in the common error shape
 
 - Body: [ErrorResponse](#errorresponse).
 
 ### Response: SignedOut
 
-The bearer token opens no session of the shop's — none sent, one that ended (the `customer` scheme says what ends one), another shop's — «برای دسترسی باید وارد شوید.»: the customer signs in again. Never a refusal of what the request asked (that is a 4xx of its own: a proof that does not hold is a 422 on its field), so a website may take any 401 here as signed out.
+No valid session for this shop: no bearer token, an ended session (the `customer` scheme lists what ends one), or another shop's token. The message is «برای دسترسی باید وارد شوید.» and the customer must sign in again. A 401 never means the request itself was refused (that is another 4xx; a proof that does not hold is a 422 on its field), so a website can treat every 401 here as signed out.
 
-- Header `WWW-Authenticate` (always): `Bearer` (RFC 6750): what the operation asks for is a bearer token.
+- Header `WWW-Authenticate` (always): `Bearer` (RFC 6750): the operation needs a bearer token.
 - Body: [ErrorResponse](#errorresponse).
 
 ### Response: SignInAgain
 
-This session's sign-in is not recent enough to change how the account is signed in to — «برای این کار دوباره وارد شوید.»: a way into the account proven again (POST /me/reauthenticate) opens it for 15 minutes. (A banned customer's 403 says so in its message, without the header.)
+The session's sign-in is too old to change how the account signs in. The message is «برای این کار دوباره وارد شوید.»; proving a way in again (`POST /me/reauthenticate`) allows it for 15 minutes. (A banned customer's 403 says so in its message, without this header.)
 
-- Header `WWW-Authenticate`: `Bearer error="insufficient_user_authentication", max_age=900` (RFC 9470): a sign-in at most this many seconds old.
+- Header `WWW-Authenticate`: `Bearer error="insufficient_user_authentication", max_age=900` (RFC 9470): the sign-in may be at most this many seconds old.
 - Body: [ErrorResponse](#errorresponse).
 
 ### Response: StaffRefused
 
-One of the shop's admins on its website refused at its admin API's door, or a decision no admin makes there: a customer who is no admin of the shop (whatever the website says) — «این بخش فقط برای پشتیبانی فروشگاه است.»; one while the website lets no admin in; a session signed in with a password alone while the website asks a strong sign-in (its `WWW-Authenticate` names the strong ways — POST /me/reauthenticate proves one); a session whose sign-in is older than 12 hours, whatever the operation (SignInAgain's challenge); an operation the website has not granted its admins; a granted operation, or a payment's approval, whose session's sign-in is older than 15 minutes (SignInAgain's challenge); a decision about themselves — their own payment approved or given back, their own wallet, their own service changed (days and traffic, switched off or on, moved, deleted) —, an admin's account or an agent's, a payment approved without a receipt in review; a banned customer.
+The website's admin API refused the request. The reasons: the customer is not an admin of the shop («این بخش فقط برای پشتیبانی فروشگاه است.»); the website lets no admins in; the session was signed in with a password alone while the website asks for a strong sign-in (`WWW-Authenticate` names the strong ways, and `POST /me/reauthenticate` can prove one); the session's sign-in is older than 12 hours (any operation; SignInAgain's challenge); the website has not granted the operation; a granted operation, or a payment approval, with a sign-in older than 15 minutes (SignInAgain's challenge); a decision about the admin themselves (their own payment approved or refunded, their own wallet, their own service changed: days and traffic, switched off or on, moved, deleted); another admin's or an agent's account; a payment approved without a receipt in review; or a banned customer.
 
-- Header `WWW-Authenticate`: `Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa"` (RFC 9470) for a sign-in too weak, `Bearer error="insufficient_user_authentication", max_age=900` for one not recent enough; none otherwise.
+- Header `WWW-Authenticate`: `Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa"` (RFC 9470) for a sign-in that is too weak; `Bearer error="insufficient_user_authentication", max_age=900` for one that is too old; absent otherwise.
 - Body: [ErrorResponse](#errorresponse).
 
 ### Response: NoContent
 
-Done; nothing to answer with
+Done; no body
 
 - Body: none.
 
 ### Response: Picture
 
-A picture, as its bytes
+A picture's bytes
 
 - Body: the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`.
 
 ### Response: Receipt
 
-A receipt's bytes: a picture the panel shows (inline), or — any other type — a file to save (attachment)
+A receipt's bytes: inline for a picture the panel can show, otherwise a download (attachment)
 
 - Body: the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/octet-stream`.
 
 ### Response: TicketPicture
 
-A ticket message's picture, as its bytes: a picture shown as itself, or — any other type — a file to save (attachment)
+A ticket message's picture: inline for a picture type, otherwise a download (attachment)
 
 - Body: the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/octet-stream`.
 
@@ -65,32 +65,32 @@ A ticket message's picture, as its bytes: a picture shown as itself, or — any 
 
 ### AgencyLevelRef
 
-A level as another list carries it.
+An agency level, as other lists reference it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
-| `price_per_gb` | string | yes | What a GB of the traffic their bots sell costs its agents, in Toman. |
+| `price_per_gb` | string | yes | What agents on this level pay per GB of traffic for their bots, in Toman. |
 
 ### AgentBot
 
-An agent's bot: who it is, whether it runs, what keeps it from running, the traffic it may still sell.
+An agent's bot: its identity, whether it runs and why not, and the traffic it can still sell.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `username` | string or null | yes | Its @username, without the @ — null until its token is handed over. |
+| `username` | string or null | yes | Its username without the @; null until the agent connects its token. |
 | `title` | string or null | yes | The name Telegram shows for it. |
-| `status` | string: `active`, `disabled` | yes | disabled: the agency ended. |
-| `connected` | boolean | yes | Whether it has a token to run on: handed over, and still readable. |
+| `status` | string: `active`, `disabled` | yes | `disabled`: the agency ended. |
+| `connected` | boolean | yes | Whether it has a usable token: connected, and still decryptable. |
 | `problem` | string or null | yes | What keeps it from running (Telegram refused its token…). |
-| `traffic_balance` | integer | yes | The traffic it may still sell, in bytes. |
-| `connected_at` | string (date-time) or null | yes | When its token was first handed over — a new token handed over later keeps it; null before. |
+| `traffic_balance` | integer | yes | The traffic it can still sell, in bytes. |
+| `connected_at` | string (date-time) or null | yes | When its token was first connected (a later new token keeps this time); null before. |
 
 ### AgentRow
 
-An agent — a customer of the main bot on a level — with their bot.
+An agent (a main-bot customer on an agency level), with their bot.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -99,16 +99,16 @@ An agent — a customer of the main bot on a level — with their bot.
 | `status` | [UserStatus](#userstatus) | yes |  |
 | `level` | [AgencyLevelRef](#agencylevelref) | yes |  |
 | `credit_limit` | string | yes | How far below zero their wallet may go, in Toman. |
-| `balance` | string | yes | The wallet, in Toman — below zero while their credit is in use. |
-| `bot` | [AgentBot](#agentbot) or null | yes | Their bot — its shop opened when they were approved. |
+| `balance` | string | yes | Their wallet balance in Toman; below zero while they use their credit. |
+| `bot` | [AgentBot](#agentbot) or null | yes | Their bot (its shop is created when they are approved). |
 | `counts` | object | yes |  |
 | `counts.customers` | integer | yes | Their bot's customers. |
-| `counts.sold` | integer | yes | Services their bot sold (purchases delivered). |
-| `counts.active` | integer | yes | Their bot's services that run. |
+| `counts.sold` | integer | yes | Services their bot sold (delivered purchases). |
+| `counts.active` | integer | yes | Their bot's active services. |
 
 ### AmountInput
 
-An amount as a form sends it: a JSON number, or its text — Persian or Arabic digits and thousands separators too. Toman are whole (the form this API answers them in, "120000.00" — a fraction of zero —, is taken; any other fraction is refused); gigabytes may have up to two decimals.
+An amount as a form sends it: a JSON number, or text (Persian or Arabic digits and thousands separators accepted). Toman are whole numbers: the API's own output form "120000.00" is accepted, any other fraction is refused. Gigabytes may have up to two decimals.
 
 One of:
 - number
@@ -116,7 +116,7 @@ One of:
 
 ### BroadcastAudience
 
-Whom it goes to: everyone, buyers, non-buyers, the inactive (no service running), a customer group, agents, one server's customers.
+Who a broadcast goes to: everyone, buyers, non-buyers, the inactive (no running service), a customer group, agents, or one server's customers.
 
 String: `all`, `buyers`, `non_buyers`, `inactive`, `group`, `agents`, `server`.
 
@@ -135,30 +135,30 @@ String: `all`, `buyers`, `non_buyers`, `inactive`, `group`, `agents`, `server`.
 
 ### BroadcastRow
 
-«ارسال همگانی»: a message a bot admin sent with /broadcast — copied or forwarded to an audience — or (kind unpin) the pins of one taken off again.
+A broadcast run («ارسال همگانی»): a message a bot admin sent with /broadcast, copied or forwarded to an audience; or (kind `unpin`) a run that removes an earlier broadcast's pins.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `kind` | string: `message`, `unpin` | yes |  |
-| `source_id` | integer or null | yes | An unpin run: the broadcast whose pins it takes off. |
-| `mode` | string: `copy`, `forward` | yes | Copied from the bot (with the link buttons), or forwarded from its first sender. |
+| `source_id` | integer or null | yes | For an unpin run: the broadcast whose pins it removes. |
+| `mode` | string: `copy`, `forward` | yes | Copied by the bot (with the link buttons), or forwarded from its original sender. |
 | `audience` | object | yes |  |
 | `audience.key` | [BroadcastAudience](#broadcastaudience) | yes |  |
-| `audience.id` | integer or null | yes | The group or the server the audience names. |
+| `audience.id` | integer or null | yes | The group or server the audience names. |
 | `audience.label` | string | yes |  |
-| `pin` | boolean | yes | Each message pinned in its chat. |
-| `pinned` | integer | yes | Chats where its message is pinned still (what «لغو پین» would take off). |
-| `buttons` | list of list of [BroadcastButton](#broadcastbutton) | yes | The admin's link buttons under a copy, rows in reading order. |
-| `content` | string or null | yes | What the message is: text, photo, video, animation, document, audio, voice, video_note, sticker, poll, other. |
-| `excerpt` | string or null | yes | Its text or caption, cut short. |
+| `pin` | boolean | yes | Each message is pinned in its chat. |
+| `pinned` | integer | yes | Chats where its message is still pinned (what unpin, «لغو پین», would remove). |
+| `buttons` | list of list of [BroadcastButton](#broadcastbutton) | yes | The link buttons under a copied message, as rows in reading order. |
+| `content` | string or null | yes | The message type: text, photo, video, animation, document, audio, voice, video_note, sticker, poll, other. |
+| `excerpt` | string or null | yes | Its text or caption, shortened. |
 | `status` | [BroadcastStatus](#broadcaststatus) | yes |  |
-| `total` | integer | yes | Recipients when it started; sent + blocked + failed is how far it got. |
+| `total` | integer | yes | Recipients when it started; sent + blocked + failed is the progress. |
 | `sent` | integer | yes |  |
 | `blocked` | integer | yes | Recipients who blocked the bot. |
 | `failed` | integer | yes |  |
 | `admin` | [UserRef](#userref) or null | yes | The bot admin who sent it; null for a run started from the panel. |
-| `reviewer` | string or null | yes | Who started it — from a panel or the shop's website: the agent's @bot, a bot admin's @username / tg:&lt;id&gt; / user#&lt;id&gt;, or the owner's login — «پشتیبانی» to anyone but the owner. |
+| `reviewer` | string or null | yes | Who started it from a panel or the website: the agent's @bot, a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt;, or the owner's login (which anyone but the owner sees as «پشتیبانی»). |
 | `created_at` | string (date-time) | yes |  |
 | `finished_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes |  |
@@ -178,22 +178,28 @@ String: `sending`, `paused`, `done`, `cancelled`.
 | `broadcasts` | list of [BroadcastRow](#broadcastrow) | yes |  |
 | `meta` | [PageMeta](#pagemeta) | yes |  |
 
+### ButtonStyle
+
+Telegram's button colours (`style` on KeyboardButton and InlineKeyboardButton). Null means the client's default look.
+
+String: `primary`, `success`, `danger`.
+
 ### ChangesResponse
 
-Each area's number (Core\Database\ChangeFeed::AREAS); an area nothing was written to yet is absent.
+Each area's version number from the change feed. An area nothing was written to yet is absent.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `versions` | object | yes |  |
-| `versions.users` | integer | no | The customers, their wallets and their groups. |
+| `versions.users` | integer | no | Customers, their wallets and their groups. |
 | `versions.servers` | integer | no | The servers and their inbounds. |
-| `versions.grants` | integer | no | The grants and their parts on each server — a running one's cursor moves every second. |
+| `versions.grants` | integer | no | Grants and their per-server parts. A running grant's cursor moves every second. |
 | `versions.plans` | integer | no | The plans, their categories and their server entries. |
 | `versions.payment_methods` | integer | no |  |
 | `versions.orders` | integer | no |  |
 | `versions.payments` | integer | no |  |
 | `versions.subscriptions` | integer | no |  |
-| `versions.referrals` | integer | no | The commissions paid out. |
+| `versions.referrals` | integer | no | Referral commissions, bonuses, rewards and alerts. |
 | `versions.agency` | integer | no | The agency's levels and requests, the agents' bots and their traffic. |
 | `versions.channels` | integer | no | The channels a customer must join. |
 | `versions.broadcasts` | integer | no | The broadcasts and their pins. |
@@ -201,6 +207,8 @@ Each area's number (Core\Database\ChangeFeed::AREAS); an area nothing was writte
 | `versions.emoji` | integer | no | The premium emoji the bot has seen. |
 | `versions.tickets` | integer | no | The support tickets and their messages. |
 | `versions.reviews` | integer | no | The customers' reviews of the shop. |
+| `versions.rewards` | integer | no | Gift codes, the lucky wheel's slices and spins, loyalty tiers, cashback rules, and the nightly draws with their winners. |
+| `versions.discounts` | integer | no | Discount codes and timed sales. A code's use count changes with orders. |
 
 ### CountKpi
 
@@ -211,15 +219,15 @@ Each area's number (Core\Database\ChangeFeed::AREAS); an area nothing was writte
 
 ### CustomerAccount
 
-The customer's account on the shop's website, as support reads it: its ways in, whether its password sign-in asks a second step, the devices signed in, and the accounts merged into it.
+The customer's website account, as support sees it: how they sign in, whether password sign-in has a second step, the signed-in devices, and the accounts merged into it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `email` | string or null | yes | Their email — proven; null without one. |
-| `google` | boolean | yes | A Google account signs them in. |
-| `has_password` | boolean | yes | Their email and a password sign them in. |
-| `two_factor` | boolean | yes | Their password sign-in asks the code of their authenticator app. |
-| `sessions` | integer | yes | The devices signed in on the website — the sessions that have not ended. |
+| `email` | string or null | yes | Their verified email; null without one. |
+| `google` | boolean | yes | They can sign in with a Google account. |
+| `has_password` | boolean | yes | They can sign in with their email and a password. |
+| `two_factor` | boolean | yes | Password sign-in also asks for their authenticator app's code. |
+| `sessions` | integer | yes | The number of devices signed in on the website (sessions not ended). |
 | `merges` | list of [CustomerMerge](#customermerge) | yes | The accounts merged into this one, newest first. |
 
 ### CustomerAccountResponse
@@ -230,7 +238,7 @@ The customer's account on the shop's website, as support reads it: its ways in, 
 
 ### CustomerGroupRef
 
-One of the admin's groups of customers, as a customer's row carries it.
+A customer group, as a customer's row lists it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -245,12 +253,13 @@ One of the admin's groups of customers, as a customer's row carries it.
 
 ### CustomerGroupRow
 
-One of the admin's groups of customers («گروه»): a name, in the admin's order; a broadcast can go to one.
+A customer group («گروه»), in the admin's order. A broadcast can target one.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
+| `agent_pricing` | boolean | yes | Its members pay the plans' agent prices («قیمت نماینده»), as agents do (a «همکار» group). |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.users` | integer | yes |  |
@@ -264,28 +273,28 @@ One of the admin's groups of customers («گروه»): a name, in the admin's or
 
 ### CustomerMerge
 
-An account of the shop merged into this customer's — its row gone since —: how it was signed in and called, and when the customer merged them (from their website: the one way two accounts are made one).
+An account merged into this customer's account (its row no longer exists): how it signed in, its name, and when the customer merged them. Accounts are only merged by the customer, from the website.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `merged_user_id` | integer | yes | Its former number in the shop. |
+| `merged_user_id` | integer | yes | Its former customer id. |
 | `merged` | object | yes |  |
-| `merged.telegram_id` | integer or null | yes | The Telegram account it had; null for none. |
+| `merged.telegram_id` | integer or null | yes | Its Telegram user id; null for none. |
 | `merged.username` | string or null | yes | Its Telegram handle, without the @. |
 | `merged.email` | string or null | yes |  |
-| `merged.google` | boolean | yes | A Google account signed it in. |
-| `merged.name` | string or null | yes | "first last", as it was; null without one. |
+| `merged.google` | boolean | yes | It could sign in with a Google account. |
+| `merged.name` | string or null | yes | Its "first last" name; null without one. |
 | `created_at` | string (date-time) | yes |  |
 
 ### CustomerReferral
 
-The referral program's facts about a customer: whose link brought them, how many their own link brought and what those earned them.
+A customer's referral details: who referred them, how many customers they referred, and what that earned them.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `referrer` | [UserRef](#userref) or null | yes | The customer whose link brought them; null when none did. |
-| `referrals` | integer | yes | The customers their link brought. |
-| `earned` | string | yes | What the commissions credited to them add up to, in Toman — each kept as theirs when it was earned, two accounts merged since or not. |
+| `referrer` | [UserRef](#userref) or null | yes | The customer whose link brought them; null if none. |
+| `referrals` | integer | yes | How many customers their link brought. |
+| `earned` | string | yes | The total of the commissions credited to them, in Toman. A commission stays with whoever earned it, even if accounts were merged since. |
 
 ### DashboardResponse
 
@@ -297,7 +306,7 @@ The referral program's facts about a customer: whose link brought them, how many
 | `range.to` | string (date) | yes |  |
 | `generated_at` | string (date-time) | yes |  |
 | `kpis` | object | yes |  |
-| `kpis.revenue` | object | yes | Money that came in (Toman): paid payments not made from the wallet, and refunded ones but a wallet top-up's. |
+| `kpis.revenue` | object | yes | Money received, in Toman: paid payments not made from the wallet, plus refunded ones except wallet top-ups. |
 | `kpis.revenue.value` | string | yes |  |
 | `kpis.revenue.previous` | string | yes |  |
 | `kpis.orders` | [CountKpi](#countkpi) | yes |  |
@@ -306,47 +315,124 @@ The referral program's facts about a customer: whose link brought them, how many
 | `kpis.users_total` | integer | yes |  |
 | `series` | list of [SeriesPoint](#seriespoint) | yes |  |
 | `attention` | object | yes |  |
-| `attention.payments_to_review` | integer | yes | Receipts waiting for a review. |
-| `attention.stuck_orders` | integer | yes | Orders paid and not delivered: the delivery failed, or nobody is delivering it (the orders list's stuck tab). |
-| `attention.open_tickets` | integer | yes | Support tickets waiting on an answer (the tickets list's open tab). |
-| `attention.pending_reviews` | integer | yes | Customers' reviews waiting on support (the reviews list's pending tab). |
+| `attention.payments_to_review` | integer | yes | Receipts waiting for review. |
+| `attention.stuck_orders` | integer | yes | Paid orders not delivered because the delivery failed or stalled (the orders list's `stuck` tab). |
+| `attention.open_tickets` | integer | yes | Support tickets waiting for an answer (the tickets list's `open` tab). |
+| `attention.pending_reviews` | integer | yes | Reviews waiting for approval (the reviews list's `pending` tab). |
 | `attention.pending_orders` | integer | yes |  |
-| `attention.servers_with_errors` | integer | yes | The shop's servers whose panel failed its last read — 0 in an agent's shop. |
+| `attention.servers_with_errors` | integer | yes | Servers whose panel failed its last check. Always 0 in an agent's shop. |
 | `attention.expiring_soon` | integer | yes | Active services ending within `expiring_days`. |
-| `traffic_shortage` | [TrafficShortage](#trafficshortage) or null | yes | An agent's shop whose traffic sells nothing; null while it sells, and in the main bot's shop. |
-| `expiring_days` | integer | yes | The one "ending soon" window, in days — the subscriptions screen's too. |
+| `traffic_shortage` | [TrafficShortage](#trafficshortage) or null | yes | Set when an agent's shop has too little traffic to sell anything; null otherwise, and always null in the main shop. |
+| `expiring_days` | integer | yes | The "ending soon" window in days, the same as on the subscriptions screen. |
 | `recent_orders` | list of [RecentOrder](#recentorder) | yes |  |
 | `recent_users` | list of [RecentUser](#recentuser) | yes |  |
 
 ### Delivery
 
-What came of a message the bot wrote a customer of its own accord: told; emailed — Telegram could not take it to them (no Telegram account, or they turned the bot away), and the shop's email took it to their address; they turned the bot away (blocked it, or their account is gone) and no email went; Telegram (or, for an email, the mail server) was out of reach; Telegram refused it; they have no Telegram account (they signed up on the website) and no email went to them — nothing was sent. Whichever, the notice is kept for their website.
+What happened to a notice the bot sent a customer: `told` (delivered in Telegram); `emailed` (Telegram could not reach them, because they have no Telegram account or blocked the bot, so it was emailed); `turned_away` (they blocked the bot or their account is gone, and no email went); `unreachable` (Telegram, or the mail server for an email, could not be reached); `refused` (Telegram refused it); `no_telegram` (no Telegram account and no email went, so nothing was sent). Either way the notice is kept for their website.
 
 String: `told`, `emailed`, `turned_away`, `unreachable`, `refused`, `no_telegram`.
 
-### ErrorResponse
+### DiscountKind
 
-Every refusal and failure — a controller's, a middleware's, the error handler's, the front controller's last resort. A 429 says its wait in `Retry-After` (seconds) too.
+The order types a discount can apply to: things a customer buys for themselves, never a wallet top-up or an agent's traffic.
+
+String: `purchase`, `renewal`, `extra_traffic`, `extra_time`.
+
+### DiscountLine
+
+One discount applied to a price, labelled for the customer («فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪», «کد NOWRUZ»).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `message` | string | yes | In the reader's words: the admin's on the panels, the customer's on the Store API. |
-| `errors` | map of list of string | no | What to fix, under the field it is about |
-| `request_id` | string | yes | The request's id, as its `X-Request-Id` header says it and every log line of it carries it — what the panel shows on a failure of the server's own («کد پیگیری»), to find the request in the log. |
-| `debug` | object | no | Only for a failure of the server's (a 500, never a refusal), with APP_DEBUG on, and only to a request straight from the server's own machine — never one a proxy or a tunnel forwarded. Paths are told from the app's folder; no call's arguments. |
+| `source` | [DiscountSource](#discountsource) | yes |  |
+| `label` | string | yes |  |
+| `amount` | string | yes | Toman taken off. |
+| `percent` | integer or null | yes | The percent; null for a fixed or free code. |
+
+### DiscountSource
+
+Where a discount came from: a timed `sale` («فروش ویژه»), the customer's `personal` percent («تخفیف اختصاصی») or their loyalty `tier` (only the largest of these three applies, never two together), or the `code` they typed, applied to the remaining amount.
+
+String: `sale`, `personal`, `tier`, `code`.
+
+### ErrorResponse
+
+The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `message` | string | yes | A message for the reader: the admin on the panels, the customer on the Store API. |
+| `errors` | map of list of string | no | Field errors, keyed by the field they are about |
+| `request_id` | string | yes | The request's id, the same as the `X-Request-Id` header and the id on every log line of the request. The panel shows it on a server failure («کد پیگیری») so the request can be found in the log. |
+| `debug` | object | no | Debug details. Only on a server failure (a 500, never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included. |
 | `debug.exception` | string | yes |  |
 | `debug.detail` | string | yes |  |
 | `debug.trace` | list of string | yes |  |
 
+### ExtraOption
+
+An amount of extra traffic (GB) or time (days) offered as a button, at its own price or at the price per GB or day.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `quantity` | integer | yes |  |
+| `price` | string or null | yes | Toman; null to charge the price per GB or day times the quantity. |
+
+### ExtraOptionInput
+
+An amount offered as a button, as a form sends it. A row with both quantity and price blank is ignored.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `quantity` | [WholeNumberInput](#wholenumberinput) or null | yes | GB or days. |
+| `price` | [AmountInput](#amountinput) or null | yes | Whole Toman, above zero. Blank or null to use the price per GB or day (which must then be set). |
+
+### ExtraPrices
+
+A plan's own price list for extra traffic and time (the shop's list is BotSettingsData's `extra_…` fields). For each kind: the unit price, the preset amounts, and the smallest and largest custom amount.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `traffic_price` | string or null | yes | Toman per GB; null when only the preset amounts with their own prices are sold (no custom amount). |
+| `traffic_options` | list of [ExtraOption](#extraoption) | yes | Smallest first. |
+| `traffic_min` | integer | yes |  |
+| `traffic_max` | integer | yes |  |
+| `time_price` | string or null | yes | Toman per day; null when only the preset periods with their own prices are sold (no custom amount). |
+| `time_options` | list of [ExtraOption](#extraoption) | yes | Fewest days first. |
+| `time_min` | integer | yes |  |
+| `time_max` | integer | yes |  |
+
+### ExtraPricesRequest
+
+A plan's own price list for extras, as a form sends it. Refusals are reported under `extras.<field>`.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `traffic_price` | [AmountInput](#amountinput) or null | no | Whole Toman per GB, above zero. Blank, null or left out for none. |
+| `traffic_options` | list of [ExtraOptionInput](#extraoptioninput) | no | GB amounts, 1 to 10000, each once, at most 8. Left out for none. |
+| `traffic_min` | [WholeNumberInput](#wholenumberinput) | yes | 1 to 10000 GB. |
+| `traffic_max` | [WholeNumberInput](#wholenumberinput) | yes | `traffic_min` to 10000 GB. |
+| `time_price` | [AmountInput](#amountinput) or null | no | Whole Toman per day, above zero. Blank, null or left out for none. |
+| `time_options` | list of [ExtraOptionInput](#extraoptioninput) | no | Day counts, 1 to 365, each once, at most 8. Left out for none. |
+| `time_min` | [WholeNumberInput](#wholenumberinput) | yes | 1 to 365 days. |
+| `time_max` | [WholeNumberInput](#wholenumberinput) | yes | `time_min` to 365 days. |
+
 ### GatewayKind
 
-How a gateway settles: at once (the wallet), or once a person — or the method's review window — accepts the receipt (a card transfer).
+How a gateway settles: `instant` (at once, like the wallet), or `manual` (once a person, or the method's automatic approval window, accepts the receipt of a card transfer).
 
 String: `instant`, `manual`.
 
+### GiftCodeKind
+
+What a gift code gives: Toman in the wallet, or a free service of a plan.
+
+String: `wallet`, `plan`.
+
 ### InviteeRow
 
-A customer who came through someone's link.
+A customer who joined through someone's link.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -354,12 +440,12 @@ A customer who came through someone's link.
 | `user` | [UserRef](#userref) | yes |  |
 | `status` | [UserStatus](#userstatus) | yes |  |
 | `referrer` | [UserRef](#userref) or null | yes |  |
-| `earned` | string | yes | What this customer's payments earned the referrer they have — the commissions credited to that one. |
+| `earned` | string | yes | What this customer's payments earned their current referrer (the commissions credited to that referrer). |
 | `joined_at` | string (date-time) | yes |  |
 
 ### InviteeSort
 
-What the invitees list sorts by: when each joined (the list's own order), what their payments earned their referrer.
+The invitees list's sort keys: sign-up time (the default), or what their payments earned their referrer.
 
 String: `joined`, `earned`.
 
@@ -376,14 +462,40 @@ String: `joined`, `earned`.
 | `meta.sort` | [InviteeSort](#inviteesort) | yes |  |
 | `meta.dir` | [SortDirection](#sortdirection) | yes |  |
 
+### LoyaltyStanding
+
+A customer's loyalty standing: their tier, what they spent, and the next tier.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `tier` | object or null | yes | Their tier; null when below the first tier, or when the shop has no tiers. |
+| `tier.id` | integer | yes |  |
+| `tier.name` | string | yes |  |
+| `tier.discount_percent` | integer | yes |  |
+| `tier.cashback_percent` | integer | yes |  |
+| `spent` | string | yes | Toman spent: paid and unrefunded purchases, renewals and extras. |
+| `next` | object or null | yes | The next tier above their spending; null at the top, or when the shop has no tiers. |
+| `next.name` | string | yes |  |
+| `next.min_spent` | string | yes | Toman. |
+| `next.missing` | string | yes | Toman still to spend to reach it. |
+
 ### NamedRef
 
-Something pointed at by its id and name (a plan, a server).
+A reference by id and name (a plan, a server).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
+
+### OrderDiscountCode
+
+The discount code used for an order.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer or null | yes | Null once the code is deleted. |
+| `code` | string | yes |  |
 
 ### OrderPayment
 
@@ -393,9 +505,15 @@ Something pointed at by its id and name (a plan, a server).
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
 | `gateway` | string | yes | Driver key ("manual", "wallet"). |
-| `method` | string | yes | The method row's label — a method payments were made with is never deleted. |
+| `method` | string | yes | The payment method's label. A method with payments is never deleted. |
 | `paid_at` | string (date-time) or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
+
+### OrderPricing
+
+Which price a purchase or renewal was made at: `regular`, the plan's price (also used for every other order type); `first_purchase`, its first-purchase price («قیمت خرید اول», for a customer who had bought no service); `agent`, its agent price («قیمت نماینده», for an agent or a member of a group with agent prices); or `gift`, free (a prize, or a service from a gift code or referral reward).
+
+String: `regular`, `first_purchase`, `agent`, `gift`.
 
 ### OrderResponse
 
@@ -405,7 +523,7 @@ Something pointed at by its id and name (a plan, a server).
 
 ### OrderRow
 
-One row of the orders screen: what the customer asked for, and how far it got.
+An order, as a row of the orders screen: what the customer asked for, and how far it got.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -413,15 +531,21 @@ One row of the orders screen: what the customer asked for, and how far it got.
 | `type` | [OrderType](#ordertype) | yes |  |
 | `status` | [OrderStatus](#orderstatus) | yes |  |
 | `amount` | string | yes |  |
+| `pricing` | [OrderPricing](#orderpricing) | yes |  |
+| `discount_amount` | string | yes | The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. |
+| `discounts` | list of [DiscountLine](#discountline) | yes | The discounts applied, the automatic one first. |
+| `discount_code` | [OrderDiscountCode](#orderdiscountcode) or null | yes | The discount code used; it counts as one of the code's uses unless the order is cancelled. Null for none. |
 | `user` | [UserRef](#userref) | yes |  |
-| `plan` | [NamedRef](#namedref) or null | yes |  |
-| `server` | [NamedRef](#namedref) or null | yes | The server the customer chose — for a renewal, where its service is. |
-| `subscription` | object or null | yes | The service it bought or renewed; null for a top-up, or once the service was deleted. |
+| `plan` | [NamedRef](#namedref) or null | yes | The plan of a purchase or renewal; for extras, the service's plan. |
+| `server` | [NamedRef](#namedref) or null | yes | The server the customer chose; for a renewal or extras, the service's server. |
+| `subscription` | object or null | yes | The service it bought, renewed or extended; null for a top-up, or once the service was deleted. |
 | `subscription.id` | integer | yes |  |
 | `subscription.name` | string | yes |  |
 | `subscription.status` | [SubscriptionStatus](#subscriptionstatus) | yes |  |
-| `notes` | string or null | yes | Why it failed, or why it was cancelled — a failed delivery as its reader may read it: the owner the diagnosis of a panel that failed it, anyone else (an agent, the shop's admins on its website) that panel's failure in a word. |
-| `payments` | list of [OrderPayment](#orderpayment) | yes | The attempts to pay it, the newest first. |
+| `traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise. |
+| `days` | integer or null | yes | The days it adds to a service (extra time); null otherwise. |
+| `notes` | string or null | yes | Why it failed or was cancelled. For a failed delivery, the owner sees the panel's full diagnosis; anyone else (an agent, a website admin) a short summary. |
+| `payments` | list of [OrderPayment](#orderpayment) | yes | The payment attempts, newest first. |
 | `paid_at` | string (date-time) or null | yes |  |
 | `fulfilled_at` | string (date-time) or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
@@ -431,7 +555,7 @@ One row of the orders screen: what the customer asked for, and how far it got.
 
 ### OrderSort
 
-What the orders list sorts by: when each was placed (the list's own order), the amount.
+The orders list's sort keys: creation time (the default) or amount.
 
 String: `created`, `amount`.
 
@@ -441,7 +565,9 @@ String: `pending`, `paid`, `processing`, `fulfilled`, `cancelled`, `failed`, `re
 
 ### OrderType
 
-String: `purchase`, `renewal`, `wallet_topup`, `traffic`.
+What an order buys: a plan (`purchase`), a service's `renewal`, a `wallet_topup`, `traffic` for an agent's bot (main bot only), or `extra_traffic` or `extra_time` for an existing service.
+
+String: `purchase`, `renewal`, `wallet_topup`, `traffic`, `extra_traffic`, `extra_time`.
 
 ### OrdersResponse
 
@@ -455,13 +581,13 @@ String: `purchase`, `renewal`, `wallet_topup`, `traffic`.
 | `meta.last_page` | integer | yes |  |
 | `meta.sort` | [OrderSort](#ordersort) | yes |  |
 | `meta.dir` | [SortDirection](#sortdirection) | yes |  |
-| `meta.stuck` | integer | yes | The stuck tab — paid and not delivered —, whatever the list shows. |
-| `meta.sold` | integer | yes | The orders of the list (its tab, type, search and days) that are sales: paid, being delivered or delivered. |
-| `meta.sold_amount` | string | yes | What those add up to (Toman). |
+| `meta.stuck` | integer | yes | Stuck orders (paid but not delivered), regardless of the filters. |
+| `meta.sold` | integer | yes | How many of the listed orders (tab, type, search and dates) are sales: paid, being delivered or delivered. |
+| `meta.sold_amount` | string | yes | Their total, in Toman. |
 
 ### PageMeta
 
-Where a paged list is. A sorted list's meta says its order beside these (`sort`, `dir`).
+A paged list's position. A sorted list's meta also has its order (`sort`, `dir`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -478,7 +604,7 @@ Where a paged list is. A sorted list's meta says its order beside these (`sort`,
 
 ### PaymentRow
 
-One row of the payments screen.
+A payment, as a row of the payments screen.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -486,11 +612,11 @@ One row of the payments screen.
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
 | `gateway` | string | yes | Driver key ("manual", "wallet"). |
-| `kind` | [GatewayKind](#gatewaykind) or null | yes | How the driver settles; null once the driver is no longer registered. |
-| `method` | string | yes | The method row's label ("کارت به کارت (ملت)") — a method payments were made with is never deleted. |
-| `summary` | string or null | yes | What the customer was told to pay to, as the driver words it (the masked card and its holder); null for a driver without one (the wallet). |
-| `reference` | string or null | yes | The gateway's own id of the payment (the wallet's ledger line); null when it has none (a card transfer). |
-| `description` | string or null | yes | The word on its latest verdict: why it failed or was cancelled — the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid — or a refund's note (refund_note too). |
+| `kind` | [GatewayKind](#gatewaykind) or null | yes | How the driver settles; null when the driver is no longer installed. |
+| `method` | string | yes | The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. |
+| `summary` | string or null | yes | What the customer was told to pay to, from the driver (the masked card number and holder); null for a driver without one (the wallet). |
+| `reference` | string or null | yes | The gateway's own id for the payment (the wallet's ledger line); null when it has none (a card transfer). |
+| `description` | string or null | yes | The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid), or a refund's note (also in `refund_note`). |
 | `user` | [UserRef](#userref) | yes |  |
 | `order` | object | yes |  |
 | `order.id` | integer | yes |  |
@@ -499,17 +625,22 @@ One row of the payments screen.
 | `order.plan` | string or null | yes |  |
 | `order.server` | string or null | yes |  |
 | `order.subscription_id` | integer or null | yes |  |
-| `order.notes` | string or null | yes | Why its delivery failed (null unless it did) — the owner reads the diagnosis of a panel that failed it, anyone else that panel's failure in a word. |
-| `receipt` | object or null | yes | The customer's receipt — always a picture: sent in the bot (it takes nothing else), or uploaded from the shop's website; null before it is sent. GET …/receipt serves either. |
+| `order.traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise. |
+| `order.days` | integer or null | yes | The days it adds to a service (extra time); null otherwise. |
+| `order.notes` | string or null | yes | Why its delivery failed; null unless it did. The owner sees the panel's full diagnosis, anyone else a short summary. |
+| `order.discount_amount` | string | yes | The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. |
+| `order.discounts` | list of [DiscountLine](#discountline) | yes | The discounts applied, the automatic one first. |
+| `order.discount_code` | [OrderDiscountCode](#orderdiscountcode) or null | yes | The discount code used; it counts as one of the code's uses unless the order is cancelled. Null for none. |
+| `receipt` | object or null | yes | The customer's receipt, always a picture: sent in the bot (which accepts only pictures) or uploaded on the website. Null until sent. `GET …/receipt` serves either. |
 | `receipt.name` | string or null | yes |  |
 | `receipt.note` | string or null | yes |  |
 | `receipt.sent_at` | string (date-time) or null | yes |  |
 | `auto_approved` | boolean | yes |  |
-| `reviewer` | string or null | yes | Who decided it by hand: the agent's @bot, a bot admin's @username / tg:&lt;id&gt; / user#&lt;id&gt; (in the report group or on the shop's website), or the owner's login — «پشتیبانی» to anyone but the owner (Auth\Services\Reviewers). |
+| `reviewer` | string or null | yes | Who decided it by hand: the agent's @bot, a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt; (in the report group or on the website), or the owner's login, which anyone but the owner sees as «پشتیبانی». |
 | `refund_note` | string or null | yes |  |
 | `paid_at` | string (date-time) or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
-| `actions` | object | yes | What the modal may do with it right now (the server's rules). |
+| `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.approve` | boolean | yes |  |
 | `actions.reject` | boolean | yes |  |
 | `actions.cancel` | boolean | yes |  |
@@ -519,7 +650,7 @@ One row of the payments screen.
 
 ### PaymentSort
 
-What the payments list sorts by: when each was made (the list's own order), the amount.
+The payments list's sort keys: creation time (the default) or amount.
 
 String: `created`, `amount`.
 
@@ -539,9 +670,9 @@ String: `pending`, `awaiting_review`, `paid`, `failed`, `cancelled`, `refunded`.
 | `meta.last_page` | integer | yes |  |
 | `meta.sort` | [PaymentSort](#paymentsort) | yes |  |
 | `meta.dir` | [SortDirection](#sortdirection) | yes |  |
-| `meta.awaiting_review` | integer | yes | The review queue, whatever the list shows. |
-| `meta.paid` | integer | yes | The payments of the list (its tab, search and days) that are paid. |
-| `meta.paid_amount` | string | yes | What those add up to (Toman). |
+| `meta.awaiting_review` | integer | yes | Receipts waiting for review, regardless of the filters. |
+| `meta.paid` | integer | yes | How many of the listed payments (tab, search and dates) are paid. |
+| `meta.paid_amount` | string | yes | Their total, in Toman. |
 
 ### PlanCategoriesResponse
 
@@ -565,7 +696,7 @@ String: `pending`, `awaiting_review`, `paid`, `failed`, `cancelled`, `refunded`.
 
 ### PlanCategoryRow
 
-A group plans are filed under.
+A plan category.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -584,8 +715,8 @@ A group plans are filed under.
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `remark` | string or null | yes |  |
-| `protocol` | string or null | yes | Null for what is not one protocol (a PasarGuard group). |
-| `port` | integer or null | yes | Null for what has no port of its own (a PasarGuard group). |
+| `protocol` | string or null | yes | Null when it is not a single protocol (a PasarGuard group). |
+| `port` | integer or null | yes | Null when it has no port of its own (a PasarGuard group). |
 | `enabled` | boolean | yes |  |
 | `is_selectable` | boolean | yes |  |
 
@@ -596,19 +727,38 @@ A group plans are filed under.
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
 | `is_active` | boolean | yes |  |
-| `serves_subscriptions` | boolean or null | yes | As on the servers screen: null = never checked, false = no subscription links — either way the customer is not shown the entry. |
+| `serves_subscriptions` | boolean or null | yes | As on the servers screen: null if never checked, false if it serves no subscription links. Either way customers are not offered the entry. |
 | `driver_label` | string | yes |  |
 | `inbounds` | list of [PlanInboundRef](#planinboundref) | yes |  |
-| `unsellable_reason` | string or null | yes | Why nothing can be sold on the server now (switched off, without subscription links, full…); null when it can. |
+| `unsellable_reason` | string or null | yes | Why nothing can be sold on the server now (switched off, no subscription links, full…); null when it can. |
 
 ### PlanOptions
 
-The servers and inbounds the plan form can build entries from, and the categories.
+The servers, inbounds and categories the plan form can use.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `categories` | list of [PlanCategoryRef](#plancategoryref) | yes |  |
 | `servers` | list of [PlanOptionServer](#planoptionserver) | yes |  |
+
+### PlanPrices
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `price` | string | yes |  |
+| `first_purchase_price` | string or null | yes |  |
+| `agent_price` | string or null | yes |  |
+
+### PlanPricesPreviewResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `changes` | list of object | yes | Every plan named, in the plans list's order. |
+| `changes[].id` | integer | yes |  |
+| `changes[].name` | string | yes |  |
+| `changes[].before` | [PlanPrices](#planprices) | yes |  |
+| `changes[].after` | [PlanPrices](#planprices) | yes |  |
+| `changes[].problem` | string or null | yes | Why the plan cannot take the change: a price below zero or above the maximum, or a first-purchase or agent price no longer below the price. Null when it can. |
 
 ### PlanResponse
 
@@ -618,61 +768,68 @@ The servers and inbounds the plan form can build entries from, and the categorie
 
 ### PlanRow
 
-A plan as the list shows it.
+A plan, as the list shows it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `category` | [PlanCategoryRef](#plancategoryref) or null | yes | Null = uncategorised (sold under "سایر پلن‌ها" when the shop has categories). |
+| `category` | [PlanCategoryRef](#plancategoryref) or null | yes | Null when uncategorised (listed under "سایر پلن‌ها" when the shop has categories). |
 | `name` | string | yes |  |
 | `description` | string or null | yes |  |
 | `price` | string | yes |  |
-| `duration_days` | integer | yes | 0 = no time limit |
-| `traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 = unlimited |
-| `ip_limit` | integer | yes | 0 = unlimited |
+| `first_purchase_price` | string or null | yes | The price of a customer's first purchase in the shop («قیمت خرید اول»), below `price`; "0.00" makes the first purchase free. Null for none: everyone pays `price`. Renewals are always at `price`. |
+| `agent_price` | string or null | yes | The price for agents and members of groups with agent prices («همکار») («قیمت نماینده»), below `price`, for purchases and renewals. Null for none. |
+| `checkout_note` | string or null | yes | A note shown under the bot's checkout for this plan («یادداشت پیش‌فاکتور»), for purchases and renewals; null for none. |
+| `button_style` | [ButtonStyle](#buttonstyle) or null | yes | The colour of its button in the bot's plan list; null for the client's default. |
+| `button_row` | integer, at least 1 | yes | How many buttons share its row there: 1 for a row of its own, or 2 or 3 (consecutive buttons with the same number share rows). |
+| `duration_days` | integer | yes | The term in whole days, rounded up; 0 only for no time limit. `duration_hours` is exact. |
+| `duration_hours` | integer | yes | The term in hours from the first connection (a daily plan's is days × 24); 0 for no time limit. |
+| `traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 for unlimited |
+| `ip_limit` | integer | yes | Devices at once; 0 for unlimited |
+| `extras` | [ExtraPrices](#extraprices) or null | yes | The plan's own prices for extra traffic and time; null to use the shop's (the bot settings' `extra_…`). |
 | `servers` | list of [PlanServerEntry](#planserverentry) | yes |  |
-| `unsellable_reason` | string or null | yes | Why the bot does not show the plan now, its switch aside (ServerSelector::judge(), the bot's own judgement): no server on it, none that can sell (each entry says why), or traffic of an agent's shop that does not cover it; null when it does. |
+| `unsellable_reason` | string or null | yes | Why the bot does not offer the plan now, apart from its switch: it has no server, none of its servers can sell (each entry says why), or an agent's traffic does not cover it. Null when it is offered. |
 | `is_active` | boolean | yes |  |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
-| `counts.active_subscriptions` | integer | yes | Its services running now. |
-| `counts.sales` | integer | yes | Its orders sold: paid, being delivered or delivered. |
-| `counts.orders` | integer | yes | Every order placed for it, whatever came of it; a plan that has any — or any service — is not deleted (switched off instead). |
-| `counts.subscriptions` | integer | yes | Every service sold on it, ended ones too. |
+| `counts.active_subscriptions` | integer | yes | Its active services. |
+| `counts.sales` | integer | yes | Its sold orders: paid, being delivered or delivered. |
+| `counts.orders` | integer | yes | All orders placed for it, whatever their status. A plan with any orders or services cannot be deleted (switch it off instead). |
+| `counts.subscriptions` | integer | yes | All services sold on it, ended ones included. |
 | `created_at` | string (date-time) | yes |  |
 | `updated_at` | string (date-time) | yes |  |
 
 ### PlanServerEntry
 
-One server a plan is sold on; `inbounds` is what a purchase gets today (resolved for whole-server entries).
+A server a plan is sold on. `inbounds` is what a purchase gets today (resolved for whole-server entries).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `server` | [PlanServerRef](#planserverref) | yes |  |
 | `all_inbounds` | boolean | yes |  |
 | `inbounds` | list of [PlanInboundRef](#planinboundref) | yes |  |
-| `unsellable_reason` | string or null | yes | Why customers are not offered this entry now (the server switched off, without subscription links, full, without a sellable inbound…); null when they are. |
+| `unsellable_reason` | string or null | yes | Why customers are not offered this entry now (the server is switched off, serves no subscription links, is full, has no sellable inbound…); null when they are. |
 
 ### PlanServerEntryInput
 
-A server the plan is sold on: the whole of it — every inbound the server marks sellable, at purchase time — or the inbounds picked; a driver without inbounds sells the whole server.
+A server the plan is sold on: the whole server (every inbound marked sellable at purchase time) or the picked inbounds. A connector without inbounds always sells the whole server.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `server_id` | integer | yes |  |
-| `all_inbounds` | boolean | no | Absent: the inbounds picked. |
-| `inbound_ids` | list of integer | no | The server's own enabled inbounds (PlanInboundRef.id); empty for the whole server. |
+| `all_inbounds` | boolean | no | Left out: only the picked inbounds. |
+| `inbound_ids` | list of integer | no | Enabled inbounds of this server (`PlanInboundRef.id`); empty for the whole server. |
 
 ### PlanServerRef
 
-The server as the plan form and the plans table know it.
+A server, as the plan form and the plans table show it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
 | `is_active` | boolean | yes |  |
-| `serves_subscriptions` | boolean or null | yes | As on the servers screen: null = never checked, false = no subscription links — either way the customer is not shown the entry. |
+| `serves_subscriptions` | boolean or null | yes | As on the servers screen: null if never checked, false if it serves no subscription links. Either way customers are not offered the entry. |
 
 ### PlansResponse
 
@@ -682,14 +839,14 @@ The server as the plan form and the plans table know it.
 
 ### QueueCounts
 
-How many wait on a human in the shop — the sidebar's numbers, the first rows of the dashboard's attention card.
+What waits for support: the sidebar's counts, and the first rows of the dashboard's attention card.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `payments_to_review` | integer | yes | Receipts waiting for a review. |
-| `stuck_orders` | integer | yes | Orders paid and not delivered: the delivery failed, or nobody is delivering it (the orders list's stuck tab). |
-| `open_tickets` | integer | yes | Support tickets waiting on an answer (the tickets list's open tab). |
-| `pending_reviews` | integer | yes | Customers' reviews waiting on support (the reviews list's pending tab). |
+| `payments_to_review` | integer | yes | Receipts waiting for review. |
+| `stuck_orders` | integer | yes | Paid orders not delivered because the delivery failed or stalled (the orders list's `stuck` tab). |
+| `open_tickets` | integer | yes | Support tickets waiting for an answer (the tickets list's `open` tab). |
+| `pending_reviews` | integer | yes | Reviews waiting for approval (the reviews list's `pending` tab). |
 
 ### QueuesResponse
 
@@ -718,21 +875,47 @@ Integer: `7`, `30`, `90`.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `name` | string or null | yes | "first last" as Telegram has it, or as they signed up with; null when the account shows none. |
-| `username` | string or null | yes | Bare Telegram handle without "@"; null when the account has none. |
-| `telegram_id` | integer or null | yes | Their Telegram account; null for one who signed up on the website — the bot cannot write to them. |
-| `email` | string or null | yes | Their email (lower case, proven); null while they have none. |
+| `name` | string or null | yes | "first last" from Telegram, or as they signed up with; null when the account has none. |
+| `username` | string or null | yes | Telegram handle without "@"; null when the account has none. |
+| `telegram_id` | integer or null | yes | Their Telegram user id; null for a customer who signed up on the website (the bot cannot message them). |
+| `email` | string or null | yes | Their verified email, in lower case; null when they have none. |
 | `balance` | string | yes |  |
 | `created_at` | string (date-time) | yes |  |
 
-### ReferralCommissionRow
+### ReferralAlertReason
 
-A commission paid out.
+Why a referrer's referrals look fake. `burst`: the set number of them joined through the link within `referral_alert_minutes`. `idle`: the set number of them (or a further multiple) joined and none ever bought.
+
+String: `burst`, `idle`.
+
+### ReferralAlertRow
+
+An alert on a referrer whose referrals look fake («هشدار زیرمجموعه‌گیری فیک»). While it is open, they earn no start gifts or plan rewards (commissions continue). Support clears it; what was withheld meanwhile is not paid later.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `referrer` | [UserRef](#userref) | yes | Whom it was credited to, kept as it was earned. |
+| `referrer` | [UserRef](#userref) | yes |  |
+| `status` | [UserStatus](#userstatus) | yes | The referrer's status. |
+| `reason` | [ReferralAlertReason](#referralalertreason) | yes |  |
+| `count` | integer | yes | The number of referrals when it was raised: those in the window, or those who never bought. |
+| `created_at` | string (date-time) | yes |  |
+
+### ReferralAlertsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `alerts` | list of [ReferralAlertRow](#referralalertrow) | yes |  |
+| `meta` | [PageMeta](#pagemeta) | yes |  |
+
+### ReferralCommissionRow
+
+A referral commission paid out.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `referrer` | [UserRef](#userref) | yes | Who it was credited to, as recorded when it was earned. |
 | `customer` | [UserRef](#userref) | yes |  |
 | `payment` | object | yes |  |
 | `payment.id` | integer | yes |  |
@@ -740,13 +923,13 @@ A commission paid out.
 | `order` | object | yes |  |
 | `order.id` | integer | yes |  |
 | `order.type` | [OrderType](#ordertype) | yes |  |
-| `rate` | integer | yes | The percent then in force. |
+| `rate` | integer | yes | The percent in force at the time. |
 | `commission` | string | yes |  |
 | `created_at` | string (date-time) | yes |  |
 
 ### ReferralCommissionSort
 
-What the commissions list sorts by: when each was paid out (the list's own order), the amount.
+The commissions list's sort keys: creation time (the default) or amount.
 
 String: `created`, `commission`.
 
@@ -763,19 +946,27 @@ String: `created`, `commission`.
 | `meta.sort` | [ReferralCommissionSort](#referralcommissionsort) | yes |  |
 | `meta.dir` | [SortDirection](#sortdirection) | yes |  |
 
+### ReferralStartTrigger
+
+When the referral start gift («هدیه شروع») is paid: when the new customer `join`s through the link, or when their first `purchase` is paid (by any method, but never a free service).
+
+String: `join`, `purchase`.
+
 ### ReferralSummary
 
-The program's rules and numbers.
+The referral program's settings and numbers.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `enabled` | boolean | yes |  |
 | `rate` | integer | yes |  |
+| `renewal_rate` | integer | yes | The rate for renewals, used instead of `rate`; 0: renewals earn nothing. |
 | `first_only` | boolean | yes |  |
 | `referrers` | integer | yes | Customers whose link brought someone. |
-| `referred` | integer | yes | Customers who came through a link. |
+| `referred` | integer | yes | Customers who joined through a link. |
 | `commissions` | integer | yes |  |
-| `paid` | string | yes | Everything paid out, in Toman. |
+| `paid` | string | yes | The total paid out, in Toman. |
+| `alerts` | integer | yes | Open alerts on referrers (`GET /referrals/alerts`). Their start gifts and plan rewards are withheld until support clears each alert. |
 
 ### ReferralSummaryResponse
 
@@ -793,12 +984,13 @@ A customer whose link brought someone.
 | `user` | [UserRef](#userref) | yes |  |
 | `status` | [UserStatus](#userstatus) | yes |  |
 | `referrals` | integer | yes |  |
-| `earned` | string | yes | What the commissions credited to them add up to. |
+| `earned` | string | yes | The total of the commissions credited to them. |
 | `last_referral_at` | string (date-time) or null | yes |  |
+| `alerts` | integer | yes | Open alerts on them (0: none). Their start gifts and plan rewards are withheld meanwhile. |
 
 ### ReferrerSort
 
-What the referrers list sorts by: how many each brought (the list's own order), what it earned them, when the last one came.
+The referrers list's sort keys: number of referrals (the default), amount earned, or time of the latest referral.
 
 String: `referrals`, `earned`, `last_referral`.
 
@@ -830,27 +1022,27 @@ String: `referrals`, `earned`, `last_referral`.
 
 ### ReviewRow
 
-A review written on the shop's website, as the moderation screen lists it — the writer's own words.
+A review written on the website, as the moderation screen lists it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes | The name it is signed with. |
 | `rating` | integer | yes | 1 to 5. |
-| `body` | string | yes | Its words, line breaks as written. |
-| `context` | string or null | yes | A line of where they use the service from («ایرانسل · اندروید · Happ»); null for none. |
+| `body` | string | yes | Its text, with line breaks as written. |
+| `context` | string or null | yes | A line on where the service is used («ایرانسل · اندروید · Happ»); null for none. |
 | `status` | [ReviewStatus](#reviewstatus) | yes |  |
-| `customer` | [UserRef](#userref) or null | yes | The customer who wrote it, signed in on the website; null for a guest's — or one whose account is gone. |
-| `reviewer` | string or null | yes | Who of support decided it last: a panel's principal, or one of the shop's admins on its website (@username, tg:&lt;id&gt; or user#&lt;id&gt;) — the owner's login reads «پشتیبانی» to anyone but the owner; null while it waits. |
-| `decided_at` | string (date-time) or null | yes | When it was last approved or rejected; null while it waits. |
+| `customer` | [UserRef](#userref) or null | yes | The signed-in customer who wrote it; null for a guest, or when the account is gone. |
+| `reviewer` | string or null | yes | Who last approved or rejected it: a panel user, or a website admin (@username, tg:&lt;id&gt; or user#&lt;id&gt;). Anyone but the owner sees the owner's login as «پشتیبانی». Null while pending. |
+| `decided_at` | string (date-time) or null | yes | When it was last approved or rejected; null while pending. |
 | `created_at` | string (date-time) | yes |  |
-| `actions` | object | yes | What its state allows support to decide (a delete, always). |
+| `actions` | object | yes | Which decisions its status allows (deleting is always allowed). |
 | `actions.approve` | boolean | yes |  |
 | `actions.reject` | boolean | yes |  |
 
 ### ReviewStatus
 
-Where a customer's review stands: pending — waiting on support —, approved — the website shows it —, rejected — kept, never shown. Support moves it either way, at any time.
+A review's status: `pending` (waiting for support), `approved` (shown on the website) or `rejected` (kept but not shown). Support can change it either way at any time.
 
 String: `pending`, `approved`, `rejected`.
 
@@ -864,7 +1056,7 @@ String: `pending`, `approved`, `rejected`.
 | `meta.per_page` | integer | yes |  |
 | `meta.total` | integer | yes |  |
 | `meta.last_page` | integer | yes |  |
-| `meta.pending` | integer | yes | The reviews waiting on support, whatever the list shows (the queue). |
+| `meta.pending` | integer | yes | Reviews waiting for support, regardless of the filters. |
 
 ### SeriesPoint
 
@@ -877,13 +1069,13 @@ String: `pending`, `approved`, `rejected`.
 
 ### SortDirection
 
-Which way a sorted list runs — asc (the oldest, the smallest, the soonest first) or desc.
+The sort direction. `asc` puts the oldest, smallest or soonest first; `desc` the reverse.
 
 String: `asc`, `desc`.
 
 ### StaffGrant
 
-What a shop lets its admins do on its website beyond its daily work: the catalogue's plans and categories (catalog), a customer's wallet credited or debited (wallet), a payment given back (refunds), a service given days and traffic (extend), a service deleted for good (delete), a customer's website account taken in hand — two-factor sign-in turned off, every device signed out (account_security).
+What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
 
 String: `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`.
 
@@ -895,43 +1087,44 @@ String: `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`.
 
 ### SubscriptionRow
 
-One row of the subscriptions screen: a client on a panel, as the shop last saw it there.
+A service, as a row of the subscriptions screen: a client on a panel, as last read from it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `status` | [SubscriptionStatus](#subscriptionstatus) | yes |  |
 | `name` | string | yes | The client's name on the panel ("amir_2", "USER_7"). |
-| `link` | string | yes | The one link the customer got. |
+| `link` | string | yes | The customer's subscription link. |
 | `user` | [UserRef](#userref) | yes |  |
-| `plan` | [NamedRef](#namedref) or null | yes | Null once the plan was deleted. |
+| `plan` | [NamedRef](#namedref) or null | yes | Null once the plan is deleted. |
 | `server` | [NamedRef](#namedref) | yes |  |
-| `traffic` | object | yes | Bytes; a limit of 0 is no limit. |
+| `traffic` | object | yes | In bytes; a limit of 0 means unlimited. |
 | `traffic.limit` | integer | yes |  |
 | `traffic.used` | integer | yes |  |
-| `ip_limit` | integer | yes | Devices at once; 0 is no limit. |
-| `duration_days` | integer | yes | The term in days, counted from the first connection; 0 never expires. |
-| `auto_renew` | boolean | yes | The customer's «تمدید خودکار»: renewed from their wallet before the deadline. |
-| `next_period` | object or null | yes | A renewal queued behind the period in use (what that period leaves unused is not carried): when it begins, and the most it leaves then (bytes). |
+| `ip_limit` | integer | yes | Devices allowed at once; 0 means unlimited. |
+| `duration_days` | integer | yes | The term in whole days, rounded up; 0 only when it never expires. `duration_hours` is exact. |
+| `duration_hours` | integer | yes | The term in hours, counted from the first connection; 0 never expires. |
+| `auto_renew` | boolean | yes | The customer's auto-renewal («تمدید خودکار»): renewed from their wallet before the deadline. |
+| `next_period` | object or null | yes | A renewal queued after the current period (unused traffic of the current period is not carried over): when it starts, and the most traffic left then, in bytes. |
 | `next_period.starts_at` | string (date-time) | yes |  |
 | `next_period.traffic` | integer | yes |  |
-| `starts_at` | string (date-time) or null | yes | When the first connection started the clock; null until then. |
+| `starts_at` | string (date-time) or null | yes | When the first connection started the term; null until then. |
 | `expires_at` | string (date-time) or null | yes | Null while waiting for the first connection, or without a term. |
-| `expiring_soon` | boolean | yes | Active, its deadline within the expiring window (the list's `meta.expiring_days`). |
-| `last_synced_at` | string (date-time) or null | yes | The moment the panel was last read for it — what the numbers are from. |
+| `expiring_soon` | boolean | yes | Active, and ending within the list's `meta.expiring_days`. |
+| `last_synced_at` | string (date-time) or null | yes | When the panel was last read for it; the numbers are from then. |
 | `disabled_at` | string (date-time) or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
-| `actions` | object | yes | What the modal may do with it right now (the server's rules). |
+| `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.sync` | boolean | yes |  |
 | `actions.disable` | boolean | yes |  |
 | `actions.enable` | boolean | yes |  |
 | `actions.move` | boolean | yes |  |
 | `actions.delete` | boolean | yes |  |
-| `actions.extend` | boolean | yes | Days and traffic on top: an active service that ends some day or has a quota. |
+| `actions.extend` | boolean | yes | Adding days and traffic: for an active service with an end date or a quota. |
 
 ### SubscriptionSort
 
-What the services list sorts by: when each was bought (the list's own order), when it ends — one that never does, or has not started, after every deadline —, the traffic used.
+The services list's sort keys: creation time (the default), end date (services that never end or have not started come after every deadline), or traffic used.
 
 String: `created`, `expires`, `used`.
 
@@ -944,7 +1137,7 @@ String: `active`, `expired`, `disabled`, `deleted`.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `subscriptions` | list of [SubscriptionRow](#subscriptionrow) | yes |  |
-| `meta` | object | yes | `expiring`: active services ending within `expiring_days` (the tab's count; the dashboard's window too). |
+| `meta` | object | yes | `expiring` counts active services ending within `expiring_days` (the tab's count; the dashboard uses the same window). |
 | `meta.page` | integer | yes |  |
 | `meta.per_page` | integer | yes |  |
 | `meta.total` | integer | yes |  |
@@ -956,28 +1149,28 @@ String: `active`, `expired`, `disabled`, `deleted`.
 
 ### TicketAttachment
 
-A message's picture — its bytes are the message's attachment address (…/messages/{message}/attachment).
+A message's picture. Its bytes are at the message's attachment address (`…/messages/{message}/attachment`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | Its name, as its sender's device gave it or one made up. |
-| `kept` | boolean | yes | Whether the shop keeps it still: a picture uploaded to a ticket goes 30 days after the ticket closed (one opened again keeps the pictures it still has; one already gone does not come back) — false then, the message saying it had one, its address a 404. |
+| `name` | string | yes | Its file name, from the sender's device or generated. |
+| `kept` | boolean | yes | Whether the file is still stored. Uploaded pictures are deleted 30 days after the ticket closes (reopening keeps the pictures still there; deleted ones do not come back). When false, the message still shows it had a picture, and its address is a 404. |
 
 ### TicketAuthor
 
-Who wrote a ticket's message: the customer, or support.
+Who wrote a ticket message: the customer or support.
 
 String: `customer`, `support`.
 
 ### TicketChannel
 
-Where a ticket's message was written: the shop's website or its bot (the customer's), a panel, the website's admin side (one of the shop's admins on it) or the report group (support's).
+Where a ticket message was written. The customer writes on the website (`web`) or in the bot (`bot`); support in a panel (`panel`), the website's admin API (`staff`) or the report group (`group`).
 
 String: `web`, `bot`, `panel`, `staff`, `group`.
 
 ### TicketDetail
 
-A support ticket with its whole conversation, the first message first.
+A support ticket with its whole conversation, oldest message first.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -985,24 +1178,24 @@ A support ticket with its whole conversation, the first message first.
 | `subject` | string | yes |  |
 | `status` | [TicketStatus](#ticketstatus) | yes |  |
 | `customer` | [UserRef](#userref) | yes |  |
-| `subscription` | [NamedRef](#namedref) or null | yes | The customer's service it is about, by its name on the panel; null for none — or one deleted since. |
-| `last_message_at` | string (date-time) | yes | When its latest message was written: the list's order. |
+| `subscription` | [NamedRef](#namedref) or null | yes | The customer's service it is about, by its panel name; null for none, or when the service was deleted. |
+| `last_message_at` | string (date-time) | yes | When its latest message was written; the list is sorted by it. |
 | `messages_count` | integer | yes |  |
-| `rating` | integer or null | yes | 1 to 5: the customer's word on it once it was closed; null for none. |
+| `rating` | integer or null | yes | The customer's rating after it closed, 1 to 5; null for none. |
 | `created_at` | string (date-time) | yes |  |
-| `closed_at` | string (date-time) or null | yes | When it was closed; null while it is not — a ticket opened again leaves its end behind. |
-| `rating_note` | string or null | yes | What the customer said with their rating. |
+| `closed_at` | string (date-time) or null | yes | When it was closed; null while open (reopening clears it). |
+| `rating_note` | string or null | yes | The note the customer left with their rating. |
 | `messages` | list of [TicketMessageRow](#ticketmessagerow) | yes |  |
 
 ### TicketMessageRow
 
-One message of a ticket.
+A ticket message.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `author` | [TicketAuthor](#ticketauthor) | yes |  |
-| `reviewer` | string or null | yes | Who of support wrote it: a panel's principal, a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt; (in the report group or on the shop's website) — the owner's login reads «پشتیبانی» to anyone but the owner; null for the customer's. |
+| `reviewer` | string or null | yes | Which support person wrote it: a panel user, or a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt; (in the report group or on the website). Anyone but the owner sees the owner's login as «پشتیبانی». Null for the customer's messages. |
 | `body` | string | yes |  |
 | `attachment` | [TicketAttachment](#ticketattachment) or null | yes | Its picture; null for none. |
 | `channel` | [TicketChannel](#ticketchannel) | yes |  |
@@ -1024,16 +1217,16 @@ A support ticket, as the list shows it.
 | `subject` | string | yes |  |
 | `status` | [TicketStatus](#ticketstatus) | yes |  |
 | `customer` | [UserRef](#userref) | yes |  |
-| `subscription` | [NamedRef](#namedref) or null | yes | The customer's service it is about, by its name on the panel; null for none — or one deleted since. |
-| `last_message_at` | string (date-time) | yes | When its latest message was written: the list's order. |
+| `subscription` | [NamedRef](#namedref) or null | yes | The customer's service it is about, by its panel name; null for none, or when the service was deleted. |
+| `last_message_at` | string (date-time) | yes | When its latest message was written; the list is sorted by it. |
 | `messages_count` | integer | yes |  |
-| `rating` | integer or null | yes | 1 to 5: the customer's word on it once it was closed; null for none. |
+| `rating` | integer or null | yes | The customer's rating after it closed, 1 to 5; null for none. |
 | `created_at` | string (date-time) | yes |  |
-| `closed_at` | string (date-time) or null | yes | When it was closed; null while it is not — a ticket opened again leaves its end behind. |
+| `closed_at` | string (date-time) or null | yes | When it was closed; null while open (reopening clears it). |
 
 ### TicketStatus
 
-Where a support ticket stands: open — waiting on support —, answered — support wrote last, waiting on the customer —, closed. A customer's message opens a ticket (again), support's answers it; either side closes it, support reopens it.
+A ticket's status: `open` (waiting for support), `answered` (support wrote last; waiting for the customer) or `closed`. A customer's message makes it open (reopening a closed one); support's answer makes it answered. Either side can close it; support can reopen it.
 
 String: `open`, `answered`, `closed`.
 
@@ -1047,39 +1240,40 @@ String: `open`, `answered`, `closed`.
 | `meta.per_page` | integer | yes |  |
 | `meta.total` | integer | yes |  |
 | `meta.last_page` | integer | yes |  |
-| `meta.open` | integer | yes | The tickets waiting on an answer, whatever the list shows (the queue). |
+| `meta.open` | integer | yes | Tickets waiting for an answer, regardless of the filters. |
 
 ### TrafficShortage
 
-An agent's bot whose traffic cannot cover even its smallest plan on sale — or is used up: the bot offers no plan and renews no service until the agent buys traffic in the main bot.
+An agent's bot whose traffic is used up or cannot cover even its smallest plan on sale. The bot offers no plan and renews no service until the agent buys traffic in the main bot.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `balance` | integer | yes | The traffic it may still sell, in bytes. |
-| `smallest_plan` | integer or null | yes | What its smallest plan on sale needs, in bytes; null while none is on sale. |
+| `balance` | integer | yes | The traffic it can still sell, in bytes. |
+| `smallest_plan` | integer or null | yes | The traffic its smallest plan on sale needs, in bytes; null while no plan is on sale. |
 
 ### UserDetailResponse
 
-GET /users/{id} — one customer, as their page shows them; their services, orders and payments are those lists' own, narrowed to them (`user=`).
+One customer, as their page shows them. Their services, orders and payments come from those lists, filtered with `user=`.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `user` | [UserRow](#userrow) | yes |  |
 | `referral` | [CustomerReferral](#customerreferral) | yes |  |
-| `agency` | [AgentRow](#agentrow) or null | yes | The customer as an agent of the main bot, as the agents list shows them — their level and credit, their bot and what it sold; null for anyone who is not one (so in every agent's shop). |
+| `agency` | [AgentRow](#agentrow) or null | yes | The customer as an agent of the main bot, as the agents list shows them (level and credit, their bot and its sales); null for anyone who is not an agent, and always in an agent's shop. |
 | `account` | [CustomerAccount](#customeraccount) | yes |  |
+| `loyalty` | [LoyaltyStanding](#loyaltystanding) | yes |  |
 
 ### UserRef
 
-The customer as every screen points at them — the three Telegram identifiers, kept apart (a customer who signed up on the website has none but a name), their email, plus our id.
+A reference to a customer, as every screen shows one: their id, the three Telegram identifiers kept separate (a customer who signed up on the website has only a name), and their email.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `name` | string or null | yes | "first last" as Telegram has it, or as they signed up with; null when the account shows none. |
-| `username` | string or null | yes | Bare Telegram handle without "@"; null when the account has none. |
-| `telegram_id` | integer or null | yes | Their Telegram account; null for one who signed up on the website — the bot cannot write to them. |
-| `email` | string or null | yes | Their email (lower case, proven); null while they have none. |
+| `name` | string or null | yes | "first last" from Telegram, or as they signed up with; null when the account has none. |
+| `username` | string or null | yes | Telegram handle without "@"; null when the account has none. |
+| `telegram_id` | integer or null | yes | Their Telegram user id; null for a customer who signed up on the website (the bot cannot message them). |
+| `email` | string or null | yes | Their verified email, in lower case; null when they have none. |
 
 ### UserResponse
 
@@ -1089,36 +1283,37 @@ The customer as every screen points at them — the three Telegram identifiers, 
 
 ### UserRole
 
-admin = the shop's people inside the bot — /broadcast, exempt from the bot's rules — and on its website (its admin API, while the website lets them in). Not the panel login.
+`admin`: a bot admin. They can use /broadcast, are exempt from the bot's gates, and can use the website's admin API while the website lets admins in. Unrelated to the panel login.
 
 String: `customer`, `admin`.
 
 ### UserRow
 
-One row of the users table: a customer of the bot (the panel's own login is not one).
+A customer, as a row of the users table. (The panel login is not a customer.)
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `name` | string or null | yes | "first last" as Telegram has it, or as they signed up with; null when the account shows none. |
-| `username` | string or null | yes | Bare Telegram handle without "@"; null when the account has none. |
-| `telegram_id` | integer or null | yes | Their Telegram account; null for one who signed up on the website — the bot cannot write to them. |
-| `email` | string or null | yes | Their email (lower case, proven); null while they have none. |
-| `phone` | string or null | yes | E.164, once shared with the bot. |
+| `name` | string or null | yes | "first last" from Telegram, or as they signed up with; null when the account has none. |
+| `username` | string or null | yes | Telegram handle without "@"; null when the account has none. |
+| `telegram_id` | integer or null | yes | Their Telegram user id; null for a customer who signed up on the website (the bot cannot message them). |
+| `email` | string or null | yes | Their verified email, in lower case; null when they have none. |
+| `phone` | string or null | yes | In E.164 form, once shared with the bot. |
 | `status` | [UserStatus](#userstatus) | yes |  |
 | `role` | [UserRole](#userrole) | yes |  |
 | `balance` | string | yes |  |
+| `discount_percent` | integer | yes | Their personal discount («تخفیف اختصاصی»): a percent off what they buy for themselves. It is one of the automatic discounts, of which the largest applies. 0 for none. |
 | `counts` | object | yes |  |
 | `counts.orders` | integer | yes |  |
 | `counts.subscriptions` | integer | yes |  |
 | `counts.active_subscriptions` | integer | yes |  |
-| `groups` | list of [CustomerGroupRef](#customergroupref) | yes | The admin's groups the customer is in, in the admin's order. |
+| `groups` | list of [CustomerGroupRef](#customergroupref) | yes | The customer groups they are in, in the groups' order. |
 | `created_at` | string (date-time) | yes |  |
 | `last_seen_at` | string (date-time) or null | yes |  |
 
 ### UserSort
 
-What the users table sorts by: when each joined (the list's own order), was last seen, the balance (no ledger is 0), the orders, the running services.
+The users table's sort keys: sign-up time (the default), last seen, balance (no ledger counts as 0), orders, active services.
 
 String: `joined`, `last_seen`, `balance`, `orders`, `services`.
 
@@ -1165,7 +1360,7 @@ One line of a customer's wallet ledger.
 | `amount` | string | yes |  |
 | `balance_after` | string | yes |  |
 | `description` | string or null | yes |  |
-| `reviewer` | string or null | yes | Who wrote it by hand — a panel's principal, or one of the shop's admins on its website — as its reader may see it (anyone but the owner reads the owner's login as «پشتیبانی»); null for the lines the shop writes itself. |
+| `reviewer` | string or null | yes | Who added the line by hand: a panel user or a website admin. Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically. |
 | `created_at` | string (date-time) | yes |  |
 
 ### WalletTransactionType
@@ -1174,7 +1369,7 @@ String: `credit`, `debit`.
 
 ### WholeNumberInput
 
-A whole number as a form sends it: a JSON number, or its text — Persian or Arabic digits too.
+A whole number as a form sends it: a JSON number, or text (Persian or Arabic digits accepted).
 
 One of:
 - integer

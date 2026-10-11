@@ -9,6 +9,7 @@ use App\Modules\Accounts\Tasks\PruneAccountsTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
+use App\Modules\Rewards\Tasks\NightlyDrawTask;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Subscriptions\Tasks\GrantsTask;
 use App\Modules\Subscriptions\Tasks\NextPeriodTask;
@@ -22,10 +23,9 @@ use App\Modules\Updates\Tasks\CheckReleasesTask;
 use Tests\DatabaseTestCase;
 
 /**
- * The shop's own schedule (bootstrap/schedule.php) as the container builds it: every task the shop relies on, at the
- * interval CLAUDE.md gives it, in the order a run takes them — a shop's own work in every bot's shop, the servers' work
- * once across them, the reminders right after the sync they read, the report groups last — and the whole of it run
- * together on a shop with something in it, no task failing.
+ * The schedule (bootstrap/schedule.php) as the container builds it: every task at its interval, in the order a run takes
+ * them — a shop's work in every bot's shop, the servers' work once across them, the reminders right after the sync they
+ * read, the report groups last — and the whole of it run together on a shop with something in it, no task failing.
  */
 final class ShopScheduleTest extends DatabaseTestCase
 {
@@ -36,7 +36,7 @@ final class ShopScheduleTest extends DatabaseTestCase
         self::assertSame([
             AutoApproveReceiptsTask::class => [1, 'each shop'],
             ResumeDeliveriesTask::class => [1, 'each shop'],
-            ExpireOrdersTask::class => [60, 'each shop'],
+            ExpireOrdersTask::class => [10, 'each shop'],
             SendBroadcastsTask::class => [1, 'each shop'],
             AutoRenewTask::class => [30, 'each shop'],
             NextPeriodTask::class => [10, 'each shop'],
@@ -46,6 +46,7 @@ final class ShopScheduleTest extends DatabaseTestCase
             PruneUpdatesTask::class => [60, 'across shops'],
             PruneAccountsTask::class => [60, 'across shops'],
             PruneTicketsTask::class => [60, 'each shop'],
+            NightlyDrawTask::class => [10, 'each shop'],
             CheckReleasesTask::class => [24 * 60, 'across shops'],
             SendReportsTask::class => [1, 'each shop'],
         ], $tasks);

@@ -35,15 +35,12 @@ use App\Support\Persian;
 use App\Support\Traffic;
 
 /**
- * «نمایندگی» in the main bot — MainMenu::AGENCY opens home() (an agent's bot has no agency of its own):
- *  - a customer reads the program's terms and levels and asks to become an agent:
- *      agency:apply           → state `agency.note`: a few words about themselves → the request (AgencyActions)
- *  - an agent sees their account with the shop — level and price per GB, the traffic their bot may still sell, wallet
- *    and credit, their bot and what it sold — and:
- *      agency:traffic         → the amounts offered at their price, or any typed (state `agency.gb`)
- *      agency:tb:{gb}         → the checkout (CheckoutScreen) → agency:tb:{gb}:{method}: ordered now and paid
- *      agency:bot             → their bot: hand its token over (state `agency.token`), or a new token for it (AgentBots)
- *      agency:login           → a one-time link that signs them in to their shop's panel (AgentBots)
+ * «نمایندگی», in the main bot only (MainMenu::AGENCY opens home()). A customer reads the terms and asks to become an
+ * agent (agency:apply → a note → the request). An agent sees their account and can:
+ *   agency:traffic            → buy traffic for their bot: an amount offered, or one typed (state `agency.gb`)
+ *   agency:tb:{gb}[:{method}] → its checkout, then pay
+ *   agency:bot                → hand their bot's token over (state `agency.token`; the message is deleted at once)
+ *   agency:login              → a one-time link into their shop's panel
  */
 final class AgencyHandler implements Handler
 {
@@ -109,7 +106,7 @@ final class AgencyHandler implements Handler
         };
     }
 
-    /** MainMenu::AGENCY: an agent's account; for a customer the terms and the request — or that theirs waits. */
+    /** MainMenu::AGENCY: an agent's account; for a customer the terms and «درخواست نمایندگی», or that theirs waits. */
     public function home(Context $ctx): void
     {
         $user = $ctx->user;
@@ -127,10 +124,7 @@ final class AgencyHandler implements Handler
         };
     }
 
-    /**
-     * The checkout of `$gb` GB at the agent's price — the traffic screen instead, when it is outside the program's bounds
-     * (they changed since the button was made).
-     */
+    /** The checkout of `$gb` GB at the agent's price; the traffic screen instead when the amount is out of bounds now. */
     public function checkout(Context $ctx, int $gb): void
     {
         $agent = $this->agent($ctx);
@@ -287,7 +281,7 @@ final class AgencyHandler implements Handler
         $ctx->edit($text, ['reply_markup' => $this->buttons->backOnly(MainMenu::AGENCY)]);
     }
 
-    /** State `agency.token`: the token the agent sent — off the chat at once, whoever sent it — and their bot connected with it. */
+    /** State `agency.token`: the token sent is deleted from the chat at once, then their bot is connected with it. */
     private function typedToken(Context $ctx): void
     {
         $ctx->deleteIncoming();
@@ -312,7 +306,7 @@ final class AgencyHandler implements Handler
         $ctx->reply($this->texts->render(BotText::AgencyBotSaved, ['bot' => '@' . $bot->username]), ['reply_markup' => $keyboard->build()]);
     }
 
-    /** «ورود به پنل»: a fresh one-time link — and a button that opens it, when the shop's address is a public one. */
+    /** «ورود به پنل»: a fresh one-time link, with a button that opens it when the shop's address is https. */
     private function login(Context $ctx): void
     {
         $agent = $this->agent($ctx);
@@ -338,7 +332,7 @@ final class AgencyHandler implements Handler
         ]), ['reply_markup' => $keyboard->build()] + BotApi::NO_LINK_PREVIEW);
     }
 
-    /** The agent behind the update, in the main bot — anyone else is shown how things stand (home()) and gets null. */
+    /** The agent behind the update, in the main bot; anyone else is shown home() and gets null. */
     private function agent(Context $ctx): ?User
     {
         if (CurrentBot::isMain() && $ctx->user->isAgent()) {

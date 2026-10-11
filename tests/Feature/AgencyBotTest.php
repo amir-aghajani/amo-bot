@@ -283,7 +283,7 @@ final class AgencyBotTest extends BotTestCase
         $this->sendToken(FakeTelegram::AGENT_TOKEN);
         self::assertSame([self::text(BotText::AgencyBotRefused, ['reason' => BotToken::REFUSED])], $this->said());
 
-        // The shop's own bot is never an agent's.
+        // The main bot is never an agent's.
         $this->sendToken(FakeTelegram::TOKEN);
         self::assertSame([self::text(BotText::AgencyBotRefused, ['reason' => AgentBots::TOKEN_MAIN])], $this->said());
 

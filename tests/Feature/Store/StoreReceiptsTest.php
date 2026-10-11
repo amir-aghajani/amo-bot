@@ -33,11 +33,8 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * A card transfer's receipt, uploaded from the shop's website: taken as the bot takes one — the customer's own payment
- * while it awaits its receipt, a picture by its bytes, at most the bot's limit —, kept among the shop's uploads under a
- * name of its own, and reviewed the same way: the same compare-and-swap (an album's second picture changes nothing), the
- * same report to the group — the picture sent as a photo —, the panel's own receipt screen; but by support alone, never
- * the method's review window. A customer uploads ten an hour at most. It goes when its order expires.
+ * Receipts uploaded from the website: taken as the bot takes one (own payment, a real picture, the size limit), the same
+ * compare-and-swap and report, reviewed by support only (never auto-approved), ten an hour, gone with an expired order.
  */
 final class StoreReceiptsTest extends HttpTestCase
 {

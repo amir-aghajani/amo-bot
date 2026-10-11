@@ -4,14 +4,13 @@ import { afterEach, beforeEach, expect, vi } from 'vitest'
 import { server, startServer } from '@/test/server'
 
 /*
- * Around every test: a fresh fake server in place of `fetch` (src/test/server), and afterwards nothing left behind —
- * what was rendered unmounted, its spies undone, real timers, the address back at the owner's panel, the browser storage
- * empty (the stubbed globals go before the next test: `unstubGlobals`) — no request the test did not answer, and none
- * the API description does not take (src/test/contract).
+ * Around every test: a fresh fake server in place of `fetch` before it; after it, nothing left behind (rendered trees
+ * unmounted, spies restored, real timers, the address back at the owner's panel, storage emptied) and two checks —
+ * every request was answered by the test, and the API description takes every request sent.
  */
 
-// react-query tells a cache's readers in a batch after a timer; in the tests, after the microtasks — the same batches in
-// the same order, without waiting a timer's tick (15 ms on Windows) at every step.
+// react-query notifies readers in batches after a timer; here after the microtasks instead — the same batches in the
+// same order, without a timer's tick (15 ms on Windows) at every step.
 notifyManager.setScheduler(queueMicrotask)
 
 beforeEach(() => {

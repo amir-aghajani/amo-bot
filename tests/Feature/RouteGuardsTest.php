@@ -68,6 +68,13 @@ final class RouteGuardsTest extends HttpTestCase
         '/payment-methods' => 'method',
         '/bot/channels' => 'channel',
         '/bot/custom-emojis' => 'emoji',
+        '/gift-codes' => 'gift_code',
+        '/wheel/prizes' => 'wheel_prize',
+        '/referrals/alerts' => 'referral_alert',
+        '/loyalty/tiers' => 'loyalty_tier',
+        '/cashback/rules' => 'cashback_rule',
+        '/discount-codes' => 'discount_code',
+        '/sales' => 'sale',
     ];
 
     /** A premium emoji's picture and animation are no row of a shop's: any a text carries is drawn, kept or not. */
@@ -84,8 +91,9 @@ final class RouteGuardsTest extends HttpTestCase
     private const STORE = '/api/store/v1';
 
     /**
-     * What a website answers its visitor before they sign in, under its base address: the shop, what it sells, its
-     * reviews — one written too (a customer's own when their token comes with it) —, and the ways in.
+     * What a website answers its visitor before they sign in, under its base address: the shop, what it sells (read as a
+     * customer's own when their token comes with it), its reviews — one written too (a customer's own when their token
+     * comes with it) —, and the ways in.
      */
     private const STORE_PUBLIC = [
         '',
@@ -346,14 +354,14 @@ final class RouteGuardsTest extends HttpTestCase
 
         $this->loginAsStaff($website, $sara);
         $granted = array_values(array_filter($routes, static fn(array $route): bool => $route[2] !== null));
-        self::assertCount(17, $granted, 'the operations a grant opens');
+        self::assertCount(19, $granted, 'the operations a grant opens');
         foreach ($granted as [$method, $path]) {
             self::assertSame([403, StaffMiddleware::NOT_GRANTED], [$this->ask($method, $path)->getStatusCode(), $this->decode($this->ask($method, $path))['message'] ?? null], "{$method} {$path}");
         }
 
         $website->forceFill(['staff_grants' => array_map(static fn(StaffGrant $grant): string => $grant->value, StaffGrant::cases())])->save();
         $this->bearer($this->customerSession($sara, ['method' => SignInMethod::Telegram, 'authenticated_at' => now()->subSeconds(CustomerSessions::RECENT_SECONDS + 1)]));
-        self::assertCount(18, array_filter($routes, static fn(array $route): bool => $route[3]), 'the operations a grant opens, and approving a payment');
+        self::assertCount(20, array_filter($routes, static fn(array $route): bool => $route[3]), 'the operations a grant opens, and approving a payment');
         foreach ($routes as [$method, $path, , $recent]) {
             $response = $this->ask($method, $path);
             $asked = $response->getStatusCode() === 403 && $response->getHeaderLine('WWW-Authenticate') === RecentSignInMiddleware::CHALLENGE;
@@ -447,6 +455,13 @@ final class RouteGuardsTest extends HttpTestCase
             'method' => (string) $this->cardMethod()->id,
             'channel' => (string) $this->channel(-1001234, 'کانال اصلی')->id,
             'emoji' => '111',
+            'gift_code' => (string) $this->giftCode()->id,
+            'wheel_prize' => (string) $this->wheelPrize()->id,
+            'referral_alert' => (string) $this->referralAlert($customer)->id,
+            'loyalty_tier' => (string) $this->loyaltyTier()->id,
+            'cashback_rule' => (string) $this->cashbackRule()->id,
+            'discount_code' => (string) $this->discountCode()->id,
+            'sale' => (string) $this->sale()->id,
         ];
     }
 

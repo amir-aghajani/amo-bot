@@ -11,14 +11,10 @@ use App\Modules\Users\Models\User;
 use Psr\Log\LoggerInterface;
 
 /**
- * What an agent's bot may be sent through its webhook. Its agent reads the webhook's address — its secret with it — from
- * Telegram with their own token, so what arrives there may be theirs rather than Telegram's: it works in their own shop
- * only, but on what every shop shares — the PHP workers, the database, the panels, the mail server. So a bot takes UPDATES
- * updates in UPDATE_SECONDS, and NEWCOMERS updates from someone it has never seen in NEWCOMER_SECONDS (each would register
- * a customer — a row, a chat, a report); past either an update is acknowledged — Telegram, which sends anything else
- * again, lets it go — and dropped, which the log hears once a window. Telegram itself holds an agent's webhook to a few
- * calls at once (BotLifecycle::AGENT_CONNECTIONS). The main bot's webhook is Telegram's alone — its secret is the
- * owner's —, and so is what bot:poll fetches: neither is counted.
+ * Rate limits on an agent's bot's webhook. The agent can read the webhook's secret from Telegram with their own token,
+ * so they could post updates themselves and load what every shop shares (workers, database, panels). A bot takes
+ * UPDATES updates a minute and NEWCOMERS updates an hour from people it has never seen (each registers a customer);
+ * beyond that, updates are acknowledged and dropped. The main bot's webhook and polled updates are not counted.
  */
 final class AgentWebhookBudget
 {
@@ -38,8 +34,8 @@ final class AgentWebhookBudget
     ) {}
 
     /**
-     * Whether the agent's bot — the shop being worked in (CurrentBot::run()) — serves the update: not past its window of
-     * updates, nor — one from someone it has no customer for — of newcomers.
+     * Whether the agent's bot (the current shop) serves the update: within its window of updates and, for someone it
+     * has no customer for, of newcomers.
      *
      * @throws ThrottleUnavailableException
      */
@@ -50,7 +46,7 @@ final class AgentWebhookBudget
     }
 
     /**
-     * One more of `$what` counted in the bot's window: true while the window has room, and the log told once as it fills.
+     * Count one more `$what` in the bot's window: true while it has room; a warning is logged once as it fills.
      *
      * @throws ThrottleUnavailableException
      */

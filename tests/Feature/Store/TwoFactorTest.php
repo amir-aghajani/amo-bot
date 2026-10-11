@@ -28,14 +28,13 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeGoogleLogin;
 
 /**
- * Two-factor sign-in on the shop's website: a customer who signs in with an email and a password turns it on with a new
- * secret for their authenticator app and its first code — their ten recovery codes shown that once —, and their
- * password sign-in then answers a challenge the app's code opens (or a recovery code, spent): five codes a challenge, each
- * wrong one counted against the address and the account too, no code taken twice. A password reset leaves it on; Google
- * and Telegram sign in without it. Off again with their password, or by support for one who lost their phone.
+ * Two-factor sign-in: setup and enable with recovery codes, the password sign-in's challenge (app code or recovery code,
+ * five tries, no code twice), resets leaving it on, Telegram and Google not asked, and turning it off.
  */
 final class TwoFactorTest extends HttpTestCase
 {
+    use WebsiteSignIns;
+
     private Website $website;
 
     protected function setUp(): void
@@ -324,17 +323,5 @@ final class TwoFactorTest extends HttpTestCase
     private function secondStep(string $challenge, string $code): ResponseInterface
     {
         return $this->postJson($this->storeApi($this->website, '/auth/login/2fa'), ['challenge' => $challenge, 'code' => $code]);
-    }
-
-    /** @return array{int, mixed} The status, and what it said under its fields */
-    private function refused(ResponseInterface $response): array
-    {
-        return [$response->getStatusCode(), $this->decode($response)['errors'] ?? null];
-    }
-
-    /** @return array{int, mixed} The status, and its message */
-    private function message(ResponseInterface $response): array
-    {
-        return [$response->getStatusCode(), $this->decode($response)['message'] ?? null];
     }
 }

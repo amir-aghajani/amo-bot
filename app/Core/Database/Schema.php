@@ -9,10 +9,9 @@ use Illuminate\Database\Connection;
 use Illuminate\Database\Schema\Blueprint;
 
 /**
- * The shop's tables as database/schema.php describes them — there are no migrations before the first release. A
- * database gets the tables it lacks with create() (the web installer, the tests) and follows an edited
- * schema with rebuild() (`db:rebuild`): every table made again, its rows carried over. Laravel's schema builder speaks
- * every database; what it leaves to the database's own rules (whose names a table may take) is the driver's.
+ * The tables database/schema.php describes. create() makes the ones a database lacks (the installer, the tests);
+ * rebuild() (`db:rebuild`) makes every table again after an edit of the schema, carrying its rows over. An installed
+ * shop follows a new release through database/upgrades/ instead (Upgrades).
  */
 final class Schema
 {
@@ -59,12 +58,11 @@ final class Schema
     }
 
     /**
-     * Make every table again as the schema says now and carry its rows over, column by column: a column both shapes
-     * have keeps its values, a new one takes its default (a NOT NULL one needs one), one the schema dropped goes with
-     * them. A table the database did not have is made as a new shop's is. A rebuild stops at a row the new shape will
-     * not take — a value too long now, a new unique key it breaks — with the database's own words; the old rows wait
-     * in `<table>__old`, and the next rebuild, the schema fixed, picks up where this one stopped. Says, per table, the
-     * rows it holds now (null: new to this database) and the columns it gained and lost.
+     * Make every table again as the schema says now and carry its rows over by column name: a shared column keeps its
+     * values, a new one takes its default (a NOT NULL one needs one), a dropped one goes. A row the new shape will not
+     * take stops the rebuild with the database's error; the old rows wait in `<table>__old`, and the next rebuild, after
+     * the schema is fixed, picks up from there. Returns, per table, its rows now (null: new to this database) and the
+     * columns it gained and lost.
      *
      * @return list<array{table: string, rows: int|null, added: list<string>, dropped: list<string>}>
      */
@@ -112,9 +110,9 @@ final class Schema
     }
 
     /**
-     * The table steps aside for its new version. The names it gave its keys are the new table's to take, and some are
-     * the database's rather than the table's (DatabaseDriver::releaseNames()), so they go first: the old rows are only
-     * read from now on.
+     * Rename the table to `<table>__old`. Some of its key names belong to the database rather than the table (MySQL's
+     * foreign keys, SQLite's indexes), so they are dropped first for the new table to take; the old rows are only read
+     * from now on.
      */
     private function moveAside(string $table): void
     {
@@ -124,8 +122,8 @@ final class Schema
     }
 
     /**
-     * The old rows into the new table, which holds nothing else: whatever is there already — the copy of a rebuild that
-     * stopped, a row the bot wrote meanwhile — gives way to them.
+     * Copy the old rows into the new table, emptied first: a copy from a rebuild that stopped, or a row the bot wrote
+     * meanwhile, gives way to them.
      *
      * @return array{table: string, rows: int|null, added: list<string>, dropped: list<string>}
      */

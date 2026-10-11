@@ -16,10 +16,10 @@ use App\Modules\Users\Services\UserDirectory;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * The tickets screen («پشتیبانی», both panels): every ticket of the shop, the latest activity first — by status (the open
- * ones the queue waiting on support, counted), one customer's (`user`, their page links here), searched by the customer,
- * the subject or a number —, and one ticket with its whole conversation: who of support wrote what (Reviewers — the
- * owner's login is «پشتیبانی» in an agent's shop) and where each message was written.
+ * The tickets screen («پشتیبانی», both panels and the website's admin API): every ticket of the shop, latest activity
+ * first, by status (the open ones are support's queue, counted), customer and search; and one ticket with its whole
+ * conversation, with who of support wrote each message (Reviewers: the owner's login reads «پشتیبانی» to anyone but the
+ * owner) and where it was written.
  */
 final class TicketDirectory
 {
@@ -28,7 +28,7 @@ final class TicketDirectory
 
     public function __construct(private readonly Reviewers $reviewers) {}
 
-    /** One status (a tab) or all, one customer's, searched — the latest activity first —; with the open ones counted. */
+    /** A page of tickets by status (a tab), customer and search, latest activity first; with the open ones counted. */
     public function search(PageRequest $list): Page
     {
         $query = Ticket::query();
@@ -64,7 +64,7 @@ final class TicketDirectory
         ];
     }
 
-    /** @return array<string, mixed> What every screen says of it, with who the customer is and how many messages it has. */
+    /** @return array<string, mixed> The shared ticket fields, with the customer and how many messages it has. */
     private function row(Ticket $ticket, int $messages): array
     {
         return TicketFields::ticket($ticket) + [
@@ -74,9 +74,8 @@ final class TicketDirectory
     }
 
     /**
-     * By the customer — name, handle, email, Telegram id, the way every list searches its customers —, the subject, or a
-     * bare ticket number. («#12» is the ticket numbered 12 alone: PageRequest::search().) The customers are found once
-     * (User::idsMatching()), so the tickets are read through their index on the customer.
+     * Search by the customer (User::idsMatching(), found once so the tickets are read through their customer index), the
+     * subject, or a bare ticket number. «#12» alone is ticket 12: PageRequest::search().
      *
      * @param Builder<Ticket> $query
      */

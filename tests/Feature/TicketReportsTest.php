@@ -30,7 +30,7 @@ use Tests\Support\FakeTelegram;
  * The tickets topic of the report group: a new ticket is reported — its picture as the photo the report captions — with
  * the bot admins' «🔒 بستن تیکت»; every later message of it, the customer's and support's answers from a panel, comes as
  * a reply under the ticket's last report, which hands its button down, so the group reads the whole conversation. A bot
- * admin's reply to any of a ticket's reports — its words, or a photo with its caption — is support's answer, the
+ * admin's reply to any of a ticket's reports — its text, or a photo with its caption — is support's answer, the
  * customer told as from a panel; anyone else, an anonymous admin, a reply without words are told why not. A ticket's
  * reports are kept while it is not closed, so a reply a week on still answers it; a reply in the topic to a message of the
  * bot's that names no ticket is told where an answer goes; a reply to anything else is none of the tickets' business.

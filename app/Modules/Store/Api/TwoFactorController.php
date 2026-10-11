@@ -15,10 +15,7 @@ use App\Modules\Store\Http\StoreMiddleware;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-/**
- * A signed-in customer's two-factor sign-in (Accounts\Services\TwoFactor): a new secret for their authenticator app,
- * turned on with its first code — the recovery codes shown that once —, and off again with their password.
- */
+/** A signed-in customer's two-factor sign-in (Accounts\Services\TwoFactor): set up, turned on, turned off. */
 final class TwoFactorController extends ApiController
 {
     public function __construct(private readonly TwoFactor $twoFactor) {}

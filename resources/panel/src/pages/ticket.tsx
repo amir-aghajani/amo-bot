@@ -35,11 +35,9 @@ const ticketQuery = (id: number) => queryOptions({ queryKey: queryKeys.ticket(id
 const CHANGES = [queryKeys.tickets, queryKeys.queues, queryKeys.dashboards]
 
 /**
- * One support ticket (`/tickets/:id`, both panels), as support answers it: what it is about and where it stands — since
- * when, once closed —, whose it is and the service it is about, the customer's word on it once rated, the conversation,
- * and the answer — and closing it (the customer told) or opening it again (asked first when that takes the customer's
- * rating with it). Another shop's ticket is not found; another ticket's page starts afresh: nothing of one — an answer
- * half written, a dialog — is left on another.
+ * One support ticket (`/tickets/:id`, both panels): its facts, the conversation and the answer form, with closing (the
+ * customer is notified) and reopening (asked first when it drops the customer's rating). Keyed on the ticket, so nothing of
+ * one is left on another.
  */
 export function TicketPage() {
   const id = Number(useParams().id)

@@ -15,11 +15,9 @@ use App\Support\Validation;
 use Psr\Http\Message\UploadedFileInterface;
 
 /**
- * The picture a QR code is drawn on. The shop ships one (resources/assets/qr-background.jpg — a dark nebula with a
- * white rounded square in the middle for the code); the admin may upload their own from the bot settings screen, which
- * lands in the uploads folder (the container's `qr.backgrounds`) and is remembered in the settings table, or go back to
- * the shipped one — each bot its own (an agent's file carries its bot's id). An upload is judged by its content, read
- * from its header before anything is decoded, and decoded once here — so the picture a delivery draws on is one GD reads.
+ * The picture a QR card is drawn on: the shipped one (resources/assets/qr-background.jpg), or the admin's upload, per
+ * bot. An upload is judged by its header before anything is decoded, then decoded once here, so every delivery draws
+ * on a picture GD can read.
  */
 final class QrBackground
 {
@@ -89,8 +87,8 @@ final class QrBackground
     }
 
     /**
-     * Take the admin's upload as the background: an image (by content, not by name) of a sane size, made no larger
-     * than a card needs.
+     * Take the admin's upload as the background: a picture by its content, within the size limits, scaled down to what a
+     * card needs.
      *
      * @throws ValidationException
      */
@@ -117,8 +115,7 @@ final class QrBackground
         }
         $bytes = self::fitted($bytes, $mime, $size[0], $size[1]);
 
-        // Written whole, then remembered, then the one it replaces gone: a failure on the way leaves the background as
-        // it was, and a delivery never draws on half a picture.
+        // Written whole, then remembered, then the old one deleted: a failure on the way leaves the background as it was.
         $previous = $this->customPath();
         $name = (CurrentBot::isMain() ? 'background.' : 'background-' . CurrentBot::id() . '.') . $extension;
         Files::writeAtomically($this->dir . '/' . $name, $bytes);
@@ -139,9 +136,8 @@ final class QrBackground
     }
 
     /**
-     * The upload as it is kept: decoded once — one GD cannot read is refused here, never met at a delivery — and, larger
-     * than MAX_SIDE, made smaller in its own type rather than decoded at full size at every delivery. Without GD (no QR
-     * card is drawn then) it stays as it came.
+     * The upload as kept: decoded once (one GD cannot read is refused here, not at a delivery) and scaled down past
+     * MAX_SIDE. Without GD (no card is drawn then) it stays as it came.
      *
      * @throws ValidationException
      */

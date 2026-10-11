@@ -16,9 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * One «ارسال همگانی» run (see Broadcasts\BroadcastService): an admin's message copied or forwarded to an audience —
- * or, of kind Unpin, the pins of an earlier one taken off again (the message, its mode and audience are its source's:
- * message()).
+ * One «ارسال همگانی» run (Broadcasts\BroadcastService): an admin's message sent to an audience, or (kind Unpin) the
+ * pins of an earlier run taken off — whose message, mode and audience are its source's (message()).
  *
  * @property int $id
  * @property BroadcastKind $kind

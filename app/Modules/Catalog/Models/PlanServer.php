@@ -52,10 +52,8 @@ class PlanServer extends Model
     }
 
     /**
-     * The inbounds a purchase on this entry gets right now: the server's selectable ones for a whole-server entry,
-     * otherwise the pinned ones — enabled only, in the order they were first seen on the panel. Callers pluck
-     * `remote_key` to address them on the panel. The pinned ones as a list read them with the entry (`inbounds`),
-     * otherwise read now.
+     * The inbounds a purchase on this entry gets now: the server's selectable ones for a whole-server entry, else the
+     * pinned ones still enabled, in id order. Uses the loaded `inbounds` relation when a list read it.
      *
      * @return Collection<int, ServerInbound>
      */

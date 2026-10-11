@@ -7,11 +7,7 @@ namespace App\Core\Logging;
 use Monolog\LogRecord;
 use Monolog\Processor\ProcessorInterface;
 
-/**
- * Every line written for a principal says who it was (`actor` among the line's extras, Acting): what the owner, an
- * agent or one of a shop's admins on its website did — and what failed while they did it — is found by who did it, as
- * a request's lines are by its id (RequestIdProcessor).
- */
+/** Adds `actor` (Acting) to every line a request writes for a signed-in principal, so their actions can be found. */
 final class ActorProcessor implements ProcessorInterface
 {
     public function __invoke(LogRecord $record): LogRecord

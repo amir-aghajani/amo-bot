@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Console\Commands\ScheduleRunCommand;
+use App\Core\Http\Controllers\CronController;
 use App\Core\Scheduling\Budget;
 use App\Core\Scheduling\Scheduler;
-use App\Modules\Scheduling\Controllers\CronController;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Tester\CommandTester;

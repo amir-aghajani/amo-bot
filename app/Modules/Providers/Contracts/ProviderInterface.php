@@ -13,16 +13,16 @@ use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 
 /**
- * What every panel connector's client (3x-ui, PasarGuard, …) offers the rest of the shop. One instance talks to one
- * server's panel: its connector builds it (PanelDriver::connect()) and ProviderRegistry::forServer() keeps it a while, so
- * a session or token it signed in for serves the calls that follow.
+ * What every panel connector's client offers the rest of the shop — panel-agnostic on purpose. One instance talks to one
+ * server's panel: its connector builds it (PanelDriver::connect()) and ProviderRegistry::forServer() reuses it a while,
+ * so a session or token it signed in for serves the calls that follow.
  *
- * Clients are addressed by their panel-wide name (ClientSpec::$name on creation, the same string afterwards); inbounds
- * by the opaque key the driver reports on InboundInfo. What the customer gets is the subscription link the panel serves
- * for the client (ClientInfo::$subscriptionUrl) and nothing else.
+ * Clients are addressed by their panel-wide name (ClientSpec::$name), inbounds by the opaque key the connector reports
+ * (InboundInfo::$key). The customer gets the subscription link the panel serves for the client
+ * (ClientInfo::$subscriptionUrl) and nothing else, so there are no per-inbound config links here.
  *
- * Every method throws a ProviderException (or a subclass) on failure; a client that is not there is a
- * NotFoundException where a return value cannot say so.
+ * Every method throws a ProviderException (or a subclass) on failure; a missing client is a NotFoundException where a
+ * return value cannot say so. Whatever a panel cannot answer is a null on the DTO, or UnsupportedOperationException.
  */
 interface ProviderInterface
 {
@@ -50,8 +50,7 @@ interface ProviderInterface
     public function listInbounds(): array;
 
     /**
-     * Whether the panel hands out subscription links right now — the one thing a customer gets, so a panel without them
-     * cannot be sold.
+     * Whether the panel hands out subscription links right now; a panel without them cannot be sold.
      *
      * @throws ProviderException
      */
@@ -86,6 +85,8 @@ interface ProviderInterface
     public function rotateClientCredentials(string $name): ClientInfo;
 
     /**
+     * Switch the client off or back on (a client is made and updated switched on).
+     *
      * @throws NotFoundException
      * @throws ProviderException
      */
@@ -109,8 +110,8 @@ interface ProviderInterface
     public function findClient(string $name, bool $presence = false): ?ClientInfo;
 
     /**
-     * Every client on the panel as findClient() answers it, presence aside — what the shop's periodic sync reads: one
-     * call for a whole server instead of one per service.
+     * Every client on the panel as findClient() answers it, without presence: the sync's one read per server instead of
+     * one per service.
      *
      * @return list<ClientInfo>
      * @throws UnsupportedOperationException when the panel cannot list its clients at once (the sync then asks for each)
@@ -118,6 +119,10 @@ interface ProviderInterface
      */
     public function listClients(): array;
 
-    /** @throws ProviderException */
+    /**
+     * Set the client's counters to zero.
+     *
+     * @throws ProviderException
+     */
     public function resetClientTraffic(string $name): void;
 }

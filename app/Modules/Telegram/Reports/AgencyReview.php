@@ -13,7 +13,6 @@ use App\Modules\Agency\Services\AgencyLevels;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Bots\CurrentBot;
-use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Telegram\Update\GroupHandler;
@@ -23,14 +22,9 @@ use App\Support\Money;
 use Psr\Log\LoggerInterface;
 
 /**
- * The buttons under a request to become an agent in the report group — «✅ تایید» and «❌ رد» — for the main bot's admins
- * only (GroupButtons::admin()): the requests are the main bot's, and only its group carries these buttons. A press
- * that reaches an agent's bot — callback data a modified client wrote under one of that bot's messages — decides
- * nothing, or an agent, the admin of their own bot, could approve anyone on any level. «تایید» asks which level, one
- * button per level (the program's default credit comes with it; the agents page sets another); «رد» rejects without a
- * note (the agents page takes one). They decide through AgencyActions as the page does — a request decided there, or
- * here a moment earlier, is not decided again — which tells the customer. A decided request loses its buttons: here at
- * once, and by its verdict's report. An admin's own request keeps them, for another admin (ActorRefusedException).
+ * «✅ تایید» (then a level) and «❌ رد» under an agency request in the main bot's report group, for its bot admins only.
+ * A press reaching an agent's bot decides nothing: callback data is the client's to write, and an agent is their own
+ * bot's admin. Decisions go through AgencyActions, as the agents page's do; an admin's own request is another admin's.
  */
 final class AgencyReview implements GroupHandler
 {
@@ -50,7 +44,6 @@ final class AgencyReview implements GroupHandler
     private const REJECTED = '❌ درخواست رد شد.';
 
     public function __construct(
-        private readonly BotApi $api,
         private readonly GroupButtons $groupButtons,
         private readonly AgencyActions $agency,
         private readonly AgencyLevels $levels,
@@ -58,7 +51,7 @@ final class AgencyReview implements GroupHandler
     ) {}
 
     /**
-     * The two buttons under a request that waits — «تایید» on a Persian reader's right.
+     * The two buttons under a waiting request, «تایید» on a Persian reader's right.
      *
      * @return list<list<array<string, mixed>>>
      */
@@ -69,50 +62,44 @@ final class AgencyReview implements GroupHandler
             ->build()['inline_keyboard'];
     }
 
-    /** A press on one of the buttons, from a group. */
+    /** A press on one of the buttons. */
     public function handle(Update $update): void
     {
-        $callbackId = (string) $update->callbackId();
         $args = $update->callbackArgs(self::PREFIX) ?? [];
         $action = $args[0] ?? '';
         $shaped = in_array($action, [self::APPROVE, self::REJECT, self::BACK], true) ? count($args) === 2 : ($action === self::LEVEL && count($args) === 3);
         if (!$shaped || !CurrentBot::isMain()) {
-            $this->api->answerCallbackQuery($callbackId);
+            $this->groupButtons->answer($update);
 
             return;
         }
 
-        $admin = GroupButtons::admin($update->from());
+        $admin = $this->groupButtons->presser($update, self::NOT_ADMIN);
         if ($admin === null) {
-            $this->api->answerCallbackQuery($callbackId, self::NOT_ADMIN, alert: true);
-
             return;
         }
 
-        $chatId = (int) $update->chatId();
-        $messageId = (int) $update->messageId();
         $request = AgencyRequest::query()->with(['user', 'level'])->find((int) $args[1]);
         if ($request === null || $request->status !== AgencyRequestStatus::Pending) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $request === null ? self::NOT_FOUND : AgencyActions::decided($request), alert: true);
+            $this->groupButtons->dismiss($update, $request === null ? self::NOT_FOUND : AgencyActions::decided($request));
 
             return;
         }
 
         match ($action) {
-            self::LEVEL => $this->approve($callbackId, $chatId, $messageId, $request, (int) $args[2], $admin),
-            self::REJECT => $this->reject($callbackId, $chatId, $messageId, $request, $admin),
-            self::APPROVE => $this->pickLevel($callbackId, $chatId, $messageId, $request),
-            default => $this->showButtons($callbackId, $chatId, $messageId, self::buttons($request->id)),
+            self::LEVEL => $this->approve($update, $request, (int) $args[2], $admin),
+            self::REJECT => $this->reject($update, $request, $admin),
+            self::APPROVE => $this->pickLevel($update, $request),
+            default => $this->showButtons($update, self::buttons($request->id)),
         };
     }
 
-    /** «تایید» opened: one button per level, in the admin's order, and back. */
-    private function pickLevel(string $callbackId, int $chatId, int $messageId, AgencyRequest $request): void
+    /** «تایید» opened: a button per level, in the admin's order, and «بازگشت». */
+    private function pickLevel(Update $update, AgencyRequest $request): void
     {
         $levels = $this->levels->ordered();
         if ($levels->isEmpty()) {
-            $this->api->answerCallbackQuery($callbackId, self::NO_LEVELS, alert: true);
+            $this->groupButtons->answer($update, self::NO_LEVELS, alert: true);
 
             return;
         }
@@ -124,22 +111,22 @@ final class AgencyReview implements GroupHandler
         ))->values()->all();
         $back = InlineKeyboard::callback('⬅️ بازگشت', CallbackData::build(self::PREFIX, self::BACK, $request->id));
 
-        $this->showButtons($callbackId, $chatId, $messageId, InlineKeyboard::make()->grid($buttons, 2)->row($back)->build()['inline_keyboard']);
+        $this->showButtons($update, InlineKeyboard::make()->grid($buttons, 2)->row($back)->build()['inline_keyboard']);
     }
 
     /** @param list<list<array<string, mixed>>> $rows */
-    private function showButtons(string $callbackId, int $chatId, int $messageId, array $rows): void
+    private function showButtons(Update $update, array $rows): void
     {
-        $this->groupButtons->set($chatId, $messageId, $rows);
-        $this->api->answerCallbackQuery($callbackId);
+        $this->groupButtons->buttons($update, $rows);
+        $this->groupButtons->answer($update);
     }
 
-    private function approve(string $callbackId, int $chatId, int $messageId, AgencyRequest $request, int $levelId, User $admin): void
+    private function approve(Update $update, AgencyRequest $request, int $levelId, User $admin): void
     {
         $level = AgencyLevel::query()->find($levelId);
         if ($level === null) {
-            $this->groupButtons->set($chatId, $messageId, self::buttons($request->id));
-            $this->api->answerCallbackQuery($callbackId, self::LEVEL_GONE, alert: true);
+            $this->groupButtons->buttons($update, self::buttons($request->id));
+            $this->groupButtons->answer($update, self::LEVEL_GONE, alert: true);
 
             return;
         }
@@ -147,35 +134,33 @@ final class AgencyReview implements GroupHandler
         try {
             $this->agency->approve($request, Actor::groupAdmin($admin), $level, null);
         } catch (ActorRefusedException $e) {
-            // A request of the admin's own: its buttons stay, for another admin.
-            $this->api->answerCallbackQuery($callbackId, $e->getMessage(), alert: true);
+            // The admin's own request: the buttons stay for another admin.
+            $this->groupButtons->answer($update, $e->getMessage(), alert: true);
 
             return;
         } catch (ValidationException $e) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $e->getMessage(), alert: true);
+            $this->groupButtons->dismiss($update, $e->getMessage());
 
             return;
         }
 
-        $this->groupButtons->set($chatId, $messageId, null);
-        $this->api->answerCallbackQuery($callbackId, sprintf(self::APPROVED, $level->name));
+        $this->groupButtons->buttons($update, null);
+        $this->groupButtons->answer($update, sprintf(self::APPROVED, $level->name));
         $this->logger->info('Agency request {id} approved from the report group by {reviewer}', ['id' => $request->id, 'reviewer' => $request->reviewer]);
     }
 
-    private function reject(string $callbackId, int $chatId, int $messageId, AgencyRequest $request, User $admin): void
+    private function reject(Update $update, AgencyRequest $request, User $admin): void
     {
         try {
             $this->agency->reject($request, Actor::groupAdmin($admin), null);
         } catch (ValidationException $e) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $e->getMessage(), alert: true);
+            $this->groupButtons->dismiss($update, $e->getMessage());
 
             return;
         }
 
-        $this->groupButtons->set($chatId, $messageId, null);
-        $this->api->answerCallbackQuery($callbackId, self::REJECTED);
+        $this->groupButtons->buttons($update, null);
+        $this->groupButtons->answer($update, self::REJECTED);
         $this->logger->info('Agency request {id} rejected from the report group by {reviewer}', ['id' => $request->id, 'reviewer' => $request->reviewer]);
     }
 }

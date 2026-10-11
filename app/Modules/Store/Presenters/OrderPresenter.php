@@ -5,23 +5,23 @@ declare(strict_types=1);
 namespace App\Modules\Store\Presenters;
 
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Services\OrderDirectory;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 
 /**
- * An order as its customer's website shows it — what it was for, how far it got, its payments — and a payment of it.
- * What the shop's own screens say of it (`orders.notes`, `diagnosis`: why a delivery failed) is never shown; the
- * word on a payment's verdict (`payments.note`: a rejection's reason, a cancellation's note) is the customer's to read,
- * as the bot tells it them. Its relations are loaded with it (Store\Services\CustomerOrders::RELATIONS).
+ * An order as its customer's website shows it, with its payments. Support's own words on an order (`notes`,
+ * `diagnosis`) are never shown; a payment's verdict note (a rejection's reason) is the customer's to read, as in the bot.
+ * Relations come loaded (Store\Services\CustomerOrders).
  */
 final class OrderPresenter
 {
     public function __construct(private readonly GatewayRegistry $gateways) {}
 
     /**
-     * The order, what it named each a reference of its id and its name — the plan, the server, the service as the panel
-     * names it (what a ticket names too) —: one way through the whole API.
+     * The order: its plan, server and service each as `{id, name}` (a service by its panel name, as everywhere in the
+     * API), and what it brings in traffic or days.
      *
      * @return array<string, mixed>
      */
@@ -29,7 +29,7 @@ final class OrderPresenter
     {
         $plan = $order->plan;
         $service = $order->subscription;
-        // A renewal names no server of its own: it is where its service is.
+        // A renewal, and extras, name no server of their own: they are where their service is.
         $server = $order->server ?? $service?->server;
 
         return [
@@ -37,19 +37,22 @@ final class OrderPresenter
             'type' => $order->type->value,
             'status' => $order->status->value,
             'amount' => $order->amount,
+            // The price a purchase or a renewal was made at: the plan's own, its first-purchase price or its agent price.
+            'pricing' => $order->pricing->value,
+        ] + OrderDirectory::discounts($order) + [
             'created_at' => $order->created_at->toIso8601String(),
             'fulfilled_at' => $order->fulfilled_at?->toIso8601String(),
             'plan' => $plan === null ? null : ['id' => $plan->id, 'name' => $plan->name],
             'server' => $server === null ? null : ['id' => $server->id, 'name' => $server->name],
             'subscription' => $service === null ? null : ['id' => $service->id, 'name' => $service->remote_name],
+            'traffic_bytes' => $order->traffic_bytes,
+            'days' => $order->days,
             'payments' => array_values($order->payments->map($this->payment(...))->all()),
         ];
     }
 
     /**
-     * One attempt to pay an order: the way it was paid — the method's label and how its driver settles (instant, the
-     * wallet; manual, a card transfer and its receipt; null for a driver no longer installed) —, how it stands, whether a
-     * receipt was sent, and the word on its latest verdict.
+     * One attempt to pay an order: its way to pay, how it stands, whether a receipt was sent, and its verdict's note.
      *
      * @return array{id: int, method: array{id: int, label: string, kind: string|null}, status: string, amount: string, created_at: string, paid_at: string|null, receipt: array{sent_at: string}|null, note: string|null}
      */
@@ -68,8 +71,8 @@ final class OrderPresenter
     }
 
     /**
-     * A way to pay, as the checkout names it: its label, and how its driver settles — instant (the wallet), manual (a
-     * card transfer and its receipt), null for a driver no longer installed.
+     * A way to pay: its label and how its driver settles — instant (the wallet), manual (a card transfer), null for a
+     * driver no longer installed.
      *
      * @return array{id: int, label: string, kind: string|null}
      */

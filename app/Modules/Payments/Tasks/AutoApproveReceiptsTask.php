@@ -15,11 +15,9 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Psr\Log\LoggerInterface;
 
 /**
- * Support may be away: a card-to-card method can carry a review window (`auto_approve_after` minutes) after which a
- * receipt nobody looked at is accepted on its own — the order is delivered and the customer told, as when support
- * approves (PaymentActions::autoApprove(), under the same rule: a receipt whose order was paid another way meanwhile is
- * support's to sort out). Only a receipt sent in the bot — by a Telegram account —: one uploaded from the website, whose
- * account an email address alone may have made, always waits for support. Runs every minute, in every shop.
+ * Accepts receipts nobody reviewed within their card method's review window, as support would (PaymentActions::
+ * autoApprove()). Only receipts sent in the bot: one uploaded from the website — whose account may be a throwaway email —
+ * always waits for support. Every minute, in every shop.
  */
 final class AutoApproveReceiptsTask implements Task
 {
@@ -38,10 +36,7 @@ final class AutoApproveReceiptsTask implements Task
         }
     }
 
-    /**
-     * The method's receipts sent in the bot waiting past its window, oldest first — a method without one leaves every
-     * receipt to support, and so does every method an uploaded one.
-     */
+    /** Approves the method's bot receipts waiting past its window, oldest first. */
     private function approve(PaymentMethod $method, int $window): void
     {
         $due = Payment::query()

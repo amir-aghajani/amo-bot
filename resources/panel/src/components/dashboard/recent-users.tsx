@@ -9,10 +9,7 @@ import { UserIdentity, userPage } from '@/components/user-identity'
 import type { RecentUser } from '@/lib/api-types'
 import { timeAgo } from '@/lib/format'
 
-/**
- * The customers who joined last — each name the way to their page —, as a section of the overview with a link to the
- * users; «—» when they could not be read (`users` undefined, no longer `loading`).
- */
+/** The newest customers on the overview, linked to their pages; «—» when they could not be read. */
 export function RecentUsers({ users, loading }: { users: RecentUser[] | undefined; loading?: boolean }) {
   return (
     <section aria-labelledby="recent-users" className="grid gap-3">

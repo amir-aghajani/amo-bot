@@ -27,22 +27,18 @@ export function useOwner() {
   return { login, changeCredentials, recoveryKey, recover }
 }
 
-/**
- * Every shop the owner may open — the main bot's first; live: an agent's new shop shows up (the `agency` area). The shop
- * picker's, a read of the shell's own: behind the page's (`useShellReads()`).
- */
+/** Every shop the owner may open, the main bot's first (the shop picker's read; a shell read, after the page's). */
 export function useShops() {
   return useQuery({ queryKey: queryKeys.shops, queryFn: () => api.get<ShopsResponse>('/shops').then((data) => data.shops), enabled: useShellReads() })
 }
 
-/** A press the page handles itself: the main button, no key that asks the browser for a new tab or window. */
+/** A press the page handles itself: the main button with no key that asks for a new tab or window. */
 const plainPress = (event: MouseEvent) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
 
 /**
- * Opening a shop — the shop picker's, the agents list's: the unsaved-changes question first (every draft goes), then the
- * panel loaded afresh at the shop's dashboard, whose address names it (lib/config) — nothing of this shop's stays on
- * screen, in the cache or under way. `opening` is the shop being opened meanwhile. A link to a shop (`link(id)`) is its
- * address: opened in a new tab as any link is, and here, by a plain press, the same way.
+ * Opening a shop (the shop picker, the agents list): ask about unsaved drafts first, then load the panel afresh at the
+ * shop's dashboard address — nothing of the current shop stays in memory. `opening` is the shop being opened. `link(id)`
+ * gives a real link: a new tab opens it as any link, a plain press goes through `open`.
  */
 export function useOpenShop() {
   const [opening, setOpening] = useState<number | null>(null)

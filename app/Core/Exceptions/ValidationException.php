@@ -4,10 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Exceptions;
 
-/**
- * Input refused with a message under each field it concerns: the error handler answers it as a 422 with them under
- * `errors`, and a bot handler shows the one it needs.
- */
+/** Input refused with a message under each field concerned: a 422 with them under `errors`. */
 final class ValidationException extends DomainRuleException
 {
     /** @param array<string, list<string>> $errors */
@@ -18,13 +15,17 @@ final class ValidationException extends DomainRuleException
         parent::__construct($message);
     }
 
-    /** One field refused, its message the answer's too: what the screen shows over the form or in a toast. */
+    /** One field refused; its message is the answer's message too (what a screen shows in a toast). */
     public static function on(string $field, string $message): self
     {
         return new self([$field => [$message]], $message);
     }
 
-    /** @param array<string, list<string>> $errors */
+    /**
+     * Throw when there are errors.
+     *
+     * @param array<string, list<string>> $errors
+     */
     public static function ifAny(array $errors): void
     {
         if ($errors !== []) {

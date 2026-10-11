@@ -1,10 +1,9 @@
 import { shownTimeZone } from '@/lib/format'
 
 /*
- * The Persian (Jalali) calendar the date filters pick days in, on the browser's own Intl (its `persian` calendar) — no
- * date library. A day travels as the API takes it: a Gregorian calendar date, "2026-10-06" (`Day`); a Jalali one is
- * {year, month, day}, month 1 (فروردین) to 12. The arithmetic runs on UTC midnights, so no zone and no daylight saving
- * ever moves a day; today is the shop's, and the words and the digits are lib/format's.
+ * The Jalali calendar for the date filters, on the browser's own Intl `persian` calendar — no date library. A day
+ * travels as the API takes it, a Gregorian "2026-10-06" (`Day`); a Jalali date is {year, month 1–12, day}. The
+ * arithmetic runs on UTC midnights, so no zone or daylight saving ever moves a day. "Today" is the shop's day.
  */
 
 /** A calendar day as the API takes it: "YYYY-MM-DD", Gregorian. */
@@ -40,10 +39,7 @@ export function isDay(text: string): boolean {
 /** A moment's Gregorian date in a zone, in Latin digits — made once per zone. */
 const datesIn = new Map<string, Intl.DateTimeFormat>()
 
-/**
- * Today on the shop's calendar: the day it is now in the zone the panel's dates read in (lib/format — the shop's, once
- * /api/app said it), whatever zone the browser is in — the days a list's `from`/`to` name, as the server bounds them.
- */
+/** Today in the shop's zone, whatever the browser's: the day the server bounds a list's `from`/`to` by. */
 export function today(): Day {
   const { zone } = shownTimeZone()
   let dates = datesIn.get(zone)

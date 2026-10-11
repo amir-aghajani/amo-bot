@@ -324,7 +324,7 @@ describe('narrowing', () => {
 })
 
 describe('ordering', () => {
-  it('reads the list in its own order without a word of it, and another from the first page', async () => {
+  it('reads the default order without sending a sort, and another order from the first page', async () => {
     const result = await ordersList()
     expect(result.current.list.order).toEqual({ sort: 'created', dir: 'desc' })
     expect(result.current.list.ownOrder).toEqual({ sort: 'created', dir: 'desc' })

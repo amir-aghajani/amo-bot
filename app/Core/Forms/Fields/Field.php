@@ -8,11 +8,9 @@ use App\Core\Forms\FieldSpec;
 use App\Core\Forms\FieldType;
 
 /**
- * One field of a form (Form): the name a screen sends and shows it under, the key it is kept under — a
- * settings-table key, or a config.php setting —, what it is while nothing is kept, how a form's value is checked (FieldRefused
- * with the message under the field, in the admin's words) and how a kept value reads back: one the field would refuse
- * (written by hand, or under another rule) reads as its default. With a spec (FieldSpec) it describes itself to a
- * generic form (describe()): a driver's form is drawn from that alone.
+ * One field of a Form: the name a screen uses, the key it is kept under (a settings key, a config.php setting, a
+ * column), its default, how a submitted value is checked (FieldRefused, worded for the admin) and how a kept value
+ * reads back — a kept value the field would refuse reads as the default. With a FieldSpec it can describe itself.
  *
  * @template T
  */
@@ -64,10 +62,9 @@ abstract class Field
     }
 
     /**
-     * What this field's value says against the others' (all checked on their own already), or null when nothing.
+     * An error about this field's value against the others' (each already checked alone), or null.
      *
-     * @param array<string, mixed> $values The form's values as the save would leave them, by field name — a field
-     *                                     refused, or not shown (FieldSpec::$when), is not there
+     * @param array<string, mixed> $values The form's values after the save, by field name; refused or hidden fields are absent
      */
     public function conflict(array $values): ?string
     {
@@ -75,13 +72,11 @@ abstract class Field
     }
 
     /**
-     * What keeping the stored value says against the save while what it belongs with moved — a secret left blank while
-     * a field it is bound to moved (Secret::$boundTo) —, or null when nothing. A field that stands in for another hands
-     * this on, as it does conflict().
+     * An error about keeping the stored value while the fields it belongs with changed (a secret left blank while its
+     * address moved — Secret::$boundTo), or null. A field that wraps another passes this on, as it does conflict().
      *
      * @param array<string, mixed> $input
-     * @param array<string, mixed> $values The form's values as the save would leave them, by field name — a field
-     *                                     refused, or not shown, is not there: it does not move
+     * @param array<string, mixed> $values The form's values after the save, by field name; refused or hidden fields are absent
      * @param array<string, mixed> $before What each field held before, by name
      */
     public function leftBehind(array $input, array $values, array $before): ?string
@@ -90,8 +85,7 @@ abstract class Field
     }
 
     /**
-     * The field as a generic form draws it: what it holds, its words, where it is shown, its bounds and what it holds
-     * while nothing is kept — never a secret's.
+     * The field as a generic form draws it: type, words, visibility, bounds and default (never a secret's).
      *
      * @return array{name: string, type: string, label: string, hint: string|null, placeholder: string|null, required: bool, secret: bool, bound_to: list<string>, moved: string|null, advanced: bool, options: list<array{value: string, label: string}>, when: object, unit: string|null, min: int|float|null, max: int|float|null, ltr: bool, default: mixed}
      * @throws \LogicException for a field without a spec: every field of a described form has one
@@ -123,7 +117,7 @@ abstract class Field
     }
 
     /**
-     * The values it may take and their words, in order (a choice's).
+     * A choice's values and labels, in order.
      *
      * @return list<array{value: string, label: string}>
      */
@@ -138,8 +132,7 @@ abstract class Field
     }
 
     /**
-     * The least and the most a number of it may be — a number's, each of a list's, an amount's —; nulls where it has
-     * no bounds.
+     * The least and the most its numbers may be (a number, each of a list, an amount); nulls for no bound.
      *
      * @return array{0: int|float|null, 1: int|float|null}
      */
@@ -148,7 +141,7 @@ abstract class Field
         return [null, null];
     }
 
-    /** What its numbers are counted in («ثانیه»), when its messages say it. */
+    /** The unit its numbers are counted in («ثانیه»), if any. */
     protected function unit(): ?string
     {
         return null;

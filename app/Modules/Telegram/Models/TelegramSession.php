@@ -8,9 +8,8 @@ use App\Modules\Bots\Models\Concerns\BelongsToBot;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Conversation state per Telegram chat with a bot (e.g. "waiting for top-up amount") — the same chat with two bots is
- * two sessions. A customer is served in their private chat only, so the chat is theirs (`chat_id` is their Telegram id).
- * Read and written through Session\ChatSession.
+ * A chat's conversation state with one bot (two bots, two sessions), read and written through Session\ChatSession. The
+ * chat is the customer's private one, so `chat_id` is their Telegram id.
  *
  * @property int $id
  * @property int $chat_id

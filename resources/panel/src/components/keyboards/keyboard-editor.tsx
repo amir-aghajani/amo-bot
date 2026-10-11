@@ -42,10 +42,8 @@ const TYPE_HINT: Record<KeyboardType, string> = {
 }
 
 /**
- * One keyboard: its rows of buttons, edited in place — a button dragged anywhere (another spot, another row, a new row
- * under the last) or moved from its dialog, rows reordered (the moved row keeping the focus), either added or removed —
- * with a live preview beside it. A button is added while an action is left to place: each stands on the keyboard once.
- * Saves the whole layout.
+ * One keyboard's editor with a live preview: buttons dragged anywhere or moved from their dialog, rows reordered, added
+ * and removed. Each action appears once, so «افزودن دکمه» holds while none is left. Saves the whole layout.
  */
 export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, onSaved }: KeyboardEditorProps) {
   const draft = useKeyboardDraft(keyboard, limits, onSaved)

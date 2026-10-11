@@ -11,10 +11,9 @@ interface BotSettingsGroupOptions<T> {
 }
 
 /**
- * One group of the bot settings as a card's form: the draft starts from `initial` (the group's values as the form edits
- * them) and follows the server's; `save` PUTs the group as it is typed (`api.put('/bot/settings/wallet', values)`) — the
- * server reads numbers and lists the way an admin types them, Persian digits too — and the settings it answers with go
- * into the page's copy (the rest of the page's data, the QR background, stays).
+ * One bot-settings group as a card's form: the draft starts from `initial` and follows the server's copy; `save` PUTs
+ * the group as typed (the server reads numbers the way an admin types them), and the answered settings go into the
+ * page's cached copy.
  */
 export function useBotSettingsGroup<T extends object>(initial: T, save: (values: T) => Promise<BotSettingsSaved>, { invalidates, reads }: BotSettingsGroupOptions<T> = {}) {
   return useSettingsGroup<T, BotSettingsResponse, BotSettingsSaved>({

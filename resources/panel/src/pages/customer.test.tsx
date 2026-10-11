@@ -8,7 +8,7 @@ import { idLabel } from '@/lib/direction'
 import { queryKeys } from '@/lib/query-keys'
 import { CustomerPage, type CustomerPageProps } from '@/pages/customer'
 import { OWNER, testQueryClient, until } from '@/test/render'
-import { customerAccount, orderRow, paymentRow, subscriptionRow, ticketRow, userRow } from '@/test/rows'
+import { customerAccount, loyaltyStanding, orderRow, paymentRow, subscriptionRow, ticketRow, userRow } from '@/test/rows'
 import { json, refusal, server, type Answer } from '@/test/server'
 
 /*
@@ -25,6 +25,7 @@ const DETAIL: UserDetailResponse = {
   referral: { referrer: { id: 4, name: 'رضا', username: 'reza', telegram_id: 55, email: null }, referrals: 2, earned: '10000.00' },
   agency: null,
   account: customerAccount(),
+  loyalty: loyaltyStanding(),
 }
 
 const META = { page: 1, per_page: 25, total: 1, last_page: 1 }
@@ -135,6 +136,16 @@ describe('a customer’s page', () => {
     expect(within(card('تیکت‌ها')).queryByRole('link', { name: 'همه تیکت‌ها' })).toBeNull()
   })
 
+  it('names what a payment paid for as the payments screen does: an extra by its amount, not its service’s plan', async () => {
+    answers()
+    const extra = paymentRow({ order: { ...paymentRow().order, id: 31, type: 'extra_traffic', plan: 'طلایی', subscription_id: 1, traffic_bytes: 10 * 1024 ** 3 } })
+    server().on('GET', '/api/admin/payments', json({ payments: [extra], meta: { ...META, sort: 'created', dir: 'desc', awaiting_review: 1, paid: 0, paid_amount: '0.00' } } satisfies PaymentsResponse))
+    open()
+
+    await until(() => expect(within(card('پرداخت‌ها')).getByText('۱۰ گیگابایت')).toBeTruthy())
+    expect(within(card('پرداخت‌ها')).queryByText('طلایی')).toBeNull()
+  })
+
   it('opens a service in the subscriptions screen’s dialog', async () => {
     answers()
     // The dialog follows its row: it reads it again.
@@ -213,7 +224,7 @@ describe('a customer’s page', () => {
     await until(() => expect(within(card('پرداخت‌ها')).getByText('#7')).toBeTruthy())
   })
 
-  it('bans the customer after a second look, and says so at once', async () => {
+  it('bans the customer after confirmation, and shows it at once', async () => {
     answers()
     server().on('PATCH', '/api/admin/users/10', json({ user: { ...CUSTOMER, status: 'banned' } }))
     open()
@@ -231,7 +242,7 @@ describe('a customer’s page', () => {
     ).toEqual([{ status: 'banned' }])
   })
 
-  it('makes the customer a bot admin after a second look, by the role’s own address — never the account’s', async () => {
+  it('makes the customer a bot admin after confirmation, through the role’s own endpoint (not the account’s)', async () => {
     answers()
     server().on('PUT', '/api/admin/users/10/role', json({ user: { ...CUSTOMER, role: 'admin' } }))
     open()
@@ -288,7 +299,7 @@ describe('a customer the page cannot show', () => {
     expect(server().requests.map((request) => request.path)).toEqual(['/api/admin/auth/me'])
   })
 
-  it('stays as it was when a later read of the customer fails, the failure said above the cards', async () => {
+  it('stays as it was when a later read of the customer fails, with the failure shown above the cards', async () => {
     let failing = false
     answers()
     server().on('GET', '/api/admin/users/10', () => (failing ? refusal(500, 'خطای سرور.') : json(DETAIL)))

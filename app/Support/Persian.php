@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * Persian presentation helpers for everything the PHP side words for people (bot messages, API
- * error texts): Persian digits and Jalali dates. The React admin has its own copy in lib/format.ts.
+ * Persian digits, durations and Jalali dates for what the PHP side words for people (the bot, error messages). The
+ * panels have their own in lib/format.ts.
  */
 final class Persian
 {

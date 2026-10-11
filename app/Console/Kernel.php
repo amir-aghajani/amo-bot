@@ -19,10 +19,8 @@ use Symfony\Component\Console\Command\LazyCommand;
 use Symfony\Component\Console\CommandLoader\FactoryCommandLoader;
 
 /**
- * Builds the `bin/console` application. Register new commands in the list below.
- *
- * Each command is made only when it runs — its name and description are read off its #[AsCommand] — so the minute's
- * `schedule:run` does not build the poller, the bot's dispatcher and the rest along with it.
+ * Builds `bin/console`; register a new command in COMMANDS. Each is made only when it runs (its name and description
+ * read off #[AsCommand]), so the minute's `schedule:run` does not build the poller and the bot along with it.
  */
 final class Kernel
 {

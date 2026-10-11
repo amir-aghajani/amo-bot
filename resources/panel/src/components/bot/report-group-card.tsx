@@ -11,11 +11,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useMainShop } from '@/lib/auth'
 
 /**
- * The report group: a Telegram group with topics where the bot reports sales, renewals, receipts, newcomers and
- * failures — and, the main bot's, requests to become an agent —, each in its own topic. Not connected, the card walks
- * the admin through handing the bot a group — a Telegram link that adds the bot as an admin and connects the group, the
- * bot making the topics itself; connected, it shows the group, its topics, what is wrong and what waits to be sent,
- * with a test, a check and disconnecting. Every action applies at once.
+ * The report group: a Telegram group with a topic per subject (sales, receipts, failures…) where the bot reports. Not
+ * connected, the card walks the admin through connecting one; connected, it shows the group, its topics, any problem and
+ * the queue, with a test, a check and disconnecting. Every action applies at once.
  */
 export function ReportGroupCard() {
   // The agency's requests are reported in the main bot's group alone.

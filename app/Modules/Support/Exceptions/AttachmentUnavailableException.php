@@ -8,8 +8,8 @@ use App\Core\Exceptions\DomainRuleException;
 
 /**
  * A ticket message's picture is not there to show (404): the message has none, Telegram no longer hands it over, or the
- * file uploaded is gone from the shop's. Telegram out of reach is another answer (Telegram\Api\
- * TelegramUnreachableException, a 502): the picture is still there.
+ * uploaded file is gone. Telegram out of reach is a different answer (TelegramUnreachableException, a 502): the picture
+ * is still there.
  */
 final class AttachmentUnavailableException extends DomainRuleException
 {

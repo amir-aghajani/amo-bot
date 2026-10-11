@@ -16,10 +16,8 @@ import { queryKeys } from '@/lib/query-keys'
 const ACCEPT = 'image/png,image/jpeg,image/webp'
 
 /**
- * The picture QR codes are drawn on: a preview of the one in use, an upload that replaces it at once — the largest it
- * takes said up front, the server's own limit —, and a way back to the shipped picture. Not a form — each action applies
- * as it happens; a refusal is said on the card. A picture's size in pixels is a measure of the file, written as such:
- * Latin digits, no separators («1024×1024»).
+ * The picture QR codes are drawn on: a preview, an upload that replaces it at once (the size limit said up front) and a
+ * way back to the shipped picture. Not a form: each action applies immediately and a refusal shows on the card.
  */
 export function QrBackgroundCard({ background }: { background: QrBackgroundInfo }) {
   const queryClient = useQueryClient()

@@ -29,17 +29,10 @@ use Slim\Psr7\UploadedFile;
 use Tests\Support\ApiDescription;
 
 /**
- * Sends PSR-7 requests straight into the Slim app (no web server). The session is the in-memory
- * CLI store, so login state carries across requests inside one test and is reset between tests;
- * the shop the owner's panel works in is the one its requests that follow name (openShop()), and a
- * website's customer the bearer token they carry (bearer()) — one of the shop's admins on its website
- * too (loginAsStaff()).
- * The shop under test counts as installed (its lock is the run's own, never this machine's
- * storage/), and its sign-in attempts start from none. Both sides of every API call are held to
- * resources/api/openapi.yaml, the contract the panels' types are generated from — as Support\ApiDescription
- * reads it, the website's admins' paths added —: the request on its way in — its path, query and body
- * (unchecked() lets one malformed request through, for a test of its refusal) — and the answer on its
- * way back.
+ * Sends PSR-7 requests straight into the Slim app. The session is the CLI's in-memory one, so a sign-in lasts the test;
+ * openShop() names the owner's shop and bearer() carries a website customer's token on the requests that follow. The
+ * shop counts as installed. Both sides of every API call are validated against resources/api/openapi.yaml (with the
+ * website admins' paths, ApiDescription): the request on its way in (unless unchecked()) and the answer on its way back.
  */
 abstract class HttpTestCase extends DatabaseTestCase
 {
@@ -77,7 +70,7 @@ abstract class HttpTestCase extends DatabaseTestCase
         parent::tearDown();
     }
 
-    /** resources/api/openapi.yaml, the website's admins' paths added (Support\ApiDescription): read once a run for every test that checks against it. */
+    /** The API description with the website admins' paths (ApiDescription), read once a run. */
     public static function apiDescription(): OpenApi
     {
         return ApiDescription::openApi();
@@ -94,7 +87,7 @@ abstract class HttpTestCase extends DatabaseTestCase
         }
     }
 
-    /** Put the panel's login into config (what config.php would hold); null = no login configured. */
+    /** Set the owner's panel login in the configuration; null for none. */
     protected function configureAdmin(?string $username = self::ADMIN_USERNAME, string $password = self::ADMIN_PASSWORD): void
     {
         $config = $this->service(Config::class);
@@ -102,10 +95,7 @@ abstract class HttpTestCase extends DatabaseTestCase
         $config->set('admin.password', $username === null ? '' : password_hash($password, PASSWORD_DEFAULT, ['cost' => 4]));
     }
 
-    /**
-     * Open the owner's session (/api/admin) — the login config.php holds (configureAdmin()) —, as signing in does: for a
-     * test that is not about signing in.
-     */
+    /** Open the owner's panel session directly, for a test that is not about signing in. */
     protected function loginAsAdmin(): void
     {
         $username = (string) $this->service(Config::class)->get('admin.username');
@@ -131,20 +121,15 @@ abstract class HttpTestCase extends DatabaseTestCase
         return (string) ($fragment['code'] ?? '');
     }
 
-    /**
-     * The owner opens this bot's shop in their panel: the requests that follow to the owner's API (/api/admin) name it,
-     * as the panel's tab names its shop on every request (`X-Shop`) — the main bot's named too.
-     */
+    /** Make the requests that follow to /api/admin name this bot's shop (`X-Shop`), as a panel tab does. */
     protected function openShop(Bot $bot): void
     {
         $this->shop = $bot->id;
     }
 
     /**
-     * One of the shop's admins signed in on its website as its admin API takes them (Store\Http\StaffMiddleware): the
-     * customer made an admin of the shop, the website letting its admins in, and a session of theirs signed in with
-     * Telegram (a strong sign-in) a moment ago (a recent one) — the requests that follow carry its token (bearer()). What
-     * the website grants them is the test's.
+     * Sign `$user` in as one of the shop's admins on its website: made an admin, the website letting admins in, a fresh
+     * strong (Telegram) session whose token the requests that follow carry. Grants are the test's to set.
      */
     protected function loginAsStaff(Website $website, User $user): void
     {
@@ -169,10 +154,8 @@ abstract class HttpTestCase extends DatabaseTestCase
     }
 
     /**
-     * Let the next request go out as it is, not held to the API description — for a test whose point is a request no
-     * panel sends (a field of the wrong type, a required one missing, a value outside its enum, a field the operation
-     * does not take) and the server's refusal of it. Its answer is still checked; a request that does match the
-     * description fails the test, so the call never outlives its reason.
+     * Send the next request without validating it, for a test of a request no panel sends and its refusal. Its answer
+     * is still validated, and a request that does match the description fails the test.
      */
     protected function unchecked(): static
     {
@@ -211,8 +194,8 @@ abstract class HttpTestCase extends DatabaseTestCase
     }
 
     /**
-     * A state-changing call as the SPA makes it: JSON in, and the X-Requested-With header the API's
-     * CSRF guard asks for. `send()` is the bare request, for the test of that guard.
+     * A call as the panels make it: JSON, and the X-Requested-With header the CSRF guard asks for (send() is the bare
+     * request).
      *
      * @param array<string, mixed>|null $body
      */
@@ -244,8 +227,7 @@ abstract class HttpTestCase extends DatabaseTestCase
     }
 
     /**
-     * POST one file as a multipart upload (`$field`), the way a browser form does — with the form's other fields
-     * (`$fields`, as PHP parses them), and a website customer's bearer token while the requests carry one (bearer()).
+     * POST one file as a multipart upload (`$field`) with the form's other `$fields`, as a browser form does.
      *
      * @param array<string, string> $fields
      */
@@ -263,10 +245,7 @@ abstract class HttpTestCase extends DatabaseTestCase
         return $this->handle($this->carrying($request));
     }
 
-    /**
-     * What a request carries of the ones that follow (bearer(), openShop()): a website customer's bearer token, and the
-     * shop the owner opened on a request of the owner's panel.
-     */
+    /** Add what the requests carry (openShop()'s `X-Shop` on /api/admin, bearer()'s token). */
     private function carrying(ServerRequestInterface $request): ServerRequestInterface
     {
         if ($this->shop !== null && str_starts_with($request->getUri()->getPath(), '/api/admin/')) {
@@ -277,10 +256,9 @@ abstract class HttpTestCase extends DatabaseTestCase
     }
 
     /**
-     * The request through the app, both ways held to what resources/api/openapi.yaml says of its operation: the request
-     * before it goes in (unless the test let it through unchecked()), the answer as it comes back — its status, its
-     * content type and every field of its JSON (objects there are closed: a field the description lacks fails too). A
-     * route the description does not have fails, except an address that is nobody's route (a 404 or 405 is all it gets).
+     * Handle the request, validating both ways against its operation: the request (unless unchecked()) and the answer's
+     * status, content type and every field (objects are closed). A route the description lacks fails, unless it is no
+     * route at all (a 404 or 405).
      */
     private function handle(ServerRequestInterface $request): ResponseInterface
     {
@@ -324,8 +302,8 @@ abstract class HttpTestCase extends DatabaseTestCase
     }
 
     /**
-     * A request as its operation takes it — path, query and body, and no body at all where the operation describes
-     * none —, or, let through unchecked(), one that is not.
+     * Validate a request against its operation (no body where it describes none); with `$unchecked`, require that it
+     * does NOT match.
      */
     private function checkRequest(OperationAddress $operation, ServerRequestInterface $request, bool $unchecked): void
     {

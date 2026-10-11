@@ -10,8 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * One line of a customer's wallet, append-only (Services\WalletService): what moved and why, and the balance from
- * then on — the last line's is the wallet's balance (User::balance()).
+ * One append-only line of a customer's wallet (Services\WalletService), with the balance after it — the last line's is
+ * the wallet's balance.
  *
  * @property int $id
  * @property int $user_id

@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Notifications;
 
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Telegram\Api\BotApi;
@@ -21,12 +22,10 @@ use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Support\Persian;
 
 /**
- * A service as the bot shows it — in words (the values every service text offers) and as its QR card (the subscription
- * link drawn as a QR code, the words its caption) — and what a paid order brought its customer. send() is the one place
- * a service goes out (a delivery in the bot or after a receipt's approval, a link changed, a service moved) and show()
- * the one place it takes the place of the message a customer tapped (the service screen's «لینک اشتراک»): the card when
- * the bot is set to make one and GD can draw it and the words fit under it as a caption, the words alone otherwise — a
- * missing picture never costs the customer the link.
+ * A service as the bot shows it: the values every service text is filled with, and the QR card of its link with the
+ * text as caption. send() is the one place a service goes out (a delivery, a new link, a move) and show() puts it in
+ * place of a tapped message. The card is used when the setting is on, GD can draw it and the text fits a caption;
+ * otherwise the text goes alone — a missing picture never costs the customer their link.
  */
 final class ServiceCard
 {
@@ -42,10 +41,8 @@ final class ServiceCard
     ) {}
 
     /**
-     * What every text about one service is filled with: the client's name on the panel, plan, server (its «لوکیشن»),
-     * the term (`duration`) or when it ends (`expires`), the quota (`traffic`) and what is left of it (`remaining`), and
-     * the one subscription link as the row keeps it — never the per-inbound config links (a panel with thirty inbounds
-     * would make a wall of them; the link carries them all and updates itself).
+     * What every text about one service is filled with. The link is the one subscription link the row keeps, never the
+     * per-inbound config links (a panel with thirty inbounds would make a wall of them; the link carries them all).
      *
      * @return array{client: string, plan: string, server: string, duration: string, expires: string, traffic: string, remaining: string, subscription: string}
      */
@@ -57,8 +54,8 @@ final class ServiceCard
             'client' => $subscription->remote_name,
             'plan' => $subscription->plan->name ?? '',
             'server' => $subscription->server->name,
-            'duration' => Messages::duration($subscription->duration_days),
-            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_days),
+            'duration' => Messages::duration($subscription->duration_hours),
+            'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
             'traffic' => Messages::traffic($subscription->traffic_limit_bytes),
             'remaining' => $remaining === null ? Messages::UNLIMITED : Messages::bytes($remaining),
             'subscription' => $subscription->subscription_url,
@@ -76,10 +73,8 @@ final class ServiceCard
     }
 
     /**
-     * The service sent to a chat: its QR card with the text — why it comes: delivered (PaySuccess), a fresh link
-     * (LinkRotated), moved (ServiceMoved), rendered with the service's values (text()), or those words made already: a
-     * notice keeps for the website the very words the card carries — as the caption, or the text alone. `$options` (a
-     * reply target, buttons) apply either way.
+     * Send the service to a chat as its QR card with `$text` as caption, or the text alone. `$text` is a BotText to
+     * render with the service's values, or words made already (a notice keeps the very words it sent).
      *
      * @param array<string, mixed> $options
      * @return array<string, mixed> The message sent
@@ -96,8 +91,7 @@ final class ServiceCard
     }
 
     /**
-     * The same in place of the message whose button asked for it: the text edited into it, or the QR card — edited in
-     * where Telegram allows, the message replaced by it otherwise (Context::editPhoto()).
+     * The same in place of the tapped message: the text edited in, or the QR card (Context::editPhoto()).
      *
      * @param array<string, mixed> $options
      */
@@ -115,9 +109,8 @@ final class ServiceCard
     }
 
     /**
-     * What a fulfilled order brought, sent to its customer's chat: a new service as its card (send()), a renewal (the
-     * link has not changed), a wallet top-up or an agent's traffic as its text — settledText(), or `$text` when the
-     * caller made it already (a notice, which keeps those words).
+     * Send what a fulfilled order brought: a new service as its card, anything else (whose link did not change) as text.
+     * `$text` replaces settledText() when the caller made it already (a notice).
      *
      * @param array<string, mixed> $options
      * @return array<string, mixed> The message sent
@@ -132,12 +125,17 @@ final class ServiceCard
         return $this->api->sendMessage($chatId, $text, $options);
     }
 
-    /** What a fulfilled order brought, in words: the new service, the renewed one, the wallet's new balance, an agent's traffic. */
+    /**
+     * What a fulfilled order brought, in words: the new service, the renewed one, the extra traffic or time on it, the
+     * wallet's new balance, an agent's traffic.
+     */
     public function settledText(Order $order): string
     {
         return match ($order->type) {
             OrderType::Purchase => $this->text(self::subscriptionOf($order), BotText::PaySuccess),
             OrderType::Renewal => $this->renewalText($order, BotText::Renewed),
+            OrderType::ExtraTraffic => $this->text(self::subscriptionOf($order), BotText::ExtraTrafficAdded, ['extra_traffic' => self::extraOf($order)]),
+            OrderType::ExtraTime => $this->text(self::subscriptionOf($order), BotText::ExtraTimeAdded, ['extra_time' => self::extraOf($order)]),
             OrderType::WalletTopUp => $this->texts->render(BotText::WalletCharged, ['balance' => Messages::balance($order->user->balance())]),
             OrderType::Traffic => $this->texts->render(BotText::AgencyTrafficAdded, [
                 'traffic' => Messages::bytes((int) $order->traffic_bytes),
@@ -152,14 +150,15 @@ final class ServiceCard
         return match ($order->type) {
             OrderType::Purchase => $this->texts->get(BotText::PayProvisionFailed),
             OrderType::Renewal => $this->texts->render(BotText::RenewFailed, ['client' => self::subscriptionOf($order)->remote_name]),
+            OrderType::ExtraTraffic, OrderType::ExtraTime => $this->texts->render(BotText::ExtraFailed, ['client' => self::subscriptionOf($order)->remote_name, 'extra' => self::extraOf($order)]),
             OrderType::WalletTopUp => $this->texts->get(BotText::TopupFailed),
             OrderType::Traffic => $this->texts->get(BotText::AgencyTrafficFailed),
         };
     }
 
     /**
-     * A renewal's text (Renewed, AutoRenewed): the renewed service and what became of the traffic it had left — queued
-     * behind the period in use, or carried (`%leftover%`).
+     * A renewal's text (Renewed, AutoRenewed) with `%leftover%`: what becomes of the traffic left — expiring with the
+     * current period, or carried over.
      *
      * @param array<string, scalar|Html> $extra The text's own values
      */
@@ -175,9 +174,8 @@ final class ServiceCard
     }
 
     /**
-     * A renewal queued behind the period in use, the shop not carrying what a period leaves unused: how much of the
-     * traffic left goes when that period ends, and what the renewed one starts with — under the service screen and the
-     * renewal messages; '' when nothing goes.
+     * With a renewal queued behind the current period: how much traffic expires when that period ends and what the next
+     * one starts with; '' when nothing expires.
      */
     public function periodNote(Subscription $subscription): Html|string
     {
@@ -201,10 +199,7 @@ final class ServiceCard
         return $this->renewal->carriesTraffic() && $planBytes > 0 && ($subscription->remainingBytes() ?? 0) > $planBytes;
     }
 
-    /**
-     * The QR card of the service's link: when the bot is set to make one, GD can draw it and the text fits under it as a
-     * caption (an admin's long wording goes as a plain message rather than not at all), else null.
-     */
+    /** The QR card's JPEG, or null when it is off, GD cannot draw it, or the text is too long for a caption. */
     private function card(Subscription $subscription, string $caption): ?string
     {
         if (!$this->settings->qrEnabled() || TelegramHtml::visibleLength($caption) > Limits::CAPTION) {
@@ -217,5 +212,13 @@ final class ServiceCard
     private static function subscriptionOf(Order $order): Subscription
     {
         return $order->subscription ?? throw new \LogicException("Order #{$order->id} has no subscription.");
+    }
+
+    /** What an order of extra traffic or time brings, in words: «۱۰ گیگابایت», «۷ روز». */
+    private static function extraOf(Order $order): string
+    {
+        $kind = ExtraKind::of($order->type) ?? throw new \LogicException("Order #{$order->id} buys no extra.");
+
+        return $kind->words($kind->quantityOf($order));
     }
 }

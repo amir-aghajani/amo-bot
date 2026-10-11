@@ -13,12 +13,10 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Guards what changes how a customer's account is signed in to — a way in added or taken away, the password, two-factor
- * sign-in, a merge (the routes it is added to, inside CustomerAuthMiddleware's group): the session must have proven a
- * way into the account within CustomerSessions::RECENT_SECONDS — its sign-in, or POST /me/reauthenticate since —, so a
- * bearer token alone, one that leaked, cannot take the account over. Otherwise a 403 whose `WWW-Authenticate` asks for a
- * more recent sign-in (RFC 9470's `insufficient_user_authentication`, its `max_age` the seconds a proof lasts) — never
- * a 401, which says the session ended.
+ * Guards what changes how an account is signed in to (ways in, the password, two-factor sign-in, a merge): the session
+ * must have proven a way in within CustomerSessions::RECENT_SECONDS, so a leaked bearer token alone cannot take the
+ * account over. Otherwise a 403 whose `WWW-Authenticate` asks for a more recent sign-in (RFC 9470) — never a 401, which
+ * would tell the site the session ended.
  */
 final class RecentSignInMiddleware implements MiddlewareInterface
 {

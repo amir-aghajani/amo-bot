@@ -9,7 +9,6 @@ use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderActions;
-use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Telegram\Update\GroupHandler;
@@ -17,12 +16,8 @@ use App\Modules\Telegram\Update\Update;
 use Psr\Log\LoggerInterface;
 
 /**
- * «🔁 تلاش دوباره برای تحویل» under a failed delivery in the errors topic: a paid order whose delivery failed (a panel out
- * of reach, say) delivered again — by the bot's admins only (GroupButtons::admin()), the orders screen's retry
- * (OrderActions::retry(): its rules, the customer told only when it worked). What came of it reaches the group as
- * reports do: delivered, the sale's report and, under the failure, that it was — the button gone; failed again, a new
- * failure report with the button under the old one, which then loses its own (the button stays meanwhile, for another
- * try).
+ * «🔁 تلاش دوباره برای تحویل» under a failed delivery, for bot admins only: the orders screen's retry
+ * (OrderActions::retry()). The outcome reaches the group as reports do; a repeated failure keeps the button for another try.
  */
 final class DeliveryRetry implements GroupHandler
 {
@@ -38,7 +33,6 @@ final class DeliveryRetry implements GroupHandler
     private const FAILED_AGAIN = 'تحویل باز هم ناموفق بود. علت: %s';
 
     public function __construct(
-        private readonly BotApi $api,
         private readonly GroupButtons $groupButtons,
         private readonly OrderActions $orders,
         private readonly LoggerInterface $logger,
@@ -50,30 +44,24 @@ final class DeliveryRetry implements GroupHandler
         return InlineKeyboard::make()->row(InlineKeyboard::callback(self::LABEL, CallbackData::build(self::PREFIX, $orderId), 'primary'))->build()['inline_keyboard'];
     }
 
-    /** A press on the button, from a group. */
+    /** A press on the button. */
     public function handle(Update $update): void
     {
-        $callbackId = (string) $update->callbackId();
         $args = $update->callbackArgs(self::PREFIX) ?? [];
         if (count($args) !== 1 || !ctype_digit($args[0])) {
-            $this->api->answerCallbackQuery($callbackId);
+            $this->groupButtons->answer($update);
 
             return;
         }
 
-        $admin = GroupButtons::admin($update->from());
+        $admin = $this->groupButtons->presser($update, self::NOT_ADMIN);
         if ($admin === null) {
-            $this->api->answerCallbackQuery($callbackId, self::NOT_ADMIN, alert: true);
-
             return;
         }
 
-        $chatId = (int) $update->chatId();
-        $messageId = (int) $update->messageId();
         $order = Order::query()->with(['payments', 'user'])->find((int) $args[0]);
         if ($order === null) {
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, self::NOT_FOUND, alert: true);
+            $this->groupButtons->dismiss($update, self::NOT_FOUND);
 
             return;
         }
@@ -81,20 +69,19 @@ final class DeliveryRetry implements GroupHandler
         try {
             $this->orders->retry($order);
         } catch (ValidationException $e) {
-            // Delivered meanwhile, its money given back, or being delivered elsewhere this moment: nothing to retry here.
-            $this->groupButtons->set($chatId, $messageId, null);
-            $this->api->answerCallbackQuery($callbackId, $e->getMessage(), alert: true);
+            // Delivered meanwhile, refunded, or being delivered elsewhere right now: nothing to retry here.
+            $this->groupButtons->dismiss($update, $e->getMessage());
 
             return;
         }
 
         $this->logger->info('Order {id} retried from the report group by {admin}: {status}', ['id' => $order->id, 'admin' => Reviewers::forAdmin($admin), 'status' => $order->status->value]);
         if ($order->status !== OrderStatus::Fulfilled) {
-            $this->api->answerCallbackQuery($callbackId, sprintf(self::FAILED_AGAIN, trim((string) ShopReports::failure($order))), alert: true);
+            $this->groupButtons->answer($update, sprintf(self::FAILED_AGAIN, trim((string) ShopReports::failure($order))), alert: true);
 
             return;
         }
-        $this->groupButtons->set($chatId, $messageId, null);
-        $this->api->answerCallbackQuery($callbackId, self::DELIVERED);
+        $this->groupButtons->buttons($update, null);
+        $this->groupButtons->answer($update, self::DELIVERED);
     }
 }

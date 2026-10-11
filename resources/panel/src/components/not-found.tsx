@@ -6,7 +6,7 @@ import { useTitleSubject } from '@/lib/document-title'
 export const NOT_FOUND_TITLE = 'صفحه پیدا نشد'
 
 /**
- * An address no page of the panel has (an old link, a mistyped one, a page only the other panel has): said in the shell,
+ * An address no page of the panel has (an old link, a mistyped one, a page only the other panel has): shown in the shell,
  * whose sidebar still leads anywhere, with the way back and to the dashboard.
  */
 export function NotFoundPage() {

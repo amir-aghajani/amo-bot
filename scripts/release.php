@@ -110,7 +110,7 @@ if (is_string($secret) && trim($secret) !== '') {
 /**
  * The manifest the shops' updater reads (Modules\Updates\Manifest): the version, the zip's name, size and sha256, the
  * oldest PHP and the extensions composer.json asks for, and the app's top-level paths the release replaces — all but
- * storage/, the shop's own.
+ * storage/, which holds the shop's data.
  */
 function manifest(string $root, string $stage, string $zip, string $version): string
 {

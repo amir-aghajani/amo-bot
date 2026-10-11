@@ -12,10 +12,8 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * CSRF protection for the session-authenticated JSON API: state-changing requests must carry
- * the X-Requested-With header. Browsers cannot attach custom headers cross-origin without a CORS
- * preflight (which the shop answers for its websites' API alone — a bearer token, no cookie —,
- * never for a panel's), so a forged form post from another site is rejected.
+ * CSRF protection for the session-authenticated APIs: a request that changes something must carry X-Requested-With.
+ * A browser cannot add that header cross-origin without a CORS preflight, which the shop never grants a panel's API.
  */
 final class JsonCsrfMiddleware implements MiddlewareInterface
 {

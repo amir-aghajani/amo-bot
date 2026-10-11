@@ -6,7 +6,7 @@ import { CustomerFilter } from '@/components/customer-filter'
 import type { PaymentsResponse, UserDetailResponse } from '@/lib/api-types'
 import { PaymentsPage } from '@/pages/payments'
 import { providers, testQueryClient, until } from '@/test/render'
-import { customerAccount, paymentRow, userRow } from '@/test/rows'
+import { customerAccount, loyaltyStanding, paymentRow, userRow } from '@/test/rows'
 import { json, server, type SentRequest } from '@/test/server'
 
 /*
@@ -15,7 +15,7 @@ import { json, server, type SentRequest } from '@/test/server'
  * filter. It rides in the list's address like the others: the list reads it, and the address drops it once let go.
  */
 
-const DETAIL: UserDetailResponse = { user: userRow({ id: 12 }), referral: { referrer: null, referrals: 0, earned: '0.00' }, agency: null, account: customerAccount() }
+const DETAIL: UserDetailResponse = { user: userRow({ id: 12 }), referral: { referrer: null, referrals: 0, earned: '0.00' }, agency: null, account: customerAccount(), loyalty: loyaltyStanding() }
 
 describe('the pill', () => {
   it('names the customer once their read is in, and leads to their page', async () => {
@@ -29,7 +29,7 @@ describe('the pill', () => {
     await until(() => expect(within(pill).getByRole('link', { name: 'امیر' }).getAttribute('href')).toBe('/users/12'))
   })
 
-  it('lets go of the filter with its ✕, in the words of what the customer is to the list', () => {
+  it('clears the filter with its ✕, labelled with the customer’s role in the list', () => {
     server().on('GET', '/api/admin/users/12', json(DETAIL))
     const onClear = vi.fn()
     render(<CustomerFilter value="12" label="معرف" onClear={onClear} />, { wrapper: providers().wrapper })

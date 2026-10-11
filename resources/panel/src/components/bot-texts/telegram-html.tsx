@@ -6,10 +6,7 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-/**
- * The wording with each variable's sample in its place, in one pass (a sample is never read again for
- * variables) — escaped for a text Telegram reads as HTML, the way the bot escapes a real value.
- */
+/** The wording with each variable replaced by its sample in one pass, escaped as the bot escapes a real value. */
 export function fillSamples(template: string, samples: Record<string, string>, html: boolean): string {
   return template.replace(VARIABLE, (token, name: string) => {
     const sample = samples[name]
@@ -21,10 +18,7 @@ export function fillSamples(template: string, samples: Record<string, string>, h
 /** A document of its own to read wordings in — never shown: nothing in it loads or runs. */
 let reader: Document | undefined
 
-/**
- * The text's body as the browser parses it — as a <body>'s content, so the line breaks a part starts with stay its own
- * — in one inert document for every wording: a list of them reads each as it draws its row.
- */
+/** Parses a wording as a <body>'s content (so a part's leading line breaks survive), in one shared inert document. */
 function parse(html: string): HTMLElement {
   reader ??= document.implementation.createHTMLDocument('')
   const body = reader.createElement('body')
@@ -38,19 +32,14 @@ export function plainText(html: string): string {
   return text.replace(/\n{2,}/g, '\n').trim()
 }
 
-/**
- * How long what the customer sees is — tags out, entities read — as Telegram counts it, and the server with it: in
- * UTF-16 units (a string's own length), an emoji beyond the basic plane two. Markup, a premium emoji's long tag above
- * all, costs nothing.
- */
+/** The visible length of a wording as Telegram (and the server) counts it: UTF-16 units of the text without its markup. */
 export function visibleLength(html: string): number {
   return (parse(html).textContent ?? '').length
 }
 
 /**
- * Telegram HTML as Telegram shows it: the tags it knows become their look, anything else is only its
- * text — built as React elements from the parsed tree, never injected, so the admin's text is inert.
- * A link is not followed from the preview.
+ * Telegram HTML rendered as Telegram shows it, built as React elements from the parsed tree (never injected), so the
+ * admin's text is inert. Unknown tags show as text; links are not followed.
  */
 export function TelegramHtml({ html }: { html: string }) {
   const nodes = useMemo(() => Array.from(parse(html).childNodes), [html])

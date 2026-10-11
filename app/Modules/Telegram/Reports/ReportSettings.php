@@ -11,10 +11,8 @@ use App\Modules\Settings\DeclaresSettings;
 use App\Modules\Settings\Services\Settings;
 
 /**
- * Which topics of the report group the admin wants (the `reports` group of the bot settings, a switch per topic — all
- * on until switched off; every bot its own). The agency's topic is the main bot's alone: agency requests and traffic
- * purchases are reported to the shop's own group, so an agent's group has no such topic and its bot no switch for it.
- * The group itself — which one is connected, what keeps reports from it — is runtime state, ReportGroupState's.
+ * Which report topics the admin wants: the `reports` group of the bot settings, a switch per topic, all on by default.
+ * An agent's bot has no agency topic: agency news goes to the main bot's group.
  */
 final class ReportSettings implements DeclaresSettings
 {

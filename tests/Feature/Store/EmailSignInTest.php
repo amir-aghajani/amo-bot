@@ -22,10 +22,8 @@ use Tests\Fakes\RecordingMailTransport;
 use Tests\HttpTestCase;
 
 /**
- * Signing in on the shop's website with an email and its password — either wrong is one answer, a failure counted
- * against the address and against the account of its shop (a success clears nobody's count), the hash made again once
- * PHP's default moved on —, and a forgotten password: a code to the address when it has an account (an email saying it
- * has none otherwise, and the same answer), then the new password with it, every other session ended, signed in.
+ * Email and password sign-in (one answer for a wrong address or password, failures counted per address and account, the
+ * hash upgraded) and the forgotten-password flow.
  */
 final class EmailSignInTest extends HttpTestCase
 {

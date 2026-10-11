@@ -13,8 +13,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Exception\HttpNotFoundException;
 
 /**
- * «متن‌های ربات»: every text the bot sends a customer, by group — what it is, where it shows, its
- * `%variables%`, the shop's wording and the admin's — and the admin's rewording of one, or its reset.
+ * «متن‌های ربات»: every text the bot sends a customer, by group (what it is, where it shows, its `%variables%`, the default
+ * and the admin's wording), and one reworded or reset.
  */
 final class BotTextsController extends ApiController
 {
@@ -27,7 +27,7 @@ final class BotTextsController extends ApiController
     }
 
     /**
-     * PUT /bot/texts/{key} — {value}; the default's own wording is the same as a reset.
+     * PUT /bot/texts/{key} — {value}; saving the default's own wording is a reset.
      *
      * @param array<string, string> $args
      */
@@ -40,7 +40,7 @@ final class BotTextsController extends ApiController
     }
 
     /**
-     * POST /bot/texts/{key}/reset — back to the shop's wording.
+     * POST /bot/texts/{key}/reset — back to the default wording.
      *
      * @param array<string, string> $args
      */
@@ -53,7 +53,7 @@ final class BotTextsController extends ApiController
     }
 
     /**
-     * The text the route names; one the bot does not have — or never says in this shop (an agent's has no agency) — is a 404.
+     * The text the route names; one the bot does not have, or never says in this shop (an agent's has no agency), is a 404.
      *
      * @param array<string, string> $args
      */

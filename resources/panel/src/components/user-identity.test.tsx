@@ -39,7 +39,7 @@ describe('one line about a customer', () => {
   })
 })
 
-describe('a customer told from every other', () => {
+describe('a customer distinguished from every other', () => {
   it('is the name with the handle, else with the Telegram id — two «࿐Âmîr™» are two people', () => {
     expect(distinctUserLabel({ ...AMIR, name: '࿐Âmîr™' })).toBe(`${isolate('࿐Âmîr™')} (${isolate('@amir')})`)
     expect(distinctUserLabel({ ...AMIR, name: '࿐Âmîr™', username: null })).toBe(`${isolate('࿐Âmîr™')} (${isolate('123456789')})`)

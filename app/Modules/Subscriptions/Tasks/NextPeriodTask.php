@@ -14,12 +14,10 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Renewals queued behind a paid period, with the shop not carrying what a period leaves unused: once that period has
- * ended (`period_ends_at`), what remains is capped at the renewed traffic and counted afresh
- * (ProvisioningService::startNextPeriod()). A panel out of reach — or one the shop leaves alone a while, or a service
- * another change holds — is tried again on a later run; until then the customer keeps what they had. A service deleted
- * since the run read it has nothing to start, and one that breaks on a fault of the shop's own is logged: neither stops
- * the others. Each start asks its panel, so the run stops at its share of the scheduler's time.
+ * Starts the renewed periods that are due (every 10 minutes, each shop): once a queued period's `period_ends_at` has
+ * passed, what remains is capped at the renewed traffic (ProvisioningService::startNextPeriod()). A panel out of reach
+ * or in backoff, or a service another change holds, is tried again on a later run — the customer keeps what they had
+ * meanwhile. A service deleted since the run read it is skipped; one that breaks is logged and stops no other.
  */
 final class NextPeriodTask implements Task
 {

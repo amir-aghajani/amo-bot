@@ -7,15 +7,15 @@ namespace App\Modules\Subscriptions\Services;
 use App\Core\Forms\Fields\Number;
 use App\Core\Forms\Fields\Toggle;
 use App\Core\Forms\Form;
+use App\Modules\Catalog\Models\Plan;
 use App\Modules\Settings\DeclaresSettings;
 use App\Modules\Settings\Services\Settings;
 
 /**
- * The admin's renewal rules («تمدید سرویس» on the bot settings screen, two groups). `renewal`: the days left always
- * carry — a renewal adds the plan's days on top of the deadline —, the traffic left is the admin's call: added to the
- * renewed period, or usable only until the paid period ends and lost then. `auto_renew` («تمدید خودکار»): how many days
- * before its deadline a service whose switch is on is renewed from the customer's wallet, and whether a new service
- * starts with the switch on.
+ * The admin's renewal rules («تمدید سرویس» in the bot settings, two groups). `renewal`: whether the traffic a period
+ * leaves unused carries into the renewed one or is lost when the paid period ends (the days left always carry).
+ * `auto_renew` («تمدید خودکار»): how many days before its deadline a service is renewed from the wallet, and whether a
+ * new service starts with the switch on.
  */
 final class RenewalSettings implements DeclaresSettings
 {
@@ -50,9 +50,25 @@ final class RenewalSettings implements DeclaresSettings
         return $this->settings->read($this->autoRenewDays);
     }
 
+    /** That window in hours, the unit a term is counted in. */
+    public function autoRenewHours(): int
+    {
+        return $this->autoRenewDays() * ServiceTerms::HOURS_A_DAY;
+    }
+
     /** Whether a new service starts with the customer's «تمدید خودکار» on. */
     public function autoRenewByDefault(): bool
     {
         return $this->settings->read($this->autoRenewDefault);
+    }
+
+    /**
+     * Whether a service of `$plan` may renew itself: its term is at least the window. A shorter term (an hourly plan's)
+     * would leave the service still due after renewing, renewed again and again within one window; a plan that never
+     * ends (0) needs no renewal.
+     */
+    public function autoRenews(Plan $plan): bool
+    {
+        return $plan->duration_hours >= $this->autoRenewHours();
     }
 }

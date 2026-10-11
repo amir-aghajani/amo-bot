@@ -129,17 +129,17 @@ final class BotSubscriptionDetailTest extends BotTestCase
 
         $this->send($this->tap($this->screenButton()));
 
-        self::assertSame($this->screen($this->unused(Messages::expiry(null, 30), self::text(BotText::ServiceNeverConnected))), $this->params(0)['text'], 'no end date: waiting for the first connection');
+        self::assertSame($this->screen($this->unused(Messages::expiry(null, 30 * 24), self::text(BotText::ServiceNeverConnected))), $this->params(0)['text'], 'no end date: waiting for the first connection');
         $row = $this->subscription->refresh();
         self::assertNull($row->expires_at, 'the row follows the panel: no deadline yet');
-        self::assertSame(30, $row->duration_days);
+        self::assertSame(30 * 24, $row->duration_hours);
         self::assertTrue($row->awaitsFirstUse());
 
         // The customer connected: the panel turned the term into a deadline, and the row learns it.
         FakeProvider::put($this->server, new ClientInfo(name: 'ali_1', enabled: true, totalBytes: 30 * Traffic::GIGABYTE, expiry: Expiry::at(new \DateTimeImmutable('2026-10-21 08:00:00')), subscriptionUrl: self::LINK, lastOnlineAt: new \DateTimeImmutable('2026-09-21 08:00:00')));
         $this->send($this->tap($this->screenButton('refresh')));
 
-        $connected = $this->unused(Messages::expiry(new \DateTimeImmutable('2026-10-21 08:00:00'), 30), Persian::date(new \DateTimeImmutable('2026-09-21 08:00:00'), withTime: true));
+        $connected = $this->unused(Messages::expiry(new \DateTimeImmutable('2026-10-21 08:00:00'), 30 * 24), Persian::date(new \DateTimeImmutable('2026-09-21 08:00:00'), withTime: true));
         self::assertSame($this->screen($connected), $this->params(1)['text'], 'after the toast');
         $row = $this->subscription->refresh();
         self::assertSame('2026-10-21 08:00:00', $row->expires_at?->format('Y-m-d H:i:s'));
@@ -157,7 +157,7 @@ final class BotSubscriptionDetailTest extends BotTestCase
             'traffic' => Messages::traffic(30 * Traffic::GIGABYTE),
             'used' => Messages::bytes(31 * Traffic::GIGABYTE),
             'remaining' => Messages::bytes(0) . ' (' . Messages::percent(0, 30 * Traffic::GIGABYTE) . ')',
-            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-19 12:00:00'), 30),
+            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-19 12:00:00'), 30 * 24),
             'last_online' => self::text(BotText::ServiceNeverConnected),
             'connection' => self::text(BotText::ServiceOffline),
         ]), $this->params(0)['text']);
@@ -349,7 +349,7 @@ final class BotSubscriptionDetailTest extends BotTestCase
             'client' => 'ali_1',
             'plan' => $this->plan->name,
             'server' => $this->server->name,
-            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-19 12:00:00'), 30),
+            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-19 12:00:00'), 30 * 24),
             'traffic' => Messages::traffic(30 * Traffic::GIGABYTE),
             'subscription' => 'https://fake.test/sub/sub-rotated-1',
         ]), $link['text'], 'the new link, like a delivery');
@@ -477,7 +477,7 @@ final class BotSubscriptionDetailTest extends BotTestCase
             'traffic' => Messages::traffic(30 * Traffic::GIGABYTE),
             'used' => Messages::bytes($used),
             'remaining' => Messages::bytes(30 * Traffic::GIGABYTE - $used) . ' (' . Messages::percent(30 * Traffic::GIGABYTE - $used, 30 * Traffic::GIGABYTE) . ')',
-            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-19 12:00:00'), 30),
+            'expires' => Messages::expiry(new \DateTimeImmutable('2026-10-19 12:00:00'), 30 * 24),
             'last_online' => Persian::date(new \DateTimeImmutable(self::LAST_ONLINE), withTime: true),
             'connection' => self::text($online ? BotText::ServiceOnline : BotText::ServiceOffline),
         ];
@@ -494,7 +494,7 @@ final class BotSubscriptionDetailTest extends BotTestCase
             'traffic' => Messages::traffic(30 * Traffic::GIGABYTE),
             'used' => Messages::bytes(2 * Traffic::GIGABYTE),
             'remaining' => Messages::bytes(28 * Traffic::GIGABYTE) . ' (' . Messages::percent(28 * Traffic::GIGABYTE, 30 * Traffic::GIGABYTE) . ')',
-            'expires' => Messages::expiry($this->subscription->expires_at, 30),
+            'expires' => Messages::expiry($this->subscription->expires_at, 30 * 24),
             'last_online' => self::text(BotText::ServiceUnknown),
             'connection' => self::text(BotText::ServiceUnknown),
         ];

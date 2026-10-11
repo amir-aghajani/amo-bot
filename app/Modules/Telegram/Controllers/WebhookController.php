@@ -20,22 +20,18 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Log\LoggerInterface;
 
 /**
- * Receives the updates Telegram pushes: POST /webhooks/telegram/{secret} for the main bot, POST
- * /webhooks/telegram/bot/{bot}/{secret} for an agent's (its own secret, kept encrypted on its row). The secret is checked
- * both in the path and, when Telegram sends it, in the header, in constant time — first of all: a call that has it wrong
- * is refused alike whether or not there is such a bot, or it serves, so the answers tell nobody which bots are here. The
- * update is served in its bot's shop — once, though Telegram sends it again (the dispatcher knows it by its id) — and an
- * agent's within its bot's budget (AgentWebhookBudget: its agent can post there too); once it is answered, the reports
- * it (or anything before it) queued for that bot's report group go out. A call with a wrong secret is anyone's to make,
- * as often as they like: the log hears of REFUSALS_LOGGED of them a webhook in a window, enough to see someone at it —
- * at one bot's without hiding another's —, never a log they fill.
+ * Receives Telegram's pushed updates: /webhooks/telegram/{secret} for the main bot, /webhooks/telegram/bot/{bot}/{secret}
+ * for an agent's. The secret (path, and header when sent) is checked first, in constant time, and a wrong one gets the
+ * same 403 whether or not the bot exists, so the answers reveal no bots. An agent's updates are held to
+ * AgentWebhookBudget. After the update, the bot's queued reports go out. Wrong-secret calls are logged REFUSALS_LOGGED
+ * times a window per webhook, so nobody can fill the log.
  */
 final class WebhookController
 {
     /** Seconds an update may take (each panel call is bound by its own timeout, Telegram's by OUTGOING_HTTP_TIMEOUT). */
     private const TIME_LIMIT = 180;
 
-    /** The refused calls the log hears of in REFUSALS_WINDOW seconds, a webhook's — calls naming no agent's bot share one. */
+    /** Refused calls logged per webhook in REFUSALS_WINDOW seconds — calls naming no agent's bot share one count. */
     public const REFUSALS_LOGGED = 10;
 
     private const REFUSALS_WINDOW = 600;
@@ -86,11 +82,11 @@ final class WebhookController
         return $this->serve($response, $bot, $update);
     }
 
-    /** The update, in its bot's shop — a slow panel may keep it past Telegram's patience —, then the bot's reports. */
+    /** Serve the update in its bot's shop, then the bot's queued reports; always 200. */
     private function serve(Response $response, Bot $bot, Update $update): Response
     {
-        // A slow panel can keep this answer past Telegram's patience, or the host's: what was started is finished —
-        // half a purchase is worse than a late one (and the copy Telegram sends meanwhile is not served again).
+        // A slow panel may keep this past Telegram's patience: finish what was started (half a purchase is worse than a
+        // late one), and the copy Telegram sends meanwhile is not served again.
         LongRunning::keepGoing(self::TIME_LIMIT);
 
         CurrentBot::run($bot, function () use ($update): void {
@@ -119,16 +115,15 @@ final class WebhookController
     }
 
     /**
-     * A call with a wrong secret — at the webhook of bot `$named` (its address's number): a 403, told to the log while the
-     * webhook's window has room, and once that the rest of it goes untold. A window is a bot's (`$bot`); the calls naming
-     * none of the shop's agents' bots share one, so calls at one webhook never hide those at another.
+     * A wrong-secret call at bot `$named`'s webhook: a 403, logged while that webhook's window has room. Calls naming no
+     * agent's bot share one window, so calls at one webhook never hide those at another.
      */
     private function refused(Response $response, Request $request, string $named, ?int $bot): Response
     {
         try {
             $count = $this->counts->hit('webhook-refusals|' . ($bot ?? 'unknown'), self::REFUSALS_WINDOW);
         } catch (ThrottleUnavailableException) {
-            // Uncounted, they would fill the log: the throttle's folder says so where it matters (a sign-in's 500).
+            // Uncounted they would fill the log; the throttle's folder problem shows where it matters (a sign-in's 500).
             return $response->withStatus(403);
         }
         if ($count <= self::REFUSALS_LOGGED + 1) {

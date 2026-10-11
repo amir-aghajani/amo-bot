@@ -45,7 +45,7 @@ export function QueueBadge({ queue, counts }: { queue: Queue | undefined; counts
 
 /**
  * Of the queues of some nav entries, the most pressing one with something waiting — a red one before the rest —, for
- * where the counts are out of sight: a folded group, a group or a page on the icon rail (a dot, and its words).
+ * where the counts are out of sight: a folded group, a group or a page on the icon rail (a dot, its label in the control's name).
  */
 export function pressingQueue(counts: QueueCounts | undefined, queues: readonly (Queue | undefined)[]): Status | undefined {
   const waiting = queues.filter((queue): queue is Queue => queue !== undefined && (counts?.[queue] ?? 0) > 0).map((queue) => QUEUES[queue])

@@ -27,12 +27,9 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * Every request of the website that orders carries its Idempotency-Key: made again — a network's retry — it is
- * answered by the order that key came to — the one it made, or the open one of the same thing it found and paid —, as it
- * stands, whatever changed since (the plan switched off, the wallet spent, the price): never a second order, never a
- * second charge. Two made in the same moment make one order and get one answer — the key's row turns the second's order
- * away, the order's compare-and-swap its payment. A key that came to an order of something else is refused; one missing,
- * or malformed, too. A key is kept a week.
+ * Idempotency keys: a repeated ordering request is answered by its key's order as it stands, whatever changed since —
+ * never a second order or charge, even for two at once; a key reused for something else, missing or malformed is
+ * refused; keys are kept a week.
  */
 final class StoreCheckoutIdempotencyTest extends HttpTestCase
 {

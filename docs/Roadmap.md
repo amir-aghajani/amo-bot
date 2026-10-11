@@ -30,6 +30,9 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Referrals («زیرمجموعه‌گیری») and agency («نمایندگی»): invite links and commissions; agents' requests, levels, prepaid traffic and a bot of their own
 - ✅ Support tickets: opened and answered in the bot, on the website, from both panels and from the report group
 - ✅ «آموزش»: a short guide the shop ships, which the owner rewords
+- ✅ Extra traffic and time for a service («حجم و زمان اضافه»), hourly plans, first-purchase and agent prices
+- ✅ Discounts and rewards: discount codes, timed sales, a customer's own discount, loyalty tiers, cashback, gift codes,
+  the lucky wheel, a nightly draw among the day's buyers, referral start gifts and plan rewards with fake-referral alerts
 - [ ] A test account («اکانت تست»)
 - [ ] Subscription link endpoint `/sub/{uuid}` of our own (today the panel's native subscription URL is handed out)
 
@@ -40,7 +43,8 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Reviews: switched on per website, written there by a customer or — behind the captcha — a guest, decided by support in the panels (or the website's admin side), the approved ones shown with their average — a captcha, a pace and a cap on what waits
 - ✅ The shop's admins on the website: the panels' daily work under `/admin` for the bot's admins — let in, a strong sign-in asked and grants given from the panel, a sign-in good for 12 hours (15 minutes for a grant or a payment's approval); no admin decides about themselves, every change logged with who made it
 - [ ] Online payment gateways (the checkout already answers with a next step, so a redirect gateway fits in)
-- [ ] Discount codes
+- ✅ Discount codes at the website's checkout (`discount_code`, priced first with `POST /discount-codes/check`), gift codes
+  redeemed there, and loyalty standing in `GET /me`
 - [ ] An AI support assistant
 - The site's own content (blog, FAQ, app downloads) stays the site's.
 
@@ -54,6 +58,8 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked, live preview), settings (master switch, phone, required channels, wallet, renewal, reminders, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
 - ✅ Settings: the panel's own configuration in `config.php` (application, database, Telegram, email, advanced), the bots' webhooks set or removed, the owner's login changed and recovered without a shell; the website's settings in both panels
 - ✅ Failures drawn one way (what failed, why, what to do, the request's id), offline and stale-build handling
+- ✅ «تخفیف و جوایز»: discount codes, sales, loyalty tiers, cashback, gift codes, the lucky wheel and the nightly draw;
+  a customer's own discount on their page; several plans' prices changed at once
 - [ ] Activity log
 
 ## Scheduled tasks

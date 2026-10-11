@@ -9,9 +9,8 @@ use GuzzleHttp\Exception\GuzzleException;
 use Psr\Log\LoggerInterface;
 
 /**
- * The authorization-code flow's last step (PKCE): the code the provider sent the browser back with, exchanged at its
- * token endpoint for the sign-in's id_token — the site's Client ID and secret as HTTP Basic, the form's fields as
- * application/x-www-form-urlencoded, the verifier whose challenge began the sign-in. Through the shop's outgoing client.
+ * The authorization-code flow's last step: the code is exchanged at the provider's token endpoint for the id_token, with
+ * the site's Client ID and secret as HTTP Basic and the PKCE verifier whose challenge began the sign-in.
  */
 final class CodeExchange
 {
@@ -21,8 +20,8 @@ final class CodeExchange
     ) {}
 
     /**
-     * The id_token the code is worth — null when the provider refused it (spent, expired, another site's, a wrong
-     * secret: the provider's reason goes to the log, never the secret).
+     * The id_token the code is worth; null when the provider refused it (spent, expired, another site's, a wrong secret —
+     * its reason logged, never the secret).
      *
      * @throws ProviderUnreachableException when the provider could not be asked, or did not answer as its API does
      */

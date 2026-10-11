@@ -15,17 +15,17 @@ use App\Support\Money;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * The one writer of the wallet ledger: every change is a line carrying the balance from then on, and the last line's is
- * the balance (User::balance()) — written the ledgers' one way (Core\Database\Ledger), so two bot callbacks at once
- * cannot both spend the same balance. A debit may take the balance below zero only as far as the credit the caller
- * allows (an agent's, «نمایندگی»), and never further. A line support writes by hand keeps who wrote it (`reviewer`). The
- * ledger lines' wording lives here too (the customer reads them in «کیف پول», the admin in the wallet modal).
+ * The one writer of the wallet ledger (through Core\Database\Ledger, under the customer's row lock, so two debits at once
+ * cannot spend the same balance). Each line carries the balance after it. A debit may go below zero only as far as the
+ * credit the caller allows (an agent's). Lines written by hand keep their reviewer. Most lines' wording lives here too.
  */
 final class WalletService
 {
     public const LINE_TOP_UP = 'شارژ کیف پول (سفارش #%d)';
     public const LINE_PAYMENT = 'پرداخت سفارش #%d (%s)';
     public const LINE_REFUND = 'بازگشت وجه پرداخت #%d';
+    /** After a refund's line, when the cashback its order earned was taken out of it (Rewards' Cashback). */
+    public const LESS_CASHBACK = ' (منهای کش‌بک)';
     public const LINE_TOP_UP_REFUND = 'برگشت شارژ کیف پول (پرداخت #%d)';
     public const LINE_REFERRAL = 'پورسانت زیرمجموعه (پرداخت #%d)';
     /** A manual credit or debit the admin wrote no note for. */
@@ -34,7 +34,7 @@ final class WalletService
 
     public function __construct(private readonly Ledger $ledger) {}
 
-    /** @param string|null $reviewer Who writes it by hand (support's adjustment); null for the shop's own lines */
+    /** @param string|null $reviewer Who writes it by hand (support's adjustment); null for lines the shop writes itself */
     public function credit(User $user, string|int $amount, string $description, ?string $reviewer = null): WalletTransaction
     {
         return $this->apply(WalletTransactionType::Credit, $user, $amount, $description, 0, $reviewer);
@@ -42,7 +42,7 @@ final class WalletService
 
     /**
      * @param string|int $credit How far below zero the balance may go (an agent's credit; 0 for anyone else)
-     * @param string|null $reviewer Who writes it by hand (support's adjustment); null for the shop's own lines
+     * @param string|null $reviewer Who writes it by hand (support's adjustment); null for lines the shop writes itself
      * @throws InsufficientBalanceException
      */
     public function debit(User $user, string|int $amount, string $description, string|int $credit = 0, ?string $reviewer = null): WalletTransaction
@@ -51,9 +51,8 @@ final class WalletService
     }
 
     /**
-     * Two accounts of one customer merged (Accounts\Services\AccountMerger): the merged account's lines become the
-     * survivor's, and the survivor's ledger is counted again from its first line, in the order the lines were written —
-     * one ledger again, its last line the two balances together (Ledger::merge()). How many lines moved.
+     * Merges `$merged`'s ledger into the survivor's (Accounts\Services\AccountMerger): every balance is recounted in line
+     * order, so the last is the two balances together. Returns how many lines moved.
      */
     public function takeOver(User $survivor, User $merged): int
     {
@@ -86,10 +85,13 @@ final class WalletService
         return sprintf(self::LINE_REFERRAL, $payment->id);
     }
 
-    /** The line of a refund: «بازگشت وجه پرداخت #12 — <the admin's note>». */
-    public static function describeRefund(Payment $payment, ?string $note): string
+    /**
+     * The line of a refund: «بازگشت وجه پرداخت #12 — <the admin's note>» — «… (منهای کش‌بک) …» when the cashback its order
+     * earned was taken out of it.
+     */
+    public static function describeRefund(Payment $payment, ?string $note, bool $lessCashback = false): string
     {
-        return sprintf(self::LINE_REFUND, $payment->id) . self::noted($note);
+        return sprintf(self::LINE_REFUND, $payment->id) . ($lessCashback ? self::LESS_CASHBACK : '') . self::noted($note);
     }
 
     /** The line of a top-up taken back by its refund: «برگشت شارژ کیف پول (پرداخت #12) — <the admin's note>». */

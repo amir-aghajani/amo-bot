@@ -15,9 +15,8 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeGoogleLogin;
 
 /**
- * A signed-in customer's own account on the shop's website: their names — theirs to set, unless Telegram's are theirs
- * —, and their password, set for an account with an email and none, or changed with the one it has (a wrong one counted
- * as a failed sign-in): every other session of theirs ends, this one stays.
+ * A signed-in customer's own account: their names (not for a Telegram account's), and their password set or changed —
+ * a wrong current one counted as a failed sign-in, every other session ended.
  */
 final class AccountSettingsTest extends HttpTestCase
 {

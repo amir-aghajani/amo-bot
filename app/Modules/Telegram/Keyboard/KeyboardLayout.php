@@ -5,15 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Keyboard;
 
 /**
- * A keyboard as the admin laid it out: rows of buttons, each an action of the bot (MainMenu::ACTIONS)
- * under a label the admin chose, optionally in one of Telegram's button styles and with a premium emoji
- * as its icon (Telegram's `icon_custom_emoji_id`, drawn before the label — only while the bot may use
- * premium emoji: its owner has Telegram Premium; BotApi sends the keyboard without icons where Telegram
- * turns them down). Rendered either as a reply keyboard (persistent, under the text field) or as inline
- * buttons under the message.
- *
- * Rows are stored in reading order (first button = rightmost on a Persian screen) and reversed when
- * rendered, since Telegram lays rows out left to right.
+ * A keyboard as the admin laid it out: rows of buttons, each an action (MainMenu::ACTIONS) with the admin's label, an
+ * optional Telegram button style and a premium emoji icon. Rendered as a reply keyboard or as inline buttons. Rows are
+ * stored in reading order (the first button is the rightmost on a Persian screen) and reversed when rendered, since
+ * Telegram lays a row out left to right.
  */
 final class KeyboardLayout
 {
@@ -23,6 +18,9 @@ final class KeyboardLayout
 
     /** Telegram's button styles (Bot API `style` field): blue, green, red; null = the client's default look. */
     public const STYLES = ['primary', 'success', 'danger'];
+
+    /** How many buttons a row of the bot's plan and location lists holds at most (a plan's, a server's `button_row`). */
+    public const ROW_MOST = 3;
 
     /** A button's icon: a premium emoji's id, as Telegram numbers them (digits, a 64-bit number). */
     public const ICON_PATTERN = '/^[0-9]{1,20}$/';
@@ -34,6 +32,12 @@ final class KeyboardLayout
         public readonly string $type,
         public readonly array $rows,
     ) {}
+
+    /** `$style` while it is one of STYLES — a plan's or a server's kept one —, else null: the client's own look. */
+    public static function style(?string $style): ?string
+    {
+        return in_array($style, self::STYLES, true) ? $style : null;
+    }
 
     public function isInline(): bool
     {

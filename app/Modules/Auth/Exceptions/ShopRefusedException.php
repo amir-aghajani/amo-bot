@@ -8,9 +8,8 @@ use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Auth\NamedShop;
 
 /**
- * A panel request that cannot be worked in the shop it names (NamedShop): the owner's naming a bot that is not there —
- * a 404, never the main shop in its place —, an agent's naming another bot than theirs — a 403: an agent's panel works
- * in their bot's shop alone, whatever the request says.
+ * A panel request that cannot run in the shop it names: the owner naming a bot that is not there (404 — never the main
+ * shop instead), or an agent naming another bot than theirs (403).
  */
 final class ShopRefusedException extends DomainRuleException
 {

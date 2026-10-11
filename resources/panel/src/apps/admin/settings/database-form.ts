@@ -19,10 +19,7 @@ export function databaseDraft(settings: DatabaseSettings, key: string = settings
   return { ...driverDraft(driver, driver.key === settings.driver ? settings.values : undefined), driver: driver.key }
 }
 
-/**
- * What a database form sends: the driver and its form's fields — the API's closed request of that driver, whose fields
- * are its form's (tests/Unit/Drivers/DriverFormsTest holds the two together).
- */
+/** What a database form sends: the driver and its form's fields — that driver's closed request shape in the API. */
 export function databaseRequest(settings: DatabaseSettings, draft: DriverDraft): DatabaseRequest {
   const driver = databaseDriver(settings, String(draft.driver))
   return { ...driverPayload(driver, draft), driver: driver.key } as DatabaseRequest

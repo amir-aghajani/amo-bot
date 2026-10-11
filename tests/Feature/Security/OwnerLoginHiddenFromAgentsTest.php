@@ -24,7 +24,7 @@ use Tests\HttpTestCase;
  * has the name can lock the owner out. Nobody but the owner reads it — not an agent, not a shop's admins on its website.
  * What the owner decided in the agent's shop — a receipt approved, their traffic set right, the pins of a broadcast taken
  * off — is «پشتیبانی» in every answer of the agent's panel, and what they decided in the main bot's shop in every answer
- * of its website's admin API, while the shop's own people show as kept: the agent, their bot's admins. The owner's panel
+ * of its website's admin API, while the shop's people show as kept: the agent, their bot's admins. The owner's panel
  * shows it as kept.
  */
 final class OwnerLoginHiddenFromAgentsTest extends HttpTestCase

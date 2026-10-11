@@ -14,17 +14,14 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * The panel's one login, as config.php keeps it: a username (ADMIN_USERNAME) and the password's hash
- * (ADMIN_PASSWORD_HASH). It is not a user: the bot's own admins are customer rows with the admin role, which is a
- * different thing. The web installer, the owner from their panel (OwnerAuth::changeCredentials()) and its recovery
- * with a key off the host's files (LoginRecovery) write it through `save()`. A password kept in plain text —
- * typed into the file by hand — is refused: the panel stays closed, and the log says why, until one is set again. What
- * the owner's session alone should not change — the login itself, the Bot API's address every bot's token goes to —
- * asks the current password typed again (confirm()).
+ * The owner's panel login, kept in config.php (ADMIN_USERNAME, ADMIN_PASSWORD_HASH) — not a user row: the bot's admins
+ * are customers with the admin role. Written by save() (installer, the owner's change, recovery). A password kept in
+ * plain text is refused and logged: the panel stays closed until one is set. What a session alone should not change
+ * (the login itself, the Bot API's address) asks the current password again (confirm()).
  */
 final class AdminAccount
 {
-    /** The owner's password, wherever it is typed — the login, its change, a setting it guards: one count of its failures (SignInThrottle). */
+    /** The throttle's way for the owner's password, wherever it is typed: one count of its failures. */
     public const WAY = 'login';
 
     /** A current password that is not the one kept. */
@@ -42,7 +39,7 @@ final class AdminAccount
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** Whether config.php names a login with a hashed password — until it does nobody can sign in. */
+    /** Whether config.php has a login with a hashed password; until then nobody can sign in. */
     public function configured(): bool
     {
         return $this->username() !== '' && $this->hashed();
@@ -53,7 +50,7 @@ final class AdminAccount
         return trim((string) $this->config->get('admin.username', ''));
     }
 
-    /** Both parts, in constant time: the username as written, the password against its hash. */
+    /** Check both parts; the password is verified even when the username is wrong, so timing tells nothing. */
     public function verify(string $username, string $password): bool
     {
         if (!$this->configured() || $password === '') {
@@ -66,9 +63,8 @@ final class AdminAccount
     }
 
     /**
-     * The owner's current password, typed again to change what it guards: why it proves nothing — none typed, or not the
-     * one kept —, else null. Judged as a sign-in is (SignInThrottle::password()): counted with the login's failures, per
-     * address and per username, so it is no way around the throttle to guess it.
+     * Check the owner's current password typed again: why it fails, else null. Counted with the login's failures, per
+     * address and per username, so it is no way around the throttle.
      *
      * @throws TooManyAttemptsException 429 while this address, or the account, must wait
      */
@@ -82,15 +78,14 @@ final class AdminAccount
         return $this->throttle->password(self::WAY, $request, $account, fn(): bool => $this->verify($account, $password)) ? null : self::WRONG_PASSWORD;
     }
 
-    /** Changes with the credentials, so a session opened under old ones stops being valid. */
+    /** Changes with the credentials, so a session opened under old ones ends. */
     public function fingerprint(): string
     {
         return hash('sha256', $this->username() . "\0" . $this->secret());
     }
 
     /**
-     * Write the login to config.php — the password as a bcrypt hash, the hash kept when the password stays — and use it
-     * from now on: a session opened under the previous one ends with it.
+     * Write the login to config.php (the password hashed, or the hash kept when it stays) and use it from now on.
      *
      * @throws ValidationException when the file cannot be written: what to fix, under `file`; nothing changed then
      */
@@ -110,7 +105,7 @@ final class AdminAccount
         $this->config->set('admin.password', $hash);
     }
 
-    /** Whether the kept password is a hash password_verify() knows; one in plain text is refused, and said in the log. */
+    /** Whether the kept password is a hash password_verify() knows; plain text is refused and logged once. */
     private function hashed(): bool
     {
         $secret = $this->secret();

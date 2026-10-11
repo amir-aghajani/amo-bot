@@ -9,12 +9,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
 /**
- * The current bot's report group as the shop knows it right now (`report_chats`, a row per bot — every bot reports to
- * a group of its own): which group is connected, what keeps reports from it, until when sending waits, the one-time
- * code that hands the bot a group, and the last group offered with that code that could not become it. Every read asks
- * the table — the panel, the bot's poller and the cron change it while the others run, so no process decides on a copy
- * it took earlier — and every change that depends on what is there is one conditional UPDATE. Nothing here talks to
- * Telegram; which topics the admin wants is ReportSettings'.
+ * The current bot's report group state (`report_chats`, a row per bot): the connected group, its problem, until when
+ * sending pauses, the one-time connect code and the last refused attempt. Every read asks the table — the panel, the
+ * poller and the cron change it concurrently — and every change that depends on the current value is one conditional
+ * UPDATE.
  */
 final class ReportGroupState
 {
@@ -88,12 +86,13 @@ final class ReportGroupState
         ReportChat::query()->delete();
     }
 
+    /** The connected group's new title. */
     public function retitle(string $title): void
     {
         ReportChat::query()->update(['title' => $title]);
     }
 
-    /** What is wrong with the group now (null: nothing) — written only when it changes, so a busy sender does not rewrite the row. */
+    /** Set what is wrong with the group (null: nothing), written only when it changes so a busy sender does not rewrite the row. */
     public function setProblem(?GroupProblem $problem): void
     {
         $changed = $problem === null
@@ -113,14 +112,15 @@ final class ReportGroupState
             ->update(['paused_until' => $until]);
     }
 
+    /** End any pause: sending may go on. */
     public function resume(): void
     {
         ReportChat::query()->whereNotNull('paused_until')->update(['paused_until' => null]);
     }
 
     /**
-     * A new connect code, replacing any other: random, good for CODE_MINUTES, kept encrypted (the screen shows its link
-     * again until it is used or runs out). The refusal of an earlier attempt goes with the old code.
+     * A new random connect code, replacing any other, good for CODE_MINUTES and kept encrypted; an earlier attempt's
+     * refusal goes with the old code.
      *
      * @return array{code: string, expires_at: Carbon}
      */
@@ -151,8 +151,8 @@ final class ReportGroupState
     }
 
     /**
-     * Use the code up — a compare-and-swap on the very bytes read, so of two messages carrying it (two taps, two webhook
-     * requests) exactly one connects a group. True for the caller that took it.
+     * Use the code up with a compare-and-swap on the stored bytes, so of two messages carrying it exactly one connects a
+     * group. True for the caller that took it.
      */
     public function claim(string $code): bool
     {

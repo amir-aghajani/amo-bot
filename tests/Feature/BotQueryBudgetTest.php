@@ -76,15 +76,19 @@ final class BotQueryBudgetTest extends BotTestCase
         $this->send($this->message('/start'));
 
         $budgets = [
-            MainMenu::PLANS => 10,
-            PurchaseHandler::planCallback($plan->id) => 10,
+            // Each price less the customer's largest automatic discount: the shop's running sales and its loyalty tiers
+            // (what the customer spent too, once it has one), read once for the list.
+            MainMenu::PLANS => 12,
+            PurchaseHandler::planCallback($plan->id) => 12,
             MainMenu::SUBSCRIPTIONS => 6,
             // The panel asked as the screen opens, the row synced.
             SubscriptionHandler::serviceCallback($service->id) => 11,
-            MainMenu::WALLET => 6,
+            // And the shop's loyalty tiers — what the customer spent too, once it has one.
+            MainMenu::WALLET => 7,
             MainMenu::HOME => 4,
-            // Last: the chat waits at the checkout from here, and leaving it is a write.
-            PurchaseHandler::serverCallback($plan->id, $germany->id) => 11,
+            // Last: the chat waits at the checkout from here, and leaving it is a write — and its price less the automatic
+            // discount (the sales, the tiers), «🏷 کد تخفیف دارم» offered while the shop has a code.
+            PurchaseHandler::serverCallback($plan->id, $germany->id) => 14,
         ];
         $few = [];
         foreach ($budgets as $tap => $budget) {
@@ -120,8 +124,10 @@ final class BotQueryBudgetTest extends BotTestCase
         [$queries, $calls] = $this->cost($this->tap(CallbackData::build($checkout, $this->walletMethod()->id)));
 
         // The server judged again, the order opened, paid and settled in one transaction, the panel's client made and the
-        // service written in another, each commit's areas counted in one statement, the outcome in place of the checkout.
-        self::assertLessThanOrEqual(51, count($queries), self::listed($queries));
+        // service written in another, each commit's areas counted in one statement, the outcome in place of the checkout —
+        // and the shop's loyalty tiers, for one the delivery may have reached (cashback, switched off, reads nothing); the
+        // price less the customer's automatic discount, judged again as it is paid (the running sales, the tiers).
+        self::assertLessThanOrEqual(54, count($queries), self::listed($queries));
         self::assertSame(['deleteMessage', 'sendMessage', 'answerCallbackQuery'], $calls);
     }
 

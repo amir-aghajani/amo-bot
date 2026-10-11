@@ -9,10 +9,11 @@ import { orderRow } from '@/test/rows'
 import { refusal, server } from '@/test/server'
 
 /*
- * An order as the admin works on it (components/orders/order-modal), when the order moves on under the admin: a cancel
- * waiting on its strip is withdrawn with a word; one confirmed and refused because the order moved on meanwhile is said
- * once — the server's words standing for the withdrawal, never both —, even though nothing is left to do; and the focus,
- * its strip gone, is on that word — never on the document.
+ * An order as the admin works on it (components/orders/order-modal): what it brings, when that is an amount — a service's
+ * extra traffic or time, an agent's traffic —; its amount, one at its plan's first-purchase price or its agent price
+ * saying so beside it; and when the order moves on under the admin: a cancel waiting on its strip is withdrawn with a word; one confirmed
+ * and refused because the order moved on meanwhile is said once — the server's words standing for the withdrawal, never
+ * both —, even though nothing is left to do; and the focus, its strip gone, is on that word — never on the document.
  */
 
 const CANCELLED = orderRow({ status: 'cancelled', notes: 'لغو توسط پشتیبانی', actions: { retry: false, cancel: false } })
@@ -24,6 +25,65 @@ function Working({ first, refreshed }: { first: OrderRow; refreshed: OrderRow })
 }
 
 const dialog = () => screen.getByRole('dialog', { name: `سفارش ${idLabel(12)}` })
+
+/** What a fact of the dialog says, by its label. */
+const fact = (label: string) => within(dialog()).getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
+
+describe('what it brings', () => {
+  const props = { onClose: vi.fn(), onChanged: vi.fn(), onStale: vi.fn() }
+  /** A service's order: plan 3 «طلایی», its service amir_1 on «آلمان». */
+  const SERVICE = { plan: { id: 3, name: 'طلایی' }, server: { id: 1, name: 'آلمان' }, subscription: { id: 1, name: 'amir_1', status: 'active' as const } }
+
+  it('is a service’s extra traffic, by its amount', () => {
+    render(<OrderModal order={orderRow({ type: 'extra_traffic', traffic_bytes: 10 * 1024 ** 3, ...SERVICE })} {...props} />, { wrapper: providers().wrapper })
+
+    expect(fact('نوع')).toBe('حجم اضافه')
+    expect(fact('حجم اضافه')).toBe('۱۰ گیگابایت')
+    expect(fact('سرویس')).toContain('amir_1')
+  })
+
+  it('is a service’s extra time, in days', () => {
+    render(<OrderModal order={orderRow({ type: 'extra_time', days: 7, ...SERVICE })} {...props} />, { wrapper: providers().wrapper })
+
+    expect(fact('زمان اضافه')).toBe('۷ روز')
+  })
+
+  it('is an agent’s traffic, by its amount', () => {
+    render(<OrderModal order={orderRow({ type: 'traffic', traffic_bytes: 50 * 1024 ** 3 })} {...props} />, { wrapper: providers().wrapper })
+    expect(fact('حجم')).toBe('۵۰ گیگابایت')
+  })
+
+  it('shows nothing for a top-up besides its amount of money', () => {
+    render(<OrderModal order={orderRow()} {...props} />, { wrapper: providers().wrapper })
+    expect(within(dialog()).queryByText(/^(حجم|زمان)/, { selector: 'dt' })).toBeNull()
+  })
+})
+
+describe('its amount', () => {
+  const props = { onClose: vi.fn(), onChanged: vi.fn(), onStale: vi.fn() }
+
+  it('says a purchase was priced at its plan’s first-purchase price', () => {
+    render(<OrderModal order={orderRow({ type: 'purchase', amount: '30000.00', pricing: 'first_purchase', plan: { id: 3, name: 'طلایی' }, server: { id: 1, name: 'آلمان' } })} {...props} />, {
+      wrapper: providers().wrapper,
+    })
+
+    expect(fact('مبلغ')).toBe('۳۰٬۰۰۰ تومان قیمت خرید اول')
+  })
+
+  it('says a renewal was priced at its plan’s agent price — an agent’s, or a «همکار» group’s customer’s', () => {
+    render(<OrderModal order={orderRow({ type: 'renewal', amount: '90000.00', pricing: 'agent', plan: { id: 3, name: 'طلایی' }, server: { id: 1, name: 'آلمان' } })} {...props} />, {
+      wrapper: providers().wrapper,
+    })
+
+    expect(fact('مبلغ')).toBe('۹۰٬۰۰۰ تومان قیمت نماینده')
+  })
+
+  it('of any other order is the amount alone', () => {
+    render(<OrderModal order={orderRow()} {...props} />, { wrapper: providers().wrapper })
+
+    expect(fact('مبلغ')).toBe('۵۰٬۰۰۰ تومان')
+  })
+})
 
 /** «لغو سفارش», its strip open. */
 function openCancel() {
@@ -62,7 +122,7 @@ describe('a cancel', () => {
     expect(within(dialog()).queryByText(/رسید در انتظار بررسی/)).toBeNull()
   })
 
-  it('confirmed and refused because the order moved on meanwhile is said once, the focus on it', async () => {
+  it('confirmed and refused because the order changed meanwhile is shown once, with the focus on it', async () => {
     const paidOnly = 'فقط سفارش‌های پرداخت‌نشده لغو می‌شوند.'
     server().on('POST', '/api/admin/orders/12/cancel', refusal(422, paidOnly, { status: [paidOnly] }))
     render(<Working first={orderRow()} refreshed={CANCELLED} />, { wrapper: providers().wrapper })
@@ -77,7 +137,7 @@ describe('a cancel', () => {
     expect(document.activeElement?.textContent).toContain(paidOnly)
   })
 
-  it('waiting on its strip when the order moves on is withdrawn with a word, which takes the focus the strip had', () => {
+  it('waiting on its strip when the order changes is withdrawn with a message, which takes the strip’s focus', () => {
     const { rerender } = render(<OrderModal order={orderRow()} {...props} />, { wrapper: providers().wrapper })
     openCancel()
     within(dialog()).getByLabelText('توضیح برای مشتری').focus()

@@ -11,9 +11,8 @@ import { useMainShop, useSession } from '@/lib/auth'
 import { formatDate, formatNumber, timeAgo } from '@/lib/format'
 
 /**
- * What the card says of a server's connection, read off its form (ServerRow.form) by the fields every connector shares
- * (PanelConnection, PanelCredentials on the PHP side): the way in — and a two-factor secret kept, a connector's own —,
- * the subscription links' prefix, the TLS check, the timeout.
+ * The connection facts the card shows, read from the server's form by the fields every connector shares (PanelConnection
+ * and PanelCredentials on the PHP side): the way in, a kept two-factor secret, the links' prefix, TLS and the timeout.
  */
 function connectionOf(form: DriverValues) {
   const text = (name: string) => {
@@ -32,18 +31,12 @@ function connectionOf(form: DriverValues) {
   }
 }
 
-/**
- * What the connector calls a way in — its own word on its form (the choices of `auth_mode`): a 3x-ui's «توکن API», a
- * PasarGuard's «کلید API»; none until its description is read.
- */
+/** The connector's own word for its way in, from its `auth_mode` choices («توکن API», «کلید API»); none until its description is read. */
 function wayIn(driver: DriverDescription | undefined, mode: string): string | undefined {
   return driver?.fields.find((field) => field.name === 'auth_mode')?.options.find((option) => option.value === mode)?.label
 }
 
-/**
- * Where a server stands: its connection and the last check's answer, whether it can sell, and its facts — the connection
- * in its connector's words (`driver`, as GET /servers/drivers describes it).
- */
+/** A server's status card: its connection and last check, whether it can sell, and its facts in its connector's words. */
 export function StatusCard({ server, probe, driver }: { server: ServerRow; probe: Probe | null; driver?: DriverDescription }) {
   // None while this installation has not its connector: nothing of its connection to say.
   const connection = server.form && connectionOf(server.form)
@@ -75,7 +68,7 @@ export function StatusCard({ server, probe, driver }: { server: ServerRow; probe
           </Callout>
         )}
         <FactList className="grid-cols-[minmax(5.5rem,auto)_1fr] gap-x-4 gap-y-2 text-footnote">
-          {/* A token's word is its connector's: said once its description is read. */}
+          {/* The way in is named by the connector's own label, shown once its description is read. */}
           {connection && (!connection.token || token) && (
             <Fact label="احراز هویت">
               {connection.token ? (
@@ -126,9 +119,8 @@ export function StatusCard({ server, probe, driver }: { server: ServerRow; probe
 }
 
 /**
- * Its running services, every shop's — what its capacity counts —, and of them the open shop's: the ones its
- * subscriptions screen lists, where they are selected and moved to another server. The link says whose they are when
- * other shops — the agents' bots, or the main one and other agents' from an agent's shop — have services there too.
+ * The server's running services across all shops (what its capacity counts) and, of them, the open shop's, linked to the
+ * subscriptions screen. The link says whose they are when other shops have services there too.
  */
 function ActiveServices({ server }: { server: ServerRow }) {
   const shop = useSession().shop

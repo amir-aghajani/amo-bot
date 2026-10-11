@@ -8,10 +8,8 @@ use App\Core\Drivers\Driver;
 use Symfony\Component\Mailer\Transport\TransportInterface;
 
 /**
- * A way the shop's email goes out — an account on a mail server, the host's own mail, an email API (Drivers\*) —:
- * config.php's MAIL_TRANSPORT names it (`none`: no driver, no email), its form is its own MAIL_* settings, and the
- * container's `mail.transport` is the transport it makes of them (MailTransport). Its descriptor says in the `sender`
- * trait which address its emails may come from, in the owner's words.
+ * A way email goes out (SMTP, the host's mail(), Resend), named by MAIL_TRANSPORT; its form is its own MAIL_* settings.
+ * The `sender` trait tells the owner which address its emails may come from.
  */
 interface MailDriver extends Driver
 {
@@ -22,7 +20,7 @@ interface MailDriver extends Driver
      * The transport these settings make.
      *
      * @param array<string, mixed> $values Its form's values by field name, as config.php holds them (Form::values())
-     * @throws MailSettingsException when they make none — a server or a key missing: no email goes out, and the log says why
+     * @throws MailSettingsException when a server or a key is missing
      */
     public function transport(array $values): TransportInterface;
 }

@@ -11,6 +11,8 @@ enum GrantAudience: string
     case All = 'all';
     /** The services the agents' bots sold, on every server. */
     case Agents = 'agents';
-    /** The services on one server (its page's «افزودن زمان و حجم», or the broadcasts page's pick). */
+    /** The services on one server (its page's «افزودن زمان و حجم», or picked on the broadcasts page). */
     case Server = 'server';
+    /** The services of one customer group's customers (one of the main shop's groups), on every server. */
+    case Group = 'group';
 }

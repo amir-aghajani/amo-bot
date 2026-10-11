@@ -9,17 +9,11 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Carbon;
 
 /**
- * The updates each bot took, by Telegram's `update_id` (`telegram_updates`), recorded before one is served: a copy
- * Telegram sends again — a webhook answered past its patience, a poller that stopped before it confirmed its offset —
- * finds the record and is not served twice (no second order, receipt or link change). At most once, by decision: an
- * update whose serving died halfway is not served again either. Telegram holds an update a day at most, so a record
- * older than KEEP_HOURS is of no more use (prune()); a bot's newest says when it last heard from Telegram (lastAt()).
- *
- * Each record says the chat it counts against, so a chat's pace is read off the records (lately()): a person taps and
- * types far slower than FLOOD_UPDATES in FLOOD_SECONDS, and a chat past it is flooding the bot — every answer is a
- * Telegram call its limits slow down, for everyone the bot serves. Only what a chat sent just now counts: an update
- * Telegram held back while the bot was away — its message sent more than BACKLOG_SECONDS ago — is a chat's earlier
- * pace, not its present one, and counts against none.
+ * Each bot's served updates by `update_id` (`telegram_updates`), recorded before serving so a copy Telegram sends again
+ * is never served twice — at most once, by design: an update whose serving died halfway is not retried either. Records
+ * live KEEP_HOURS (Telegram keeps an update a day). Each also names its chat, which gives a chat's pace (lately()): more
+ * than FLOOD_UPDATES in FLOOD_SECONDS is a flood. An update Telegram held back while the bot was away counts against no
+ * chat.
  */
 final class ReceivedUpdates
 {

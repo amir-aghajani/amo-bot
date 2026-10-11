@@ -6,9 +6,8 @@ import { readStored, STORAGE_KEYS, writeStored } from '@/lib/storage'
 import { PHONE, useMediaQuery } from '@/lib/use-media-query'
 
 /*
- * What the shell shares: the panel it is drawn for (its navigation, who signs in to it, what only it has in the
- * column), whether the desktop sidebar is collapsed to an icon rail (the admin's choice, else a rail on a window below
- * 64rem), whether the phone's drawer is open, and the Ctrl/⌘+B shortcut.
+ * The shell's shared state: the panel it is drawn for, whether the desktop sidebar is collapsed to an icon rail (the
+ * admin's choice, else a rail below 64rem), whether the phone's drawer is open, and the Ctrl/⌘+B shortcut.
  */
 
 /** What a panel puts into the shared shell. */
@@ -93,8 +92,8 @@ export function ShellProvider({ panel, children }: { panel: PanelShell; children
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isMobile, toggleCollapsed])
 
-  // The server answers a panel's requests one at a time (they share its session): what the page on screen shows is asked
-  // for first, the shell's own reads a moment after the shell is drawn — after the page drawn with it has asked.
+  // PHP serves one session's requests one at a time: the page's own reads go first, the shell's a tick after the shell
+  // is drawn (by then the page drawn with it has asked).
   const [shellReads, setShellReads] = useState(false)
   useEffect(() => {
     const timer = window.setTimeout(() => setShellReads(true))

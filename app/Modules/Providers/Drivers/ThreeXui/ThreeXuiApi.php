@@ -10,14 +10,15 @@ use App\Modules\Providers\Drivers\ThreeXui\DTO\Inbound;
 use App\Modules\Providers\Drivers\ThreeXui\DTO\PanelSettings;
 use App\Modules\Providers\Drivers\ThreeXui\DTO\ServerStatus;
 use App\Modules\Providers\Drivers\ThreeXui\DTO\Traffic;
-use App\Modules\Providers\Drivers\ThreeXui\Support\Raw;
 use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Exceptions\ProviderException;
+use App\Modules\Providers\Support\Raw;
 
 /**
  * The 3x-ui v3 endpoints the shop calls, and only those — each held to the panel's own description by
  * ThreeXuiContractTest — in 3x-ui's terms: clients are first-class rows addressed by email, attached to any number of
- * inbounds (by id); a client the panel does not have is a NotFoundException however the endpoint words it.
+ * inbounds (by id). A client the panel does not have is a NotFoundException (or null on a read) however the endpoint
+ * words it.
  */
 final class ThreeXuiApi
 {
@@ -79,16 +80,7 @@ final class ThreeXuiApi
      */
     public function client(string $email): ?ClientRecord
     {
-        try {
-            $raw = Raw::objectOf($this->client->get(self::CLIENTS . '/get/' . rawurlencode($email)));
-        } catch (ThreeXuiApiException $e) {
-            if (self::isNotFound($e)) {
-                return null;
-            }
-
-            throw $e;
-        }
-
+        $raw = $this->clientRead('/get/', $email);
         $row = Raw::nullableArray($raw, 'client') ?? $raw;
 
         return $row !== [] ? ClientRecord::fromArray($row) : null;
@@ -101,15 +93,7 @@ final class ThreeXuiApi
      */
     public function traffic(string $email): ?Traffic
     {
-        try {
-            $raw = Raw::objectOf($this->client->get(self::CLIENTS . '/traffic/' . rawurlencode($email)));
-        } catch (ThreeXuiApiException $e) {
-            if (self::isNotFound($e)) {
-                return null;
-            }
-
-            throw $e;
-        }
+        $raw = $this->clientRead('/traffic/', $email);
 
         return $raw !== [] ? Traffic::fromArray($raw) : null;
     }
@@ -169,8 +153,8 @@ final class ThreeXuiApi
     }
 
     /**
-     * POST /clients/bulkEnable or /bulkDisable for the one client — the panel has no single-client switch — whose answer
-     * lists what it skipped, and why, instead of failing.
+     * POST /clients/bulkEnable or /bulkDisable for the one client (the panel has no single-client switch). The answer
+     * lists what it skipped and why instead of failing, so a skip is turned into the failure it is.
      *
      * @throws NotFoundException|ProviderException
      */
@@ -191,6 +175,21 @@ final class ThreeXuiApi
         }
 
         throw self::saysNotFound($reason) ? self::missing($email) : new ThreeXuiApiException('POST', $path, 200, $reason);
+    }
+
+    /**
+     * A GET of one client's `$route`; empty when the panel does not have the client, however it words that.
+     *
+     * @return array<string, mixed>
+     * @throws ProviderException
+     */
+    private function clientRead(string $route, string $email): array
+    {
+        try {
+            return Raw::objectOf($this->client->get(self::CLIENTS . $route . rawurlencode($email)));
+        } catch (ThreeXuiApiException $e) {
+            return self::isNotFound($e) ? [] : throw $e;
+        }
     }
 
     /**

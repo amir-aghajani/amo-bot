@@ -14,7 +14,7 @@ use Tests\TestCase;
 /**
  * A release's manifest is believed only once the key built into the shop signed its very bytes, and only as the release
  * asked for: another key's signature, a byte changed, no key at all, or a manifest of another version — or one that
- * would replace the shop's own files — is refused before anything in it is read.
+ * would replace the shop's data (config.php, storage/) — is refused before anything in it is read.
  */
 #[RequiresPhpExtension('sodium')]
 final class ManifestTest extends TestCase

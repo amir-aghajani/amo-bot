@@ -1,8 +1,9 @@
 # Orders and payments
 
 «فروش › سفارش‌ها» and «فروش › پرداخت‌ها», in both panels. An **order** is what a customer buys — a service («خرید»), a
-renewal («تمدید»), a top-up of their wallet («شارژ کیف پول») or, in the main shop, an agent's traffic («خرید حجم
-نمایندگی») —, and a **payment** one attempt to pay it, by one method.
+renewal («تمدید»), extra traffic or time for a service they have («حجم اضافه», «زمان اضافه» —
+[Bot settings](Bot-Settings.md#extra-traffic-and-time)), a top-up of their wallet («شارژ کیف پول») or, in the main shop,
+an agent's traffic («خرید حجم نمایندگی») —, and a **payment** one attempt to pay it, by one method.
 
 Nothing is ordered until the customer picks a way to pay. The wallet pays at once and the order is delivered there and
 then; a card transfer waits for its receipt and your review. An order and its payments move on once, however many
@@ -37,7 +38,7 @@ with it now:
 
 | Operation | Offered | What it does |
 |---|---|---|
-| «تایید و تحویل» («… شارژ کیف پول», «… افزودن حجم») | A card payment not paid yet, its order still open — with a receipt, or without one («تایید دستی و …») | **At one press.** The order is paid and delivered at once — the service made or renewed, the wallet charged, the agent's traffic added —, the order's other attempts to pay are cancelled (but a receipt waiting for review, which stays yours to reject), a referrer's commission is paid, and the customer gets their service or word of it |
+| «تایید و تحویل» («… شارژ کیف پول», «… افزودن حجم», «… افزودن زمان») | A card payment not paid yet, its order still open — with a receipt, or without one («تایید دستی و …») | **At one press.** The order is paid and delivered at once — the service made or renewed, its extra traffic or time added, the wallet charged, the agent's traffic added —, the order's other attempts to pay are cancelled (but a receipt waiting for review, which stays yours to reject), a referrer's commission is paid, and the customer gets their service or word of it |
 | «رد کردن» | A receipt waiting for review | Asks for a reason the customer reads («دلیل رد کردن»). The payment fails; the order stays open for them to pay again |
 | «لغو پرداخت» | Any payment not paid | Asks for an optional note. Cancels this payment, and — while nothing else paid it — its order with every other attempt to pay it; the customer is told when it cancelled the order. **But while another payment of the order has a receipt waiting for review**, this payment is cancelled alone: that receipt may be the money, so the order and the receipt stay for you to decide, and the customer is told nothing |
 | «یادآوری به مشتری» | A card payment waiting for its receipt, or rejected, its order open | At one press: a reminder with «ارسال رسید» and «پرداخت دوباره» (a rejected one, «پرداخت دوباره» alone). Nothing changes; the toast says whether it reached them |
@@ -81,9 +82,10 @@ customer; search by an order's number, a customer, a plan or a service's name (`
 or «زمان». The line above it says how many were sold and their sum.
 
 **An order's dialog** — «رسیدگی» on one to deliver again, «جزئیات» on the rest — shows what it bought (the plan, the
-server, the service — a link to it), why it failed or was cancelled, when it was placed, paid and delivered, and its
-payments, each a link to the payments screen, where receipts, refunds and reminders are. Two operations belong to the
-order:
+server, the service — a link to it —, and how much a service's extra traffic or time, or an agent's traffic, comes to:
+«حجم اضافه ۱۰ گیگابایت», «زمان اضافه ۷ روز»), why it failed or was cancelled, when it was placed, paid and delivered, and
+its payments, each a link to the payments screen, where receipts, refunds and reminders are. The list's «بابت» says the
+same: a service's extra as its amount over the service's name. Two operations belong to the order:
 
 - **«تلاش دوباره برای تحویل»** — at one press: the delivery again, once whatever stopped it is fixed (the server back, the
   agent's traffic bought). The customer hears of it only when it works; failing again, the dialog says why and stays. A
@@ -102,8 +104,10 @@ rule's refusal (no server can sell the plan now, the agent's traffic is short �
 
 «بازپرداخت» gives back what a payment paid, by what its order bought:
 
-- **A service or a renewal** — the amount into the customer's wallet («بازگشت وجه پرداخت #12»). A delivered service
-  stays as it is: switch it off or delete it from [its dialog](Services.md) if it must go.
+- **A service, a renewal, or a service's extra traffic or time** — the amount into the customer's wallet («بازگشت وجه
+  پرداخت #12»), less the cashback the order earned, if any
+  ([Cashback](Loyalty-Cashback-And-Draws.md#a-refund)). What was delivered stays as it is — the service, the traffic or
+  days added to it: switch it off or delete it from [its dialog](Services.md) if it must go.
 - **A top-up of the wallet** — give the money back yourself, outside the shop: the refund takes the same amount out of
   their wallet, and is refused once they spent it (an agent's credit counting). A top-up never delivered moves nothing
   in the wallet, and the customer is told their balance did not change.
@@ -118,8 +122,9 @@ commission stays paid; the traffic a refunded purchase drew from an agent's pool
 - **Deliveries left behind** — an order paid while the bot was restarting, untouched for ten minutes, is delivered by
   the scheduler (every minute, the longest-waiting first). A failed one waits for you.
 - **Unpaid orders expire** — an order nobody paid, with nothing done to it or its payments for **48 hours**, is
-  cancelled within the hour after: quietly, its rows kept, a rejected receipt's reason kept, the receipts uploaded for it
-  on the website deleted. **An order whose receipt is with you never expires.**
+  cancelled within ten minutes after (an order made with a discount code sooner —
+  [Discounts](Discounts.md#uses-and-giving-them-back)): quietly, its rows kept, a rejected receipt's reason kept, the
+  receipts uploaded for it on the website deleted. **An order whose receipt is with you never expires.**
 - **Receipts approved by themselves** — a card's review window ([Payment methods](Payment-Methods.md)).
 
 ## Watch out for

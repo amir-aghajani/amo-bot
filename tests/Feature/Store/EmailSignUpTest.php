@@ -24,11 +24,8 @@ use Tests\Fakes\RecordingMailTransport;
 use Tests\HttpTestCase;
 
 /**
- * Signing up on the shop's website with an email: the form, then a six-digit code to the address — the account it makes
- * kept with it —, then the code typed back: the account registered as every newcomer is (reported, made the referral of
- * the code's owner, who is told) and signed in. An address with an account gets an email saying so and the same answer;
- * a code is tried five times, a sign-up again replaces it — once a minute at most. Off, or with no email going out, the
- * website takes no sign-up.
+ * Email sign-up: a code to the address (or an "already registered" email, with the same answer), the code typed back
+ * registering the account as every newcomer, tries and resends limited, and no sign-up while it is off or mail is down.
  */
 final class EmailSignUpTest extends HttpTestCase
 {

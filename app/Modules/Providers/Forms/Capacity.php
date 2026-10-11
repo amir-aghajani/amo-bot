@@ -11,8 +11,8 @@ use App\Core\Forms\FieldType;
 use App\Support\Input;
 
 /**
- * How many running services a server takes: blank — no limit —, or a whole number (Persian digits too), 0 a full server
- * nothing more is sold on.
+ * How many active services a server takes: blank for no limit, or a whole number (Persian digits too); 0 is a full
+ * server nothing more is sold on.
  *
  * @extends Field<int|null>
  */

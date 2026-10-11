@@ -9,11 +9,9 @@ use App\Support\Input;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * The shop a panel request names, by its bot's id. The owner's panel names the shop its tab shows on every request — in
- * the `X-Shop` header; a read (GET, HEAD) may name it in its `shop` query parameter instead, since what a picture, a
- * video or a download link asks for carries no header —, so nothing on the server remembers a shop between two requests
- * and each tab of one session works in its own. A request that names none is the main shop's. An agent's panel names
- * none: their shop is their bot (AgentAuth refuses another).
+ * The shop a panel request names by its bot's id: the `X-Shop` header, or on a read the `shop` query parameter (an
+ * `<img>` or a download link carries no header). The shop is each request's, never the session's — every tab of a
+ * browser shares one session — so each tab works in the shop its address shows. None named: the main shop.
  */
 final class NamedShop
 {
@@ -23,10 +21,10 @@ final class NamedShop
     /** The field a refusal of the shop named is under. */
     public const FIELD = 'shop';
 
-    /** Not a bot's id — or two of them, one in the header and another in the query. */
+    /** Not a bot's id, or two different ones in the header and the query. */
     public const MALFORMED = 'فروشگاهی که این درخواست نام برده، شماره درستی ندارد.';
 
-    /** A change names its shop in the header alone: the address it is sent to says nothing of one. */
+    /** A change names its shop in the header alone. */
     public const QUERY_ON_A_CHANGE = 'درخواستی که چیزی را تغییر می‌دهد فروشگاهش را فقط در هدر X-Shop نام می‌برد.';
 
     private const READS = ['GET', 'HEAD'];

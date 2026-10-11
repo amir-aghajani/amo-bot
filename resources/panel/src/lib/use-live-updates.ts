@@ -11,15 +11,14 @@ const POLL_MS = 4_000
 type Area = keyof ChangesResponse['versions']
 
 /**
- * What a change to each area of the shop moves on the screens: every read whose rows or figures come from the area's
- * tables — not the names a row borrows from another area (a customer's on an order, a plan's or a server's on a
- * service), which follow the row's own area and the next read. A customer's visit alone moves nothing (the server
- * counts it for no area), so the customer lists and the dashboard follow the `users` area too.
+ * The reads a change in each area refetches: every read whose rows or figures come from the area's tables. Not the
+ * names a row borrows from another area (a customer's name on an order), which catch up with the next read. A new
+ * table a screen shows needs its area here, and a screen that starts reading an area adds its key.
  */
 const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
   // Customers, their wallets and their groups: the users screen and its groups, a customer's page, a wallet, the referral
   // program's people, the agents (their level, credit and wallet) with the program's counts and each level's, the agent's
-  // own account (their wallet), the dashboard's newcomers.
+  // own account (their wallet), the dashboard's newcomers, whom a mass gift to a customer group would reach.
   users: [
     queryKeys.users,
     queryKeys.everyUser,
@@ -33,6 +32,7 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
     queryKeys.agents,
     queryKeys.account,
     queryKeys.dashboards,
+    queryKeys.massGrants,
   ],
   // The servers and their inbounds — and whether a plan's entry, a move or the plan form can sell on one —, the mass
   // gift's servers, the dashboard's failing ones.
@@ -43,7 +43,7 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
   plans: [queryKeys.plans, queryKeys.planCategories, queryKeys.planOptions, queryKeys.account, queryKeys.dashboards],
   payment_methods: [queryKeys.paymentMethods],
   // The orders, the payments made for them, a customer's and an agent's bot's counts, each plan's sales, the dashboard,
-  // the sidebar's count of the stuck ones.
+  // the sidebar's count of the stuck ones, each discount code's uses, each loyalty tier's customers.
   orders: [
     queryKeys.orders,
     queryKeys.everyOrder,
@@ -55,6 +55,8 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
     queryKeys.plans,
     queryKeys.dashboards,
     queryKeys.queues,
+    queryKeys.discountCodes,
+    queryKeys.loyaltyTiers,
   ],
   // The payments, the orders they pay, each method's count, the dashboard's revenue, the sidebar's receipts to review.
   payments: [queryKeys.payments, queryKeys.everyPayment, queryKeys.orders, queryKeys.everyOrder, queryKeys.paymentMethods, queryKeys.dashboards, queryKeys.queues],
@@ -77,8 +79,8 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
     queryKeys.massGrants,
     queryKeys.dashboards,
   ],
-  // The commissions — and what a customer's referrals earned them, on their page.
-  referrals: [queryKeys.referrals, queryKeys.referrers, queryKeys.invitees, queryKeys.referralCommissions, queryKeys.everyUser],
+  // The commissions and the alerts on referrers — and what a customer's referrals earned them, on their page.
+  referrals: [queryKeys.referrals, queryKeys.referrers, queryKeys.invitees, queryKeys.referralCommissions, queryKeys.referralAlerts, queryKeys.everyUser],
   // The agency's levels and requests, the agents' bots and their traffic — on an agent's page too; an agent's traffic too
   // short to sell anything (account, dashboard), or a plan of theirs (plans) —, the owner's shops.
   agency: [
@@ -103,26 +105,30 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
   tickets: [queryKeys.tickets, queryKeys.everyTicket, queryKeys.queues, queryKeys.dashboards],
   // The customers' reviews: their list, the sidebar's and the dashboard's count of those waiting on support.
   reviews: [queryKeys.reviews, queryKeys.queues, queryKeys.dashboards],
+  // The shop's prizes and gifts: the gift codes and their batches, the lucky wheel's slices and its spins; its loyalty
+  // tiers — a customer's on their page —, its cashback rules and its nightly draws with their winners.
+  rewards: [queryKeys.giftCodes, queryKeys.giftCodeBatches, queryKeys.wheelPrizes, queryKeys.wheelSpins, queryKeys.loyaltyTiers, queryKeys.everyUser, queryKeys.cashbackRules, queryKeys.lotteryDraws],
+  // The discount codes and the timed sales.
+  discounts: [queryKeys.discountCodes, queryKeys.sales],
 }
 
 /**
- * Keeps the panel live: every few seconds while the tab is on screen — and at once when it comes back — it asks the
- * server which areas of the shop changed, and reloads the queries that show them, wherever the change came from: the
- * bot, a scheduled task, the Telegram group's buttons, another tab. Only queries on screen refetch, in place; the rest
- * are marked stale and load fresh when next shown. Forms keep what the admin typed: they only read their data once.
- * The browser offline, the poll waits (react-query pauses it) and asks at once when it is back. It is the panel's
- * heartbeat too: `unreachable` while its last ask — tried three times — got no answer at all (the shell says so).
+ * Keeps the panel live (mounted once by AppShell): every POLL_MS while the tab is visible, and at once when it comes
+ * back, it asks `/changes` which areas moved — whoever moved them (the bot, a scheduled task, another tab) — and
+ * invalidates their reads. Reads on screen refetch in place; the rest refetch when next shown. Forms keep what was
+ * typed (they read their data once). Offline, the poll pauses. It is the panel's heartbeat too: `unreachable` while
+ * its last ask got no answer at all.
  */
 export function useLiveUpdates(): { unreachable: boolean } {
   const queryClient = useQueryClient()
   const seen = useRef<ChangesResponse['versions'] | null>(null)
-  // How many of the query's failures came before the server last answered: the rest are the polls failed since.
+  // The query's error count when the server last answered: what it has gained since is the polls failed in a row.
   const failedBefore = useRef(0)
   const { data, error } = useQuery({
     queryKey: queryKeys.changes,
     queryFn: () => api.get<ChangesResponse>('/changes'),
-    // While the server does not answer, ask less and less often (up to a minute); the first answer brings it back.
-    // (fetchFailureCount would not do: it counts one poll's retries, and starts again with every poll.)
+    // While the server does not answer, back off (up to a minute); the first answer restores the pace.
+    // (fetchFailureCount would not do: it counts one poll's retries and restarts with every poll.)
     refetchInterval: ({ state }) => {
       if (state.status !== 'error') {
         failedBefore.current = state.errorUpdateCount

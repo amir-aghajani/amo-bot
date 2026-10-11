@@ -10,8 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * A channel or group the customer must join before the bot serves them (see Channels\RequiredChannels). It always has
- * a way in: a public handle, or a private one's invite link.
+ * A channel a customer must join before the bot serves them (Channels\RequiredChannels); it always has a way in, a
+ * public handle or a private invite link.
  *
  * @property int $id
  * @property int $chat_id Telegram chat id (-100… for channels and supergroups)

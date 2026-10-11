@@ -13,9 +13,8 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
 /**
- * "عضو شدم" under the join screen: look the memberships up again (no cache). Still missing one — say
- * which, and trim the screen to what is left; all there — confirm and open the menu. With the rule
- * turned off meanwhile the tap simply opens the menu.
+ * «عضو شدم» under the join screen: the memberships checked again without the cache. Still missing a channel, the screen
+ * shrinks to what is left; all joined (or the rule switched off), the menu opens.
  */
 final class JoinHandler implements Handler
 {

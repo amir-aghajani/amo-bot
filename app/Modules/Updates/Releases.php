@@ -9,11 +9,9 @@ use App\Modules\Settings\Services\Settings;
 use App\Modules\Updates\Exceptions\UpdateRefusedException;
 
 /**
- * AmoBot's releases as the shop knows them: the newest one GitHub publishes (GitHub), read again at most every
- * KEEP_SECONDS while a screen asks — GitHub's API takes 60 calls an hour from an address, and a shared host's address is
- * every site's on it —, at once on the owner's «بررسی دوباره», and daily by itself (Tasks\CheckReleasesTask) so the
- * dashboard says when one is out. What was read is kept with when, as the installation's runtime state (the main bot's
- * settings rows), and stands while GitHub does not answer.
+ * The newest release, kept in the main bot's settings with when it was read and tried. A screen reads GitHub again at
+ * most every KEEP_SECONDS — its API allows 60 calls an hour per address, and a shared host's address is every site's —
+ * the owner's «بررسی دوباره» at once, and CheckReleasesTask daily. What was read stands while GitHub does not answer.
  */
 final class Releases
 {
@@ -32,9 +30,8 @@ final class Releases
     ) {}
 
     /**
-     * The newest release as last read, and when it was — read again first when that is KEEP_SECONDS ago, or the last
-     * try is (GitHub not answering then is no reason to wait on it again at once): what stood stays while it does not
-     * answer now.
+     * The newest release as last read, read again first when both the last read and the last try are KEEP_SECONDS old
+     * (so a GitHub that did not answer is not waited on at every screen).
      *
      * @return array{release: Release|null, checked_at: int|null}
      */
@@ -53,7 +50,7 @@ final class Releases
     }
 
     /**
-     * The newest release, read from GitHub now — null while it publishes none — and kept.
+     * Read the newest release from GitHub now and keep it (null while none is published).
      *
      * @return array{release: Release|null, checked_at: int}
      * @throws UpdateRefusedException when GitHub does not answer (what stood stays)

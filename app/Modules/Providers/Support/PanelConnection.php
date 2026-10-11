@@ -13,22 +13,21 @@ use App\Core\Forms\FieldSpec;
 use App\Modules\Providers\Models\Server;
 
 /**
- * Where a panel is and how to talk to it, whatever the panel: its URL, how long a request may take, whether its TLS
- * certificate is checked (off for a self-signed one) and — for a panel behind a reverse proxy its own settings do not
- * describe — the prefix its subscription links start with. Kept in `servers.base_url` and `servers.meta` and read back
- * by of(); every connector's form takes them by the same fields — the address with the connector's own rule
- * (address()), the options under «تنظیمات پیشرفته» (options()) —, and a secret of the way in goes only to the host it
- * was given for (bound()).
+ * Where a panel is and how to talk to it, whatever the panel: its URL, the request timeout, whether its TLS certificate
+ * is checked (off for a self-signed one) and, for a panel behind a reverse proxy its own settings do not describe, the
+ * prefix its subscription links start with. Kept in `servers.base_url` and `servers.meta`, read back by of(). Every
+ * connector's form uses the same fields for them — address() with the connector's own rule, options() under
+ * «تنظیمات پیشرفته» — and binds the way in's secrets to the address's host (bound()).
  */
 final class PanelConnection
 {
-    /** The field the panel's address is: the one the way in's secrets are bound to. */
+    /** The field of the panel's address, which the way in's secrets are bound to. */
     public const ADDRESS = 'base_url';
 
-    /** The longest address kept (servers.base_url; the subscription links' prefix alike). */
+    /** The longest address kept (servers.base_url, and the subscription links' prefix). */
     private const ADDRESS_MAX = 255;
 
-    /** Seconds a request may take while the server says nothing else. */
+    /** Seconds a request may take unless the server sets its own. */
     public const DEFAULT_TIMEOUT = 30;
     private const MIN_TIMEOUT = 5;
     private const MAX_TIMEOUT = 120;
@@ -60,9 +59,9 @@ final class PanelConnection
     }
 
     /**
-     * The form's field of the panel's address — an http(s) URL with a host and nothing secret or stray in it, kept in
-     * `base_url` — in the connector's words (`$hint`, `$placeholder`), held to its rule beside: none of the panel's own
-     * pages (`$pages`, a pattern on the address's path, refused in `$pagesRefusal`'s words).
+     * The form's field of the panel's address: an http(s) URL with a host and no credentials, query or fragment, kept in
+     * `base_url`, worded by the connector (`$hint`, `$placeholder`) and refusing the panel's own pages (`$pages`, a
+     * pattern on the path, refused with `$pagesRefusal`).
      */
     public static function address(string $hint, string $placeholder, string $pages, string $pagesRefusal): Url
     {
@@ -82,7 +81,7 @@ final class PanelConnection
 
     /**
      * The form's fields of the connection's options, under «تنظیمات پیشرفته» and kept in `meta`: the TLS check, the
-     * timeout, and the prefix of the subscription links — where the connector's links take it (`$subscriptionHint`).
+     * timeout, and the subscription links' prefix (`$subscriptionHint` says where the connector's links take it).
      *
      * @return list<Field<mixed>>
      */
@@ -115,8 +114,8 @@ final class PanelConnection
     }
 
     /**
-     * What an address of the panel's with credentials in it is told: the way in has fields of its own, kept encrypted —
-     * the address is shown on the servers screen and in every error about the panel.
+     * The refusal of an address with credentials in it: the way in has encrypted fields of its own, while the address is
+     * shown on the servers screen and in every error about the panel.
      */
     private static function credentials(string $label): string
     {
@@ -124,9 +123,9 @@ final class PanelConnection
     }
 
     /**
-     * What a secret of the way in is bound to (Secret::$boundTo): the panel's address, by its origin — its scheme, host
-     * and port; another path is the same panel. Moved to another host, a secret kept is never sent there: it is typed
-     * again.
+     * What a secret of the way in is bound to (Secret::$boundTo): the panel's address by its origin (scheme, host, port;
+     * another path is the same panel). When the address moves to another host, a kept secret is never sent there: it
+     * must be typed again.
      *
      * @return array<string, \Closure(mixed): ?string>
      */

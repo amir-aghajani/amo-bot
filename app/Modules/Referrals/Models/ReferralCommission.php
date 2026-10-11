@@ -13,10 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * What one payment earned its customer's referrer (ReferralService::reward()): at most one row per payment, with whom
- * it was credited to — the customer's `referred_by` as it was earned, kept: two accounts merged since may give the
- * customer another, and what was earned stays its referrer's —, the rate in force then and the commission credited to
- * the referrer's wallet. Who paid and how much are the payment's: its order's customer.
+ * What one payment earned the customer's referrer (ReferralService::reward()), one row per payment. `referrer_id` is
+ * kept as it was when earned: a later account merge may change the customer's referrer, but earnings stay put.
  *
  * @property int $id
  * @property int $payment_id
@@ -49,7 +47,7 @@ class ReferralCommission extends Model
     ];
 
     /**
-     * Commissions beside the customer who paid each — joined as `payers` (PAYER): the payment's order's customer.
+     * Commissions joined with the customer who paid each, as `payers` (PAYER).
      *
      * @return Builder<static>
      */

@@ -15,16 +15,12 @@ use Illuminate\Database\ConnectionInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Two accounts of one person in a shop made one — a customer who signed up on the website and then linked the Telegram
- * account that has their services, an email, a Google account. The older account stays (`created_at`, then its number),
- * whichever asked; the other is merged into it and goes: everything it owned is the survivor's (REFERENCES — orders and
- * so their payments, services, the wallet's lines in one ledger again, sessions, the notices it was told, its support
- * tickets, its reviews of the shop, groups, a broadcast's pins, the customers it brought, an agency request, an agent's
- * bot), and its ways in and profile fill the survivor's empty slots (a Telegram account with its handle, an email with
- * its password and two-factor sign-in, a Google account, the name, the phone, the invite code, who brought it, an agency,
- * the bot's admin role, the later visit). Refused before anything changes (refusal()): an account with itself, either
- * banned, a different way in of one kind on each (two Telegram accounts, two Google accounts, two emails — one goes
- * first), two agents. One transaction, both rows locked in id order and judged again as they are then; recorded in
+ * Two accounts of one person in a shop made one: a customer who signed up on the website and then links the Telegram
+ * account that holds their services (or a Google account, an email). The older account stays, whichever asked. Everything
+ * the other owned moves to it (REFERENCES), and its ways in and profile fill the survivor's empty slots (takeOn()).
+ *
+ * Refused before anything changes (refusal()): an account with itself, either banned, a different way in of one kind on
+ * each, two agents. One transaction, both rows locked in id order and judged again as they are then; recorded in
  * `account_merges` and logged.
  */
 final class AccountMerger
@@ -33,13 +29,11 @@ final class AccountMerger
     public const BY_CUSTOMER = 'customer';
 
     /**
-     * Every column of the shop's tables that points at a customer — each foreign key on `users` in database/schema.php,
-     * and `bots.user_id` (an agent's own bot, which has none: the users come after the bots) — and how a merge carries
-     * what it points at to the account that stays: `move` (the merged account's rows are the survivor's), `union` (a row
-     * the survivor has already for the same `key` goes, the rest move: a group, a broadcast's pin), `drop` (gone: a
-     * sign-in's short-lived secrets), `ledger` (the wallet's lines, the balance counted again — WalletService::takeOver()),
-     * `referrer` (the customers it brought — never the survivor itself). `as` is what the merge's record counts it
-     * under (`account_merges.moved`). A table that adds such a column adds it here: AccountMergerReferencesTest reads the
+     * Every column that points at a customer (each foreign key on `users` in database/schema.php, plus `bots.user_id`,
+     * which has none because users are made after bots) and how a merge carries it: `move` the rows to the survivor;
+     * `union` by `key` (a row the survivor already has for that key goes, the rest move); `drop` them; `ledger` the wallet
+     * lines into one ledger (WalletService::takeOver()); `referrer` the customers it brought, never the survivor itself.
+     * `as` names the count in `account_merges.moved`. A new such column goes here: AccountMergerReferencesTest reads the
      * schema and fails while one is missing.
      */
     public const REFERENCES = [
@@ -61,6 +55,16 @@ final class AccountMerger
         'broadcasts.user_id' => ['how' => 'move', 'as' => 'broadcasts'],
         'broadcast_pins.user_id' => ['how' => 'union', 'key' => 'broadcast_id', 'as' => 'pins'],
         'bots.user_id' => ['how' => 'move', 'as' => 'bots'],
+        'gift_codes.redeemed_by' => ['how' => 'move', 'as' => 'gift_codes'],
+        'wheel_spins.user_id' => ['how' => 'move', 'as' => 'wheel_spins'],
+        'cashbacks.user_id' => ['how' => 'move', 'as' => 'cashbacks'],
+        'lottery_winners.user_id' => ['how' => 'move', 'as' => 'lottery_wins'],
+        // A newcomer's start gift is once a newcomer: one both accounts were given stays the survivor's (both rows are the
+        // shop's, so the shop's id is the key every row shares).
+        'referral_bonuses.invitee_id' => ['how' => 'union', 'key' => 'bot_id', 'as' => 'referral_bonuses'],
+        'referral_bonuses.referrer_id' => ['how' => 'move', 'as' => 'referral_bonuses_given'],
+        'referral_rewards.referrer_id' => ['how' => 'union', 'key' => 'milestone', 'as' => 'referral_rewards'],
+        'referral_alerts.referrer_id' => ['how' => 'move', 'as' => 'referral_alerts'],
     ];
 
     public function __construct(
@@ -69,7 +73,7 @@ final class AccountMerger
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** Why the two accounts cannot be made one, in the customer's words; null when they can. */
+    /** Why the two accounts cannot be made one, worded for the customer; null when they can. Asked again under the locks. */
     public function refusal(User $a, User $b): ?AccountRefusedException
     {
         if ($a->id === $b->id) {
@@ -96,7 +100,7 @@ final class AccountMerger
     }
 
     /**
-     * Make the two accounts one — the older stays — and answer it, as it stands after.
+     * Make the two accounts one; answers the older, which stays, as it stands after.
      *
      * @throws AccountRefusedException 422 when they cannot be one (refusal()), now or as they are once locked
      */
@@ -162,9 +166,9 @@ final class AccountMerger
     }
 
     /**
-     * The merged account's ways in and profile fill the survivor's empty slots — taken off it first, so no unique index
-     * sees one twice — and the merged row goes. A slot is filled with what belongs to it: a Telegram account with its
-     * handle and whether it turned the bot away, an email with its password and two-factor sign-in, the names together.
+     * The merged account's ways in and profile fill the survivor's empty slots, then its row goes. Its unique values are
+     * cleared first, so no unique index sees one twice. A slot takes what belongs with it: a Telegram account with its
+     * handle and `bot_blocked`, an email with its password and two-factor columns, the two names together.
      */
     private function takeOn(User $survivor, User $merged): void
     {
@@ -204,6 +208,10 @@ final class AccountMerger
         if ($merged->isAdmin() && !$survivor->isAdmin()) {
             $fill['role'] = UserRole::Admin->value;
         }
+        // Their own discount («تخفیف اختصاصی»): the larger of the two the shop gave them.
+        if ((int) $merged->discount_percent > (int) $survivor->discount_percent) {
+            $fill += $take('discount_percent');
+        }
         if ($merged->last_seen_at !== null && ($survivor->last_seen_at === null || $merged->last_seen_at->gt($survivor->last_seen_at))) {
             $fill += $take('last_seen_at');
         }
@@ -215,7 +223,7 @@ final class AccountMerger
         $this->db->table('users')->where('id', $merged->id)->delete();
     }
 
-    /** A table keyed by the customer and `$key`: what the survivor has already for a key goes from the merged one, the rest moves. */
+    /** Move a table keyed by the customer and `$key`: the merged account's rows for keys the survivor has already go, the rest move. */
     private function union(string $table, string $column, string $key, User $survivor, User $merged): int
     {
         $held = $this->db->table($table)->where($column, $survivor->id)->pluck($key)->all();
@@ -226,13 +234,13 @@ final class AccountMerger
         return $this->db->table($table)->where($column, $merged->id)->update([$column => $survivor->id]);
     }
 
-    /** The older of the two accounts — the one a merge keeps: a customer since earlier, or (the same moment) numbered first. */
+    /** The account a merge keeps: the one made earlier, or at the same moment the lower id. */
     public static function older(User $a, User $b): User
     {
         return $a->created_at->lt($b->created_at) || ($a->created_at->eq($b->created_at) && $a->id < $b->id) ? $a : $b;
     }
 
-    /** An agent, or one once: on a level, or with a bot of their own. */
+    /** An agent now or once: on a level, or owning a bot. */
     private static function isAgent(User $user): bool
     {
         return $user->isAgent() || Bot::query()->where('user_id', $user->id)->exists();

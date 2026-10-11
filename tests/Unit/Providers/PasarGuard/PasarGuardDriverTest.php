@@ -10,9 +10,9 @@ use App\Modules\Providers\Drivers\PasarGuard\PasarGuardDriver;
 use Tests\TestCase;
 
 /**
- * The PasarGuard connector: its card and its form — the panel's root address, an API key in its whole `pg_key_…` shape
- * or an admin's username and password, the connection's options —, every refusal at once, and secrets kept while left
- * blank, as long as the address stays on its host.
+ * The PasarGuard connector's card and form: the panel's root address, a whole `pg_key_…` API key or an admin's username
+ * and password, the shared options; every refusal at once; and stored secrets kept while left blank, as long as the
+ * address stays on its host.
  */
 final class PasarGuardDriverTest extends TestCase
 {

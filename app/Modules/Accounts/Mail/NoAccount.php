@@ -8,8 +8,8 @@ use App\Core\Mail\MailBody;
 use App\Core\Mail\MailMessage;
 
 /**
- * What a forgotten password of an address without an account sends it, instead of a code: that it has none — so the
- * answer, and how long it takes, is the same whether or not the address has an account, and only its owner learns which.
+ * Sent instead of a reset code to an address without an account: it has none. The request answers the same, in the
+ * same time, either way, so only the address's owner learns which.
  */
 final class NoAccount
 {

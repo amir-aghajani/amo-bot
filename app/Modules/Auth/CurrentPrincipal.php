@@ -7,12 +7,9 @@ namespace App\Modules\Auth;
 use App\Core\Logging\Acting;
 
 /**
- * Who the request being answered is read by: the principal its guard put on it — the panels' auth middleware, the website's
- * admins' (Store\Http\StaffMiddleware) —, for what an answer shows by its reader rather than by its shop (who of support
- * decided something, Services\Reviewers: the owner's login is no one's to read but the owner's). Set for the work a guard
- * hands on and put back after it (run(), as CurrentBot::run()), so nothing of one request is left for the next; the log
- * names them for the rest of the request (Core\Logging\Acting). Nothing set — the bot, a task, a customer's own request —
- * nobody of the shop's people reads the answer.
+ * The principal the current request is answered for (set by a guard through run()), for what an answer shows by its
+ * reader — Services\Reviewers hides the owner's login from anyone but the owner. Null for the bot, a task or a
+ * customer's own request.
  */
 final class CurrentPrincipal
 {
@@ -24,7 +21,7 @@ final class CurrentPrincipal
     }
 
     /**
-     * Do the work for `$principal`, and come back to whom it was for before (even when it throws).
+     * Run `$work` for `$principal`, restoring the previous principal afterwards, even on a throw.
      *
      * @template T
      * @param \Closure(): T $work

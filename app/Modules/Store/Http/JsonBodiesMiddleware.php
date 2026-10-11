@@ -13,12 +13,10 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Slim\Routing\RouteContext;
 
 /**
- * What the Store API takes as a body: JSON. A POST, PUT or PATCH that carries anything else — a form, text, a body that
- * says nothing of itself — is a 415 in the error shape, but on a route that takes a picture (one routes/api.php marks
- * with UPLOAD: a receipt, a ticket's message), which takes a form too (multipart/form-data). A form or a text body is
- * what a page of any site may make its visitors' browsers send without asking first (a CORS "simple request"): refused,
- * a sign-up, a sign-in or a reset asked from another site's page needs the preflight only the website's own origins
- * pass. A request that carries nothing is its route's to judge.
+ * The Store API takes JSON bodies only: a POST, PUT or PATCH carrying anything else is a 415, except multipart forms on
+ * the routes routes/api.php marks UPLOAD (a receipt, a ticket's message). Why: a form or text body is a CORS "simple
+ * request" any site's page can make a visitor's browser send without a preflight; refusing them means a sign-in posted
+ * from another site needs the preflight only the website's own origins pass.
  */
 final class JsonBodiesMiddleware implements MiddlewareInterface
 {
@@ -47,7 +45,7 @@ final class JsonBodiesMiddleware implements MiddlewareInterface
         return Json::error($this->responses->createResponse(), $upload ? self::NOT_JSON_OR_FORM : self::NOT_JSON, 415);
     }
 
-    /** Whether the request says it carries a body: its type, its length past none, or the chunks it comes in. */
+    /** Whether the request says it carries a body: a content type, a non-zero length, or chunked transfer. */
     private static function carriesBody(ServerRequestInterface $request): bool
     {
         $length = $request->getHeaderLine('Content-Length');

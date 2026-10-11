@@ -54,7 +54,7 @@ beforeEach(() => {
 })
 
 describe('reading a failure', () => {
-  it.each(TABLE)('reads %s as its kind, in the words the admin reads', (_what, error, kind, words) => {
+  it.each(TABLE)('reads %s as its kind, with the message the admin sees', (_what, error, kind, words) => {
     const failure = describeFailure(error)
 
     expect(failure.kind).toBe(kind)
@@ -84,7 +84,7 @@ describe('reading a failure', () => {
     expect(describeFailure(new TypeError('Importing a module script failed.')).message).toContain('هنوز پیدا نمی‌شوند')
   })
 
-  it('offers what its words say: an answer the panel cannot read is loaded again, not asked again', () => {
+  it('offers the action its description promises: reload for an unreadable answer, not retry', () => {
     const kinds = Object.entries(FAILURE_KINDS)
     expect(kinds.filter(([, spec]) => spec.reload).map(([kind]) => kind)).toEqual(['unreadable', 'stale-build', 'crash'])
     for (const [, spec] of kinds) expect(spec.reload && spec.retry, `${spec.title} reloads, and says so`).toBe(false)
@@ -113,7 +113,7 @@ describe('what follows a lead that says what was not found', () => {
     expect(notFoundReason(describeFailure(new RouteErrorResponse(404, 'Not Found', null)))).toBe(reason)
   })
 
-  it('is the server’s own words when they say why', () => {
+  it('is the server’s message when it explains why', () => {
     expect(notFoundReason(describeFailure(failed(404, 'فایل این رسید دیگر در تلگرام نیست.')))).toBe('فایل این رسید دیگر در تلگرام نیست.')
   })
 })
@@ -131,13 +131,13 @@ describe('a failure in one line', () => {
 })
 
 describe('a failure in a toast', () => {
-  it('has the server’s words as its title when they are the admin’s', () => {
+  it('uses the server’s message as its title when it is meant for the admin', () => {
     toastFailure(failed(409, 'این پلن فروخته شده است.'))
 
     expect(toast.error).toHaveBeenCalledWith('این پلن فروخته شده است.', { description: undefined })
   })
 
-  it('has the kind’s title over its words, and the code of a failure of the server’s own', () => {
+  it('shows the kind’s title over its description, with the tracking code for a server failure', () => {
     toastFailure(failed(0, 'No answer', { foreign: true }))
     toastFailure(failed(500, 'x', { requestId: '3f9a1c2b7d4e5f60' }))
 
@@ -145,7 +145,7 @@ describe('a failure in a toast', () => {
     expect(toast.error).toHaveBeenNthCalledWith(2, FAILURE_KINDS.server.title, { description: `${FAILURE_KINDS.server.description} کد پیگیری: 3f9a1c2b7d4e5f60` })
   })
 
-  it('names what failed when the screen says it, the words under it', () => {
+  it('uses the screen’s own title when given, with the description under it', () => {
     toastFailure(failed(0, 'No answer', { foreign: true }), 'خروج انجام نشد')
 
     expect(toast.error).toHaveBeenCalledWith('خروج انجام نشد', { description: FAILURE_KINDS.unreachable.description })

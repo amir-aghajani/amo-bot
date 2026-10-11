@@ -7,9 +7,8 @@ namespace App\Modules\Store\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * The website's captcha asked for what it does not have: a token judged while the website asks none (409 — its owner
- * sets one up in the panel), or a challenge from a captcha whose widget asks the shop for none (404 — Turnstile's draws
- * its own).
+ * The website's captcha asked for what it lacks: a token judged while none is set up (409), or a challenge from a captcha
+ * whose widget makes its own, Turnstile's (404).
  */
 final class NoCaptchaException extends DomainRuleException
 {

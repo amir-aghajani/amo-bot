@@ -14,39 +14,35 @@ use App\Modules\Providers\Enums\CoreState;
 use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 use App\Modules\Providers\Support\PanelConnection;
+use App\Modules\Providers\Support\Raw;
+use App\Support\Text;
 
 /**
- * ProviderInterface for PasarGuard panels (3.1 and later), on top of PasarGuardClient — the client of one server's
- * panel, which its connector builds (PasarGuardDriver::connect()).
+ * ProviderInterface for PasarGuard panels (3.1 and later), on PasarGuardClient — the client of one server's panel,
+ * built by PasarGuardDriver::connect().
  *
- * A client is a PasarGuard user, addressed by its username — the contract's `name` — through the
- * /api/user/by-username routes. The shop's inbounds are PasarGuard's **groups**: a user reaches the
- * panel's inbounds only through the groups it belongs to (`group_ids`), so a group's id is the
- * inbound key and a plan entry sells groups. The term from the first connection is PasarGuard's
- * "on hold" (`on_hold_expire_duration`), a deadline its `expire`. PasarGuard has no per-client IP
- * limit, so ClientSpec::$ipLimit is not sent (its HWID device limit is a different rule, left to the
- * panel's own policy).
+ * A client is a PasarGuard user, addressed by username (the contract's `name`) through /api/user/by-username (the bare
+ * /api/user/{x} turns id-based in v6). The shop's "inbounds" are PasarGuard's groups: a user reaches inbounds only
+ * through its groups (`group_ids`), so a group's id is the inbound key and a plan entry sells groups. A term from the
+ * first connection is PasarGuard's "on hold" (`on_hold_expire_duration`); a deadline is its `expire`. PasarGuard has no
+ * per-client IP limit (its HWID device limit is another rule), so ClientSpec::$ipLimit is not sent.
  *
- * The subscription link is the user's `subscription_url`, made absolute against the panel's address
- * when the panel answers a path (it does unless its settings name a URL prefix). PasarGuard signs a
- * fresh token into every answer, each valid until the link is revoked, so the link a sync brings is
+ * The subscription link is the user's `subscription_url`, made absolute against the panel's address when it is a path.
+ * PasarGuard signs a fresh token into every answer, each valid until the link is revoked, so the link a sync brings is
  * a new one that works alongside the old.
- *
- * Server columns: base_url (the panel's root, no /dashboard), api_token (a `pg_key_…` API key, preferred) or the
- * username and password of an admin; meta: verify_tls, timeout, subscription_url (Support\PanelConnection).
  */
 final class PasarGuardProvider implements ProviderInterface
 {
-    /** How recently PasarGuard must have seen traffic for a user to count it online — its dashboard's window. */
+    /** How recently PasarGuard must have seen a user's traffic to count it online — its dashboard's window. */
     private const ONLINE_WINDOW_SECONDS = 120;
 
     /** Users read per request when the whole panel is listed. */
     private const PAGE_SIZE = 500;
 
-    /** The most pages one listing reads (50,000 users), so a panel that misbehaves cannot keep a sync paging forever. */
+    /** The most pages one listing reads (50,000 users), so a misbehaving panel cannot keep a sync paging forever. */
     private const MAX_PAGES = 100;
 
-    /** The longest the shop keeps an inbound's tag (server_inbounds.tag). */
+    /** The longest inbound tag the shop keeps (server_inbounds.tag). */
     private const TAG_MAX = 128;
 
     private const USERS = '/api/user/by-username/';
@@ -56,50 +52,41 @@ final class PasarGuardProvider implements ProviderInterface
         private readonly PanelConnection $connection,
     ) {}
 
-    /** One user read: the credentials, and the users permission every sale needs. */
+    /** One user read: proves the credentials and the users permission every sale needs. */
     public function testConnection(): void
     {
         $this->client->get('/api/users', ['limit' => 1]);
     }
 
     /**
-     * The panel host's vitals. The proxy cores run on PasarGuard's nodes, which are not read (their
-     * rows carry each node's own key), so the core's state is unknown.
+     * The panel host's vitals. The proxy cores run on PasarGuard's nodes, which are not read (their rows carry each
+     * node's own key), so the core's state is unknown.
      */
     public function status(): PanelStatus
     {
         $system = $this->client->get('/api/system');
 
         return new PanelStatus(
-            cpuPercent: self::float($system['cpu_usage'] ?? null),
-            memoryUsedBytes: self::int($system['mem_used'] ?? null),
-            memoryTotalBytes: self::int($system['mem_total'] ?? null),
-            diskUsedBytes: self::int($system['disk_used'] ?? null),
-            diskTotalBytes: self::int($system['disk_total'] ?? null),
+            cpuPercent: Raw::float($system, 'cpu_usage'),
+            memoryUsedBytes: Raw::int($system, 'mem_used'),
+            memoryTotalBytes: Raw::int($system, 'mem_total'),
+            diskUsedBytes: Raw::int($system, 'disk_used'),
+            diskTotalBytes: Raw::int($system, 'disk_total'),
             coreState: CoreState::Unknown,
-            uptimeSeconds: self::int($system['uptime_seconds'] ?? null),
+            uptimeSeconds: Raw::int($system, 'uptime_seconds'),
         );
     }
 
-    /**
-     * Every group the admin may use, as an inbound: its name as the title, the inbound tags it holds as the tag. A group
-     * has no protocol or port of its own.
-     */
+    /** Every group the admin may use, as an inbound: its name as the title, its inbound tags as the tag; no protocol or port. */
     public function listInbounds(): array
     {
-        $groups = $this->client->get('/api/groups')['groups'] ?? [];
-
-        return array_values(array_map(static function (array $group): InboundInfo {
-            $tags = array_values(array_filter(is_array($group['inbound_tags'] ?? null) ? $group['inbound_tags'] : [], is_string(...)));
-
-            return new InboundInfo(
-                key: (string) self::int($group['id'] ?? null),
-                tag: self::shortened(implode(', ', $tags), self::TAG_MAX),
-                remark: self::string($group['name'] ?? null),
-                enabled: ($group['is_disabled'] ?? false) !== true,
-                clientCount: self::int($group['total_users'] ?? null),
-            );
-        }, array_filter(is_array($groups) ? $groups : [], is_array(...))));
+        return array_map(static fn(array $group): InboundInfo => new InboundInfo(
+            key: (string) Raw::int($group, 'id'),
+            tag: Text::fit(implode(', ', Raw::stringsOf($group['inbound_tags'] ?? null)), self::TAG_MAX),
+            remark: Raw::string($group, 'name'),
+            enabled: ($group['is_disabled'] ?? false) !== true,
+            clientCount: Raw::int($group, 'total_users'),
+        ), Raw::objectsOf($this->client->get('/api/groups')['groups'] ?? null));
     }
 
     /** PasarGuard has no switch for its subscription server: every user it answers about carries a link. */
@@ -124,7 +111,7 @@ final class PasarGuardProvider implements ProviderInterface
         return $this->clientOf($user, online: null);
     }
 
-    /** One PUT: the panel keeps the user's groups, credentials and link — and its own reset strategy. */
+    /** One PUT: the panel keeps the user's groups, credentials and link, and its own reset strategy. */
     public function updateClient(ClientSpec $spec): ClientInfo
     {
         $user = $this->client->put(self::USERS . rawurlencode($spec->name), [
@@ -134,16 +121,15 @@ final class PasarGuardProvider implements ProviderInterface
         return $this->clientOf($user, online: null);
     }
 
-    /** revoke_sub: fresh proxy credentials for the user and a new link; every link signed before stops working. */
+    /** revoke_sub: fresh proxy credentials and a new link; every link signed before stops working. */
     public function rotateClientCredentials(string $name): ClientInfo
     {
         return $this->clientOf($this->client->post(self::USERS . rawurlencode($name) . '/revoke_sub'), online: null);
     }
 
     /**
-     * Switching off is one PUT. Switching on reads the user first: a user whose term never started goes
-     * back on hold with it — sent as such, since a panel before 5.0 would otherwise make it active with
-     * no end at all.
+     * Switching off is one PUT. Switching on reads the user first: one whose term never started goes back on hold with
+     * it, sent explicitly — a panel before 5.0 would otherwise make it active with no end at all.
      */
     public function setClientEnabled(string $name, bool $enabled): void
     {
@@ -155,7 +141,7 @@ final class PasarGuardProvider implements ProviderInterface
         }
 
         $user = $this->client->get($path);
-        if (self::string($user['status'] ?? null) !== 'disabled') {
+        if (Raw::string($user, 'status') !== 'disabled') {
             return;
         }
 
@@ -168,7 +154,7 @@ final class PasarGuardProvider implements ProviderInterface
         $this->client->delete(self::USERS . rawurlencode($name));
     }
 
-    /** Presence comes with the user: seen within PasarGuard's own window (its dashboard's). */
+    /** Presence comes with the user: seen within PasarGuard's own window. */
     public function findClient(string $name, bool $presence = false): ?ClientInfo
     {
         try {
@@ -183,21 +169,21 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * Page by page, ordered by the unique username so a page boundary never shifts under a stable panel,
-     * until a short page or the total the panel reported. A panel past MAX_PAGES — or one that never stops
-     * answering full pages — is not listed at once: the sync then asks for each service on its own.
+     * Page by page, ordered by the unique username so a page boundary never shifts on a stable panel, until a short page
+     * or the reported total. A panel past MAX_PAGES — or one that never stops answering full pages — is not listed at
+     * once: the sync then asks for each service on its own.
      */
     public function listClients(): array
     {
         $clients = [];
         for ($page = 0; $page < self::MAX_PAGES; $page++) {
             $answer = $this->client->get('/api/users', ['offset' => $page * self::PAGE_SIZE, 'limit' => self::PAGE_SIZE, 'sort' => 'username', 'load_sub' => 'true']);
-            $users = array_values(array_filter(is_array($answer['users'] ?? null) ? $answer['users'] : [], is_array(...)));
+            $users = Raw::objectsOf($answer['users'] ?? null);
             foreach ($users as $user) {
                 $client = $this->clientOf($user, online: null);
                 $clients[$client->name] = $client;
             }
-            if (count($users) < self::PAGE_SIZE || count($clients) >= self::int($answer['total'] ?? null)) {
+            if (count($users) < self::PAGE_SIZE || count($clients) >= Raw::int($answer, 'total')) {
                 return array_values($clients);
             }
         }
@@ -209,8 +195,6 @@ final class PasarGuardProvider implements ProviderInterface
     {
         $this->client->post(self::USERS . rawurlencode($name) . '/reset');
     }
-
-    // ---------------------------------------------------------------- mapping
 
     /**
      * The term of a client switched on, as PasarGuard words it: on hold with its duration, or active with a deadline —
@@ -229,8 +213,8 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * The comment (which carries the Telegram id) as the user's note — PasarGuard users have no Telegram
-     * field; nothing to say leaves the panel's note alone.
+     * The comment (which carries the Telegram id) as the user's note — PasarGuard users have no Telegram field; nothing
+     * to say leaves the panel's note alone.
      *
      * @return array{note?: string}
      */
@@ -242,51 +226,49 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * A user as the contract's client. PasarGuard counts one total, reported as download (the shop adds
-     * the two).
+     * A user as the contract's client. PasarGuard counts one total, reported as download (the shop adds the two).
      *
      * @param array<string, mixed> $user
      */
     private function clientOf(array $user, ?bool $online): ClientInfo
     {
-        $status = self::string($user['status'] ?? null);
         $pending = self::waitingTerm($user);
         $deadline = self::moment($user['expire'] ?? null);
 
         return new ClientInfo(
-            name: self::string($user['username'] ?? null),
-            enabled: $status !== 'disabled',
-            downloadBytes: self::int($user['used_traffic'] ?? null),
-            totalBytes: self::int($user['data_limit'] ?? null),
+            name: Raw::string($user, 'username'),
+            enabled: Raw::string($user, 'status') !== 'disabled',
+            downloadBytes: Raw::int($user, 'used_traffic'),
+            totalBytes: Raw::int($user, 'data_limit'),
             expiry: match (true) {
                 $pending !== null => Expiry::afterFirstUse($pending),
                 $deadline !== null => Expiry::at($deadline),
                 default => Expiry::never(),
             },
-            subscriptionUrl: $this->linkOf(self::string($user['subscription_url'] ?? null)),
+            subscriptionUrl: $this->linkOf(Raw::string($user, 'subscription_url')),
             online: $online,
             lastOnlineAt: self::moment($user['online_at'] ?? null),
         );
     }
 
     /**
-     * The term still waiting for the user's first connection, in seconds: on hold, or switched off before
-     * its clock started (switched on, it goes back on hold); null otherwise. A duration on an active user
-     * is a leftover the panel cannot clear, not a term.
+     * The term still waiting for the user's first connection, in seconds: on hold, or switched off before its clock
+     * started (switched on, it goes back on hold); null otherwise. A duration on an active user is a leftover the panel
+     * cannot clear, not a term.
      *
      * @param array<string, mixed> $user
      */
     private static function waitingTerm(array $user): ?int
     {
-        $seconds = self::int($user['on_hold_expire_duration'] ?? null);
-        $waits = $seconds > 0 && ($user['expire'] ?? null) === null && in_array(self::string($user['status'] ?? null), ['on_hold', 'disabled'], true);
+        $seconds = Raw::int($user, 'on_hold_expire_duration');
+        $waits = $seconds > 0 && ($user['expire'] ?? null) === null && in_array(Raw::string($user, 'status'), ['on_hold', 'disabled'], true);
 
         return $waits ? $seconds : null;
     }
 
     /**
-     * The link the customer gets: the panel's, made absolute against the panel's address when it is a
-     * path, or the server's own prefix in front of its token when one is set.
+     * The link the customer gets: the panel's, made absolute against the panel's address when it is a path, or the
+     * server's own prefix in front of its token when one is set.
      */
     private function linkOf(string $url): ?string
     {
@@ -312,25 +294,5 @@ final class PasarGuardProvider implements ProviderInterface
         } catch (\Exception) {
             return null;
         }
-    }
-
-    private static function int(mixed $value): int
-    {
-        return is_numeric($value) ? (int) $value : 0;
-    }
-
-    private static function float(mixed $value): float
-    {
-        return is_numeric($value) ? (float) $value : 0.0;
-    }
-
-    private static function string(mixed $value): string
-    {
-        return is_scalar($value) ? (string) $value : '';
-    }
-
-    private static function shortened(string $text, int $max): string
-    {
-        return mb_strlen($text) > $max ? mb_substr($text, 0, $max - 1) . '…' : $text;
     }
 }

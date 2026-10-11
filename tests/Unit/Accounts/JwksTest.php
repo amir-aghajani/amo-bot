@@ -16,10 +16,8 @@ use Psr\Log\NullLogger;
 use Tests\Support\FakeTelegramLogin;
 
 /**
- * A provider's published key set as a sign-in is checked with: only keys that sign, by an asymmetric algorithm, are
- * taken — a shared secret a set might carry, a key for encryption, a key the library cannot read are left out —, a key
- * that names no algorithm gets its type's, and a set with nothing to sign with is no set: the provider could not be
- * asked what a sign-in needs.
+ * Which keys of a published set are used: asymmetric signing keys only, a missing algorithm by key type, and a set with
+ * no usable key counts as none.
  */
 final class JwksTest extends TestCase
 {

@@ -10,9 +10,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * GET /changes (both panels) — each area's number from the change feed; a panel asks every few seconds and reloads
- * what the areas whose number moved show. A read, so it holds up none of the session's other requests
- * (SessionMiddleware).
+ * GET /changes (both panels): each area's version from the change feed. A panel polls it every few seconds and reloads
+ * what the moved areas show.
  */
 final class ChangesController extends ApiController
 {

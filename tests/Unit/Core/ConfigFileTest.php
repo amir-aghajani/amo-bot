@@ -10,8 +10,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
- * config.php, the shop's own configuration: read as the app boots on it, written whole — every declared setting in its
- * section with its words, the ones the file does not set shown commented out at their defaults, a driver's DB_*
+ * config.php, the shop's configuration: read as the app boots on it, written whole — every declared setting in its
+ * section with its description, the ones the file does not set shown commented out at their defaults, a driver's DB_*
  * settings after DB_CONNECTION, anything else kept —, any value surviving the round trip as what it is.
  */
 final class ConfigFileTest extends TestCase

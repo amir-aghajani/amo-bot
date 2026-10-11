@@ -8,9 +8,8 @@ use App\Modules\Telegram\Api\Refusal;
 use App\Modules\Telegram\Api\TelegramApiException;
 
 /**
- * What keeps the report group from taking reports — or a group from becoming it — as the shop keeps it (its value) and
- * as the screen and the group read it (message()): learned from a check, from the bot's own membership updates, or from
- * a refused send.
+ * What keeps the report group from taking reports, or a group from becoming it: learned from a check, the bot's
+ * membership updates or a refused send. message() is how the screen and the group word it.
  */
 enum GroupProblem: string
 {
@@ -32,11 +31,7 @@ enum GroupProblem: string
         };
     }
 
-    /**
-     * What a refused call says about the group itself — the bot taken out, demoted, without the "manage topics" right,
-     * topics switched off; null when it is not the group's trouble (a flood limit, an outage, one bad report, a topic
-     * to make or open again).
-     */
+    /** What a refused call says about the group itself; null when it is not the group's trouble (a flood, an outage…). */
     public static function of(TelegramApiException $e): ?self
     {
         return match ($e->refusal()) {

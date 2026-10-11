@@ -35,7 +35,7 @@ without the right to manage topics.
 | Topic | What it hears |
 |---|---|
 | «خریدها» | A service sold and delivered: the customer, the plan, the location, the service, the amount and the way it was paid, the referrer's commission |
-| «تمدیدها» | A renewal, and the new end |
+| «تمدیدها» | A renewal, and the new end; extra traffic or time bought for a service («حجم و زمان اضافه»), and what the service has now |
 | «شارژ کیف پول» | A wallet top-up, and the balance |
 | «رسیدها» | A copy of each card receipt with what it pays for, «✅ تایید» and «❌ رد»; then its verdict as a reply to it |
 | «کاربران جدید» | A newcomer, and who brought them |

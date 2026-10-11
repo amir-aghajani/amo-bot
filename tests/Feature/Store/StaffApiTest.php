@@ -44,15 +44,10 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * The shop's admins — its customers whose role is admin — work the shop from its website: the panels' own operations of
- * its daily work under `/admin` of the Store API (Store\Http\StaffMiddleware). Shut by default and asked at the door
- * every time: an admin of the shop, a website that lets them in, a strong sign-in while it asks one (a password alone
- * is made strong by its second step proven again), a way in proven within a working day, what the website grants for an
- * operation that needs a grant — and then a recent sign-in too, which approving a payment asks as well. Inside, an admin
- * reads what the panels read, in their shapes, decides under their own name,
- * never about themselves or another admin's account or an agent's, approves no payment without a receipt in review, leaves no client
- * on a panel that answers, reads a panel's failure in a word, works the panels at a pace, and every change they ask is
- * logged with them on the line.
+ * The website's admin API for the shop's admins: the door's checks in order (an admin, let in, a strong sign-in, a
+ * working day's sign-in, a grant, a recent sign-in), the panels' shapes, decisions under their own name, the guards
+ * against deciding about themselves or another admin's or agent's account, receipts first, panel failures summarised,
+ * the pace limit and the log line.
  */
 final class StaffApiTest extends HttpTestCase
 {

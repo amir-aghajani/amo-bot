@@ -13,6 +13,7 @@ use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Notifications\ServiceCard;
@@ -20,16 +21,14 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
 use App\Support\LocalTime;
+use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * The orders screen: every order with its customer, what it was for and its payments — tabs by status and the stuck
- * queue (paid and not delivered, counted: the dashboard and the sidebar link there), a type filter, the shop's days,
- * one search box, and what the list sold — and what an order itself allows: delivering a paid order again once its
- * delivery failed, dropping an order nobody paid, with its unpaid payments. The customer hears as from the payments
- * screen, as a reply to their receipt.
+ * The orders screen: status tabs and the stuck queue, filters, search and the sold total; retrying a stalled delivery and
+ * cancelling an unpaid order with its open payments, the customer told as a reply to their receipt.
  */
 final class AdminOrdersApiTest extends HttpTestCase
 {
@@ -181,6 +180,30 @@ final class AdminOrdersApiTest extends HttpTestCase
         self::assertSame(404, $this->get('/api/admin/orders/999999')->getStatusCode());
     }
 
+    public function testExtraTrafficAndTimeAreOrdersOfTheirOwnSayingWhatTheyBring(): void
+    {
+        $bought = $this->buy($this->ali, $this->plan, $this->server);
+        $service = Subscription::query()->sole();
+        $traffic = $this->paidExtra($service, ExtraKind::Traffic, 10, '20000');
+        $time = $this->paidExtra($service, ExtraKind::Time, 7, '7000');
+
+        $data = $this->decode($this->get('/api/admin/orders'));
+        $rows = array_column($data['orders'], null, 'id');
+        self::assertSame(['extra_traffic', 10 * Traffic::GIGABYTE, null], [$rows[$traffic->id]['type'], $rows[$traffic->id]['traffic_bytes'], $rows[$traffic->id]['days']]);
+        self::assertSame(['extra_time', null, 7], [$rows[$time->id]['type'], $rows[$time->id]['traffic_bytes'], $rows[$time->id]['days']]);
+        self::assertSame(
+            [['id' => $this->plan->id, 'name' => 'Basic'], ['id' => $this->server->id, 'name' => 'Berlin'], $bought->subscription_id],
+            [$rows[$traffic->id]['plan'], $rows[$traffic->id]['server'], $rows[$traffic->id]['subscription']['id']],
+            'its service, where that is, and its plan',
+        );
+        self::assertSame([null, null], [$rows[$bought->id]['traffic_bytes'], $rows[$bought->id]['days']], 'a purchase brings neither');
+        self::assertSame([3, '77000.00'], [$data['meta']['sold'], $data['meta']['sold_amount']], 'sales like any other');
+
+        $ids = fn(string $query): array => array_column($this->decode($this->get("/api/admin/orders?{$query}"))['orders'], 'id');
+        self::assertSame([$traffic->id], $ids('type=extra_traffic'));
+        self::assertSame([$time->id], $ids('type=extra_time'));
+    }
+
     public function testAFailedDeliveryIsRetriedAndTheCustomerHearsOnlyWhenItWorked(): void
     {
         $this->server->forceFill(['is_active' => false])->save();
@@ -323,7 +346,7 @@ final class AdminOrdersApiTest extends HttpTestCase
         $refunded = $this->purchaseOrder($this->ali, $this->plan, $this->server, ['status' => OrderStatus::Refunded]);
         $delivering = $this->paid($this->purchaseOrder($this->ali, $this->plan, $this->server, ['status' => OrderStatus::Processing]));
 
-        // Cancelled elsewhere a moment ago — another tab, the bot's checkout expiring —: said so, not the rule.
+        // Cancelled elsewhere a moment ago — another tab, the bot's checkout expiring —: the refusal says so, not the rule.
         self::assertSame('این سفارش لغو شده است.', $refusal($cancelled, 'cancel'));
         self::assertSame('مبلغ این سفارش بازپرداخت شده است.', $refusal($refunded, 'cancel'));
         self::assertSame('این سفارش هنوز پرداخت نشده است.', $refusal($open, 'retry'));

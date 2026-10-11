@@ -23,7 +23,7 @@ interface ApiPictureProps {
   alt: string
   /** Its file's name, as a download saves it. */
   name: string
-  /** What it is, as its words say: «رسید» (… بارگذاری نشد), «تصویر». */
+  /** What it is, for the failure's line: «رسید» (… بارگذاری نشد), «تصویر». */
   what: string
   /** The browser cannot draw it, as its name says (a HEIC photo sent as a file): what there is, asked at once. */
   undrawable?: boolean
@@ -31,12 +31,10 @@ interface ApiPictureProps {
 }
 
 /**
- * A picture the panel's API serves — a payment's receipt, a ticket message's —, drawn by the browser from its address
- * (lib/api's mediaUrl: the shop the tab shows goes in it), opening at full size in a dialog with its download. When the
- * browser cannot draw it — a name it does not draw, a picture that would not load —, the panel asks the address what
- * there is (lib/api's probe): the file, there to download; or the server's word on why there is none to show — gone
- * (said so, nothing more), or out of reach for now (with a way to try again, which draws it afresh: a refusal is never
- * cached, so the browser asks again).
+ * A picture the panel's API serves (a payment's receipt, a ticket message's), drawn by the browser from `mediaUrl()`
+ * and opening at full size in a dialog with a download. When the browser cannot draw it, the panel probes the address:
+ * the file is there (offer the download), or the server says why not — gone, or out of reach for now (with a retry; a
+ * refusal is never cached, so the browser asks again).
  */
 export function ApiPicture({ path, alt, name, what, undrawable = false, place }: ApiPictureProps) {
   const [failed, setFailed] = useState(undrawable)

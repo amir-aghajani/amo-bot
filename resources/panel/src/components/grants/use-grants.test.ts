@@ -180,7 +180,7 @@ describe('stopping a grant', () => {
   })
 })
 
-describe('a grant in words', () => {
+describe('a grant described in text', () => {
   it('says what it gives each service as the bot does', () => {
     expect(giftLabel({ days: 3, traffic_bytes: 10 * GB })).toBe('۳ روز و ۱۰ گیگابایت')
     expect(giftLabel({ days: 0, traffic_bytes: 1.5 * GB })).toBe('۱٫۵ گیگابایت')

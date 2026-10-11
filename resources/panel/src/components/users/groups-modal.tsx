@@ -26,10 +26,7 @@ interface GroupsModalProps {
   onSaved: (user: UserRow) => void
 }
 
-/**
- * The admin's groups a customer is in: every group ticked or not, saved as a whole. With no group yet it says so, and
- * where one is made — nothing to choose, nothing to save.
- */
+/** Which groups a customer is in, saved as a whole. With no group yet it says where groups are made. */
 export function GroupsModal({ user, invalidates, onClose, onSaved }: GroupsModalProps) {
   return (
     <Modal open={user !== null} onClose={onClose} size="sm" title={user ? `گروه‌های ${userLabel(user)}` : 'گروه‌ها'}>

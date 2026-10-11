@@ -21,6 +21,7 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import type { BotTextRow } from '@/lib/api-types'
+import { messageOf } from '@/lib/failure'
 import { formatNumber } from '@/lib/format'
 import { botTextsQuery } from '@/lib/queries'
 
@@ -32,10 +33,8 @@ function normalize(text: string): string {
 }
 
 /**
- * Every text the bot sends a customer, by where it shows, each reworded in a modal with its variables and
- * a Telegram preview. The shop's wording stays the default until the admin changes it. The list is long: its rows stay
- * drawn whatever the search and the tab — those only hide the rest —, and follow the field and the tabs a beat behind,
- * so typing and switching answer at once.
+ * «متن‌های ربات»: every text the bot sends, grouped by where it shows, each reworded in a dialog with a Telegram preview.
+ * The list is long, so its rows stay drawn and the search and tabs only hide them (deferred a beat, so typing stays fast).
  */
 export function BotTextsPage() {
   const queryClient = useQueryClient()
@@ -61,8 +60,10 @@ export function BotTextsPage() {
       (current) => current && { groups: current.groups.map((group) => ({ ...group, texts: group.texts.map((row) => (row.key === text.key ? text : row)) })) },
     )
 
+  // Quiet: the dialog that asked says why it was refused.
   const reset = useMutation({
     mutationFn: (text: BotTextRow) => api.post(`/bot/texts/${text.key}/reset`),
+    meta: { quiet: true },
     onSuccess: (result) => {
       replace(result.text)
       setResetting(null)
@@ -170,11 +171,15 @@ export function BotTextsPage() {
 
       <ConfirmModal
         open={resetting !== null}
-        onClose={() => setResetting(null)}
+        onClose={() => {
+          setResetting(null)
+          reset.reset()
+        }}
         title="بازگشت به متن پیش‌فرض"
         description={resetting && `«${resetting.title}» دوباره با متن پیش‌فرض فروشگاه فرستاده می‌شود.`}
         confirmLabel="بازگشت به پیش‌فرض"
         pending={reset.isPending}
+        error={reset.error ? messageOf(reset.error) : null}
         onConfirm={() => resetting && reset.mutate(resetting)}
       >
         متن فعلی شما کنار گذاشته می‌شود و برنمی‌گردد.

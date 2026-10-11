@@ -14,11 +14,10 @@ use App\Modules\Auth\Services\SignInThrottle;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * The captcha a website asks of a sign-up, a sign-in with a password and a password reset (Core\Captcha\Verifier, the
- * website's driver): the form's `captcha`, the widget's token, judged for its action once the form's own fields passed —
- * a Turnstile token is good once — and counted first against what the address network that sent it may cost the shop
- * (SignInThrottle::issuing()): a refused token keeps its count, so a bot's guesses cost it what asking for codes costs,
- * and once that is spent its next token is refused unjudged. A site that asks none is asked nothing.
+ * The captcha a website asks of a sign-up, a password sign-in and a password reset: the form's `captcha` token judged for
+ * the form's action (Core\Captcha\Verifier), after the form's own fields passed. Each token is first counted against what
+ * the address network may cost the shop (SignInThrottle::issuing()); a refused one keeps its count, so a bot's guesses
+ * cost it what asking for codes costs, and once that budget is spent its tokens are refused unjudged.
  */
 final class Captcha
 {
@@ -28,6 +27,8 @@ final class Captcha
     ) {}
 
     /**
+     * Judge the form's captcha, when the site asks one.
+     *
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `captcha`: none, or not passed
      * @throws TooManyAttemptsException 429 while this address network asked too much
@@ -47,6 +48,7 @@ final class Captcha
 
             throw $e;
         }
+        // A token that passed costs nothing; only refused ones keep their count.
         $this->throttle->issuedNothing($request);
     }
 }

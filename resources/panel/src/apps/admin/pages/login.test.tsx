@@ -84,7 +84,7 @@ describe('signing in', () => {
     await until(() => expect(screen.getByTestId('address').textContent).toBe('/'))
   })
 
-  it('stays on the form when refused, the API’s words under the field', async () => {
+  it('stays on the form when refused, with the API’s message under the field', async () => {
     server().on('POST', '/api/admin/auth/login', refusal(422, 'نام کاربری یا رمز عبور درست نیست.', { password: ['نام کاربری یا رمز عبور درست نیست.'] }))
     open('/login')
     await screen.findByLabelText('نام کاربری')

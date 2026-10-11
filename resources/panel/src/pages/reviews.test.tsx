@@ -10,7 +10,7 @@ import { json, noContent, refusal, server, type Answer } from '@/test/server'
 
 /*
  * The reviews screen (pages/reviews): every review written on the shop's website, the newest first — its number, the
- * name it is signed with and who wrote it (their page, or a guest), its stars, its words with where they use the service
+ * name it is signed with and who wrote it (their page, or a guest), its stars, its text with where they use the service
  * from, where it stands and who decided it —; the queue waiting on support counted beside its tab, the tab the dashboard's
  * link opens; a tab and a search narrowing the list as the server reads it; and from a row's menu, what its state allows:
  * approve, reject — a decision another made first told, the list read again —, and delete, asked first.
@@ -47,7 +47,7 @@ beforeEach(() => {
 })
 
 describe('the reviews', () => {
-  it('list each one — its number, its name and who wrote it, its stars, its words and where they use it from, its state and who decided it', async () => {
+  it('list each one with its number, its name and who wrote it, its stars, its text and where the service is used, its status and who decided it', async () => {
     const guests = reviewRow({
       id: 9,
       name: 'Sara',
@@ -79,7 +79,7 @@ describe('the reviews', () => {
     expect(within(approved).getByText('root')).toBeTruthy()
   })
 
-  it('say there is none yet in the screen’s own words', async () => {
+  it('say there is none yet, with the screen’s own empty text', async () => {
     open('/reviews', reviews([], { pending: 0 }))
 
     expect(await screen.findByText('هنوز نظری نوشته نشده است')).toBeTruthy()
@@ -126,7 +126,7 @@ describe('the list narrowed', () => {
 })
 
 describe('a decision from the row’s menu', () => {
-  it('approves it: the review the server answers in its place, said in a toast', async () => {
+  it('approves it: the server’s answer replaces the row, confirmed in a toast', async () => {
     open()
     server().on(
       'POST',

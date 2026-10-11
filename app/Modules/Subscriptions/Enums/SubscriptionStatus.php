@@ -8,7 +8,7 @@ namespace App\Modules\Subscriptions\Enums;
 enum SubscriptionStatus: string
 {
     case Active = 'active';
-    /** Its time or its traffic ran out; a renewal (or an extension on the panel) makes it run again. */
+    /** Its time or traffic ran out; a renewal (or an extension made on the panel) makes it run again. */
     case Expired = 'expired';
     /** Switched off by support; switched back on the same way. */
     case Disabled = 'disabled';

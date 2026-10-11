@@ -31,13 +31,9 @@ use Tests\HttpTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
- * The payments screen: the list with its tabs, search and the shop's days — and what it took in —, the receipt served
- * from Telegram, and the review — approving
- * delivers the order and tells the customer (a refused receipt too, once support sees the money), rejecting tells them
- * why, cancelling drops the open order — its other open payments with it — and says so only then, a reminder nudges with its buttons, a retry speaks only
- * when the delivery worked. Every word about a decision is a bare reply to the receipt; only the reminder carries
- * buttons. An approval that meets its order closed in the same moment is refused and changes nothing. (Refunds:
- * PaymentRefundsTest.)
+ * The payments screen: tabs, search, days and the paid total, the receipt served from Telegram, and the review operations —
+ * approve (even a refused receipt), reject, cancel (with the open order unless another receipt is in review), remind, retry
+ * — each told as a bare reply to the receipt. Refunds are PaymentRefundsTest's.
  */
 final class AdminPaymentsApiTest extends HttpTestCase
 {
@@ -481,7 +477,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
         $plan = $this->plan(['price' => '50000.00'], $server);
         $payment = $this->receipt($this->cardPayment($this->purchaseOrder($this->ali, $plan, $server), $this->card));
 
-        // The server is off: the payment is accepted, the delivery fails, the customer is told once.
+        // The server is off: the payment is accepted, the delivery fails, the customer is notified once.
         $approved = $this->decode($this->postJson("/api/admin/payments/{$payment->id}/approve"))['payment'];
         self::assertSame(['paid', 'failed'], [$approved['status'], $approved['order']['status']]);
         self::assertNotNull($approved['order']['notes'], 'the admin sees why');

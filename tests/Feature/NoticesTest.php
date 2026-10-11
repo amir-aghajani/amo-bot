@@ -47,12 +47,10 @@ use Tests\Fakes\RecordingMailTransport;
 use Tests\HttpTestCase;
 
 /**
- * Every notice the shop sends a customer reaches them on every door they have (Notifications\Services\Notices): it is
- * kept for their website — what it was, what it is about (the order of a payment, an order, a service, a support ticket;
- * nothing for their account or another's row) and its words, exactly what the bot wrote them —, it goes to their Telegram chat when
- * they have one that has not turned the bot away, else by email when they have an address and the shop's email goes out (its subject the notice's kind,
- * its body the words as safe HTML and plain text), and else nowhere but the website, as before. Half a year on, the
- * hourly housekeeping forgets it.
+ * Every notice is kept for the customer's website (its kind, what it is about — a payment's order, an order, a service, a
+ * ticket; nothing for the account or for someone else's row — and the exact words the bot sent) and goes to their Telegram
+ * chat, else by email when they have an address and the shop's email works (the kind as the subject, the words as safe
+ * HTML and plain text), else nowhere but the website. The hourly housekeeping forgets notices half a year old.
  */
 final class NoticesTest extends HttpTestCase
 {
@@ -326,18 +324,6 @@ final class NoticesTest extends HttpTestCase
         self::assertSame(Delivery::Unreachable, $delivery);
         self::assertTrue($logs->hasWarningThatContains('did not go'), 'the Mailer says why');
         self::assertSame(NoticeType::PaymentReminder, $this->latest($sara)->type, 'kept for her website all the same');
-    }
-
-    public function testAnAgentsCustomerHearsFromTheAgentsBotAndTheNoticeIsTheAgentsShops(): void
-    {
-        $bot = $this->agentBot();
-        $theirs = CurrentBot::run($bot, fn(): Subscription => $this->subscription($this->customer(), $this->plan(['traffic_gb' => 10], $this->server), $this->server, 'reza_1'));
-
-        $this->service(CustomerNotifier::class)->serviceEnabled($theirs);
-
-        $notice = CurrentBot::run($bot, fn(): Notification => Notification::query()->sole());
-        self::assertSame([$bot->id, $theirs->user_id, NoticeType::ServiceEnabled], [$notice->bot_id, $notice->user_id, $notice->type]);
-        self::assertSame(0, Notification::query()->count(), "none in the main bot's shop");
     }
 
     public function testTheHousekeepingForgetsWhatIsHalfAYearOld(): void

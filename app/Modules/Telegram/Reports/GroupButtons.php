@@ -6,17 +6,14 @@ namespace App\Modules\Telegram\Reports;
 
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\TelegramApiException;
+use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 use Psr\Log\LoggerInterface;
 
 /**
- * The buttons of the bot's messages in the report group — a receipt's review (ReceiptReview), a failed delivery's retry
- * (DeliveryRetry), a request to become an agent (AgencyReview), a ticket's close (TicketClose) — and who may press them,
- * or answer a ticket by a reply (TicketReplies): the bot's admins (`users.role` admin, not banned), by the account that
- * pressed or wrote, never by being in the group or by what a button says — who decides is that account
- * (Auth\Actor::groupAdmin(), its name as Auth\Services\Reviewers::forAdmin() keeps it). Changing or taking off a
- * message's buttons, and the bot's words to whoever pressed or wrote (say()), never throw: buttons already as asked are
- * fine, anything else is logged.
+ * What the report group's buttons and replies share: who may act (admin(): a bot admin's own account, never anyone just
+ * for being in the group, nor what a button's data says), changing a message's buttons, and the bot's word under
+ * someone's message. Nothing here throws over Telegram: a failure is logged.
  */
 final class GroupButtons
 {
@@ -29,7 +26,7 @@ final class GroupButtons
     ) {}
 
     /**
-     * The bot's admin behind a Telegram account, or null for anyone else.
+     * The bot admin behind a Telegram account (role admin, not banned), or null for anyone else.
      *
      * @param array<string, mixed>|null $from
      */
@@ -45,7 +42,7 @@ final class GroupButtons
     }
 
     /**
-     * The topic a message of the group is in (its message_thread_id), or null for one in no topic.
+     * The topic a group message is in (its message_thread_id), or null for one in no topic.
      *
      * @param array<string, mixed> $message
      */
@@ -54,7 +51,80 @@ final class GroupButtons
         return ($message['is_topic_message'] ?? false) === true ? (int) ($message['message_thread_id'] ?? 0) : null;
     }
 
-    /** @param list<list<array<string, mixed>>>|null $rows null takes the buttons off */
+    /** The bot admin who pressed the button; null after telling anyone else why in a popup (`$notAdmin`). */
+    public function presser(Update $update, string $notAdmin): ?User
+    {
+        $admin = self::admin($update->from());
+        if ($admin === null) {
+            $this->answer($update, $notAdmin, alert: true);
+        }
+
+        return $admin;
+    }
+
+    /** Answer the press: stop its spinner, with a toast or (`$alert`) a popup. */
+    public function answer(Update $update, ?string $text = null, bool $alert = false): void
+    {
+        $this->api->answerCallbackQuery((string) $update->callbackId(), $text, $alert);
+    }
+
+    /**
+     * Put these buttons under the pressed message; null takes them off.
+     *
+     * @param list<list<array<string, mixed>>>|null $rows
+     */
+    public function buttons(Update $update, ?array $rows): void
+    {
+        $this->set((int) $update->chatId(), (int) $update->messageId(), $rows);
+    }
+
+    /** Nothing is left to decide here: the pressed message loses its buttons and a popup says why. */
+    public function dismiss(Update $update, string $why): void
+    {
+        $this->buttons($update, null);
+        $this->answer($update, $why, alert: true);
+    }
+
+    /**
+     * The message `$message` replies to, when that is one of the bot's own; null otherwise.
+     *
+     * @param array<string, mixed> $message
+     * @return array<string, mixed>|null
+     */
+    public function botReplied(array $message): ?array
+    {
+        $replied = $message['reply_to_message'] ?? null;
+
+        return is_array($replied) && (int) ($replied['from']['id'] ?? 0) === $this->api->botId() ? $replied : null;
+    }
+
+    /**
+     * The bot admin who wrote `$message`; null after telling the writer why their message does nothing — written
+     * anonymously (no account to authorise), or not a bot admin (`$notAdmin`).
+     *
+     * @param array<string, mixed> $message
+     */
+    public function writer(int $chatId, array $message, string $notAdmin): ?User
+    {
+        if (isset($message['sender_chat'])) {
+            $this->sayUnder($chatId, $message, self::ANONYMOUS);
+
+            return null;
+        }
+
+        $admin = self::admin(is_array($message['from'] ?? null) ? $message['from'] : null);
+        if ($admin === null) {
+            $this->sayUnder($chatId, $message, $notAdmin);
+        }
+
+        return $admin;
+    }
+
+    /**
+     * Set a message's buttons; null takes them off. Buttons already as asked are fine.
+     *
+     * @param list<list<array<string, mixed>>>|null $rows
+     */
     public function set(int $chatId, int $messageId, ?array $rows): void
     {
         try {
@@ -65,8 +135,8 @@ final class GroupButtons
     }
 
     /**
-     * The bot's words in the group, as written, under `$replyTo` in its topic (`$thread`): what a reply or a press came
-     * to, a prompt for a reason. The message's id, or null when Telegram would not take it.
+     * The bot's words (plain text) as a reply to `$replyTo` in topic `$thread`; the message's id, or null when Telegram
+     * refused it.
      *
      * @param array<string, mixed>|null $markup
      */
@@ -87,5 +157,15 @@ final class GroupButtons
 
             return null;
         }
+    }
+
+    /**
+     * The bot's words as a reply to someone's `$message`, in its topic.
+     *
+     * @param array<string, mixed> $message
+     */
+    public function sayUnder(int $chatId, array $message, string $text): void
+    {
+        $this->say($chatId, (int) ($message['message_id'] ?? 0), self::threadOf($message), $text);
     }
 }

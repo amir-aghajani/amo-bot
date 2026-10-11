@@ -7,10 +7,9 @@ namespace App\Modules\Telegram\Session;
 use App\Modules\Telegram\Models\TelegramSession;
 
 /**
- * One chat's conversation: the step of a flow it is in (`state` — "topup.amount", "receipt:12": a handler's prefix and
- * where it is) with that step's scratch, and the chat's own facts, which outlive every flow (keys starting with "_" in
- * the data bag: whether a reply keyboard is on the client's screen, a membership confirmed lately). Handlers change it;
- * the dispatcher saves it once the update is served.
+ * One chat's conversation: the step of a flow it is at (`state`, e.g. "topup.amount", "receipt:12") with that step's
+ * scratch, and the chat's own facts, which outlive every flow (data keys starting with "_": whether a reply keyboard is
+ * shown, a recent membership check). Handlers change it; the dispatcher saves it after the update.
  */
 final class ChatSession
 {
@@ -21,6 +20,7 @@ final class ChatSession
 
     public function __construct(private readonly TelegramSession $model) {}
 
+    /** The step the chat is at; null outside any flow. */
     public function state(): ?string
     {
         return $this->model->state;
@@ -35,8 +35,7 @@ final class ChatSession
     }
 
     /**
-     * Go to a step of a flow with what it needs to keep (`$scratch`): the step before and its scratch are left behind,
-     * the chat's own facts stay.
+     * Go to a step with its scratch: the previous step's scratch goes, the chat's own facts stay.
      *
      * @param array<string, mixed> $scratch
      */
@@ -47,14 +46,16 @@ final class ChatSession
         $this->dirty = true;
     }
 
+    /** A value of the step's scratch, or one of the chat's own facts. */
     public function get(string $key, mixed $default = null): mixed
     {
         return $this->model->data[$key] ?? $default;
     }
 
+    /** Keep a value: in the step's scratch, or as a chat's fact when `$key` starts with "_". */
     public function put(string $key, mixed $value): void
     {
-        // In place, the bag's order kept: a value put again as it was leaves the row as it was, and nothing is written.
+        // In place, keeping the bag's order: putting a value again as it was leaves the row unchanged, so nothing is written.
         $data = $this->model->data ?? [];
         $data[$key] = $value;
         $this->model->data = $data;
@@ -70,16 +71,15 @@ final class ChatSession
     }
 
     /**
-     * Leave the flow at a last step that must run once (a broadcast sent, a link changed), as clear() does: true for
-     * the one update that moved the stored state off `$state` — of two taps on the same button in the same moment, the
-     * other gets false and does nothing.
+     * Leave the flow at a last step that must run once (a broadcast sent, a link changed): one conditional update of
+     * the stored state, so of two taps at the same moment only one gets true.
      */
     public function claim(string $state): bool
     {
         $claimed = $this->model->newQuery()->whereKey($this->model->getKey())->where('state', $state)->update(['state' => null]) === 1;
         $this->clear();
         if ($claimed) {
-            // The row holds no state now: a step entered again after all (a start refused at the last moment) is a change to write.
+            // The row holds no state now, so a step entered again after all (a start refused at the last moment) is written.
             $this->model->syncOriginalAttribute('state');
         }
 
@@ -97,7 +97,7 @@ final class ChatSession
         $this->put(self::REPLY_KEYBOARD, $shown);
     }
 
-    /** Write what the update changed — Eloquent writes nothing when the values are as they were. */
+    /** Write what the update changed (Eloquent skips values that are as they were). */
     public function save(): void
     {
         if ($this->dirty) {

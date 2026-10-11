@@ -29,18 +29,16 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Two-factor sign-in for the shop's website — the email and password sign-in's second step, a code of an authenticator
- * app (RFC 6238, Core\Security\Totp): the customer turns it on with a new secret (setup(): kept waiting, an auth challenge
- * of theirs, SETUP_SECONDS — a new one replaces it) and the app's first code (enable()), and gets RECOVERY_CODES one-time
- * codes for the day the phone is lost, shown once, kept as keyed hashes (Encrypter::mac(), as the emailed codes are). A
- * password sign-in then answers a challenge (EmailSignIn), which signIn() opens with the app's code or a recovery code
- * — the challenge takes CODE_ATTEMPTS codes, each wrong one counted against the address and the account too, and every
- * code tried for the account is counted first against its second-step budget (SignInThrottle::secondStep(): whoever has
- * its password guesses no further, from however many addresses at once — its customer told the first time a day it runs
- * out); no code opens twice (`totp_last_step`), a recovery code is spent. A reset's new password waits in its challenge
- * and is set only as the second step opens. Google's and Telegram's sign-ins are not asked: the provider signed them in.
- * Off again with the account's password (disable()), or by support for one who lost the phone it was on (turnOff():
- * logged with who did). The customer is told whichever way it goes on or off. A password reset leaves it on.
+ * Two-factor sign-in on the website: the email-and-password sign-in's second step, an authenticator app's code (RFC 6238,
+ * Core\Security\Totp). Telegram and Google sign-ins are not asked — the provider signed them in.
+ *
+ * On: setup() keeps a new secret waiting, enable() takes the app's first code and hands out RECOVERY_CODES one-time
+ * codes (shown once, kept as keyed hashes). Then a password sign-in answers a challenge (EmailSignIn) that signIn()
+ * opens with the app's code or a recovery code. Every code tried is counted first against the account's second-step
+ * budget (SignInThrottle::secondStep()), so someone holding the password cannot guess on from many addresses; no app
+ * code opens twice (`totp_last_step`), and a recovery code is spent. A reset's new password waits in the challenge and
+ * is set only when the second step opens. Off: disable() with the password, or turnOff() by support. The customer is
+ * told every time.
  */
 final class TwoFactor
 {
@@ -54,10 +52,10 @@ final class TwoFactor
     public const RECOVERY_CODES = 10;
     public const RECOVERY_LENGTH = 10;
 
-    /** What an account keeps of it — gone with it, and with the email it is asked of (Identities); carried with that email (AccountMerger). */
+    /** Its columns on `users`: they go with the email when it is removed, and move with it in a merge. */
     public const COLUMNS = ['totp_secret', 'totp_recovery_codes', 'totp_enabled_at', 'totp_last_step'];
 
-    /** What a second step's challenge keeps of a reset: the new password's hash, set once the second step opens. */
+    /** The payload key a reset's challenge keeps the new password's hash under, until the second step opens. */
     public const NEW_PASSWORD = 'password_hash';
 
     public const SETUP_GONE = 'زمان راه‌اندازی ورود دو مرحله‌ای گذشته است؛ آن را از اول راه‌اندازی کنید.';
@@ -79,8 +77,8 @@ final class TwoFactor
     ) {}
 
     /**
-     * A new secret for the customer's authenticator app — kept waiting for its first code (enable()), any earlier one
-     * gone — and the otpauth:// address the app takes it by: the shop's name its issuer, the account's email its name.
+     * A new secret for the customer's app, kept waiting for its first code (enable()) in place of any earlier one, and its
+     * otpauth:// address: the shop's name as issuer, the account's email as name.
      *
      * @return array{secret: string, uri: string}
      * @throws AccountRefusedException 422 no email and password to ask it of, or it is on already
@@ -95,8 +93,8 @@ final class TwoFactor
     }
 
     /**
-     * Two-factor sign-in turned on by the app's first code for the secret setup() gave: its recovery codes, shown this
-     * once. The code is taken once — the next sign-in asks a later one. The customer is told.
+     * Turn it on with the app's first code for the secret setup() gave; answers the recovery codes, shown this once. The
+     * code's step is taken, so the next sign-in needs a later one. The customer is notified.
      *
      * @param array<string, mixed> $input {code}
      * @return list<string>
@@ -139,8 +137,8 @@ final class TwoFactor
     }
 
     /**
-     * Two-factor sign-in turned off by the customer, the account's password typed again — a wrong one counted as a
-     * failed sign-in (EmailSignIn::confirm()). The customer is told.
+     * The customer turns it off with the account's password (EmailSignIn::confirm(): a wrong one is a failed sign-in).
+     * The customer is notified.
      *
      * @param array<string, mixed> $input {password}
      * @throws AccountRefusedException 422 it is not on
@@ -160,9 +158,8 @@ final class TwoFactor
     }
 
     /**
-     * Support turns it off for a customer who lost the phone it was on (either panel, or one of the shop's admins on its
-     * website): the password alone signs them in from now on. The customer is told (CustomerNotifier: in Telegram and by email, and on their website), the log says
-     * who did it.
+     * Support turns it off for a customer who lost the phone it was on (a panel, or a shop admin on the website). The
+     * customer is notified and the log names who did it.
      *
      * @throws AccountRefusedException 422 it is not on
      */
@@ -177,12 +174,11 @@ final class TwoFactor
     }
 
     /**
-     * A password sign-in's second step: the challenge it answered, and the code of the account's app — six digits,
-     * Persian ones too — or one of its recovery codes (spent). A wrong code is a 422 on `code`, counted on the challenge
-     * (CODE_ATTEMPTS codes at most), against the account's second-step budget, and against the address and the account;
-     * a challenge that opens nothing any more (unknown, expired, tried out, two-factor turned off since) asks for the
-     * password again (a 401). A reset's new password the challenge kept is set as it opens, every other session of the
-     * account ended and the customer told.
+     * A password sign-in's second step: the challenge and the app's code (Persian digits too) or a recovery code. A wrong
+     * code is a 422 on `code`, counted on the challenge (AuthChallenges::CODE_ATTEMPTS), on the second-step budget and as a
+     * failed sign-in. A challenge that opens nothing any more (unknown, expired, tried out, two-factor off since) is a 401:
+     * start with the password again. A reset's new password kept in the challenge is set now, every session ended and the
+     * customer told.
      *
      * @param array<string, mixed> $input {challenge, code}
      * @throws SignInRefusedException 401 the challenge opens nothing; 403 banned
@@ -228,8 +224,8 @@ final class TwoFactor
     }
 
     /**
-     * The account's second step asked again of a signed-in customer who proves the account theirs by its password
-     * (Reauthentication): its app's code or a recovery code, as a sign-in's — counted the same, against the same budget.
+     * The second step asked of a signed-in customer proving their password again (Reauthentication): checked and counted
+     * as a sign-in's.
      *
      * @param array<string, mixed> $input {code}
      * @throws ValidationException 422 on `code`: none, or wrong
@@ -245,18 +241,17 @@ final class TwoFactor
         $this->tryCode($user, $request, $code, fn(): ?array => $this->passes($user, $code) ? [] : null);
     }
 
-    /** The account without two-factor sign-in — its secret, its recovery codes, its mark —, left to save. */
+    /** The account with its two-factor columns emptied, left to save. */
     private static function clear(User $user): User
     {
         return $user->forceFill(array_fill_keys(self::COLUMNS, null));
     }
 
     /**
-     * A second-step code tried for the account. One of neither shape — no six digits, no recovery code — is judged by
-     * nothing and takes no try off anything, but counts as a failed sign-in; any other is counted first against the
-     * account's second-step budget (SignInThrottle::secondStep(): a 429 once spent, its customer told the first time a
-     * day), then `$opens` judges it: a right one gives its count back, a wrong one counts against the address and the
-     * account too. What the code opened (a challenge's payload).
+     * Try a second-step code; answers what it opened (a challenge's payload). A code of neither shape is judged by nothing
+     * and spends no budget. Any other is counted first against the account's second-step budget (a 429 once spent, the
+     * customer told the first time a day), then judged by `$opens`: right gives the count back. Anything wrong counts as a
+     * failed sign-in.
      *
      * @param \Closure(): (array<string, mixed>|null) $opens What the code opens; null when it is wrong
      * @return array<string, mixed>
@@ -280,9 +275,9 @@ final class TwoFactor
     }
 
     /**
-     * Whether `$code` opens the account's second step now: a code of its app for a step later than the last one taken
-     * — taken by one conditional UPDATE, so of two sign-ins with it one gets it —, or one of its recovery codes —
-     * spent by one conditional UPDATE on the list as it was read. Quietly: no panel shows either.
+     * Whether `$code` opens the second step now: an app code for a step later than the last one taken, or a recovery code.
+     * Each is taken by one conditional UPDATE (the step, or the list as it was read), so of two sign-ins with one code only
+     * one gets it. Written quietly: no panel shows either.
      */
     private function passes(User $user, string $code): bool
     {
@@ -315,14 +310,14 @@ final class TwoFactor
         return true;
     }
 
-    /** What is kept of a recovery code: its keyed hash, as the emailed codes are kept. */
+    /** A recovery code's keyed hash: ten characters are too few to keep under a bare hash. */
     private function hashOf(string $code): string
     {
         return $this->encrypter->mac("totp_recovery|{$code}");
     }
 
     /**
-     * Two-factor sign-in can be asked of the account: it signs in with an email and a password, and does not ask it yet.
+     * Refuse unless the account signs in with an email and a password and does not have two-factor sign-in on yet.
      *
      * @throws AccountRefusedException
      */
@@ -337,7 +332,7 @@ final class TwoFactor
     }
 
     /**
-     * The code as typed: Latin digits, without the spaces and dashes an app or a sheet shows it with, a recovery code in capitals.
+     * The typed code normalised: Latin digits, no spaces or dashes (as apps and printed sheets show them), upper case.
      *
      * @param array<string, mixed> $input
      */

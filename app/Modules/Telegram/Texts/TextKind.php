@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Texts;
 
 /**
- * Where a text ends up, which decides what it may hold: a message or the caption of the QR card (Telegram
- * HTML), a callback popup or a button (shown as typed), or a part that another text puts inside itself.
+ * Where a text ends up, which decides what it may hold: a message or the QR card's caption (Telegram HTML), a popup
+ * or a button (plain text), or a part another text takes in as a variable.
  */
 enum TextKind: string
 {
@@ -16,10 +16,7 @@ enum TextKind: string
     case Button = 'button';
     case Part = 'part';
 
-    /**
-     * The most a template may show — its text without tags, as Telegram counts —: Telegram's own limit, less room for what
-     * its variables bring.
-     */
+    /** The most a wording may show (tags not counted): Telegram's limit, less room for what its variables bring. */
     public function limit(): int
     {
         return match ($this) {

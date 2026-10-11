@@ -6,6 +6,9 @@ namespace App\Modules\Orders\Models;
 
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
 use App\Modules\Catalog\Models\Plan;
+use App\Modules\Discounts\DTO\DiscountLine;
+use App\Modules\Discounts\Enums\DiscountSource;
+use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Services\OrderService;
@@ -22,10 +25,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * What the customer asked for. An order is paid through one or more Payment attempts — one of which pays it, and
- * when is its `paid_at` — and, once paid, fulfilled (subscription provisioned / renewed / wallet credited / an agent's
- * traffic added). In an agent's bot a purchase or a renewal draws its traffic from the agent's
- * (Agency\Services\TrafficPool).
+ * What a customer buys. It is paid by one of its Payment attempts and then delivered (Services\OrderService): a service
+ * made, renewed or given extra traffic or time, the wallet credited, or an agent's traffic added. Its price and the
+ * discounts taken are kept on it (Services\Pricing, DTO\Quote).
  *
  * @property int $id
  * @property int $user_id
@@ -34,10 +36,15 @@ use Illuminate\Support\Carbon;
  * @property int|null $plan_id
  * @property int|null $server_id The server the customer chose (purchase orders); a renewal's is its service's
  * @property int|null $subscription_id
- * @property int|null $traffic_bytes The traffic an agent bought (traffic orders)
+ * @property int|null $traffic_bytes The traffic an order brings: an agent's (traffic orders), a service's extra (extra traffic)
+ * @property int|null $days The days an extra time order brings its service
  * @property string $amount
- * @property string|null $notes Why a delivery failed — in words anyone of the shop may read — or why it was cancelled
- * @property string|null $diagnosis The owner's reading of the panel that failed its delivery (OrderDirectory::notes())
+ * @property OrderPricing $pricing Which of the plan's prices it was made at
+ * @property string $discount_amount The Toman all its discounts took off
+ * @property list<array<string, mixed>>|null $discounts Its discount lines as kept (discountLines())
+ * @property int|null $discount_code_id The code it was made with: one of the code's uses while it is not cancelled
+ * @property string|null $notes Why the delivery failed (safe for any reader of the shop) or why it was cancelled
+ * @property string|null $diagnosis The owner-only detail of a panel that failed the delivery (OrderDirectory::notes())
  * @property Carbon|null $fulfilled_at
  * @property Carbon $created_at
  * @property Carbon $updated_at
@@ -53,6 +60,9 @@ class Order extends Model
 
     protected $table = 'orders';
 
+    /** @var array<string, mixed> A new order is at its own price, nothing taken off, unless it says otherwise. */
+    protected $attributes = ['pricing' => 'regular', 'discount_amount' => '0.00'];
+
     protected $fillable = [
         'user_id',
         'type',
@@ -61,7 +71,12 @@ class Order extends Model
         'server_id',
         'subscription_id',
         'traffic_bytes',
+        'days',
         'amount',
+        'pricing',
+        'discount_amount',
+        'discounts',
+        'discount_code_id',
         'notes',
         'diagnosis',
         'fulfilled_at',
@@ -72,12 +87,23 @@ class Order extends Model
         'type' => OrderType::class,
         'status' => OrderStatus::class,
         'amount' => 'decimal:2',
+        'pricing' => OrderPricing::class,
+        'discount_amount' => 'decimal:2',
+        'discounts' => 'array',
+        'discount_code_id' => 'integer',
         'traffic_bytes' => 'integer',
+        'days' => 'integer',
         'fulfilled_at' => 'datetime',
     ];
 
-    /** The statuses of a sale: the money is in and the delivery done or under way. */
+    /** A sale: paid, and delivered or being delivered. */
     public const SOLD = [OrderStatus::Paid->value, OrderStatus::Processing->value, OrderStatus::Fulfilled->value];
+
+    /** Paid and not given back: a sale, or a failed delivery waiting for support's retry. */
+    public const KEPT = [...self::SOLD, OrderStatus::Failed->value];
+
+    /** Paid at some point, whatever happened since: KEPT, or refunded. */
+    private const EVER_PAID = [...self::KEPT, OrderStatus::Refunded->value];
 
     /**
      * Orders that count as a sale (SOLD).
@@ -90,8 +116,54 @@ class Order extends Model
     }
 
     /**
-     * Paid, and nobody is delivering them: a delivery that never started, or a claim gone quiet — untouched for
-     * OrderService::STALE_PROCESSING_MINUTES (OrderService::isStale() of one order).
+     * The customer's purchases that were ever paid: "has bought a service in the shop" for first-purchase prices and
+     * codes — a free plan counts, a service given free does not. Rewards read paidPurchases() instead.
+     *
+     * @return Builder<static>
+     */
+    public static function boughtBy(int $userId): Builder
+    {
+        return static::bought()->where('user_id', $userId);
+    }
+
+    /**
+     * Every customer's purchases that boughtBy() counts, for questions about many customers at once.
+     *
+     * @return Builder<static>
+     */
+    public static function bought(): Builder
+    {
+        return static::query()
+            ->where('type', OrderType::Purchase->value)
+            ->whereIn('status', self::EVER_PAID)
+            ->where('pricing', '!=', OrderPricing::Gift->value);
+    }
+
+    /**
+     * Purchases with a price that were ever paid: what money-like rewards count as "bought" (referral gifts, the
+     * fake-referral alert, the wheel's buyers-only rule), since a free trial must not unlock them.
+     *
+     * @return Builder<static>
+     */
+    public static function paidPurchases(): Builder
+    {
+        return static::bought()->where('amount', '>', 0);
+    }
+
+    /**
+     * What customers spent in the shop: orders bought for themselves (OrderType::FOR_THEMSELVES) and paid without being
+     * given back (KEPT). Loyalty tiers and the nightly draw count these.
+     *
+     * @return Builder<static>
+     */
+    public static function spending(): Builder
+    {
+        return static::query()->whereIn('status', self::KEPT)->whereIn('type', OrderType::FOR_THEMSELVES);
+    }
+
+    /**
+     * Paid, and nobody is delivering them: untouched for OrderService::STALE_PROCESSING_MINUTES while paid or processing
+     * (OrderService::isStale() is the same rule for one order).
      *
      * @return Builder<static>
      */
@@ -101,9 +173,8 @@ class Order extends Model
     }
 
     /**
-     * Paid, and not delivered — the queue that waits on support, the orders it can act on: the delivery failed, or nobody
-     * is delivering it, while the payment that paid it stands (a refunded one gave the money back: nothing is owed).
-     * OrderActions::stuck() of one order — what its retry is offered on.
+     * Paid but not delivered — support's queue: the delivery failed or went stale while the paying payment still stands
+     * (a refunded one owes nothing). OrderActions::stuck() is the same rule for one order.
      *
      * @return Builder<static>
      */
@@ -117,8 +188,7 @@ class Order extends Model
     }
 
     /**
-     * Orders the customer may still pay: open, and no receipt of theirs waiting for support — that one is support's to
-     * decide, and paying it again would pay twice.
+     * Orders the customer may still pay: pending with no receipt waiting for support (paying again would pay twice).
      *
      * @return Builder<static>
      */
@@ -154,8 +224,7 @@ class Order extends Model
     }
 
     /**
-     * The attempts to pay it, the newest first — each knowing this order as its own (chaperone()): what is done to one of
-     * them reads the order at hand, not a copy fetched again.
+     * The attempts to pay it, newest first, each given this very order (chaperone()) rather than a fresh copy.
      *
      * @return HasMany<Payment, $this>
      */
@@ -164,13 +233,35 @@ class Order extends Model
         return $this->hasMany(Payment::class)->orderByDesc('id')->chaperone('order');
     }
 
-    /** When it was paid: the paying payment's moment (refunded since or not) — its payments loaded; null while unpaid. */
+    /**
+     * The discounts it took: the automatic one, then the code's.
+     *
+     * @return list<DiscountLine>
+     */
+    public function discountLines(): array
+    {
+        return DiscountLine::listOf($this->discounts);
+    }
+
+    /** The line of the code it was made with; null for none. */
+    public function codeLine(): ?DiscountLine
+    {
+        foreach ($this->discountLines() as $line) {
+            if ($line->source === DiscountSource::Code) {
+                return $line;
+            }
+        }
+
+        return null;
+    }
+
+    /** When it was paid (refunded since or not); null while unpaid. Its payments must be loaded. */
     public function paidAt(): ?Carbon
     {
         return $this->payments->first(static fn(Payment $payment): bool => $payment->paid_at !== null)?->paid_at;
     }
 
-    /** The payment that paid it, while that payment stands — not refunded since; null for one nobody paid. Its payments loaded. */
+    /** The payment that paid it, unless refunded since; null otherwise. Its payments must be loaded. */
     public function paidBy(): ?Payment
     {
         return $this->payments->first(static fn(Payment $payment): bool => $payment->isPaid());

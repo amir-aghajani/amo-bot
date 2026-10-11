@@ -9,10 +9,8 @@ use App\Modules\Payments\Enums\CheckoutOutcome;
 use App\Modules\Payments\Models\Payment;
 
 /**
- * What came of a checkout (Payments\Services\Checkout::pay()), for its door to show: the outcome and what it carries —
- * the order as it stands (settled, transfer, processing, refused), the payment awaiting its receipt and the card to
- * transfer to (transfer), the payment the gateway refused (refused), the wallet's shortfall (short). Asking an outcome for
- * what it does not carry is the door's mistake.
+ * What came of a checkout (Services\Checkout::pay()) for the bot or the website to show: the outcome and what it
+ * carries. Asking an outcome for something it does not carry is a LogicException.
  */
 final class CheckoutResult
 {
@@ -42,7 +40,7 @@ final class CheckoutResult
         return new self(CheckoutOutcome::Processing, $order);
     }
 
-    /** Paid or closed elsewhere in the same moment — or held back by the door —: nothing charged. */
+    /** Paid or closed elsewhere in the same moment — or held back by the caller's own guard —: nothing charged. */
     public static function closed(): self
     {
         return new self(CheckoutOutcome::Closed);

@@ -11,8 +11,8 @@ use App\Core\Forms\FieldType;
 use App\Support\Input;
 
 /**
- * SQLite's database file (DB_DATABASE): relative to the application or absolute — never in memory, which every request
- * would start empty, and never under public/, where the web server hands out whatever is there.
+ * SQLite's database file (DB_DATABASE), relative to the application or absolute. Never in memory (every request would
+ * start empty) and never under public/ (the web server would hand it out).
  *
  * @extends Field<string>
  */

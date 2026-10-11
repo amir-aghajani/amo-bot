@@ -11,9 +11,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * The owner's sections that are the shop's as a whole, worked where they belong whatever shop the panel shows: every
- * bot's services at once (EVERYWHERE — the servers, their grants, the mass gifts; the container's `shop.everywhere`) or
- * the main bot's shop (MAIN — the agency, whose agents are its customers, and the panel's settings; `shop.main`).
+ * Runs the owner's installation-wide sections where they belong, whatever shop the panel shows: across every bot's rows
+ * (EVERYWHERE — servers, grants, mass gifts; the container's `shop.everywhere`) or in the main bot's shop (MAIN — the
+ * agency, whose agents are its customers, and the panel's settings; `shop.main`).
  */
 final class ShopScopeMiddleware implements MiddlewareInterface
 {

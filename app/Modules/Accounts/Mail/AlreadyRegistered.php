@@ -8,8 +8,8 @@ use App\Core\Mail\MailBody;
 use App\Core\Mail\MailMessage;
 
 /**
- * What a sign-up of an address that has an account sends it, instead of a code: that it has one, and the way back in —
- * so the sign-up's answer is the same whether or not the address has an account, and only its owner learns which.
+ * Sent instead of a sign-up code to an address that has an account: it has one, and the way back in. The sign-up answers
+ * the same either way, so only the address's owner learns which.
  */
 final class AlreadyRegistered
 {

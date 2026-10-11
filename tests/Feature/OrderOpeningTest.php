@@ -12,9 +12,8 @@ use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
 
 /**
- * The order a customer's pick of a way to pay opens: the open one of the same thing — the same plan on the same server
- * at today's price — found again, its expiry counted from then; a new one for anything else. A top-up or an agent's
- * traffic outside the shop's bounds is refused whoever asks, before anything is ordered.
+ * Opening an order: picking a way to pay again finds the same open order (same plan, server and price) and restarts its
+ * expiry; anything else is a new order. Top-ups and agents' traffic outside the shop's bounds are refused.
  */
 final class OrderOpeningTest extends DatabaseTestCase
 {

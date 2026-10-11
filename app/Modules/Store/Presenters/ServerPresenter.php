@@ -7,13 +7,13 @@ namespace App\Modules\Store\Presenters;
 use App\Modules\Providers\Models\Server;
 
 /**
- * A server as the shop's website shows its status: its name, whether it takes a new customer now and when the shop last
- * talked to its panel — never its address, its connector, nor what its panel said.
+ * A server's status as the website shows it: its name, whether it takes a new customer now and when the shop last reached
+ * its panel — never its address, its connector, nor what its panel said.
  */
 final class ServerPresenter
 {
     /**
-     * `$available`: nothing stands against selling on it now (Providers\Services\ServerReadiness).
+     * `$available`: nothing stands against selling on it now (ServerReadiness).
      *
      * @return array{id: int, name: string, available: bool, checked_at: string|null}
      */

@@ -12,9 +12,8 @@ use App\Modules\Users\Services\WalletService;
 use Tests\DatabaseTestCase;
 
 /**
- * The wallet's ledger, its one writer: every move a line carrying the balance from then on — the last line's is the
- * balance, read with a list's rows too —; a debit no further below zero than the credit its caller passes (an agent's),
- * a credit always landing; and the ledger lines worded in one place.
+ * The wallet ledger: every line carries the balance after it (the last is the balance, also read with a list's rows), a
+ * debit goes below zero only as far as the caller's credit, a credit always lands, and the lines' wording.
  */
 final class WalletServiceTest extends DatabaseTestCase
 {

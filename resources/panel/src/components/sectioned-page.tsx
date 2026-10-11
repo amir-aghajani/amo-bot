@@ -1,32 +1,32 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Navigate } from 'react-router'
+import { Navigate, useNavigate } from 'react-router'
+import { FilterSelect } from '@/components/filter-select'
 import { Page, type PageWidth } from '@/components/page'
 import { PageHeader, type PageHeaderProps } from '@/components/page-header'
-import { SectionPicker } from '@/components/section-picker'
 import { useSection, type NavSection } from '@/components/shell/nav'
 
-/** The header's place for a section's actions, and whether that section is the one on screen (outside a sectioned page, all is). */
+/** The header's slot for a section's actions, and whether that section is the one on screen (outside a sectioned page, always). */
 const SectionContext = createContext<{ slot: HTMLDivElement | null; shown: boolean }>({ slot: null, shown: true })
 
 interface SectionedPageProps<T extends string> {
-  /** The page's sections, its first one at the page's own address (components/shell/nav). */
+  /** The page's sections, the first at the page's own address (components/shell/nav). */
   sections: NavSection<T>[]
   width?: PageWidth
-  /** The header — the page's own, or the shown section's words; a section's own actions come from inside it (SectionActions). */
+  /** The header for the shown section; a section's own actions come from inside it (SectionActions). */
   header: (current: NavSection<T>) => Omit<PageHeaderProps, 'actionsRef'>
-  /** A section's name in the phone's picker, its own way (with a count beside it). */
+  /** A section's label in the phone's picker, when it differs from its title (a count beside it). */
   labels?: Partial<Record<T, ReactNode>>
-  /** What sits under the header on every section — or, given the section, on some (the program's notices, its numbers). */
+  /** What sits under the header — on every section, or on some, given the section (a program's notices). */
   above?: (current: NavSection<T>) => ReactNode
-  /** Each section's content: every one mounted and the shown one visible, so searches, pages and drafts survive a switch. */
+  /** Each section's content: all mounted, only the shown one visible, so searches, pages and drafts survive a switch. */
   children: Record<T, ReactNode>
 }
 
 /**
- * A page made of sections, which the sidebar lists in a column of the page's own (by decision, instead of tabs): the
- * section the address names is on screen — any other address under the page goes to the first —, its header on top,
- * the phone's section picker under it.
+ * A page made of sections, which the sidebar lists in a column of the page's own (deliberately, instead of tabs): the
+ * section the address names is on screen (any other address under the page goes to the first), with the header on top
+ * and, on a phone, a section picker under it.
  */
 export function SectionedPage<T extends string>({ sections, width, header, labels, above, children }: SectionedPageProps<T>) {
   const current = useSection(sections)
@@ -51,10 +51,29 @@ export function SectionedPage<T extends string>({ sections, width, header, label
   )
 }
 
-/**
- * A section's own actions, drawn in the page's header while the section is on screen («افزودن گروه») — so the section
- * keeps what they open (its editor) to itself.
- */
+/** The sections on a phone, where the sidebar that lists them is behind the menu: a «بخش» pick (hidden from md up). */
+function SectionPicker<T extends string>({ sections, current, labels }: { sections: NavSection<T>[]; current: NavSection<T>; labels?: Partial<Record<T, ReactNode>> }) {
+  const navigate = useNavigate()
+
+  if (sections.length < 2) return null
+
+  return (
+    <div className="md:hidden">
+      <FilterSelect
+        label="بخش"
+        value={current.value}
+        options={sections.map((section) => ({ value: section.value, label: labels?.[section.value] ?? section.title }))}
+        onChange={(value) => {
+          const section = sections.find((item) => item.value === value)
+          if (section) navigate(section.to)
+        }}
+        className="w-full"
+      />
+    </div>
+  )
+}
+
+/** A section's own actions («افزودن گروه»), drawn in the page's header while the section is on screen. */
 export function SectionActions({ children }: { children: ReactNode }) {
   const { slot, shown } = useContext(SectionContext)
 
@@ -62,8 +81,8 @@ export function SectionActions({ children }: { children: ReactNode }) {
 }
 
 /**
- * Whether what reads this is on screen: false in a section kept mounted and hidden. A list there stops following the
- * shop (its read unsubscribed — the live updates pass it by) and reads afresh once its section is shown again.
+ * Whether the caller is on screen: false in a section kept mounted but hidden. A list there stops following live
+ * updates and reads afresh once its section is shown again.
  */
 export function useSectionShown(): boolean {
   return useContext(SectionContext).shown

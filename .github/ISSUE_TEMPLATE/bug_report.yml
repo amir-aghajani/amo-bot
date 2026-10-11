@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         A weakness that could hurt a shop or its customers is not a bug report: report it privately
-        ([SECURITY.md](https://github.com/amir-aghajani/amo-bot/blob/main/SECURITY.md)). Leave every token, password,
+        ([Security](https://github.com/amir-aghajani/amo-bot/blob/main/docs/Security.md)). Leave every token, password,
         key and customer's detail out of what you paste.
   - type: input
     id: version

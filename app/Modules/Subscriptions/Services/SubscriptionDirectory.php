@@ -14,25 +14,23 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Expression;
 
 /**
- * The subscriptions screen ("اشتراک‌ها", in both panels and on the shop's website for its admins): a searchable,
- * filterable page of the shop's services as it last saw them on their panels, each with what its modal may do with it
- * now (SubscriptionActions, which does it).
+ * The subscriptions screen («اشتراک‌ها»: both panels and the website's admin API): a searchable, filterable page of the
+ * shop's services as last seen on their panels, each with what its modal may do now (SubscriptionActions::allowed()).
  */
 final class SubscriptionDirectory
 {
     /** The tab that is not a status: active services whose deadline is at most EXPIRING_DAYS away. */
     public const EXPIRING = 'expiring';
 
-    /** The window of that tab — and of the dashboard's card that links to it. */
+    /** The window of that tab, and of the dashboard's card that links to it. */
     public const EXPIRING_DAYS = 3;
 
     public function __construct(private readonly SubscriptionActions $actions) {}
 
     /**
-     * The page asked for: by `status` (a SubscriptionStatus, or EXPIRING), `server` (the services on it), `user` (one
-     * customer's — their page links here), and the search box (applySearch()) — newest first, or by its end (one that never
-     * ends, or has not started, after every deadline) or the traffic used (`sort`) —; with the expiring tab's count and
-     * its window.
+     * The page asked for, filtered by `status` (a SubscriptionStatus, or EXPIRING), `server`, `user` and the search box
+     * (applySearch()); newest first, or sorted by its end (no deadline after every deadline) or the traffic used. With
+     * the expiring tab's count and window.
      */
     public function search(PageRequest $list): Page
     {
@@ -74,7 +72,8 @@ final class SubscriptionDirectory
             'server' => ['id' => $subscription->server->id, 'name' => $subscription->server->name],
             'traffic' => ['limit' => $subscription->traffic_limit_bytes, 'used' => $subscription->usedBytes()],
             'ip_limit' => $subscription->ip_limit,
-            'duration_days' => $subscription->duration_days,
+            'duration_days' => ServiceTerms::daysOf($subscription->duration_hours),
+            'duration_hours' => $subscription->duration_hours,
             'auto_renew' => $subscription->auto_renew,
             // A renewal queued behind the period in use: when it begins, and the most it leaves then.
             'next_period' => $subscription->period_ends_at === null ? null : [
@@ -92,9 +91,8 @@ final class SubscriptionDirectory
     }
 
     /**
-     * By a bare service number, the client's name on the panel, a piece of its link (a customer pastes theirs), or the
-     * customer — name, handle, Telegram id — the way every directory searches customers. («#12» is the service numbered
-     * 12 alone: PageRequest::search().)
+     * Search by a bare service number, the client's name on the panel, a piece of its link (a customer pastes theirs), or
+     * the customer (User::idsMatching()). «#12» alone is service 12: PageRequest::search().
      *
      * @param Builder<Subscription> $query
      */

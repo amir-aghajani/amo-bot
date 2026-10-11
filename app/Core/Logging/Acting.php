@@ -7,11 +7,9 @@ namespace App\Core\Logging;
 use App\Core\Http\RequestId;
 
 /**
- * Who the request being answered acts for — the owner signed in to their panel, an agent, one of a shop's admins on its
- * website —, as one line of the log names them (ActorProcessor): the guard that admits a principal says so (begin()),
- * and it holds for the rest of that request, as its id does (RequestId) — a failure the error handler logs after the
- * guard let go names them too. It belongs to the request it was said in: the next one (its own id) acts for nobody
- * until its guard says otherwise. Core names nobody: what it holds is the guard's own words for them.
+ * Who the current request acts for (the owner, an agent, a shop's admin), for the log's `actor` (ActorProcessor). Set
+ * by the guard that admits the principal, it lasts to the end of that request — a failure logged after the guard is
+ * done names them too — and is tied to the request's id, so the next request starts with nobody.
  */
 final class Acting
 {
@@ -26,7 +24,7 @@ final class Acting
         return $request !== null && self::$current !== null && self::$current[0] === $request ? self::$current[1] : null;
     }
 
-    /** The request being answered acts for `$actor` from now on, to its end; outside a request, nothing is said. */
+    /** The current request acts for `$actor` until it ends; outside a request this does nothing. */
     public static function begin(string $actor): void
     {
         $request = RequestId::current();

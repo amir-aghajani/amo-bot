@@ -7,9 +7,9 @@ namespace App\Modules\Reviews\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * The shop keeps as many reviews waiting on support as it takes (Services\Reviews::PENDING_MAX): no new one until support
- * decides some — a 503 in the customer's words. Whoever writes them by the hundred, from address after address, fills
- * no moderation queue without end, nor the report group's.
+ * The shop already has Services\Reviews::PENDING_MAX reviews waiting on support: no new one until support decides some.
+ * A 503 worded for the customer, so a flood from address after address cannot grow the queue (or the report group)
+ * without end.
  */
 final class ReviewsFullException extends DomainRuleException
 {

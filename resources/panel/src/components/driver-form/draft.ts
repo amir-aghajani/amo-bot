@@ -3,18 +3,18 @@ import { digitsOnly } from '@/lib/format'
 import { originOf } from '@/lib/utils'
 
 /*
- * A driver's form as a screen holds it (components/driver-form): drawn from the driver's description alone, read and
- * sent as the server's Form reads it — a field shown only while the fields its `when` names hold a value it lists, a
- * secret sent only when typed, kept otherwise while the fields it belongs with stay.
+ * A driver's form as a screen holds it, read the way the server's Core\Forms reads it: a field is shown (and sent) only
+ * while the fields its `when` names hold one of the listed values; a secret is sent only when typed, else the kept one
+ * stays — as long as the fields it is bound to have not moved.
  */
 
-/** A driver's form as typed: each field's text under its name — a switch true or false —, and a secret's `clear_<name>`. */
+/** A driver's form as typed: each field's text by name (a switch true or false), and each secret's `clear_<name>`. */
 export type DriverDraft = Record<string, string | boolean>
 
-/** What a driver's form sends: its fields shown, by name, as typed — the API holds it to the driver's own request. */
+/** What a driver's form sends: the shown fields by name, as typed; the API holds it to the driver's own request shape. */
 export type DriverPayload = Record<string, string | boolean>
 
-/** What a screen shows of a field kept: a secret's state, or the value config.php holds. */
+/** A kept field as the server presents it: a secret's state, or the stored value. */
 type Kept = DriverValues[string]
 
 /** Nothing kept of a secret (the installer's, a driver other than the one saved). */
@@ -45,9 +45,8 @@ export function driverDraft(driver: DriverDescription, stored?: DriverValues): D
 }
 
 /**
- * The fields shown, in order: each whose `when` holds — every field it names shown before it and holding one of the
- * values listed, a switch spelled "true" or "false" — as the server reads the form (a field not shown is neither read nor
- * refused, and stays as it is kept).
+ * The fields shown, in order: each whose `when` holds — every field it names is shown before it and holds one of the
+ * listed values (a switch as "true"/"false"). As on the server, a field not shown is neither read nor refused.
  */
 export function shownFields(driver: DriverDescription, draft: DriverDraft): FieldDescription[] {
   const shown = new Set<string>()
@@ -74,9 +73,9 @@ export function driverPayload(driver: DriverDescription, draft: DriverDraft): Dr
 }
 
 /**
- * Whether a secret left blank would keep the stored one while a field it belongs with (`bound_to`), shown, moved from
- * what is kept — what the server refuses, in the field's `moved` words: each read as the server identifies it, a number
- * by its digits, a web address by its origin.
+ * Whether a blank secret would keep the stored one although a shown field it is bound to (`bound_to`) moved — which the
+ * server refuses in the field's `moved` words. Values are compared as the server compares them: a number by its
+ * digits, an address by its origin.
  */
 export function leftBehind(driver: DriverDescription, field: FieldDescription, draft: DriverDraft, stored?: DriverValues): boolean {
   const kept = stored?.[field.name]

@@ -5,6 +5,7 @@ import { DateFilter } from '@/components/date-filter'
 import { EmptyState } from '@/components/empty-state'
 import { ListTotal } from '@/components/list-total'
 import { ListView, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
+import { PaidFor } from '@/components/orders/order-subject'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
@@ -19,7 +20,7 @@ import { api } from '@/lib/api'
 import type { PaymentResponse, PaymentRow, PaymentSort, PaymentsResponse, PaymentStatus } from '@/lib/api-types'
 import { formatMoney, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { ORDER_TYPE, PAYMENT_STATUS } from '@/lib/statuses'
+import { PAYMENT_STATUS } from '@/lib/statuses'
 import { useNextRow } from '@/lib/use-next-row'
 import { useOpenRow } from '@/lib/use-open-row'
 import { usePagedList } from '@/lib/use-paged-list'
@@ -138,12 +139,7 @@ function PaymentsTable({ payments, sorting, onOpen }: { payments: PaymentRow[]; 
               <UserIdentity user={payment.user} />
             </TableCell>
             <TableCell className="hidden md:table-cell">
-              <div className="grid">
-                <span>{payment.order.plan ?? ORDER_TYPE[payment.order.type]}</span>
-                <span className="text-footnote text-muted-foreground">
-                  {payment.order.plan ? `${ORDER_TYPE[payment.order.type]} · ` : ''}سفارش <span dir="ltr">#{payment.order.id}</span>
-                </span>
-              </div>
+              <PaidFor order={payment.order} />
             </TableCell>
             <TableCell className="tabular">{formatMoney(payment.amount)}</TableCell>
             <TableCell>

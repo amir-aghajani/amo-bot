@@ -3,10 +3,9 @@ const OPEN = String.fromCodePoint(0x2068)
 const CLOSE = String.fromCodePoint(0x2069)
 
 /**
- * `text` kept whole inside the words around it, in the direction of its own first letter — what `<bdi>` is in markup,
- * for a plain string: a toast, a dialog's title, a confirm's sentence, an `aria-label`, the tab's name. Without it a
- * Latin run in a Persian sentence loses a leading «@» to its far side («agent_bot@»). The isolates are invisible, and
- * nothing to the text's letters.
+ * `text` wrapped in invisible Unicode isolates — `<bdi>` for a plain string (a toast, a dialog's title, an
+ * `aria-label`, the tab's title). Without it a Latin run in a Persian sentence loses a leading «@» to its far side
+ * («agent_bot@»).
  */
 export function isolate(text: string): string {
   return `${OPEN}${text}${CLOSE}`
@@ -30,9 +29,8 @@ export function idLabel(id: number): string {
 const MARKUP = /<[^<>]*>(?:[^\s<>]*<[^<>]*>)*|&#?\w+;|%\w+%|[\w-]+="[^"]*"|"[^"]*"|[<>"']/g
 
 /**
- * Every run of markup in a plain sentence kept whole, as typed (`isolate()` each): in a Persian sentence the
- * bidirectional algorithm mirrors a bare tag's brackets and moves its «/» — «</b>» reads «<b/>», «&lt;» «;lt&», a lone
- * «>» shows as «<». What a bot text's wording is told about it says tags (components/bot-texts).
+ * Every run of markup in a plain sentence isolated, so it reads as typed: in a Persian sentence the bidirectional
+ * algorithm would show «</b>» as «<b/>», «&lt;» as «;lt&», a lone «>» as «<». Used for messages about bot texts.
  */
 export function isolateMarkup(text: string): string {
   return text.replace(MARKUP, (run) => isolate(run))

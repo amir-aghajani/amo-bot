@@ -11,8 +11,8 @@ interface TrafficShortageNoticeProps {
 }
 
 /**
- * An agent's bot whose traffic sells nothing — the server's judgement (TrafficShortage): it offers no plan its traffic
- * cannot cover and renews no service of one, so too little for its smallest plan on sale is as good as none.
+ * Shown when an agent's bot has too little traffic for even its smallest plan on sale (the server's `traffic_shortage`):
+ * such a bot sells and renews nothing.
  */
 export function TrafficShortageNotice({ shortage: { balance, smallest_plan: smallest }, help }: TrafficShortageNoticeProps) {
   const short = balance > 0 && smallest !== null

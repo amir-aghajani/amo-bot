@@ -10,6 +10,7 @@ use App\Support\Input;
 
 /**
  * One of a fixed list of values (a log level, a time zone). Described, its spec words every value, in the list's order.
+ * One that is not required takes its default when it is left out or blank (a server's button in the bot).
  *
  * @extends Field<string>
  */
@@ -21,9 +22,10 @@ final class Choice extends Field
         string $key,
         string $default,
         public readonly array $options,
-        /** What anything else is told */
+        /** The refusal for any other value */
         private readonly string $refusal,
         ?FieldSpec $spec = null,
+        private readonly bool $required = true,
     ) {
         parent::__construct($name, $key, $default, $spec);
     }
@@ -35,12 +37,15 @@ final class Choice extends Field
 
     public function required(): bool
     {
-        return true;
+        return $this->required;
     }
 
     public function read(array $input, mixed $kept): string
     {
         $value = Input::text($input, $this->name);
+        if ($value === '' && !$this->required) {
+            return $this->default;
+        }
         if (!in_array($value, $this->options, true)) {
             throw new FieldRefused($this->refusal);
         }

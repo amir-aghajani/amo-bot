@@ -18,11 +18,8 @@ use Slim\Psr7\Factory\ServerRequestFactory;
 use Tests\HttpTestCase;
 
 /**
- * What a website's sign-in costs the shop before anything is tried — a nonce or a redirect's state kept, an email sent —
- * is held to the address network that asks: 120 in ten minutes (one address is many customers on a mobile network), then
- * a 429 with its wait, whichever of them it asked for. Its window closes ten minutes after it opened; another address is
- * not held up. And whoever asks, from however many addresses, a shop keeps 5000 nonces at most — and apart, 5000 states —
- * in as long as one lives: past them a 503, the log told once.
+ * What a sign-in costs before anything is tried (a nonce, a redirect state, an email) is held to 120 per address network
+ * per ten minutes; and a shop keeps at most 5000 live nonces and 5000 live states, whoever asks (503 past them).
  */
 final class IssuanceThrottleTest extends HttpTestCase
 {

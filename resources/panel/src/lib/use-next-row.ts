@@ -32,10 +32,9 @@ export interface NextRow {
 type Waiting = { for: 'list' } | { for: 'page'; page: number }
 
 /**
- * «بعدی» in a list's detail dialog: the row after the open one, in the list's own order — the next page's first at the
- * end of a page —, so a queue is worked through without closing the dialog (the payments' receipts). When a decision
- * took the open row out of the list (a receipt reviewed leaves the review tab), the next is the row that came to its
- * place. A press while the list is being read again waits for it, so the next is always the list's as it is now.
+ * «بعدی» in a list's detail dialog, so a queue (the receipts to review) is worked through without closing it: the row
+ * after the open one, or the next page's first. When a decision took the open row out of the list, the next is the row
+ * that moved into its place. A press while the list is being refetched waits for the fresh list.
  */
 export function useNextRow<Row extends { id: number }>({ queryKey, list, open, onOpen }: UseNextRowOptions<Row>): NextRow {
   const fetching = useIsFetching({ queryKey }) > 0

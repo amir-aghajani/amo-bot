@@ -5,16 +5,14 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * Words cut to the room the shop gives them, by their characters — a ticket's subject, a label on a button —, one way
- * everywhere. (Words fitted to Telegram's own room — a notice, a report, a screen of the bot — are counted as Telegram
- * counts them: Telegram\Api\Limits::fit().)
+ * Text cut to a length in characters (a ticket's subject, a button's label). Text sized for Telegram is counted as
+ * Telegram counts it instead: Telegram\Api\Limits::fit().
  */
 final class Text
 {
     /**
-     * `$text` as it is when it fits `$max` characters, else cut short with «…» ending it — `$max` characters at most, the
-     * ellipsis among them. `$atWord` cuts at the last space when there is one in the second half of what is kept, so a
-     * word is not left in pieces (a subject).
+     * `$text` when it fits `$max` characters, else cut to `$max` with «…» included. `$atWord` cuts at the last space in
+     * the second half, so no word is left in pieces.
      */
     public static function fit(string $text, int $max, bool $atWord = false): string
     {

@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 import { DetailFooter, DetailModal } from '@/components/detail-modal'
 import { Fact, FactList } from '@/components/fact-list'
 import { OperationsSection, useOperations, type OperationSpec } from '@/components/operations'
+import { DiscountFact } from '@/components/orders/order-discounts'
+import { orderBrings } from '@/components/orders/order-subject'
 import { StatusBadge } from '@/components/status-badge'
 import { searchLink, TextLink } from '@/components/text-link'
 import { CustomerFacts } from '@/components/user-identity'
@@ -12,7 +14,7 @@ import type { OrderRow } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
 import { formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS, SUBSCRIPTION_STATUS } from '@/lib/statuses'
+import { ORDER_PRICING, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS, SUBSCRIPTION_STATUS } from '@/lib/statuses'
 
 type Action = keyof OrderRow['actions']
 
@@ -56,10 +58,7 @@ export function OrderModal({ order, gone, onClose, onChanged, onStale }: OrderMo
   )
 }
 
-/**
- * What an order's operation changes beside the order: its payments, the service it delivered, the dashboard's counts, and
- * the customer's page — their counts, the wallet a top-up charged.
- */
+/** Reads an order's operation changes besides the order: payments, services, the dashboard and the customer's page and wallet. */
 const CHANGES = [queryKeys.payments, queryKeys.subscriptions, queryKeys.dashboards, queryKeys.everyUser, queryKeys.everyUserWallet]
 
 function OrderBody({ order, onClose, onChanged, onStale }: { order: OrderRow; onClose: () => void; onChanged: (order: OrderRow) => void; onStale: () => void }) {
@@ -94,17 +93,29 @@ function OrderBody({ order, onClose, onChanged, onStale }: { order: OrderRow; on
   )
 }
 
-/** Everything known about the order. */
+/** Everything known about the order, including what it brings when that is an amount and a special price beside the amount. */
 function Facts({ order }: { order: OrderRow }) {
+  const brings = orderBrings(order)
+  const pricing = ORDER_PRICING[order.pricing]
+
   return (
     <FactList>
       <Fact label="وضعیت">
         <StatusBadge status={ORDER_STATUS[order.status]} />
       </Fact>
       <Fact label="نوع">{ORDER_TYPE[order.type]}</Fact>
+      {brings && <Fact label={brings.label}>{brings.amount}</Fact>}
+      {/* A space, not a margin alone, between the amount and the words beside it: two words for assistive tech, not one. */}
       <Fact label="مبلغ">
         <span className="font-medium tabular">{formatMoney(order.amount)}</span>
+        {pricing && (
+          <>
+            {' '}
+            <span className="ms-1 text-footnote text-muted-foreground">{pricing}</span>
+          </>
+        )}
       </Fact>
+      <DiscountFact order={order} />
       <CustomerFacts user={order.user} />
       {order.plan && <Fact label="پلن">{order.plan.name}</Fact>}
       {order.server && <Fact label="سرور">{order.server.name}</Fact>}

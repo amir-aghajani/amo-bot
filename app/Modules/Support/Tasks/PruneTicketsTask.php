@@ -9,10 +9,9 @@ use App\Modules\Support\Services\TicketAttachments;
 use App\Modules\Telegram\Reports\ReportSender;
 
 /**
- * Every hour, in every shop: the tickets' housekeeping — the pictures uploaded to tickets closed TicketAttachments::
- * KEEP_DAYS ago go from the host (their messages say they had one), and the report group's reports of tickets closed —
- * or gone — are forgotten once a week old, as every other report is (those of a ticket still open stay: a reply to any of
- * them answers it).
+ * The tickets' housekeeping, hourly in every shop: the pictures uploaded to tickets closed TicketAttachments::KEEP_DAYS
+ * ago are deleted, and the report group's reports of closed (or deleted) tickets are forgotten once a week old. Reports
+ * of an open ticket stay, since a reply to any of them answers it.
  */
 final class PruneTicketsTask implements Task
 {

@@ -146,7 +146,7 @@ final class FakeProvider implements ProviderInterface
             totalBytes: $subscription->traffic_limit_bytes,
             expiry: match (true) {
                 $subscription->expires_at !== null => Expiry::at($subscription->expires_at->toDateTimeImmutable()),
-                $subscription->duration_days > 0 => Expiry::afterFirstUse($subscription->duration_days * 86400),
+                $subscription->duration_hours > 0 => Expiry::afterFirstUse($subscription->duration_hours * 3600),
                 default => Expiry::never(),
             },
             subscriptionUrl: $subscription->subscription_url,

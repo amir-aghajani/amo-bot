@@ -24,11 +24,9 @@ use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * A change of a service on its panel holds the service (a lease on its row) as long as a call to the panel may take —
- * renewed before every call, so a change at work keeps it however slow its panel. One that lost it all the same once the
- * panel took the change (it stalled past its time, and another change took the service) is done: what the panel answered
- * is written by the row's key, and nothing gives, renews or moves the service a second time. One that lost it before
- * touching the panel did nothing: busy, and tried again.
+ * A change of a service on its panel holds the service with a lease renewed before every panel call, so a slow panel
+ * never loses it. A change that lost the lease after the panel took it is still recorded by the row's key, and nothing is
+ * given, renewed or moved twice; one that lost it before touching the panel did nothing (busy, retried).
  */
 final class ServiceHoldTest extends DatabaseTestCase
 {

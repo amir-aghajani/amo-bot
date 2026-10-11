@@ -15,35 +15,31 @@ use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
 
 /**
- * The sign-in flows' short-lived secrets, each in the current shop: issue() hands out a random secret and keeps its
- * sha256 with what the flow needs back (`payload`, encrypted), until it expires; spend() takes it back — once: spending
- * is one conditional DELETE, and of two requests spending the same secret at once only the one whose DELETE took the row
- * gets the payload. A secret is spent by whoever it was issued to: a signed-in customer's (its holder) by them alone —
- * one about a session of theirs (its subject: a redirect's state) by that session alone —, a sign-in's (issued to
- * nobody) by a sign-in alone — a redirect's state another browser brings back opens nothing of a customer whose own
- * request did not ask for it. One tried with codes counts its tries on its row (attempt():
- * CODE_ATTEMPTS at most, each counted before it is judged) — a code emailed to an address (issueCode(), checkCode(): six
- * digits, found by what it is for and the address it went to), a two-factor sign-in's second step (find(), by its
- * secret), an authenticator app's secret waiting for its first code (hold(), held(): the customer's, one at a time). What
- * expired or was never spent goes with the hourly housekeeping (prune()). What anyone may ask for — a nonce, a redirect's
- * state (ChallengePurpose::anyonesToAsk()) — a shop issues LIVE_MAX of in its lifetime at most, whoever asks from however
- * many addresses: past it, a 503 until it has room again (the log told once).
+ * The sign-in flows' short-lived secrets (`auth_challenges`, per shop). issue() hands out a random secret and keeps only
+ * its sha256 with an encrypted payload until it expires; spend() takes it back once — one conditional DELETE, so of two
+ * requests spending one secret at once only one gets the payload.
+ *
+ * A secret is spent only by whoever it was issued to: a signed-in customer's (its holder, and with a subject that very
+ * session) by them alone, a sign-in's (issued to nobody) by a sign-in alone. So a redirect state another browser brings
+ * back opens nothing of a customer who did not ask for it.
+ *
+ * Challenges tried with codes count their tries on the row (attempt(), CODE_ATTEMPTS, each counted before it is judged):
+ * emailed codes (issueCode()/checkCode()), a two-factor sign-in's step (find()), an app secret waiting for its first code
+ * (hold()/held()). What anyone may ask for without an account (a nonce, a redirect state) is capped at LIVE_MAX per shop
+ * in its lifetime, so a stranger asking from address after address cannot fill the table: past it, a 503.
  */
 final class AuthChallenges
 {
     /** How long a nonce for an id_token sign-in waits for its token (POST /auth/nonce). */
     public const NONCE_SECONDS = 1800;
 
-    /** The nonces — and, apart, the redirect states — a shop issues in their lifetime at most: what lives of them at once. */
+    /** The nonces — and separately the redirect states — a shop issues within their lifetime at most. */
     public const LIVE_MAX = 5000;
 
     /** How long an emailed code may be typed back. */
     public const CODE_SECONDS = 900;
 
-    /**
-     * How many codes a challenge takes — an emailed one's, a two-factor sign-in's, an authenticator app's first: the
-     * next finds it spent, whatever is typed.
-     */
+    /** How many codes a challenge takes; the next finds it spent, whatever is typed. */
     public const CODE_ATTEMPTS = 5;
 
     public function __construct(
@@ -53,8 +49,8 @@ final class AuthChallenges
     ) {}
 
     /**
-     * A new secret for `$purpose`, good for `$seconds`: 64 hex characters, of which only the sha256 is kept — one anyone
-     * may ask for while the shop has room for it (room()).
+     * A new secret for `$purpose`, good for `$seconds`: 64 hex characters, only its sha256 kept. One anyone may ask for
+     * is held to the shop's room (room()).
      *
      * @param array<string, mixed> $payload What spend() gives back
      * @throws SignInsBusyException 503: the shop issued LIVE_MAX of them in their lifetime
@@ -77,11 +73,9 @@ final class AuthChallenges
     }
 
     /**
-     * Take the secret back: what was kept with it, the first time it is spent before it expires; null for a secret this
-     * shop never issued for `$purpose` to `$holder` — with one, issued to that customer; without, issued to nobody (a
-     * sign-in's own, which no signed-in customer's request takes, nor a sign-in theirs) — and, with `$subject`, about it
-     * (a redirect's state issued to a customer's very session: no other session of theirs takes it, nor spends it) —, one
-     * spent already (by this request or another at the same moment), or one that expired (gone with it).
+     * Take the secret back: its payload the first time, before it expires. Null for a secret not issued for `$purpose` to
+     * `$holder` (none: issued to nobody) and, with `$subject`, about it; for one already spent (now or by a request at the
+     * same moment); and for one expired, which goes all the same.
      *
      * @return array<string, mixed>|null
      */
@@ -106,11 +100,9 @@ final class AuthChallenges
     }
 
     /**
-     * A new code of six digits for `$purpose` about `$subject` — the address it is emailed to —, good for `$seconds` and
-     * CODE_ATTEMPTS tries: one for a purpose, an address and whoever it is issued to at a time, so the one it replaces —
-     * theirs, never another customer's who asked for the same address — opens nothing from now on. Six digits are no
-     * secret to a hash alone, so what is kept is keyed with APP_KEY (Encrypter::mac()): the database alone does not give
-     * it away.
+     * A new six-digit code for `$purpose` about `$subject` (the address it is emailed to), good for `$seconds` and
+     * CODE_ATTEMPTS tries. It replaces the same holder's last code for that address — never another customer's. Six digits
+     * are no secret to a bare hash, so it is kept as a hash keyed with APP_KEY: the database alone does not give it away.
      *
      * @param array<string, mixed> $payload What checkCode() gives back
      */
@@ -124,9 +116,8 @@ final class AuthChallenges
     }
 
     /**
-     * Take a code back (attempt()): what was kept with it, when `$code` is the one issued for `$purpose` and `$subject` —
-     * and, with `$holder`, issued to that customer —, before it expired and with a try left. Null otherwise: no code, a
-     * wrong one, one spent, expired or tried out.
+     * Try a code (attempt()): its payload when `$code` is the latest one issued for `$purpose` and `$subject` (with
+     * `$holder`, to that customer), unexpired and with a try left. Null for anything else.
      *
      * @return array<string, mixed>|null
      */
@@ -143,8 +134,8 @@ final class AuthChallenges
     }
 
     /**
-     * Keep `$payload` for the customer, good for `$seconds` — one for a purpose and a customer at a time: any it replaces
-     * is gone (an authenticator app's secret shown again). It is found by its customer (held()), never by a secret.
+     * Keep `$payload` for the customer for `$seconds`, replacing their last one for `$purpose`. It is found by its
+     * customer (held()), never by a secret.
      *
      * @param array<string, mixed> $payload
      */
@@ -161,10 +152,9 @@ final class AuthChallenges
     }
 
     /**
-     * One code tried on a challenge: counted first — one conditional UPDATE while it has tries left (`attempts` below
-     * CODE_ATTEMPTS: two at once count twice) —, then judged by `$right` (given what was kept with it), and spent by one
-     * conditional DELETE when it is right (of two right tries at once, one gets it). What was kept, for the try that
-     * opened it; null for a wrong one, one past its tries, one expired, or one spent meanwhile.
+     * One code tried on a challenge: counted first by a conditional UPDATE while tries are left (two at once count twice),
+     * judged by `$right`, then spent by a conditional DELETE (of two right tries at once, one wins). The payload for the
+     * try that opened it; null otherwise.
      *
      * @param \Closure(array<string, mixed>): bool $right
      * @return array<string, mixed>|null
@@ -191,9 +181,8 @@ final class AuthChallenges
     }
 
     /**
-     * One more of what anyone may ask for in the current shop, held to LIVE_MAX in a window of its lifetime — counted
-     * as it is asked (RateLimiter::attempt()): a table of them grows no further, whoever asks from address after
-     * address. Past it, the log is told once a window and the asker gets a 503 until the window closes.
+     * Count one more of what anyone may ask for in the current shop, at most LIVE_MAX within its lifetime. Past it a
+     * warning is logged once a window and the asker gets a 503 until the window closes.
      *
      * @throws SignInsBusyException
      */
@@ -230,7 +219,7 @@ final class AuthChallenges
         ]);
     }
 
-    /** What is kept of a code: keyed with APP_KEY, and bound to what it is for and the address it went to. */
+    /** A code's keyed hash, bound to its purpose and the address it went to. */
     private function codeHash(ChallengePurpose $purpose, string $subject, string $code): string
     {
         return $this->encrypter->mac("{$purpose->value}|{$subject}|{$code}");

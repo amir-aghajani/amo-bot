@@ -26,10 +26,8 @@ use App\Support\Validation;
 use Tests\HttpTestCase;
 
 /**
- * The payment-methods screen: the wallet row the shop starts with, plus rows the admin adds from the driver picker —
- * several cards, each its own method, the card number normalised and checked —, put in checkout order, switched by a
- * strict switch, and deleted only while no payment was made with them. What the checkout offers comes from here: every
- * method switched on, but the wallet for a top-up.
+ * The payment methods screen: the built-in wallet row, card methods added from the driver picker (card number normalised
+ * and checked), ordering, the strict switch, deletion only without payments, and what the checkout offers.
  */
 final class AdminPaymentMethodsApiTest extends HttpTestCase
 {

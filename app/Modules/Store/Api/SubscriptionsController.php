@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Store\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Accounts\Http\Customer;
@@ -15,14 +14,13 @@ use App\Modules\Subscriptions\Exceptions\AutoRenewUnavailableException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
 use App\Modules\Subscriptions\Exceptions\ServiceNotReadException;
 use App\Modules\Subscriptions\Models\Subscription;
-use App\Support\Input;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * A signed-in customer's services on the shop's website (Store\Services\CustomerSubscriptions): the list, one of them
- * — another customer's is a 404 —, read from its panel now, its «تمدید خودکار», a new link.
+ * A signed-in customer's services (Store\Services\CustomerSubscriptions): the list, one of them (another customer's is a
+ * 404), read from its panel now, its «تمدید خودکار», a new link.
  */
 final class SubscriptionsController extends ApiController
 {
@@ -31,7 +29,7 @@ final class SubscriptionsController extends ApiController
     /** GET /subscriptions — ?status=&page=, newest first. */
     public function index(Request $request, Response $response): Response
     {
-        $page = $this->subscriptions->page(Customer::of($request)->user, PageRequest::fromQuery($request->getQueryParams()));
+        $page = $this->subscriptions->page(Customer::of($request)->user, $this->pageRequest($request));
 
         return $this->json($response, $page->toArray('subscriptions'));
     }
@@ -95,14 +93,14 @@ final class SubscriptionsController extends ApiController
     }
 
     /**
-     * The service the route names, the customer's own.
+     * The customer's own service the route names.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
      */
     private function own(Request $request, array $args): Subscription
     {
-        return $this->subscriptions->find(Customer::of($request)->user, Input::integerOf($args['id'] ?? null) ?? 0);
+        return $this->subscriptions->find(Customer::of($request)->user, $this->routeId($args));
     }
 
     private function answer(Response $response, Subscription $subscription, ?ClientInfo $client = null): Response

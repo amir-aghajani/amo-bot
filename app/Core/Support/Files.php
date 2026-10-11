@@ -5,48 +5,38 @@ declare(strict_types=1);
 namespace App\Core\Support;
 
 /**
- * The few things the app does with files of its own (config.php, the host keys, the scheduler's state, the sign-in
- * throttle, the pictures it keeps, the sessions, the log), done one way. They are their owner's alone — a file made
- * readable and writable by the user PHP runs as and nobody else, a folder entered by it alone —: config.php holds the
- * database's password, the bot's token and the key to what is kept encrypted, a host key opens the installer or the
- * panel, a picture is a customer's, and a shared host has other accounts. That holds where PHP runs as the account that
- * owns the app (PHP-FPM, suEXEC, LSAPI — the common case); where it runs as another user (mod_php), the owner opens
- * install-key.txt, recovery-key.txt and config.php in the host's file manager as that account, so what the app makes
- * is theirs to read there (ownerOnly(): decided as the app boots, by who owns its folder) — on such a host every site's
- * PHP is that one user anyway: an owner-only mode would protect nothing and only lock the owner out. A file system that
- * says no is an answer here, never a PHP warning: on a shared host a folder the web server may not write is common, and
- * a warning would end up in an answer or a test's output.
+ * How the app writes its own files (config.php, host keys, scheduler state, throttle counts, kept pictures, sessions,
+ * the log). They are owner-only (0600, folders 0700) where PHP runs as the account owning the app — config.php holds
+ * the database password and APP_KEY, and a shared host has other accounts. Under mod_php, PHP is another user and the
+ * owner must still read the host keys and config.php in the file manager, so files are 0644 there (ownerOnly(), decided
+ * at boot). A refusing file system is an answer here (false, null), never a PHP warning that could leak into an answer.
  */
 final class Files
 {
-    /** What a file the app makes is while PHP runs as the account that owns the app: its owner's to read and write, nobody else's. */
+    /** A file's mode while PHP runs as the account that owns the app. */
     public const FILE_MODE = 0o600;
 
-    /** What a folder the app makes is then: its owner's to enter, list and write in. */
+    /** A folder's mode then. */
     public const FOLDER_MODE = 0o700;
 
-    /** What a file the app makes is where PHP runs as another user: theirs to write, the account's — anyone's — to read. */
+    /** A file's mode where PHP runs as another user (mod_php). */
     public const SHARED_FILE_MODE = 0o644;
 
-    /** What a folder the app makes is then: the account's to enter and list. */
+    /** A folder's mode then. */
     public const SHARED_FOLDER_MODE = 0o755;
 
-    /** Whether what the app makes is its owner's alone (ownerOnly()) — until the app boots and says, it is. */
+    /** Whether new files are owner-only; true until the app boots and decides. */
     private static bool $ownerOnly = true;
 
-    /**
-     * Whether the files and folders the app makes from now on are its owner's alone (FILE_MODE, FOLDER_MODE) or the
-     * account's to read (SHARED_FILE_MODE, SHARED_FOLDER_MODE) — the Application says, as it boots, by processOwns().
-     */
+    /** Whether the files and folders made from now on are owner-only or readable by the account (set at boot). */
     public static function ownerOnly(bool $ownerOnly): void
     {
         self::$ownerOnly = $ownerOnly;
     }
 
     /**
-     * Whether the process runs as the user that owns `$folder` (the app's): PHP-FPM, suEXEC, LSAPI, a shell — or the host
-     * keeps no users apart (no posix: Windows), and it is as if it did. A folder whose owner cannot be read counts as
-     * its, and what the app makes stays owner-only.
+     * Whether the process runs as the user that owns `$folder`. True without posix (Windows) and when the owner cannot
+     * be read, so files stay owner-only.
      */
     public static function processOwns(string $folder): bool
     {
@@ -81,11 +71,9 @@ final class Files
     }
 
     /**
-     * Write the file whole or not at all: the content goes to a file of its own beside it, which then takes its name, so
-     * a reader never sees half of it — half a state file reads as "nothing ever ran", half a config.php as a broken shop.
-     * That file is its owner's alone before its first byte is written; then it takes the permissions the file had (an
-     * owner who made theirs readable to their group keeps it so), or a new one's (fileMode()) — wherever the host lets a
-     * file's permissions be set at all (permissions it cannot set are not what keeps the file from being written).
+     * Write the file whole or not at all: to a temporary file beside it, then renamed over it, so no reader sees half of
+     * it. The temporary file is owner-only before its first byte, then takes the old file's mode (or fileMode()). A full
+     * disk that writes only part of it is a failure too.
      *
      * @throws \RuntimeException when it cannot be written; the file is then as it was
      */
@@ -116,9 +104,8 @@ final class Files
     }
 
     /**
-     * Read and rewrite the file under an exclusive lock — made, empty and as the app's files are (fileMode()), when it is
-     * not there — so two processes changing it at once change it one after the other: `$change` gets what it holds and
-     * says what it holds next.
+     * Read and rewrite the file under an exclusive lock (making it if missing), so two processes change it one after the
+     * other: `$change` gets the content and returns the next.
      *
      * @param \Closure(string): string $change
      * @return string What it holds now
@@ -159,9 +146,8 @@ final class Files
     }
 
     /**
-     * What a file rewrite() keeps holds, read under a shared lock: never what a rewrite in another process has half
-     * written — it is emptied first —, nor, where a lock bars every other reader (Windows), nothing in its place. Null
-     * when it is not there (or may not be read).
+     * Read a file that rewrite() keeps, under a shared lock, so never half rewritten (a rewrite empties it first). Null
+     * when it is not there or may not be read.
      */
     public static function readShared(string $path): ?string
     {
@@ -181,7 +167,7 @@ final class Files
         }
     }
 
-    /** What the PHP file returns; null when it is not there (gone meanwhile, too) or does not parse. */
+    /** What the PHP file returns; null when it is not there or does not parse. */
     public static function load(string $path): mixed
     {
         try {
@@ -201,16 +187,15 @@ final class Files
         return $time === false ? null : $time;
     }
 
-    /** The file gone, if it was there; true unless it is still there. */
+    /** Delete the file if it is there; false only when it is still there. */
     public static function delete(string $path): bool
     {
         return !is_file($path) || @unlink($path);
     }
 
     /**
-     * The bytes free on the disk a path is on — the path, or the nearest folder above it that is there (a folder not made
-     * yet is made on that disk) —; null when the host does not say (disk_free_space() disabled, a path outside
-     * open_basedir).
+     * The bytes free on the disk the path (or its nearest existing parent) is on; null when the host does not say
+     * (disk_free_space() disabled, a path outside open_basedir).
      */
     public static function freeSpace(string $path): ?float
     {

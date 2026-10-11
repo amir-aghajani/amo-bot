@@ -12,13 +12,10 @@ use FastRoute\RouteParser\Std;
 use Slim\Interfaces\RouteCollectorInterface;
 
 /**
- * The router's table, kept in a file. Slim compiles every route's pattern into FastRoute's regular expressions for each
- * request — about half of what routing a small one costs —; read from a file, which the opcode cache keeps compiled, the
- * table costs next to nothing. The file is named after what it was made from: the version, the prefix requests arrive
- * under, and each source of the routes as it stands (its time and size) — so an edited route file, an upgrade or another
- * prefix makes a new one, and the old ones go after a while. It is written whole (Files::writeAtomically): a request
- * racing the one that writes it reads all of it or none; one that does not read back as a table is dropped. Without a
- * folder the web server may write in, nothing is kept and routing is as it would be anyway.
+ * The router's compiled table kept in a file (storage/cache/routes): Slim would otherwise compile every route's pattern
+ * on each request. The file is named after the version, the prefix and each route file's time and size, so any change
+ * makes a new one; old ones go after KEEP_OLD_SECONDS. Written atomically; one that does not read back is dropped; with
+ * no writable folder nothing is kept.
  */
 final class RouteCache
 {

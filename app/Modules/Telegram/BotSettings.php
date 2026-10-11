@@ -12,11 +12,9 @@ use App\Modules\Settings\Services\Settings;
 use App\Support\Persian;
 
 /**
- * How the bot itself behaves, as the admin sets it at runtime (every bot its own; read per update, so a change reaches
- * the running bot at once) — its groups of the bot settings screen: `general` (the master switch and the phone rule,
- * each enforced by a Gate the dispatcher runs before any handler, and the support contact the bot's «پشتیبانی» screen
- * shows), `channels` (the channel rule, beside the list it applies: Channels\RequiredChannels) and `qr` (whether a
- * delivered service comes as a QR card; its picture is Qr\QrBackground's, uploaded rather than saved here).
+ * The bot's own runtime settings (each bot its own), as groups of the bot settings screen: `general` (the master switch
+ * and the phone rule — each enforced by a Gate — and the support contact), `channels` (the required-channels rule) and
+ * `qr` (whether a delivered service comes as a QR card).
  */
 final class BotSettings implements DeclaresSettings
 {
@@ -69,9 +67,8 @@ final class BotSettings implements DeclaresSettings
     }
 
     /**
-     * The support contact as a link a page opens (the shop's website): an @handle as its t.me address, a web or t.me
-     * address as it is (https:// added to a bare t.me one), a phone number as a tel: link — null when none is set, or it
-     * is none of these (words the bot shows as they are).
+     * The support contact as a link for the website: an @handle as its t.me address, a web or t.me address (https added
+     * to a bare t.me one), a phone number as tel:; null when unset or none of these.
      */
     public function supportUrl(): ?string
     {

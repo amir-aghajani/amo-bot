@@ -9,25 +9,22 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
- * A running balance kept as lines — a customer's wallet (`wallet_transactions`), an agent's traffic
- * (`traffic_transactions`): every line carries the balance from then on, so the last line's is the balance now and
- * nothing else stores it. What makes that safe is how a line is written, the same for every ledger: under a lock on the
- * owner's row (two writers take turns), the last line read with a locking read (under MySQL's repeatable read a plain
- * read could answer from a snapshot taken before the lock, older than the line the turn before wrote), the new line
- * written — in one transaction, the caller's when there is one. Two owners become one the same way (merge()): both
- * rows locked, one owner's lines the other's, every balance counted again.
+ * A running balance kept as lines (a wallet's `wallet_transactions`, an agent's `traffic_transactions`): each line
+ * carries `balance_after`, so the last line is the balance and nothing else stores it. A line is written under a lock
+ * on the owner's row, after reading the last line with a locking read — under MySQL's repeatable read a plain read
+ * could see a snapshot older than the previous writer's line.
  */
 final class Ledger
 {
-    /** The longest note an admin gives a line by hand (a wallet's, a traffic's): within the `description` column with room to spare. */
+    /** The longest note an admin may give a line by hand; the `description` column has room to spare. */
     public const NOTE_MAX = 190;
 
     public function __construct(private readonly ConnectionInterface $db) {}
 
     /**
-     * Write the owner's next line: `$write` is given the balance now — the last line's `balance_after`, "0" before the
-     * first — and writes the line, returns without one, or refuses by throwing, which writes nothing and reaches the
-     * caller as thrown. An owner whose row is gone is a ModelNotFoundException, before `$write` is asked.
+     * Write the owner's next line: `$write` gets the balance now ("0" before the first line) and writes the line, or
+     * throws to refuse. Runs in one transaction (the caller's, if any). An owner whose row is gone is a
+     * ModelNotFoundException.
      *
      * @template T
      * @param string $lines The ledger's table
@@ -50,12 +47,9 @@ final class Ledger
     }
 
     /**
-     * Fold `$from`'s ledger into `$into`'s — two owners become one (two accounts of a customer merged): every line of
-     * `$from` becomes `$into`'s, and the balance on every line of the ledger they make is counted again from nothing, line
-     * by line in the order they were written (id) — `$next` is given the balance before a line and the line, and answers
-     * the balance after it —, so its last line is the two balances together and every line agrees with the ones before
-     * it. Both owners' rows are locked first, in id order (an append() to either waits for the merge, and the merge for it),
-     * the lines read with a locking read; one transaction, the caller's when there is one. How many lines moved.
+     * Fold `$from`'s lines into `$into`'s ledger (two accounts merged) and recount every `balance_after` in id order:
+     * `$next` gets the balance before a line and the line, and returns the balance after it. Both owners' rows are
+     * locked first, in id order, so an append() to either waits. Returns how many lines moved.
      *
      * @param \Closure(string, \stdClass): string $next
      */

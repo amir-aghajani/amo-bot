@@ -10,7 +10,7 @@ use App\Modules\Store\Services\Storefront;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-/** The Store API's `GET /`: the shop the store key names, as its website introduces it — what the site asks first. */
+/** The Store API's `GET /`: the shop the store key names, as a website introduces it (Store\Services\Storefront). */
 final class StoreController extends ApiController
 {
     public function __construct(private readonly Storefront $storefront) {}

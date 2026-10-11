@@ -33,6 +33,7 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.agents, // an agent's level, credit and wallet; their bot's customers
     queryKeys.account, // the agent's own level, credit and wallet
     queryKeys.dashboards, // new customers, the customers in all, the latest ones and their balance
+    queryKeys.massGrants, // whom a gift to a customer group would reach: its members
   ],
   servers: [
     queryKeys.servers,
@@ -63,6 +64,8 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.plans, // each plan's sales
     queryKeys.dashboards,
     queryKeys.queues, // the sidebar's stuck orders
+    queryKeys.discountCodes, // each code's uses: the orders made with it, not cancelled
+    queryKeys.loyaltyTiers, // how many customers each tier holds: what they spent
   ],
   payments: [
     queryKeys.payments,
@@ -95,6 +98,7 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.referrers,
     queryKeys.invitees,
     queryKeys.referralCommissions,
+    queryKeys.referralAlerts, // the alerts on referrers
     queryKeys.everyUser, // what a customer's referrals earned them, on their page
   ],
   agency: [
@@ -124,6 +128,20 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.reviews, // the reviews screen: each one's state, who decided it
     queryKeys.queues, // the sidebar's reviews waiting on support
     queryKeys.dashboards, // the same, on the attention card
+  ],
+  rewards: [
+    queryKeys.giftCodes, // the gift codes screen: each code's state, who took it
+    queryKeys.giftCodeBatches, // its batches' counts
+    queryKeys.wheelPrizes, // the wheel's slices
+    queryKeys.wheelSpins, // the spins customers made
+    queryKeys.loyaltyTiers, // the loyalty tiers screen: each tier's terms and how many customers it holds
+    queryKeys.everyUser, // a customer's page: the tier they are on, the next one
+    queryKeys.cashbackRules, // the cashback rules
+    queryKeys.lotteryDraws, // the nightly draws, each with its winners
+  ],
+  discounts: [
+    queryKeys.discountCodes, // the discount codes screen: each code's terms and whether it is on
+    queryKeys.sales, // the timed sales
   ],
 }
 

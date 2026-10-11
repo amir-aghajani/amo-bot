@@ -12,11 +12,13 @@ import type { RecentOrder } from '@/lib/api-types'
 import { formatMoney, timeAgo } from '@/lib/format'
 import { ORDER_STATUS, ORDER_TYPE } from '@/lib/statuses'
 
-/**
- * The latest purchases, renewals and top-ups — each number the way to the order on the orders screen, each customer to
- * their page —, as a section of the overview with a link to the orders; «—» when they could not be read (`orders`
- * undefined, no longer `loading`).
- */
+/** What an order was on: its plan — a service's extra traffic or time said before its service's plan —, else what it was for. */
+function onWhat(order: RecentOrder): string {
+  if (order.plan === null) return ORDER_TYPE[order.type]
+  return order.type === 'extra_traffic' || order.type === 'extra_time' ? `${ORDER_TYPE[order.type]} · ${order.plan}` : order.plan
+}
+
+/** The latest orders on the overview, linked to the orders screen and their customers; «—» when they could not be read. */
 export function RecentOrders({ orders, loading }: { orders: RecentOrder[] | undefined; loading?: boolean }) {
   return (
     <section aria-labelledby="recent-orders" className="grid gap-3">
@@ -66,7 +68,7 @@ export function RecentOrders({ orders, loading }: { orders: RecentOrder[] | unde
                       <UserLabel user={order.user} />
                     </Link>
                   </TableCell>
-                  <TableCell className="hidden max-w-48 truncate text-muted-foreground md:table-cell">{order.plan ?? ORDER_TYPE[order.type]}</TableCell>
+                  <TableCell className="hidden max-w-48 truncate text-muted-foreground md:table-cell">{onWhat(order)}</TableCell>
                   <TableCell>
                     <StatusBadge status={ORDER_STATUS[order.status]} />
                   </TableCell>

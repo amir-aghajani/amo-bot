@@ -24,10 +24,8 @@ import { formatAmount, formatBytes, formatDate, formatMoney, MONEY_UNIT } from '
 import { queryKeys } from '@/lib/query-keys'
 
 /**
- * «حساب نمایندگی», the agent's own page: their bot (who it is, whether it runs, what keeps it from running), the traffic
- * it may still sell and every line of it, their level and price per GB, their wallet and credit with the shop, and the
- * way to sign every other browser out of their panel. Traffic is bought, and the bot's token handed over, from the main
- * bot. An account that could not be read says so, its figures «—».
+ * «حساب نمایندگی», the agent's own page: their bot and its state, the traffic left with its ledger, their level, wallet
+ * and credit, and signing out other browsers. Traffic is bought, and the bot's token handed over, in the main bot.
  */
 export function AccountPage() {
   const { data, error, isPending, refetch } = useQuery(accountQuery)
@@ -67,7 +65,7 @@ export function AccountPage() {
       {data?.traffic_shortage && <TrafficShortageNotice shortage={data.traffic_shortage} help={BUY_TRAFFIC} />}
 
       <StatGrid label="حجم، سطح و کیف پول">
-        {/* Where traffic is bought is said once: by the notice while the traffic sells nothing, else under the figure. */}
+        {/* Where traffic is bought shows once: in the notice while the traffic sells nothing, else under the figure. */}
         <StatCard label="حجم باقی‌مانده" value={bot && formatBytes(bot.traffic_balance)} hint={data?.traffic_shortage ? undefined : BUY_TRAFFIC} loading={isPending} />
         <StatCard
           label="قیمت هر گیگابایت"
@@ -129,10 +127,7 @@ export function AccountPage() {
   )
 }
 
-/**
- * Every other browser signed in to the agent's panel — with a link opened on another device, a phone lost — signed out
- * at once, after a second look; this one stays.
- */
+/** Signs every other browser out of the agent's panel (a lost phone, a link opened elsewhere), after a confirmation. */
 function OtherBrowsers() {
   const [asking, setAsking] = useState(false)
   const end = useMutation({

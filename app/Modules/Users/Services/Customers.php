@@ -16,16 +16,11 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
- * The shop's customers as they arrive, whichever door they came through — the bot (Telegram\UserResolver) or the
- * shop's website (a sign-in with Telegram, an email proven by its code, a Google account): one row per Telegram account,
- * per email, per Google account in the shop (CurrentBot), every newcomer registered the same way. A newcomer is
- * reported to the admins' report group with whoever brought them — the customer whose referral code came with them (a
- * /start link, the website's `referral_code`) becomes their referrer as they are registered, and is told —; the agent
- * who owns a bot is its admin from their first arrival there.
- *
- * A customer's row is written only when something on it changed, or their presence (`last_seen_at`) is a minute old —
- * and a visit alone quietly (ChangeFeed::quietly()): it is no news for the panels' users area, which every visit would
- * otherwise move, making every open panel read its customer lists again.
+ * Customers as they arrive, through the bot (Telegram\UserResolver) or the website (Telegram, email or Google sign-in):
+ * one row per Telegram account, email or Google account in the shop, and every newcomer registered one way — attributed
+ * to whoever's referral code they came with and reported to the group, in one transaction. An agent is the admin of
+ * their own bot from their first arrival. A visit alone is written at most once a minute and quietly
+ * (ChangeFeed::quietly()), so it does not make every open panel reload its customer lists.
  */
 final class Customers
 {
@@ -44,8 +39,8 @@ final class Customers
     ) {}
 
     /**
-     * A Telegram account's profile as the shop keeps it: the handle (without "@"), and the names — a name made only of
-     * invisible format characters, as some accounts have, is no name (User::name() is null) rather than nothing shown.
+     * A Telegram profile as the shop keeps it: the handle without "@", and the names (one made only of invisible format
+     * characters is none).
      *
      * @return array{username: string|null, first_name: string|null, last_name: string|null}
      */
@@ -59,10 +54,8 @@ final class Customers
     }
 
     /**
-     * The shop's customer with this Telegram account — their profile filled in as it is now (saved by seen()) — or a
-     * newcomer registered with it: the one row though two of their first arrivals come at once (the second finds the
-     * first's), reported, with the customer whose `$referralCode` brought them, by the arrival that made it
-     * (`wasRecentlyCreated`).
+     * The customer with this Telegram account, profile refreshed (seen() saves it), or a newcomer registered with it —
+     * one row even when two first arrivals come at once (createOrFirst).
      *
      * @param array{username: string|null, first_name: string|null, last_name: string|null} $profile
      */
@@ -80,8 +73,7 @@ final class Customers
     }
 
     /**
-     * A newcomer who proved their email on the shop's website — the code sent to it typed back —, with the password
-     * they chose (its hash): registered as every newcomer is.
+     * A newcomer who proved their email on the website, with their password's hash.
      *
      * @param array{username: string|null, first_name: string|null, last_name: string|null} $profile
      * @throws UniqueConstraintViolationException when the address has an account since — another sign-up of it, a moment ago
@@ -92,42 +84,32 @@ final class Customers
     }
 
     /**
-     * The shop's customer with this Google account: the one it signs in already; else — the address Google speaks for
-     * being theirs (`$trustedEmail`, Accounts\Services\GoogleSignIn's judgement: null for one it does not) — the account
-     * with that email, which signs in with Google too from now on; else a newcomer registered with it,
-     * the address theirs when Google speaks for it. Of two first sign-ins at once, one makes the row and the other finds
-     * it. An account is never signed in to by its address alone when it has two-factor sign-in on (the address is no way
-     * past its second step) or another Google account signs in to it: signed in its own way, the customer takes this one
-     * on from their account's settings.
+     * The customer with this Google account; else the account with the address Google vouches for (`$trustedEmail`,
+     * null when it does not), which takes the Google account on; else a newcomer. An account with two-factor sign-in on,
+     * or linked to another Google account, is never entered by its address alone: the customer links Google from their
+     * own settings.
      *
      * @param array{username: string|null, first_name: string|null, last_name: string|null} $profile
-     * @throws SignInRefusedException 409 the address is an account's that takes no Google account on by it
+     * @throws SignInRefusedException 409 the address's account takes no Google account by it
      */
     public function byGoogle(string $sub, ?string $trustedEmail, array $profile, ?string $referralCode): User
     {
-        for ($try = 1; ; $try++) {
-            $user = $this->withGoogle($sub, $trustedEmail);
-            if ($user !== null) {
-                return $user;
-            }
+        $user = $this->withGoogle($sub, $trustedEmail);
+        if ($user !== null) {
+            return $user;
+        }
 
-            try {
-                return $this->register(static fn(): User => User::query()->createOrFirst(['google_sub' => $sub], $profile + ['email' => $trustedEmail, 'last_seen_at' => now()]), $referralCode);
-            } catch (UniqueConstraintViolationException $e) {
-                // The address took an account in the same moment (its own sign-up): that account is the one, found again.
-                if ($try === 1) {
-                    continue;
-                }
-
-                throw $e;
-            }
+        try {
+            return $this->register(static fn(): User => User::query()->createOrFirst(['google_sub' => $sub], $profile + ['email' => $trustedEmail, 'last_seen_at' => now()]), $referralCode);
+        } catch (UniqueConstraintViolationException $e) {
+            // The address got an account at the same moment (its own sign-up): find that one.
+            return $this->withGoogle($sub, $trustedEmail) ?? throw $e;
         }
     }
 
     /**
-     * The account a Google account signs in to now — by itself, or by the address Google speaks for, which takes the
-     * Google account on (one conditional UPDATE while it has none) — but not one with two-factor sign-in on, nor one
-     * another Google account signs in to.
+     * The account a Google account signs in to: its own, or the trusted address's, which takes it on by a conditional
+     * UPDATE (of two sign-ins at once, one) — never one with two-factor sign-in on or another Google account.
      *
      * @throws SignInRefusedException 409
      */
@@ -157,10 +139,9 @@ final class Customers
     }
 
     /**
-     * The customer's row as `$make` makes it — or finds it, made by another arrival of theirs that came first — and, when
-     * this call made it (`wasRecentlyCreated`), the newcomer registered with it in one transaction: whoever their code
-     * says brought them, and the report group's word on it. A report the database refuses takes the newcomer back with
-     * it — their next arrival registers them afresh —; the one who brought them is told once it stands.
+     * Makes the customer's row (or finds it, made by another arrival) and, when this call made it, registers the newcomer
+     * in the same transaction: their referrer and the report. A failed report rolls the newcomer back (their next arrival
+     * registers them afresh). After the commit the referrer is notified and the referral gifts run.
      *
      * @param \Closure(): User $make
      */
@@ -178,15 +159,13 @@ final class Customers
         });
         if ($referrer !== null) {
             $this->notifier->referralJoined($referrer, $user);
+            $this->referrals->joined($user, $referrer);
         }
 
         return $user;
     }
 
-    /**
-     * The customer as they were just seen: whatever changed on their row is saved, and their presence with it — a visit
-     * alone is written quietly, once a minute at most.
-     */
+    /** Saves what changed on the customer's row and their presence; a visit alone quietly, once a minute at most. */
     public function seen(User $user): void
     {
         $changed = $user->isDirty();

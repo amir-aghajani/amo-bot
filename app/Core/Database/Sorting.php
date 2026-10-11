@@ -8,17 +8,15 @@ use App\Core\Exceptions\ValidationException;
 use App\Support\Persian;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * Admin-defined order for rows that carry a `sort` column (plans, categories, payment methods).
- */
+/** The admin's own order for rows that carry a `sort` column (plans, categories, payment methods). */
 final class Sorting
 {
-    /** The most ids one reorder takes: every list the admin orders by hand is far shorter, and each id is a write. */
+    /** The most ids one reorder takes: every hand-ordered list is far shorter, and each id is a write. */
     public const MAX_IDS = 1000;
 
     /**
-     * Renumber the rows: the given ids first, in that order, then everything else in its current
-     * order. Duplicates and unknown ids are ignored; the whole renumbering is one transaction.
+     * Renumber the rows: the given ids first, in that order, then the rest in their current order. Duplicates and
+     * unknown ids are ignored; one transaction.
      *
      * @param class-string<Model> $model
      * @param list<int> $ids

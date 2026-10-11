@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Config;
 
 /**
- * The configuration by file name, read with dot notation ("session.cookie.secure"): each file in config/ returns a
- * closure that makes its part out of config.php's settings (ConfigValues). set() is for what changes while the process
- * runs — the installer's and the settings screen's new values — and the tests.
+ * The configuration read with dot notation ("session.lifetime"): each config/<part>.php returns a closure making its
+ * part from config.php's settings. set() is for values that change while the process runs (a settings save) and tests.
  */
 final class Repository
 {

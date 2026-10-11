@@ -1,7 +1,8 @@
-import { useCallback, useId, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { Plus, Server as ServerIcon, X } from 'lucide-react'
 import { ErrorState } from '@/components/error-state'
+import { FieldGroup } from '@/components/field'
 import { IconButton } from '@/components/icon-button'
 import { PageTabs } from '@/components/page-tabs'
 import { TextLink } from '@/components/text-link'
@@ -51,12 +52,9 @@ function inboundAddress(inbound: PlanInboundRef): string {
 }
 
 /**
- * Builds the list of servers a plan is sold on: pick a server, then either the whole server (every
- * inbound it marks sellable, evaluated at purchase time) or specific inbounds, and add it. The
- * customer later picks one of these servers when buying. Why a server cannot sell now is the server's
- * own answer (`unsellable_reason`); an entry on it stays, unseen by the customer until it can. Without a server to
- * pick — none read, or none there — it says so, and where one is added. It is one field of the plan's form: refused, it
- * is marked invalid as a whole (counted with the form's other fields, the focus taken there), its refusals under it.
+ * The servers a plan is sold on — one field of the plan form: pick a server, then the whole server (every inbound marked
+ * sellable, judged at purchase time) or chosen inbounds. A server that cannot sell now stays listed with its
+ * `unsellable_reason`; customers simply do not see it until it can.
  */
 export function ServerEntries({ entries, onChange, options, errors = [], addServers }: ServerEntriesProps) {
   const servers = options.data?.servers ?? []
@@ -65,8 +63,6 @@ export function ServerEntries({ entries, onChange, options, errors = [], addServ
   const [picked, setPicked] = useState<number[]>([])
   // A panel with a server's page (the owner's) sends its admin there; an agent's inbounds are support's to set.
   const serverPages = addServers !== undefined
-  const ids = useId()
-  const invalid = errors.length > 0
 
   const remaining = servers.filter((s) => !entries.some((e) => e.server_id === s.id))
   const chosen = servers.find((s) => String(s.id) === serverId)
@@ -92,21 +88,12 @@ export function ServerEntries({ entries, onChange, options, errors = [], addServ
   const remove = (id: number) => onChange(entries.filter((e) => e.server_id !== id))
 
   return (
-    <div
-      role="group"
-      aria-labelledby={`${ids}-title`}
-      aria-describedby={invalid ? `${ids}-errors` : undefined}
-      data-invalid={invalid ? '' : undefined}
-      tabIndex={invalid ? -1 : undefined}
-      className="grid gap-3 rounded-xl border border-border p-4 outline-none focus-visible:focus-ring"
+    <FieldGroup
+      label="سرورها"
+      description="مشتری هنگام خرید یکی از این سرورها را انتخاب می‌کند و یک اشتراک روی همه اینباندهای آن ردیف می‌گیرد."
+      error={errors}
+      className="gap-3 rounded-xl border border-border p-4"
     >
-      <div className="grid gap-1">
-        <span id={`${ids}-title`} className="text-body font-medium">
-          سرورها
-        </span>
-        <p className="text-footnote leading-relaxed text-muted-foreground">مشتری هنگام خرید یکی از این سرورها را انتخاب می‌کند و یک اشتراک روی همه اینباندهای آن ردیف می‌گیرد.</p>
-      </div>
-
       {entries.length > 0 && (
         <ul className="grid gap-2">
           {entries.map((entry) => {
@@ -250,14 +237,6 @@ export function ServerEntries({ entries, onChange, options, errors = [], addServ
           همه سرورها به این پلن اضافه شده‌اند.
         </p>
       )}
-
-      {invalid && (
-        <ul id={`${ids}-errors`} className="grid gap-0.5 text-footnote text-danger">
-          {errors.map((message) => (
-            <li key={message}>{message}</li>
-          ))}
-        </ul>
-      )}
-    </div>
+    </FieldGroup>
   )
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Auth\Services;
 
+use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Session\Session;
 use App\Modules\Auth\Exceptions\ShopRefusedException;
@@ -14,22 +15,25 @@ use App\Modules\Auth\Principal;
 use App\Modules\Auth\PrincipalKind;
 use App\Modules\Bots\Enums\BotStatus;
 use App\Modules\Bots\Models\Bot;
+use App\Support\Input;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * An agent's panel session (/api/agent). They sign in with the one-time link the main bot gave them
- * (AgentBots::loginLink()) and work in their bot's shop only — the shop is their bot, never anything the request names:
- * one that names another bot is refused. Every request asks again: the bot is still theirs and switched on (their
- * agency stands), and its `panel_epoch` is still the one they signed in under (the shop raises it to end their
- * sessions, and so does the agent, to end every one but the session they are in). A link opened where another agent is
- * signed in asks before it takes that session's place. Its key is its own: the owner signed in to their panel in the
- * same browser stays signed in.
+ * An agent's panel sign-in (/api/agent), by the one-time link the main bot gives (AgentBots::loginLink()); they work in
+ * their bot's shop only. Every request checks again that the bot is still theirs and active and that its `panel_epoch`
+ * is the one they signed in under (raising it ends their sessions).
  */
 final class AgentAuth implements PanelAuth
 {
     private const KEY = 'auth.agent';
 
-    public function __construct(private readonly Session $session) {}
+    /** The throttle's way for login links: its failures counted per address. */
+    private const WAY = 'link';
+
+    public function __construct(
+        private readonly Session $session,
+        private readonly SignInThrottle $throttle,
+    ) {}
 
     /**
      * @throws ValidationException 422 on `shop`: a shop named that is no bot's id
@@ -50,14 +54,36 @@ final class AgentAuth implements PanelAuth
     }
 
     /**
-     * Sign in with the code of a login link — once: the code is taken by a compare-and-swap on the bot's row, so two
-     * tabs opening the same link sign in once. Null for a code that is wrong, used or old, or an agent whose agency or
-     * bot is no more. A link of another agent's bot than the one this browser is signed in to takes that session's place
-     * only when the request says so (`$replace`): otherwise it is refused before it is spent, and the panel asks.
+     * Sign in with a login link — {code, replace?}. The address must not be waiting; a code that opens nothing is a
+     * failure counted against it, one that works clears its count. `replace` lets the link take the place of another
+     * agent's session open in this browser, which it is refused without (the panel asks first; nothing counted).
+     *
+     * @param array<string, mixed> $input
+     * @throws SignInRefusedException 401: a code no link of now carries; 409: another agent's session is open here
+     * @throws TooManyAttemptsException 429 while this address must wait
+     */
+    public function login(array $input, ServerRequestInterface $request): Principal
+    {
+        $this->throttle->check(self::WAY, $request);
+
+        $principal = $this->attemptCode(Input::text($input, 'code'), Input::truthy($input['replace'] ?? false));
+        if ($principal === null) {
+            $this->throttle->failed(self::WAY, $request);
+
+            throw SignInRefusedException::linkRefused();
+        }
+        $this->throttle->passed(self::WAY, $request);
+
+        return $principal;
+    }
+
+    /**
+     * Sign in with a login link's code, spent by a compare-and-swap so two tabs sign in once; null for a wrong, used or
+     * expired code or an agency that ended. Where another agent is signed in, it is refused unspent unless `$replace`.
      *
      * @throws SignInRefusedException 409: another agent's session is open here, and the request does not replace it
      */
-    public function attemptCode(string $code, bool $replace): ?Principal
+    private function attemptCode(string $code, bool $replace): ?Principal
     {
         $hash = hash('sha256', $code);
         $bot = $code === '' ? null : Bot::query()->where('login_code', $hash)->first();
@@ -79,9 +105,8 @@ final class AgentAuth implements PanelAuth
     }
 
     /**
-     * End every other session of this agent's — each browser signed in to their panel but this one: their bot's
-     * `panel_epoch` goes up, and this session is held again under the new one. Of two sessions doing it at once, the
-     * first to move the epoch ends the other.
+     * Sign the agent's other browsers out: raise the bot's `panel_epoch` (a compare-and-swap — of two at once, the first
+     * ends the other) and hold this session under the new one.
      *
      * @throws SignInRefusedException 401: this session was ended meanwhile
      */
@@ -104,7 +129,7 @@ final class AgentAuth implements PanelAuth
         $this->session->regenerate();
     }
 
-    /** The bot this session holds: while it is still its agent's, switched on, under the epoch they signed in under. */
+    /** The bot this session holds, while it is still its agent's, active, and under the same epoch. */
     private function held(): ?Bot
     {
         $held = $this->session->get(self::KEY);
@@ -116,13 +141,13 @@ final class AgentAuth implements PanelAuth
         return $bot !== null && self::open($bot) && $bot->user_id === (int) $held['agent'] && $bot->panel_epoch === (int) $held['epoch'] ? $bot : null;
     }
 
-    /** This session is the bot's agent's, under the bot's `panel_epoch` of now. */
+    /** Hold this session for the bot's agent under `$epoch`. */
     private function hold(Bot $bot, int $epoch): void
     {
         $this->session->set(self::KEY, ['bot' => $bot->id, 'agent' => $bot->user_id, 'epoch' => $epoch]);
     }
 
-    /** An agent's bot whose panel may be used: switched on — its owner still an agent. */
+    /** An agent's bot whose agent still has an agency. */
     private static function open(Bot $bot): bool
     {
         return !$bot->isMain() && $bot->status() === BotStatus::Active;

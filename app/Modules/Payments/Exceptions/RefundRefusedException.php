@@ -9,8 +9,8 @@ use App\Modules\Telegram\Messages;
 use App\Support\Money;
 
 /**
- * A refund that would take back what its order put in the shop — a wallet top-up's credit, an agent's traffic — when
- * that is no longer there: spent, or sold by the agent's bot since. Nothing was written; the message says what is left.
+ * A refund that must take back what the order added — a top-up's credit, an agent's traffic — that has been spent or
+ * sold since. Nothing was written; the message says what is left.
  */
 final class RefundRefusedException extends DomainRuleException
 {

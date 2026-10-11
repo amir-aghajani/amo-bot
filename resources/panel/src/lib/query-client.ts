@@ -6,33 +6,27 @@ import { toastFailure } from '@/lib/failure'
 declare module '@tanstack/react-query' {
   interface Register {
     mutationMeta: {
-      /** The mutation shows its own failure (a form's error line, a modal's strip): no toast. */
+      /** The screen shows the failure itself (a form's error line, a modal's strip): no toast. */
       quiet?: boolean
       /**
-       * What its success changes elsewhere on the screens — the reads it does not write itself (an answer put into the
-       * cache is no reason to read that again): these go stale, and the ones on screen run again. A run whose reach is
-       * known only once it ends names it from its answer (a grant worked on: nothing when its card left it unfinished).
+       * The reads this write changes besides what its own screen writes into the cache: refetched once it succeeds. A
+       * function names them from the answer (a grant run: nothing while its card left it unfinished).
        */
       invalidates?: readonly QueryKey[] | ((answer: unknown) => readonly QueryKey[])
     }
   }
 }
 
-/**
- * How long a read no screen shows is kept: a page opened again within it is drawn at once from what it last read (and
- * read again behind it) — the live poll keeps what it shows from being wrong meanwhile (lib/use-live-updates).
- */
+/** How long a read no screen shows stays cached: a page opened again within it draws at once and refetches behind. */
 const KEEP_UNUSED_MS = 30 * 60_000
 
 /**
- * The panels' cache. A read that got no answer at all (a network blip) is asked again, twice; an answer — even an
- * error — stands, and the screen shows it (ErrorState); a read or a write that failed for any other reason is the
- * panel's own bug, told to the console and the shop's log too (lib/error-reporting). A read is fresh for ten seconds — a
- * page opened again sooner is not read again —, and none is read again because the window got the focus: the live poll
- * asks then, and reloads what moved. Every write is a mutation of it:
- * its failure is told in a toast in lib/failure's words — the API's own where they are the admin's —, unless the screen
- * shows it itself (`meta.quiet`) — so none fails without a word; and what it changes elsewhere is named once, on it
- * (`meta.invalidates`) — the kits take it as their `invalidates`, a form's save in `submit()`'s.
+ * The panels' query client:
+ * - a read that got no answer at all is asked twice more; any answer, even an error, stands and the screen shows it;
+ * - a read is fresh for ten seconds, and never refetched on window focus (the live poll asks then);
+ * - every write is a mutation: its failure is a toast unless `meta.quiet`, and what it changes elsewhere is named once,
+ *   on it (`meta.invalidates`);
+ * - a failure that is not an API answer is a bug of the panel's and goes to lib/error-reporting.
  */
 export function createQueryClient(): QueryClient {
   const client: QueryClient = new QueryClient({
@@ -60,15 +54,15 @@ export function createQueryClient(): QueryClient {
 }
 
 /**
- * One request run as a mutation of the panels' cache — a form's save (lib/use-form) —, its `meta` heeded as any
- * useMutation's is. It goes at once, whatever the browser says of the network: its form says when no answer came.
+ * Run one request as a mutation of the cache (a form's save, lib/use-form), so its `meta` applies as for any
+ * useMutation. It goes at once whatever the browser says of the network: the form says when no answer came.
  */
 export async function runMutation<R>(client: QueryClient, request: () => Promise<R>, meta: MutationMeta): Promise<R> {
   const observer = new MutationObserver<R, Error>(client, { mutationFn: request, meta, networkMode: 'always' })
   try {
     return await observer.mutate()
   } finally {
-    // Nobody watches it any more: the cache lets it go in its own time.
+    // Nobody watches it any more; the cache lets it go in its own time.
     observer.reset()
   }
 }

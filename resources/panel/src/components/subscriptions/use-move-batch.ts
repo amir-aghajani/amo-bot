@@ -18,26 +18,22 @@ export interface Question {
 }
 
 /**
- * How one request went: moved, or the step that failed and why — `leave` being the server's refusal to leave the client
- * on the previous one (an agent's shop may, only while that panel is out of reach).
+ * How one service's move went: moved, or the step that failed and why. `leave` is the server refusing to leave the
+ * client on the old panel (an agent's shop may only while that panel is out of reach).
  */
 type Result = { step: 'moved' } | { step: 'previous' | 'target' | 'leave' | 'service'; message: string }
 
-/**
- * What a batch moves beyond the services it moved — read again once it is over: the list behind it (a client found gone
- * on its panel on the way is marked deleted), the servers' counts and room, the dashboard's.
- */
+/** Reads refreshed once a batch is over: the list (a client found gone is marked deleted), the servers' counts, the dashboard. */
 const BATCH_CHANGES = [queryKeys.subscriptions, queryKeys.serverChoices, queryKeys.dashboards]
 
 /**
- * A batch of services moved to another server, one request each, in order, so the admin watches every one of them go
- * (or fail, and why) — the one source of what the move dialog shows. A previous server that does not answer pauses the
- * batch on a question (`question`, answered with `reply`): carry on without deleting from it — the rest of the batch on
- * that server goes the same way — or cancel there. A target that refuses one stops the batch there (`stopped`, that
- * service — its outcome says why): the next would fail too; so does a refusal to carry on without the previous server.
- * Every opening (a new `subscriptions`) starts afresh. The page going away (the browser's back) stops the batch after
- * the service under way — a question it waited on is answered «لغو» —, and closing the tab meanwhile asks first. The
- * batch is one mutation: once it is over, what it moved beyond its services is read again (BATCH_CHANGES).
+ * Runs a move batch — one request per service, in order — and is the single source of what the move dialog shows.
+ *
+ * - An old server that does not answer pauses the batch on `question` (answered with `reply`): carry on without
+ *   deleting from it (the rest on that server follow suit) or cancel.
+ * - A target that refuses a service stops the batch (`stopped`): the next would fail the same way.
+ * - Leaving the page stops after the service under way (a pending question counts as «لغو»); closing the tab asks first.
+ * - The batch is one mutation, so BATCH_CHANGES are read again once it is over. A new `subscriptions` starts afresh.
  */
 export function useMoveBatch(subscriptions: SubscriptionRow[] | null, onMoved: (subscription: SubscriptionRow) => void) {
   const [opened, setOpened] = useState(subscriptions)

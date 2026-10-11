@@ -8,10 +8,7 @@ use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Support\Persian;
 
-/**
- * A payment method that payments were made with cannot be deleted — each payment is read through its method (its
- * driver, its card); it can only be switched off, so the history keeps it.
- */
+/** A method payments were made with cannot be deleted (each payment reads its driver and card through it): switch it off. */
 final class MethodInUseException extends DomainRuleException
 {
     public function __construct(PaymentMethod $method, int $payments)

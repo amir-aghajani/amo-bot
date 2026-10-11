@@ -13,11 +13,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Which routes answer before the shop is installed, and which after — put on route groups, so the router decides what
- * a request is (an encoded spelling of an address reaches the same group as the plain one): the shop's routes — the
- * panels' API, the webhooks, the cron address — wait for the installation (a JSON 503), and the installer's
- * (`installer: true`, the container's `installer.open`) are gone once it is done (a 404). What tells a panel which it
- * is — /api/app, /health — answers either way.
+ * On a route group: the shop's routes (panels' API, webhooks, cron) answer a 503 until the shop is installed; the
+ * installer's (`installer: true`, the container's `installer.open`) answer a 404 once it is. /api/app and /health have
+ * neither and answer either way.
  */
 final class InstalledMiddleware implements MiddlewareInterface
 {

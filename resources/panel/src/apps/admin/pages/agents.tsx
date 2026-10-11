@@ -44,11 +44,7 @@ const PROGRAM =
   'مشتری از صفحه «نمایندگی» ربات درخواست می‌دهد؛ با تایید، روی یک سطح نماینده می‌شود و ربات فروش خودش را دارد: توکنش را از ربات اصلی می‌فرستد، پلن‌ها و قیمت‌ها و مشتری‌هایش را در پنل خودش می‌سازد و سرویس‌ها روی سرورهای شما ساخته می‌شوند. حجمی را که رباتش می‌فروشد با قیمت سطحش از شما می‌خرد و تا اعتبارش می‌تواند بدهکار شود.'
 
 /**
- * «نمایندگی», the shop's program: four sections listed in the sidebar — the requests to become an agent (approved on a
- * level with a credit, or rejected), the agents (their bot and its traffic, their level and credit changed, their
- * traffic set right, their shop opened, their agency ended), the levels, each a price per GB, and the program's rules.
- * The lists come with the program's numbers — «—», with what failed, when they could not be read. The sections stay
- * mounted when another is shown, so each keeps its search, page and draft.
+ * «نمایندگان» (the owner's): the agency program's numbers above four sections — requests, agents, levels and the rules.
  */
 export function AgentsPage() {
   const summaryRead = useQuery(agencySummaryQuery)

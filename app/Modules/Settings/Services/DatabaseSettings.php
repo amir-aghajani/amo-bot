@@ -17,11 +17,8 @@ use App\Core\Forms\Form;
 use App\Support\Input;
 
 /**
- * The database part of config.php, for the settings screen (ConfigSettings' `database` group) and the web installer
- * alike: the driver DB_CONNECTION names and its form, which drivers the admin may pick, the admin's choice checked by
- * the chosen driver's form — a password left blank kept only while the address it was given for stays (its secret's
- * `boundTo`) —, and whether a database answers to it. Everything about one database is its driver's
- * (App\Core\Database\Drivers).
+ * The database part of config.php, for the settings screen and the installer: the driver DB_CONNECTION names and its
+ * form, the drivers offered, the admin's choice checked by the chosen driver's form, and the probe.
  */
 final class DatabaseSettings
 {
@@ -33,8 +30,8 @@ final class DatabaseSettings
     ) {}
 
     /**
-     * The group as a screen shows it: the driver, the drivers on offer (each described: its form's fields), and the
-     * driver's fields as config.php holds them — a password as whether one is kept, never a character or the length of it.
+     * The group as a screen shows it: the driver, the drivers on offer (described), and the driver's values (a password
+     * only as whether one is kept).
      *
      * @return array{driver: string, drivers: list<array<string, mixed>>, values: array<string, mixed>}
      */
@@ -51,7 +48,7 @@ final class DatabaseSettings
     }
 
     /**
-     * The driver the admin picked (`driver`): one the screen offers; none named is the one it shows.
+     * The driver picked (`driver`), one the screen offers; none named is the one it shows.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException
@@ -71,11 +68,9 @@ final class DatabaseSettings
     }
 
     /**
-     * The admin's choice checked by the chosen driver's form: DB_CONNECTION and the driver's settings, ready to write —
-     * once probe() says yes. A secret left blank keeps what is stored only for the driver whose values the screen showed
-     * (another one starts with nothing stored), and only while its address stays — moved, as the driver reads it (so
-     * «۳۳۰۷» is still 3307), it is asked for again: a password kept is never sent to another server, a test of the new
-     * address included.
+     * Check the choice by the chosen driver's form: DB_CONNECTION and its settings, to write once probe() passes. A blank
+     * password keeps the stored one only for the driver shown and only while its address stays — a kept password never
+     * goes to another server, not even for a test.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
@@ -89,7 +84,7 @@ final class DatabaseSettings
     }
 
     /**
-     * Whether a database answers to `$config` — validate()'s settings, or config.php's as they are — and what it is.
+     * Probe a database with `$config` (validate()'s settings, or config.php's): what answered.
      *
      * @param array<string, mixed> $config
      * @throws ProbeFailedException
@@ -112,8 +107,7 @@ final class DatabaseSettings
     }
 
     /**
-     * What a screen lets the admin pick, in registration order: the drivers the installer offers, and `$current` — the
-     * one config.php names or the shop runs on — even when it is not one of them.
+     * The drivers a screen offers: the installable ones, and `$current` even when it is not.
      *
      * @return list<DatabaseDriver>
      */
@@ -125,10 +119,7 @@ final class DatabaseSettings
         ));
     }
 
-    /**
-     * The driver a screen starts from: the one config.php names, else the one the shop runs on — or, when that is no
-     * driver at all, the first the screens offer.
-     */
+    /** The driver a screen starts from: config.php's, else the running one, else the first offered. */
     private function current(): DatabaseDriver
     {
         $key = $this->stored()['DB_CONNECTION'] ?? $this->running();
@@ -137,8 +128,7 @@ final class DatabaseSettings
     }
 
     /**
-     * What `$driver`'s fields hold: config.php's DB_* settings, else — for the driver the shop runs on — what it runs
-     * with (the ones it booted with), else the fields' defaults.
+     * What `$driver`'s fields hold: config.php's DB_* settings, plus — for the running driver — what it booted with.
      *
      * @return array<string, string>
      */

@@ -13,11 +13,7 @@ interface EmailSectionProps {
   mailSettings?: string
 }
 
-/**
- * «ورود با ایمیل»: customers sign up on the website with their email and a password — a code to the address, the account
- * made once it is typed back, so it takes the shop's email —, and the captcha that guards every way in with a password,
- * and any form of the site's own (CaptchaCard).
- */
+/** «ورود با ایمیل»: email sign-up (which needs the shop's email to send its code) and the website's captcha. */
 export function EmailSection({ website, mailSettings }: EmailSectionProps) {
   return (
     <>
@@ -35,9 +31,8 @@ function signupDraftOf(website: Website): SignupDraft {
 }
 
 /**
- * Signing up with an email: the switch — held while no email goes out and it is kept off, since the code would reach
- * nobody; kept on, it may still be switched off —, and a word that the accounts made already keep their way in whatever
- * it says.
+ * The email sign-up switch. It cannot be turned on while no email goes out (the code would reach nobody); accounts
+ * already made keep signing in either way.
  */
 function EmailSignupCard({ website, mailSettings }: EmailSectionProps) {
   const group = useWebsiteGroup(website, signupDraftOf, (values) => values)

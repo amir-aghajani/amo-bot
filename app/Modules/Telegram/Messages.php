@@ -10,13 +10,9 @@ use App\Support\Persian;
 use App\Support\Traffic;
 
 /**
- * The bot's words that are not the admin's to reword: the units and phrases the formatters build values
- * from (a quota, a term, «۳ روز مانده»), the main menu's default labels (the keyboards editor rewords
- * those) and what the bot says to its own admins (/broadcast, /emoji). Everything it says to a customer is a
- * BotText (Texts\TextCatalog), sent through Texts\BotTexts — which escapes what goes into it. Placeholders are
- * `%name%`, filled with fill(), which fills and nothing else: an admin's message built here escapes its own values.
- * Emoji keep one form per glyph: the emoji-presentation form (with U+FE0F) for the symbols that need
- * it (⛔️ 🛍️ 🗜️ ⚠️ ⚙️ ☎️ ♻️ ↩️ ✏️ ⬅️), the bare code point for those that are emoji by themselves.
+ * The bot's words that are not the admin's to reword: the formatters' units and phrases (a quota, a term, «۳ روز
+ * مانده»), the main menu's default labels, and what the bot says to its own admins (/broadcast, /emoji). Everything a
+ * customer reads is a BotText instead. fill() only fills `%name%` placeholders: callers escape their own values.
  */
 final class Messages
 {
@@ -25,23 +21,23 @@ final class Messages
 
     // Units — quotas, terms and device counts are worded through traffic(), bytes(), duration(), devices().
     private const UNIT_DAYS = 'روز';
+    private const UNIT_HOURS = 'ساعت';
     private const UNIT_GB = 'گیگابایت';
     private const UNIT_MB = 'مگابایت';
     /** After a device count: «۲ دستگاه». */
     private const PLAN_DEVICES = 'دستگاه';
 
     // When a service ends (expiry()): the clock starts at the first connection, so until then there is no date.
-    private const EXPIRY_PENDING = '⏳ در انتظار اولین اتصال (%days% روز)';
+    private const EXPIRY_PENDING = '⏳ در انتظار اولین اتصال (%term%)';
     private const EXPIRY_DAYS_LEFT = '%days% روز مانده';
-    private const EXPIRY_LAST_DAY = 'کمتر از یک روز مانده';
+    private const EXPIRY_HOURS_LEFT = '%hours% ساعت مانده';
     private const EXPIRY_ENDED = 'تمام شده';
 
     // A wallet below zero (an agent's credit in use), and an agent without credit (balance(), credit()).
     private const DEBT = '%amount% بدهی';
     private const NO_CREDIT = 'ندارد';
 
-    // The main menu's default labels (the keyboards editor rewords them): a reply-keyboard tap sends the label
-    // as a message, so these are also routes (MainMenu).
+    // The main menu's default labels; a reply-keyboard tap sends its label, so these are routes too (MainMenu).
     public const MENU_BUY = '🔐 خرید اشتراک';
     public const MENU_SERVICES = '🛍️ سرویس‌های من';
     public const MENU_RENEW = '♻️ تمدید سرویس';
@@ -50,6 +46,8 @@ final class Messages
     public const MENU_AFFILIATES = '👥 زیرمجموعه‌گیری';
     public const MENU_SUPPORT = '☎️ پشتیبانی';
     public const MENU_AGENCY = '🤝 نمایندگی';
+    public const MENU_GIFT = '🎁 کد هدیه';
+    public const MENU_WHEEL = '🎡 گردونه شانس';
 
     // /broadcast (admins only): a message copied or forwarded to an audience, with live progress and its controls.
     public const BROADCAST_ASK = '📣 پیامی را که می‌خواهید برای کاربران ارسال شود بفرستید — متن، عکس، ویدیو یا هر پیام دیگری. برای فوروارد، پیام کانال را همین‌جا فوروارد کنید.';
@@ -178,13 +176,21 @@ final class Messages
     /** What a grant or an extension gave a service: "۳ روز و ۱۰ گیگابایت", "۳ روز" or "۱۰ گیگابایت". */
     public static function gift(int $days, int $bytes): string
     {
-        return implode(' و ', array_filter([$days > 0 ? self::duration($days) : '', $bytes > 0 ? self::bytes($bytes) : '']));
+        return implode(' و ', array_filter([$days > 0 ? self::duration($days * ServiceTerms::HOURS_A_DAY) : '', $bytes > 0 ? self::bytes($bytes) : '']));
     }
 
-    /** "۳۰ روز", "نامحدود" for 0. */
-    public static function duration(int $days): string
+    /** A term from its hours: "۳۰ روز", "۶ ساعت" under a day, "۱ روز و ۶ ساعت" between; "نامحدود" for 0. */
+    public static function duration(int $hours): string
     {
-        return $days > 0 ? Persian::digits($days) . ' ' . self::UNIT_DAYS : self::UNLIMITED;
+        $days = intdiv(max(0, $hours), ServiceTerms::HOURS_A_DAY);
+        $left = max(0, $hours) % ServiceTerms::HOURS_A_DAY;
+
+        return match (true) {
+            $hours <= 0 => self::UNLIMITED,
+            $left === 0 => Persian::digits($days) . ' ' . self::UNIT_DAYS,
+            $days === 0 => Persian::digits($left) . ' ' . self::UNIT_HOURS,
+            default => Persian::digits($days) . ' ' . self::UNIT_DAYS . ' و ' . Persian::digits($left) . ' ' . self::UNIT_HOURS,
+        };
     }
 
     /** A number of devices: "۲ دستگاه", "نامحدود" for 0. */
@@ -206,28 +212,29 @@ final class Messages
     }
 
     /**
-     * When a service ends: "۲۷ آذر ۱۴۰۵ (۹۰ روز مانده)" with a deadline, "⏳ در انتظار اولین اتصال (۹۰ روز)"
-     * while the panel has not started the clock, "نامحدود" for no term at all.
+     * When a service ends: "۲۷ آذر ۱۴۰۵ (۹۰ روز مانده)" (with the hour and hours left on its last day), "⏳ در انتظار
+     * اولین اتصال (۹۰ روز)" while its clock waits for the first connection, "نامحدود" for no term.
      */
-    public static function expiry(?\DateTimeInterface $at, int $days): string
+    public static function expiry(?\DateTimeInterface $at, int $hours): string
     {
         if ($at === null) {
-            return $days > 0 ? self::fill(self::EXPIRY_PENDING, ['days' => Persian::digits($days)]) : self::UNLIMITED;
+            return $hours > 0 ? self::fill(self::EXPIRY_PENDING, ['term' => self::duration($hours)]) : self::UNLIMITED;
         }
 
         $left = $at->getTimestamp() - now()->getTimestamp();
+        $lastDay = $left > 0 && $left < ServiceTerms::DAY;
         $note = match (true) {
             $left <= 0 => self::EXPIRY_ENDED,
-            $left < ServiceTerms::DAY => self::EXPIRY_LAST_DAY,
+            $lastDay => self::fill(self::EXPIRY_HOURS_LEFT, ['hours' => Persian::digits((int) ceil($left / ServiceTerms::HOUR))]),
             default => self::fill(self::EXPIRY_DAYS_LEFT, ['days' => Persian::digits((int) ceil($left / ServiceTerms::DAY))]),
         };
 
-        return Persian::date($at) . ' (' . $note . ')';
+        return Persian::date($at, withTime: $lastDay) . ' (' . $note . ')';
     }
 
     /**
-     * The template with its `%variables%` filled, in one pass: a filled-in value is never read again for
-     * variables (a plan named "x %balance%" stays that).
+     * The template with its `%variables%` filled in one pass, so a filled-in value is never read again for variables
+     * (a plan named "x %balance%" stays that).
      *
      * @param array<string, scalar> $replace
      */

@@ -11,27 +11,19 @@ use Illuminate\Database\Events\TransactionRolledBack;
 use Psr\Log\LoggerInterface;
 
 /**
- * What changed, for the panels' live view (`GET /api/{admin,agent}/changes`): a number per area of the shop that
- * goes up once a write to one of the area's tables is committed, whoever made it — a panel request, the bot, a
- * scheduled task, the report group's buttons. The panel asks for the numbers every few seconds and reloads only
- * what the areas that moved show.
+ * The panels' live view (`GET /api/{panel}/changes`): a version number per area of the shop that goes up once a write
+ * to one of its tables is committed, by any process. A panel polls the numbers and reloads what the moved areas show.
  *
- * The writes are read off the connection's own events (every INSERT, UPDATE and DELETE it runs), so no service
- * has to remember to report one. A write inside a transaction counts once the transaction commits — the number
- * goes up after the commit, outside its locks, so it never holds up a payment — and not at all when it rolls
- * back. The numbers are never written from inside the event of the statement that wrote: the driver's last
- * insert id, which an INSERT's caller reads right after the statement, belongs to that statement. They are
- * written just before the connection's next statement, after a commit, or when the process ends. A number that
- * cannot go up is logged and never fails the write it follows.
- *
- * A write no screen needs to follow at once is made quietly() — a customer's presence, which their every message
- * refreshes — so it does not have every open panel read its lists again.
+ * Writes are read off the connection's own query events, so no service has to report one. A write inside a
+ * transaction counts at the commit, not at a rollback. The numbers are written outside the transaction (never holding
+ * its locks) and never from inside the writing statement's event — the driver's last insert id still belongs to that
+ * statement — but just before the next statement, after a commit, or at shutdown. A failed bump is logged, never thrown.
  */
 final class ChangeFeed
 {
     /**
-     * The tables the panel shows, by area. Any other table — sessions, the bookkeeping, this feed's own — moves nothing. A
-     * grant under way moves its cursor every second: an area of its own, so only the screens that follow it read again.
+     * The tables the panels show, by area; any other table moves nothing. Grants are an area of their own because a
+     * running grant moves its cursor every second.
      */
     public const AREAS = [
         'users' => 'users',
@@ -51,6 +43,9 @@ final class ChangeFeed
         'orders' => 'orders',
         'payments' => 'payments',
         'referral_commissions' => 'referrals',
+        'referral_alerts' => 'referrals',
+        'referral_bonuses' => 'referrals',
+        'referral_rewards' => 'referrals',
         'agency_levels' => 'agency',
         'agency_requests' => 'agency',
         'bots' => 'agency',
@@ -66,6 +61,15 @@ final class ChangeFeed
         'tickets' => 'tickets',
         'ticket_messages' => 'tickets',
         'reviews' => 'reviews',
+        'gift_codes' => 'rewards',
+        'wheel_prizes' => 'rewards',
+        'wheel_spins' => 'rewards',
+        'loyalty_tiers' => 'rewards',
+        'cashback_rules' => 'rewards',
+        'lottery_draws' => 'rewards',
+        'lottery_winners' => 'rewards',
+        'discount_codes' => 'discounts',
+        'sales' => 'discounts',
     ];
 
     private const TABLE = 'change_versions';
@@ -118,9 +122,8 @@ final class ChangeFeed
     }
 
     /**
-     * Make `$write` without moving any area — for a write no screen needs to follow at once (a customer's presence,
-     * `users.last_seen_at`), which would otherwise have every open panel read its lists again. Only what `$write` itself
-     * writes goes uncounted: anything written before or after it — in the same transaction too — counts as ever.
+     * Run `$write` without moving any area — for a write no screen needs to follow (a customer's `last_seen_at`), which
+     * would otherwise make every open panel reload. Only what `$write` itself writes goes uncounted.
      *
      * @template T
      * @param \Closure(): T $write
@@ -137,8 +140,8 @@ final class ChangeFeed
     }
 
     /**
-     * A commit back to `$level` is the commit. The tests run every case inside a transaction of their own that is
-     * rolled back afterwards: for the feed, that transaction is the database.
+     * Treat a commit back to `$level` as the commit. The tests run each case inside a transaction rolled back
+     * afterwards; for the feed, that transaction is the database.
      */
     public function countAsCommitted(int $level): void
     {
@@ -184,8 +187,8 @@ final class ChangeFeed
     }
 
     /**
-     * Write the committed areas' numbers — never inside a transaction, where they would wait on its locks — in one
-     * statement for every area a commit moved: each is a write of its own, and a sale moves three.
+     * Bump the committed areas' numbers in one statement (a sale moves three areas); never inside a transaction, where
+     * the bump would wait on its locks.
      */
     private function count(): void
     {

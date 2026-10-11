@@ -10,7 +10,7 @@ interface SwitchRowProps {
   onCheckedChange: (checked: boolean) => void
   /** Validation message from the server; shown under the hint and marks the row invalid. */
   error?: string
-  /** It cannot be switched now, for a reason said beside it: the switch is held — reachable, its words told, taking no press. */
+  /** It cannot be switched now, for a reason shown beside it: the switch is held — focusable and announced, but taking no press. */
   held?: boolean
   /** False for a switch that sits among a form's fields, where the box would be one border too many. */
   bordered?: boolean
@@ -19,7 +19,7 @@ interface SwitchRowProps {
 
 /**
  * An on/off setting as one row: label and explanation on one side, the switch on the other — the whole row toggles. The
- * switch is told what its hint and its error say, as a field's control is (Field).
+ * switch is described by its hint and its error, as a field's control is (Field).
  */
 export function SwitchRow({ label, hint, checked, onCheckedChange, error, held = false, bordered = true, className }: SwitchRowProps) {
   const id = useId()

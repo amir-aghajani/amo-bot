@@ -16,13 +16,10 @@ use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Support\Persian;
 
 /**
- * /emoji — an admin shows the bot premium emoji for its texts (routes/bot.php serves it to the bot's admins only): the
- * command asks for a message, and the admin sends one composed in Telegram the way a customer should see it (premium
- * emoji, formatting, `%variables%`). The bot keeps its premium emoji for the editors' picker (Emoji\CustomEmojis), sends
- * the message back written by itself — whether its premium emoji survive says whether the bot may use them (its owner
- * needs Telegram Premium): the last finding is forgotten first, so the bot asks afresh, and what it finds is kept
- * (PremiumEmojiStatus) — and answers with the message as a template (Telegram HTML, in a block a tap copies) to paste
- * into a text.
+ * /emoji (bot admins only): the admin sends a message with premium emoji, composed as a customer should see it. The bot
+ * keeps the emoji for the panel's picker (Emoji\CustomEmojis), sends the message back itself — whether the emoji survive
+ * tells whether the bot may use them (PremiumEmojiStatus; its owner needs Telegram Premium) — and answers with the
+ * message as Telegram HTML to paste into a text.
  */
 final class CustomEmojiHandler implements Handler
 {

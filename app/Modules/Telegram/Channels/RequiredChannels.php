@@ -7,16 +7,15 @@ namespace App\Modules\Telegram\Channels;
 use App\Core\Database\Sorting;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Telegram\Api\BotApi;
+use App\Modules\Telegram\Api\Limits;
 use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Api\TelegramUnreachableException;
 use App\Modules\Telegram\Models\BotChannel;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
- * The channels a customer must join before the bot serves them ("کانال‌های اجباری"), as the admin keeps them: one is
- * added by its link, the bot looks the chat up and refuses it unless it is an admin there (it needs that to see who is
- * a member, ChannelMembership), and a check looks it up again. Telegram out of reach for a moment answers neither: the
- * admin is told so (TelegramUnreachableException) and nothing changes.
+ * The admin's list of required channels: added by link (refused unless the bot is an admin there — it needs that to see
+ * members), checked again on demand, reordered and removed. Telegram out of reach changes nothing (a 502).
  */
 final class RequiredChannels
 {
@@ -33,9 +32,8 @@ final class RequiredChannels
     }
 
     /**
-     * Add a channel by what the admin pasted: a public link or handle ("https://t.me/name", "@name") or,
-     * for a private channel, its numeric id — the bot exports the invite link itself. The bot must
-     * already be an admin of the chat.
+     * Add a channel by a public link or handle, or a private one's numeric id (the bot exports its invite link). The bot
+     * must already be an admin there.
      *
      * @throws ValidationException with the reason under "link"
      * @throws TelegramUnreachableException
@@ -92,9 +90,8 @@ final class RequiredChannels
     }
 
     /**
-     * Look the channel up again: is the bot still an admin, and did the title or the way in change — its handle, or a
-     * private one's invite link (the bot needs to be an admin to get one; when it cannot, the last way known stays).
-     * A chat Telegram no longer shows the bot is flagged like one where it lost its rights.
+     * Look the channel up again: the bot's rights, the title and the way in (a private one's last invite link stays when
+     * none can be made now). A chat Telegram no longer shows is flagged like one where the bot lost its rights.
      *
      * @throws TelegramUnreachableException
      */
@@ -125,6 +122,7 @@ final class RequiredChannels
         return $channel;
     }
 
+    /** Take the channel off the list (the bot stays in it). */
     public function delete(BotChannel $channel): void
     {
         $channel->delete();
@@ -170,8 +168,7 @@ final class RequiredChannels
     }
 
     /**
-     * A private chat's way in: the invite link Telegram already shows its admins, else one the bot exports; null when
-     * it may not. (A public one's is its handle's — BotChannel::link().)
+     * A private chat's invite link: the one Telegram shows its admins, else one the bot exports; null when it may not.
      *
      * @param array<string, mixed> $chat
      * @throws TelegramUnreachableException
@@ -194,7 +191,7 @@ final class RequiredChannels
     {
         $title = trim((string) ($chat['title'] ?? ''));
 
-        return mb_substr($title !== '' ? $title : (string) ($chat['username'] ?? $chat['id'] ?? ''), 0, 128);
+        return mb_substr($title !== '' ? $title : (string) ($chat['username'] ?? $chat['id'] ?? ''), 0, Limits::TITLE);
     }
 
     /** @param array<string, mixed> $chat */
@@ -207,6 +204,6 @@ final class RequiredChannels
 
     private static function invalid(string $message): ValidationException
     {
-        return new ValidationException(['link' => [$message]], $message);
+        return ValidationException::on('link', $message);
     }
 }

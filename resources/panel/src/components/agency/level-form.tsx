@@ -10,7 +10,7 @@ import { useForm } from '@/lib/use-form'
 
 interface LevelFormProps {
   level: AgencyLevelRow | null
-  /** What else shows the levels — its list's (useRows' `invalidates`) —, read again once it is saved. */
+  /** Other reads to refresh once it is saved (useRows' `invalidates`). */
   invalidates: readonly QueryKey[]
   onSaved: (level: AgencyLevelRow) => void
   onCancel: () => void

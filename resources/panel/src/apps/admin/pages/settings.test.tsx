@@ -47,7 +47,7 @@ describe('the panel’s settings, config.php unread', () => {
     expect(screen.queryByText('تنظیمات بارگذاری نشد.')).toBeNull()
   })
 
-  it('offer the panel’s look, said to be kept in the browser rather than the file', async () => {
+  it('offer the panel’s appearance, noting it is stored in the browser rather than the file', async () => {
     await show('/settings/appearance')
 
     expect(screen.getByRole('radiogroup', { name: 'تم پنل' })).toBeTruthy()

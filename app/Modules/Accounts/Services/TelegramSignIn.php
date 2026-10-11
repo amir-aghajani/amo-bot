@@ -24,67 +24,54 @@ use App\Modules\Telegram\Api\TelegramUnreachableException;
 use App\Modules\Users\Services\Customers;
 use App\Support\Input;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Log\LoggerInterface;
 
 /**
- * Signing in on the shop's website with a Telegram account: Telegram's OpenID Connect (Log In With Telegram), under
- * the Client ID @BotFather shows for the site (SignInSite::telegramClientId()). Two flows, the site picks:
- * - popup — Telegram's telegram-login.js runs the sign-in itself and hands the page an id_token, for a nonce the site
- *   asked the shop for first (POST /auth/nonce, AuthChallenges::nonce()); the page posts both.
- * - redirect — authorization code + PKCE, the PKCE verifier the browser's own: the site makes it, keeps it where the
- *   page that began the sign-in can read it (its sessionStorage), and sends the shop only its challenge (S256);
- *   authorize() gives the site Telegram's authorization address, the challenge, return address and nonce kept here under
- *   a one-time `state`; Telegram sends the browser back to the site with a code and the state, which the site posts with
- *   the verifier — the one whose challenge the state keeps, else the sign-in began in another browser and opens nothing
- *   —, and the code is exchanged for the id_token with the site's client secret and that verifier (CodeExchange). The
- *   shop keeps no verifier: a code and state another browser brings back (a crafted link) come without it. The state is
- *   whoever asked for it too: a sign-in's (POST /auth/telegram/authorize) is spent by a sign-in alone, a signed-in
- *   customer's (POST /me/telegram/authorize, `$holder`) by that customer's very session alone (the challenge's holder
- *   and its subject) — another device of theirs adds no Telegram account to theirs, nor signs them in to somebody else's.
- * Either way the token is checked the one way (IdTokenVerifier; the popup's by IdTokens, the nonce rule of every
- * id_token sign-in), its nonce spent once, and its `id` claim — the Telegram user's numeric id, which the bot knows its
- * customers by — is the Telegram account it proves (account(): what a signed-in customer links to their account, or
- * proves theirs again, too — Identities, Reauthentication). A sign-in's customer is the shop's with that account: the
- * bot's, with their services and wallet; or a newcomer, registered as the bot registers one (Users\Services\Customers),
- * with the site's `referral_code`. A proof that does not hold counts against the address (SignInThrottle) — a 401 for a
- * sign-in, a 422 on the proof's field for a signed-in customer, whose session it does not end —; one that works clears
- * nobody's count. Telegram out of reach is a 502 that counts for nothing.
+ * Signing in on the website with a Telegram account (Log In With Telegram, OpenID Connect), under the Client ID
+ * @BotFather shows for the site. The id_token's `id` claim is the numeric Telegram id the bot knows its customers by, so
+ * a sign-in finds the bot's own customer, with their services and wallet, or registers a newcomer the way the bot does.
+ *
+ * Two flows, the site picks:
+ * - popup: Telegram's telegram-login.js hands the page an id_token for a nonce the shop gave (ProviderSignIn::nonced()).
+ * - redirect: authorization code + PKCE. The browser makes and keeps the PKCE verifier and sends the shop only its S256
+ *   challenge; authorize() keeps that challenge, the return address and a nonce under a one-time `state`. The code comes
+ *   back with the state and the verifier and is exchanged with the site's client secret. The shop never holds a verifier,
+ *   so a code and state carried to another browser (a crafted link) open nothing.
+ *
+ * A state belongs to whoever asked for it: a sign-in's (issued to nobody) is spent only by a sign-in, and a signed-in
+ * customer's (POST /me/telegram/authorize, linking or proving their Telegram account) only by the very session that asked.
  */
 final class TelegramSignIn
 {
-    /** What the redirect flow asks Telegram for: the sign-in, the profile (the `id` claim with it), and the bot's right to write to them. */
+    /** What the redirect flow asks for: the sign-in, the profile (with the `id` claim), and the bot's right to write to them. */
     public const SCOPE = 'openid profile telegram:bot_access';
 
     /** How long a redirect sign-in may take, from the authorization address to the code brought back. */
     private const STATE_SECONDS = 600;
 
-    /** A PKCE challenge as S256 makes it: the base64url of a SHA-256, without its padding. */
+    /** A PKCE S256 challenge: the base64url of a SHA-256, without padding. */
     private const CHALLENGE = '/^[A-Za-z0-9_-]{43}$/';
 
-    /** A PKCE verifier (RFC 7636): 43 to 128 of its unreserved characters. */
+    /** A PKCE verifier (RFC 7636): 43 to 128 unreserved characters. */
     private const VERIFIER = '/^[A-Za-z0-9._~-]{43,128}$/';
 
     public function __construct(
         private readonly IdTokenVerifier $verifier,
-        private readonly IdTokens $idTokens,
+        private readonly ProviderSignIn $provider,
         private readonly CodeExchange $exchange,
         private readonly AuthChallenges $challenges,
         private readonly Customers $customers,
-        private readonly CustomerSessions $sessions,
         private readonly SignInThrottle $throttle,
-        private readonly LoggerInterface $logger,
     ) {}
 
     /**
-     * Telegram's authorization address for the redirect flow, back to `$redirectUri` — an address of the site (its own
-     * origin, or one it lists) —, for the PKCE challenge the site made of its verifier (`$codeChallenge`, S256), which
-     * the state keeps. The state is a sign-in's, or — `$holder` — the signed-in customer's who asked, spent by the
-     * session they asked from alone; it is counted against the address that asked (SignInThrottle::issuing()).
+     * Telegram's authorization address for the redirect flow, back to `$redirectUri` (on one of the site's origins), for
+     * the PKCE challenge the site made of its verifier. With `$holder` the state is that customer's session's own. Each
+     * call is counted against the asking address (SignInThrottle::issuing()).
      *
      * @throws SignInRefusedException 422: Telegram sign-in off, or no client secret to exchange a code with
      * @throws ValidationException 422 on `redirect_uri`, on `code_challenge`
      * @throws TooManyAttemptsException 429 while this address asked too much
-     * @throws SignInsBusyException 503 while the shop keeps as many redirect states as it takes
+     * @throws SignInsBusyException 503 while the shop holds as many redirect states as it takes
      */
     public function authorize(SignInSite $site, ServerRequestInterface $request, string $redirectUri, string $codeChallenge, ?Customer $holder = null): string
     {
@@ -120,73 +107,52 @@ final class TelegramSignIn
     }
 
     /**
-     * The customer signed in — a session opened on the device the request came from — by the popup's id_token and
-     * nonce, or the redirect's code and state.
+     * Sign the customer in by the popup's id_token and nonce or the redirect's code and state: the bot's customer with
+     * that Telegram account, or a newcomer registered with the site's `referral_code`.
      *
      * @param array<string, mixed> $input {id_token, nonce, referral_code?} or {code, state, code_verifier, referral_code?}
-     * @throws SignInRefusedException 401 the token, the code or the nonce/state does not sign them in; 403 banned; 422 Telegram sign-in not set up
+     * @throws SignInRefusedException 401 the proof does not hold; 403 banned; 422 Telegram sign-in not set up
      * @throws ValidationException 422 a field missing
      * @throws TooManyAttemptsException 429 while this address must wait
-     * @throws TelegramUnreachableException 502 when Telegram could not be asked
+     * @throws TelegramUnreachableException 502
      */
     public function signIn(SignInSite $site, ServerRequestInterface $request, array $input): SignedIn
     {
         $account = $this->account($site, $request, $input);
         $code = Input::text($input, 'referral_code');
         $user = $this->customers->byTelegram($account->id, $account->profile, $code === '' ? null : $code);
-        if ($user->isBanned()) {
-            throw SignInRefusedException::banned();
-        }
-        if (!$user->wasRecentlyCreated) {
-            $this->customers->seen($user);
-        }
 
-        return $this->sessions->open($user, $request, SignInMethod::Telegram);
+        return $this->provider->open($user, $request, SignInMethod::Telegram);
     }
 
     /**
-     * The Telegram account the input proves — the popup's id_token and nonce, or the redirect's code and state, checked
-     * the one way —: what a sign-in signs in by, and what a signed-in customer (`$holder`, whose own session's redirect
-     * state alone it spends) links to their account or proves theirs again. A proof that does not hold counts against the address
-     * (SignInThrottle) — a signed-in customer's is a 422 on its field (proofField()), never the 401 that ends a session;
-     * Telegram out of reach counts for nothing.
+     * The Telegram account the input proves — what a sign-in signs in by, and what a signed-in customer (`$holder`)
+     * links to their account or proves theirs again. Run as a sign-in attempt (ProviderSignIn::prove()).
      *
      * @param array<string, mixed> $input {id_token, nonce} or {code, state, code_verifier}
-     * @throws SignInRefusedException 401 the token, the code or the nonce/state proves nothing (a sign-in's); 422 Telegram sign-in not set up
-     * @throws ValidationException 422 a field missing; on the proof's field, a signed-in customer's proof that does not hold
+     * @throws SignInRefusedException 401 the proof does not hold (a sign-in's); 422 Telegram sign-in not set up
+     * @throws ValidationException 422 a field missing; on the proof's field when a signed-in customer's proof does not hold
      * @throws TooManyAttemptsException 429 while this address must wait
-     * @throws TelegramUnreachableException 502 when Telegram could not be asked
+     * @throws TelegramUnreachableException 502
      */
     public function account(SignInSite $site, ServerRequestInterface $request, array $input, ?Customer $holder = null): TelegramAccount
     {
         $clientId = $site->telegramClientId() ?? throw SignInRefusedException::telegramOff();
-        $this->throttle->check(SignInThrottle::WEBSITE, $request);
 
-        try {
-            $claims = Input::text($input, 'id_token') !== '' ? $this->idTokens->nonced(OidcProvider::telegram(), $clientId, $input) : $this->redirect($site, $clientId, $input, $holder);
-            $telegramId = self::telegramIdOf($claims) ?? throw SignInRefusedException::noTelegramId();
-        } catch (SignInRefusedException $e) {
-            if ($e->failedSignIn()) {
-                $this->throttle->failed(SignInThrottle::WEBSITE, $request);
-                if ($holder !== null) {
-                    throw ValidationException::on(self::proofField($input), $e->getMessage());
-                }
-            }
+        [$id, $claims] = $this->provider->prove(OidcProvider::telegram(), $request, $holder !== null, self::proofField($input), function () use ($site, $clientId, $input, $holder): array {
+            $claims = Input::text($input, 'id_token') !== ''
+                ? $this->provider->nonced(OidcProvider::telegram(), $clientId, $input)
+                : $this->redirect($site, $clientId, $input, $holder);
 
-            throw $e;
-        } catch (ProviderUnreachableException $e) {
-            // The owner's to look into when it lasts: a host that may not reach oauth.telegram.org signs nobody in.
-            $this->logger->warning('A Telegram sign-in on the website could not ask Telegram: {message}', ['message' => $e->getMessage()]);
+            return [self::telegramIdOf($claims) ?? throw SignInRefusedException::noTelegramId(), $claims];
+        }, static fn(ProviderUnreachableException $e): \Throwable => new TelegramUnreachableException($e));
 
-            throw new TelegramUnreachableException($e);
-        }
-
-        return new TelegramAccount($telegramId, Customers::profile($claims['preferred_username'] ?? null, $claims['given_name'] ?? $claims['name'] ?? null, $claims['family_name'] ?? null));
+        return new TelegramAccount($id, Customers::profile($claims['preferred_username'] ?? null, $claims['given_name'] ?? $claims['name'] ?? null, $claims['family_name'] ?? null));
     }
 
     /**
-     * The field a proof of a Telegram account comes under — the popup's `id_token`, else the redirect's `code` —: where a
-     * signed-in customer's proof that does not hold is said.
+     * The field a proof comes under — the popup's `id_token`, else the redirect's `code` —: where a signed-in customer's
+     * refused proof is reported.
      *
      * @param array<string, mixed> $input
      */
@@ -196,9 +162,8 @@ final class TelegramSignIn
     }
 
     /**
-     * The redirect's code, for the state authorize() kept for `$holder` and the session they asked from (a sign-in's:
-     * nobody's), with the verifier of the challenge it keeps — the browser that began the sign-in's: the state spent, the
-     * verifier held to the challenge, the code exchanged where it began with it, and the token's nonce the one kept.
+     * The redirect's claims: the state spent (only by whoever it was issued to), the posted verifier matched to the
+     * challenge the state keeps, the code exchanged with that verifier, and the token's nonce matched to the kept one.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
@@ -225,7 +190,7 @@ final class TelegramSignIn
         if (!is_string($kept['challenge'] ?? null) || !is_string($kept['redirect_uri'] ?? null) || !is_string($kept['nonce'] ?? null)) {
             throw SignInRefusedException::signInSpent();
         }
-        // The verifier of the browser that began it, or the code another browser brought back opens nothing.
+        // Only the browser that began the sign-in has the verifier: a code carried elsewhere opens nothing.
         if (!hash_equals($kept['challenge'], self::base64Url(hash('sha256', $verifier, true)))) {
             throw SignInRefusedException::signInSpent();
         }
@@ -233,7 +198,7 @@ final class TelegramSignIn
         $provider = OidcProvider::telegram();
         $idToken = $this->exchange->idToken($provider, $clientId, $secret, $code, $kept['redirect_uri'], $verifier) ?? throw SignInRefusedException::codeRefused();
         $claims = $this->verifier->verify($provider, $idToken, $clientId);
-        if (!IdTokens::carries($claims, $kept['nonce'])) {
+        if (!ProviderSignIn::carries($claims, $kept['nonce'])) {
             throw SignInRefusedException::signInSpent();
         }
 
@@ -241,8 +206,8 @@ final class TelegramSignIn
     }
 
     /**
-     * The Telegram user's numeric id — the `id` claim, a number or its digits —; null when the token carries none (the
-     * site did not ask for the profile).
+     * The Telegram user's numeric id (the `id` claim, a number or its digits); null when the token has none — the site
+     * did not ask for the profile.
      *
      * @param array<string, mixed> $claims
      */
@@ -256,7 +221,7 @@ final class TelegramSignIn
         return is_int($id) && $id > 0 ? $id : null;
     }
 
-    /** What a signed-in customer's redirect state is about: the session it was asked from, which alone spends it. */
+    /** The subject of a signed-in customer's redirect state: the session that asked, which alone may spend it. */
     private static function askedFrom(Customer $holder): string
     {
         return 'session:' . $holder->session->id;

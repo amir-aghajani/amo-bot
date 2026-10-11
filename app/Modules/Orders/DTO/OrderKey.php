@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Orders\DTO;
 
 /**
- * What a request of the website that orders is known by (OrderService::open*()): its key — the Idempotency-Key, one a
- * customer — and the way to pay it asks for, by the method's id. A key is one checkout attempt and its way to pay part of
- * it: made again with another, it is no request made again but another one under its key (refused, a 422).
+ * A website ordering request's identity: its Idempotency-Key and the payment method it asked for. A key is one checkout
+ * attempt including its way to pay, so the same key with another method is refused (RequestKeyReusedException).
  */
 final class OrderKey
 {

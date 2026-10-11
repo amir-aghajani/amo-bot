@@ -32,21 +32,22 @@ use Psr\Http\Message\UploadedFileInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Support conversations («تیکت»), one service whichever door a message comes through — the customer's website or bot,
- * support's panel, the website's admin side or the report group —, so every door keeps the same rules: a customer opens
- * a ticket with its first message (open — waiting on support), writes again (a closed one opens again), closes it, rates
- * it once closed; support answers (answered, and the customer told on every door they have — CustomerNotifier), closes
- * it (the customer told) and reopens it. Every change of where a ticket stands is one conditional update
- * (Core\Database\Transitions), so of two at once one decides, and the one that did tells; a message and the change it
- * makes are written under the ticket's row lock, in one transaction, so a close that comes at the same moment comes
- * before it or after it, never between. A ticket opened again leaves its rating behind: a rating is the customer's word
- * on a conversation that was over. The report group hears everything but what was written in it (ShopReports), in the
- * transaction of the change it reports — a report the database refuses takes the change back with it —; a customer's
- * own doings tell nobody else; a rating, only a first one or one that changed. A customer opens OPENS tickets in
- * OPEN_WINDOW and writes MESSAGES messages — ratings among them — in MESSAGE_WINDOW at most, and their uploaded pictures
- * count in the shop's one budget of them (CustomerPictures::budget(), with their receipts): a 429 with the wait. A
- * ticket holds MESSAGES_MAX messages, and PICTURES_MAX pictures the customer uploaded (each a file on the host, kept
- * while the ticket is not closed).
+ * Support conversations («تیکت»): one service for every channel — the customer's website or bot, support's panel, the
+ * website's admin API, the report group — so they all keep the same rules. A customer opens a ticket with its first
+ * message (open: waiting on support), writes again (a closed ticket opens again), closes it, and rates it once closed;
+ * support answers (answered; the customer is notified on every channel), closes it (notified) and reopens it.
+ *
+ * Concurrency: every status change is one conditional update (Transitions), so of two at once one wins and only the
+ * winner tells anyone; a message and the status change it causes are written in one transaction under the ticket's row
+ * lock (lock()), so a close arriving at the same moment lands before or after it, never between. Reopening drops the
+ * rating: it was the customer's word on a conversation that was over.
+ *
+ * The report group hears every change except what was written in it (ShopReports), inside the change's transaction, so
+ * a report the database refuses takes the change back with it; a rating only when first given or changed.
+ *
+ * Limits: a customer opens OPENS tickets per OPEN_WINDOW and writes MESSAGES messages (ratings included) per
+ * MESSAGE_WINDOW; their uploads count in the shop's one picture budget (CustomerPictures::budget(), with receipts) —
+ * each a 429 with the wait. A ticket holds MESSAGES_MAX messages and PICTURES_MAX uploaded pictures from the customer.
  */
 final class Tickets
 {
@@ -55,16 +56,16 @@ final class Tickets
     public const BODY_MAX = 4000;
     public const RATING_NOTE_MAX = 500;
 
-    /** The messages a ticket holds — the customer's and support's together —: then a new ticket is the way on. */
+    /** The messages a ticket holds, the customer's and support's together; then a new ticket is the way on. */
     public const MESSAGES_MAX = 200;
 
     /**
-     * The pictures a customer uploads to one ticket — each a file on the host, kept while the ticket is not closed —:
-     * then their messages come without one (a picture sent in the bot is Telegram's to keep, and support is not held).
+     * The pictures a customer may upload to one ticket — each a file kept on the host while the ticket is open. Pictures
+     * sent in the bot stay on Telegram and do not count; support is not limited.
      */
     public const PICTURES_MAX = 20;
 
-    /** Its refusal, under `file`: PICTURES_MAX in Persian digits. */
+    /** The refusal past PICTURES_MAX, under `file` (%s: the limit in Persian digits). */
     public const PICTURES_FULL = 'این تیکت بیشتر از %s تصویر از شما نمی‌گیرد؛ پیام را بدون تصویر بفرستید، یا تیکت تازه‌ای باز کنید.';
 
     /** Tickets a customer opens in a window of OPEN_WINDOW seconds. */
@@ -75,7 +76,7 @@ final class Tickets
     public const MESSAGES = 30;
     public const MESSAGE_WINDOW = 600;
 
-    /** Refused, as the state the ticket is in says. */
+    /** Refusals by the state the ticket is in. */
     public const CLOSED = 'این تیکت بسته شده است.';
     public const NOT_CLOSED = 'این تیکت بسته نیست.';
     public const RATE_WHEN_CLOSED = 'امتیاز را پس از بسته شدن تیکت می‌توانید ثبت کنید.';
@@ -87,7 +88,7 @@ final class Tickets
     private const NO_SUCH_SERVICE = 'این سرویس پیدا نشد.';
     private const RATING_RANGE = 'امتیاز باید عددی بین 1 تا 5 باشد.';
 
-    /** What a ticket opened again leaves behind: its end, and the rating the customer gave it then. */
+    /** What reopening a ticket clears: its end, and the rating the customer gave it then. */
     private const REOPENED = ['closed_at' => null, 'rating' => null, 'rating_note' => null];
 
     public function __construct(
@@ -101,8 +102,8 @@ final class Tickets
     ) {}
 
     /**
-     * The customer opens a ticket — its `subject`, the first message's `body`, the service it is about
-     * (`subscription_id`, one of their own) and a picture —, every refusal at once; then the report group hears it.
+     * The customer opens a ticket: its `subject`, the first message's `body`, the service it is about
+     * (`subscription_id`, one of their own) and a picture, every refusal at once. The report group hears it.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `subject`, `body`, `subscription_id` or `file`
@@ -117,7 +118,7 @@ final class Tickets
         $service = self::service($customer, $input, $errors);
         $attachment = $this->attachment($picture, $errors);
         ValidationException::ifAny($errors);
-        $this->throttle($customer, opening: true, upload: $attachment?->bytes !== null);
+        $this->throttle($customer->id, opening: true, uploader: $attachment?->bytes !== null ? $customer : null);
 
         return $this->writing(function (?string &$kept) use ($customer, $subject, $service, $body, $attachment, $channel): Ticket {
             $ticket = Ticket::query()->create([
@@ -135,8 +136,8 @@ final class Tickets
     }
 
     /**
-     * The customer writes in their ticket — a closed one opens again, an answered one waits on support again —; the
-     * report group hears it under the ticket.
+     * The customer writes in their ticket: a closed one opens again, an answered one waits on support again. The report
+     * group hears it under the ticket.
      *
      * @param array<string, mixed> $input `body`
      * @throws ValidationException 422 on `body` or `file` — an upload past PICTURES_MAX too —, or on `status`: the ticket holds MESSAGES_MAX
@@ -153,9 +154,9 @@ final class Tickets
             $errors['file'][] = self::picturesRefusal();
         }
         ValidationException::ifAny($errors);
-        // Refused before it costs them a message of their window; asked again under the lock.
+        // Refused before it costs them a message of their window; checked again under the lock.
         self::assertNotFull($ticket);
-        $this->throttle($upload ? $ticket->user : $ticket->user_id, opening: false, upload: $upload);
+        $this->throttle($ticket->user_id, opening: false, uploader: $upload ? $ticket->user : null);
 
         return $this->writing(function (?string &$kept) use ($ticket, $body, $attachment, $upload, $channel): Ticket {
             $this->lock($ticket);
@@ -179,10 +180,9 @@ final class Tickets
     }
 
     /**
-     * Support answers — from a panel (its principal), the shop's website (one of its admins) or the report group (the
-     * bot's admin), the message's channel where it was written (TicketChannel::of()) —: the ticket is answered, waiting on
-     * the customer, who has not read it yet; a closed one opens again so. The customer is told on every door they have;
-     * the report group hears an answer written elsewhere under the ticket.
+     * Support answers — from a panel, the website's admin API or the report group; the message's channel follows the
+     * actor (TicketChannel::of()). The ticket becomes answered and unread by the customer (a closed one opens again so).
+     * The customer is notified on every channel; the report group hears an answer written elsewhere.
      *
      * @param array<string, mixed> $input `body`
      * @throws ValidationException 422 on `body` or `file`, or on `status`: the ticket holds MESSAGES_MAX
@@ -221,8 +221,8 @@ final class Tickets
     }
 
     /**
-     * Closed — by the customer (no actor), or by support, who tells the customer. The report group hears it, and the
-     * ticket's last report loses its button.
+     * Close the ticket — by the customer (no actor), or by support, which tells the customer. The report group hears it,
+     * and the ticket's last report loses its button.
      *
      * @throws ValidationException 422 on `status`: closed already
      */
@@ -243,7 +243,7 @@ final class Tickets
     }
 
     /**
-     * Support opens a closed ticket again — waiting on support, its rating left behind —; the report group hears it.
+     * Support reopens a closed ticket: waiting on support again, its rating dropped. The report group hears it.
      *
      * @throws ValidationException 422 on `status`: it is not closed
      */
@@ -261,9 +261,8 @@ final class Tickets
     }
 
     /**
-     * The customer rates their closed ticket — `rating` 1 to 5 and a `note` —, a rating given before replaced; each a
-     * message of their window. The report group hears a first rating, or one that changed — the same again changes and
-     * tells nothing.
+     * The customer rates their closed ticket — `rating` 1 to 5 and a `note` — replacing any earlier rating; each counts
+     * as a message of their window. The report group hears a first or changed rating; the same one again changes nothing.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `rating` or `note`, then on `status` while it is not closed
@@ -283,7 +282,7 @@ final class Tickets
             $errors += $e->errors();
         }
         ValidationException::ifAny($errors);
-        $this->throttle($ticket->user_id, opening: false, upload: false);
+        $this->throttle($ticket->user_id, opening: false);
 
         $this->db->transaction(function () use ($ticket, $rating, $note): void {
             $this->lock($ticket);
@@ -301,9 +300,8 @@ final class Tickets
     }
 
     /**
-     * The customer read their ticket — the bot's screen showed it, their website says so (POST /tickets/{id}/read) —:
-     * support's latest words are read, and so are the notices about the ticket in their website's feed. Quietly: no
-     * screen of the panels shows either.
+     * The customer read their ticket (the bot's screen showed it, or their website says so): support's latest words are
+     * read, and so are the ticket's notices in their website's feed. Written quietly: no panel screen shows either.
      */
     public function markRead(Ticket $ticket): void
     {
@@ -317,8 +315,8 @@ final class Tickets
     }
 
     /**
-     * Write a ticket's message — and keep its picture — in one transaction: a picture kept for a message that was never
-     * written after all goes again.
+     * Write a ticket's message and keep its picture in one transaction; a picture kept for a message that was then not
+     * written is deleted again.
      *
      * @param \Closure(?string &$kept): Ticket $work `$kept` is set to the name of the picture kept, once there is one
      */
@@ -339,8 +337,8 @@ final class Tickets
     }
 
     /**
-     * The ticket's row held until the transaction ends — what a close, an answer or another message coming at the same
-     * moment waits for — and read again as it stands under the hold, onto `$ticket`.
+     * Lock the ticket's row until the transaction ends (a close, an answer or another message at the same moment waits
+     * for it) and read it again onto `$ticket` as it stands under the lock.
      */
     private function lock(Ticket $ticket): void
     {
@@ -383,7 +381,7 @@ final class Tickets
     }
 
     /**
-     * A message's picture: an upload judged (its refusal under `file`), one sent in Telegram as it is.
+     * A message's picture: an upload is judged (its refusal under `file`), a Telegram one taken as it is.
      *
      * @param array<string, list<string>> $errors
      * @throws StorageFullException 503: an upload the host's disk has no room for
@@ -403,34 +401,32 @@ final class Tickets
     }
 
     /**
-     * The customer's tries held to their windows: a ticket opened counts as one (and its first message as a message),
-     * every message — and every rating — as one, and a picture they uploaded in the budget it shares with their receipts.
-     * Each window asked before any is counted: a refused try costs nothing.
+     * Count the customer's try against their windows: opening a ticket counts once (and its first message as a message),
+     * every message and rating once, and an upload (`$uploader` set) in the picture budget shared with their receipts.
+     * The specific windows are checked before anything is counted, so a refused try costs nothing.
      *
      * @throws TooManyAttemptsException
      */
-    private function throttle(User|int $customer, bool $opening, bool $upload): void
+    private function throttle(int $customer, bool $opening, ?User $uploader = null): void
     {
-        $id = $customer instanceof User ? $customer->id : $customer;
-        $opened = ['tickets|open|' . $id, self::OPENS, self::OPEN_WINDOW];
+        $opened = ['tickets|open|' . $customer, self::OPENS, self::OPEN_WINDOW];
         $wait = $opening ? $this->limiter->availableIn($opened[0], self::OPENS) : 0;
         if ($wait > 0) {
             throw TooManyAttemptsException::wait('تیکت زیادی باز کرده‌اید', $wait);
         }
-        $pictures = $upload && $customer instanceof User ? CustomerPictures::budget($customer) : null;
+        $pictures = $uploader !== null ? CustomerPictures::budget($uploader) : null;
         $wait = $pictures !== null ? $this->limiter->availableIn($pictures[0], $pictures[1]) : 0;
         if ($wait > 0) {
             throw TooManyAttemptsException::wait(CustomerPictures::TOO_MANY, $wait);
         }
 
-        $messages = ['tickets|message|' . $id, self::MESSAGES, self::MESSAGE_WINDOW];
-        $wait = $this->limiter->attempt(array_values(array_filter([$opening ? $opened : null, $messages, $pictures])));
-        if ($wait > 0) {
-            throw TooManyAttemptsException::wait('پیام زیادی فرستاده‌اید', $wait);
-        }
+        $messages = ['tickets|message|' . $customer, self::MESSAGES, self::MESSAGE_WINDOW];
+        $this->limiter->enforce(array_values(array_filter([$opening ? $opened : null, $messages, $pictures])), 'پیام زیادی فرستاده‌اید');
     }
 
     /**
+     * A ticket's subject: SUBJECT_MIN to SUBJECT_MAX characters.
+     *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
      */
@@ -473,7 +469,7 @@ final class Tickets
     }
 
     /**
-     * The service a ticket is about: one of the customer's own — none sent, none.
+     * The service a ticket is about: one of the customer's own, or none when none is sent.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors

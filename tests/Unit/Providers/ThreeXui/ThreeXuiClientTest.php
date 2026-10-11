@@ -27,9 +27,9 @@ use Psr\Log\NullLogger;
 use Tests\Support\FakePanel;
 
 /**
- * The transport to a 3x-ui v3 panel: how it signs in (a token, or a cookie session behind the panel's CSRF guard, with a
- * one-time code when the login asks for one), unwraps the envelope, and turns every way a panel can fail into a typed
- * failure the owner can act on.
+ * The 3x-ui v3 transport: signing in (a token, or a cookie session behind the panel's CSRF guard, with a one-time code
+ * when the login asks for one), unwrapping the envelope, and every way a panel can fail turned into a typed failure the
+ * owner can act on.
  */
 final class ThreeXuiClientTest extends TestCase
 {

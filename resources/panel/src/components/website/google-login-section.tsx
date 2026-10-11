@@ -15,12 +15,7 @@ function draftOf(website: Website): Draft {
   return { google_client_id: website.google.client_id ?? '' }
 }
 
-/**
- * «ورود با گوگل»: customers sign in to the website with their Google account — to the account it signs in to already,
- * else to the one with the address Google vouches for, else to a new one — under the site's OAuth client id in Google
- * Cloud; blank, Google sign-in is off. How to make one — the website's origin among its Authorized JavaScript origins —
- * is said in steps above the field.
- */
+/** «ورود با گوگل»: the site's OAuth client id from Google Cloud (blank turns Google sign-in off), with the steps to make one. */
 export function GoogleLoginSection({ website }: { website: Website }) {
   const group = useWebsiteGroup(website, draftOf, (values) => values)
   const { values, set, error } = group

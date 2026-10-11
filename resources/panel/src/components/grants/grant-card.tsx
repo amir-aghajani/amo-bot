@@ -37,10 +37,7 @@ interface GrantCardProps<Row extends GrantRowBase> {
   stopDetails: string
 }
 
-/**
- * A grants card — a server's «افزودن زمان و حجم», the mass gift: the button that issues one (none while one is under
- * way), the latest ones with how far each got, and stopping one, asked first.
- */
+/** A grants card (a server's, or the mass gift): issue one (not while one runs), the latest with their progress, and stop one. */
 export function GrantCard<Row extends GrantRowBase>({ title, description, noun, addLabel, listLabel, read, running, cancel, item, add, stopDetails }: GrantCardProps<Row>) {
   const [adding, setAdding] = useState(false)
   const [stopping, setStopping] = useState<Row | null>(null)

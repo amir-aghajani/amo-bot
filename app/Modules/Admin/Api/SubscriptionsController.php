@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
 use App\Modules\Subscriptions\Models\Subscription;
@@ -15,12 +14,10 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The subscriptions screen (SubscriptionDirectory) and what its modal can do (SubscriptionActions, by the request's
- * principal): list, read the panel again, give a service days and traffic, switch a client off or back on, move it to
- * another server, delete it for good. Every operation answers with the fresh row — a delete with nothing — or with why
- * it was refused: the state, a field or the target server (422), who asks (403: one of the shop's admins' own service),
- * another change of the service in flight (409), a panel (502, under `errors.panel`, or a move's `errors.previous` /
- * `errors.target`).
+ * The subscriptions screen (SubscriptionDirectory) and the modal's operations (SubscriptionActions, by the request's
+ * principal): sync from the panel, extend, switch off or on, move to another server, delete. An operation answers the
+ * fresh row (a delete: 204), or a refusal: 422 the state or a field, 403 a shop admin's own service, 409 another change
+ * in flight, 502 a panel (under `errors.panel`, or a move's `errors.previous`/`errors.target`).
  */
 final class SubscriptionsController extends ApiController
 {
@@ -34,7 +31,7 @@ final class SubscriptionsController extends ApiController
     /** GET /subscriptions?search=&status=&server=&user=&sort=&dir=&page= */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->subscriptions->search(PageRequest::fromQuery($request->getQueryParams()))->toArray('subscriptions'));
+        return $this->json($response, $this->subscriptions->search($this->pageRequest($request))->toArray('subscriptions'));
     }
 
     /**

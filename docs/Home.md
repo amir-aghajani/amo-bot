@@ -3,7 +3,7 @@
 AmoBot is an open-source shop for VPN services: a Telegram bot customers buy from, a panel the shop is run from
 (`/admin/`) and a panel of their own for its resellers (`/agent/`), and an API for the shop's own website — over VPN
 panels it connects to (3X-UI, PasarGuard) and the payment methods it takes. It runs on shared hosting — cPanel,
-DirectAdmin and the like —, the one way it is supported: PHP answers a JSON API, the panels are static files, a web
+DirectAdmin and the like —, the only way it is supported: PHP answers a JSON API, the panels are static files, a web
 installer sets it all up from the browser, the host's cron runs its scheduler and Telegram reaches its bots through
 webhooks. Everything a customer or a shop owner sees is Persian, right to left; the code and these pages are English.
 
@@ -14,7 +14,7 @@ webhooks. Everything a customer or a shop owner sees is Persian, right to left; 
 | Setting up a shop | [Installation](Installation.md), then [Running in production](Running-In-Production.md) and the [Owner's guide](Owners-Guide.md) |
 | Running a shop | The [Owner's guide](Owners-Guide.md) — the panels, servers, plans, payments, customers, support — and the [Bot guide](Bot-Guide.md) |
 | Building a shop's website | The [Store API](Store-API.md) |
-| Working on AmoBot | [Architecture](Architecture.md), [Development](Development.md), [Contributing](Contributing.md) |
+| Working on AmoBot | [Architecture](Architecture.md), [Conventions](Conventions.md), [Development](Development.md), [Contributing](Contributing.md), then the internals of the area you touch |
 
 ## Reference
 
@@ -26,8 +26,7 @@ webhooks. Everything a customer or a shop owner sees is Persian, right to left; 
   contributors, and the [schemas](API-Schemas.md) they share — and the description itself as one file for tools,
   [`docs/openapi.json`](https://github.com/amir-aghajani/amo-bot/blob/main/docs/openapi.json).
 - [Console commands](Console-Commands.md), [Drivers](Drivers.md), [Roadmap](Roadmap.md), [Security](Security.md), and
-  what each release brought: the
-  [changelog](https://github.com/amir-aghajani/amo-bot/blob/main/CHANGELOG.md).
+  what each release brought: [Releases](Releases.md).
 
 ## These pages
 

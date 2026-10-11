@@ -52,7 +52,7 @@ describe('a read', () => {
     expect(read).toHaveBeenCalledTimes(1)
   })
 
-  it('that failed for no answer of the server’s is the panel’s own bug, told to the console and the log', async () => {
+  it('that failed in the panel’s own code is a bug, logged to the console and reported to the log', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const sent: ClientErrorRequest[] = []
     const stop = startErrorReporting((report) => Promise.resolve(sent.push(report)))
@@ -85,13 +85,13 @@ describe('a read', () => {
 })
 
 describe('a mutation', () => {
-  it('that fails is told in a toast, in the API’s words', async () => {
+  it('that fails shows a toast with the API’s message', async () => {
     await mutate(createQueryClient(), { mutationFn: () => Promise.reject(new ApiError(422, 'نام پلن تکراری است.')) })
 
     expect(toast.error).toHaveBeenCalledWith('نام پلن تکراری است.', { description: undefined })
   })
 
-  it('that got no answer is told in the words of what happened', async () => {
+  it('that got no answer shows a toast saying what happened', async () => {
     await mutate(createQueryClient(), { mutationFn: () => Promise.reject(new ApiError(0, 'No answer', {}, { foreign: true, timedOut: true })) })
 
     expect(toast.error).toHaveBeenCalledWith(FAILURE_KINDS.timeout.title, { description: FAILURE_KINDS.timeout.description })

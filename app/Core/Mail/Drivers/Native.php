@@ -10,10 +10,7 @@ use App\Core\Mail\MailDriver;
 use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Mailer\Transport\TransportInterface;
 
-/**
- * The host's own mail, as PHP's mail() sends it (php.ini's sendmail_path): nothing to set but who the emails come from —
- * an address of the host's own domain.
- */
+/** The host's own mail, as PHP's mail() sends it (php.ini's sendmail_path); nothing to set. */
 final class Native implements MailDriver
 {
     public function key(): string

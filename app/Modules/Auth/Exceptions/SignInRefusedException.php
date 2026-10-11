@@ -8,33 +8,28 @@ use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Auth\PanelAuthMiddleware;
 
 /**
- * A sign-in the shop turns down, in the words its page shows. A panel's: credentials or a link that do not open it
- * (401), an agent's link opened where another agent is signed in, which takes that session's place only when asked to
- * (409, on `replace`), a session ended meanwhile by another of the same agent's (401), no login set up yet (503 — the
- * login page's recovery sets one, with a key off the host's files), or a recovery whose key the host's storage/ does
- * not take (503). A customer's on the shop's website (Accounts): a token, a code or a password that does not sign them
- * in, a request to sign in that is spent (401), a way in the website has not set up (422), a banned customer (403), an
- * address another sign-up took a moment ago or an account Google's address may not take on by itself (409), a provider
- * out of reach (502), the shop's email unavailable — none goes out, or its budget is spent (503). A captcha that could
- * not be judged is Core\Captcha's own refusal (CaptchaUnavailableException).
+ * A sign-in refused, in the words its page shows — the panels' and the website customers' alike. 401 is a sign-in that
+ * opened nothing (what the throttle counts, failedSignIn()); 409 a conflict the user can resolve (another agent's
+ * session here, an address taken a moment ago); 422 a way in the website has not set up; 403 a banned customer; 502 a
+ * provider out of reach; 503 what the host must fix (no login set up, storage unwritable, no email going out).
  */
 final class SignInRefusedException extends DomainRuleException
 {
     public const WRONG_CREDENTIALS = 'نام کاربری یا رمز عبور اشتباه است.';
     public const NOT_SET_UP = 'ورود به پنل هنوز تنظیم نشده است؛ با «رمز را فراموش کرده‌اید؟» نام کاربری و رمز تازه بگذارید.';
-    /** Said the way the agent's login page says it: the main bot, its «نمایندگی», the button. */
+    /** Worded as the agent's login page words it: the main bot's «نمایندگی», then the button. */
     public const LINK_REFUSED = 'این لینک ورود دیگر کار نمی‌کند؛ برای لینک تازه، در ربات اصلی به «نمایندگی» بروید و «🔐 ورود به پنل» را بزنید.';
-    /** An agent's link opened in a browser signed in to another agent's panel: said before the link is spent. */
+    /** An agent's link opened where another agent is signed in; said before the link is spent. */
     public const ANOTHER_AGENT = 'در این مرورگر پنل نمایندگی دیگری باز است؛ ورود با این لینک از آن پنل خارج می‌شود.';
-    /** The recovery's key has nowhere to go: what the owner fixes in their host's File Manager. */
+    /** The recovery key could not be written to storage/. */
     public const KEY_UNWRITABLE = 'کلید بازیابی در پوشه storage نوشته نشد؛ در File Manager هاست به پوشه storage اجازه نوشتن بدهید و دوباره امتحان کنید.';
 
-    /** An id_token that is not one: its signature, its form, a key its provider does not publish. */
+    /** An id_token that does not verify (signature, form, unknown key). */
     public const TOKEN_INVALID = 'توکن ورود معتبر نیست؛ دوباره وارد شوید.';
     public const TOKEN_EXPIRED = 'زمان این ورود گذشته است؛ دوباره وارد شوید.';
-    /** A token another provider signed, or the provider signed for another site: the website's Client ID is the one to check. */
+    /** A token from another issuer, or for another client id. */
     public const TOKEN_ELSEWHERE = 'این ورود برای این وب‌سایت صادر نشده است؛ Client ID وب‌سایت را بررسی کنید.';
-    /** A nonce or a state the shop never issued, spent already, expired, or not the token's. */
+    /** A nonce or state never issued, already spent, expired, or not the token's. */
     public const SIGN_IN_SPENT = 'این درخواست ورود منقضی شده یا قبلا استفاده شده است؛ دوباره وارد شوید.';
     public const NO_TELEGRAM_ID = 'تلگرام شناسه حساب را نفرستاد؛ ورود باید دسترسی profile را بخواهد.';
     public const CODE_REFUSED = 'تلگرام کد ورود را نپذیرفت؛ دوباره وارد شوید.';
@@ -42,12 +37,11 @@ final class SignInRefusedException extends DomainRuleException
     public const REDIRECT_OFF = 'ورود با redirect برای این وب‌سایت آماده نیست؛ Client Secret تلگرام در پنل وارد نشده است.';
     public const BANNED = 'حساب کاربری شما مسدود شده است.';
     /**
-     * A Google account whose address — one Google speaks for — is an account's that does not take it on by its address
-     * alone: one with two-factor sign-in on (the address is no way past its second step), or one another Google account
-     * signs in to already.
+     * A Google account whose address belongs to an account that may not take it on by the address alone: one with
+     * two-factor sign-in on (an address is no way past the second step), or one another Google account signs in to.
      */
     public const GOOGLE_ACCOUNT_EXISTS = 'حسابی با این ایمیل هست؛ با همان روش وارد شوید و گوگل را از تنظیمات حساب وصل کنید.';
-    /** One answer whichever is wrong: the address, or its password — which addresses have an account is told nobody. */
+    /** One answer whichever is wrong, so nobody learns which addresses have an account. */
     public const WRONG_EMAIL_OR_PASSWORD = 'ایمیل یا رمز عبور درست نیست.';
     public const EMAIL_OFF = 'ثبت‌نام با ایمیل برای این وب‌سایت فعال نیست.';
     public const MAIL_OFF = 'فعلا ایمیلی از این فروشگاه فرستاده نمی‌شود؛ کمی بعد دوباره امتحان کنید یا از راه دیگری وارد شوید.';
@@ -85,7 +79,7 @@ final class SignInRefusedException extends DomainRuleException
         return new self(self::ANOTHER_AGENT, 409, about: 'replace');
     }
 
-    /** A session that was open when the request began, and ended before it was done: a 401 like the guard's. */
+    /** A session that ended while the request ran: a 401 like the guard's. */
     public static function signedOut(): self
     {
         return new self(PanelAuthMiddleware::SIGNED_OUT, 401);
@@ -186,7 +180,7 @@ final class SignInRefusedException extends DomainRuleException
         return $this->about;
     }
 
-    /** A sign-in that did not open anything — what a throttle counts — rather than one the shop does not take at all. */
+    /** Whether this is a sign-in that opened nothing (what a throttle counts), not one the shop does not take at all. */
     public function failedSignIn(): bool
     {
         return $this->status === 401;

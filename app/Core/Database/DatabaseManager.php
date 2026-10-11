@@ -15,8 +15,8 @@ use Illuminate\Events\Dispatcher as EventDispatcher;
 use Psr\Log\LoggerInterface;
 
 /**
- * The shop's database: the driver DB_CONNECTION names (config/database.php), its connection booted into Eloquent
- * (illuminate/database) outside of Laravel. The connection is lazy: nothing talks to the database until the first query.
+ * Boots Eloquent (outside Laravel) on the connection of the driver DB_CONNECTION names. The connection is lazy:
+ * nothing talks to the database until the first query.
  */
 final class DatabaseManager
 {
@@ -31,9 +31,8 @@ final class DatabaseManager
     ) {}
 
     /**
-     * Hand Eloquent the driver's connection, once, at boot (Application). A relation read row by row off a list — a
-     * query per row, where one eager load does — is a mistake the test suite fails on (it throws there); live it is
-     * logged once a process for each relation, and the rows still load: nobody's answer waits on it.
+     * Hand Eloquent the driver's connection, once, at boot. A relation lazy-loaded off a list (a query per row) is logged
+     * once per relation and process, and still loads; the test suite makes it throw instead.
      *
      * @throws UnknownDriverException when DB_CONNECTION names no driver: nothing runs without its database
      */
@@ -58,7 +57,7 @@ final class DatabaseManager
     }
 
     /**
-     * The driver the shop runs on: what the dashboard's day, the schema tooling and the requirements ask.
+     * The driver the shop runs on.
      *
      * @throws UnknownDriverException when DB_CONNECTION names no driver
      */
@@ -73,7 +72,7 @@ final class DatabaseManager
         return $this->driver;
     }
 
-    /** Whether the database answers a query now; why not goes to the log, never to the caller (it names the host and the user). */
+    /** Whether the database answers a query now. Why not goes to the log only: the error names the host and the user. */
     public function answers(): bool
     {
         try {

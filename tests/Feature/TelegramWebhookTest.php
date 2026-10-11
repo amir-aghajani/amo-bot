@@ -163,7 +163,7 @@ final class TelegramWebhookTest extends HttpTestCase
         self::assertSame([], $this->telegram()->calls());
     }
 
-    /** A webhook's refused calls are told a few a window, its own: calls at one bot's never hide those at another's. */
+    /** A webhook's refused calls are logged a few per window, each webhook its own count: one bot's never hide another's. */
     public function testRefusedCallsAreCountedAWebhookAtATime(): void
     {
         $bot = $this->agentBot(overrides: ['webhook_secret' => 'agent-secret']);
@@ -194,7 +194,7 @@ final class TelegramWebhookTest extends HttpTestCase
 
     /**
      * What an agent can post to its own bot's webhook is held to its bot's budget: so many updates a window, so many from
-     * someone it has never seen — past either, acknowledged and dropped, the log told once. Its customers go on being
+     * someone it has never seen — past either, acknowledged and dropped, logged once. Its customers go on being
      * served within the second, and the main bot is never held to an agent's.
      */
     public function testAnAgentsBotTakesSoManyUpdatesAWindowAndSoManyNewcomers(): void

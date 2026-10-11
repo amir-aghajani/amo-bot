@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import type { TicketRow, TicketsResponse, UserDetailResponse } from '@/lib/api-types'
 import { TicketsPage } from '@/pages/tickets'
 import { signedIn, until } from '@/test/render'
-import { customerAccount, ticketRow, userRow } from '@/test/rows'
+import { customerAccount, loyaltyStanding, ticketRow, userRow } from '@/test/rows'
 import { json, server, type Answer } from '@/test/server'
 
 /*
  * The tickets screen (pages/tickets): every ticket, the conversation that moved last first — its number, its subject
  * leading to its page, its customer to theirs, its state, its last activity, its messages and its rating —; the queue
  * waiting on an answer counted beside its tab, the tab the dashboard's link opens; a tab, a search and a customer
- * narrowing the list as the server reads it, a page at a time; and nothing to list said in the screen's own words.
+ * narrowing the list as the server reads it, a page at a time; and nothing to list worded by the screen itself.
  */
 
 const SARA = { id: 11, name: 'سارا', username: null, telegram_id: null, email: 'sara@example.com' }
@@ -35,7 +35,7 @@ const asked = () =>
 const table = () => screen.findByRole('table', { name: 'تیکت‌ها' })
 
 describe('the tickets', () => {
-  it('list each one — its number, its subject to its page, its customer to theirs, its state, the last activity, its messages, its rating', async () => {
+  it('list each with its number, its subject linking to its page, its customer linking to theirs, its status, last activity, message count and rating', async () => {
     open('/tickets', tickets([ticketRow(), ticketRow({ id: 9, subject: 'Renewal problem', status: 'closed', subscription: null, customer: SARA, messages_count: 5, rating: 4 })]))
 
     const [, waiting, closed] = within(await table()).getAllByRole('row')
@@ -107,11 +107,11 @@ describe('the list narrowed', () => {
     await until(() => expect(asked().at(-1)).toEqual({ search: '#12' }))
   })
 
-  it('to one customer, as their page links here — said beside the search, and let go of', async () => {
+  it('to one customer, as their page links here, shows a filter beside the search that can be cleared', async () => {
     server().on(
       'GET',
       '/api/admin/users/10',
-      json({ user: userRow(), referral: { referrer: null, referrals: 0, earned: '0.00' }, agency: null, account: customerAccount() } satisfies UserDetailResponse),
+      json({ user: userRow(), referral: { referrer: null, referrals: 0, earned: '0.00' }, agency: null, account: customerAccount(), loyalty: loyaltyStanding() } satisfies UserDetailResponse),
     )
     open('/tickets?user=10')
 
@@ -140,7 +140,7 @@ describe('nothing to list', () => {
     expect(await screen.findByText('هنوز تیکتی باز نشده است')).toBeTruthy()
   })
 
-  it('says the queue is empty in its own words, and another tab in its', async () => {
+  it('says the queue is empty with its own text, and another tab with its own', async () => {
     open('/tickets?status=open', tickets([]))
     expect(await screen.findByText('فعلا تیکتی در انتظار پاسخ نیست.')).toBeTruthy()
 

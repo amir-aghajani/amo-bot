@@ -7,9 +7,8 @@ namespace App\Modules\Telegram\Reports;
 use App\Modules\Bots\CurrentBot;
 
 /**
- * The report group's topics: one per subject, each made by the bot when the group is connected (ReportGroup) and
- * switched on or off by the admin (ReportSettings). The value is the key everywhere — `report_topics.topic`,
- * `report_messages.topic`, the setting `reports.topic.<value>`, the screen's `report_<value>` switch.
+ * The report group's topics, one per subject. The value is stored (`report_topics.topic`, `report_messages.topic`, the
+ * setting `reports.topic.<value>`), so it never changes.
  */
 enum Topic: string
 {
@@ -40,15 +39,14 @@ enum Topic: string
     }
 
     /**
-     * What comes to it in the current bot's group (ShopReports): the topic's first message there, and its switch's hint on
-     * the screen. A server's panel that stops answering is the main bot's news alone — an agent's group hears of its own
-     * failed deliveries, not of the servers (nor of the agency, a topic it does not have: ReportSettings::topics()).
+     * What the topic carries in the current bot's group: its first message there and its switch's hint. Servers' news
+     * goes to the main bot's group only.
      */
     public function about(): string
     {
         return match ($this) {
-            self::Purchases => 'هر سرویسی که فروخته و تحویل داده می‌شود: مشتری، پلن، لوکیشن، مبلغ و روش پرداخت.',
-            self::Renewals => 'هر سرویسی که تمدید می‌شود، با مبلغ و تاریخ پایان جدید.',
+            self::Purchases => 'هر سرویسی که فروخته و تحویل داده می‌شود: مشتری، پلن، لوکیشن، مبلغ و روش پرداخت؛ و نتیجه قرعه‌کشی شبانه خریداران.',
+            self::Renewals => 'هر سرویسی که تمدید می‌شود، با مبلغ و تاریخ پایان جدید؛ و هر حجم یا زمان اضافه‌ای که مشتری برای سرویسش می‌خرد.',
             self::Wallet => 'هر بار که کیف پول مشتری شارژ می‌شود، با مبلغ و موجودی جدید.',
             self::Receipts => 'تصویر هر رسید کارت به کارت که مشتری می‌فرستد، با دکمه‌های تایید و رد برای مدیرهای ربات؛ و بعد نتیجه بررسی آن: تایید، رد یا لغو.',
             self::Users => 'هر کسی که اولین بار ربات را استارت می‌کند، با معرفش اگر با لینک دعوت آمده باشد.',
@@ -61,10 +59,8 @@ enum Topic: string
     }
 
     /**
-     * Where its reports stand in the queue (ReportSender sends the lowest first, each in the order they came): a receipt
-     * waiting for review and a paid order that was not delivered — a customer waits on support for them — go before
-     * everything else, whatever else floods the group; a review — anyone on the website writes one, and nobody waits on
-     * it — after everything else, so however many come, none holds the shop's own news up.
+     * Its reports' place in the queue, lowest first: receipts and failed deliveries (a customer waits on them) before
+     * everything; reviews (anyone can write many) after everything, so they never hold the shop's news up.
      */
     public function priority(): int
     {

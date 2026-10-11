@@ -26,11 +26,8 @@ interface ServerFormProps {
 }
 
 /**
- * Add or edit a server: a new one's connector notes, then its form drawn from the connector's description alone
- * (components/driver-form) — the server's name, the connector's connection, and under «تنظیمات پیشرفته» the
- * connection's options with the server's capacity, notes and switch —, "test connection" and its outcome, then the
- * actions. A save and a test send the connector and the fields shown: a new server's to the list, a saved one's to its
- * own address, and a test of a saved server under its id, so the secrets left blank are its stored ones.
+ * Add or edit a server: its form is drawn from the connector's description (components/driver-form), with
+ * «تست اتصال» beside it. A test of a saved server sends its id, so secrets left blank stand for the stored ones.
  */
 export function ServerForm({ driver, server, onSaved, onCancel }: ServerFormProps) {
   const editing = server !== undefined

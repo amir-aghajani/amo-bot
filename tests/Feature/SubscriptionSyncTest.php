@@ -23,10 +23,10 @@ use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * The periodic sync: every running service — every bot's — read from its panel, one list per server, so the reminders
- * and the admin's screens see today's counters, a deadline the panel started at the first connection, a client that is
- * gone. A list that comes back without a client never deletes it on its own word, and one that raced a change made
- * elsewhere (a grant, a move) changes nothing of it. A panel that failed is left alone a while; a run out of time stops.
+ * The periodic sync: every running service (every bot's) read from its panel, one list per server — counters, a deadline
+ * the panel started at the first connection, a client that is gone. A list missing a client never deletes it on its own
+ * word, and a list that raced a change made elsewhere changes nothing of it. A panel in backoff is skipped; a run out of
+ * time stops.
  */
 final class SubscriptionSyncTest extends DatabaseTestCase
 {

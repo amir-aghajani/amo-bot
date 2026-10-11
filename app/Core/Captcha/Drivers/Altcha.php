@@ -15,19 +15,13 @@ use App\Core\Security\RateLimiter;
 use App\Support\Persian;
 
 /**
- * ALTCHA (altcha.org), the open-source proof-of-work captcha: no third party to reach, nothing to block, no keys to type —
- * it works on any host, from Iran too. Its widget fetches a challenge from the shop (challenge()) and has the visitor's
- * browser find the number whose SHA-256, after the challenge's salt, is the challenge — a fraction of a second's work,
- * which a bot pays on every form; the form carries what it found (the payload: the challenge, the number, the salt and
- * the signature, as base64 JSON). The shop judges it (verify()) by hash alone: its own signature on the challenge
- * (HMAC-SHA256 under a key derived from APP_KEY for it, Encrypter::mac()), the number's hash, and the salt's expiry —
- * which, like the action a challenge was asked for, travels in the salt the signature covers —, each challenge taken
- * once until it expires (Core\Security\RateLimiter: a window of CHALLENGE_SECONDS on the salt's random part).
+ * ALTCHA (altcha.org), an open-source proof of work: no third party, no keys, works on any host, from Iran too. The
+ * widget fetches a signed challenge from the shop; the visitor's browser finds the number whose SHA-256 after the salt
+ * is the challenge; the shop checks its own signature (Encrypter::mac()), the hash and the expiry carried in the salt,
+ * and takes each challenge once (a RateLimiter window on the salt's random part).
  *
- * The hash covers the salt and the number written one after the other, so the salt ends in a delimiter that is no digit
- * (SALT's `&`): without it, the number's first digits moved onto the salt's end would make another salt with the same
- * hash — a solution passing again under a "new" challenge, with an expiry that never comes. A salt without it is none
- * of the shop's.
+ * The salt ends in `&`, a non-digit: without it the number's first digits could be moved onto the salt, making a "new"
+ * challenge with the same hash and no expiry.
  */
 final class Altcha implements CaptchaDriver, IssuesChallenges
 {
@@ -49,7 +43,7 @@ final class Altcha implements CaptchaDriver, IssuesChallenges
      */
     private const SALT = '/^([0-9a-f]{24})\?([^?]*)&$/';
 
-    /** A payload's codes of refusal — as Turnstile's for the same: not a solution of ours, or one expired or spent. */
+    /** Refusal codes, the same as Turnstile's: not a solution of ours; expired or spent. */
     private const INVALID = 'invalid-input-response';
     private const SPENT = 'timeout-or-duplicate';
 
@@ -80,9 +74,8 @@ final class Altcha implements CaptchaDriver, IssuesChallenges
     }
 
     /**
-     * The widget's challenge (`algorithm`, `challenge`, `maxnumber`, `salt`, `signature`): a random salt carrying when it
-     * expires — and `$action`, when named — and ending in its delimiter (SALT), the SHA-256 of the salt and a number up
-     * to MAX_NUMBER, signed.
+     * The widget's challenge: a random salt carrying its expiry (and `$action`) and ending in `&`, the SHA-256 of the
+     * salt and a number up to MAX_NUMBER, and the shop's signature of it.
      */
     public function challenge(array $values, ?string $action): array
     {
@@ -99,10 +92,8 @@ final class Altcha implements CaptchaDriver, IssuesChallenges
     }
 
     /**
-     * The payload judged: a challenge of the shop's (its signature, and a salt as the shop issues them — ending in its
-     * delimiter), solved (the number's hash), not expired, and not taken before — then taken, whatever the form makes of
-     * it —, for the form's action when the challenge was asked for one. ALTCHA says nothing of where it was solved: no
-     * host is held to.
+     * Judge the payload: the shop's signature and salt, the number's hash, not expired, not taken before (then taken),
+     * and the form's action. ALTCHA does not say where it was solved, so no host is checked.
      */
     public function verify(array $values, CaptchaAttempt $attempt): CaptchaVerdict
     {
@@ -120,8 +111,8 @@ final class Altcha implements CaptchaDriver, IssuesChallenges
         parse_str($issued[2], $params);
         $expires = is_string($params['expires'] ?? null) && ctype_digit($params['expires']) ? (int) $params['expires'] : 0;
         $action = is_string($params['action'] ?? null) ? $params['action'] : null;
-        // The signature covers the salt, so its expiry is the shop's own — at most CHALLENGE_SECONDS away: a solution is
-        // taken once, by its salt's random part, for as long as a challenge lives.
+        // The signature covers the salt, so the expiry was set by the shop (at most CHALLENGE_SECONDS away): a window
+        // that long on the salt's random part takes each solution once.
         if ($expires <= now()->getTimestamp() || $this->limiter->attempt([['altcha|' . $issued[1], 1, self::CHALLENGE_SECONDS]]) > 0) {
             return CaptchaVerdict::refused([self::SPENT], $action);
         }

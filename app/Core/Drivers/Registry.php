@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Drivers;
 
 /**
- * A family's drivers, by key, in the order they are registered (bootstrap/container.php: one entry per family —
- * `database.drivers`, `mail.drivers` …). Two drivers of one key are the code's mistake.
+ * A family's drivers by key, in registration order (the order screens offer them). Two drivers of one key are a
+ * LogicException.
  *
  * @template-covariant T of Driver
  */

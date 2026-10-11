@@ -8,9 +8,8 @@ import { useSession } from '@/lib/auth'
 import { useForm } from '@/lib/use-form'
 
 /**
- * The owner's own login — the username and password config.php keeps —, «تنظیمات پنل» › «ورود به پنل»: the current
- * password proves it is them, and a new password left blank keeps the one they have. Saved, every other browser signed
- * in to the panel is signed out; this one stays, and the form starts again from the login as it is now.
+ * «ورود به پنل»: the owner changes their login (kept in config.php), proving it with the current password; a blank new
+ * password keeps the old one. Saving signs every other browser out; this one stays signed in.
  */
 export function LoginSection({ disabled }: { disabled: boolean }) {
   const session = useSession()

@@ -19,9 +19,8 @@ export function reached(grant: GrantProgress): number {
 }
 
 /**
- * How far a running grant got, its numbers named: every active service it goes through (`total` — whether one takes it
- * is its panel's word as its turn comes), how many of them were checked, and what came of those so far:
- * "۵ از ۱۲ سرویس فعال بررسی شد · به ۳ سرویس اضافه شد · ۲ سرویس شامل نشد".
+ * A running grant's progress in words: "۵ از ۱۲ سرویس فعال بررسی شد · به ۳ سرویس اضافه شد · ۲ سرویس شامل نشد". `total`
+ * is every active service it goes through; whether one takes it is decided by its panel when its turn comes.
  */
 export function progress(grant: GrantProgress): string {
   const parts = [`${formatNumber(reached(grant))} از ${formatNumber(grant.total)} سرویس فعال بررسی شد`, `به ${formatNumber(grant.granted)} سرویس اضافه شد`]

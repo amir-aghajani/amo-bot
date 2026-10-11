@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { Link } from 'react-router'
+import { pillClasses } from '@/components/filter-select'
 import { IconButton } from '@/components/icon-button'
-import { pillClasses } from '@/components/pill'
 import { UserLabel, userPage } from '@/components/user-identity'
 import { customerQuery } from '@/lib/queries'
 import { cn } from '@/lib/utils'
@@ -30,7 +30,7 @@ function customerId(value: string): number | null {
 }
 
 /**
- * A list narrowed to one customer — their page's «همه …» —, said beside its other filters: «مشتری  name ✕». The name
+ * A list narrowed to one customer — their page's «همه …» —, shown beside its other filters: «مشتری  name ✕». The name
  * is the customer's page's own read (there already when their page led here) and leads back to it; the ✕ lets go of
  * the filter, which rides in the list's address like the others.
  */

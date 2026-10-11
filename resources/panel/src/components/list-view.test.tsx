@@ -42,7 +42,7 @@ describe('a list', () => {
     expect(screen.queryByRole('table')).toBeNull()
   })
 
-  it('whose read failed says so in lib/failure’s words, with a way to ask again', () => {
+  it('whose read failed says so as lib/failure describes it, with a retry', () => {
     const state = list({ error: new ApiError(500, 'خطای سرور') })
     view(state)
 
@@ -314,7 +314,7 @@ describe('a sortable header', () => {
     expect(reversed.setOrder).toHaveBeenCalledWith(OWN)
   })
 
-  it('names what it sorts by when its words do not, and is a button the keyboard reaches', () => {
+  it('names what it sorts by when its text does not, and is a button the keyboard reaches', () => {
     const { button } = header(OWN, { by: 'traffic', label: 'حجم ربات', words: 'ربات' })
 
     expect(button.getAttribute('aria-label')).toBe('مرتب‌سازی بر اساس حجم ربات')

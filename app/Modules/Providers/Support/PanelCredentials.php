@@ -13,19 +13,18 @@ use App\Modules\Providers\Enums\AuthMode;
 use App\Modules\Providers\Models\Server;
 
 /**
- * The way into a panel, as every connector takes it: an API token, or an admin's username and password — kept in
- * `servers.api_token`, `servers.username` and `servers.password` (the secrets encrypted), one way at a time: which of
- * them a server keeps is its way in (of()). Every connector's form takes it by the same fields (fields()): the way
- * picked, then its own — the token, or the username and the password, beside which a connector may ask more of the
- * password way (WITH_PASSWORD: 3x-ui's two-factor secret) —, a secret left blank keeping the stored one only while the
- * panel's address stays on its host (PanelConnection::bound()).
+ * The way into a panel, as every connector takes it: an API token, or an admin's username and password, kept in
+ * `servers.api_token`, `servers.username` and `servers.password` (secrets encrypted). A server keeps one way at a time;
+ * which credentials it has is its way in (of()). Every connector's form uses the same fields (fields()); a connector
+ * may add fields to the password way (WITH_PASSWORD: 3x-ui's two-factor secret). A secret left blank keeps the stored
+ * one only while the panel's address stays on its host (PanelConnection::bound()).
  */
 final class PanelCredentials
 {
-    /** The field the way in is picked by: no column of its own — it is which credentials a server keeps (of()). */
+    /** The field the way in is picked by; no column of its own — it is which credentials a server keeps (of()). */
     public const MODE = 'auth_mode';
 
-    /** What a field of the password way in is shown by (FieldSpec::$when): the username, the password, a connector's own. */
+    /** The `when` of every field of the password way in (FieldSpec::$when). */
     public const WITH_PASSWORD = [self::MODE => [AuthMode::Password->value]];
 
     /** The longest username kept (servers.username). */
@@ -47,9 +46,9 @@ final class PanelCredentials
     }
 
     /**
-     * The form's fields of the way in: which one; the API token — what the connector calls it (`$token`: «توکن API»,
-     * «کلید API»), where on the panel it is made (`$tokenHint`), its shape (`$tokenPattern`, refused in
-     * `$tokenMismatch`'s words) —; or an admin's username and password (`$loginHint`: whose).
+     * The form's fields of the way in: which way; the API token, worded by the connector (`$token`: «توکن API»,
+     * «کلید API»; `$tokenHint`: where on the panel it is made) and held to its shape (`$tokenPattern`, refused with
+     * `$tokenMismatch`); or an admin's username and password (`$loginHint`: whose).
      *
      * @return list<Field<mixed>>
      */
@@ -92,6 +91,7 @@ final class PanelCredentials
         ];
     }
 
+    /** An API token to sign in with. */
     public function usesToken(): bool
     {
         return $this->mode === AuthMode::Token && ($this->token ?? '') !== '';

@@ -7,9 +7,8 @@ namespace App\Modules\Payments\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * A payment's receipt is not there to show (404): none was sent, Telegram no longer hands the file over, or the picture
- * uploaded from the website was deleted (its order expired). Telegram out of reach is another answer
- * (Telegram\Api\TelegramUnreachableException, a 502): the receipt is still there.
+ * A payment's receipt is not there to show (404): none sent, Telegram no longer has the file, or the upload was deleted.
+ * Telegram being out of reach is a 502 instead (TelegramUnreachableException).
  */
 final class ReceiptUnavailableException extends DomainRuleException
 {

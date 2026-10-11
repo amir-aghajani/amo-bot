@@ -11,14 +11,13 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * A command that does its work for every bot the shop runs (Bots::eachServing(): the main one when it has a token, then
- * each agent's that is switched on with one), each in its own shop — and one bot that fails keeps it from none of the
- * others: it says how the work went for each.
+ * Base for a command that works on every serving bot (Bots::eachServing()), each in its own shop; one bot failing
+ * stops none of the others, and report() prints how each went.
  */
 abstract class EveryBotCommand extends Command
 {
     /**
-     * Each bot's outcome said — `$done`'s line for one the work went through for, why it stopped for the others.
+     * Print each bot's outcome: `$done`'s line for a success, the redacted reason for a failure.
      *
      * @template T
      * @param list<BotOutcome<T>> $outcomes

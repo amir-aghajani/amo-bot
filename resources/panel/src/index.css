@@ -63,7 +63,7 @@
   /* The surface a table sits on — the page's; a card sets its own —, under its last column when it sticks (see below). */
   --table-surface: var(--surface-1);
 
-  /* The overview's one series (one metric at a time, by decision; components/dashboard/area-chart). */
+  /* The overview chart's one series: it shows one metric at a time (components/dashboard/area-chart). */
   --chart-1: #2a78d6;
 }
 
@@ -98,8 +98,7 @@
   --danger-soft: #3c0e0e;
   --danger-line: #641919;
 
-  --danger-solid: #c93a3a;
-  --focus: #2a78d6;
+  /* --danger-solid and --focus are the same in both themes. */
   --link: #6da7ec;
 
   --shadow-popover: 0 8px 24px rgb(0 0 0 / 32%), 0 2px 6px rgb(0 0 0 / 20%);
@@ -110,16 +109,15 @@
 }
 
 @theme inline {
-  /* One typeface, by decision: Vazirmatn (self-hosted, src/fonts/vazirmatn) for every word of both panels — Persian,
-     Latin and identifiers alike. Tailwind's other families are not kept (`font-mono`, `font-serif` would bring a
-     system face back), and code, keys and samples take the page's face (the base layer below). */
+  /* One typeface for everything — Persian, Latin and identifiers alike: Vazirmatn, self-hosted (src/fonts/vazirmatn,
+     no request to Google: the panels must work from Iran). Tailwind's other families are dropped (`font-mono` would
+     bring a system face back), and code and keys take the page's face too (the base layer below). */
   --font-*: initial;
   --font-sans: 'Vazirmatn', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* The type scale (the Console's names; line heights opened up for Persian's taller letters). `subtitle` is a dialog's
-     title, `display` the voice of the overview's greeting and the sign-in and installer titles (24px: as large to the
-     eye as the 32px serif it was set in before). Every name is also in lib/utils' tailwind-merge, which must know it is
-     a size. */
+  /* The type scale (the Console's names; taller line heights for Persian). `subtitle` is a dialog's title, `display` the
+     overview's greeting and the sign-in and installer titles. Every name is also listed in lib/utils' tailwind-merge,
+     which must know it is a size. */
   --text-caption: 0.75rem;
   --text-caption--line-height: 1.125rem;
   --text-footnote: 0.8125rem;

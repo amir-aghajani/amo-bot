@@ -207,7 +207,7 @@ describe('a save', () => {
     expect(result.current.dirty).toBe(true)
   })
 
-  it('says a refusal that names no field in the server’s words', async () => {
+  it('shows a refusal that names no field with the server’s message', async () => {
     const onInvalid = vi.fn()
     const { result } = renderForm(() => useForm(PLAN))
 
@@ -226,7 +226,7 @@ describe('a save', () => {
     expect(result.current.formError).toBeNull()
   })
 
-  it('says any other failure above the form, in lib/failure’s words — the API’s own where they are the admin’s —, and keeps it', async () => {
+  it('shows any other failure above the form as lib/failure describes it (the API’s message when meant for the admin), and keeps it', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const { result } = renderForm(() => useForm(PLAN))
 

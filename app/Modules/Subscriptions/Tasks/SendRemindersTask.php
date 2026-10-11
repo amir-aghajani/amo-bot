@@ -9,8 +9,8 @@ use App\Modules\Subscriptions\Services\ServiceReminders;
 use Psr\Log\LoggerInterface;
 
 /**
- * «یادآوری» on the clock: the services that got near their end or their traffic's since the last run are
- * told so (ServiceReminders), right after the sync has read their panels.
+ * «یادآوری» on the clock (every 15 minutes, each shop, registered right after the sync so it reads fresh numbers):
+ * sends the reminders that came due (ServiceReminders).
  */
 final class SendRemindersTask implements Task
 {

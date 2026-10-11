@@ -13,10 +13,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * /system/update (the owner's panel only — never an agent's, nor a shop's admins on its website): the update screen
- * (GET), GitHub read again (check), an update to the newest release begun (start), its next step taken (step), given up
- * (cancel) and taken back once installed (rollback). Every one answers the screen as it stands then; a refusal is the
- * owner's words, the way out in them.
+ * /api/admin/system/update (the owner's panel only): the update screen, check, start, step, cancel and rollback. Each
+ * answers the screen as it then stands; a refusal tells the owner the way out.
  */
 final class UpdateController extends ApiController
 {
@@ -70,8 +68,8 @@ final class UpdateController extends ApiController
     }
 
     /**
-     * GitHub is asked, files fetched and moved: the session's other requests do not wait on that, and an owner who hangs
-     * up — a proxy's patience over before the zip came down — leaves no step half-way.
+     * Release the session (the panel's other requests need not wait on GitHub) and keep going if the owner hangs up, so
+     * no step is left half-way.
      */
     private function settle(): void
     {

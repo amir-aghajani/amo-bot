@@ -14,9 +14,8 @@ use App\Support\Validation;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * The admin's own groups of customers («گروه‌ها» on the users page): create/rename/delete/reorder with Persian
- * validation — just a name, unique in the shop — and who is in which, set customer by customer from the users table. A
- * broadcast can go to one group. Deleting a group takes nobody's account away: its customers just leave it.
+ * The customer groups as the panels keep them (a name unique in the shop, and the «همکار» agent-pricing switch), and each
+ * customer's groups. Deleting a group only takes its customers out of it.
  */
 final class CustomerGroups
 {
@@ -37,24 +36,24 @@ final class CustomerGroups
     }
 
     /**
-     * @param array<string, mixed> $input {name}
+     * @param array<string, mixed> $input {name, agent_pricing?}
      * @throws ValidationException
      */
     public function create(array $input): CustomerGroup
     {
         $group = new CustomerGroup(['sort' => Sorting::next(CustomerGroup::class)]);
-        UniqueName::save($group->fill(['name' => self::name($input, $group)]), self::TAKEN);
+        UniqueName::save($group->fill(self::validate($input, $group)), self::TAKEN);
 
         return $group->loadCount('users');
     }
 
     /**
-     * @param array<string, mixed> $input {name}
+     * @param array<string, mixed> $input {name, agent_pricing?}
      * @throws ValidationException
      */
     public function update(CustomerGroup $group, array $input): CustomerGroup
     {
-        UniqueName::save($group->fill(['name' => self::name($input, $group)]), self::TAKEN);
+        UniqueName::save($group->fill(self::validate($input, $group)), self::TAKEN);
 
         return $group->loadCount('users');
     }
@@ -93,6 +92,7 @@ final class CustomerGroups
         return [
             'id' => $group->id,
             'name' => $group->name,
+            'agent_pricing' => $group->agent_pricing,
             'sort' => $group->sort,
             'counts' => ['users' => (int) $group->users_count],
             'created_at' => $group->created_at->toIso8601String(),
@@ -106,11 +106,15 @@ final class CustomerGroups
     }
 
     /**
+     * The group's name and its switch, every refusal at once; the switch left out keeps the group's (a new one's off).
+     *
      * @param array<string, mixed> $input
+     * @return array{name: string, agent_pricing: bool}
      * @throws ValidationException
      */
-    private static function name(array $input, CustomerGroup $group): string
+    private static function validate(array $input, CustomerGroup $group): array
     {
+        $errors = [];
         $name = Input::text($input, 'name');
         $message = match (true) {
             $name === '' => 'نام گروه را وارد کنید؛ مثلا «VIP» یا «همکاران».',
@@ -119,9 +123,19 @@ final class CustomerGroups
             default => null,
         };
         if ($message !== null) {
-            throw ValidationException::on('name', $message);
+            $errors['name'][] = $message;
         }
 
-        return $name;
+        $agentPricing = $group->exists && $group->agent_pricing;
+        if (array_key_exists('agent_pricing', $input)) {
+            if (Input::isBoolean($input['agent_pricing'])) {
+                $agentPricing = Input::truthy($input['agent_pricing']);
+            } else {
+                $errors['agent_pricing'][] = Validation::NOT_A_SWITCH;
+            }
+        }
+        ValidationException::ifAny($errors);
+
+        return ['name' => $name, 'agent_pricing' => $agentPricing];
     }
 }

@@ -9,27 +9,21 @@ use App\Modules\Auth\PrincipalKind;
 use App\Modules\Users\Models\User;
 
 /**
- * Who decided something — the `reviewer` a decision keeps: a payment's verdict, a traffic line's adjustment or
- * extension, an unpin started from a panel, a ticket's answer — as the shop's screens show it to whoever reads them
- * (CurrentPrincipal). The owner reads it as kept. Anyone else — an agent, one of the shop's admins on its website — reads
- * the owner's login as «پشتیبانی»: a login's name would let anyone lock the owner out of the panel (SignInThrottle counts
- * failed sign-ins per username). The shop's own people show as they are kept: the agent (`@bot`, `@handle` or
- * `agent#<id>`, AgentAuth) and its admins — in its report group or on its website — by their account (forAdmin()).
+ * A decision's `reviewer` as its reader sees it (CurrentPrincipal). The owner sees it as kept; anyone else sees the
+ * owner's login as «پشتیبانی» — knowing it would let anyone lock the owner out (sign-in failures are counted per
+ * username). Agents and admins show as kept (`@bot`, `@handle`, `tg:<id>`, `user#<id>`, `agent#<id>`).
  */
 final class Reviewers
 {
-    /** What anyone but the owner reads for the owner — the word everything a customer or an agent reads uses. */
+    /** What anyone but the owner reads for the owner. */
     public const SUPPORT = 'پشتیبانی';
 
-    /** How the shop's own people are kept; anything else is a login the owner signs in with, or once did. */
+    /** How agents and admins are kept; anything else is a login of the owner's, now or in the past. */
     private const OWN = '/^(@\S+|tg:\d+|user#\d+|agent#\d+)$/';
 
     public function __construct(private readonly AdminAccount $owner) {}
 
-    /**
-     * One of the shop's admins as a decision of theirs keeps them — in the report group, on the shop's website —: their
-     * @handle, else their Telegram id (`tg:<id>`), else — an account of the website alone — its number (`user#<id>`).
-     */
+    /** A shop's admin as their decisions keep them: their @handle, else `tg:<telegram id>`, else `user#<id>`. */
     public static function forAdmin(User $admin): string
     {
         return match (true) {

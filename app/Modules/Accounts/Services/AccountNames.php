@@ -11,10 +11,9 @@ use App\Support\Input;
 use App\Support\Validation;
 
 /**
- * A customer's names as the website's forms take them — a sign-up's, and the account's own (PATCH /me, rename()): the
- * first name 1 to MAX characters, the last name MAX at most (blank: none), a name made only of invisible characters none
- * (Customers::profile()). A Telegram account's names are Telegram's: the bot reads them afresh as they write to it, so
- * the website does not change them.
+ * A customer's names as the website's forms take them (a sign-up, and PATCH /me): a first name of 1 to MAX characters, a
+ * last name of at most MAX (blank: none); a name of invisible characters alone is none. An account with Telegram keeps
+ * Telegram's names — the bot reads them afresh — so the website cannot change them.
  */
 final class AccountNames
 {
@@ -43,7 +42,7 @@ final class AccountNames
     }
 
     /**
-     * The last name typed under `last_name` — blank: none —, or why it cannot be one under it.
+     * The last name typed under `last_name` (blank: none), or why it cannot be one under it.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
@@ -59,8 +58,7 @@ final class AccountNames
     }
 
     /**
-     * The account's names, as the customer sets them on the website: the ones sent, the rest as they are — refused
-     * under each one sent for an account with Telegram, whose names are Telegram's.
+     * Set the names sent, the rest left as they are; refused under each field sent for an account with Telegram.
      *
      * @param array<string, mixed> $input {first_name?, last_name?}
      * @throws ValidationException 422 under the field

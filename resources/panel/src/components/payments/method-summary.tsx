@@ -7,9 +7,8 @@ const SUMMARY_PARTS = ' · '
 const NUMBERS_ONLY = /^[^\p{L}]+$/u
 
 /**
- * A payment method's line in its driver's words (GatewayDriver::summary(), on the methods list and on a payment) —
- * "6037 •••• •••• 1119 · امیر رضایی" —, each part in its own direction: the masked card left to right in the mono, the
- * holder's name as written.
+ * A payment method's one-line summary from its driver ("6037 •••• •••• 1119 · امیر رضایی"), each part in its own
+ * direction: the masked card left to right, the holder's name as written.
  */
 export function MethodSummary({ summary, className }: { summary: string; className?: string }) {
   return (

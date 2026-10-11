@@ -17,28 +17,18 @@ use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * Routes an incoming Update to a Handler — each update once: one Telegram sends again is recognised by its id
- * (ReceivedUpdates) and left alone, and so is one of a chat flooding the bot (faster than a person: its updates go
- * unanswered while it keeps on). Customers are served in private chats only — a private chat is its sender's own, and
- * an update saying otherwise is no update of Telegram's, left alone —: an update from a group or supergroup
- * (the admins' report group) goes to the group's routes — a button by its callback data's longest prefix (one no route
- * takes is acknowledged), a command by its name (one no route takes is nobody's), anything else to the group handler —
- * and no further, without a user, a session or the gates. A private chat's update first passes the gates (the bot's
- * master switch, phone verification, required channels — a gate that holds an update back answers it itself), then
- * goes to the first route that takes it:
- *   1. /command             (navigation: the flow in progress is left)
- *   2. keyboard label       (exact text of a reply-keyboard button; navigation like a command)
- *   3. contact card         (a shared phone number; navigation like a command)
- *   4. callback data prefix (longest registered prefix wins, e.g. "plan:" for "plan:42"; navigation where routes/bot.php
- *                            says so — the menu's `menu:*`; a tap no prefix takes goes to the fallback)
- *   5. conversation state   (a message, by the longest registered prefix again: "topup" takes the state "topup.amount")
- *   6. fallback             (the menu again, so navigation too)
- * A command or button only the bot's admins reach answers anyone else nothing at all (a step of an admin's flow left
- * behind by an admin who is one no more goes to the fallback). A tap the handler left unanswered is acknowledged once
- * it is done, and a handler that fails is reported to the customer — on the button while the tap is unanswered, in a
- * message once it was.
- *
- * Gates and handlers are registered in routes/bot.php and resolved from the container lazily.
+ * Routes each update to its handler, as routes/bot.php registers them. Every update is served once: a copy Telegram
+ * sends again is recognised by its id, and a chat sending faster than a person is ignored while it floods
+ * (ReceivedUpdates). A group's update goes to the group routes only (no user, session or gates). A private chat's update
+ * — whose chat must be its sender's — passes the ban check and the gates, then takes the first route that matches:
+ *   1. /command             (navigation)
+ *   2. reply-keyboard label (navigation)
+ *   3. contact card         (navigation)
+ *   4. callback prefix      (longest prefix wins; navigation where registered so; an unknown one goes to the fallback)
+ *   5. conversation state   (longest prefix: "topup" takes "topup.amount")
+ *   6. fallback             (the menu: navigation)
+ * Navigation leaves the flow in progress. An admin-only route answers anyone else nothing. A tap the handler left
+ * unanswered is acknowledged afterwards, and a failure is reported on the button or, once the tap was answered, in a message.
  */
 final class Dispatcher
 {
@@ -48,7 +38,7 @@ final class Dispatcher
     /** @var array<string, Route> By the command's name, without its slash */
     private array $commands = [];
 
-    /** @var list<array{labels: \Closure, route: Route}> The label lists are asked per update (the admin edits them). */
+    /** @var list<array{labels: \Closure, route: Route}> The label lists are read per update: the admin edits them. */
     private array $labels = [];
 
     /** @var array<string, Route> By callback data prefix */
@@ -101,8 +91,7 @@ final class Dispatcher
     }
 
     /**
-     * @param \Closure $labels Returns the exact message texts — the reply keyboard's buttons — and is called per
-     *                         update with its parameters injected from the container, since the admin edits them
+     * @param \Closure $labels Returns the reply keyboard's labels; called per update, its parameters injected
      * @param class-string<Handler> $handler
      */
     public function text(\Closure $labels, string $handler): self
@@ -135,7 +124,7 @@ final class Dispatcher
         return $this;
     }
 
-    /** @param class-string<Handler> $handler The handler for a shared contact card (the phone gate's answer, once it passed) */
+    /** @param class-string<Handler> $handler The handler of a shared contact card that passed the gates */
     public function contact(string $handler): self
     {
         $this->contact = new Route($handler, navigation: true);
@@ -143,10 +132,7 @@ final class Dispatcher
         return $this;
     }
 
-    /**
-     * @param class-string<Handler> $handler What nothing else takes — an unknown command or text, a button from a
-     *                                       screen long gone; it shows the menu, so it is navigation
-     */
+    /** @param class-string<Handler> $handler What no other route takes; it shows the menu, so it is navigation */
     public function fallback(string $handler): self
     {
         $this->fallback = new Route($handler, navigation: true);
@@ -162,7 +148,7 @@ final class Dispatcher
         return $this;
     }
 
-    /** @param class-string<GroupHandler> $handler A command written in a group — to this bot or to another: the handler tells */
+    /** @param class-string<GroupHandler> $handler A command written in a group (to this bot or another: the handler tells) */
     public function groupCommand(string $name, string $handler): self
     {
         $this->groupCommands[strtolower(ltrim($name, '/'))] = $handler;
@@ -170,7 +156,7 @@ final class Dispatcher
         return $this;
     }
 
-    /** @param class-string<GroupHandler> $handler What else a group's or supergroup's updates go to — the bot's membership there, the group's messages */
+    /** @param class-string<GroupHandler> $handler Every other group update: the bot's membership, the group's messages */
     public function group(string $handler): self
     {
         $this->group = $handler;
@@ -178,6 +164,7 @@ final class Dispatcher
         return $this;
     }
 
+    /** Serve one update, as the class comment describes; nothing it throws escapes (it is logged). */
     public function dispatch(Update $update): void
     {
         $chatId = $update->chatId();
@@ -191,8 +178,8 @@ final class Dispatcher
 
             return;
         }
-        // A private chat is its one person's: an update saying otherwise is none of Telegram's (an agent's webhook can be
-        // posted anything), and would be served as a chat of someone else's.
+        // A private chat's id is its person's: an update saying otherwise is not Telegram's (an agent's webhook can be
+        // posted anything) and would act on someone else's chat.
         if (!$update->isPrivateChat() || $update->fromId() !== $chatId) {
             return;
         }
@@ -218,7 +205,7 @@ final class Dispatcher
             $ctx = new Context($update, $this->api, $user, $this->sessions->load($chatId));
             $this->serve($ctx);
             $ctx->session->save();
-            // A tap nothing answered — the handler's or a gate's work was the answer — still stops its spinner.
+            // A tap nobody answered still needs its spinner stopped.
             $ctx->answer();
         } catch (\Throwable $e) {
             $this->logger->error('Telegram update {id} failed: {message}', [
@@ -255,10 +242,7 @@ final class Dispatcher
         }
     }
 
-    /**
-     * Whether the update is the bot's to serve: a copy of one it took already is left alone, and so is one of a chat
-     * flooding the bot — said once, as the flood begins.
-     */
+    /** Whether to serve the update: not a copy of one served already, nor from a chat flooding the bot (logged once). */
     private function claim(Update $update): bool
     {
         if (!$this->received->claim($update)) {
@@ -315,14 +299,13 @@ final class Dispatcher
     }
 
     /**
-     * Tell the customer something broke, once: on the tapped button while the tap is unanswered, in a message
-     * otherwise — a message they sent, a tap answered before its handler failed, or one Telegram no longer takes an
-     * answer for. A failure while telling is logged.
+     * Tell the customer something broke: on the button while the tap is unanswered, else in a message. A failure while
+     * telling is only logged.
      */
     private function reportFailure(Update $update, int $chatId, ?Context $ctx): void
     {
         try {
-            // The admin's wording when it can be read — the failure may be the settings table's own.
+            // The admin's wording when it can be read; the failure may be the settings table's own.
             try {
                 $text = $this->texts->get(BotText::Error);
             } catch (\Throwable) {
@@ -341,9 +324,8 @@ final class Dispatcher
     }
 
     /**
-     * The route the update takes, in the order the class comment gives; null for none — an admin's command or button
-     * pressed by anyone else (no answer at all), or no fallback. A step of an admin's flow the chat is still at, its
-     * customer no admin any more, is not theirs either: the fallback takes the message, and the flow is left.
+     * The route the update takes, in the class comment's order; null for an admin-only command or button pressed by
+     * anyone else. A step of an admin flow left by someone who is no admin any more goes to the fallback.
      */
     private function route(Update $update, ?string $state, bool $admin): ?Route
     {
@@ -366,7 +348,7 @@ final class Dispatcher
         }
 
         if ($update->isCallback()) {
-            // A button no route knows is from a screen long gone, never an answer to the step the chat is at.
+            // An unknown button is from a screen long gone, never an answer to the step the chat is at.
             $button = self::longestPrefix($this->callbacks, (string) $update->callbackData());
 
             return $button === null ? $this->fallback : $allowed($button);

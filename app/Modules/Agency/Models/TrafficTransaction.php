@@ -9,9 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * One line of an agent's prepaid traffic (Agency\Services\TrafficPool): bought, drawn by a sale or a renewal of their
- * bot or by the traffic the shop gave one of its services, given back, or set right by the shop. The shop's as a
- * whole — no bot scope: the agent's bot is named by `bot_id`, whoever reads it.
+ * One line of an agent's prepaid traffic ledger (Services\TrafficPool). No shop scope: `bot_id` names the agent's bot,
+ * whichever shop reads it.
  *
  * @property int $id
  * @property int $bot_id

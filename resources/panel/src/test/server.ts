@@ -1,11 +1,10 @@
 import { contractProblem } from '@/test/contract'
 
 /*
- * The PHP server as the panels' tests play it: every test gets a fresh one in place of `fetch` (src/test/setup.ts), so
- * nothing ever goes out. A test says what a route answers (`on`) — an answer, or a function of the request —, holds a
- * route's requests until it answers them (`hold`), and reads what was sent (`requests`, `sent`). A request to a route
- * the test gave no answer for fails the test, and so does one the API description does not take (src/test/contract: its
- * operation, its parameters, its body) — as the PHP tests hold theirs to it; `unchecked()` lets one through.
+ * The fake PHP server: every test gets a fresh one in place of `fetch` (src/test/setup.ts), so nothing goes out. A test
+ * says what a route answers (`on`: an answer, or a function of the request), holds a route's requests until it answers
+ * them (`hold`), and reads what was sent (`requests`, `sent`). A request no route answers fails the test, and so does
+ * one the API description does not take (src/test/contract); `unchecked()` lets one malformed request through.
  */
 
 /** A request as the server received it. */

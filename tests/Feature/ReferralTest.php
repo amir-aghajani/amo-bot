@@ -15,10 +15,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\BotTestCase;
 
 /**
- * «زیرمجموعه‌گیری» in the bot: a customer's invite code (made once) and link, the newcomer it brings — someone not in
- * the database yet, theirs from that first /start (even one a gate holds back), never a customer the shop already knew —
- * the owner told of each, and the screen that shows the link, what it earns and the numbers so far; no link while the
- * program is off or the bot's @username unknown, and the menu's button only while the program runs.
+ * Referrals in the bot: the invite code and link, attributing only a brand-new customer (even one a gate holds back), the
+ * referrer told, the «زیرمجموعه‌گیری» screen, and no link or button while the program is off.
  */
 final class ReferralTest extends BotTestCase
 {

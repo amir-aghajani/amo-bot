@@ -33,10 +33,7 @@ function formOf(settings: ConfigMailSettings, transport: string): DriverDraft {
   return { ...(driver === undefined ? {} : driverDraft(driver, settings.values[driver.key])), transport }
 }
 
-/**
- * The group's PUT: none, or a driver's own request — its form's fields shown, a secret only when typed — with who the
- * emails come from. What the other drivers keep is not sent: it stays as it is.
- */
+/** The group's PUT: none, or the chosen driver's fields (a secret only when typed) and the sender. Other drivers' settings are not sent. */
 function requestOf(settings: ConfigMailSettings, values: DriverDraft): ConfigMailRequest {
   const driver = driverOf(settings, String(values.transport))
   if (driver === undefined) return { transport: 'none' }
@@ -45,11 +42,9 @@ function requestOf(settings: ConfigMailSettings, values: DriverDraft): ConfigMai
 }
 
 /**
- * The shop's email — what a website's sign-up codes and password resets go out by, every shop's, and the shop's notices
- * to a customer Telegram cannot reach (no Telegram account, or the bot turned away): how — none, or a mail driver, its
- * form drawn from its description (components/driver-form) —, and who the emails come from while any goes out. A
- * password kept goes with the server, the encryption and the account it was given for: moved, the field says to type it
- * again, as the server asks.
+ * «ایمیل»: how the shop sends email (websites' codes and resets, notices to customers Telegram cannot reach) — none or a
+ * mail driver drawn from its description — and the sender. A kept SMTP password is bound to its server and account:
+ * change those and it must be typed again.
  */
 export function MailSection({ settings, disabled }: { settings: ConfigMailSettings; disabled: boolean }) {
   const group = useConfigGroup<DriverDraft>(
@@ -109,11 +104,7 @@ export function MailSection({ settings, disabled }: { settings: ConfigMailSettin
   )
 }
 
-/**
- * A short email by the mail settings as saved, to an address the owner types — to see the shop's email go out. A refusal
- * of the address is said under it; any other failure — no email going out yet, the mail server's own refusal — on the
- * card's line, in its words.
- */
+/** «ارسال ایمیل تست»: sends a short email by the saved settings to a typed address; failures show on the card. */
 export function MailTestCard() {
   const form = useForm({ to: '' })
   const send = form.handleSubmit(async () => {

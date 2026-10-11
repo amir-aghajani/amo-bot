@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Handlers;
 
 use App\Core\Exceptions\DomainRuleException;
+use App\Modules\Orders\Services\Pricing;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
@@ -30,27 +31,17 @@ use App\Support\Persian;
 use Psr\Log\LoggerInterface;
 
 /**
- * One of the customer's services, opened from "سرویس‌های من":
- *   sub:{id}              → the service as the panel sees it right now: status, traffic, expiry, last connection
- *   sub:{id}:refresh      → the same, asked again — from the panel only: out of reach, a popup says so and the
- *                           screen stays as it was
- *   sub:{id}:rotate       → «تغییر لینک»: confirm first — every device on the old link drops
- *   sub:{id}:rotate:yes   → a fresh credential and subscription id on the panel, once: the confirmation is spent
- *                           (ChatSession::claim()), so a second tap changes nothing; the new link comes like a
- *                           delivery (QR card or text) in place of the confirm message
- *   sub:{id}:link         → «لینک اشتراک»: the link the shop keeps, in place of the screen (QR card or text) with a
- *                           back button to it — no panel round-trip, so it shows while the panel is down
- *   sub:{id}:autorenew    → «تمدید خودکار» on or off (AutoRenewal); only the buttons are redrawn, the switch's label
- *                           says where it stands — offered while the service runs, ends some day and the wallet is on
- *   sub:{id}:renew        → «تمدید سرویس»: the renewal's checkout (RenewalHandler), «بازگشت» to this screen
- *   sub:{id}:report       → «ارسال گزارش اختلال»: a support ticket about the service, its first message awaited
- *                           (TicketHandler::report()), «بازگشت» to this screen
- * Only the customer's own services answer. When the panel cannot be asked as the screen opens, it shows the
- * row's last known numbers and says so; the back button returns to the list page the service is on. A panel that
- * cannot rotate credentials gets neither the «تغییر لینک» button nor the hint that points at it. The screen is where the
- * chat comes back to from the steps it starts — a report's message, a link's change, a renewal's checkout —, so showing
- * it leaves whatever step the chat was at: what the customer types next is no outage report, and no old confirmation
- * changes a link.
+ * One of the customer's services, opened from «سرویس‌های من»:
+ *   sub:{id}            → the service as its panel sees it now (the row's last numbers, flagged, when the panel is out
+ *                         of reach)
+ *   sub:{id}:refresh    → the same from the panel only: out of reach, a popup says so and the screen stays
+ *   sub:{id}:link       → «لینک اشتراک»: the kept link (QR card or text) in place of the screen, no panel asked
+ *   sub:{id}:rotate     → «تغییر لینک» asks first; `rotate:yes` claims that confirmation once, so a second tap
+ *                         cannot kill the link just delivered
+ *   sub:{id}:autorenew  → «تمدید خودکار» on or off; only the buttons are redrawn
+ *   sub:{id}:renew      → the renewal's checkout (RenewalHandler)
+ *   sub:{id}:report     → «ارسال گزارش اختلال»: a support ticket about the service (TicketHandler::report())
+ * Showing the screen leaves whatever step the chat was at, so nothing typed next is taken as an old step's answer.
  */
 final class SubscriptionHandler implements Handler
 {
@@ -65,6 +56,8 @@ final class SubscriptionHandler implements Handler
         private readonly TicketHandler $tickets,
         private readonly AutoRenewal $autoRenewal,
         private readonly RenewalSettings $renewalSettings,
+        private readonly ExtrasHandler $extras,
+        private readonly Pricing $pricing,
         private readonly ServiceCard $card,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
@@ -82,10 +75,7 @@ final class SubscriptionHandler implements Handler
         $args = $ctx->update->callbackArgs(self::PREFIX) ?? [];
         $action = $args[1] ?? 'show';
 
-        $subscription = Subscription::query()
-            ->where('user_id', $ctx->user->id)
-            ->where('status', '!=', SubscriptionStatus::Deleted->value)
-            ->find((int) ($args[0] ?? 0));
+        $subscription = CustomerServices::of($ctx->user)->find((int) ($args[0] ?? 0));
         if ($subscription === null) {
             $ctx->edit($this->texts->get(BotText::ServiceNotFound), ['reply_markup' => InlineKeyboard::make()->row($this->backToList(MenuHandler::subscriptionsCallback(1)))->build()]);
 
@@ -105,12 +95,9 @@ final class SubscriptionHandler implements Handler
     }
 
     /**
-     * The screen, from the panel (the row synced on the way), with whether the service is connected now
-     * (ProvisioningService::look()). Opened while the panel cannot be read — out of reach, or one the shop leaves alone a
-     * while after it failed, so the bot does not wait out its timeout for every customer — it shows the row's last known
-     * numbers, flagged. «به‌روزرسانی اطلاعات» (`$refresh`) promises the panel's numbers, so then the customer is told the
-     * panel could not be reached and the screen stays as it was — the row's copy is never passed off as fresh. The chat is
-     * back on the screen: whatever step it was at is left.
+     * The screen, read from the panel with presence (ProvisioningService::look(), which skips a panel in backoff so the
+     * customer never waits out its timeout). Unread, it shows the row's last numbers, flagged — but a `$refresh` promises
+     * the panel's numbers, so then a popup says the panel was not reached and the screen stays as it was.
      */
     private function show(Context $ctx, Subscription $subscription, bool $refresh = false): void
     {
@@ -136,21 +123,13 @@ final class SubscriptionHandler implements Handler
         $ctx->edit($this->details($subscription, $client, $live, $rotates), ['reply_markup' => $this->keyboard($subscription, $rotates)]);
     }
 
-    /**
-     * «لینک اشتراک»: the link the shop keeps for the service — refreshed from the panel whenever the screen
-     * is drawn — in place of the screen: the text edited into it, or the QR card (edited in where Telegram
-     * allows, the screen replaced otherwise), with "back" to the screen. One message either way, and no
-     * panel round-trip, so the customer gets their link even while the panel is down.
-     */
+    /** «لینک اشتراک»: the kept link in place of the screen, with «بازگشت» to it — no panel asked, so it works while one is down. */
     private function link(Context $ctx, Subscription $subscription): void
     {
         $this->card->show($ctx, $subscription, BotText::LinkRequested, ['reply_markup' => $this->buttons->backOnly(self::serviceCallback($subscription->id))]);
     }
 
-    /**
-     * «تمدید خودکار»: the switch flips and only the buttons are redrawn — no panel round-trip, and the numbers
-     * on the screen stay as they were. Turning it on says what will happen: when, and what the wallet pays.
-     */
+    /** «تمدید خودکار» flipped: only the buttons are redrawn. Turning it on says when it renews and what the wallet pays. */
     private function toggleAutoRenew(Context $ctx, Subscription $subscription): void
     {
         $on = !$subscription->auto_renew;
@@ -165,13 +144,13 @@ final class SubscriptionHandler implements Handler
 
         $ctx->answer($on ? $this->texts->render(BotText::AutoRenewEnabled, [
             'days' => Persian::digits($this->renewalSettings->autoRenewDays()),
-            // Offered, the service has its plan: what the wallet pays.
-            'amount' => Money::format($subscription->plan->price ?? 0),
+            // The customer's renewal price: an agent's at the agent price, less the automatic discount.
+            'amount' => Money::format($subscription->plan === null ? 0 : $this->pricing->renewal($ctx->user, $subscription, $subscription->plan)->amount()),
         ]) : $this->texts->get(BotText::AutoRenewDisabled), alert: $on);
         $ctx->editKeyboard($this->keyboard($subscription, $this->provisioning->rotates($subscription)));
     }
 
-    /** «تغییر لینک» asks first — and the conversation waits for that one confirmation (rotate() claims it). */
+    /** «تغییر لینک» asks first; the chat waits on that one confirmation, which rotate() claims. */
     private function confirmRotate(Context $ctx, Subscription $subscription): void
     {
         if (!$subscription->isActive()) {
@@ -190,12 +169,9 @@ final class SubscriptionHandler implements Handler
     }
 
     /**
-     * The confirmed change: new ids on the panel, then the confirm message goes and the new link arrives
-     * like a delivery — nothing else: the link is what the customer came for (Amir's call), the list is a
-     * menu tap away. The confirmation is spent first: a second tap on the same button — or one after the
-     * customer went elsewhere — changes nothing, or it would kill the link just delivered. Once the panel has
-     * changed the link the customer must hear something: a delivery Telegram refuses is reported as such, with
-     * the button that sends the link again.
+     * The confirmed change: new credentials on the panel, then the new link sent like a delivery in place of the
+     * confirmation. The confirmation is claimed first, so a second tap (or one after the chat moved on) changes nothing.
+     * If the panel changed the link but Telegram refused the delivery, the customer gets a word and a button to resend it.
      */
     private function rotate(Context $ctx, Subscription $subscription): void
     {
@@ -235,7 +211,6 @@ final class SubscriptionHandler implements Handler
         $used = $subscription->usedBytes();
         $remaining = $subscription->remainingBytes();
 
-        // The service's own values as every service text words them, and the screen's.
         $text = $this->texts->render(BotText::ServiceDetails, array_intersect_key($this->card->values($subscription), array_flip(['client', 'plan', 'server', 'traffic', 'expires'])) + [
             'status' => $this->status($subscription, $client),
             'used' => $used > 0 ? Messages::bytes($used) : $this->texts->part(BotText::ServiceUnused),
@@ -254,7 +229,7 @@ final class SubscriptionHandler implements Handler
             }),
         ]);
 
-        // A renewal queued behind this period, what it leaves unused not carried: say how much goes, and when.
+        // The traffic that expires with the current period, the link-change hint, and the stale flag.
         return BotTexts::paragraphs(
             $text,
             $this->card->periodNote($subscription),
@@ -263,7 +238,7 @@ final class SubscriptionHandler implements Handler
         );
     }
 
-    /** The row's state first (what sync() concluded), then the panel's own switch. */
+    /** The service's status word: the row's state first, then the panel's own switch. */
     private function status(Subscription $subscription, ?ClientInfo $client): Html
     {
         return $this->texts->part(match (true) {
@@ -277,10 +252,9 @@ final class SubscriptionHandler implements Handler
     }
 
     /**
-     * Rows as Telegram lays them out, left to right — for a right-to-left reader the first button of a
-     * pair is the one on the right: refresh; renew | link; the «تمدید خودکار» switch (when it is offered,
-     * green while on); report | change link (only when the panel can rotate a client's credentials); back
-     * to the list.
+     * The screen's buttons (Telegram lays a row out left to right, so a row's first button sits on the left): refresh;
+     * renew | link; the extras; the «تمدید خودکار» switch while offered; report | change link (when the panel can);
+     * back to the list page the service is on.
      *
      * @return array<string, mixed>
      */
@@ -295,19 +269,20 @@ final class SubscriptionHandler implements Handler
         return InlineKeyboard::make()
             ->row(InlineKeyboard::callback($this->texts->get(BotText::ServiceRefresh), self::serviceCallback($id, 'refresh'), 'primary'))
             ->row($this->linkButton($subscription), InlineKeyboard::callback($this->texts->get(BotText::ServiceRenew), self::serviceCallback($id, 'renew'), 'success'))
+            ->row(...$this->extras->buttons($subscription))
             ->row(...$this->autoRenewal->offeredFor($subscription) ? [$autoRenew] : [])
             ->row(...$rotates ? [InlineKeyboard::callback($this->texts->get(BotText::ServiceRotate), self::serviceCallback($id, 'rotate')), $report] : [$report])
             ->row($this->backToList(MenuHandler::subscriptionsCallbackFor($subscription)))
             ->build();
     }
 
-    /** @return array<string, mixed> «لینک اشتراک» — on the screen, and under a new link Telegram would not take. */
+    /** @return array<string, mixed> «لینک اشتراک»: on the screen, and under a new link Telegram would not take. */
     private function linkButton(Subscription $subscription): array
     {
         return InlineKeyboard::callback($this->texts->get(BotText::ServiceLink), self::serviceCallback($subscription->id, 'link'), 'primary');
     }
 
-    /** @return array<string, mixed> The red "back to the list" button — worded for the list, unlike the plain back. */
+    /** @return array<string, mixed> The red «بازگشت به لیست سرویس‌ها» button. */
     private function backToList(string $screen): array
     {
         return InlineKeyboard::callback($this->texts->get(BotText::ServiceBack), $screen, 'danger');

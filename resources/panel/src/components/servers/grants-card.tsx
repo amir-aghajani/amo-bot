@@ -17,10 +17,9 @@ const grantsQuery = (serverId: number) => queryOptions({ queryKey: queryKeys.ser
 const waiting = (grant: ServerGrantRow) => grant.waiting_reason !== null
 
 /**
- * «افزودن زمان و حجم» on a server's page: days and traffic for the running services on it — and, ticked, those
- * still waiting for their first connection — an outage made good, a gift, with the reason the customers read in
- * the bot; and the latest grants with how far each got, a mass gift's part on this server among them. The one under
- * way is worked on from here while the page is open; the scheduler carries on without it.
+ * «افزودن زمان و حجم» on a server's page: days and traffic for the services running on it (optionally those not started
+ * yet), with a reason customers read, and the latest grants — mass gifts' parts here included. The grant under way is
+ * worked from this page while it is open; the scheduler carries on otherwise.
  */
 export function GrantsCard({ server }: { server: ServerRow }) {
   const grants = useGrants({

@@ -85,7 +85,7 @@ final class BotPurchaseFlowTest extends BotTestCase
             'client' => 'USER_1',
             'plan' => 'یک‌ماهه',
             'server' => 'فرانسه',
-            'duration' => Messages::duration(30),
+            'duration' => Messages::duration(30 * 24),
             'traffic' => Messages::traffic(Traffic::bytesOfGb(30)),
             'subscription' => 'https://fake.test/sub/sub-1',
         ])], $this->said(), "the client's name on the panel and the panel's subscription link, each a code span a tap copies");
@@ -416,7 +416,7 @@ final class BotPurchaseFlowTest extends BotTestCase
             'plan' => $plan->name,
             'description' => $description,
             'traffic' => Messages::traffic($plan->trafficBytes()),
-            'duration' => Messages::duration($plan->duration_days),
+            'duration' => Messages::duration($plan->duration_hours),
             'devices' => Messages::devices($plan->ip_limit),
             'price' => Money::format($plan->price),
         ]);

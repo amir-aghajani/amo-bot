@@ -10,10 +10,7 @@ import { PublicPanel } from '@/components/public-screen'
 import { Button } from '@/components/ui/button'
 import { useForm } from '@/lib/use-form'
 
-/**
- * The database: written to config.php once its driver's probe answers, then the shop's tables made on it. Nothing is
- * kept yet to show: a secret left blank is an empty one here.
- */
+/** The database step: written to config.php once its driver's probe answers, then the tables made. A blank secret is empty here. */
 export function DatabaseStep({ status, onDone }: StepProps) {
   const { database } = status
   const { values, set, patch, error, formError, busy, submit, handleSubmit } = useForm(() => databaseDraft(database))

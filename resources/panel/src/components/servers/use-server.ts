@@ -7,9 +7,8 @@ import type { Probe, ServerDetailResponse, ServerInboundRow, ServerRow } from '@
 import { queryKeys } from '@/lib/query-keys'
 
 /**
- * One server's page: its read, and what the page does to it — check its panel (the answer kept to show), read the
- * inbounds again, choose which are sold, save the connection (its form names the list too), delete it. Each change writes
- * the page's copy and has the servers list read again (its counts, the check, whether the server can sell).
+ * A server page's read and operations: check the panel (the answer kept to show), sync the inbounds, choose which are
+ * sold, delete. Each writes the page's copy and has the servers list read again.
  */
 export function useServer(id: number, created: Probe | null) {
   const queryClient = useQueryClient()

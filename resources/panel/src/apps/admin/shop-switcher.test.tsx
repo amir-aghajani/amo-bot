@@ -88,7 +88,7 @@ describe('the shop the tab shows', () => {
     expect(within(list).getByText('در حال خواندن فروشگاه‌ها…')).toBeTruthy()
   })
 
-  it('stays on the picker when the shops could not be read, the failure said in its menu with a way to ask again', async () => {
+  it('stays on the picker when the shops could not be read, showing the failure in its menu with a retry', async () => {
     open({ shop: REZA, shops: refusal(500, 'خطایی در سرور رخ داد. لطفا بعدا دوباره تلاش کنید.') })
 
     const list = await menu('فروشگاه: فروشگاه رضا')

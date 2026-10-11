@@ -6,7 +6,7 @@ namespace App\Modules\Settings\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
 
-/** The owner's test send while no email can go: config.php names no transport, or no address to send from. */
+/** The owner's test email while no email can go: no transport, or no sender address, saved yet. */
 final class MailNotReadyException extends DomainRuleException
 {
     public const MESSAGE = 'ارسال ایمیل هنوز راه نیفتاده است؛ اول تنظیمات را ذخیره کنید.';

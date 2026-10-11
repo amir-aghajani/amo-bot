@@ -10,8 +10,8 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Bots\Services\Bots;
 
 /**
- * The scheduler's shops are the bots': the main bot's always (its rows are there, a token or not), then every agent's
- * bot that runs (Bots::shops()) — each worked in with CurrentBot, and the shop as a whole everywhere().
+ * The scheduler's shops are the bots' (Bots::shops()): a shop's task runs in each with CurrentBot::run(), and the
+ * installation's tasks run once everywhere(). Core\Scheduling names no module, so this is how it reaches the bots.
  */
 final class BotShops implements Shops
 {

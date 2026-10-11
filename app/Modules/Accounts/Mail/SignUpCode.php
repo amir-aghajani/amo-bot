@@ -10,8 +10,8 @@ use App\Modules\Accounts\Services\AuthChallenges;
 use App\Support\Persian;
 
 /**
- * The code a sign-up on the shop's website is finished with, emailed to the address it proves — nothing in it typed by
- * whoever asked (a sign-up may name any address, so its words would be anyone's to send there).
+ * The code that finishes a sign-up, emailed to the address it proves. It holds nothing the requester typed: a sign-up
+ * may name anyone's address, so typed words would let anyone send their text there.
  */
 final class SignUpCode
 {

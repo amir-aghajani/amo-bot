@@ -10,7 +10,7 @@ use App\Support\Email;
 use App\Support\Input;
 
 /**
- * An email address, by the one rule for one (App\Support\Email: kept in lower case) — blank for none, unless it is
+ * An email address, by App\Support\Email's rules (kept in lower case) — blank for none, unless it is
  * `required` (an address to send from, once mail goes out at all).
  *
  * @extends Field<string>

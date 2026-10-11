@@ -6,10 +6,7 @@ namespace App\Modules\Telegram\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
 
-/**
- * The shop's address is not one Telegram calls a webhook at: Telegram takes only HTTPS. Nothing is registered then —
- * the owner puts an https APP_URL in the panel's settings (or the operator passes bot:webhook:set --url).
- */
+/** The shop's address is not HTTPS, the only kind Telegram calls a webhook at: nothing is registered. */
 final class WebhookAddressException extends DomainRuleException
 {
     public function __construct()

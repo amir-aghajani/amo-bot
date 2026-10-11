@@ -11,8 +11,13 @@ import { lazyPage } from '@/lib/lazy-page'
 import {
   BotSettingsPage,
   BotTextsPage,
+  CashbackPage,
   CustomerPage,
+  DiscountCodesPage,
+  GiftCodesPage,
   KeyboardsPage,
+  LotteryPage,
+  LoyaltyPage,
   OrdersPage,
   PaymentMethodsPage,
   PaymentsPage,
@@ -20,17 +25,19 @@ import {
   PlansPage,
   ReferralsPage,
   ReviewsPage,
+  SalesPage,
   SubscriptionsPage,
   TicketPage,
   TicketsPage,
   UsersPage,
   WebsiteSettingsPage,
+  WheelPage,
 } from '@/pages/lazy'
 
 /*
- * The owner's panel (/admin/): the shop's pages both panels have, and the shop's own — its servers, the agents, the
- * mass gift, the system card on the dashboard, the panel's settings and, before the shop is installed, the installer.
- * Every page is its own chunk.
+ * The owner's panel (/admin/): the shared shop pages plus the owner's own — servers, agents, the mass gift, the
+ * dashboard's system card, the panel's settings and, before the shop is installed, the installer. Every page is its own
+ * chunk.
  */
 
 const AgentsPage = lazyPage(
@@ -123,6 +130,13 @@ export const ADMIN_ROUTES: RouteObject[] = [
                   { path: 'subscriptions', element: <SubscriptionsPage servers={ownerServers} serverPage={serverPage} /> },
                   { path: 'referrals/:section?', element: <ReferralsPage /> },
                   { path: 'agents/:section?', element: <AgentsPage /> },
+                  { path: 'discounts/:section?', element: <DiscountCodesPage /> },
+                  { path: 'sales', element: <SalesPage /> },
+                  { path: 'loyalty', element: <LoyaltyPage /> },
+                  { path: 'cashback', element: <CashbackPage /> },
+                  { path: 'gift-codes', element: <GiftCodesPage /> },
+                  { path: 'wheel/:section?', element: <WheelPage /> },
+                  { path: 'lottery', element: <LotteryPage /> },
                   { path: 'keyboards', element: <KeyboardsPage /> },
                   { path: 'bot-texts', element: <BotTextsPage /> },
                   { path: 'broadcasts/:section?', element: <BroadcastsPage /> },

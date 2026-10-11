@@ -18,10 +18,8 @@ use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
 /**
- * The shop's dashboard (both panels, each its shop's): the period's figures against the one before, the chart's days —
- * the shop's own —, the queues that need a human, the latest arrivals — and, the owner's alone, whether the machinery
- * behind the shop is alive: the version, PHP's, how the open shop's bot gets its updates, and the main bot's — the way
- * every bot of the installation gets them.
+ * The dashboard (both panels): figures against the period before, the chart's days in the shop's zone, the queues, the
+ * latest arrivals; and the owner's system status — versions and how the open shop's and the main bot get updates.
  */
 final class AdminDashboardApiTest extends HttpTestCase
 {

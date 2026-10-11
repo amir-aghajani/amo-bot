@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
 use App\Modules\Orders\Models\Order;
@@ -15,9 +14,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The orders screen: the list, and what its modal can do with an order — deliver it again when its delivery failed,
- * drop it while nobody has paid — each OrderActions', which tells the customer; the answer is the order's row as it
- * stands after it.
+ * The orders screen: the list, and the modal's operations — retry a failed delivery, cancel an unpaid order — each
+ * OrderActions', which tells the customer. An operation answers the order's row as it stands after it.
  */
 final class OrdersController extends ApiController
 {
@@ -29,7 +27,7 @@ final class OrdersController extends ApiController
     /** GET /orders?search=&status=&type=&user=&from=&to=&sort=&dir=&page= */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->orders->search(PageRequest::fromQuery($request->getQueryParams()))->toArray('orders'));
+        return $this->json($response, $this->orders->search($this->pageRequest($request))->toArray('orders'));
     }
 
     /**

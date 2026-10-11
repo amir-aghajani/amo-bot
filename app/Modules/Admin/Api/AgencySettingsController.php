@@ -10,8 +10,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The agency program's rules («تنظیمات», a section of the owner's agents page): whether it takes requests, the credit an
- * approved agent starts with, the traffic agents buy. The shop's own, not a bot's.
+ * The agency program's rules (a section of the owner's agents page): whether it takes requests, an approved agent's
+ * starting credit, the traffic agents buy. The installation's rules, kept in the main bot's settings.
  */
 final class AgencySettingsController extends ApiController
 {

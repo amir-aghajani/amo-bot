@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Scheduling;
 
-/**
- * A unit of background work run by `schedule:run`. Implementations are resolved from the container.
- */
+/** A unit of scheduled work, listed in bootstrap/schedule.php and made by the container. */
 interface Task
 {
     public function run(): void;

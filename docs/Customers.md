@@ -77,8 +77,12 @@ An agent's credit — how far below zero their wallet may go when they buy traff
 ## Groups
 
 «کاربران › گروه‌ها» — the shop's own groups of customers: VIP, colleagues, a campaign. A group is a name (32 characters at
-most, unique in the shop) and a place in the order (▲▼); «تغییر نام» and «حذف» in its menu. A customer's groups are
-ticked from their row's «گروه‌ها», or from the «گروه‌ها» card of their page.
+most, unique in the shop), a place in the order (▲▼) and a switch, «همکار»; «ویرایش» and «حذف» in its menu. A
+customer's groups are ticked from their row's «گروه‌ها», or from the «گروه‌ها» card of their page.
+
+**«همکار»** — the group's customers pay the plans' agent prices, as your agents do: resellers who are no agents of the
+shop, a partner's staff ([Plans](Plans.md#agent-price)). The list marks such a group «همکار». A customer who leaves it
+pays the plans' prices from then on.
 
 A broadcast may go to one group ([Broadcasts](Broadcasts.md)). Deleting a group takes nothing from its customers — they
 leave it —, but a broadcast aimed at it then reaches nobody.

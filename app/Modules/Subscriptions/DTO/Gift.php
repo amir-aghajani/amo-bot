@@ -9,9 +9,8 @@ use App\Support\Input;
 use App\Support\Traffic;
 
 /**
- * Days and traffic support gives on top of what services have — a grant to the services on a server or on many
- * (Grants), or one service's extension (SubscriptionActions::extend()) —, with the word the customers read and
- * whether they are told. ProvisioningService::grant() gives it to a service; Messages::gift() words it.
+ * Days and traffic support adds to services — a grant (Grants) or one service's extension
+ * (SubscriptionActions::extend()) — with the note the customers read and whether they are told.
  */
 final class Gift
 {
@@ -21,15 +20,14 @@ final class Gift
     public function __construct(
         public readonly int $days,
         public readonly int $bytes,
-        /** Support's word to the customers (BotText::AdminNote); null for none. */
+        /** Support's note to the customers (BotText::AdminNote); null for none. */
         public readonly ?string $note,
         public readonly bool $notify,
     ) {}
 
     /**
-     * As the admin typed it — {days, traffic_gb, <$noteField>?, notify?}: the amounts in Persian digits too, blank for
-     * none, each within its bounds and at least one above zero; the note held to the one note rule; told unless `notify`
-     * is off.
+     * Read what the admin typed — {days, traffic_gb, <$noteField>?, notify?}: amounts in Persian digits too, blank for
+     * none, each within bounds and at least one above zero; the note by Input::note(); told unless `notify` is off.
      *
      * @param array<string, mixed> $input
      * @param string $noteField Where the form puts the note: a grant's `reason`, a service's `note`

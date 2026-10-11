@@ -10,12 +10,10 @@ use App\Support\Input;
 use Psr\Log\LoggerInterface;
 
 /**
- * The bot's keyboards as the admin laid them out, stored in the settings table (`bot.keyboard.<name>`)
- * with a built-in default per keyboard. Only the start menu exists today; more screens register here.
- * A layout is read back through the same checks it was saved with: one that would not pass them (a row changed by
- * hand) is not the menu — the built-in one is, so a bad row can never take the bot's menu away. A shop's layout has only
- * the actions its menu has — none the bot no longer has (MainMenu::ACTIONS), no «نمایندگی» in an agent's bot
- * (MainMenu::absent()): a save refuses another, and one kept from before reads without it.
+ * The admin's keyboard layouts (settings `bot.keyboard.<name>`), each with a built-in default; only the start menu
+ * exists today. A stored layout is read back through the same checks as a save: one that fails them shows the built-in
+ * menu instead, so a bad row never takes the menu away. A button whose action this shop lacks is refused on save and
+ * dropped on read.
  */
 final class KeyboardLayouts
 {
@@ -45,6 +43,7 @@ final class KeyboardLayouts
         return array_keys(self::NAMES);
     }
 
+    /** The keyboard as the admin laid it out — the built-in one when they never did, or what is stored fails the checks. */
     public function get(string $name): KeyboardLayout
     {
         $default = self::defaultFor($name);
@@ -65,6 +64,7 @@ final class KeyboardLayouts
         return $layout->rows === [] ? $default : $layout;
     }
 
+    /** Whether the admin never saved a layout of their own. */
     public function isDefault(string $name): bool
     {
         return $this->settings->get(self::key($name)) === null;

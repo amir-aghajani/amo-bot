@@ -10,8 +10,8 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
 /**
- * The buttons the bot puts under more than one screen, in the admin's words (BotTexts) and looking the same wherever
- * they show: «⬅️ بازگشت» to a screen, «بعدی» / «قبلی» under a list of pages, «➕ افزایش موجودی», «💾 خرید حجم».
+ * The buttons shared by many screens, in the admin's wording: «⬅️ بازگشت», «بعدی» / «قبلی», «➕ افزایش موجودی»,
+ * «💾 خرید حجم».
  */
 final class Buttons
 {
@@ -39,9 +39,8 @@ final class Buttons
     }
 
     /**
-     * «بعدی» and «قبلی» under a list that runs over more than one page («سرویس‌های من», the renewals, «تیکت‌های من»):
-     * none on its first page for «قبلی» nor on its last for «بعدی». Forward is leftward for a right-to-left reader, so
-     * «بعدی» comes first — Telegram lays a row out left to right.
+     * «بعدی» and «قبلی» under a paged list, each only where there is a page to go to. Forward is leftward for a
+     * right-to-left reader, so «بعدی» comes first in the row.
      *
      * @param \Closure(int): string $at The list at another page
      * @return list<array<string, mixed>> The row's buttons; none for a list of one page
@@ -60,8 +59,7 @@ final class Buttons
     }
 
     /**
-     * «➕ افزایش موجودی»: the wallet's top-up — under the wallet, a payment it cannot cover, an automatic renewal it
-     * could not pay.
+     * «➕ افزایش موجودی»: the wallet's top-up.
      *
      * @return array<string, mixed>
      */
@@ -71,7 +69,7 @@ final class Buttons
     }
 
     /**
-     * «💾 خرید حجم»: an agent's traffic — under their account and a delivery their traffic could not cover.
+     * «💾 خرید حجم»: an agent's traffic purchase.
      *
      * @return array<string, mixed>
      */

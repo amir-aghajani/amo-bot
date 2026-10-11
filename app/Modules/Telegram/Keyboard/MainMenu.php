@@ -7,6 +7,8 @@ namespace App\Modules\Telegram\Keyboard;
 use App\Modules\Agency\Services\AgencySettings;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Referrals\Services\ReferralSettings;
+use App\Modules\Rewards\Services\GiftCodeSettings;
+use App\Modules\Rewards\Services\WheelSettings;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
@@ -14,11 +16,10 @@ use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Users\Models\User;
 
 /**
- * The bot's home screen. Its layout — which buttons, in which rows, reply keyboard or inline — is
- * the admin's (`KeyboardLayouts`, "start"); this class knows the actions a button can stand for and
- * renders the current layout. Callback ids (`menu:*`) are what inline buttons and "back" buttons use;
- * a reply-keyboard tap arrives as the button's label and actionFor() maps it back. It also puts the menu on
- * the chat (show()) and the screens it opens (screen()), the one place that knows which of the two the layout is.
+ * The bot's main menu. The admin lays it out (KeyboardLayouts, "start"): which actions, in which rows, as a reply
+ * keyboard or inline buttons. This class knows the actions (ACTIONS), renders the layout for a customer (hiding what is
+ * switched off), and is the one place that knows which form it takes — show() sends it, screen() puts a screen it
+ * opens in place of the tapped message.
  */
 final class MainMenu
 {
@@ -33,13 +34,11 @@ final class MainMenu
     public const AGENCY = 'menu:agency';
     public const TUTORIAL = 'menu:tutorial';
     public const SUPPORT = 'menu:support';
+    public const GIFT = 'menu:gift';
+    public const WHEEL = 'menu:wheel';
     public const HOME = 'menu:home';
 
-    /**
-     * Everything a menu button can do: key => admin-facing title, default label, the screen it opens.
-     * Order = the order offered in the admin's picker. A layout kept from before with a button whose action is not here
-     * (one the bot no longer has) reads without it (KeyboardLayouts).
-     */
+    /** Every action a menu button can stand for: key => admin-facing title, default label, the screen it opens. */
     public const ACTIONS = [
         'buy' => ['title' => 'خرید اشتراک', 'label' => Messages::MENU_BUY, 'screen' => self::PLANS],
         'services' => ['title' => 'سرویس‌های من', 'label' => Messages::MENU_SERVICES, 'screen' => self::SUBSCRIPTIONS],
@@ -49,12 +48,16 @@ final class MainMenu
         'agency' => ['title' => 'نمایندگی', 'label' => Messages::MENU_AGENCY, 'screen' => self::AGENCY],
         'tutorial' => ['title' => 'آموزش', 'label' => Messages::MENU_TUTORIAL, 'screen' => self::TUTORIAL],
         'support' => ['title' => 'پشتیبانی', 'label' => Messages::MENU_SUPPORT, 'screen' => self::SUPPORT],
+        'gift' => ['title' => 'کد هدیه', 'label' => Messages::MENU_GIFT, 'screen' => self::GIFT],
+        'wheel' => ['title' => 'گردونه شانس', 'label' => Messages::MENU_WHEEL, 'screen' => self::WHEEL],
     ];
 
     public function __construct(
         private readonly KeyboardLayouts $layouts,
         private readonly ReferralSettings $referrals,
         private readonly AgencySettings $agency,
+        private readonly GiftCodeSettings $giftCodes,
+        private readonly WheelSettings $wheel,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
     ) {}
@@ -66,6 +69,7 @@ final class MainMenu
      *   [ آموزش | کیف پول + شارژ ]
      *   [ پشتیبانی | زیرمجموعه‌گیری ] — «زیرمجموعه‌گیری» only while the referral program runs (markup())
      *   [ نمایندگی ]                  — only while the agency program runs; never in an agent's bot (absent())
+     *   [ کد هدیه | گردونه شانس ]     — each only while it is switched on (markup())
      */
     public static function defaultLayout(): KeyboardLayout
     {
@@ -77,12 +81,12 @@ final class MainMenu
             [$button('tutorial'), $button('wallet')],
             [$button('support'), $button('affiliates')],
             [$button('agency')],
+            [$button('gift'), $button('wheel')],
         ]))->without(...self::absent());
     }
 
     /**
-     * The actions the current shop's menu never has: an agent's bot has no agency of its own — no «نمایندگی». Its
-     * editor neither offers nor takes them (actions(), KeyboardLayouts), and a layout saved before reads without them.
+     * The actions the current shop's menu never has: an agent's bot has no «نمایندگی».
      *
      * @return list<string>
      */
@@ -104,6 +108,7 @@ final class MainMenu
         return $list;
     }
 
+    /** Whether a menu button can stand for `$key` at all (in any shop). */
     public static function hasAction(string $key): bool
     {
         return isset(self::ACTIONS[$key]);
@@ -115,21 +120,21 @@ final class MainMenu
         return self::ACTIONS[$action]['screen'] ?? self::HOME;
     }
 
+    /** The menu as the admin laid it out. */
     public function layout(): KeyboardLayout
     {
         return $this->layouts->get(KeyboardLayouts::START);
     }
 
+    /** Whether the menu is inline buttons rather than a reply keyboard. */
     public function isInline(): bool
     {
         return $this->layout()->isInline();
     }
 
     /**
-     * The menu under `$text` (a greeting, "not understood") in a message of its own: a reply keyboard under the text
-     * field, or inline buttons under the message. A reply keyboard stays on the client until a message takes it away,
-     * and a message carries one markup: going to an inline menu, the text takes the old keyboard away and the menu
-     * follows under BotText::MenuPrompt.
+     * Send `$text` with the menu. A reply keyboard stays on the client until a message removes it and a message carries
+     * one markup, so switching to an inline menu takes two messages: `$text` removes the keyboard, the menu follows.
      */
     public function show(Context $ctx, string $text): void
     {
@@ -149,9 +154,8 @@ final class MainMenu
     }
 
     /**
-     * A screen the menu opens, in place of the tapped message (in a message of its own, from a reply keyboard): its own
-     * buttons, and — with an inline menu, which leaves nothing under the text field to go back with — «بازگشت» to the
-     * menu under them, in one of KeyboardLayout::STYLES (`$backStyle`) or the client's own look.
+     * A screen the menu opens, in place of the tapped message; with an inline menu it also gets «بازگشت» to the menu,
+     * since nothing under the text field leads back.
      */
     public function screen(Context $ctx, string $text, ?InlineKeyboard $keyboard = null, ?string $backStyle = null): void
     {
@@ -163,10 +167,8 @@ final class MainMenu
     }
 
     /**
-     * The `reply_markup` that shows the menu — without «زیرمجموعه‌گیری» while the referral program is off, nor
-     * «نمایندگی» while the agency program is (an agent keeps it: it is their account), so the buttons stay on the
-     * admin's layout and come back with them. An agent's bot has no agency of its own: its layout never has «نمایندگی»
-     * (absent()).
+     * The menu's `reply_markup` for a customer, without the buttons of programs switched off (an agent keeps
+     * «نمایندگی»: it is their account). They stay on the admin's layout and come back with their program.
      *
      * @return array<string, mixed>
      */
@@ -175,6 +177,8 @@ final class MainMenu
         $off = array_keys(array_filter([
             'affiliates' => !$this->referrals->enabled(),
             'agency' => !$this->agency->enabled() && !$user->isAgent(),
+            'gift' => !$this->giftCodes->enabled(),
+            'wheel' => !$this->wheel->enabled(),
         ]));
 
         return $this->layout()->without(...$off)->markup();

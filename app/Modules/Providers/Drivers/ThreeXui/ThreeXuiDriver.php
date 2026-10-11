@@ -17,9 +17,11 @@ use App\Modules\Providers\Support\PanelCredentials;
 use App\Modules\Providers\Support\PanelHttp;
 
 /**
- * 3x-ui panels (MHSanaei), v3 and later — the only ones with the API this connector speaks: the server's connection is
- * the panel's address with its web base path, an API token or an admin's username and password — with the TOTP secret
- * when the panel's two-factor login is on —, and the options every connection takes; its client is ThreeXuiProvider.
+ * The 3x-ui connector (MHSanaei's panel, v3 and later — older versions have another API). A server's connection is the
+ * panel's address with its web base path, an API token or an admin's username and password (plus the TOTP secret when
+ * the panel's two-factor login is on), and the shared options. Its client is ThreeXuiProvider.
+ *
+ * Naming: the product's words say «3X-UI»; code, keys and files say 3x-ui (key `3x-ui`, namespace ThreeXui).
  */
 final class ThreeXuiDriver implements PanelDriver
 {
@@ -37,9 +39,9 @@ final class ThreeXuiDriver implements PanelDriver
             label: '3X-UI',
             description: 'پنل مدیریت Xray با پشتیبانی از VLESS، VMess، Trojan، Shadowsocks و WireGuard. اتصال از طریق API پنل انجام می‌شود.',
             form: new Form(self::KEY, [
-                // The panel's paths set apart (U+2068…U+2069, isolates): in a right-to-left line «/panel» reads «panel/».
-                // Its pages come after the web base path: its dashboard (/panel) and what is under it, its sign-in
-                // (/login). A web base path that is itself «/panel» — the address's one segment — is no page of it.
+                // Paths are wrapped in Unicode isolates (U+2068…U+2069): in a right-to-left line «/panel» reads «panel/».
+                // Refused: the panel's pages after the web base path — its dashboard (/panel and below) and its sign-in
+                // (/login). A web base path that is itself «/panel» (the address's only segment) is allowed.
                 PanelConnection::address(
                     hint: "با مسیر پایه وب (web base path)؛ بدون \u{2068}/panel\u{2069} یا \u{2068}/login\u{2069} بعد از آن.",
                     placeholder: 'https://host:2053/AbCdEf',

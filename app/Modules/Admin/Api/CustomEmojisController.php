@@ -12,9 +12,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The premium emoji the editors offer (Telegram\Emoji\CustomEmojis): the ones an admin showed the bot with /emoji,
- * whether the bot may send them (PremiumEmojiStatus), and each one's picture — and animation, when it moves — for the
- * picker and the previews.
+ * The premium emoji the editors offer (Telegram\Emoji\CustomEmojis): the ones an admin showed the bot with /emoji, whether
+ * the bot may send them, and each one's picture and animation for the picker and the previews.
  */
 final class CustomEmojisController extends ApiController
 {

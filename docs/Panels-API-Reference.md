@@ -3,140 +3,178 @@
 # Panels' API reference
 
 The panels' JSON API, for contributors: every operation the owner's panel (`/api/admin/…`) and an agent's
-(`/api/agent/…`) call, the web installer's (`/api/install/…`) and the two anyone may ask, as the description
-says it — the description the panels' TypeScript types are generated from (`pnpm api:types`) and the tests hold
-every request and answer to ([Extending](Extending.md#a-panel-screen-and-its-api)).
+panel (`/api/agent/…`) call, the web installer's (`/api/install/…`), and the two public ones. The panels'
+TypeScript types are generated from this description (`pnpm api:types`), and the tests check every request and
+answer against it ([Extending](Extending.md#a-panel-screen-and-its-api)).
 
-A panel's request carries its session cookie: every operation asks the panel's sign-in but signing in and its
-recovery. One that changes something carries `X-Requested-With: XMLHttpRequest` too (the CSRF guard). The
-parameters the panels' operations take everywhere:
+Panel requests carry the session cookie; every operation needs the panel's sign-in, except signing in and login
+recovery. A request that changes something also sends `X-Requested-With: XMLHttpRequest` (the CSRF guard). The
+parameters every panel operation takes:
 
 | Parameter | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `panel` | path | string: `admin`, `agent` | yes | Whose panel: the owner's (admin) or an agent's (agent) — the same screen of the shop the panel shows |
-| `X-Shop` | header | integer, at least 1 | no | The shop the request is worked in, by its bot's id (ShopRef.id; 1 is the main bot's): every request of the owner's panel names the shop its tab shows — the tab's address says it (`/admin/s/7/…`; `/admin/…` the main bot's) —, so the session remembers no shop and two tabs work in a shop each. None named is the main bot's shop; one that is no bot's id is a 422 on `shop`, a bot that is not there a 404 on `shop` (never the main shop in its place) — the sign-in's too, once its credentials are found right. A sign-in answers the session in the shop named. The owner's sections that are the shop's as a whole work where they belong whatever is named (the servers across every bot's services, the agency and the panel's settings in the main bot's shop). An agent's panel names none — their shop is their bot: naming another bot is a 403 on `shop`. |
+| `panel` | path | string: `admin`, `agent` | yes | Which panel: the owner's (`admin`) or an agent's (`agent`). The operation is the same screen in both |
+| `X-Shop` | header | integer, at least 1 | no | The shop the request works in, by its bot's id (`ShopRef.id`; 1 is the main bot). The owner's panel sends the shop its tab shows, taken from the tab's address (`/admin/s/7/…`; `/admin/…` is the main bot), so the session remembers no shop and two tabs can work in two shops. Without it, the request works in the main shop. A value that is not a bot id is a 422 on `shop`; a bot that does not exist is a 404 on `shop` (never the main shop instead), for a sign-in too once its credentials are right. A sign-in returns the session in the shop named. Sections that cover the whole installation ignore it: servers work across every bot's services, and the agency and the panel settings always work in the main shop. An agent's panel sends none, since their shop is their bot; naming another bot is a 403 on `shop`. |
 
-Every operation may also answer the one error shape. Objects are closed ([API schemas](API-Schemas.md)).
+Every operation may also return the common error shape. Objects are closed ([API schemas](API-Schemas.md)).
 
 ## Both panels
 
-The same screens of the shop in both panels: `{panel}` is `admin` in the owner's and `agent` in an agent's. One the shop's admins also have on its website says so.
+Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` in an agent's. An operation the website's admins can also use says so.
 
 | Operation | What it does |
 |---|---|
-| [`GET /api/{panel}/auth/me`](#get-apipanelauthme) | Who is signed in to this panel, and the shop the request is worked in |
-| [`POST /api/{panel}/auth/logout`](#post-apipanelauthlogout) | Sign out of this panel (the other's session in the same browser stays) |
-| [`GET /api/{panel}/changes`](#get-apipanelchanges) | Each area's number from the change feed |
-| [`POST /api/{panel}/client-errors`](#post-apipanelclient-errors) | Report a failure of the panel's own code |
-| [`GET /api/{panel}/queues`](#get-apipanelqueues) | How many wait on a human in the shop |
-| [`GET /api/{panel}/dashboard`](#get-apipaneldashboard) | The period's figures against the one before it |
-| [`GET /api/{panel}/broadcasts`](#get-apipanelbroadcasts) | Every «ارسال همگانی» run, newest first (sent from the bot with /broadcast) |
-| [`POST /api/{panel}/broadcasts/{id}/pause`](#post-apipanelbroadcastsidpause) | Pause a run that is sending |
-| [`POST /api/{panel}/broadcasts/{id}/resume`](#post-apipanelbroadcastsidresume) | Let a paused run go on (the scheduler carries on with it) |
-| [`POST /api/{panel}/broadcasts/{id}/cancel`](#post-apipanelbroadcastsidcancel) | Stop a run for good |
-| [`POST /api/{panel}/broadcasts/{id}/unpin`](#post-apipanelbroadcastsidunpin) | Take a finished pinned run's pins off again |
-| [`GET /api/{panel}/plans`](#get-apipanelplans) | Every plan, in the customer's order |
+| [`GET /api/{panel}/auth/me`](#get-apipanelauthme) | Who is signed in to this panel, and which shop the request works in |
+| [`POST /api/{panel}/auth/logout`](#post-apipanelauthlogout) | Sign out of this panel |
+| [`GET /api/{panel}/changes`](#get-apipanelchanges) | The change feed's version of each area |
+| [`POST /api/{panel}/client-errors`](#post-apipanelclient-errors) | Report a panel error to the server log |
+| [`GET /api/{panel}/queues`](#get-apipanelqueues) | The counts of what waits for support |
+| [`GET /api/{panel}/dashboard`](#get-apipaneldashboard) | The dashboard |
+| [`GET /api/{panel}/broadcasts`](#get-apipanelbroadcasts) | All broadcast («ارسال همگانی») runs, newest first |
+| [`POST /api/{panel}/broadcasts/{id}/pause`](#post-apipanelbroadcastsidpause) | Pause a broadcast that is sending |
+| [`POST /api/{panel}/broadcasts/{id}/resume`](#post-apipanelbroadcastsidresume) | Resume a paused broadcast |
+| [`POST /api/{panel}/broadcasts/{id}/cancel`](#post-apipanelbroadcastsidcancel) | Cancel a broadcast |
+| [`POST /api/{panel}/broadcasts/{id}/unpin`](#post-apipanelbroadcastsidunpin) | Unpin a finished pinned broadcast |
+| [`GET /api/{panel}/plans`](#get-apipanelplans) | All plans, in the order customers see them |
 | [`POST /api/{panel}/plans`](#post-apipanelplans) | Add a plan |
-| [`GET /api/{panel}/plans/options`](#get-apipanelplansoptions) | The servers, inbounds and categories the plan form builds from |
-| [`POST /api/{panel}/plans/reorder`](#post-apipanelplansreorder) | Put the plans in a new order |
-| [`PUT /api/{panel}/plans/{id}`](#put-apipanelplansid) | Change a plan |
+| [`GET /api/{panel}/plans/options`](#get-apipanelplansoptions) | The servers, inbounds and categories the plan form offers |
+| [`POST /api/{panel}/plans/reorder`](#post-apipanelplansreorder) | Reorder the plans |
+| [`POST /api/{panel}/plans/prices/preview`](#post-apipanelplanspricespreview) | Preview a bulk price change |
+| [`POST /api/{panel}/plans/prices`](#post-apipanelplansprices) | Raise or lower several plans' prices at once |
+| [`PUT /api/{panel}/plans/{id}`](#put-apipanelplansid) | Update a plan |
 | [`PATCH /api/{panel}/plans/{id}`](#patch-apipanelplansid) | Switch a plan on or off |
-| [`DELETE /api/{panel}/plans/{id}`](#delete-apipanelplansid) | Delete a plan nothing was sold with |
-| [`POST /api/{panel}/plans/{id}/duplicate`](#post-apipanelplansidduplicate) | A copy of a plan, switched off |
-| [`GET /api/{panel}/plans/categories`](#get-apipanelplanscategories) | Every plan category, in order |
-| [`POST /api/{panel}/plans/categories`](#post-apipanelplanscategories) | Add a category |
-| [`POST /api/{panel}/plans/categories/reorder`](#post-apipanelplanscategoriesreorder) | Put the categories in a new order |
-| [`PUT /api/{panel}/plans/categories/{id}`](#put-apipanelplanscategoriesid) | Change a category |
+| [`DELETE /api/{panel}/plans/{id}`](#delete-apipanelplansid) | Delete a plan |
+| [`POST /api/{panel}/plans/{id}/duplicate`](#post-apipanelplansidduplicate) | Duplicate a plan |
+| [`GET /api/{panel}/plans/categories`](#get-apipanelplanscategories) | All plan categories, in their order |
+| [`POST /api/{panel}/plans/categories`](#post-apipanelplanscategories) | Add a plan category |
+| [`POST /api/{panel}/plans/categories/reorder`](#post-apipanelplanscategoriesreorder) | Reorder the categories |
+| [`PUT /api/{panel}/plans/categories/{id}`](#put-apipanelplanscategoriesid) | Update a category |
 | [`PATCH /api/{panel}/plans/categories/{id}`](#patch-apipanelplanscategoriesid) | Switch a category on or off |
 | [`DELETE /api/{panel}/plans/categories/{id}`](#delete-apipanelplanscategoriesid) | Delete a category |
-| [`GET /api/{panel}/users`](#get-apipanelusers) | The bot's customers, newest first |
-| [`GET /api/{panel}/users/{id}`](#get-apipanelusersid) | One customer of the shop, as their page shows them |
+| [`GET /api/{panel}/users`](#get-apipanelusers) | The shop's customers |
+| [`GET /api/{panel}/users/{id}`](#get-apipanelusersid) | One customer, as their page shows them |
 | [`PATCH /api/{panel}/users/{id}`](#patch-apipanelusersid) | Ban or unban a customer |
-| [`PUT /api/{panel}/users/{id}/role`](#put-apipanelusersidrole) | Make a customer the bot's admin |
-| [`GET /api/{panel}/users/{id}/wallet`](#get-apipanelusersidwallet) | A customer's balance and ledger |
+| [`PUT /api/{panel}/users/{id}/role`](#put-apipanelusersidrole) | Make a customer a bot admin, or take the role back |
+| [`PUT /api/{panel}/users/{id}/discount`](#put-apipanelusersiddiscount) | Set a customer's personal discount («تخفیف اختصاصی») |
+| [`GET /api/{panel}/users/{id}/wallet`](#get-apipanelusersidwallet) | A customer's wallet balance and ledger |
 | [`POST /api/{panel}/users/{id}/wallet`](#post-apipanelusersidwallet) | Credit or debit a customer's wallet |
-| [`PUT /api/{panel}/users/{id}/groups`](#put-apipanelusersidgroups) | The admin's groups a customer is in |
-| [`POST /api/{panel}/users/{id}/two-factor/disable`](#post-apipanelusersidtwo-factordisable) | Turn off the two-factor sign-in of the customer's account on the website |
-| [`POST /api/{panel}/users/{id}/sessions/end`](#post-apipanelusersidsessionsend) | Sign the customer out of the website on every device |
-| [`GET /api/{panel}/customer-groups`](#get-apipanelcustomer-groups) | The admin's groups of customers, in order, with how many are in each |
-| [`POST /api/{panel}/customer-groups`](#post-apipanelcustomer-groups) | Add a group |
-| [`POST /api/{panel}/customer-groups/reorder`](#post-apipanelcustomer-groupsreorder) | Put the groups in a new order |
-| [`PUT /api/{panel}/customer-groups/{id}`](#put-apipanelcustomer-groupsid) | Rename a group |
-| [`DELETE /api/{panel}/customer-groups/{id}`](#delete-apipanelcustomer-groupsid) | Delete a group |
-| [`GET /api/{panel}/orders`](#get-apipanelorders) | Every order, newest first |
-| [`GET /api/{panel}/orders/{id}`](#get-apipanelordersid) | One order as the list shows it |
-| [`POST /api/{panel}/orders/{id}/retry`](#post-apipanelordersidretry) | Deliver a paid order whose delivery failed |
-| [`POST /api/{panel}/orders/{id}/cancel`](#post-apipanelordersidcancel) | Cancel an order nobody paid, with its open payments |
-| [`GET /api/{panel}/payments`](#get-apipanelpayments) | Every payment, newest first |
-| [`GET /api/{panel}/payments/{id}`](#get-apipanelpaymentsid) | One payment as the list shows it |
-| [`GET /api/{panel}/payments/{id}/receipt`](#get-apipanelpaymentsidreceipt) | The customer's receipt, fetched from Telegram |
-| [`POST /api/{panel}/payments/{id}/approve`](#post-apipanelpaymentsidapprove) | Accept a payment (a receipt, or by hand) and deliver what it paid for |
-| [`POST /api/{panel}/payments/{id}/reject`](#post-apipanelpaymentsidreject) | Refuse a receipt |
+| [`PUT /api/{panel}/users/{id}/groups`](#put-apipanelusersidgroups) | Set a customer's groups |
+| [`POST /api/{panel}/users/{id}/two-factor/disable`](#post-apipanelusersidtwo-factordisable) | Turn off a customer's two-factor sign-in on the website |
+| [`POST /api/{panel}/users/{id}/sessions/end`](#post-apipanelusersidsessionsend) | Sign a customer out of the website on every device |
+| [`GET /api/{panel}/customer-groups`](#get-apipanelcustomer-groups) | All customer groups, in their order, with each group's member count |
+| [`POST /api/{panel}/customer-groups`](#post-apipanelcustomer-groups) | Add a customer group |
+| [`POST /api/{panel}/customer-groups/reorder`](#post-apipanelcustomer-groupsreorder) | Reorder the customer groups |
+| [`PUT /api/{panel}/customer-groups/{id}`](#put-apipanelcustomer-groupsid) | Update a customer group |
+| [`DELETE /api/{panel}/customer-groups/{id}`](#delete-apipanelcustomer-groupsid) | Delete a customer group |
+| [`GET /api/{panel}/orders`](#get-apipanelorders) | All orders |
+| [`GET /api/{panel}/orders/{id}`](#get-apipanelordersid) | One order, as the list shows it |
+| [`POST /api/{panel}/orders/{id}/retry`](#post-apipanelordersidretry) | Retry delivering a paid order whose delivery failed or stalled |
+| [`POST /api/{panel}/orders/{id}/cancel`](#post-apipanelordersidcancel) | Cancel an unpaid order |
+| [`GET /api/{panel}/payments`](#get-apipanelpayments) | All payments |
+| [`GET /api/{panel}/payments/{id}`](#get-apipanelpaymentsid) | One payment, as the list shows it |
+| [`GET /api/{panel}/payments/{id}/receipt`](#get-apipanelpaymentsidreceipt) | The payment's receipt picture |
+| [`POST /api/{panel}/payments/{id}/approve`](#post-apipanelpaymentsidapprove) | Approve a payment and deliver what it paid for |
+| [`POST /api/{panel}/payments/{id}/reject`](#post-apipanelpaymentsidreject) | Reject a receipt |
 | [`POST /api/{panel}/payments/{id}/cancel`](#post-apipanelpaymentsidcancel) | Cancel an unpaid payment and its open order |
-| [`POST /api/{panel}/payments/{id}/remind`](#post-apipanelpaymentsidremind) | Remind the customer in the bot |
-| [`POST /api/{panel}/payments/{id}/retry`](#post-apipanelpaymentsidretry) | Deliver again what a paid payment bought |
-| [`POST /api/{panel}/payments/{id}/refund`](#post-apipanelpaymentsidrefund) | Give a paid payment back, by what it bought |
-| [`GET /api/{panel}/subscriptions`](#get-apipanelsubscriptions) | Every service sold, newest first |
-| [`GET /api/{panel}/subscriptions/{id}`](#get-apipanelsubscriptionsid) | One service as the list shows it |
-| [`POST /api/{panel}/subscriptions/{id}/sync`](#post-apipanelsubscriptionsidsync) | Read the service's numbers from its panel again |
-| [`POST /api/{panel}/subscriptions/{id}/extend`](#post-apipanelsubscriptionsidextend) | Give the service days and traffic on top of what it has |
+| [`POST /api/{panel}/payments/{id}/remind`](#post-apipanelpaymentsidremind) | Remind the customer to pay |
+| [`POST /api/{panel}/payments/{id}/retry`](#post-apipanelpaymentsidretry) | Retry the delivery of what a paid payment bought |
+| [`POST /api/{panel}/payments/{id}/refund`](#post-apipanelpaymentsidrefund) | Refund a paid payment |
+| [`GET /api/{panel}/subscriptions`](#get-apipanelsubscriptions) | All services sold |
+| [`GET /api/{panel}/subscriptions/{id}`](#get-apipanelsubscriptionsid) | One service, as the list shows it |
+| [`POST /api/{panel}/subscriptions/{id}/sync`](#post-apipanelsubscriptionsidsync) | Refresh a service's usage and term from its panel |
+| [`POST /api/{panel}/subscriptions/{id}/extend`](#post-apipanelsubscriptionsidextend) | Add days and traffic to a service, on top of what it has |
 | [`POST /api/{panel}/subscriptions/{id}/disable`](#post-apipanelsubscriptionsiddisable) | Switch a service off on its panel |
 | [`POST /api/{panel}/subscriptions/{id}/enable`](#post-apipanelsubscriptionsidenable) | Switch a service back on |
-| [`POST /api/{panel}/subscriptions/{id}/move`](#post-apipanelsubscriptionsidmove) | Move a service to another server with what is left of it |
-| [`POST /api/{panel}/subscriptions/{id}/delete`](#post-apipanelsubscriptionsiddelete) | Delete a service from its panel and the shop |
-| [`GET /api/{panel}/tickets`](#get-apipaneltickets) | Every support ticket of the shop, the latest activity first |
-| [`GET /api/{panel}/tickets/{id}`](#get-apipanelticketsid) | One ticket with its whole conversation |
-| [`POST /api/{panel}/tickets/{id}/messages`](#post-apipanelticketsidmessages) | Support's answer |
-| [`GET /api/{panel}/tickets/{id}/messages/{message}/attachment`](#get-apipanelticketsidmessagesmessageattachment) | A message's picture |
-| [`POST /api/{panel}/tickets/{id}/close`](#post-apipanelticketsidclose) | Close the ticket |
-| [`POST /api/{panel}/tickets/{id}/reopen`](#post-apipanelticketsidreopen) | Open a closed ticket again, waiting on support (its rating left behind) |
-| [`GET /api/{panel}/reviews`](#get-apipanelreviews) | Every review of the shop written on its website, the newest first |
-| [`POST /api/{panel}/reviews/{id}/approve`](#post-apipanelreviewsidapprove) | Approve the review |
-| [`POST /api/{panel}/reviews/{id}/reject`](#post-apipanelreviewsidreject) | Reject the review |
-| [`DELETE /api/{panel}/reviews/{id}`](#delete-apipanelreviewsid) | Delete the review, whatever it stood at |
-| [`GET /api/{panel}/payment-methods`](#get-apipanelpayment-methods) | Every payment method, in checkout order |
-| [`POST /api/{panel}/payment-methods`](#post-apipanelpayment-methods) | Add a method from a driver, with that driver's form |
-| [`GET /api/{panel}/payment-methods/drivers`](#get-apipanelpayment-methodsdrivers) | The gateway drivers a method can be made from, each with its form |
-| [`POST /api/{panel}/payment-methods/reorder`](#post-apipanelpayment-methodsreorder) | Put the methods in a new checkout order |
-| [`PUT /api/{panel}/payment-methods/{id}`](#put-apipanelpayment-methodsid) | Change a method |
-| [`PATCH /api/{panel}/payment-methods/{id}`](#patch-apipanelpayment-methodsid) | Switch a method on or off |
-| [`DELETE /api/{panel}/payment-methods/{id}`](#delete-apipanelpayment-methodsid) | Delete a method (never the wallet) |
+| [`POST /api/{panel}/subscriptions/{id}/move`](#post-apipanelsubscriptionsidmove) | Move a service to another server |
+| [`POST /api/{panel}/subscriptions/{id}/delete`](#post-apipanelsubscriptionsiddelete) | Delete a service from its panel and from the shop |
+| [`GET /api/{panel}/tickets`](#get-apipaneltickets) | All support tickets |
+| [`GET /api/{panel}/tickets/{id}`](#get-apipanelticketsid) | One ticket, with its whole conversation |
+| [`POST /api/{panel}/tickets/{id}/messages`](#post-apipanelticketsidmessages) | Answer a ticket as support |
+| [`GET /api/{panel}/tickets/{id}/messages/{message}/attachment`](#get-apipanelticketsidmessagesmessageattachment) | A ticket message's picture |
+| [`POST /api/{panel}/tickets/{id}/close`](#post-apipanelticketsidclose) | Close a ticket |
+| [`POST /api/{panel}/tickets/{id}/reopen`](#post-apipanelticketsidreopen) | Reopen a closed ticket |
+| [`GET /api/{panel}/reviews`](#get-apipanelreviews) | All reviews written on the website |
+| [`POST /api/{panel}/reviews/{id}/approve`](#post-apipanelreviewsidapprove) | Approve a pending or rejected review |
+| [`POST /api/{panel}/reviews/{id}/reject`](#post-apipanelreviewsidreject) | Reject a pending or approved review |
+| [`DELETE /api/{panel}/reviews/{id}`](#delete-apipanelreviewsid) | Delete a review, whatever its status |
+| [`GET /api/{panel}/payment-methods`](#get-apipanelpayment-methods) | All payment methods, in checkout order |
+| [`POST /api/{panel}/payment-methods`](#post-apipanelpayment-methods) | Add a payment method |
+| [`GET /api/{panel}/payment-methods/drivers`](#get-apipanelpayment-methodsdrivers) | The gateway drivers a payment method can use, each with its form |
+| [`POST /api/{panel}/payment-methods/reorder`](#post-apipanelpayment-methodsreorder) | Reorder the payment methods |
+| [`PUT /api/{panel}/payment-methods/{id}`](#put-apipanelpayment-methodsid) | Update a payment method |
+| [`PATCH /api/{panel}/payment-methods/{id}`](#patch-apipanelpayment-methodsid) | Switch a payment method on or off |
+| [`DELETE /api/{panel}/payment-methods/{id}`](#delete-apipanelpayment-methodsid) | Delete a payment method |
 | [`GET /api/{panel}/bot/settings`](#get-apipanelbotsettings) | The bot's settings, every group, and the QR card's background |
 | [`PUT /api/{panel}/bot/settings/{group}`](#put-apipanelbotsettingsgroup) | Save one group of the bot's settings |
-| [`GET /api/{panel}/bot/qr-background`](#get-apipanelbotqr-background) | The picture QR codes are drawn on |
-| [`POST /api/{panel}/bot/qr-background`](#post-apipanelbotqr-background) | Upload a picture of the admin's own |
-| [`DELETE /api/{panel}/bot/qr-background`](#delete-apipanelbotqr-background) | Go back to the shipped picture |
-| [`GET /api/{panel}/bot/channels`](#get-apipanelbotchannels) | The channels a customer must join, in order |
-| [`POST /api/{panel}/bot/channels`](#post-apipanelbotchannels) | Add a channel by its link, @handle or id |
-| [`POST /api/{panel}/bot/channels/reorder`](#post-apipanelbotchannelsreorder) | Put the channels in a new order |
-| [`POST /api/{panel}/bot/channels/{id}/check`](#post-apipanelbotchannelsidcheck) | Ask Telegram about a channel again |
-| [`DELETE /api/{panel}/bot/channels/{id}`](#delete-apipanelbotchannelsid) | Stop asking customers to join a channel |
-| [`GET /api/{panel}/bot/report-group`](#get-apipanelbotreport-group) | The admins' report group |
-| [`DELETE /api/{panel}/bot/report-group`](#delete-apipanelbotreport-group) | Disconnect the group (the bot stays in it) |
-| [`POST /api/{panel}/bot/report-group/link`](#post-apipanelbotreport-grouplink) | A one-time link that adds the bot to a group with topics |
-| [`POST /api/{panel}/bot/report-group/check`](#post-apipanelbotreport-groupcheck) | Ask Telegram about the group again |
-| [`POST /api/{panel}/bot/report-group/test`](#post-apipanelbotreport-grouptest) | A test message in every topic |
-| [`GET /api/{panel}/keyboards`](#get-apipanelkeyboards) | The bot's keyboards as the admin laid them out, and what a button can be |
+| [`GET /api/{panel}/bot/qr-background`](#get-apipanelbotqr-background) | The background picture QR cards are drawn on |
+| [`POST /api/{panel}/bot/qr-background`](#post-apipanelbotqr-background) | Upload a custom QR background |
+| [`DELETE /api/{panel}/bot/qr-background`](#delete-apipanelbotqr-background) | Reset the QR background to the default picture |
+| [`GET /api/{panel}/bot/channels`](#get-apipanelbotchannels) | The channels a customer must join, in their order |
+| [`POST /api/{panel}/bot/channels`](#post-apipanelbotchannels) | Add a required channel by its link, @handle or id |
+| [`POST /api/{panel}/bot/channels/reorder`](#post-apipanelbotchannelsreorder) | Reorder the required channels |
+| [`POST /api/{panel}/bot/channels/{id}/check`](#post-apipanelbotchannelsidcheck) | Check a channel with Telegram again |
+| [`DELETE /api/{panel}/bot/channels/{id}`](#delete-apipanelbotchannelsid) | Remove a required channel |
+| [`GET /api/{panel}/bot/report-group`](#get-apipanelbotreport-group) | The report group's state |
+| [`DELETE /api/{panel}/bot/report-group`](#delete-apipanelbotreport-group) | Disconnect the report group |
+| [`POST /api/{panel}/bot/report-group/link`](#post-apipanelbotreport-grouplink) | Make a one-time link that adds the bot to a group with topics |
+| [`POST /api/{panel}/bot/report-group/check`](#post-apipanelbotreport-groupcheck) | Check the report group with Telegram again |
+| [`POST /api/{panel}/bot/report-group/test`](#post-apipanelbotreport-grouptest) | Send a test message to every topic |
+| [`GET /api/{panel}/keyboards`](#get-apipanelkeyboards) | The bot's keyboards as laid out, and the actions and styles a button can have |
 | [`PUT /api/{panel}/keyboards/{name}`](#put-apipanelkeyboardsname) | Save a keyboard |
-| [`POST /api/{panel}/keyboards/{name}/reset`](#post-apipanelkeyboardsnamereset) | Back to the built-in layout |
+| [`POST /api/{panel}/keyboards/{name}/reset`](#post-apipanelkeyboardsnamereset) | Reset a keyboard to the default layout |
 | [`GET /api/{panel}/referrals`](#get-apipanelreferrals) | The referral program's rules and numbers |
-| [`GET /api/{panel}/referrals/referrers`](#get-apipanelreferralsreferrers) | Customers whose link brought someone, most referrals first |
-| [`GET /api/{panel}/referrals/invitees`](#get-apipanelreferralsinvitees) | Who brought whom, newest first |
-| [`GET /api/{panel}/referrals/commissions`](#get-apipanelreferralscommissions) | Commissions paid out, newest first |
-| [`GET /api/{panel}/bot/custom-emojis`](#get-apipanelbotcustom-emojis) | The premium emoji the bot texts editor offers, and whether the bot may send them |
-| [`GET /api/{panel}/bot/custom-emojis/{id}/image`](#get-apipanelbotcustom-emojisidimage) | A still picture of a premium emoji, fetched from Telegram |
-| [`GET /api/{panel}/bot/custom-emojis/{id}/animation`](#get-apipanelbotcustom-emojisidanimation) | How a premium emoji moves, fetched from Telegram (404 for a still one) |
-| [`DELETE /api/{panel}/bot/custom-emojis/{id}`](#delete-apipanelbotcustom-emojisid) | Take a premium emoji off the picker |
-| [`GET /api/{panel}/bot/texts`](#get-apipanelbottexts) | Every text the bot sends a customer, by group |
-| [`PUT /api/{panel}/bot/texts/{key}`](#put-apipanelbottextskey) | Reword a text |
-| [`POST /api/{panel}/bot/texts/{key}/reset`](#post-apipanelbottextskeyreset) | Back to the shop's wording |
-| [`GET /api/{panel}/website`](#get-apipanelwebsite) | The shop's website |
-| [`PATCH /api/{panel}/website`](#patch-apipanelwebsite) | Change the website |
-| [`POST /api/{panel}/website/key`](#post-apipanelwebsitekey) | A new store key |
+| [`GET /api/{panel}/referrals/referrers`](#get-apipanelreferralsreferrers) | Customers whose referral link brought someone |
+| [`GET /api/{panel}/referrals/invitees`](#get-apipanelreferralsinvitees) | Who brought whom |
+| [`GET /api/{panel}/referrals/commissions`](#get-apipanelreferralscommissions) | Referral commissions paid |
+| [`GET /api/{panel}/referrals/alerts`](#get-apipanelreferralsalerts) | Alerts on referrers whose referrals look fake |
+| [`POST /api/{panel}/referrals/alerts/{id}/clear`](#post-apipanelreferralsalertsidclear) | Clear a referral alert |
+| [`GET /api/{panel}/bot/custom-emojis`](#get-apipanelbotcustom-emojis) | The premium emoji the text editor offers, and whether the bot may send them |
+| [`GET /api/{panel}/bot/custom-emojis/{id}/image`](#get-apipanelbotcustom-emojisidimage) | A premium emoji's still picture, fetched from Telegram |
+| [`GET /api/{panel}/bot/custom-emojis/{id}/animation`](#get-apipanelbotcustom-emojisidanimation) | A premium emoji's animation, fetched from Telegram |
+| [`DELETE /api/{panel}/bot/custom-emojis/{id}`](#delete-apipanelbotcustom-emojisid) | Remove a premium emoji from the picker |
+| [`GET /api/{panel}/bot/texts`](#get-apipanelbottexts) | Every text the bot sends customers, by group |
+| [`PUT /api/{panel}/bot/texts/{key}`](#put-apipanelbottextskey) | Save a text's wording |
+| [`POST /api/{panel}/bot/texts/{key}/reset`](#post-apipanelbottextskeyreset) | Reset a text to its default wording |
+| [`GET /api/{panel}/website`](#get-apipanelwebsite) | The shop's website settings |
+| [`PATCH /api/{panel}/website`](#patch-apipanelwebsite) | Update the website's settings |
+| [`POST /api/{panel}/website/key`](#post-apipanelwebsitekey) | Make a new store key |
+| [`GET /api/{panel}/discount-codes`](#get-apipaneldiscount-codes) | The discount codes, newest first, each with its uses |
+| [`POST /api/{panel}/discount-codes`](#post-apipaneldiscount-codes) | Create a discount code |
+| [`PUT /api/{panel}/discount-codes/{id}`](#put-apipaneldiscount-codesid) | Update a discount code |
+| [`PATCH /api/{panel}/discount-codes/{id}`](#patch-apipaneldiscount-codesid) | Switch a discount code on or off |
+| [`DELETE /api/{panel}/discount-codes/{id}`](#delete-apipaneldiscount-codesid) | Delete an unused discount code |
+| [`GET /api/{panel}/sales`](#get-apipanelsales) | The timed sales («فروش ویژه»), newest first |
+| [`POST /api/{panel}/sales`](#post-apipanelsales) | Create a sale |
+| [`PUT /api/{panel}/sales/{id}`](#put-apipanelsalesid) | Update a sale |
+| [`PATCH /api/{panel}/sales/{id}`](#patch-apipanelsalesid) | Switch a sale on or off |
+| [`DELETE /api/{panel}/sales/{id}`](#delete-apipanelsalesid) | Delete a sale |
+| [`GET /api/{panel}/gift-codes`](#get-apipanelgift-codes) | The gift codes, newest first, each with who redeemed it and what it gave |
+| [`POST /api/{panel}/gift-codes`](#post-apipanelgift-codes) | Create a batch of gift codes |
+| [`POST /api/{panel}/gift-codes/discard`](#post-apipanelgift-codesdiscard) | Delete a batch's unredeemed codes, including expired ones |
+| [`GET /api/{panel}/gift-codes/batches`](#get-apipanelgift-codesbatches) | All gift code batches, newest first, with their counts |
+| [`GET /api/{panel}/gift-codes/unused`](#get-apipanelgift-codesunused) | A batch's unredeemed codes, oldest first |
+| [`DELETE /api/{panel}/gift-codes/{id}`](#delete-apipanelgift-codesid) | Delete an unredeemed gift code |
+| [`GET /api/{panel}/wheel/prizes`](#get-apipanelwheelprizes) | The lucky wheel's slices, in their order |
+| [`POST /api/{panel}/wheel/prizes`](#post-apipanelwheelprizes) | Add a wheel slice |
+| [`POST /api/{panel}/wheel/prizes/reorder`](#post-apipanelwheelprizesreorder) | Reorder the wheel slices |
+| [`PUT /api/{panel}/wheel/prizes/{id}`](#put-apipanelwheelprizesid) | Update a wheel slice |
+| [`PATCH /api/{panel}/wheel/prizes/{id}`](#patch-apipanelwheelprizesid) | Switch a wheel slice on or off |
+| [`DELETE /api/{panel}/wheel/prizes/{id}`](#delete-apipanelwheelprizesid) | Delete a wheel slice |
+| [`GET /api/{panel}/wheel/spins`](#get-apipanelwheelspins) | The wheel spins, newest first, each with the slice it landed on and what it gave |
+| [`GET /api/{panel}/loyalty/tiers`](#get-apipanelloyaltytiers) | The loyalty tiers, lowest threshold first, each with its current number of customers |
+| [`POST /api/{panel}/loyalty/tiers`](#post-apipanelloyaltytiers) | Add a loyalty tier |
+| [`PUT /api/{panel}/loyalty/tiers/{id}`](#put-apipanelloyaltytiersid) | Update a loyalty tier |
+| [`DELETE /api/{panel}/loyalty/tiers/{id}`](#delete-apipanelloyaltytiersid) | Delete a loyalty tier |
+| [`GET /api/{panel}/cashback/rules`](#get-apipanelcashbackrules) | The cashback rules, in creation order |
+| [`POST /api/{panel}/cashback/rules`](#post-apipanelcashbackrules) | Add a cashback rule |
+| [`PUT /api/{panel}/cashback/rules/{id}`](#put-apipanelcashbackrulesid) | Update a cashback rule |
+| [`PATCH /api/{panel}/cashback/rules/{id}`](#patch-apipanelcashbackrulesid) | Switch a cashback rule on or off |
+| [`DELETE /api/{panel}/cashback/rules/{id}`](#delete-apipanelcashbackrulesid) | Delete a cashback rule |
+| [`GET /api/{panel}/lottery/draws`](#get-apipanellotterydraws) | The nightly lottery draws among buyers, newest first, each with its prize and winners |
 
 ### GET /api/{panel}/auth/me
 
-Who is signed in to this panel, and the shop the request is worked in: the owner's, the one it names; an agent's, their bot's
+Who is signed in to this panel, and which shop the request works in. For the owner, the shop the request names; for an agent, their own bot's.
 
 **Answers**
 
@@ -147,7 +185,7 @@ Who is signed in to this panel, and the shop the request is worked in: the owner
 
 ### POST /api/{panel}/auth/logout
 
-Sign out of this panel (the other's session in the same browser stays)
+Sign out of this panel. A session of the other panel in the same browser stays signed in.
 
 **Body:** none.
 
@@ -160,9 +198,9 @@ Sign out of this panel (the other's session in the same browser stays)
 
 ### GET /api/{panel}/changes
 
-Each area's number from the change feed; the panel reloads what the areas that moved show
+The change feed's version of each area. The panel reloads what an area shows when its number moves.
 
-- **On the website:** the shop's admins have it too, as [`GET /changes`](Store-Admin-API-Reference.md#get-changes).
+- **On the website:** the website's admins can also use it, as [`GET /changes`](Store-Admin-API-Reference.md#get-changes).
 
 **Answers**
 
@@ -173,20 +211,20 @@ Each area's number from the change feed; the panel reloads what the areas that m
 
 ### POST /api/{panel}/client-errors
 
-Report a failure of the panel's own code — a page it could not draw, an error left unhandled — to the shop's log
+Report a panel error to the server log. For errors in the panel's own code, such as a page that failed to render or an unhandled error.
 
 **Body**, as JSON:
 
-A failure of the panel's own code, as its page reports it (ClientErrors): one error line of the shop's log with the shop's version, never kept anywhere else. Each part is cut to its length and taken out of any secret, the body is refused past 16 KB (413), and a principal or an address sends 20 in ten minutes and 100 in a day (429, `Retry-After`).
+An error in the panel's own code, reported by the page. It becomes one error line in the server log (with the app's version) and is stored nowhere else. Each part is truncated and stripped of secrets. A body over 16 KB is a 413; each user or address may send 20 reports in ten minutes and 100 a day (then a 429 with `Retry-After`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `kind` | string: `render`, `unhandled` | yes | `render` a page it could not draw (an error boundary, the router's error screen); `unhandled` an error a press or a promise left unhandled. |
-| `message` | string | yes | What was thrown: the error's name and its message. |
+| `kind` | string: `render`, `unhandled` | yes | `render`: a page failed to render (an error boundary or the router's error screen). `unhandled`: an error from a click handler or a promise that nothing handled. |
+| `message` | string | yes | The error's name and message. |
 | `stack` | string or null | no | The top of the error's stack. |
-| `component_stack` | string or null | no | Where in the page's components it was drawing (a render failure's). |
-| `address` | string | yes | The panel's address it happened at — its path and query, never the fragment (a sign-in link's code). |
-| `build` | string | yes | The panel build the page runs: when `vite build` made it. |
+| `component_stack` | string or null | no | For a render failure: the React component stack. |
+| `address` | string | yes | The panel address where it happened: its path and query, never the fragment (which may hold a sign-in code). |
+| `build` | string | yes | The panel build: when `vite build` made it. |
 
 **Answers**
 
@@ -197,9 +235,9 @@ A failure of the panel's own code, as its page reports it (ClientErrors): one er
 
 ### GET /api/{panel}/queues
 
-How many wait on a human in the shop — the sidebar's numbers beside the payments, the orders, the support tickets and the reviews
+The counts of what waits for support. The sidebar shows them beside payments, orders, support tickets and reviews.
 
-- **On the website:** the shop's admins have it too, as [`GET /queues`](Store-Admin-API-Reference.md#get-queues).
+- **On the website:** the website's admins can also use it, as [`GET /queues`](Store-Admin-API-Reference.md#get-queues).
 
 **Answers**
 
@@ -210,9 +248,9 @@ How many wait on a human in the shop — the sidebar's numbers beside the paymen
 
 ### GET /api/{panel}/dashboard
 
-The period's figures against the one before it
+The dashboard. The period's figures, compared with the period before.
 
-- **On the website:** the shop's admins have it too, as [`GET /dashboard`](Store-Admin-API-Reference.md#get-dashboard).
+- **On the website:** the website's admins can also use it, as [`GET /dashboard`](Store-Admin-API-Reference.md#get-dashboard).
 
 **Parameters**
 
@@ -229,9 +267,9 @@ The period's figures against the one before it
 
 ### GET /api/{panel}/broadcasts
 
-Every «ارسال همگانی» run, newest first (sent from the bot with /broadcast)
+All broadcast («ارسال همگانی») runs, newest first. Broadcasts are composed in the bot with /broadcast.
 
-- **On the website:** the shop's admins have it too, as [`GET /broadcasts`](Store-Admin-API-Reference.md#get-broadcasts).
+- **On the website:** the website's admins can also use it, as [`GET /broadcasts`](Store-Admin-API-Reference.md#get-broadcasts).
 
 **Parameters**
 
@@ -248,9 +286,9 @@ Every «ارسال همگانی» run, newest first (sent from the bot with /bro
 
 ### POST /api/{panel}/broadcasts/{id}/pause
 
-Pause a run that is sending
+Pause a broadcast that is sending.
 
-- **On the website:** the shop's admins have it too, as [`POST /broadcasts/{id}/pause`](Store-Admin-API-Reference.md#post-broadcastsidpause).
+- **On the website:** the website's admins can also use it, as [`POST /broadcasts/{id}/pause`](Store-Admin-API-Reference.md#post-broadcastsidpause).
 
 **Parameters**
 
@@ -269,9 +307,9 @@ Pause a run that is sending
 
 ### POST /api/{panel}/broadcasts/{id}/resume
 
-Let a paused run go on (the scheduler carries on with it)
+Resume a paused broadcast. The scheduler continues sending it.
 
-- **On the website:** the shop's admins have it too, as [`POST /broadcasts/{id}/resume`](Store-Admin-API-Reference.md#post-broadcastsidresume).
+- **On the website:** the website's admins can also use it, as [`POST /broadcasts/{id}/resume`](Store-Admin-API-Reference.md#post-broadcastsidresume).
 
 **Parameters**
 
@@ -290,9 +328,9 @@ Let a paused run go on (the scheduler carries on with it)
 
 ### POST /api/{panel}/broadcasts/{id}/cancel
 
-Stop a run for good; those who got it keep it
+Cancel a broadcast. Messages already sent stay.
 
-- **On the website:** the shop's admins have it too, as [`POST /broadcasts/{id}/cancel`](Store-Admin-API-Reference.md#post-broadcastsidcancel).
+- **On the website:** the website's admins can also use it, as [`POST /broadcasts/{id}/cancel`](Store-Admin-API-Reference.md#post-broadcastsidcancel).
 
 **Parameters**
 
@@ -311,9 +349,9 @@ Stop a run for good; those who got it keep it
 
 ### POST /api/{panel}/broadcasts/{id}/unpin
 
-Take a finished pinned run's pins off again — answers with the new «لغو پین» run
+Unpin a finished pinned broadcast. Starts and returns a new unpin («لغو پین») run.
 
-- **On the website:** the shop's admins have it too, as [`POST /broadcasts/{id}/unpin`](Store-Admin-API-Reference.md#post-broadcastsidunpin).
+- **On the website:** the website's admins can also use it, as [`POST /broadcasts/{id}/unpin`](Store-Admin-API-Reference.md#post-broadcastsidunpin).
 
 **Parameters**
 
@@ -332,9 +370,9 @@ Take a finished pinned run's pins off again — answers with the new «لغو پ
 
 ### GET /api/{panel}/plans
 
-Every plan, in the customer's order
+All plans, in the order customers see them.
 
-- **On the website:** the shop's admins have it too, as [`GET /plans`](Store-Admin-API-Reference.md#get-plans).
+- **On the website:** the website's admins can also use it, as [`GET /plans`](Store-Admin-API-Reference.md#get-plans).
 
 **Answers**
 
@@ -345,25 +383,32 @@ Every plan, in the customer's order
 
 ### POST /api/{panel}/plans
 
-Add a plan
+Add a plan.
 
-- **On the website:** the shop's admins have it too, as [`POST /plans`](Store-Admin-API-Reference.md#post-plans), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /plans`](Store-Admin-API-Reference.md#post-plans), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Body**, as JSON:
 
-A plan as its form sends it, added or changed whole: its words, its price and what it gives — 0 is no limit for the term, the traffic and the devices —, its category, and the servers it is sold on (the set is replaced).
+A plan's whole form, to add or update it: its texts, its price, what it gives (0 means no limit for the term, the traffic and the devices), its category, and the servers it is sold on (the list replaces the current one).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
 | `description` | string | no | Shown with the plan in the bot; blank for none. |
 | `price` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for a free plan. |
-| `duration_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | The term in days, from the first connection; 0 — it never ends. |
-| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes; 0 — unlimited, which an agent's shop refuses (its traffic is prepaid). |
-| `ip_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Devices at once; 0 — unlimited. |
-| `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A PlanCategoryRow.id; blank or 0 — none. |
+| `duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. |
+| `duration_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in whole days (the older alternative to `duration_hours`); 0 never ends. |
+| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes; 0 for unlimited, which an agent's shop refuses (its traffic is prepaid). |
+| `ip_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Devices at once; 0 for unlimited. |
+| `first_purchase_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | The price of a customer's first purchase in the shop («قیمت خرید اول»), whole Toman below `price`; 0 makes it free. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `agent_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | The price for agents and members of groups with agent prices («قیمت نماینده»), whole Toman below `price`. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
+| `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
+| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
+| `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
-| `is_active` | boolean | no | Absent: a new plan starts on, a changed one keeps its switch. |
+| `is_active` | boolean | no | Left out: on for a new plan, unchanged for an existing one. |
 
 **Answers**
 
@@ -374,9 +419,9 @@ A plan as its form sends it, added or changed whole: its words, its price and wh
 
 ### GET /api/{panel}/plans/options
 
-The servers, inbounds and categories the plan form builds from
+The servers, inbounds and categories the plan form offers.
 
-- **On the website:** the shop's admins have it too, as [`GET /plans/options`](Store-Admin-API-Reference.md#get-plansoptions).
+- **On the website:** the website's admins can also use it, as [`GET /plans/options`](Store-Admin-API-Reference.md#get-plansoptions).
 
 **Answers**
 
@@ -387,17 +432,17 @@ The servers, inbounds and categories the plan form builds from
 
 ### POST /api/{panel}/plans/reorder
 
-Put the plans in a new order
+Reorder the plans.
 
-- **On the website:** the shop's admins have it too, as [`POST /plans/reorder`](Store-Admin-API-Reference.md#post-plansreorder), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /plans/reorder`](Store-Admin-API-Reference.md#post-plansreorder), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -406,11 +451,63 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 | `200` | Reordered | [PlansResponse](API-Schemas.md#plansresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /api/{panel}/plans/prices/preview
+
+Preview a bulk price change. Nothing is saved: returns each plan's prices before and after, and why a plan cannot take the change. A 422 lists every invalid field of the change at once.
+
+- **On the website:** the website's admins can also use it, as [`POST /plans/prices/preview`](Store-Admin-API-Reference.md#post-planspricespreview), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+
+**Body**, as JSON:
+
+A bulk change of several plans' prices: raise or lower the named prices by a percent or a number of Toman, rounding each new price to the nearest step. A plan without one of the named prices still has none afterwards.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `plan_ids` | list of integer, at most 1000 | yes | The plans to change; at least one. |
+| `direction` | string: `increase`, `decrease` | yes |  |
+| `mode` | string: `percent`, `amount` | yes | A percent of each price (at most 1000, or 100 for a decrease), or a number of Toman. |
+| `value` | [AmountInput](API-Schemas.md#amountinput) | yes | The percent (decimals allowed) or whole Toman; above zero. |
+| `round_to` | integer: `1`, `100`, `1000`, `10000` | yes | Each new price is rounded to the nearest multiple of this; 1 means whole Toman. |
+| `prices` | list of string: `price`, `first_purchase_price`, `agent_price` | yes | Which prices change: the price, the first-purchase price, the agent price. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [PlanPricesPreviewResponse](API-Schemas.md#planpricespreviewresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/plans/prices
+
+Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price), nothing changes and a 422 on `plan_ids` names each such plan.
+
+- **On the website:** the website's admins can also use it, as [`POST /plans/prices`](Store-Admin-API-Reference.md#post-plansprices), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+
+**Body**, as JSON:
+
+A bulk change of several plans' prices: raise or lower the named prices by a percent or a number of Toman, rounding each new price to the nearest step. A plan without one of the named prices still has none afterwards.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `plan_ids` | list of integer, at most 1000 | yes | The plans to change; at least one. |
+| `direction` | string: `increase`, `decrease` | yes |  |
+| `mode` | string: `percent`, `amount` | yes | A percent of each price (at most 1000, or 100 for a decrease), or a number of Toman. |
+| `value` | [AmountInput](API-Schemas.md#amountinput) | yes | The percent (decimals allowed) or whole Toman; above zero. |
+| `round_to` | integer: `1`, `100`, `1000`, `10000` | yes | Each new price is rounded to the nearest multiple of this; 1 means whole Toman. |
+| `prices` | list of string: `price`, `first_purchase_price`, `agent_price` | yes | Which prices change: the price, the first-purchase price, the agent price. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Changed; all plans, as the list shows them | [PlansResponse](API-Schemas.md#plansresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### PUT /api/{panel}/plans/{id}
 
-Change a plan
+Update a plan.
 
-- **On the website:** the shop's admins have it too, as [`PUT /plans/{id}`](Store-Admin-API-Reference.md#put-plansid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`PUT /plans/{id}`](Store-Admin-API-Reference.md#put-plansid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -420,19 +517,26 @@ Change a plan
 
 **Body**, as JSON:
 
-A plan as its form sends it, added or changed whole: its words, its price and what it gives — 0 is no limit for the term, the traffic and the devices —, its category, and the servers it is sold on (the set is replaced).
+A plan's whole form, to add or update it: its texts, its price, what it gives (0 means no limit for the term, the traffic and the devices), its category, and the servers it is sold on (the list replaces the current one).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
 | `description` | string | no | Shown with the plan in the bot; blank for none. |
 | `price` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for a free plan. |
-| `duration_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | The term in days, from the first connection; 0 — it never ends. |
-| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes; 0 — unlimited, which an agent's shop refuses (its traffic is prepaid). |
-| `ip_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Devices at once; 0 — unlimited. |
-| `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A PlanCategoryRow.id; blank or 0 — none. |
+| `duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. |
+| `duration_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in whole days (the older alternative to `duration_hours`); 0 never ends. |
+| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes; 0 for unlimited, which an agent's shop refuses (its traffic is prepaid). |
+| `ip_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Devices at once; 0 for unlimited. |
+| `first_purchase_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | The price of a customer's first purchase in the shop («قیمت خرید اول»), whole Toman below `price`; 0 makes it free. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `agent_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | The price for agents and members of groups with agent prices («قیمت نماینده»), whole Toman below `price`. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
+| `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
+| `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
+| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
+| `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
-| `is_active` | boolean | no | Absent: a new plan starts on, a changed one keeps its switch. |
+| `is_active` | boolean | no | Left out: on for a new plan, unchanged for an existing one. |
 
 **Answers**
 
@@ -443,9 +547,9 @@ A plan as its form sends it, added or changed whole: its words, its price and wh
 
 ### PATCH /api/{panel}/plans/{id}
 
-Switch a plan on or off
+Switch a plan on or off.
 
-- **On the website:** the shop's admins have it too, as [`PATCH /plans/{id}`](Store-Admin-API-Reference.md#patch-plansid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`PATCH /plans/{id}`](Store-Admin-API-Reference.md#patch-plansid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -455,7 +559,7 @@ Switch a plan on or off
 
 **Body**, as JSON:
 
-The on/off switch of a row in its list (a plan, a category): true or false, nothing else.
+A row's on/off switch (a plan, a category). A JSON boolean only.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -470,9 +574,9 @@ The on/off switch of a row in its list (a plan, a category): true or false, noth
 
 ### DELETE /api/{panel}/plans/{id}
 
-Delete a plan nothing was sold with
+Delete a plan. Only a plan nothing was sold with.
 
-- **On the website:** the shop's admins have it too, as [`DELETE /plans/{id}`](Store-Admin-API-Reference.md#delete-plansid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`DELETE /plans/{id}`](Store-Admin-API-Reference.md#delete-plansid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -489,9 +593,9 @@ Delete a plan nothing was sold with
 
 ### POST /api/{panel}/plans/{id}/duplicate
 
-A copy of a plan, switched off
+Duplicate a plan. The copy starts switched off.
 
-- **On the website:** the shop's admins have it too, as [`POST /plans/{id}/duplicate`](Store-Admin-API-Reference.md#post-plansidduplicate), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /plans/{id}/duplicate`](Store-Admin-API-Reference.md#post-plansidduplicate), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -510,9 +614,9 @@ A copy of a plan, switched off
 
 ### GET /api/{panel}/plans/categories
 
-Every plan category, in order
+All plan categories, in their order.
 
-- **On the website:** the shop's admins have it too, as [`GET /plans/categories`](Store-Admin-API-Reference.md#get-planscategories).
+- **On the website:** the website's admins can also use it, as [`GET /plans/categories`](Store-Admin-API-Reference.md#get-planscategories).
 
 **Answers**
 
@@ -523,18 +627,18 @@ Every plan category, in order
 
 ### POST /api/{panel}/plans/categories
 
-Add a category
+Add a plan category.
 
-- **On the website:** the shop's admins have it too, as [`POST /plans/categories`](Store-Admin-API-Reference.md#post-planscategories), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /plans/categories`](Store-Admin-API-Reference.md#post-planscategories), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Body**, as JSON:
 
-A category added or changed.
+A plan category to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Unique in the shop. |
-| `is_active` | boolean | no | Absent: a new category starts on, a changed one keeps its switch. |
+| `is_active` | boolean | no | Left out: on for a new category, unchanged for an existing one. |
 
 **Answers**
 
@@ -545,17 +649,17 @@ A category added or changed.
 
 ### POST /api/{panel}/plans/categories/reorder
 
-Put the categories in a new order
+Reorder the categories.
 
-- **On the website:** the shop's admins have it too, as [`POST /plans/categories/reorder`](Store-Admin-API-Reference.md#post-planscategoriesreorder), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /plans/categories/reorder`](Store-Admin-API-Reference.md#post-planscategoriesreorder), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -566,9 +670,9 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 
 ### PUT /api/{panel}/plans/categories/{id}
 
-Change a category
+Update a category.
 
-- **On the website:** the shop's admins have it too, as [`PUT /plans/categories/{id}`](Store-Admin-API-Reference.md#put-planscategoriesid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`PUT /plans/categories/{id}`](Store-Admin-API-Reference.md#put-planscategoriesid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -578,12 +682,12 @@ Change a category
 
 **Body**, as JSON:
 
-A category added or changed.
+A plan category to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Unique in the shop. |
-| `is_active` | boolean | no | Absent: a new category starts on, a changed one keeps its switch. |
+| `is_active` | boolean | no | Left out: on for a new category, unchanged for an existing one. |
 
 **Answers**
 
@@ -594,9 +698,9 @@ A category added or changed.
 
 ### PATCH /api/{panel}/plans/categories/{id}
 
-Switch a category on or off
+Switch a category on or off.
 
-- **On the website:** the shop's admins have it too, as [`PATCH /plans/categories/{id}`](Store-Admin-API-Reference.md#patch-planscategoriesid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`PATCH /plans/categories/{id}`](Store-Admin-API-Reference.md#patch-planscategoriesid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -606,7 +710,7 @@ Switch a category on or off
 
 **Body**, as JSON:
 
-The on/off switch of a row in its list (a plan, a category): true or false, nothing else.
+A row's on/off switch (a plan, a category). A JSON boolean only.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -621,9 +725,9 @@ The on/off switch of a row in its list (a plan, a category): true or false, noth
 
 ### DELETE /api/{panel}/plans/categories/{id}
 
-Delete a category; its plans become uncategorised
+Delete a category. Its plans become uncategorised.
 
-- **On the website:** the shop's admins have it too, as [`DELETE /plans/categories/{id}`](Store-Admin-API-Reference.md#delete-planscategoriesid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`DELETE /plans/categories/{id}`](Store-Admin-API-Reference.md#delete-planscategoriesid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -640,21 +744,21 @@ Delete a category; its plans become uncategorised
 
 ### GET /api/{panel}/users
 
-The bot's customers, newest first — or in another order (sort, dir)
+The shop's customers. Newest first, or sorted by `sort` and `dir`.
 
-- **On the website:** the shop's admins have it too, as [`GET /users`](Store-Admin-API-Reference.md#get-users).
+- **On the website:** the website's admins can also use it, as [`GET /users`](Store-Admin-API-Reference.md#get-users).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | string | no | The status tab; empty for all |
-| `role` | query | [UserRole](API-Schemas.md#userrole) | no | The bot's admins alone (admin), or everyone else (customer) |
-| `group` | query | integer | no | One of the admin's customer groups: only its customers |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | string | no | The status tab. Empty for all |
+| `role` | query | [UserRole](API-Schemas.md#userrole) | no | Only the bot's admins (`admin`), or only everyone else (`customer`) |
+| `group` | query | integer | no | A customer group's id: only its members |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [UserSort](API-Schemas.md#usersort) | no | What to sort by; any other is the list's own, joined |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [UserSort](API-Schemas.md#usersort) | no | What to sort by. Anything else sorts by sign-up time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -665,9 +769,9 @@ The bot's customers, newest first — or in another order (sort, dir)
 
 ### GET /api/{panel}/users/{id}
 
-One customer of the shop, as their page shows them — their row, their referral facts, an agent's agency; another shop's is not found
+One customer, as their page shows them. Their row, referral numbers and, for an agent, their agency. A customer of another shop is a 404.
 
-- **On the website:** the shop's admins have it too, as [`GET /users/{id}`](Store-Admin-API-Reference.md#get-usersid).
+- **On the website:** the website's admins can also use it, as [`GET /users/{id}`](Store-Admin-API-Reference.md#get-usersid).
 
 **Parameters**
 
@@ -684,9 +788,9 @@ One customer of the shop, as their page shows them — their row, their referral
 
 ### PATCH /api/{panel}/users/{id}
 
-Ban or unban a customer. On the shop's website, an admin's account — another's or their own — and an agent's are the panels' (403).
+Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403).
 
-- **On the website:** the shop's admins have it too, as [`PATCH /users/{id}`](Store-Admin-API-Reference.md#patch-usersid).
+- **On the website:** the website's admins can also use it, as [`PATCH /users/{id}`](Store-Admin-API-Reference.md#patch-usersid).
 
 **Parameters**
 
@@ -711,7 +815,7 @@ Ban or unban a customer.
 
 ### PUT /api/{panel}/users/{id}/role
 
-Make a customer the bot's admin — /broadcast, the report group's buttons, the shop's website's admin side while it lets its admins in — or take it back
+Make a customer a bot admin, or take the role back. An admin can use /broadcast, the report group's buttons and, while the website lets admins in, its admin API.
 
 **Parameters**
 
@@ -721,7 +825,7 @@ Make a customer the bot's admin — /broadcast, the report group's buttons, the 
 
 **Body**, as JSON:
 
-Make a customer the bot's admin, or take it back.
+Make a customer a bot admin, or take the role back.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -734,11 +838,36 @@ Make a customer the bot's admin, or take it back.
 | `200` | Changed | [UserResponse](API-Schemas.md#userresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### PUT /api/{panel}/users/{id}/discount
+
+Set a customer's personal discount («تخفیف اختصاصی»). It lasts until changed; 0 removes it. Logged with who set it. Panels only.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+A customer's personal discount («تخفیف اختصاصی»), until changed: a percent off everything they buy for themselves.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100; 0 removes it. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Changed | [UserResponse](API-Schemas.md#userresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /api/{panel}/users/{id}/wallet
 
-A customer's balance and ledger
+A customer's wallet balance and ledger.
 
-- **On the website:** the shop's admins have it too, as [`GET /users/{id}/wallet`](Store-Admin-API-Reference.md#get-usersidwallet).
+- **On the website:** the website's admins can also use it, as [`GET /users/{id}/wallet`](Store-Admin-API-Reference.md#get-usersidwallet).
 
 **Parameters**
 
@@ -755,9 +884,9 @@ A customer's balance and ledger
 
 ### POST /api/{panel}/users/{id}/wallet
 
-Credit or debit a customer's wallet
+Credit or debit a customer's wallet.
 
-- **On the website:** the shop's admins have it too, as [`POST /users/{id}/wallet`](Store-Admin-API-Reference.md#post-usersidwallet), when the website grants `wallet` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /users/{id}/wallet`](Store-Admin-API-Reference.md#post-usersidwallet), when the website grants `wallet` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -767,13 +896,13 @@ Credit or debit a customer's wallet
 
 **Body**, as JSON:
 
-A credit or a debit by hand — a debit no further than the balance —, with the line the customer reads in their ledger.
+A manual credit or debit, with the line the customer sees in their ledger. A debit cannot exceed the balance.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `type` | [WalletTransactionType](API-Schemas.md#wallettransactiontype) | yes |  |
 | `amount` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman, above zero. |
-| `description` | string | no | The ledger line, 190 characters at most; blank for support's default wording. |
+| `description` | string | no | The ledger line, at most 190 characters. Blank for the default wording. |
 
 **Answers**
 
@@ -784,9 +913,9 @@ A credit or a debit by hand — a debit no further than the balance —, with th
 
 ### PUT /api/{panel}/users/{id}/groups
 
-The admin's groups a customer is in: every one listed, no other
+Set a customer's groups. Replaces their groups with the ones listed.
 
-- **On the website:** the shop's admins have it too, as [`PUT /users/{id}/groups`](Store-Admin-API-Reference.md#put-usersidgroups).
+- **On the website:** the website's admins can also use it, as [`PUT /users/{id}/groups`](Store-Admin-API-Reference.md#put-usersidgroups).
 
 **Parameters**
 
@@ -796,11 +925,11 @@ The admin's groups a customer is in: every one listed, no other
 
 **Body**, as JSON:
 
-The admin's groups the customer is in: every one listed, no other — an empty list takes them out of all.
+The customer's groups: exactly the ones listed. An empty list removes them from all groups.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `group_ids` | list of integer | yes | CustomerGroupRow ids. |
+| `group_ids` | list of integer | yes | Group ids (`CustomerGroupRow.id`). |
 
 **Answers**
 
@@ -811,9 +940,9 @@ The admin's groups the customer is in: every one listed, no other — an empty l
 
 ### POST /api/{panel}/users/{id}/two-factor/disable
 
-Turn off the two-factor sign-in of the customer's account on the website — the phone it was on lost: the password alone signs them in. The customer is told (in Telegram, when they have it), the log says who did it. 422 when it is not on.
+Turn off a customer's two-factor sign-in on the website. For a customer who lost the phone it was on: afterwards the password alone signs them in. The customer is notified and the log records who did it. A 422 when it is not on.
 
-- **On the website:** the shop's admins have it too, as [`POST /users/{id}/two-factor/disable`](Store-Admin-API-Reference.md#post-usersidtwo-factordisable), when the website grants `account_security` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /users/{id}/two-factor/disable`](Store-Admin-API-Reference.md#post-usersidtwo-factordisable), when the website grants `account_security` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -827,14 +956,14 @@ Turn off the two-factor sign-in of the customer's account on the website — the
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Turned off — the website account as it stands | [CustomerAccountResponse](API-Schemas.md#customeraccountresponse) |
+| `200` | Turned off; the website account as it is now | [CustomerAccountResponse](API-Schemas.md#customeraccountresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/{panel}/users/{id}/sessions/end
 
-Sign the customer out of the website on every device: every session of theirs ends (the log says who did it)
+Sign a customer out of the website on every device. All their sessions end; the log records who did it.
 
-- **On the website:** the shop's admins have it too, as [`POST /users/{id}/sessions/end`](Store-Admin-API-Reference.md#post-usersidsessionsend), when the website grants `account_security` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /users/{id}/sessions/end`](Store-Admin-API-Reference.md#post-usersidsessionsend), when the website grants `account_security` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -853,9 +982,9 @@ Sign the customer out of the website on every device: every session of theirs en
 
 ### GET /api/{panel}/customer-groups
 
-The admin's groups of customers, in order, with how many are in each
+All customer groups, in their order, with each group's member count.
 
-- **On the website:** the shop's admins have it too, as [`GET /customer-groups`](Store-Admin-API-Reference.md#get-customer-groups).
+- **On the website:** the website's admins can also use it, as [`GET /customer-groups`](Store-Admin-API-Reference.md#get-customer-groups).
 
 **Answers**
 
@@ -866,17 +995,18 @@ The admin's groups of customers, in order, with how many are in each
 
 ### POST /api/{panel}/customer-groups
 
-Add a group
+Add a customer group.
 
-- **On the website:** the shop's admins have it too, as [`POST /customer-groups`](Store-Admin-API-Reference.md#post-customer-groups).
+- **On the website:** the website's admins can also use it, as [`POST /customer-groups`](Store-Admin-API-Reference.md#post-customer-groups).
 
 **Body**, as JSON:
 
-A group added or renamed.
+A customer group to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | Unique in the shop. |
+| `name` | string | yes | Unique within the shop. |
+| `agent_pricing` | boolean | no | Its members pay the plans' agent prices. Left out: off for a new group, unchanged for an existing one. |
 
 **Answers**
 
@@ -887,17 +1017,17 @@ A group added or renamed.
 
 ### POST /api/{panel}/customer-groups/reorder
 
-Put the groups in a new order
+Reorder the customer groups.
 
-- **On the website:** the shop's admins have it too, as [`POST /customer-groups/reorder`](Store-Admin-API-Reference.md#post-customer-groupsreorder).
+- **On the website:** the website's admins can also use it, as [`POST /customer-groups/reorder`](Store-Admin-API-Reference.md#post-customer-groupsreorder).
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -908,9 +1038,9 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 
 ### PUT /api/{panel}/customer-groups/{id}
 
-Rename a group
+Update a customer group.
 
-- **On the website:** the shop's admins have it too, as [`PUT /customer-groups/{id}`](Store-Admin-API-Reference.md#put-customer-groupsid).
+- **On the website:** the website's admins can also use it, as [`PUT /customer-groups/{id}`](Store-Admin-API-Reference.md#put-customer-groupsid).
 
 **Parameters**
 
@@ -920,11 +1050,12 @@ Rename a group
 
 **Body**, as JSON:
 
-A group added or renamed.
+A customer group to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | Unique in the shop. |
+| `name` | string | yes | Unique within the shop. |
+| `agent_pricing` | boolean | no | Its members pay the plans' agent prices. Left out: off for a new group, unchanged for an existing one. |
 
 **Answers**
 
@@ -935,9 +1066,9 @@ A group added or renamed.
 
 ### DELETE /api/{panel}/customer-groups/{id}
 
-Delete a group — its customers just leave it
+Delete a customer group. Its members just leave it.
 
-- **On the website:** the shop's admins have it too, as [`DELETE /customer-groups/{id}`](Store-Admin-API-Reference.md#delete-customer-groupsid).
+- **On the website:** the website's admins can also use it, as [`DELETE /customer-groups/{id}`](Store-Admin-API-Reference.md#delete-customer-groupsid).
 
 **Parameters**
 
@@ -954,23 +1085,23 @@ Delete a group — its customers just leave it
 
 ### GET /api/{panel}/orders
 
-Every order, newest first — or in another order (sort, dir) —, with the stuck ones counted and what the list sold
+All orders. Newest first, or sorted by `sort` and `dir`; with the count of stuck orders and the list's sales total.
 
-- **On the website:** the shop's admins have it too, as [`GET /orders`](Store-Admin-API-Reference.md#get-orders).
+- **On the website:** the website's admins can also use it, as [`GET /orders`](Store-Admin-API-Reference.md#get-orders).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | string | no | The status tab — an OrderStatus, or stuck (paid and not delivered: the delivery failed, or nobody is delivering it); empty for all |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | string | no | The status tab: an OrderStatus, or `stuck` (paid but not delivered, because the delivery failed or stalled). Empty for all |
 | `type` | query | string | no |  |
-| `user` | query | integer | no | One customer's id: only what is theirs (their page links here); anything else is no filter |
-| `from` | query | string (date) | no | The first day of the list (a date of the shop's calendar, included); anything else is no start |
-| `to` | query | string (date) | no | The last day of the list (a date of the shop's calendar, included); anything else is no end |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
+| `from` | query | string (date) | no | The first day to include, in the shop's time zone |
+| `to` | query | string (date) | no | The last day to include, in the shop's time zone |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [OrderSort](API-Schemas.md#ordersort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [OrderSort](API-Schemas.md#ordersort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -981,9 +1112,9 @@ Every order, newest first — or in another order (sort, dir) —, with the stuc
 
 ### GET /api/{panel}/orders/{id}
 
-One order as the list shows it
+One order, as the list shows it.
 
-- **On the website:** the shop's admins have it too, as [`GET /orders/{id}`](Store-Admin-API-Reference.md#get-ordersid).
+- **On the website:** the website's admins can also use it, as [`GET /orders/{id}`](Store-Admin-API-Reference.md#get-ordersid).
 
 **Parameters**
 
@@ -1000,9 +1131,9 @@ One order as the list shows it
 
 ### POST /api/{panel}/orders/{id}/retry
 
-Deliver a paid order whose delivery failed
+Retry delivering a paid order whose delivery failed or stalled.
 
-- **On the website:** the shop's admins have it too, as [`POST /orders/{id}/retry`](Store-Admin-API-Reference.md#post-ordersidretry).
+- **On the website:** the website's admins can also use it, as [`POST /orders/{id}/retry`](Store-Admin-API-Reference.md#post-ordersidretry).
 
 **Parameters**
 
@@ -1021,9 +1152,9 @@ Deliver a paid order whose delivery failed
 
 ### POST /api/{panel}/orders/{id}/cancel
 
-Cancel an order nobody paid, with its open payments — a receipt waiting for review among them
+Cancel an unpaid order. Its open payments are cancelled with it, including one whose receipt waits for review.
 
-- **On the website:** the shop's admins have it too, as [`POST /orders/{id}/cancel`](Store-Admin-API-Reference.md#post-ordersidcancel).
+- **On the website:** the website's admins can also use it, as [`POST /orders/{id}/cancel`](Store-Admin-API-Reference.md#post-ordersidcancel).
 
 **Parameters**
 
@@ -1033,7 +1164,7 @@ Cancel an order nobody paid, with its open payments — a receipt waiting for re
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1048,22 +1179,22 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### GET /api/{panel}/payments
 
-Every payment, newest first — or in another order (sort, dir) —, with the review queue's count and what the list took in
+All payments. Newest first, or sorted by `sort` and `dir`; with the count of receipts to review and the list's paid total.
 
-- **On the website:** the shop's admins have it too, as [`GET /payments`](Store-Admin-API-Reference.md#get-payments).
+- **On the website:** the website's admins can also use it, as [`GET /payments`](Store-Admin-API-Reference.md#get-payments).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | string | no | The status tab; empty for all |
-| `user` | query | integer | no | One customer's id: only what is theirs (their page links here); anything else is no filter |
-| `from` | query | string (date) | no | The first day of the list (a date of the shop's calendar, included); anything else is no start |
-| `to` | query | string (date) | no | The last day of the list (a date of the shop's calendar, included); anything else is no end |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | string | no | The status tab. Empty for all |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
+| `from` | query | string (date) | no | The first day to include, in the shop's time zone |
+| `to` | query | string (date) | no | The last day to include, in the shop's time zone |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [PaymentSort](API-Schemas.md#paymentsort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [PaymentSort](API-Schemas.md#paymentsort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -1074,9 +1205,9 @@ Every payment, newest first — or in another order (sort, dir) —, with the re
 
 ### GET /api/{panel}/payments/{id}
 
-One payment as the list shows it
+One payment, as the list shows it.
 
-- **On the website:** the shop's admins have it too, as [`GET /payments/{id}`](Store-Admin-API-Reference.md#get-paymentsid).
+- **On the website:** the website's admins can also use it, as [`GET /payments/{id}`](Store-Admin-API-Reference.md#get-paymentsid).
 
 **Parameters**
 
@@ -1093,16 +1224,16 @@ One payment as the list shows it
 
 ### GET /api/{panel}/payments/{id}/receipt
 
-The customer's receipt, fetched from Telegram: a picture to show, anything else (a HEIC photo) a file to save
+The payment's receipt picture. A receipt sent in the bot is fetched from Telegram. A picture the browser can show is sent inline; anything else (a HEIC photo) as a download.
 
-- **On the website:** the shop's admins have it too, as [`GET /payments/{id}/receipt`](Store-Admin-API-Reference.md#get-paymentsidreceipt).
+- **On the website:** the website's admins can also use it, as [`GET /payments/{id}/receipt`](Store-Admin-API-Reference.md#get-paymentsidreceipt).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | integer | yes |  |
-| `shop` | query | integer, at least 1 | no | The shop, as `X-Shop` names it, for what a picture, a video or a download link asks for — no header goes with those (the panel adds it to every such address). A read alone may name it here; a change names it in the header (a 422 on `shop` otherwise), and a header and a query that name two shops are a 422 too. |
+| `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
 
 **Answers**
 
@@ -1113,9 +1244,9 @@ The customer's receipt, fetched from Telegram: a picture to show, anything else 
 
 ### POST /api/{panel}/payments/{id}/approve
 
-Accept a payment (a receipt, or by hand) and deliver what it paid for
+Approve a payment and deliver what it paid for. With a receipt in review, or by hand without one.
 
-- **On the website:** the shop's admins have it too, as [`POST /payments/{id}/approve`](Store-Admin-API-Reference.md#post-paymentsidapprove), when the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /payments/{id}/approve`](Store-Admin-API-Reference.md#post-paymentsidapprove), when the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -1134,9 +1265,9 @@ Accept a payment (a receipt, or by hand) and deliver what it paid for
 
 ### POST /api/{panel}/payments/{id}/reject
 
-Refuse a receipt
+Reject a receipt.
 
-- **On the website:** the shop's admins have it too, as [`POST /payments/{id}/reject`](Store-Admin-API-Reference.md#post-paymentsidreject).
+- **On the website:** the website's admins can also use it, as [`POST /payments/{id}/reject`](Store-Admin-API-Reference.md#post-paymentsidreject).
 
 **Parameters**
 
@@ -1146,7 +1277,7 @@ Refuse a receipt
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1161,9 +1292,9 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### POST /api/{panel}/payments/{id}/cancel
 
-Cancel an unpaid payment and its open order — the payment alone while another of the order's payments waits on its receipt's review: that one stays support's to decide
+Cancel an unpaid payment and its open order. If another payment of the order has a receipt waiting for review, only this payment is cancelled and the order stays open for that review.
 
-- **On the website:** the shop's admins have it too, as [`POST /payments/{id}/cancel`](Store-Admin-API-Reference.md#post-paymentsidcancel).
+- **On the website:** the website's admins can also use it, as [`POST /payments/{id}/cancel`](Store-Admin-API-Reference.md#post-paymentsidcancel).
 
 **Parameters**
 
@@ -1173,7 +1304,7 @@ Cancel an unpaid payment and its open order — the payment alone while another 
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1188,9 +1319,9 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### POST /api/{panel}/payments/{id}/remind
 
-Remind the customer in the bot — the answer says whether they were told
+Remind the customer to pay. The answer says whether the reminder reached them.
 
-- **On the website:** the shop's admins have it too, as [`POST /payments/{id}/remind`](Store-Admin-API-Reference.md#post-paymentsidremind).
+- **On the website:** the website's admins can also use it, as [`POST /payments/{id}/remind`](Store-Admin-API-Reference.md#post-paymentsidremind).
 
 **Parameters**
 
@@ -1204,14 +1335,14 @@ Remind the customer in the bot — the answer says whether they were told
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Reminded, or tried to | [ReminderResponse](API-Schemas.md#reminderresponse) |
+| `200` | Sent, or attempted | [ReminderResponse](API-Schemas.md#reminderresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/{panel}/payments/{id}/retry
 
-Deliver again what a paid payment bought
+Retry the delivery of what a paid payment bought.
 
-- **On the website:** the shop's admins have it too, as [`POST /payments/{id}/retry`](Store-Admin-API-Reference.md#post-paymentsidretry).
+- **On the website:** the website's admins can also use it, as [`POST /payments/{id}/retry`](Store-Admin-API-Reference.md#post-paymentsidretry).
 
 **Parameters**
 
@@ -1230,9 +1361,9 @@ Deliver again what a paid payment bought
 
 ### POST /api/{panel}/payments/{id}/refund
 
-Give a paid payment back, by what it bought: a purchase's, a renewal's or an agent's traffic's amount to the customer's wallet, a top-up's back out of it. 422 on `note` past the 190 characters of the wallet line it is written on, or on `status`; 422 too once what the order put in the shop is no longer there (a top-up spent, an agent's traffic sold).
+Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone (a top-up already spent, an agent's traffic already sold).
 
-- **On the website:** the shop's admins have it too, as [`POST /payments/{id}/refund`](Store-Admin-API-Reference.md#post-paymentsidrefund), when the website grants `refunds` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /payments/{id}/refund`](Store-Admin-API-Reference.md#post-paymentsidrefund), when the website grants `refunds` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -1242,7 +1373,7 @@ Give a paid payment back, by what it bought: a purchase's, a renewal's or an age
 
 **Body**, as JSON:
 
-Support's word on a refund: its own line of the message the customer gets, and the note of the wallet line the refund writes — 190 characters at most, a ledger line's (Ledger::NOTE_MAX); blank for none.
+Support's note on a refund. It is a line of the message the customer gets and the description of the wallet line the refund writes, so at most 190 characters (a ledger line's limit). Blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1257,21 +1388,21 @@ Support's word on a refund: its own line of the message the customer gets, and t
 
 ### GET /api/{panel}/subscriptions
 
-Every service sold, newest first — or in another order (sort, dir)
+All services sold. Newest first, or sorted by `sort` and `dir`.
 
-- **On the website:** the shop's admins have it too, as [`GET /subscriptions`](Store-Admin-API-Reference.md#get-subscriptions).
+- **On the website:** the website's admins can also use it, as [`GET /subscriptions`](Store-Admin-API-Reference.md#get-subscriptions).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | string | no | The status tab; empty for all |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | string | no | The status tab. Empty for all |
 | `server` | query | integer | no |  |
-| `user` | query | integer | no | One customer's id: only what is theirs (their page links here); anything else is no filter |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [SubscriptionSort](API-Schemas.md#subscriptionsort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [SubscriptionSort](API-Schemas.md#subscriptionsort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -1282,9 +1413,9 @@ Every service sold, newest first — or in another order (sort, dir)
 
 ### GET /api/{panel}/subscriptions/{id}
 
-One service as the list shows it
+One service, as the list shows it.
 
-- **On the website:** the shop's admins have it too, as [`GET /subscriptions/{id}`](Store-Admin-API-Reference.md#get-subscriptionsid).
+- **On the website:** the website's admins can also use it, as [`GET /subscriptions/{id}`](Store-Admin-API-Reference.md#get-subscriptionsid).
 
 **Parameters**
 
@@ -1301,9 +1432,9 @@ One service as the list shows it
 
 ### POST /api/{panel}/subscriptions/{id}/sync
 
-Read the service's numbers from its panel again
+Refresh a service's usage and term from its panel.
 
-- **On the website:** the shop's admins have it too, as [`POST /subscriptions/{id}/sync`](Store-Admin-API-Reference.md#post-subscriptionsidsync).
+- **On the website:** the website's admins can also use it, as [`POST /subscriptions/{id}/sync`](Store-Admin-API-Reference.md#post-subscriptionsidsync).
 
 **Parameters**
 
@@ -1322,9 +1453,9 @@ Read the service's numbers from its panel again
 
 ### POST /api/{panel}/subscriptions/{id}/extend
 
-Give the service days and traffic on top of what it has
+Add days and traffic to a service, on top of what it has.
 
-- **On the website:** the shop's admins have it too, as [`POST /subscriptions/{id}/extend`](Store-Admin-API-Reference.md#post-subscriptionsidextend), when the website grants `extend` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /subscriptions/{id}/extend`](Store-Admin-API-Reference.md#post-subscriptionsidextend), when the website grants `extend` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -1334,14 +1465,14 @@ Give the service days and traffic on top of what it has
 
 **Body**, as JSON:
 
-What «افزایش زمان و حجم» gives one service on top of what it has — what a grant gives it —: at least one amount above zero, days only to a service that ends some day, traffic only to one with a quota. In an agent's shop the traffic comes out of the bot's (refused under `traffic_gb` when it is short); the days cost nothing.
+Days and traffic to add to one service («افزایش زمان و حجم»), as a grant adds them. At least one amount must be above zero; days only for a service with an end date, traffic only for one with a quota. In an agent's shop the traffic is taken from the agent's bot (refused on `traffic_gb` when it is short); days cost nothing.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days, 0 to 365; blank is none. |
-| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | no | Gigabytes, 0 to 10000; blank is none. |
-| `note` | string | no | Support's word to the customer, on its own line of the message; 300 characters at most. |
-| `notify` | boolean | no | Whether the customer is told; they are unless it is false. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days, 0 to 365; blank for none. |
+| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | no | Gigabytes, 0 to 10000; blank for none. |
+| `note` | string | no | Support's note to the customer, a separate line of the message; at most 300 characters. |
+| `notify` | boolean | no | Whether to notify the customer; default true. |
 
 **Answers**
 
@@ -1352,9 +1483,9 @@ What «افزایش زمان و حجم» gives one service on top of what it has
 
 ### POST /api/{panel}/subscriptions/{id}/disable
 
-Switch a service off on its panel
+Switch a service off on its panel.
 
-- **On the website:** the shop's admins have it too, as [`POST /subscriptions/{id}/disable`](Store-Admin-API-Reference.md#post-subscriptionsiddisable).
+- **On the website:** the website's admins can also use it, as [`POST /subscriptions/{id}/disable`](Store-Admin-API-Reference.md#post-subscriptionsiddisable).
 
 **Parameters**
 
@@ -1364,7 +1495,7 @@ Switch a service off on its panel
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1379,9 +1510,9 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### POST /api/{panel}/subscriptions/{id}/enable
 
-Switch a service back on
+Switch a service back on.
 
-- **On the website:** the shop's admins have it too, as [`POST /subscriptions/{id}/enable`](Store-Admin-API-Reference.md#post-subscriptionsidenable).
+- **On the website:** the website's admins can also use it, as [`POST /subscriptions/{id}/enable`](Store-Admin-API-Reference.md#post-subscriptionsidenable).
 
 **Parameters**
 
@@ -1400,9 +1531,9 @@ Switch a service back on
 
 ### POST /api/{panel}/subscriptions/{id}/move
 
-Move a service to another server with what is left of it
+Move a service to another server. It keeps its remaining days and traffic.
 
-- **On the website:** the shop's admins have it too, as [`POST /subscriptions/{id}/move`](Store-Admin-API-Reference.md#post-subscriptionsidmove).
+- **On the website:** the website's admins can also use it, as [`POST /subscriptions/{id}/move`](Store-Admin-API-Reference.md#post-subscriptionsidmove).
 
 **Parameters**
 
@@ -1412,7 +1543,7 @@ Move a service to another server with what is left of it
 
 **Body**, as JSON:
 
-A running service moved to another server with what is left of it. `leave_previous` moves it without asking its previous panel, out of reach — the old client stays there for the owner to remove (in an agent's shop only while that panel is out of reach).
+Move an active service to another server, keeping its remaining days and traffic. `leave_previous` moves it without contacting the previous panel (when it is unreachable); the old client stays there for the owner to remove. In an agent's shop this is allowed only while that panel is unreachable.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1428,9 +1559,9 @@ A running service moved to another server with what is left of it. `leave_previo
 
 ### POST /api/{panel}/subscriptions/{id}/delete
 
-Delete a service from its panel and the shop
+Delete a service from its panel and from the shop.
 
-- **On the website:** the shop's admins have it too, as [`POST /subscriptions/{id}/delete`](Store-Admin-API-Reference.md#post-subscriptionsiddelete), when the website grants `delete` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+- **On the website:** the website's admins can also use it, as [`POST /subscriptions/{id}/delete`](Store-Admin-API-Reference.md#post-subscriptionsiddelete), when the website grants `delete` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
@@ -1440,7 +1571,7 @@ Delete a service from its panel and the shop
 
 **Body**, as JSON:
 
-A service deleted from its panel and the shop for good; the note goes to the customer when they hear at all (a service still active). `leave_panel` deletes it without asking its panel, out of reach — the client stays there (in an agent's shop only while that panel is out of reach).
+Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1456,17 +1587,17 @@ A service deleted from its panel and the shop for good; the note goes to the cus
 
 ### GET /api/{panel}/tickets
 
-Every support ticket of the shop, the latest activity first — searched by the customer, the subject or a number (#12 the ticket alone) —, with the open ones counted (the queue waiting on support)
+All support tickets. Latest activity first; searchable by customer, subject or number (`#12` finds that ticket only). Includes the count of open tickets waiting for support.
 
-- **On the website:** the shop's admins have it too, as [`GET /tickets`](Store-Admin-API-Reference.md#get-tickets).
+- **On the website:** the website's admins can also use it, as [`GET /tickets`](Store-Admin-API-Reference.md#get-tickets).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | [TicketStatus](API-Schemas.md#ticketstatus) | no | The status tab; empty — or anything else — for every ticket |
-| `user` | query | integer | no | One customer's id: only what is theirs (their page links here); anything else is no filter |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | [TicketStatus](API-Schemas.md#ticketstatus) | no | The status tab. Empty for all tickets |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `page` | query | integer, at least 1 | no |  |
 
 **Answers**
@@ -1478,9 +1609,9 @@ Every support ticket of the shop, the latest activity first — searched by the 
 
 ### GET /api/{panel}/tickets/{id}
 
-One ticket with its whole conversation
+One ticket, with its whole conversation.
 
-- **On the website:** the shop's admins have it too, as [`GET /tickets/{id}`](Store-Admin-API-Reference.md#get-ticketsid).
+- **On the website:** the website's admins can also use it, as [`GET /tickets/{id}`](Store-Admin-API-Reference.md#get-ticketsid).
 
 **Parameters**
 
@@ -1497,9 +1628,9 @@ One ticket with its whole conversation
 
 ### POST /api/{panel}/tickets/{id}/messages
 
-Support's answer — its words, and a picture as a form — under the panel's principal: the ticket answered, waiting on the customer (a closed one opens again so), the customer told on every door they have (in Telegram, the picture with it), the report group under the ticket. 422 on `body` (1 to 4000 characters) or `file` (a JPEG, a PNG or a WebP by its bytes, 10 MB at most), or on `status` once the ticket holds 200 messages; 503 while the host's free disk space is under the 200 MB the shop keeps in reserve, or once the pictures uploaded to the shop in a day — its customers' and support's together — took 1024 MB; a form larger than the host's PHP takes is a 413, and a form field that is not UTF-8 a 422 on it.
+Answer a ticket as support. Send JSON, or a form to attach a picture. The ticket becomes answered (a closed ticket reopens), the customer is notified (in Telegram with the picture, else by email) and the report group gets the answer. A 422 on `body` (1 to 4000 characters), on `file` (a JPEG, PNG or WebP, at most 10 MB) or on `status` once the ticket has 200 messages. A 503 while the host has less than 200 MB of free disk, or once the shop's uploads for the day reach 1024 MB. A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field.
 
-- **On the website:** the shop's admins have it too, as [`POST /tickets/{id}/messages`](Store-Admin-API-Reference.md#post-ticketsidmessages).
+- **On the website:** the website's admins can also use it, as [`POST /tickets/{id}/messages`](Store-Admin-API-Reference.md#post-ticketsidmessages).
 
 **Parameters**
 
@@ -1509,20 +1640,20 @@ Support's answer — its words, and a picture as a form — under the panel's pr
 
 **Body**, as JSON:
 
-A ticket's message — support's answer on a panel, the customer's on their website —: its words. One with a picture comes as a form (TicketMessageUploadRequest).
+A ticket message's text: support's answer on a panel, or the customer's message on the website. To attach a picture, send a form instead (TicketMessageUploadRequest).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `body` | string | yes | 1 to 4000 characters, its line breaks kept. |
+| `body` | string | yes | 1 to 4000 characters; line breaks are kept. |
 
 **Body**, as a form (`multipart/form-data`):
 
-A ticket's message with its picture, as a browser form uploads it — a form without one is a message without a picture.
+A ticket message with a picture, as a browser form uploads it. A form without a file is a message without a picture.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `body` | string | yes | 1 to 4000 characters, its line breaks kept. |
-| `file` | file | no | The picture: a JPEG, a PNG or a WebP, judged by its bytes — 10 MB at most; left out, none. |
+| `body` | string | yes | 1 to 4000 characters; line breaks are kept. |
+| `file` | file | no | The picture: a JPEG, PNG or WebP (checked by its content), at most 10 MB. Optional. |
 
 **Answers**
 
@@ -1533,17 +1664,17 @@ A ticket's message with its picture, as a browser form uploads it — a form wit
 
 ### GET /api/{panel}/tickets/{id}/messages/{message}/attachment
 
-A message's picture — kept by the shop, or fetched from Telegram — a 404 when it has none or it is gone, a 502 while Telegram is out of reach
+A ticket message's picture. Served from the shop's files or fetched from Telegram. A 404 when the message has no picture or it is gone; a 502 while Telegram cannot be reached.
 
-- **On the website:** the shop's admins have it too, as [`GET /tickets/{id}/messages/{message}/attachment`](Store-Admin-API-Reference.md#get-ticketsidmessagesmessageattachment).
+- **On the website:** the website's admins can also use it, as [`GET /tickets/{id}/messages/{message}/attachment`](Store-Admin-API-Reference.md#get-ticketsidmessagesmessageattachment).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | integer | yes |  |
-| `message` | path | integer | yes | A message of the ticket (TicketMessageRow.id) |
-| `shop` | query | integer, at least 1 | no | The shop, as `X-Shop` names it, for what a picture, a video or a download link asks for — no header goes with those (the panel adds it to every such address). A read alone may name it here; a change names it in the header (a 422 on `shop` otherwise), and a header and a query that name two shops are a 422 too. |
+| `message` | path | integer | yes | A message of the ticket (`TicketMessageRow.id`) |
+| `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
 
 **Answers**
 
@@ -1554,9 +1685,9 @@ A message's picture — kept by the shop, or fetched from Telegram — a 404 whe
 
 ### POST /api/{panel}/tickets/{id}/close
 
-Close the ticket — the customer told, the report group under the ticket; 422 on `status` when it is closed already
+Close a ticket. The customer and the report group are notified. A 422 on `status` when it is already closed.
 
-- **On the website:** the shop's admins have it too, as [`POST /tickets/{id}/close`](Store-Admin-API-Reference.md#post-ticketsidclose).
+- **On the website:** the website's admins can also use it, as [`POST /tickets/{id}/close`](Store-Admin-API-Reference.md#post-ticketsidclose).
 
 **Parameters**
 
@@ -1575,9 +1706,9 @@ Close the ticket — the customer told, the report group under the ticket; 422 o
 
 ### POST /api/{panel}/tickets/{id}/reopen
 
-Open a closed ticket again, waiting on support (its rating left behind); 422 on `status` when it is not closed
+Reopen a closed ticket. It waits for support again, and its rating is cleared. A 422 on `status` when it is not closed.
 
-- **On the website:** the shop's admins have it too, as [`POST /tickets/{id}/reopen`](Store-Admin-API-Reference.md#post-ticketsidreopen).
+- **On the website:** the website's admins can also use it, as [`POST /tickets/{id}/reopen`](Store-Admin-API-Reference.md#post-ticketsidreopen).
 
 **Parameters**
 
@@ -1596,16 +1727,16 @@ Open a closed ticket again, waiting on support (its rating left behind); 422 on 
 
 ### GET /api/{panel}/reviews
 
-Every review of the shop written on its website, the newest first — searched by the name it is signed with, its words, the customer who wrote it or a number (#12 the review alone) —, with the ones waiting on support counted (the queue)
+All reviews written on the website. Newest first; searchable by the signed name, the text, the customer who wrote it or a number (`#12` finds that review only). Includes the count of reviews waiting for support.
 
-- **On the website:** the shop's admins have it too, as [`GET /reviews`](Store-Admin-API-Reference.md#get-reviews).
+- **On the website:** the website's admins can also use it, as [`GET /reviews`](Store-Admin-API-Reference.md#get-reviews).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `status` | query | [ReviewStatus](API-Schemas.md#reviewstatus) | no | The status tab; empty — or anything else — for every review |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `status` | query | [ReviewStatus](API-Schemas.md#reviewstatus) | no | The status tab. Empty for all reviews |
 | `page` | query | integer, at least 1 | no |  |
 
 **Answers**
@@ -1617,9 +1748,9 @@ Every review of the shop written on its website, the newest first — searched b
 
 ### POST /api/{panel}/reviews/{id}/approve
 
-Approve the review — waiting, or rejected before —: the website shows it from now on (GET /reviews of the Store API), under the request's principal; 403 the shop's admin's own review, 422 on `status` when it is approved already
+Approve a pending or rejected review. The website shows it from now on (the Store API's `GET /reviews`). A 403 for an admin's own review; a 422 on `status` when it is already approved.
 
-- **On the website:** the shop's admins have it too, as [`POST /reviews/{id}/approve`](Store-Admin-API-Reference.md#post-reviewsidapprove).
+- **On the website:** the website's admins can also use it, as [`POST /reviews/{id}/approve`](Store-Admin-API-Reference.md#post-reviewsidapprove).
 
 **Parameters**
 
@@ -1638,9 +1769,9 @@ Approve the review — waiting, or rejected before —: the website shows it fro
 
 ### POST /api/{panel}/reviews/{id}/reject
 
-Reject the review — waiting, or shown before (hidden again) —: kept, never shown on the website; 403 the shop's admin's own review, 422 on `status` when it is rejected already
+Reject a pending or approved review. It is kept but no longer shown on the website. A 403 for an admin's own review; a 422 on `status` when it is already rejected.
 
-- **On the website:** the shop's admins have it too, as [`POST /reviews/{id}/reject`](Store-Admin-API-Reference.md#post-reviewsidreject).
+- **On the website:** the website's admins can also use it, as [`POST /reviews/{id}/reject`](Store-Admin-API-Reference.md#post-reviewsidreject).
 
 **Parameters**
 
@@ -1659,9 +1790,9 @@ Reject the review — waiting, or shown before (hidden again) —: kept, never s
 
 ### DELETE /api/{panel}/reviews/{id}
 
-Delete the review, whatever it stood at — shown on the website no more; 403 the shop's admin's own review
+Delete a review, whatever its status. A 403 for an admin's own review.
 
-- **On the website:** the shop's admins have it too, as [`DELETE /reviews/{id}`](Store-Admin-API-Reference.md#delete-reviewsid).
+- **On the website:** the website's admins can also use it, as [`DELETE /reviews/{id}`](Store-Admin-API-Reference.md#delete-reviewsid).
 
 **Parameters**
 
@@ -1678,7 +1809,7 @@ Delete the review, whatever it stood at — shown on the website no more; 403 th
 
 ### GET /api/{panel}/payment-methods
 
-Every payment method, in checkout order
+All payment methods, in checkout order.
 
 **Answers**
 
@@ -1689,25 +1820,25 @@ Every payment method, in checkout order
 
 ### POST /api/{panel}/payment-methods
 
-Add a method from a driver, with that driver's form
+Add a payment method. Names a driver and fills in that driver's form.
 
 **Body**, as JSON:
 
-A new method of a driver that is not built in: the driver's key, the label the customer picks it by, the switch and the driver's form (DriverDescription.fields) — a closed shape per driver, held to its form by tests/Unit/Drivers/DriverFormsTest.
+A new payment method for a driver that is not built in: the driver's key, the label customers pick it by, the switch and the driver's form (`DriverDescription.fields`). One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest.
 
 One of:
 
-**`ManualMethodCreateRequest`** — A new card-to-card method: its driver, and its form (ManualMethodRequest) with the label required.
+**`ManualMethodCreateRequest`** — A new card-to-card method: its driver and its form (ManualMethodRequest), with the label required.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `driver` | string: `manual` | yes | A DriverDescription.key of GET /payment-methods/drivers. |
-| `label` | string | yes | What the checkout's button says: «کارت به کارت (ملت)». Absent on a change: the one it has. |
-| `enabled` | boolean | no | Absent: a new method starts on, a changed one keeps its switch. |
-| `card_number` | string | yes | 16 digits; Persian ones, and spaces or dashes between them, too. |
+| `driver` | string: `manual` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `card_number` | string | yes | 16 digits; Persian digits, and spaces or dashes between them, are accepted. |
 | `card_holder` | string | yes |  |
 | `instructions` | string | no | Shown to the customer with the card; blank for none. |
-| `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt may wait for a review before it is accepted on its own; blank or 0 — only by hand. |
+| `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. |
 
 **Answers**
 
@@ -1718,7 +1849,7 @@ One of:
 
 ### GET /api/{panel}/payment-methods/drivers
 
-The gateway drivers a method can be made from, each with its form
+The gateway drivers a payment method can use, each with its form.
 
 **Answers**
 
@@ -1729,15 +1860,15 @@ The gateway drivers a method can be made from, each with its form
 
 ### POST /api/{panel}/payment-methods/reorder
 
-Put the methods in a new checkout order
+Reorder the payment methods.
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -1748,7 +1879,7 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 
 ### PUT /api/{panel}/payment-methods/{id}
 
-Change a method — its driver's form again
+Update a payment method. Sends its driver's form again.
 
 **Parameters**
 
@@ -1758,22 +1889,22 @@ Change a method — its driver's form again
 
 **Body**, as JSON:
 
-A method's form again, as its driver takes it — a closed shape per driver, held to its form by tests/Unit/Drivers/DriverFormsTest; a method whose driver is gone takes none (switch it off or delete it).
+A payment method's form, as its driver takes it. One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest. A method whose driver is no longer installed cannot be updated (switch it off or delete it).
 
 One of:
 
-**`ManualMethodRequest`** — A card-to-card method's form: the label the customer picks it by, its switch, and the manual driver's form — the card and its holder the bot shows, the note under them, and how long a receipt may wait for a review.
+**`ManualMethodRequest`** — A card-to-card method's form: the label customers pick it by, its switch, and the manual driver's form (the card number and holder the bot shows, the note under them, and how long a receipt may wait for review).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `label` | string | no | What the checkout's button says: «کارت به کارت (ملت)». Absent on a change: the one it has. |
-| `enabled` | boolean | no | Absent: a new method starts on, a changed one keeps its switch. |
-| `card_number` | string | yes | 16 digits; Persian ones, and spaces or dashes between them, too. |
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `card_number` | string | yes | 16 digits; Persian digits, and spaces or dashes between them, are accepted. |
 | `card_holder` | string | yes |  |
 | `instructions` | string | no | Shown to the customer with the card; blank for none. |
-| `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt may wait for a review before it is accepted on its own; blank or 0 — only by hand. |
+| `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. |
 
-**`WalletMethodRequest`** — The wallet, the shop's own method: nothing to configure but its label and its switch.
+**`WalletMethodRequest`** — The wallet, the built-in method: only its label and switch can be set.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1789,7 +1920,7 @@ One of:
 
 ### PATCH /api/{panel}/payment-methods/{id}
 
-Switch a method on or off
+Switch a payment method on or off.
 
 **Parameters**
 
@@ -1799,7 +1930,7 @@ Switch a method on or off
 
 **Body**, as JSON:
 
-A method's switch in the list: true or false, nothing else.
+A payment method's on/off switch. A JSON boolean only.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1814,7 +1945,7 @@ A method's switch in the list: true or false, nothing else.
 
 ### DELETE /api/{panel}/payment-methods/{id}
 
-Delete a method (never the wallet)
+Delete a payment method. The wallet cannot be deleted.
 
 **Parameters**
 
@@ -1831,7 +1962,7 @@ Delete a method (never the wallet)
 
 ### GET /api/{panel}/bot/settings
 
-The bot's settings, every group, and the QR card's background
+The bot's settings, every group, and the QR card's background.
 
 **Answers**
 
@@ -1842,7 +1973,7 @@ The bot's settings, every group, and the QR card's background
 
 ### PUT /api/{panel}/bot/settings/{group}
 
-Save one group of the bot's settings
+Save one group of the bot's settings.
 
 **Parameters**
 
@@ -1852,7 +1983,7 @@ Save one group of the bot's settings
 
 **Body**, as JSON:
 
-One group of the bot's settings, saved whole (PUT /bot/settings/{group}) — the group's fields as BotSettingsData names them: every switch and number is sent (one left out is refused), a text or a list left out is blank.
+One group of the bot's settings, saved whole (`PUT /bot/settings/{group}`), with the fields named as in BotSettingsData. Every switch and number must be sent (a missing one is refused); a text or list left out counts as blank.
 
 One of:
 
@@ -1862,7 +1993,7 @@ One of:
 |---|---|---|---|
 | `enabled` | boolean | yes |  |
 | `phone_required` | boolean | yes |  |
-| `support_contact` | string | no | 190 characters at most. |
+| `support_contact` | string | no | At most 190 characters. |
 
 **`BotChannelsSettingsRequest`**
 
@@ -1874,8 +2005,8 @@ One of:
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `topup_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman — its thousands set apart as typed too, only between groups of three ("10,000"). |
-| `topup_presets` | [NumbersInput](#numbersinput) | no | Toman, none below topup_min, 8 at most. |
+| `topup_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman. Thousands separators are accepted only between groups of three digits ("10,000"). |
+| `topup_presets` | [NumbersInput](#numbersinput) | no | Toman, none below `topup_min`, at most 8. |
 
 **`BotRenewalSettingsRequest`**
 
@@ -1889,6 +2020,20 @@ One of:
 |---|---|---|---|
 | `auto_renew_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 30. |
 | `auto_renew_default` | boolean | yes |  |
+
+**`BotExtrasSettingsRequest`** — «حجم و زمان اضافه»: the switch and the shop's price list (ExtraPricesRequest's fields, each prefixed `extra_`).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `extras_enabled` | boolean | yes |  |
+| `extra_traffic_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman per GB, above zero. Blank, null or left out for none: only the preset amounts with their own prices are sold. |
+| `extra_traffic_options` | list of [ExtraOptionInput](API-Schemas.md#extraoptioninput) | no | GB amounts, 1 to 10000, each once, at most 8. Left out for none. |
+| `extra_traffic_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 10000 GB. |
+| `extra_traffic_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | `extra_traffic_min` to 10000 GB. |
+| `extra_time_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman per day, above zero. Blank, null or left out for none: only the preset periods with their own prices are sold. |
+| `extra_time_options` | list of [ExtraOptionInput](API-Schemas.md#extraoptioninput) | no | Day counts, 1 to 365, each once, at most 8. Left out for none. |
+| `extra_time_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 365 days. |
+| `extra_time_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | `extra_time_min` to 365 days. |
 
 **`BotRemindersSettingsRequest`**
 
@@ -1905,7 +2050,16 @@ One of:
 |---|---|---|---|
 | `referral_enabled` | boolean | yes |  |
 | `referral_rate` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Percent, 1 to 100. |
+| `referral_renewal_rate` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Percent, 0 to 100: what a renewal earns instead of `referral_rate`. |
 | `referral_first_only` | boolean | yes |  |
+| `referral_start_referrer` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman, 0 to 10,000,000. |
+| `referral_start_invitee` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman, 0 to 10,000,000. |
+| `referral_start_when` | [ReferralStartTrigger](API-Schemas.md#referralstarttrigger) | yes |  |
+| `referral_reward_every` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 1000; 0 for no reward. |
+| `referral_reward_plan_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | yes | A plan id; null, blank or 0 for none, which is refused while `referral_reward_every` is above 0. |
+| `referral_alert_burst` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 10000; 0 turns this alert off. |
+| `referral_alert_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 10080 minutes (a week). |
+| `referral_alert_idle` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100000; 0 turns this alert off. |
 
 **`BotReportsSettingsRequest`**
 
@@ -1917,7 +2071,7 @@ One of:
 | `report_receipts` | boolean | yes |  |
 | `report_users` | boolean | yes |  |
 | `report_errors` | boolean | yes |  |
-| `report_agency` | boolean | no | The main bot's shop only, where it is required; an agent's bot has no such switch. |
+| `report_agency` | boolean | no | Main shop only, where it is required; an agent's bot has no such switch. |
 | `report_tickets` | boolean | yes |  |
 | `report_reviews` | boolean | yes |  |
 
@@ -1926,6 +2080,48 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `qr_enabled` | boolean | yes |  |
+
+**`BotGiftCodesSettingsRequest`**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `gift_codes_enabled` | boolean | yes |  |
+
+**`BotWheelSettingsRequest`**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `wheel_enabled` | boolean | yes |  |
+| `wheel_cooldown_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 720. |
+| `wheel_buyers_only` | boolean | yes |  |
+| `wheel_cost` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Whole Toman, 0 to 10,000,000. Thousands separators are accepted only between groups of three digits ("10,000"). |
+
+**`BotCashbackSettingsRequest`**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `cashback_enabled` | boolean | yes |  |
+
+**`BotLotterySettingsRequest`** — «قرعه‌کشی شبانه»: only the amount field of the chosen prize kind is read; the other prize fields keep their values.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `lottery_enabled` | boolean | yes |  |
+| `lottery_hour` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 23. |
+| `lottery_winners` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 20. |
+| `lottery_prize` | [LotteryPrizeKind](#lotteryprizekind) | yes |  |
+| `lottery_wallet` | [AmountInput](API-Schemas.md#amountinput) | no | Whole Toman, 1,000 to 100,000,000. Read for a wallet prize. |
+| `lottery_traffic_gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | 1 to 10000 GB. Read for a traffic prize. |
+| `lottery_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | 1 to 365 days. Read for a days prize. |
+| `lottery_plan_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | A plan id. Read for a plan prize. |
+| `lottery_entries` | string: `order`, `buyer` | yes |  |
+| `lottery_exclude_agents` | boolean | yes |  |
+
+**`BotDiscountsSettingsRequest`**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `hold_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 1440 minutes. |
 
 **Answers**
 
@@ -1936,13 +2132,13 @@ One of:
 
 ### GET /api/{panel}/bot/qr-background
 
-The picture QR codes are drawn on
+The background picture QR cards are drawn on.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `shop` | query | integer, at least 1 | no | The shop, as `X-Shop` names it, for what a picture, a video or a download link asks for — no header goes with those (the panel adds it to every such address). A read alone may name it here; a change names it in the header (a 422 on `shop` otherwise), and a header and a query that name two shops are a 422 too. |
+| `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
 
 **Answers**
 
@@ -1953,11 +2149,11 @@ The picture QR codes are drawn on
 
 ### POST /api/{panel}/bot/qr-background
 
-Upload a picture of the admin's own
+Upload a custom QR background.
 
 **Body**, as a form (`multipart/form-data`):
 
-The admin's own picture for the QR card, as a browser form uploads it: PNG, JPEG or WebP, judged by its bytes, up to QrBackgroundInfo.max_bytes.
+A custom QR card background, as a browser form uploads it: a PNG, JPEG or WebP (checked by its content), up to `QrBackgroundInfo.max_bytes`.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1972,7 +2168,7 @@ The admin's own picture for the QR card, as a browser form uploads it: PNG, JPEG
 
 ### DELETE /api/{panel}/bot/qr-background
 
-Go back to the shipped picture
+Reset the QR background to the default picture.
 
 **Answers**
 
@@ -1983,7 +2179,7 @@ Go back to the shipped picture
 
 ### GET /api/{panel}/bot/channels
 
-The channels a customer must join, in order
+The channels a customer must join, in their order.
 
 **Answers**
 
@@ -1994,11 +2190,11 @@ The channels a customer must join, in order
 
 ### POST /api/{panel}/bot/channels
 
-Add a channel by its link, @handle or id
+Add a required channel by its link, @handle or id.
 
 **Body**, as JSON:
 
-A channel or group the customers must join, as the admin pasted it: t.me/name, @name, or a private chat's numeric id (-100…) — the bot an admin there already.
+A channel or group customers must join, as the admin pasted it: t.me/name, @name, or a private chat's numeric id (-100…). The bot must already be an admin there.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2013,15 +2209,15 @@ A channel or group the customers must join, as the admin pasted it: t.me/name, @
 
 ### POST /api/{panel}/bot/channels/reorder
 
-Put the channels in a new order
+Reorder the required channels.
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -2032,7 +2228,7 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 
 ### POST /api/{panel}/bot/channels/{id}/check
 
-Ask Telegram about a channel again
+Check a channel with Telegram again.
 
 **Parameters**
 
@@ -2051,7 +2247,7 @@ Ask Telegram about a channel again
 
 ### DELETE /api/{panel}/bot/channels/{id}
 
-Stop asking customers to join a channel
+Remove a required channel.
 
 **Parameters**
 
@@ -2068,7 +2264,7 @@ Stop asking customers to join a channel
 
 ### GET /api/{panel}/bot/report-group
 
-The admins' report group
+The report group's state.
 
 **Answers**
 
@@ -2079,7 +2275,7 @@ The admins' report group
 
 ### DELETE /api/{panel}/bot/report-group
 
-Disconnect the group (the bot stays in it)
+Disconnect the report group. The bot stays in the group.
 
 **Answers**
 
@@ -2090,7 +2286,7 @@ Disconnect the group (the bot stays in it)
 
 ### POST /api/{panel}/bot/report-group/link
 
-A one-time link that adds the bot to a group with topics
+Make a one-time link that adds the bot to a group with topics.
 
 **Body:** none.
 
@@ -2103,7 +2299,7 @@ A one-time link that adds the bot to a group with topics
 
 ### POST /api/{panel}/bot/report-group/check
 
-Ask Telegram about the group again
+Check the report group with Telegram again.
 
 **Body:** none.
 
@@ -2116,7 +2312,7 @@ Ask Telegram about the group again
 
 ### POST /api/{panel}/bot/report-group/test
 
-A test message in every topic
+Send a test message to every topic.
 
 **Body:** none.
 
@@ -2129,7 +2325,7 @@ A test message in every topic
 
 ### GET /api/{panel}/keyboards
 
-The bot's keyboards as the admin laid them out, and what a button can be
+The bot's keyboards as laid out, and the actions and styles a button can have.
 
 **Answers**
 
@@ -2140,7 +2336,7 @@ The bot's keyboards as the admin laid them out, and what a button can be
 
 ### PUT /api/{panel}/keyboards/{name}
 
-Save a keyboard
+Save a keyboard.
 
 **Parameters**
 
@@ -2150,7 +2346,7 @@ Save a keyboard
 
 **Body**, as JSON:
 
-A keyboard laid out anew: its type and its rows in reading order (first = rightmost) — a row left empty is dropped.
+A new keyboard layout: its type and its rows in reading order (the first button is the rightmost). Empty rows are dropped.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2166,7 +2362,7 @@ A keyboard laid out anew: its type and its rows in reading order (first = rightm
 
 ### POST /api/{panel}/keyboards/{name}/reset
 
-Back to the built-in layout
+Reset a keyboard to the default layout.
 
 **Parameters**
 
@@ -2185,9 +2381,9 @@ Back to the built-in layout
 
 ### GET /api/{panel}/referrals
 
-The referral program's rules and numbers
+The referral program's rules and numbers.
 
-- **On the website:** the shop's admins have it too, as [`GET /referrals`](Store-Admin-API-Reference.md#get-referrals).
+- **On the website:** the website's admins can also use it, as [`GET /referrals`](Store-Admin-API-Reference.md#get-referrals).
 
 **Answers**
 
@@ -2198,18 +2394,18 @@ The referral program's rules and numbers
 
 ### GET /api/{panel}/referrals/referrers
 
-Customers whose link brought someone, most referrals first — or in another order (sort, dir)
+Customers whose referral link brought someone. Most referrals first, or sorted by `sort` and `dir`.
 
-- **On the website:** the shop's admins have it too, as [`GET /referrals/referrers`](Store-Admin-API-Reference.md#get-referralsreferrers).
+- **On the website:** the website's admins can also use it, as [`GET /referrals/referrers`](Store-Admin-API-Reference.md#get-referralsreferrers).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
+| `search` | query | string | no | The search text ("#12" finds by number) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [ReferrerSort](API-Schemas.md#referrersort) | no | What to sort by; any other is the list's own, referrals |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [ReferrerSort](API-Schemas.md#referrersort) | no | What to sort by. Anything else sorts by number of referrals |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -2220,19 +2416,19 @@ Customers whose link brought someone, most referrals first — or in another ord
 
 ### GET /api/{panel}/referrals/invitees
 
-Who brought whom, newest first — or in another order (sort, dir)
+Who brought whom. Newest first, or sorted by `sort` and `dir`.
 
-- **On the website:** the shop's admins have it too, as [`GET /referrals/invitees`](Store-Admin-API-Reference.md#get-referralsinvitees).
+- **On the website:** the website's admins can also use it, as [`GET /referrals/invitees`](Store-Admin-API-Reference.md#get-referralsinvitees).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
-| `referrer` | query | integer | no | One customer's id: only the ones their link brought (never they themselves) |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `referrer` | query | integer | no | A customer's id: only the customers their link brought (not the referrer themselves) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [InviteeSort](API-Schemas.md#inviteesort) | no | What to sort by; any other is the list's own, joined |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [InviteeSort](API-Schemas.md#inviteesort) | no | What to sort by. Anything else sorts by sign-up time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -2243,18 +2439,18 @@ Who brought whom, newest first — or in another order (sort, dir)
 
 ### GET /api/{panel}/referrals/commissions
 
-Commissions paid out, newest first — or in another order (sort, dir)
+Referral commissions paid. Newest first, or sorted by `sort` and `dir`.
 
-- **On the website:** the shop's admins have it too, as [`GET /referrals/commissions`](Store-Admin-API-Reference.md#get-referralscommissions).
+- **On the website:** the website's admins can also use it, as [`GET /referrals/commissions`](Store-Admin-API-Reference.md#get-referralscommissions).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
+| `search` | query | string | no | The search text ("#12" finds by number) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [ReferralCommissionSort](API-Schemas.md#referralcommissionsort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [ReferralCommissionSort](API-Schemas.md#referralcommissionsort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -2263,9 +2459,50 @@ Commissions paid out, newest first — or in another order (sort, dir)
 | `200` | OK | [ReferralCommissionsResponse](API-Schemas.md#referralcommissionsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /api/{panel}/referrals/alerts
+
+Alerts on referrers whose referrals look fake. Newest first. An alert stays until support clears it.
+
+- **On the website:** the website's admins can also use it, as [`GET /referrals/alerts`](Store-Admin-API-Reference.md#get-referralsalerts).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `page` | query | integer, at least 1 | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ReferralAlertsResponse](API-Schemas.md#referralalertsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/referrals/alerts/{id}/clear
+
+Clear a referral alert. The referrer earns start gifts and plan rewards again from now on; rewards withheld meanwhile are not paid later. An admin cannot clear an alert on themselves (403). An alert already cleared is a 422 on `status`.
+
+- **On the website:** the website's admins can also use it, as [`POST /referrals/alerts/{id}/clear`](Store-Admin-API-Reference.md#post-referralsalertsidclear).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | Cleared | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /api/{panel}/bot/custom-emojis
 
-The premium emoji the bot texts editor offers, and whether the bot may send them
+The premium emoji the text editor offers, and whether the bot may send them.
 
 **Answers**
 
@@ -2276,43 +2513,43 @@ The premium emoji the bot texts editor offers, and whether the bot may send them
 
 ### GET /api/{panel}/bot/custom-emojis/{id}/image
 
-A still picture of a premium emoji, fetched from Telegram
+A premium emoji's still picture, fetched from Telegram.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | string matching `^[0-9]+$` | yes | Telegram's custom emoji id |
-| `shop` | query | integer, at least 1 | no | The shop, as `X-Shop` names it, for what a picture, a video or a download link asks for — no header goes with those (the panel adds it to every such address). A read alone may name it here; a change names it in the header (a 422 on `shop` otherwise), and a header and a query that name two shops are a 422 too. |
+| `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The picture as its bytes; anything else Telegram hands over goes as bytes to save, never to render | the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/octet-stream` |
+| `200` | The picture's bytes. Any other file type Telegram returns is sent as a download, never rendered | the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/octet-stream` |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/bot/custom-emojis/{id}/animation
 
-How a premium emoji moves, fetched from Telegram (404 for a still one)
+A premium emoji's animation, fetched from Telegram. A 404 for a still emoji.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | string matching `^[0-9]+$` | yes | Telegram's custom emoji id |
-| `shop` | query | integer, at least 1 | no | The shop, as `X-Shop` names it, for what a picture, a video or a download link asks for — no header goes with those (the panel adds it to every such address). A read alone may name it here; a change names it in the header (a 422 on `shop` otherwise), and a header and a query that name two shops are a 422 too. |
+| `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Its Lottie animation as Telegram has it — a .tgs, gzipped JSON, served as bytes to save, never to render — or its WebM video | the bytes, as `application/octet-stream`, `video/webm` |
+| `200` | Its Lottie animation as Telegram stores it (a .tgs file: gzipped JSON, sent as a download, never rendered), or its WebM video | the bytes, as `application/octet-stream`, `video/webm` |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### DELETE /api/{panel}/bot/custom-emojis/{id}
 
-Take a premium emoji off the picker
+Remove a premium emoji from the picker.
 
 **Parameters**
 
@@ -2329,7 +2566,7 @@ Take a premium emoji off the picker
 
 ### GET /api/{panel}/bot/texts
 
-Every text the bot sends a customer, by group
+Every text the bot sends customers, by group.
 
 **Answers**
 
@@ -2340,17 +2577,17 @@ Every text the bot sends a customer, by group
 
 ### PUT /api/{panel}/bot/texts/{key}
 
-Reword a text
+Save a text's wording.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `key` | path | string | yes | A BotTextRow.key the shop's list has — an agent's has no agency texts (404). |
+| `key` | path | string | yes | A text's key (`BotTextRow.key`) from the shop's list. An agent's shop has no agency texts (404). |
 
 **Body**, as JSON:
 
-A text reworded: Telegram HTML for a message, a caption or a part, plain text for a popup or a button, with its required variables; the shop's own wording puts the default back.
+A new wording: Telegram HTML for a message, a caption or a part, plain text for a popup or a button, with all its required variables. Sending the default wording restores the default.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2365,13 +2602,13 @@ A text reworded: Telegram HTML for a message, a caption or a part, plain text fo
 
 ### POST /api/{panel}/bot/texts/{key}/reset
 
-Back to the shop's wording
+Reset a text to its default wording.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `key` | path | string | yes | A BotTextRow.key the shop's list has — an agent's has no agency texts (404). |
+| `key` | path | string | yes | A text's key (`BotTextRow.key`) from the shop's list. An agent's shop has no agency texts (404). |
 
 **Body:** none.
 
@@ -2384,7 +2621,7 @@ Back to the shop's wording
 
 ### GET /api/{panel}/website
 
-The shop's website — made, switched off, the first time it is asked for
+The shop's website settings. The first read creates the website, switched off.
 
 **Answers**
 
@@ -2395,28 +2632,28 @@ The shop's website — made, switched off, the first time it is asked for
 
 ### PATCH /api/{panel}/website
 
-Change the website — the fields sent, the rest as kept: judged as the website would stand after it, every refusal at once, under its field
+Update the website's settings. Only the fields sent change. The result is validated as a whole, and every refusal is returned at once under its field.
 
 **Body**, as JSON:
 
-A change of the website as its panel makes it — each card sends its own fields. Every field is optional: one sent is changed, one left out stays as it is kept; an empty object changes nothing. What a website needs is asked of the website as it would stand after the change (switched on, an address — the one sent or the one kept), every refusal at once, under its field. A secret sent blank keeps the one kept too; `clear_<secret>` empties it.
+A partial update of the website's settings; each panel card sends its own fields. Every field is optional: a field sent changes, one left out keeps its value, and an empty object changes nothing. Requirements are checked against the settings as they would be after the change (for example, switched on needs an address, sent now or already stored), with every refusal returned at once under its field. A secret sent blank keeps the stored one; `clear_<secret>` empties it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `enabled` | boolean | no | On needs an address: the one sent, or the one kept. |
-| `url` | string | no | The site's address — http(s), a host, no ? or #, 255 characters at most. Blank: none — refused while the website is on. |
-| `origins` | list of string or string | no | The other origins: a list, or the text an admin types (one a line, or apart by commas) — 10 at most, each http(s) with a host and a port at most, nothing after it. Empty: none. |
-| `telegram_login` | boolean | no | On needs a Client ID: the one sent, or the one kept. |
-| `telegram_client_id` | string | no | Digits, as @BotFather shows them (Persian digits too). Blank: none — refused while Telegram sign-in is on. |
-| `telegram_client_secret` | string | no | Blank: the one kept stays. |
-| `clear_telegram_client_secret` | boolean | no | True: the kept secret is emptied. |
-| `email_signup` | boolean | no | Customers sign up with their email — not switched on while the installation's email does not go out. |
-| `google_client_id` | string | no | The OAuth client id Google Cloud shows (&lt;digits&gt;-&lt;letters and digits&gt;.apps.googleusercontent.com). Blank: Google sign-in off. |
+| `enabled` | boolean | no | Switching on needs an address, sent now or already stored. |
+| `url` | string | no | The site's address: http(s) with a host, no ? or #, at most 255 characters. Blank for none, which is refused while the website is on. |
+| `origins` | list of string or string | no | Other allowed origins: a list, or text as the admin types it (one per line, or comma-separated). At most 10, each http(s) with a host and optionally a port, nothing after it. Empty for none. |
+| `telegram_login` | boolean | no | Switching on needs a Client ID, sent now or already stored. |
+| `telegram_client_id` | string | no | Digits, as @BotFather shows them (Persian digits accepted). Blank for none, which is refused while Telegram sign-in is on. |
+| `telegram_client_secret` | string | no | Blank: the stored secret stays. |
+| `clear_telegram_client_secret` | boolean | no | True empties the stored secret. |
+| `email_signup` | boolean | no | Customers can sign up with an email. Cannot be switched on while the installation cannot send email. |
+| `google_client_id` | string | no | The OAuth client id Google Cloud shows (&lt;digits&gt;-&lt;letters and digits&gt;.apps.googleusercontent.com). Blank turns Google sign-in off. |
 | `captcha` | [WebsiteCaptchaRequest](#websitecaptcharequest) | no |  |
-| `reviews_enabled` | boolean | no | Whether it shows the reviews support approved and takes new ones. |
-| `staff_enabled` | boolean | no | Whether the shop's admins work it from the website. |
-| `staff_strong_sign_in` | boolean | no | Whether they must have signed in strongly: Telegram, Google, or a password with its second step. |
-| `staff_grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | no | What it lets them do beyond the shop's daily work — the whole list: what is left out is not granted. |
+| `reviews_enabled` | boolean | no | Whether the website shows approved reviews and accepts new ones. |
+| `staff_enabled` | boolean | no | Whether the shop's admins can use the admin API. |
+| `staff_strong_sign_in` | boolean | no | Whether admins must sign in strongly: Telegram, Google, or a password with its second step. |
+| `staff_grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | no | The full list of grants beyond the daily work; any grant left out is not given. |
 
 **Answers**
 
@@ -2427,7 +2664,7 @@ A change of the website as its panel makes it — each card sends its own fields
 
 ### POST /api/{panel}/website/key
 
-A new store key — the old base address stops working at once
+Make a new store key. The old base address stops working at once.
 
 **Body:** none.
 
@@ -2435,82 +2672,767 @@ A new store key — the old base address stops working at once
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Turned over | [WebsiteResponse](#websiteresponse) |
+| `200` | Replaced | [WebsiteResponse](#websiteresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/discount-codes
+
+The discount codes, newest first, each with its uses. Searchable by code or note (`#12` finds code number 12).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `page` | query | integer, at least 1 | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [DiscountCodesResponse](#discountcodesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/discount-codes
+
+Create a discount code. Every refusal is returned at once, under its field.
+
+**Body**, as JSON:
+
+A discount code's whole form. Every refusal is returned at once, under its field. A field left out, null or blank means what its description says.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `code` | string | yes | 3 to 32 letters, digits, `-` and `_`, unique within the shop. Stored in upper case, with Persian digits converted. |
+| `note` | string or null | no | At most 191 characters. |
+| `type` | [DiscountType](#discounttype) | yes |  |
+| `value` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: 1 to 100. For `fixed`: whole Toman above zero. Ignored for `free`. |
+| `max_discount` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: the cap, whole Toman above zero; blank or null for none. Ignored for other types. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman; blank or null for none. |
+| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | no | At least one; null (or all of them) for every type. |
+| `plan_ids` | list of integer or null | no | Plan ids; null or empty for any. |
+| `server_ids` | list of integer or null | no | Server ids; null or empty for any. |
+| `first_purchase_only` | boolean | yes |  |
+| `starts_at` | string or null | no | A local date and time in the shop's time zone (not the browser's), such as 2026-03-20T18:00. Blank or null: from now. |
+| `ends_at` | string or null | no | The same format, after `starts_at`. Blank or null: no end. |
+| `max_uses` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | 1 or more; blank or null for no limit. |
+| `per_user` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | 1 or more; blank or null for no limit. |
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Made | [DiscountCodeResponse](#discountcoderesponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/discount-codes/{id}
+
+Update a discount code. Send the whole form; its past uses stay.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+A discount code's whole form. Every refusal is returned at once, under its field. A field left out, null or blank means what its description says.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `code` | string | yes | 3 to 32 letters, digits, `-` and `_`, unique within the shop. Stored in upper case, with Persian digits converted. |
+| `note` | string or null | no | At most 191 characters. |
+| `type` | [DiscountType](#discounttype) | yes |  |
+| `value` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: 1 to 100. For `fixed`: whole Toman above zero. Ignored for `free`. |
+| `max_discount` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: the cap, whole Toman above zero; blank or null for none. Ignored for other types. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman; blank or null for none. |
+| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | no | At least one; null (or all of them) for every type. |
+| `plan_ids` | list of integer or null | no | Plan ids; null or empty for any. |
+| `server_ids` | list of integer or null | no | Server ids; null or empty for any. |
+| `first_purchase_only` | boolean | yes |  |
+| `starts_at` | string or null | no | A local date and time in the shop's time zone (not the browser's), such as 2026-03-20T18:00. Blank or null: from now. |
+| `ends_at` | string or null | no | The same format, after `starts_at`. Blank or null: no end. |
+| `max_uses` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | 1 or more; blank or null for no limit. |
+| `per_user` | [WholeNumberInput](API-Schemas.md#wholenumberinput) or null | no | 1 or more; blank or null for no limit. |
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [DiscountCodeResponse](#discountcoderesponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PATCH /api/{panel}/discount-codes/{id}
+
+Switch a discount code on or off.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Switched | [DiscountCodeResponse](#discountcoderesponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/{panel}/discount-codes/{id}
+
+Delete an unused discount code. A code with uses (orders made with it and not cancelled) is a 409: switch it off instead.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/sales
+
+The timed sales («فروش ویژه»), newest first.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [SalesResponse](#salesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/sales
+
+Create a sale. Every refusal is returned at once, under its field.
+
+**Body**, as JSON:
+
+A sale's whole form. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name` | string | yes | At most 64 characters. |
+| `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
+| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | no | At least one; null (or all of them) for every type. |
+| `plan_ids` | list of integer or null | no | Plan ids; null or empty for every plan. |
+| `starts_at` | string or null | no | A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. |
+| `ends_at` | string or null | no | The same format, after `starts_at`. Blank or null: no end. |
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Made | [SaleResponse](#saleresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/sales/{id}
+
+Update a sale. Send the whole form.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+A sale's whole form. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name` | string | yes | At most 64 characters. |
+| `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
+| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | no | At least one; null (or all of them) for every type. |
+| `plan_ids` | list of integer or null | no | Plan ids; null or empty for every plan. |
+| `starts_at` | string or null | no | A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. |
+| `ends_at` | string or null | no | The same format, after `starts_at`. Blank or null: no end. |
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [SaleResponse](#saleresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PATCH /api/{panel}/sales/{id}
+
+Switch a sale on or off.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Switched | [SaleResponse](#saleresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/{panel}/sales/{id}
+
+Delete a sale. Orders it discounted keep their discount lines.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/gift-codes
+
+The gift codes, newest first, each with who redeemed it and what it gave. Filter by batch and by status.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `batch` | query | string | no | A batch's label: only its codes. Empty for all |
+| `status` | query | [GiftCodeStatus](#giftcodestatus) | no | Only codes with this status |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `page` | query | integer, at least 1 | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [GiftCodesResponse](#giftcodesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/gift-codes
+
+Create a batch of gift codes. Every refusal is returned at once, under its field.
+
+**Body**, as JSON:
+
+A batch of gift codes to create. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `count` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | How many codes, 1 to 500. |
+| `kind` | [GiftCodeKind](API-Schemas.md#giftcodekind) | yes |  |
+| `amount` | [AmountInput](API-Schemas.md#amountinput) | no | For `wallet` codes (required): whole Toman each code adds to the wallet, 1,000 to 500,000,000. |
+| `plan_id` | integer | no | For `plan` codes (required): the plan whose service each code gives. Any plan of the shop, even one that is switched off. |
+| `batch` | string | yes | The batch label (at most 64 characters). A batch is listed, copied and deleted by its label. |
+| `prefix` | string | no | A prefix for every code: Latin letters and digits, at most 12 (dashes and spaces are dropped, letters upper-cased). Blank for none. |
+| `expires_on` | string | no | The last day the codes can be redeemed, in the shop's time zone (YYYY-MM-DD, today or later). Blank or left out: never expires. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Made | [GiftCodeBatchResponse](#giftcodebatchresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/gift-codes/discard
+
+Delete a batch's unredeemed codes, including expired ones. Redeemed codes stay, for the record. A 422 on `batch` when none is named.
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `batch` | string | yes | The batch's label. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Deleted | [GiftCodesDeletedResponse](#giftcodesdeletedresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/gift-codes/batches
+
+All gift code batches, newest first, with their counts.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [GiftCodeBatchesResponse](#giftcodebatchesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/gift-codes/unused
+
+A batch's unredeemed codes, oldest first. For copying and handing out.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `batch` | query | string | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [GiftCodesUnusedResponse](#giftcodesunusedresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/{panel}/gift-codes/{id}
+
+Delete an unredeemed gift code. A redeemed code stays (a 422 on `status`).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/wheel/prizes
+
+The lucky wheel's slices, in their order.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [WheelPrizesResponse](#wheelprizesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/wheel/prizes
+
+Add a wheel slice.
+
+**Body**, as JSON:
+
+A wheel slice to add or update. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | yes | The text the wheel shows, at most 32 characters. |
+| `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
+| `amount` | [AmountInput](API-Schemas.md#amountinput) | no | For wallet: whole Toman, at least 1,000. For traffic: GB above zero, up to two decimals, at most 10000. For days: whole days, 1 to 3650. Ignored for nothing and plan. |
+| `plan_id` | integer | no | For a plan slice: the plan whose service it gives. |
+| `weight` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 10000. |
+| `enabled` | boolean | no | Left out: on for a new slice, unchanged for an existing one. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Added | [WheelPrizeResponse](#wheelprizeresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/wheel/prizes/reorder
+
+Reorder the wheel slices.
+
+**Body**, as JSON:
+
+The rows of an admin-ordered list in their new order, by id. At most 1000.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `ids` | list of integer, at most 1000 | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Reordered | [WheelPrizesResponse](#wheelprizesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/wheel/prizes/{id}
+
+Update a wheel slice.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+A wheel slice to add or update. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | yes | The text the wheel shows, at most 32 characters. |
+| `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
+| `amount` | [AmountInput](API-Schemas.md#amountinput) | no | For wallet: whole Toman, at least 1,000. For traffic: GB above zero, up to two decimals, at most 10000. For days: whole days, 1 to 3650. Ignored for nothing and plan. |
+| `plan_id` | integer | no | For a plan slice: the plan whose service it gives. |
+| `weight` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 10000. |
+| `enabled` | boolean | no | Left out: on for a new slice, unchanged for an existing one. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [WheelPrizeResponse](#wheelprizeresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PATCH /api/{panel}/wheel/prizes/{id}
+
+Switch a wheel slice on or off.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Changed | [WheelPrizeResponse](#wheelprizeresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/{panel}/wheel/prizes/{id}
+
+Delete a wheel slice. Spins that landed on it keep a copy of it.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/wheel/spins
+
+The wheel spins, newest first, each with the slice it landed on and what it gave. One customer's or all.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `page` | query | integer, at least 1 | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [WheelSpinsResponse](#wheelspinsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/loyalty/tiers
+
+The loyalty tiers, lowest threshold first, each with its current number of customers.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [LoyaltyTiersResponse](#loyaltytiersresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/loyalty/tiers
+
+Add a loyalty tier. Every refusal is returned at once, under its field.
+
+**Body**, as JSON:
+
+A loyalty tier to add or update. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name` | string | yes | At most 32 characters, unique within the shop. |
+| `min_spent` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman, 0 or more; no two tiers may share a threshold. 0 puts every customer on it from the start. |
+| `discount_percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100. |
+| `cashback_percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Added | [LoyaltyTierResponse](#loyaltytierresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/loyalty/tiers/{id}
+
+Update a loyalty tier.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+A loyalty tier to add or update. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name` | string | yes | At most 32 characters, unique within the shop. |
+| `min_spent` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman, 0 or more; no two tiers may share a threshold. 0 puts every customer on it from the start. |
+| `discount_percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100. |
+| `cashback_percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [LoyaltyTierResponse](#loyaltytierresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/{panel}/loyalty/tiers/{id}
+
+Delete a loyalty tier. Its customers drop to the tier below; their past orders do not change.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/cashback/rules
+
+The cashback rules, in creation order.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [CashbackRulesResponse](#cashbackrulesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/cashback/rules
+
+Add a cashback rule. Every refusal is returned at once, under its field.
+
+**Body**, as JSON:
+
+A cashback rule to add or update. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
+| `order_types` | list of [CashbackOrderType](#cashbackordertype) | yes | At least one. |
+| `customer_group_id` | integer or null | no | A customer group of the shop; null or left out for anyone. |
+| `payment_method_id` | integer or null | no | The payment method the order must be paid with; null or left out for any. |
+| `enabled` | boolean | no | Left out: on for a new rule, unchanged for an existing one. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Added | [CashbackRuleResponse](#cashbackruleresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/cashback/rules/{id}
+
+Update a cashback rule.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+A cashback rule to add or update. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
+| `order_types` | list of [CashbackOrderType](#cashbackordertype) | yes | At least one. |
+| `customer_group_id` | integer or null | no | A customer group of the shop; null or left out for anyone. |
+| `payment_method_id` | integer or null | no | The payment method the order must be paid with; null or left out for any. |
+| `enabled` | boolean | no | Left out: on for a new rule, unchanged for an existing one. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [CashbackRuleResponse](#cashbackruleresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PATCH /api/{panel}/cashback/rules/{id}
+
+Switch a cashback rule on or off.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Changed | [CashbackRuleResponse](#cashbackruleresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/{panel}/cashback/rules/{id}
+
+Delete a cashback rule. Cashback it already credited stays with the customers.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/lottery/draws
+
+The nightly lottery draws among buyers, newest first, each with its prize and winners.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `page` | query | integer, at least 1 | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [LotteryDrawsResponse](#lotterydrawsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ## The owner's panel
 
-What only the owner's panel has.
+Operations only the owner's panel has.
 
 | Operation | What it does |
 |---|---|
-| [`POST /api/admin/auth/login`](#post-apiadminauthlogin) | The owner signs in with the panel's login, in the shop the request names (`X-Shop`) |
-| [`POST /api/admin/auth/recovery/key`](#post-apiadminauthrecoverykey) | A lost login's way back in begins |
-| [`POST /api/admin/auth/recovery`](#post-apiadminauthrecovery) | A new panel login, set with that key |
-| [`PUT /api/admin/auth/credentials`](#put-apiadminauthcredentials) | The owner changes the panel's login |
-| [`GET /api/admin/shops`](#get-apiadminshops) | Every shop the owner may open |
-| [`GET /api/admin/system`](#get-apiadminsystem) | Whether the machinery behind the shop is alive |
-| [`POST /api/admin/system/webhook`](#post-apiadminsystemwebhook) | Put every bot the shop runs on its webhook under APP_URL |
-| [`DELETE /api/admin/system/webhook`](#delete-apiadminsystemwebhook) | Take every bot the shop runs off its webhook, back to polling |
-| [`GET /api/admin/system/update`](#get-apiadminsystemupdate) | AmoBot's own update (the owner's alone) |
-| [`POST /api/admin/system/update/check`](#post-apiadminsystemupdatecheck) | Read the newest release from GitHub now (a 502 while GitHub does not answer |
-| [`POST /api/admin/system/update/start`](#post-apiadminsystemupdatestart) | Begin updating to the newest release |
-| [`POST /api/admin/system/update/step`](#post-apiadminsystemupdatestep) | Take the update's next step, or as much of it as a request has time for |
-| [`POST /api/admin/system/update/cancel`](#post-apiadminsystemupdatecancel) | Give the update up before its install began (`run.cancel`) |
-| [`POST /api/admin/system/update/rollback`](#post-apiadminsystemupdaterollback) | Take the update installed last back (`run.rollback`) |
-| [`GET /api/admin/servers/drivers`](#get-apiadminserversdrivers) | The connectors a server can be added with |
-| [`GET /api/admin/servers`](#get-apiadminservers) | Every server, in order |
+| [`POST /api/admin/auth/login`](#post-apiadminauthlogin) | Sign the owner in |
+| [`POST /api/admin/auth/recovery/key`](#post-apiadminauthrecoverykey) | Start recovering a lost login |
+| [`POST /api/admin/auth/recovery`](#post-apiadminauthrecovery) | Set a new panel login with the recovery key |
+| [`PUT /api/admin/auth/credentials`](#put-apiadminauthcredentials) | Change the panel's login |
+| [`GET /api/admin/shops`](#get-apiadminshops) | The shops the owner can open |
+| [`GET /api/admin/system`](#get-apiadminsystem) | The system's health |
+| [`POST /api/admin/system/webhook`](#post-apiadminsystemwebhook) | Set the webhook of every bot |
+| [`DELETE /api/admin/system/webhook`](#delete-apiadminsystemwebhook) | Delete the webhook of every bot |
+| [`GET /api/admin/system/update`](#get-apiadminsystemupdate) | AmoBot's update status |
+| [`POST /api/admin/system/update/check`](#post-apiadminsystemupdatecheck) | Check GitHub for the newest release now |
+| [`POST /api/admin/system/update/start`](#post-apiadminsystemupdatestart) | Start updating to the newest release |
+| [`POST /api/admin/system/update/step`](#post-apiadminsystemupdatestep) | Run the update's next step |
+| [`POST /api/admin/system/update/cancel`](#post-apiadminsystemupdatecancel) | Cancel the update before installing starts (`run.cancel`) |
+| [`POST /api/admin/system/update/rollback`](#post-apiadminsystemupdaterollback) | Roll back the last update (`run.rollback`) |
+| [`GET /api/admin/servers/drivers`](#get-apiadminserversdrivers) | The panel connectors a server can use |
+| [`GET /api/admin/servers`](#get-apiadminservers) | All servers, in their order |
 | [`POST /api/admin/servers`](#post-apiadminservers) | Add a server |
-| [`POST /api/admin/servers/test`](#post-apiadminserverstest) | Try a connection before it is saved (`id` reuses a saved server's secrets) |
-| [`GET /api/admin/servers/{id}`](#get-apiadminserversid) | One server with its inbounds |
-| [`PUT /api/admin/servers/{id}`](#put-apiadminserversid) | Change a server |
-| [`DELETE /api/admin/servers/{id}`](#delete-apiadminserversid) | Delete a server nothing was sold on |
-| [`POST /api/admin/servers/{id}/test`](#post-apiadminserversidtest) | Check a saved server's panel (and learn whether it serves subscription links) |
+| [`POST /api/admin/servers/test`](#post-apiadminserverstest) | Test a connection before saving it |
+| [`GET /api/admin/servers/{id}`](#get-apiadminserversid) | One server, with its inbounds |
+| [`PUT /api/admin/servers/{id}`](#put-apiadminserversid) | Update a server |
+| [`DELETE /api/admin/servers/{id}`](#delete-apiadminserversid) | Delete a server |
+| [`POST /api/admin/servers/{id}/test`](#post-apiadminserversidtest) | Check a saved server's panel |
 | [`POST /api/admin/servers/{id}/inbounds/sync`](#post-apiadminserversidinboundssync) | Read the panel's inbounds again |
-| [`PATCH /api/admin/servers/{id}/inbounds/{inbound}`](#patch-apiadminserversidinboundsinbound) | Whether an inbound is sold |
-| [`GET /api/admin/servers/{id}/grants`](#get-apiadminserversidgrants) | A server's latest grants, and whom a new one would reach |
+| [`PATCH /api/admin/servers/{id}/inbounds/{inbound}`](#patch-apiadminserversidinboundsinbound) | Switch whether an inbound is sold |
+| [`GET /api/admin/servers/{id}/grants`](#get-apiadminserversidgrants) | A server's latest grants |
 | [`POST /api/admin/servers/{id}/grants`](#post-apiadminserversidgrants) | Give days and traffic to the services on a server |
-| [`POST /api/admin/servers/{id}/grants/{grant}/run`](#post-apiadminserversidgrantsgrantrun) | Work a grant through a few services |
+| [`POST /api/admin/servers/{id}/grants/{grant}/run`](#post-apiadminserversidgrantsgrantrun) | Apply a grant to the next few services |
 | [`POST /api/admin/servers/{id}/grants/{grant}/cancel`](#post-apiadminserversidgrantsgrantcancel) | Stop a grant |
-| [`GET /api/admin/mass-grants`](#get-apiadminmass-grants) | The latest mass gifts (a part per server), and whom a new one would reach |
-| [`POST /api/admin/mass-grants`](#post-apiadminmass-grants) | Give days and traffic to the running services on every server |
-| [`POST /api/admin/mass-grants/{id}/run`](#post-apiadminmass-grantsidrun) | Work on a mass gift's parts for a few seconds (the screen keeps asking while it is open) |
+| [`GET /api/admin/mass-grants`](#get-apiadminmass-grants) | The latest mass gifts |
+| [`POST /api/admin/mass-grants`](#post-apiadminmass-grants) | Give days and traffic to running services |
+| [`POST /api/admin/mass-grants/{id}/run`](#post-apiadminmass-grantsidrun) | Apply a mass gift for a few seconds |
 | [`POST /api/admin/mass-grants/{id}/cancel`](#post-apiadminmass-grantsidcancel) | Stop a mass gift |
-| [`GET /api/admin/agency`](#get-apiadminagency) | The agency program's numbers, with whether it runs and the credit an agent starts with |
-| [`GET /api/admin/agency/settings`](#get-apiadminagencysettings) | The agency program's rules |
-| [`PUT /api/admin/agency/settings`](#put-apiadminagencysettings) | Save the rules |
-| [`GET /api/admin/agency/requests`](#get-apiadminagencyrequests) | Requests to become an agent, newest first (or the oldest, dir) |
-| [`POST /api/admin/agency/requests/{id}/approve`](#post-apiadminagencyrequestsidapprove) | Approve a request on a level, with the credit the agent starts with |
-| [`POST /api/admin/agency/requests/{id}/reject`](#post-apiadminagencyrequestsidreject) | Reject a request |
-| [`GET /api/admin/agency/agents`](#get-apiadminagencyagents) | The agents, newest first |
-| [`PUT /api/admin/agency/agents/{id}`](#put-apiadminagencyagentsid) | An agent's level and credit (the id is the customer's) |
-| [`POST /api/admin/agency/agents/{id}/revoke`](#post-apiadminagencyagentsidrevoke) | End the agency |
-| [`GET /api/admin/agency/agents/{id}/traffic`](#get-apiadminagencyagentsidtraffic) | An agent's traffic, line by line, newest first |
-| [`POST /api/admin/agency/agents/{id}/traffic`](#post-apiadminagencyagentsidtraffic) | Set an agent's traffic right |
-| [`GET /api/admin/agency/levels`](#get-apiadminagencylevels) | The agents' levels, in order |
-| [`POST /api/admin/agency/levels`](#post-apiadminagencylevels) | Add a level |
-| [`POST /api/admin/agency/levels/reorder`](#post-apiadminagencylevelsreorder) | Put the levels in a new order |
-| [`PUT /api/admin/agency/levels/{id}`](#put-apiadminagencylevelsid) | Change a level |
-| [`DELETE /api/admin/agency/levels/{id}`](#delete-apiadminagencylevelsid) | Delete a level |
-| [`GET /api/admin/settings/config`](#get-apiadminsettingsconfig) | The panel's own configuration, read from config.php |
-| [`GET /api/admin/settings/config/cron-url`](#get-apiadminsettingsconfigcron-url) | The cron trigger's whole address, for the screen's copy action (the screen shows it masked) |
-| [`POST /api/admin/settings/config/telegram/test`](#post-apiadminsettingsconfigtelegramtest) | Ask Telegram who a token belongs to |
-| [`POST /api/admin/settings/config/database/test`](#post-apiadminsettingsconfigdatabasetest) | Try database settings without saving them |
-| [`POST /api/admin/settings/config/mail/test`](#post-apiadminsettingsconfigmailtest) | A short email by the mail settings as saved |
+| [`GET /api/admin/agency`](#get-apiadminagency) | The agency program's numbers |
+| [`GET /api/admin/agency/settings`](#get-apiadminagencysettings) | The agency program's settings |
+| [`PUT /api/admin/agency/settings`](#put-apiadminagencysettings) | Save the agency program's settings |
+| [`GET /api/admin/agency/requests`](#get-apiadminagencyrequests) | Requests to become an agent |
+| [`POST /api/admin/agency/requests/{id}/approve`](#post-apiadminagencyrequestsidapprove) | Approve an agency request |
+| [`POST /api/admin/agency/requests/{id}/reject`](#post-apiadminagencyrequestsidreject) | Reject an agency request |
+| [`GET /api/admin/agency/agents`](#get-apiadminagencyagents) | The agents |
+| [`PUT /api/admin/agency/agents/{id}`](#put-apiadminagencyagentsid) | Change an agent's level and credit |
+| [`POST /api/admin/agency/agents/{id}/revoke`](#post-apiadminagencyagentsidrevoke) | End an agency |
+| [`GET /api/admin/agency/agents/{id}/traffic`](#get-apiadminagencyagentsidtraffic) | An agent's traffic ledger |
+| [`POST /api/admin/agency/agents/{id}/traffic`](#post-apiadminagencyagentsidtraffic) | Adjust an agent's traffic |
+| [`GET /api/admin/agency/levels`](#get-apiadminagencylevels) | The agency levels, in their order |
+| [`POST /api/admin/agency/levels`](#post-apiadminagencylevels) | Add an agency level |
+| [`POST /api/admin/agency/levels/reorder`](#post-apiadminagencylevelsreorder) | Reorder the agency levels |
+| [`PUT /api/admin/agency/levels/{id}`](#put-apiadminagencylevelsid) | Update an agency level |
+| [`DELETE /api/admin/agency/levels/{id}`](#delete-apiadminagencylevelsid) | Delete an agency level |
+| [`GET /api/admin/settings/config`](#get-apiadminsettingsconfig) | The installation's configuration, read from config.php |
+| [`GET /api/admin/settings/config/cron-url`](#get-apiadminsettingsconfigcron-url) | The cron trigger's full address |
+| [`POST /api/admin/settings/config/telegram/test`](#post-apiadminsettingsconfigtelegramtest) | Ask Telegram which bot a token belongs to |
+| [`POST /api/admin/settings/config/database/test`](#post-apiadminsettingsconfigdatabasetest) | Test database settings without saving them |
+| [`POST /api/admin/settings/config/mail/test`](#post-apiadminsettingsconfigmailtest) | Send a test email with the saved mail settings |
 | [`PUT /api/admin/settings/config/{group}`](#put-apiadminsettingsconfiggroup) | Save one group of the config.php settings |
 
 ### POST /api/admin/auth/login
 
-The owner signs in with the panel's login, in the shop the request names (`X-Shop`): the right credentials at the address of a shop that is not there open nothing (404)
+Sign the owner in. The session works in the shop named by `X-Shop`; if that shop does not exist, even the right credentials get a 404.
 
 **Body**, as JSON:
 
-The owner signs in with the panel's login (config.php keeps it).
+The owner's panel login (kept in config.php).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `username` | string | yes |  |
-| `password` | string | yes | As typed — a space at either end is part of it. |
+| `password` | string | yes | As typed; spaces at either end are part of it. |
 
 **Answers**
 
@@ -2521,7 +3443,7 @@ The owner signs in with the panel's login (config.php keeps it).
 
 ### POST /api/admin/auth/recovery/key
 
-A lost login's way back in begins: a one-time key written to the host's files, where only someone who can read them finds it — the same key while it still opens
+Start recovering a lost login. Writes a one-time key into the host's files, where only someone with access to them can read it. Asking again while the key is still valid returns the same key.
 
 **Body:** none.
 
@@ -2529,56 +3451,56 @@ A lost login's way back in begins: a one-time key written to the host's files, w
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Where the key is, and until when it opens | [RecoveryKeyResponse](#recoverykeyresponse) |
+| `200` | Where the key is, and until when it is valid | [RecoveryKeyResponse](#recoverykeyresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/admin/auth/recovery
 
-A new panel login, set with that key: signed in under it, in the shop the request names, every other session out (a wrong key counts as a failed sign-in)
+Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends. A wrong key counts as a failed sign-in.
 
 **Body**, as JSON:
 
-A new panel login set without the old one: the key the panel wrote to the host's files (RecoveryKeyResponse.file), then the login by the installer's rule (InstallAdminRequest).
+A new panel login set without the old one: the recovery key from the host's files (`RecoveryKeyResponse.file`), then the login with the installer's rules (InstallAdminRequest).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `key` | string | yes | As the file holds it; case and the spaces around it do not matter. |
+| `key` | string | yes | As written in the file; case and surrounding spaces do not matter. |
 | `username` | string | yes |  |
-| `password` | string | yes | As typed — a space at either end is part of it. |
+| `password` | string | yes | As typed; spaces at either end are part of it. |
 | `password_confirmation` | string | yes |  |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Set — signed in under it | [SessionResponse](#sessionresponse) |
+| `200` | Set; this browser is signed in with the new login | [SessionResponse](#sessionresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### PUT /api/admin/auth/credentials
 
-The owner changes the panel's login: every other session ends, this one stays
+Change the panel's login. Every other session ends; this one stays signed in.
 
 **Body**, as JSON:
 
-The owner changes the panel's login: their current password first, then the new login by the installer's rule (InstallAdminRequest) — a password left blank, its confirmation too, keeps the one kept; a change that changes nothing is refused.
+A new panel login: the current password, then the new login with the installer's rules (InstallAdminRequest). Leaving the password and its confirmation blank keeps the current password. A request that changes nothing is refused.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `current_password` | string | yes |  |
 | `username` | string | yes |  |
-| `password` | string | no | As typed — a space at either end is part of it. |
+| `password` | string | no | As typed; spaces at either end are part of it. |
 | `password_confirmation` | string | no |  |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Changed — the session as it is now | [SessionResponse](#sessionresponse) |
+| `200` | Changed; the current session | [SessionResponse](#sessionresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/admin/shops
 
-Every shop the owner may open — the main bot's, then each agent's
+The shops the owner can open. The main bot's shop first, then each agent's.
 
 **Answers**
 
@@ -2589,7 +3511,7 @@ Every shop the owner may open — the main bot's, then each agent's
 
 ### GET /api/admin/system
 
-Whether the machinery behind the shop is alive: the version, PHP, the bot of the shop the request names and the main bot, and the scheduler (the owner's alone)
+The system's health. The version, PHP, the bot of the shop the request names and the main bot, and the scheduler. Owner only.
 
 **Answers**
 
@@ -2600,7 +3522,7 @@ Whether the machinery behind the shop is alive: the version, PHP, the bot of the
 
 ### POST /api/admin/system/webhook
 
-Put every bot the shop runs on its webhook under APP_URL — which Telegram calls only over HTTPS, else a 422 and no bot is touched — as bot:webhook:set does: one bot failing keeps it from none of the others
+Set the webhook of every bot. Each webhook is under APP_URL, which must be HTTPS (else a 422 and no bot is changed). Same as `bot:webhook:set`: a bot that fails does not stop the others.
 
 **Body:** none.
 
@@ -2613,7 +3535,7 @@ Put every bot the shop runs on its webhook under APP_URL — which Telegram call
 
 ### DELETE /api/admin/system/webhook
 
-Take every bot the shop runs off its webhook, back to polling — bot:poll must run then —, as bot:webhook:delete does
+Delete the webhook of every bot. The bots go back to polling, so `bot:poll` must run. Same as `bot:webhook:delete`.
 
 **Answers**
 
@@ -2624,7 +3546,7 @@ Take every bot the shop runs off its webhook, back to polling — bot:poll must 
 
 ### GET /api/admin/system/update
 
-AmoBot's own update (the owner's alone): the version the shop runs, the newest release — read from GitHub again once the last read is a few hours old —, what keeps the shop from installing it itself, and the update under way or the last one
+AmoBot's update status. The running version, the newest release (read again from GitHub when the last read is a few hours old), what blocks a self-update, and the current or last update. Owner only.
 
 **Answers**
 
@@ -2635,7 +3557,7 @@ AmoBot's own update (the owner's alone): the version the shop runs, the newest r
 
 ### POST /api/admin/system/update/check
 
-Read the newest release from GitHub now (a 502 while GitHub does not answer: the release read last stands)
+Check GitHub for the newest release now. A 502 when GitHub does not answer; the release read before is kept.
 
 **Body:** none.
 
@@ -2643,29 +3565,29 @@ Read the newest release from GitHub now (a 502 while GitHub does not answer: the
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The update screen with what GitHub said | [UpdateResponse](#updateresponse) |
+| `200` | The update status, with GitHub's answer | [UpdateResponse](#updateresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/admin/system/update/start
 
-Begin updating to the newest release — a 422 on `version` when it is not that, or not newer than the shop's; a 409 while an update is under way; a 422 with what keeps the shop from updating itself
+Start updating to the newest release. A 422 on `version` when it is not the newest release or not newer than the running one; a 409 while an update is already running; a 422 naming what blocks a self-update.
 
 **Body**, as JSON:
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `version` | string | yes | The newest release — `latest.version`: an update is to it, and nothing else. |
+| `version` | string | yes | The newest release (`latest.version`). Updating to any other version is refused. |
 
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The update begun, its first step to take | [UpdateResponse](#updateresponse) |
+| `200` | Started; the run is at its first step | [UpdateResponse](#updateresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/admin/system/update/step
 
-Take the update's next step, or as much of it as a request has time for — the release's files fetched and checked against the release key, unpacked, the host checked, then installed in one request while every other request is told to come back (a 503 with Retry-After). A refusal is kept with the run (`run.error`); a 409 while another request works the update, or a scheduled run does not end in time; a 502 while GitHub does not answer
+Run the update's next step. Does as much of the step as one request has time for: download the release and check its signature, unpack it, check the host, then install it in one request while every other request gets a 503 with `Retry-After`. A refusal is kept on the run (`run.error`). A 409 while another request is working on the update or a scheduled run does not finish in time; a 502 when GitHub does not answer.
 
 **Body:** none.
 
@@ -2673,12 +3595,12 @@ Take the update's next step, or as much of it as a request has time for — the 
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Where the update stands now | [UpdateResponse](#updateresponse) |
+| `200` | The update's current state | [UpdateResponse](#updateresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/admin/system/update/cancel
 
-Give the update up before its install began (`run.cancel`): what it fetched and unpacked goes
+Cancel the update before installing starts (`run.cancel`). The downloaded and unpacked files are deleted.
 
 **Body:** none.
 
@@ -2686,12 +3608,12 @@ Give the update up before its install began (`run.cancel`): what it fetched and 
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The update screen, no update under way | [UpdateResponse](#updateresponse) |
+| `200` | The update status, with no update running | [UpdateResponse](#updateresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/admin/system/update/rollback
 
-Take the update installed last back (`run.rollback`): the version it replaced in its place again — refused once it changed the database, which only a backup takes back
+Roll back the last update (`run.rollback`). Puts the replaced version back. Refused once the update changed the database: only a backup can undo that.
 
 **Body:** none.
 
@@ -2699,12 +3621,12 @@ Take the update installed last back (`run.rollback`): the version it replaced in
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The update taken back | [UpdateResponse](#updateresponse) |
+| `200` | Rolled back | [UpdateResponse](#updateresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/admin/servers/drivers
 
-The connectors a server can be added with
+The panel connectors a server can use.
 
 **Answers**
 
@@ -2715,7 +3637,7 @@ The connectors a server can be added with
 
 ### GET /api/admin/servers
 
-Every server, in order
+All servers, in their order.
 
 **Answers**
 
@@ -2726,55 +3648,59 @@ Every server, in order
 
 ### POST /api/admin/servers
 
-Add a server; its panel is asked at once
+Add a server. Its panel is checked right away.
 
 **Body**, as JSON:
 
-A server added or changed with its form, whole: its connector (`driver` — a saved server's own: a server's connector does not change) and the fields its description lists (ServerDriversResponse), by name, as typed — its name; the panel's address and the way in, an API token or an admin's username and password, one at a time (the other way's credentials are emptied); the connection's options; its own columns. A secret left blank or left out keeps the stored one while the panel's address stays on its host — moved to another, it is typed again —, and `clear_<name>: true` empties it. A closed shape per connector: tests/Unit/Drivers/DriverFormsTest holds each to its connector's form.
+A server's whole form, to add or update it: its connector (`driver`; a saved server keeps its connector) and the fields the connector lists (ServerDriversResponse), by name, as typed. That is: the name; the panel's address and one way in, an API token or an admin's username and password (the other way's credentials are cleared); the connection options; and the server's own fields. A secret left blank or out keeps the stored one while the panel's address stays on the same host (after a host change it must be typed again); `clear_<name>: true` empties it. One closed shape per connector, checked against the connector's form by tests/Unit/Drivers/DriverFormsTest.
 
 One of:
 
-**`ServerThreeXuiRequest`** — A 3X-UI panel's server: its API token, or an admin's username and password with the secret of the two-factor login the panel may ask a code of.
+**`ServerThreeXuiRequest`** — A server on a 3X-UI panel: its API token, or an admin's username and password plus the two-factor secret when the panel asks for a code.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `3x-ui` | yes |  |
-| `name` | string | yes | Seen in the panels alone; 100 characters at most. |
-| `base_url` | string | yes | The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
-| `auth_mode` | string: `token`, `password` | yes | The way in: an API token, or an admin's username and password. |
-| `api_token` | string | no | With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. |
-| `clear_api_token` | boolean | no | True: the kept token is emptied. |
-| `username` | string | no | With a username and password: an admin of the panel. |
-| `password` | string | no | With a username and password. Left out or blank: the one kept stays. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
-| `verify_tls` | boolean | yes | Whether the panel's TLS certificate is checked — off for a self-signed one. |
-| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds a request may take, 5 to 120. |
-| `subscription_url` | string | no | What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. |
-| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The running services it takes; blank — no limit, 0 — full. |
-| `notes` | string | no | The owner's own, 1000 characters at most. |
-| `is_active` | boolean | yes | Off: no new service goes on it. |
-| `totp_secret` | string | no | With a username and password: the two-factor login's secret (Base32), whose codes the shop signs in with — as an authenticator app shows it, spaces, dashes and lower case taken. Left out or blank: the one kept stays. |
-| `clear_totp_secret` | boolean | no | True: the kept two-factor secret is emptied — the login asks no code any more. |
+| `name` | string | yes | Shown only in the panels; at most 100 characters. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `totp_secret` | string | no | For `password`: the two-factor secret (Base32) the shop makes sign-in codes from, as an authenticator app shows it (spaces, dashes and lower case accepted). Left out or blank: the stored secret stays. |
+| `clear_totp_secret` | boolean | no | True empties the stored two-factor secret; the sign-in then asks for no code. |
 
-**`ServerPasarGuardRequest`** — A PasarGuard panel's server: its API key, or an admin's username and password.
+**`ServerPasarGuardRequest`** — A server on a PasarGuard panel: its API key, or an admin's username and password.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `pasarguard` | yes |  |
-| `name` | string | yes | Seen in the panels alone; 100 characters at most. |
-| `base_url` | string | yes | The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
-| `auth_mode` | string: `token`, `password` | yes | The way in: an API token, or an admin's username and password. |
-| `api_token` | string | no | With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. |
-| `clear_api_token` | boolean | no | True: the kept token is emptied. |
-| `username` | string | no | With a username and password: an admin of the panel. |
-| `password` | string | no | With a username and password. Left out or blank: the one kept stays. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
-| `verify_tls` | boolean | yes | Whether the panel's TLS certificate is checked — off for a self-signed one. |
-| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds a request may take, 5 to 120. |
-| `subscription_url` | string | no | What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. |
-| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The running services it takes; blank — no limit, 0 — full. |
-| `notes` | string | no | The owner's own, 1000 characters at most. |
-| `is_active` | boolean | yes | Off: no new service goes on it. |
+| `name` | string | yes | Shown only in the panels; at most 100 characters. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
 
 **Answers**
 
@@ -2785,57 +3711,61 @@ One of:
 
 ### POST /api/admin/servers/test
 
-Try a connection before it is saved (`id` reuses a saved server's secrets)
+Test a connection before saving it. With `id`, blank secrets are taken from that saved server.
 
 **Body**, as JSON:
 
-A connection tried before it is saved: a new server's form (ServerRequest), or a saved server's under its `id` — whose stored secrets the blank ones stand for, while the address stays on its host. A closed shape per connector.
+A connection to test before saving: a new server's form (ServerRequest), or a saved server's form with its `id`, whose stored secrets fill in blank ones while the address stays on the same host. One closed shape per connector.
 
 One of:
 
-**`ServerThreeXuiTestRequest`** — A 3X-UI panel's server, tried.
+**`ServerThreeXuiTestRequest`** — A 3X-UI server to test.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id` | integer | no | The saved server whose form it is. |
+| `id` | integer | no | The saved server this form belongs to. |
 | `driver` | string: `3x-ui` | yes |  |
-| `name` | string | yes | Seen in the panels alone; 100 characters at most. |
-| `base_url` | string | yes | The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
-| `auth_mode` | string: `token`, `password` | yes | The way in: an API token, or an admin's username and password. |
-| `api_token` | string | no | With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. |
-| `clear_api_token` | boolean | no | True: the kept token is emptied. |
-| `username` | string | no | With a username and password: an admin of the panel. |
-| `password` | string | no | With a username and password. Left out or blank: the one kept stays. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
-| `verify_tls` | boolean | yes | Whether the panel's TLS certificate is checked — off for a self-signed one. |
-| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds a request may take, 5 to 120. |
-| `subscription_url` | string | no | What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. |
-| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The running services it takes; blank — no limit, 0 — full. |
-| `notes` | string | no | The owner's own, 1000 characters at most. |
-| `is_active` | boolean | yes | Off: no new service goes on it. |
-| `totp_secret` | string | no | With a username and password: the two-factor login's secret (Base32), whose codes the shop signs in with — as an authenticator app shows it, spaces, dashes and lower case taken. Left out or blank: the one kept stays. |
-| `clear_totp_secret` | boolean | no | True: the kept two-factor secret is emptied — the login asks no code any more. |
+| `name` | string | yes | Shown only in the panels; at most 100 characters. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `totp_secret` | string | no | For `password`: the two-factor secret (Base32) the shop makes sign-in codes from, as an authenticator app shows it (spaces, dashes and lower case accepted). Left out or blank: the stored secret stays. |
+| `clear_totp_secret` | boolean | no | True empties the stored two-factor secret; the sign-in then asks for no code. |
 
-**`ServerPasarGuardTestRequest`** — A PasarGuard panel's server, tried.
+**`ServerPasarGuardTestRequest`** — A PasarGuard server to test.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id` | integer | no | The saved server whose form it is. |
+| `id` | integer | no | The saved server this form belongs to. |
 | `driver` | string: `pasarguard` | yes |  |
-| `name` | string | yes | Seen in the panels alone; 100 characters at most. |
-| `base_url` | string | yes | The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
-| `auth_mode` | string: `token`, `password` | yes | The way in: an API token, or an admin's username and password. |
-| `api_token` | string | no | With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. |
-| `clear_api_token` | boolean | no | True: the kept token is emptied. |
-| `username` | string | no | With a username and password: an admin of the panel. |
-| `password` | string | no | With a username and password. Left out or blank: the one kept stays. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
-| `verify_tls` | boolean | yes | Whether the panel's TLS certificate is checked — off for a self-signed one. |
-| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds a request may take, 5 to 120. |
-| `subscription_url` | string | no | What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. |
-| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The running services it takes; blank — no limit, 0 — full. |
-| `notes` | string | no | The owner's own, 1000 characters at most. |
-| `is_active` | boolean | yes | Off: no new service goes on it. |
+| `name` | string | yes | Shown only in the panels; at most 100 characters. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
 
 **Answers**
 
@@ -2846,7 +3776,7 @@ One of:
 
 ### GET /api/admin/servers/{id}
 
-One server with its inbounds
+One server, with its inbounds.
 
 **Parameters**
 
@@ -2863,7 +3793,7 @@ One server with its inbounds
 
 ### PUT /api/admin/servers/{id}
 
-Change a server
+Update a server.
 
 **Parameters**
 
@@ -2873,51 +3803,55 @@ Change a server
 
 **Body**, as JSON:
 
-A server added or changed with its form, whole: its connector (`driver` — a saved server's own: a server's connector does not change) and the fields its description lists (ServerDriversResponse), by name, as typed — its name; the panel's address and the way in, an API token or an admin's username and password, one at a time (the other way's credentials are emptied); the connection's options; its own columns. A secret left blank or left out keeps the stored one while the panel's address stays on its host — moved to another, it is typed again —, and `clear_<name>: true` empties it. A closed shape per connector: tests/Unit/Drivers/DriverFormsTest holds each to its connector's form.
+A server's whole form, to add or update it: its connector (`driver`; a saved server keeps its connector) and the fields the connector lists (ServerDriversResponse), by name, as typed. That is: the name; the panel's address and one way in, an API token or an admin's username and password (the other way's credentials are cleared); the connection options; and the server's own fields. A secret left blank or out keeps the stored one while the panel's address stays on the same host (after a host change it must be typed again); `clear_<name>: true` empties it. One closed shape per connector, checked against the connector's form by tests/Unit/Drivers/DriverFormsTest.
 
 One of:
 
-**`ServerThreeXuiRequest`** — A 3X-UI panel's server: its API token, or an admin's username and password with the secret of the two-factor login the panel may ask a code of.
+**`ServerThreeXuiRequest`** — A server on a 3X-UI panel: its API token, or an admin's username and password plus the two-factor secret when the panel asks for a code.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `3x-ui` | yes |  |
-| `name` | string | yes | Seen in the panels alone; 100 characters at most. |
-| `base_url` | string | yes | The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
-| `auth_mode` | string: `token`, `password` | yes | The way in: an API token, or an admin's username and password. |
-| `api_token` | string | no | With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. |
-| `clear_api_token` | boolean | no | True: the kept token is emptied. |
-| `username` | string | no | With a username and password: an admin of the panel. |
-| `password` | string | no | With a username and password. Left out or blank: the one kept stays. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
-| `verify_tls` | boolean | yes | Whether the panel's TLS certificate is checked — off for a self-signed one. |
-| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds a request may take, 5 to 120. |
-| `subscription_url` | string | no | What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. |
-| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The running services it takes; blank — no limit, 0 — full. |
-| `notes` | string | no | The owner's own, 1000 characters at most. |
-| `is_active` | boolean | yes | Off: no new service goes on it. |
-| `totp_secret` | string | no | With a username and password: the two-factor login's secret (Base32), whose codes the shop signs in with — as an authenticator app shows it, spaces, dashes and lower case taken. Left out or blank: the one kept stays. |
-| `clear_totp_secret` | boolean | no | True: the kept two-factor secret is emptied — the login asks no code any more. |
+| `name` | string | yes | Shown only in the panels; at most 100 characters. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `totp_secret` | string | no | For `password`: the two-factor secret (Base32) the shop makes sign-in codes from, as an authenticator app shows it (spaces, dashes and lower case accepted). Left out or blank: the stored secret stays. |
+| `clear_totp_secret` | boolean | no | True empties the stored two-factor secret; the sign-in then asks for no code. |
 
-**`ServerPasarGuardRequest`** — A PasarGuard panel's server: its API key, or an admin's username and password.
+**`ServerPasarGuardRequest`** — A server on a PasarGuard panel: its API key, or an admin's username and password.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `pasarguard` | yes |  |
-| `name` | string | yes | Seen in the panels alone; 100 characters at most. |
-| `base_url` | string | yes | The panel's address, its path included — http(s), no credentials, query or fragment in it, and none of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
-| `auth_mode` | string: `token`, `password` | yes | The way in: an API token, or an admin's username and password. |
-| `api_token` | string | no | With a token: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the one kept stays. |
-| `clear_api_token` | boolean | no | True: the kept token is emptied. |
-| `username` | string | no | With a username and password: an admin of the panel. |
-| `password` | string | no | With a username and password. Left out or blank: the one kept stays. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
-| `verify_tls` | boolean | yes | Whether the panel's TLS certificate is checked — off for a self-signed one. |
-| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds a request may take, 5 to 120. |
-| `subscription_url` | string | no | What stands before the token of a subscription link instead of the panel's own — a full address, no credentials, query or fragment; blank: the panel's. |
-| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The running services it takes; blank — no limit, 0 — full. |
-| `notes` | string | no | The owner's own, 1000 characters at most. |
-| `is_active` | boolean | yes | Off: no new service goes on it. |
+| `name` | string | yes | Shown only in the panels; at most 100 characters. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
 
 **Answers**
 
@@ -2928,7 +3862,7 @@ One of:
 
 ### DELETE /api/admin/servers/{id}
 
-Delete a server nothing was sold on
+Delete a server. Only a server nothing was sold on.
 
 **Parameters**
 
@@ -2945,7 +3879,7 @@ Delete a server nothing was sold on
 
 ### POST /api/admin/servers/{id}/test
 
-Check a saved server's panel (and learn whether it serves subscription links)
+Check a saved server's panel. Also records whether it serves subscription links.
 
 **Parameters**
 
@@ -2964,7 +3898,7 @@ Check a saved server's panel (and learn whether it serves subscription links)
 
 ### POST /api/admin/servers/{id}/inbounds/sync
 
-Read the panel's inbounds again
+Read the panel's inbounds again.
 
 **Parameters**
 
@@ -2983,7 +3917,7 @@ Read the panel's inbounds again
 
 ### PATCH /api/admin/servers/{id}/inbounds/{inbound}
 
-Whether an inbound is sold
+Switch whether an inbound is sold.
 
 **Parameters**
 
@@ -2994,7 +3928,7 @@ Whether an inbound is sold
 
 **Body**, as JSON:
 
-Whether an inbound is sold — on the plans that sell the whole server.
+Whether an inbound is sold on plans that sell the whole server.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3009,7 +3943,7 @@ Whether an inbound is sold — on the plans that sell the whole server.
 
 ### GET /api/admin/servers/{id}/grants
 
-A server's latest grants, and whom a new one would reach
+A server's latest grants. Also how many services a new grant would reach.
 
 **Parameters**
 
@@ -3026,7 +3960,7 @@ A server's latest grants, and whom a new one would reach
 
 ### POST /api/admin/servers/{id}/grants
 
-Give days and traffic to the services on a server
+Give days and traffic to the services on a server.
 
 **Parameters**
 
@@ -3036,13 +3970,13 @@ Give days and traffic to the services on a server
 
 **Body**, as JSON:
 
-Days and traffic for the services on a server — an outage made good, a gift —: at least one amount above zero. It reaches the services running when it is issued, and those still waiting for their first connection only with `include_unstarted`; the reason goes to the customers, who hear it unless `notify` is false.
+Days and traffic for the services on a server, to make up for an outage or as a gift. At least one amount must be above zero. It reaches the services running when it is issued, and those still waiting for their first connection only with `include_unstarted`. Customers are notified with the reason unless `notify` is false.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days, 0 to 365; blank is none. |
-| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | no | Gigabytes, 0 to 10000; blank is none. |
-| `reason` | string | no | Its own line of the message; 300 characters at most. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days, 0 to 365; blank for none. |
+| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | no | Gigabytes, 0 to 10000; blank for none. |
+| `reason` | string | no | A separate line of the message; at most 300 characters. |
 | `notify` | boolean | no |  |
 | `include_unstarted` | boolean | no |  |
 
@@ -3055,7 +3989,7 @@ Days and traffic for the services on a server — an outage made good, a gift �
 
 ### POST /api/admin/servers/{id}/grants/{grant}/run
 
-Work a grant through a few services
+Apply a grant to the next few services.
 
 **Parameters**
 
@@ -3075,7 +4009,7 @@ Work a grant through a few services
 
 ### POST /api/admin/servers/{id}/grants/{grant}/cancel
 
-Stop a grant; the services reached keep what they got
+Stop a grant. Services already given it keep it.
 
 **Parameters**
 
@@ -3095,7 +4029,7 @@ Stop a grant; the services reached keep what they got
 
 ### GET /api/admin/mass-grants
 
-The latest mass gifts (a part per server), and whom a new one would reach
+The latest mass gifts. Each has a part per server; also how many services a new gift would reach.
 
 **Answers**
 
@@ -3106,21 +4040,22 @@ The latest mass gifts (a part per server), and whom a new one would reach
 
 ### POST /api/admin/mass-grants
 
-Give days and traffic to the running services on every server — or the agents', or one server's
+Give days and traffic to running services. On every server, or only the agents' services, one customer group's, or one server's.
 
 **Body**, as JSON:
 
-A server grant's terms (ServerGrantRequest) for every server at once — or the agents' services alone (what the bots of agents whose agency stands sold), or one server's.
+A server grant's terms (ServerGrantRequest) for every server at once, or only for the agents' services (sold by the bots of agents with an active agency), one customer group's, or one server's.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days, 0 to 365; blank is none. |
-| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | no | Gigabytes, 0 to 10000; blank is none. |
-| `reason` | string | no | Its own line of the message; 300 characters at most. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days, 0 to 365; blank for none. |
+| `traffic_gb` | [AmountInput](API-Schemas.md#amountinput) | no | Gigabytes, 0 to 10000; blank for none. |
+| `reason` | string | no | A separate line of the message; at most 300 characters. |
 | `notify` | boolean | no |  |
 | `include_unstarted` | boolean | no |  |
 | `audience` | [MassGrantAudience](#massgrantaudience) | yes |  |
-| `server_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For audience server, the server (a ServerRow.id); blank for the others. |
+| `server_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For the `server` audience: the server's id (`ServerRow.id`). Blank otherwise. |
+| `group_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For the `group` audience: a customer group of the main shop (`CustomerGroupRow.id`). Blank otherwise. |
 
 **Answers**
 
@@ -3131,7 +4066,7 @@ A server grant's terms (ServerGrantRequest) for every server at once — or the 
 
 ### POST /api/admin/mass-grants/{id}/run
 
-Work on a mass gift's parts for a few seconds (the screen keeps asking while it is open)
+Apply a mass gift for a few seconds. The screen keeps calling this while it is open.
 
 **Parameters**
 
@@ -3145,12 +4080,12 @@ Work on a mass gift's parts for a few seconds (the screen keeps asking while it 
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | As it stands now | [MassGrantResponse](#massgrantresponse) |
+| `200` | The current state | [MassGrantResponse](#massgrantresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/admin/mass-grants/{id}/cancel
 
-Stop a mass gift; what was given stays
+Stop a mass gift. What was already given stays.
 
 **Parameters**
 
@@ -3169,7 +4104,7 @@ Stop a mass gift; what was given stays
 
 ### GET /api/admin/agency
 
-The agency program's numbers, with whether it runs and the credit an agent starts with
+The agency program's numbers. Also whether it is on and the credit a new agent starts with.
 
 **Answers**
 
@@ -3180,7 +4115,7 @@ The agency program's numbers, with whether it runs and the credit an agent start
 
 ### GET /api/admin/agency/settings
 
-The agency program's rules — the shop's, not a bot's
+The agency program's settings. They apply to the whole installation, not one bot.
 
 **Answers**
 
@@ -3191,17 +4126,17 @@ The agency program's rules — the shop's, not a bot's
 
 ### PUT /api/admin/agency/settings
 
-Save the rules
+Save the agency program's settings.
 
 **Body**, as JSON:
 
-The program's rules saved whole, as AgencySettings names them: the switch and the numbers are sent (one left out is refused), the presets left out are none.
+The agency settings, saved whole, with the fields named as in AgencySettings. The switch and the numbers must be sent (a missing one is refused); presets left out means none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `enabled` | boolean | yes |  |
 | `default_credit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman. |
-| `traffic_presets` | [NumbersInput](#numbersinput) | no | Gigabytes, none below traffic_min, 8 at most. |
+| `traffic_presets` | [NumbersInput](#numbersinput) | no | Gigabytes, none below `traffic_min`, at most 8. |
 | `traffic_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Gigabytes. |
 
 **Answers**
@@ -3213,17 +4148,17 @@ The program's rules saved whole, as AgencySettings names them: the switch and th
 
 ### GET /api/admin/agency/requests
 
-Requests to become an agent, newest first (or the oldest, dir) — one status (pending, approved, rejected) or all
+Requests to become an agent. Newest first (`dir=asc` for oldest first); one status or all.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `status` | query | string | no | The status tab; empty for all |
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
+| `status` | query | string | no | The status tab. Empty for all |
+| `search` | query | string | no | The search text ("#12" finds by number) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [AgencyRequestSort](#agencyrequestsort) | no | What to sort by; any other is the list's own, created |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [AgencyRequestSort](#agencyrequestsort) | no | What to sort by. Anything else sorts by creation time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -3234,7 +4169,7 @@ Requests to become an agent, newest first (or the oldest, dir) — one status (p
 
 ### POST /api/admin/agency/requests/{id}/approve
 
-Approve a request on a level, with the credit the agent starts with; the customer is told
+Approve an agency request. Sets the level and the starting credit; the customer is notified.
 
 **Parameters**
 
@@ -3244,12 +4179,12 @@ Approve a request on a level, with the credit the agent starts with; the custome
 
 **Body**, as JSON:
 
-An agent's terms — approving a request, or changing an agent's: their level, and how far below zero their wallet may go.
+An agent's terms, when approving a request or changing an agent: their level, and how far below zero their wallet may go.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `level_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | An AgencyLevelRow.id. |
-| `credit_limit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 — none. |
+| `level_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | A level id (`AgencyLevelRow.id`). |
+| `credit_limit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for none. |
 
 **Answers**
 
@@ -3260,7 +4195,7 @@ An agent's terms — approving a request, or changing an agent's: their level, a
 
 ### POST /api/admin/agency/requests/{id}/reject
 
-Reject a request; the customer is told, with the note
+Reject an agency request. The customer is notified, with the note.
 
 **Parameters**
 
@@ -3270,7 +4205,7 @@ Reject a request; the customer is told, with the note
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3285,17 +4220,17 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### GET /api/admin/agency/agents
 
-The agents, newest first — or in another order (sort, dir) —, on one level or all
+The agents. Newest first, or sorted by `sort` and `dir`; on one level or all.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `level` | query | integer | no | A level's id; empty for every level |
-| `search` | query | string | no | What the search box holds ("#12" finds by number) |
+| `level` | query | integer | no | A level's id. Empty for all levels |
+| `search` | query | string | no | The search text ("#12" finds by number) |
 | `page` | query | integer, at least 1 | no |  |
-| `sort` | query | [AgentSort](#agentsort) | no | What to sort by; any other is the list's own, joined |
-| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | Which way `sort` runs; anything else is desc (the newest, the largest first) |
+| `sort` | query | [AgentSort](#agentsort) | no | What to sort by. Anything else sorts by sign-up time |
+| `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
 **Answers**
 
@@ -3306,7 +4241,7 @@ The agents, newest first — or in another order (sort, dir) —, on one level o
 
 ### PUT /api/admin/agency/agents/{id}
 
-An agent's level and credit (the id is the customer's); the agent is told of a change, and the answer says whether they were
+Change an agent's level and credit. The id is the agent's customer id. The agent is notified of a change, and the answer says whether the notice reached them.
 
 **Parameters**
 
@@ -3316,12 +4251,12 @@ An agent's level and credit (the id is the customer's); the agent is told of a c
 
 **Body**, as JSON:
 
-An agent's terms — approving a request, or changing an agent's: their level, and how far below zero their wallet may go.
+An agent's terms, when approving a request or changing an agent: their level, and how far below zero their wallet may go.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `level_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | An AgencyLevelRow.id. |
-| `credit_limit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 — none. |
+| `level_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | A level id (`AgencyLevelRow.id`). |
+| `credit_limit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for none. |
 
 **Answers**
 
@@ -3332,7 +4267,7 @@ An agent's terms — approving a request, or changing an agent's: their level, a
 
 ### POST /api/admin/agency/agents/{id}/revoke
 
-End the agency: their bot goes off; the customer is told, with the note
+End an agency. The agent's bot stops; the agent is notified, with the note.
 
 **Parameters**
 
@@ -3342,7 +4277,7 @@ End the agency: their bot goes off; the customer is told, with the note
 
 **Body**, as JSON:
 
-Support's word to the customer that comes with a decision — a cancel, a rejection, a service switched off, an agency refused or ended: its own line of the message they get; 300 characters at most, blank for none.
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3357,7 +4292,7 @@ Support's word to the customer that comes with a decision — a cancel, a reject
 
 ### GET /api/admin/agency/agents/{id}/traffic
 
-An agent's traffic, line by line, newest first
+An agent's traffic ledger. Newest line first.
 
 **Parameters**
 
@@ -3375,7 +4310,7 @@ An agent's traffic, line by line, newest first
 
 ### POST /api/admin/agency/agents/{id}/traffic
 
-Set an agent's traffic right — a negative gb takes it away
+Adjust an agent's traffic. A negative `gb` takes traffic away.
 
 **Parameters**
 
@@ -3385,12 +4320,12 @@ Set an agent's traffic right — a negative gb takes it away
 
 **Body**, as JSON:
 
-An agent's traffic set right by hand, never below zero — the note on their ledger.
+A manual adjustment of an agent's traffic (never below zero), with the note for their ledger.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes added; a negative number (or text after a minus sign) takes them away. |
-| `note` | string | no | The ledger line's note, 190 characters at most (Ledger::NOTE_MAX); blank for none. |
+| `gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Gigabytes to add; a negative number (or text after a minus sign) takes them away. |
+| `note` | string | no | The ledger line's note, at most 190 characters; blank for none. |
 
 **Answers**
 
@@ -3401,7 +4336,7 @@ An agent's traffic set right by hand, never below zero — the note on their led
 
 ### GET /api/admin/agency/levels
 
-The agents' levels, in order
+The agency levels, in their order.
 
 **Answers**
 
@@ -3412,16 +4347,16 @@ The agents' levels, in order
 
 ### POST /api/admin/agency/levels
 
-Add a level
+Add an agency level.
 
 **Body**, as JSON:
 
-A level added or changed.
+An agency level to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | Unique. |
-| `price_per_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman: what its agents pay for a gigabyte of their bot's traffic. |
+| `name` | string | yes | Must be unique. |
+| `price_per_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman that agents on this level pay per GB of their bot's traffic. |
 
 **Answers**
 
@@ -3432,15 +4367,15 @@ A level added or changed.
 
 ### POST /api/admin/agency/levels/reorder
 
-Put the levels in a new order
+Reorder the agency levels.
 
 **Body**, as JSON:
 
-An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting::MAX_IDS), as many as a list may have.
+The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `ids` | list of integer, 1000 at most | yes |  |
+| `ids` | list of integer, at most 1000 | yes |  |
 
 **Answers**
 
@@ -3451,7 +4386,7 @@ An admin-ordered list's rows in their new order, by id — 1000 at most (Sorting
 
 ### PUT /api/admin/agency/levels/{id}
 
-Change a level
+Update an agency level.
 
 **Parameters**
 
@@ -3461,12 +4396,12 @@ Change a level
 
 **Body**, as JSON:
 
-A level added or changed.
+An agency level to add or update.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | Unique. |
-| `price_per_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman: what its agents pay for a gigabyte of their bot's traffic. |
+| `name` | string | yes | Must be unique. |
+| `price_per_gb` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman that agents on this level pay per GB of their bot's traffic. |
 
 **Answers**
 
@@ -3477,7 +4412,7 @@ A level added or changed.
 
 ### DELETE /api/admin/agency/levels/{id}
 
-Delete a level — refused (409) while agents are on it
+Delete an agency level. Refused (409) while agents are on it.
 
 **Parameters**
 
@@ -3494,7 +4429,7 @@ Delete a level — refused (409) while agents are on it
 
 ### GET /api/admin/settings/config
 
-The panel's own configuration, read from config.php
+The installation's configuration, read from config.php.
 
 **Answers**
 
@@ -3505,7 +4440,7 @@ The panel's own configuration, read from config.php
 
 ### GET /api/admin/settings/config/cron-url
 
-The cron trigger's whole address, for the screen's copy action (the screen shows it masked)
+The cron trigger's full address. For the screen's copy button; the screen shows it masked.
 
 **Answers**
 
@@ -3516,11 +4451,11 @@ The cron trigger's whole address, for the screen's copy action (the screen shows
 
 ### POST /api/admin/settings/config/telegram/test
 
-Ask Telegram who a token belongs to — the stored one when none is typed
+Ask Telegram which bot a token belongs to. Uses the stored token when none is given.
 
 **Body**, as JSON:
 
-A token to ask Telegram about; blank or left out — the stored one.
+A token to check with Telegram. Blank or left out: the stored token.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3535,15 +4470,15 @@ A token to ask Telegram about; blank or left out — the stored one.
 
 ### POST /api/admin/settings/config/database/test
 
-Try database settings without saving them
+Test database settings without saving them.
 
 **Body**, as JSON:
 
-The database part of config.php as a form sends it — the installer's step, the settings screen's save and its test: the driver (one of `drivers`) and its form's fields under their names, as typed. A secret left blank or left out keeps the stored one while the address it was given for stays — in the installer there is none: it is empty —, and `clear_<name>: true` empties it. A closed shape per driver.
+The database settings as a form sends them (the installer's step, and the settings screen's save and test): the driver (one of `drivers`) and its form's fields by name, as typed. A secret left blank or out keeps the stored one while the address it was given for stays the same (the installer has nothing stored, so it is empty); `clear_<name>: true` empties it. One closed shape per driver.
 
 One of:
 
-**`DatabaseMysqlRequest`** — MySQL or MariaDB: where the database is, the account on it, its tables' prefix.
+**`DatabaseMysqlRequest`** — MySQL or MariaDB: the server, the account, the database and an optional table prefix.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3552,17 +4487,17 @@ One of:
 | `port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes |  |
 | `database` | string | yes |  |
 | `username` | string | yes |  |
-| `password` | string | no | Left out or blank: the one kept stays — while the host, the port and the socket stay. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
+| `password` | string | no | Left out or blank: the stored password stays, as long as the host, port and socket stay the same. |
+| `clear_password` | boolean | no | True empties the stored password. |
 | `socket` | string | no | Blank for none. |
 | `prefix` | string | no | Blank for none. |
 
-**`DatabaseSqliteRequest`** — SQLite: a file of the shop's own.
+**`DatabaseSqliteRequest`** — SQLite: a database file.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `sqlite` | yes |  |
-| `path` | string | yes | The file, relative to the application or absolute; never under public/. |
+| `path` | string | yes | The file's path, relative to the application folder or absolute; never under public/. |
 
 **Answers**
 
@@ -3573,11 +4508,11 @@ One of:
 
 ### POST /api/admin/settings/config/mail/test
 
-A short email by the mail settings as saved — 422 while none goes out (no transport, or no address to send from, saved), 502 with the transport's reason when it did not take it
+Send a test email with the saved mail settings. A 422 while no email can go out (no transport or no sender address saved); a 502 with the transport's reason when it refused the email.
 
 **Body**, as JSON:
 
-Where the test email goes.
+Where to send the test email.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3592,7 +4527,7 @@ Where the test email goes.
 
 ### PUT /api/admin/settings/config/{group}
 
-Save one group of the config.php settings
+Save one group of the config.php settings.
 
 **Parameters**
 
@@ -3602,7 +4537,7 @@ Save one group of the config.php settings
 
 **Body**, as JSON:
 
-One group of the config.php settings, saved whole (PUT /settings/config/{group}) — the group's fields as ConfigSettingsResponse.groups names them. A secret left blank or left out keeps the stored one, `clear_<name>: true` empties it.
+One group of the config.php settings, saved whole (`PUT /settings/config/{group}`), with the fields `ConfigSettingsResponse.groups` lists for it. A secret left blank or out keeps the stored one; `clear_<name>: true` empties it.
 
 One of:
 
@@ -3613,26 +4548,26 @@ One of:
 | `name` | string | yes |  |
 | `url` | string | yes |  |
 | `debug` | boolean | yes |  |
-| `timezone` | string | yes | An IANA zone id (one of meta.timezones). |
+| `timezone` | string | yes | An IANA time zone id (one of `meta.timezones`). |
 
 **`ConfigTelegramRequest`**
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `token` | string | no | Left out or blank: the one kept stays — while the Bot API's address (`api_url`) stays on its host. |
+| `token` | string | no | Left out or blank: the stored token stays, as long as the Bot API address (`api_url`) stays on the same host. |
 | `clear_token` | boolean | no |  |
-| `username` | string | no | The bot's @username, the @ optional; blank for none. |
-| `api_url` | string | yes | The Bot API's address — http(s), a host, no credentials, ? or #. Moved to another origin (scheme, host or port), every bot's token goes there, agents' too: the save asks `current_password`. |
-| `current_password` | string | no | The owner's current panel password, asked only while `api_url` moves to another origin (else not read): blank, or a wrong one — a failed sign-in, counted with the login's —, is a 422 on it and nothing is saved. |
+| `username` | string | no | The bot's username, with or without the @; blank for none. |
+| `api_url` | string | yes | The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password`. |
+| `current_password` | string | no | The owner's current panel password. Read only when `api_url` moves to another origin: blank or wrong (a wrong one counts as a failed sign-in) is a 422 on it, and nothing is saved. |
 | `poll_timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds, 1 to 60. |
 | `webhook_secret` | string | no |  |
 | `clear_webhook_secret` | boolean | no |  |
 
-**`ConfigMailRequest`** — The shop's email, saved whole: the way out, and — for a mail driver — its settings by its form and who the emails come from. A closed shape per way out; what the other drivers keep stays as it is.
+**`ConfigMailRequest`** — The shop's email settings, saved whole: the transport and, for a mail driver, its settings and the sender. One closed shape per transport; the other drivers' stored settings are not changed.
 
 One of:
 
-**`MailNoneRequest`** — No email at all: what the drivers keep stays, for a way back.
+**`MailNoneRequest`** — No email. The drivers' stored settings are kept, so they can be switched back on.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3643,49 +4578,49 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `transport` | string: `smtp` | yes |  |
-| `host` | string | yes | mail.example.com — no scheme, no port. |
-| `port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 65535: 587 with tls, 465 with ssl, 25 without. |
+| `host` | string | yes | Such as mail.example.com, without scheme or port. |
+| `port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 65535: usually 587 with tls, 465 with ssl, 25 without. |
 | `encryption` | [MailEncryption](#mailencryption) | yes |  |
 | `username` | string | no | Blank for none. |
-| `password` | string | no | Left out or blank: the one kept stays — while the server, its port, the encryption and the username stay. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
-| `from_address` | string | yes | An email address (kept in lower case). |
-| `from_name` | string | no | 64 characters at most; blank: the shop's name. |
+| `password` | string | no | Left out or blank: the stored password stays, as long as the host, port, encryption and username stay the same. |
+| `clear_password` | boolean | no | True empties the stored password. |
+| `from_address` | string | yes | An email address (stored in lower case). |
+| `from_name` | string | no | At most 64 characters; blank for the shop's name. |
 
-**`MailNativeRequest`** — The host's own mail, as PHP's mail() sends it.
+**`MailNativeRequest`** — The host's own mail, sent with PHP's mail().
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `transport` | string: `native` | yes |  |
-| `from_address` | string | yes | An email address (kept in lower case). |
-| `from_name` | string | no | 64 characters at most; blank: the shop's name. |
+| `from_address` | string | yes | An email address (stored in lower case). |
+| `from_name` | string | no | At most 64 characters; blank for the shop's name. |
 
 **`MailResendRequest`** — Resend's API.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `transport` | string: `resend` | yes |  |
-| `resend_key` | string | no | Resend's API key, re_… as resend.com › API Keys shows it; left out or blank: the one kept stays — one is needed. |
-| `clear_resend_key` | boolean | no | True: the kept key is emptied. |
-| `from_address` | string | yes | An email address (kept in lower case). |
-| `from_name` | string | no | 64 characters at most; blank: the shop's name. |
+| `resend_key` | string | no | Resend's API key (re_…, from resend.com › API Keys). Left out or blank: the stored key stays. A key is required. |
+| `clear_resend_key` | boolean | no | True empties the stored key. |
+| `from_address` | string | yes | An email address (stored in lower case). |
+| `from_name` | string | no | At most 64 characters; blank for the shop's name. |
 
 **`ConfigAdvancedRequest`**
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `log_level` | string | yes | One of meta.log_levels — any other is refused, as a time zone is. |
+| `log_level` | string | yes | One of `meta.log_levels`; anything else is refused. |
 | `session_lifetime` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes, 5 to 43200. |
 | `session_secure_cookie` | boolean | yes |  |
 | `http_timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds, 5 to 120. |
 | `cron_token` | string | no |  |
 | `clear_cron_token` | boolean | no |  |
 
-**`DatabaseRequest`** — The database part of config.php as a form sends it — the installer's step, the settings screen's save and its test: the driver (one of `drivers`) and its form's fields under their names, as typed. A secret left blank or left out keeps the stored one while the address it was given for stays — in the installer there is none: it is empty —, and `clear_<name>: true` empties it. A closed shape per driver.
+**`DatabaseRequest`** — The database settings as a form sends them (the installer's step, and the settings screen's save and test): the driver (one of `drivers`) and its form's fields by name, as typed. A secret left blank or out keeps the stored one while the address it was given for stays the same (the installer has nothing stored, so it is empty); `clear_<name>: true` empties it. One closed shape per driver.
 
 One of:
 
-**`DatabaseMysqlRequest`** — MySQL or MariaDB: where the database is, the account on it, its tables' prefix.
+**`DatabaseMysqlRequest`** — MySQL or MariaDB: the server, the account, the database and an optional table prefix.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3694,17 +4629,17 @@ One of:
 | `port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes |  |
 | `database` | string | yes |  |
 | `username` | string | yes |  |
-| `password` | string | no | Left out or blank: the one kept stays — while the host, the port and the socket stay. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
+| `password` | string | no | Left out or blank: the stored password stays, as long as the host, port and socket stay the same. |
+| `clear_password` | boolean | no | True empties the stored password. |
 | `socket` | string | no | Blank for none. |
 | `prefix` | string | no | Blank for none. |
 
-**`DatabaseSqliteRequest`** — SQLite: a file of the shop's own.
+**`DatabaseSqliteRequest`** — SQLite: a database file.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `sqlite` | yes |  |
-| `path` | string | yes | The file, relative to the application or absolute; never under public/. |
+| `path` | string | yes | The file's path, relative to the application folder or absolute; never under public/. |
 
 **Answers**
 
@@ -3715,27 +4650,27 @@ One of:
 
 ## An agent's panel
 
-What only an agent's panel has.
+Operations only an agent's panel has.
 
 | Operation | What it does |
 |---|---|
-| [`POST /api/agent/auth/link`](#post-apiagentauthlink) | An agent signs in with the code of the one-time link the main bot gave them, in their bot's shop |
-| [`POST /api/agent/auth/sessions/end`](#post-apiagentauthsessionsend) | The agent signs out of every other browser signed in to their panel |
-| [`GET /api/agent/account`](#get-apiagentaccount) | «حساب نمایندگی» |
-| [`GET /api/agent/account/traffic`](#get-apiagentaccounttraffic) | The agent's traffic, line by line, newest first |
+| [`POST /api/agent/auth/link`](#post-apiagentauthlink) | Sign an agent in with the code from their one-time link |
+| [`POST /api/agent/auth/sessions/end`](#post-apiagentauthsessionsend) | Sign the agent out of every other browser |
+| [`GET /api/agent/account`](#get-apiagentaccount) | The agent's account («حساب نمایندگی») |
+| [`GET /api/agent/account/traffic`](#get-apiagentaccounttraffic) | The agent's traffic ledger |
 
 ### POST /api/agent/auth/link
 
-An agent signs in with the code of the one-time link the main bot gave them, in their bot's shop — in place of another agent's session open in this browser only with `replace` (else a 409 on `replace`, the link not spent: the panel asks first)
+Sign an agent in with the code from their one-time link. The main bot gives the link; the session works in the agent's own shop. If another agent is signed in in this browser, the request needs `replace: true`; without it the answer is a 409 on `replace` and the link stays unused, so the panel can ask first.
 
 **Body**, as JSON:
 
-The code of the one-time link the main bot gave the agent («ورود به پنل»), read off the address's fragment (`#code=`).
+The code from the agent's one-time sign-in link (the main bot's «ورود به پنل»), read from the address's fragment (`#code=`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `code` | string | yes |  |
-| `replace` | boolean | no | Sign in even though another agent's session is open in this browser — it ends. Left out: refused with a 409 on `replace`, the link not spent. |
+| `replace` | boolean | no | Sign in even if another agent is signed in in this browser; that session ends. Without it, such a request gets a 409 on `replace` and the link stays unused. |
 
 **Answers**
 
@@ -3746,7 +4681,7 @@ The code of the one-time link the main bot gave the agent («ورود به پن�
 
 ### POST /api/agent/auth/sessions/end
 
-The agent signs out of every other browser signed in to their panel — this one stays (its sign-in held under the new epoch); a session ended meanwhile by another of theirs is a 401
+Sign the agent out of every other browser. This browser stays signed in. If this session was itself ended meanwhile from another browser, the answer is a 401.
 
 **Body:** none.
 
@@ -3759,7 +4694,7 @@ The agent signs out of every other browser signed in to their panel — this one
 
 ### GET /api/agent/account
 
-«حساب نمایندگی»: the agent's bot, its traffic, their level, wallet and credit
+The agent's account («حساب نمایندگی»). Their bot, its traffic, and their level, wallet and credit.
 
 **Answers**
 
@@ -3770,7 +4705,7 @@ The agent signs out of every other browser signed in to their panel — this one
 
 ### GET /api/agent/account/traffic
 
-The agent's traffic, line by line, newest first
+The agent's traffic ledger. Newest line first.
 
 **Parameters**
 
@@ -3787,20 +4722,20 @@ The agent's traffic, line by line, newest first
 
 ## The web installer
 
-Until the shop is installed, each request with the install key (`X-Install-Key`: the text of storage/install-key.txt, which the first request makes).
+Available only until the shop is installed; each request needs the install key (`X-Install-Key`: the text of storage/install-key.txt, which the first request creates).
 
 | Operation | What it does |
 |---|---|
-| [`GET /api/install`](#get-apiinstall) | Where the installation stands (only until the shop is installed) |
-| [`POST /api/install/database`](#post-apiinstalldatabase) | The database, written to config.php once its driver's probe answers (a blank secret is empty |
-| [`POST /api/install/tables`](#post-apiinstalltables) | The shop's tables, on the database the previous step wrote |
-| [`POST /api/install/admin`](#post-apiinstalladmin) | The panel's login |
-| [`POST /api/install/site`](#post-apiinstallsite) | The shop's name and address, and the bot's token if given |
-| [`POST /api/install/finish`](#post-apiinstallfinish) | End the installation |
+| [`GET /api/install`](#get-apiinstall) | The installation's progress |
+| [`POST /api/install/database`](#post-apiinstalldatabase) | Save the database settings |
+| [`POST /api/install/tables`](#post-apiinstalltables) | Create the shop's tables |
+| [`POST /api/install/admin`](#post-apiinstalladmin) | Set the panel's login |
+| [`POST /api/install/site`](#post-apiinstallsite) | Set the shop's name and address, and the bot's token when one is given |
+| [`POST /api/install/finish`](#post-apiinstallfinish) | Finish the installation |
 
 ### GET /api/install
 
-Where the installation stands (only until the shop is installed)
+The installation's progress. Available only until the shop is installed.
 
 **Answers**
 
@@ -3811,15 +4746,15 @@ Where the installation stands (only until the shop is installed)
 
 ### POST /api/install/database
 
-The database, written to config.php once its driver's probe answers (a blank secret is empty: nothing is stored yet)
+Save the database settings. They are written to config.php only after the driver's probe connects. A blank secret means empty here, since nothing is stored yet.
 
 **Body**, as JSON:
 
-The database part of config.php as a form sends it — the installer's step, the settings screen's save and its test: the driver (one of `drivers`) and its form's fields under their names, as typed. A secret left blank or left out keeps the stored one while the address it was given for stays — in the installer there is none: it is empty —, and `clear_<name>: true` empties it. A closed shape per driver.
+The database settings as a form sends them (the installer's step, and the settings screen's save and test): the driver (one of `drivers`) and its form's fields by name, as typed. A secret left blank or out keeps the stored one while the address it was given for stays the same (the installer has nothing stored, so it is empty); `clear_<name>: true` empties it. One closed shape per driver.
 
 One of:
 
-**`DatabaseMysqlRequest`** — MySQL or MariaDB: where the database is, the account on it, its tables' prefix.
+**`DatabaseMysqlRequest`** — MySQL or MariaDB: the server, the account, the database and an optional table prefix.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3828,17 +4763,17 @@ One of:
 | `port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes |  |
 | `database` | string | yes |  |
 | `username` | string | yes |  |
-| `password` | string | no | Left out or blank: the one kept stays — while the host, the port and the socket stay. |
-| `clear_password` | boolean | no | True: the kept password is emptied. |
+| `password` | string | no | Left out or blank: the stored password stays, as long as the host, port and socket stay the same. |
+| `clear_password` | boolean | no | True empties the stored password. |
 | `socket` | string | no | Blank for none. |
 | `prefix` | string | no | Blank for none. |
 
-**`DatabaseSqliteRequest`** — SQLite: a file of the shop's own.
+**`DatabaseSqliteRequest`** — SQLite: a database file.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `sqlite` | yes |  |
-| `path` | string | yes | The file, relative to the application or absolute; never under public/. |
+| `path` | string | yes | The file's path, relative to the application folder or absolute; never under public/. |
 
 **Answers**
 
@@ -3849,7 +4784,7 @@ One of:
 
 ### POST /api/install/tables
 
-The shop's tables, on the database the previous step wrote — the ones it does not have
+Create the shop's tables. Creates the tables missing from the database the previous step saved.
 
 **Body:** none.
 
@@ -3862,16 +4797,16 @@ The shop's tables, on the database the previous step wrote — the ones it does 
 
 ### POST /api/install/admin
 
-The panel's login
+Set the panel's login.
 
 **Body**, as JSON:
 
-The panel's login by its one rule (Auth's Credentials): a username of 2 to 64 letters, digits, `.`, `_`, `@` or `-`, and a password of 8 characters at least and 72 bytes at most, typed twice alike.
+The panel's login: a username of 2 to 64 letters, digits, `.`, `_`, `@` or `-`, and a password of at least 8 characters and at most 72 bytes, typed twice.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `username` | string | yes |  |
-| `password` | string | yes | As typed — a space at either end is part of it. |
+| `password` | string | yes | As typed; spaces at either end are part of it. |
 | `password_confirmation` | string | yes |  |
 
 **Answers**
@@ -3883,17 +4818,17 @@ The panel's login by its one rule (Auth's Credentials): a username of 2 to 64 le
 
 ### POST /api/install/site
 
-The shop's name and address, and the bot's token if given
+Set the shop's name and address, and the bot's token when one is given.
 
 **Body**, as JSON:
 
-The shop's name and the address it is reached at (APP_NAME, APP_URL), and the main bot's token when the owner has it now — written once Telegram says whose it is.
+The shop's name and public address (APP_NAME, APP_URL), and optionally the main bot's token, which is saved once Telegram confirms which bot it belongs to.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
-| `url` | string | yes | http(s), its sub-folder included. |
-| `token` | string | no | From @BotFather; blank or left out — later, from the settings screen. |
+| `url` | string | yes | An http(s) address, including any sub-folder. |
+| `token` | string | no | From @BotFather. Blank or left out to set it later on the settings screen. |
 
 **Answers**
 
@@ -3904,7 +4839,7 @@ The shop's name and the address it is reached at (APP_NAME, APP_URL), and the ma
 
 ### POST /api/install/finish
 
-End the installation
+Finish the installation.
 
 **Body:** none.
 
@@ -3917,16 +4852,16 @@ End the installation
 
 ## The installation
 
-Anyone may ask these.
+Anyone can call these.
 
 | Operation | What it does |
 |---|---|
-| [`GET /health`](#get-health) | Whether the app and its database answer |
-| [`GET /api/app`](#get-apiapp) | The shop's name, and whether it is installed |
+| [`GET /health`](#get-health) | Health check for uptime monitors |
+| [`GET /api/app`](#get-apiapp) | The shop's name and whether it is installed |
 
 ### GET /health
 
-Whether the app and its database answer — for uptime monitors
+Health check for uptime monitors. Says whether the app and its database answer.
 
 **Answers**
 
@@ -3938,7 +4873,7 @@ Whether the app and its database answer — for uptime monitors
 
 ### GET /api/app
 
-The shop's name, and whether it is installed — what the panel asks before anything else
+The shop's name and whether it is installed. The panels ask this first.
 
 **Answers**
 
@@ -3953,13 +4888,13 @@ The shop's name, and whether it is installed — what the panel asks before anyt
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `traffic_shortage` | [TrafficShortage](API-Schemas.md#trafficshortage) or null | yes | Whether their traffic sells nothing; null while it sells. |
+| `traffic_shortage` | [TrafficShortage](API-Schemas.md#trafficshortage) or null | yes | Set when their traffic is too low to sell anything; null otherwise. |
 | `account` | object | yes |  |
 | `account.bot` | [AgentBot](API-Schemas.md#agentbot) | yes |  |
 | `account.agent` | [UserRef](API-Schemas.md#userref) | yes |  |
 | `account.level` | [AgencyLevelRef](API-Schemas.md#agencylevelref) or null | yes | Their level; null once the agency ended. |
-| `account.credit_limit` | string | yes | How far below zero their wallet with the shop may go, in Toman. |
-| `account.balance` | string | yes | Their wallet with the shop (in the main bot), in Toman. |
+| `account.credit_limit` | string | yes | How far below zero their main-bot wallet may go, in Toman. |
+| `account.balance` | string | yes | Their wallet balance in the main bot, in Toman. |
 
 ### AgencyLevelResponse
 
@@ -3969,13 +4904,13 @@ The shop's name, and whether it is installed — what the panel asks before anyt
 
 ### AgencyLevelRow
 
-A level of the shop's agents.
+An agency level.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
-| `price_per_gb` | string | yes | What a GB of the traffic their bots sell costs its agents, in Toman. |
+| `price_per_gb` | string | yes | What agents on this level pay per GB of traffic for their bots, in Toman. |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.agents` | integer | yes |  |
@@ -3996,7 +4931,7 @@ A level of the shop's agents.
 
 ### AgencyRequestRow
 
-A customer asking to become an agent.
+A customer's request to become an agent.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4008,7 +4943,7 @@ A customer asking to become an agent.
 | `note` | string or null | yes | What the customer wrote. |
 | `level` | [AgencyLevelRef](API-Schemas.md#agencylevelref) or null | yes | The level given on approval. |
 | `reason` | string or null | yes | Support's note on a rejection. |
-| `reviewer` | string or null | yes | Who decided: the panel login, or a bot admin (@username / tg:&lt;id&gt;). |
+| `reviewer` | string or null | yes | Who decided it: the panel login, or a bot admin (@username or tg:&lt;id&gt;). |
 | `decided_at` | string (date-time) or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
 | `actions` | object | yes |  |
@@ -4017,7 +4952,7 @@ A customer asking to become an agent.
 
 ### AgencyRequestSort
 
-What the agency requests sort by: when each was sent (the list's own order).
+The agency requests list's sort key: creation time.
 
 String: `created`.
 
@@ -4040,14 +4975,14 @@ String: `pending`, `approved`, `rejected`.
 
 ### AgencySettings
 
-The agency program's rules — the shop's own (the main bot's settings), on the owner's agents page.
+The agency program's settings (stored with the main bot's settings), set on the owner's agents page.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `enabled` | boolean | yes | Requests are taken and customers see the menu's button (agents keep their account and bots either way). |
-| `default_credit` | string | yes | The credit an approved agent starts with, in Toman. |
-| `traffic_presets` | list of integer | yes | The GB an agent may buy with one tap, smallest first. |
-| `traffic_min` | integer | yes | The least GB an agent may type. |
+| `enabled` | boolean | yes | Requests are accepted and customers see the menu button. Existing agents keep their accounts and bots either way. |
+| `default_credit` | string | yes | The credit a newly approved agent gets, in Toman. |
+| `traffic_presets` | list of integer | yes | The GB amounts an agent can buy with one tap, smallest first. |
+| `traffic_min` | integer | yes | The smallest GB amount an agent can type. |
 
 ### AgencySettingsResponse
 
@@ -4057,13 +4992,13 @@ The agency program's rules — the shop's own (the main bot's settings), on the 
 
 ### AgencySummary
 
-The program's numbers, above the lists (its rules are AgencySettings, on their own section).
+The agency program's numbers, shown above the lists (its settings are AgencySettings).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `levels` | integer | yes |  |
 | `agents` | integer | yes |  |
-| `bots` | integer | yes | Agents' bots that run (handed over and switched on). |
+| `bots` | integer | yes | Agents' bots that are running (connected and switched on). |
 | `pending` | integer | yes | Requests waiting for a decision. |
 
 ### AgencySummaryResponse
@@ -4077,7 +5012,7 @@ The program's numbers, above the lists (its rules are AgencySettings, on their o
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `agent` | [AgentRow](API-Schemas.md#agentrow) | yes |  |
-| `delivery` | [Delivery](API-Schemas.md#delivery) or null | yes | Whether the agent was told their new terms; null when the terms sent are the ones they had — nothing changed, nobody told. |
+| `delivery` | [Delivery](API-Schemas.md#delivery) or null | yes | Whether the agent was notified of their new terms; null when the terms did not change (no notice was sent). |
 
 ### AgentResponse
 
@@ -4087,7 +5022,7 @@ The program's numbers, above the lists (its rules are AgencySettings, on their o
 
 ### AgentSort
 
-What the agents list sorts by: when each joined the bot (the list's own order), the wallet, the bot's traffic, what it sold (none is 0).
+The agents list's sort keys: sign-up time (the default), wallet balance, the bot's traffic, or its sales (none counts as 0).
 
 String: `joined`, `balance`, `traffic`, `sold`.
 
@@ -4106,13 +5041,13 @@ String: `joined`, `balance`, `traffic`, `sold`.
 
 ### AppInfo
 
-GET /api/app — asked before anything else.
+The answer of `GET /api/app`, which the panels call first.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | The shop's name (APP_NAME), as the brand shows it. |
-| `installed` | boolean | yes | False until the web installer has finished: the panel then opens it. |
-| `timezone` | string | yes | The shop's time zone (APP_TIMEZONE, an IANA name such as Asia/Tehran): the panels show every date and time in it, as the bot words its dates. |
+| `name` | string | yes | The shop's name (APP_NAME). |
+| `installed` | boolean | yes | False until the web installer has finished; the panel then shows the installer. |
+| `timezone` | string | yes | The shop's time zone (APP_TIMEZONE, an IANA name such as Asia/Tehran). The panels show every date and time in it, as the bot does. |
 
 ### BotChannelResponse
 
@@ -4122,7 +5057,7 @@ GET /api/app — asked before anything else.
 
 ### BotChannelRow
 
-A channel or group the customer must join first.
+A channel or group customers must join before using the bot.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4130,9 +5065,9 @@ A channel or group the customer must join first.
 | `chat_id` | integer | yes |  |
 | `type` | string: `channel`, `supergroup` | yes |  |
 | `title` | string | yes |  |
-| `username` | string or null | yes | Public handle without "@"; null for private ones. |
-| `link` | string | yes | Where the customer is sent to join. |
-| `bot_is_admin` | boolean | yes | What the last check found; the bot needs admin rights to see the members. |
+| `username` | string or null | yes | Public handle without "@"; null for a private chat. |
+| `link` | string | yes | The link customers follow to join. |
+| `bot_is_admin` | boolean | yes | Whether the bot was an admin at the last check; it needs admin rights to see the members. |
 | `checked_at` | string (date-time) or null | yes |  |
 | `sort` | integer | yes |  |
 
@@ -4158,19 +5093,19 @@ A channel or group the customer must join first.
 
 ### BotMode
 
-How a bot gets its updates: a webhook Telegram calls, a poller (bot:poll) whose heartbeat is fresh, or none of them.
+How a bot gets its updates: `webhook` (Telegram calls it), `polling` (a `bot:poll` process with a fresh heartbeat), or `offline` (neither).
 
 String: `webhook`, `polling`, `offline`.
 
 ### BotRuntime
 
-How a bot runs. The main bot's is the installation's: every bot gets its updates its way (on webhooks, or polling — they are put on webhooks and taken off together), and its token is config.php's.
+How a bot runs. The main bot's mode applies to the whole installation: every bot gets updates the same way (all on webhooks, or all polling), and the main bot's token is in config.php.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `configured` | boolean | yes | It has a token to run on. |
-| `enabled` | boolean | yes | Its shop's master switch (تنظیمات ربات), independent of whether the process is running. |
-| `username` | string or null | yes | Its @username, without the @; null while unknown. |
+| `configured` | boolean | yes | It has a token. |
+| `enabled` | boolean | yes | The shop's master switch (bot settings), whether or not the process is running. |
+| `username` | string or null | yes | Its username, without the @; null while unknown. |
 | `mode` | [BotMode](#botmode) | yes |  |
 | `last_update_at` | string (date-time) or null | yes |  |
 
@@ -4178,36 +5113,71 @@ How a bot runs. The main bot's is the installation's: every bot gets its updates
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
+| `hold_minutes` | integer | yes | «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days). |
 | `enabled` | boolean | yes |  |
 | `phone_required` | boolean | yes |  |
 | `join_required` | boolean | yes |  |
-| `support_contact` | string | yes | The Telegram id or link the bot's "پشتیبانی" screen shows; may be empty. |
-| `topup_min` | integer | yes | Smallest top-up, Toman. |
+| `support_contact` | string | yes | The Telegram id or link the bot's «پشتیبانی» screen shows; may be empty. |
+| `topup_min` | integer | yes | The smallest top-up, in Toman. |
 | `topup_presets` | list of integer | yes | The amounts offered as buttons, ascending. |
 | `qr_enabled` | boolean | yes | Whether a delivered service comes with a QR code of its link. |
-| `carry_traffic` | boolean | yes | «تمدید سرویس»: whether the traffic a period leaves unused is added to the renewed one (else it goes when the period ends). |
-| `auto_renew_days` | integer | yes | «تمدید خودکار»: how many days before its deadline a service is renewed from the wallet. |
-| `auto_renew_default` | boolean | yes | Whether a new service starts with the customer's switch on. |
-| `expiry_reminder` | boolean | yes | «یادآوری»: the customer is told a service ends soon — this many days before its deadline. |
+| `carry_traffic` | boolean | yes | «تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends). |
+| `auto_renew_days` | integer | yes | «تمدید خودکار»: how many days before its end a service is renewed from the wallet. |
+| `auto_renew_default` | boolean | yes | Whether a new service starts with auto-renewal on. |
+| `extras_enabled` | boolean | yes | «حجم و زمان اضافه»: whether customers can buy extra traffic and time for their services, at these prices or a plan's own (`PlanRow.extras`). When off, none is sold. |
+| `extra_traffic_price` | string or null | yes | The shop's price per GB of extra traffic, in Toman; null when only the preset amounts with their own prices are sold (no custom amount). |
+| `extra_traffic_options` | list of [ExtraOption](API-Schemas.md#extraoption) | yes | The GB amounts offered as buttons, smallest first. |
+| `extra_traffic_min` | integer | yes | The smallest custom GB amount (needs a price per GB). |
+| `extra_traffic_max` | integer | yes | The largest custom GB amount. |
+| `extra_time_price` | string or null | yes | The shop's price per day of extra time, in Toman; null when only the preset periods with their own prices are sold (no custom amount). |
+| `extra_time_options` | list of [ExtraOption](API-Schemas.md#extraoption) | yes | The day counts offered as buttons, fewest first. |
+| `extra_time_min` | integer | yes | The fewest custom days (needs a price per day). |
+| `extra_time_max` | integer | yes | The most custom days. |
+| `expiry_reminder` | boolean | yes | «یادآوری»: remind the customer `expiry_reminder_days` days before a service ends. |
 | `expiry_reminder_days` | integer | yes |  |
-| `traffic_reminder` | boolean | yes | …and that its traffic runs low — once this share of its quota is used. |
+| `traffic_reminder` | boolean | yes | Remind the customer once `traffic_reminder_percent` of a service's quota is used. |
 | `traffic_reminder_percent` | integer | yes |  |
-| `referral_enabled` | boolean | yes | «زیرمجموعه‌گیری»: links bring referrals and payments earn their referrers this percent… |
+| `referral_enabled` | boolean | yes | «زیرمجموعه‌گیری»: the referral program. Referral links bring new customers, and their payments earn the referrer `referral_rate` percent. |
 | `referral_rate` | integer | yes |  |
-| `referral_first_only` | boolean | yes | …of only the first payment of each referred customer. |
-| `report_purchases` | boolean | yes | «گروه گزارش‌ها»: which topics of the admins' report group get reports — every one on until switched off. |
+| `referral_renewal_rate` | integer | yes | The percent a referred customer's renewal earns instead (0: renewals earn nothing). |
+| `referral_first_only` | boolean | yes | Only the first payment of each referred customer earns a commission. |
+| `referral_start_referrer` | string | yes | «هدیه شروع»: Toman added to the referrer's wallet for each new customer their link brings (0: none). |
+| `referral_start_invitee` | string | yes | Toman added to the new customer's own wallet (0: none). |
+| `referral_start_when` | [ReferralStartTrigger](API-Schemas.md#referralstarttrigger) | yes |  |
+| `referral_reward_every` | integer | yes | «جایزه دعوت»: each time this many more of a referrer's referrals have bought, the referrer gets a free service of `referral_reward_plan_id` (0: never). |
+| `referral_reward_plan_id` | integer or null | yes | The reward's plan (`PlanRow.id`); null for none. Required while the reward is on. |
+| `referral_alert_burst` | integer | yes | «هشدار زیرمجموعه‌گیری فیک»: raise an alert when this many customers join through one link within `referral_alert_minutes` (0: never). |
+| `referral_alert_minutes` | integer | yes | The window for `referral_alert_burst`, in minutes. Each kind of alert is raised at most once per window. |
+| `referral_alert_idle` | integer | yes | Raise an alert when a referrer has this many referrals and none of them bought, and again at each further multiple (0: never). While an alert stands, the referrer earns no start gift and no plan reward. |
+| `report_purchases` | boolean | yes | «گروه گزارش‌ها»: the `report_…` switches choose which report group topics get reports. All are on until switched off. |
 | `report_renewals` | boolean | yes |  |
 | `report_wallet` | boolean | yes |  |
 | `report_receipts` | boolean | yes |  |
 | `report_users` | boolean | yes |  |
 | `report_errors` | boolean | yes |  |
-| `report_agency` | boolean | no | The main bot's shop only: agency requests and traffic purchases are reported to the shop's own group, so an agent's bot has no such switch. |
-| `report_tickets` | boolean | yes | The support tickets and their conversation — every shop's. |
-| `report_reviews` | boolean | yes | The reviews written on the shop's website — every shop's. |
+| `report_agency` | boolean | no | Main shop only: agency requests and traffic purchases are reported to the main shop's group, so an agent's bot has no such switch. |
+| `report_tickets` | boolean | yes | Support tickets and their messages (in every shop). |
+| `report_reviews` | boolean | yes | Reviews written on the website (in every shop). |
+| `gift_codes_enabled` | boolean | yes | «کد هدیه»: customers can redeem gift codes, with the bot's «🎁 کد هدیه» button or on the website. Codes can be created either way. |
+| `wheel_enabled` | boolean | yes | «گردونه شانس»: customers can spin the lucky wheel with the bot's «🎡 گردونه شانس» button. |
+| `wheel_cooldown_hours` | integer | yes | Hours a customer waits between two spins that gave a prize. |
+| `wheel_buyers_only` | boolean | yes | Only customers who have bought a service can spin (bot admins always can). |
+| `wheel_cost` | integer | yes | The cost of a spin from the wallet, in whole Toman; 0 for free. |
+| `cashback_enabled` | boolean | yes | «کش‌بک»: whether delivered orders earn cashback, from the cashback rules (`GET /cashback/rules`) and the customer's loyalty tier. When off, none is earned. |
+| `lottery_enabled` | boolean | yes | «قرعه‌کشی شبانه»: whether a draw among buyers runs every night. |
+| `lottery_hour` | integer | yes | The hour (0 to 23, in the shop's time zone) from which the night's draw runs. |
+| `lottery_winners` | integer | yes | Winners per draw, 1 to 20. |
+| `lottery_prize` | [LotteryPrizeKind](#lotteryprizekind) | yes |  |
+| `lottery_wallet` | string | yes | The prize in Toman, for a wallet prize. |
+| `lottery_traffic_gb` | integer | yes | The prize in GB, for a traffic prize. |
+| `lottery_days` | integer | yes | The prize in days, for a days prize. |
+| `lottery_plan_id` | integer or null | yes | For a plan prize: the plan whose service it gives; null while none is chosen. |
+| `lottery_entries` | string: `order`, `buyer` | yes | One entry per paid order, or one per buyer. |
+| `lottery_exclude_agents` | boolean | yes | Leave agents out of the draw (bot admins and banned customers are always left out). |
 
 ### BotSettingsGroup
 
-String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `reminders`, `referral`, `reports`, `qr`.
+String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `extras`, `reminders`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`.
 
 ### BotSettingsResponse
 
@@ -4232,7 +5202,7 @@ String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `reminders`, `
 
 ### BotTextKind
 
-Where a text ends up: a message or the QR card's caption (Telegram HTML), a callback popup or a button (shown as typed), or a part another text takes in.
+Where a text is used: a `message` or the QR card's `caption` (Telegram HTML), a callback `popup` or a `button` (plain text), or a `part` included in other texts.
 
 String: `message`, `caption`, `popup`, `button`, `part`.
 
@@ -4244,44 +5214,73 @@ String: `message`, `caption`, `popup`, `button`, `part`.
 
 ### BotTextRow
 
-One text the bot sends a customer, with the shop's wording and the admin's.
+A text the bot sends customers, with its default wording and the current one.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `key` | string | yes |  |
 | `group` | string | yes |  |
 | `kind` | [BotTextKind](#bottextkind) | yes |  |
-| `html` | boolean | yes | Telegram reads it as HTML (a message, a caption, a part). |
-| `limit` | integer | yes | The longest the wording may be, in characters. |
+| `html` | boolean | yes | Telegram reads it as HTML (a message, a caption or a part). |
+| `limit` | integer | yes | The maximum length of the wording, in characters. |
 | `title` | string | yes |  |
-| `description` | string | yes | Where the customer meets it. |
+| `description` | string | yes | Where the customer sees it. |
 | `variables` | list of [BotTextVariable](#bottextvariable) | yes |  |
 | `default` | string | yes |  |
-| `value` | string | yes | The wording in use: the admin's, or the default. |
+| `value` | string | yes | The wording in use: the custom one, or the default. |
 | `customized` | boolean | yes |  |
 
 ### BotTextVariable
 
-A `%name%` the bot fills in when it sends the text.
+A `%name%` placeholder the bot fills in when it sends the text.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
 | `description` | string | yes |  |
-| `sample` | string | yes | What the screen's preview puts in its place. |
-| `required` | boolean | yes | The text cannot do without it (a delivery without its link). |
+| `sample` | string | yes | The sample value the screen's preview uses. |
+| `required` | boolean | yes | The wording must contain it (a delivery message needs its link). |
 
 ### BotTextsResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `groups` | list of [BotTextGroup](#bottextgroup) | yes | The groups the shop's bot says, in the screen's order — an agent's has no «نمایندگی». |
+| `groups` | list of [BotTextGroup](#bottextgroup) | yes | The text groups of the shop's bot, in the screen's order. An agent's bot has no «نمایندگی» group. |
 
-### ButtonStyle
+### CashbackOrderType
 
-Telegram's button styles (`style` on KeyboardButton / InlineKeyboardButton); null = the client's default look.
+An order type a cashback rule can apply to: things a customer buys for themselves.
 
-String: `primary`, `success`, `danger`.
+String: `purchase`, `renewal`, `extra_traffic`, `extra_time`.
+
+### CashbackRuleResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `rule` | [CashbackRuleRow](#cashbackrulerow) | yes |  |
+
+### CashbackRuleRow
+
+A cashback rule («کش‌بک»): this percent of what a delivered order paid goes back to the customer's wallet, for the listed order types, for members of its customer group (null: anyone) who paid with its payment method (null: any). Of the enabled rules matching an order, the highest percent applies; the customer's loyalty tier adds its own.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `percent` | integer | yes |  |
+| `order_types` | list of [CashbackOrderType](#cashbackordertype) | yes |  |
+| `customer_group` | object or null | yes |  |
+| `customer_group.id` | integer | yes |  |
+| `customer_group.name` | string | yes |  |
+| `payment_method` | object or null | yes |  |
+| `payment_method.id` | integer | yes |  |
+| `payment_method.label` | string | yes |  |
+| `enabled` | boolean | yes |  |
+
+### CashbackRulesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `rules` | list of [CashbackRuleRow](#cashbackrulerow) | yes |  |
 
 ### ConfigAdvancedSettings
 
@@ -4298,7 +5297,7 @@ String: `primary`, `success`, `danger`.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
-| `url` | string | yes | APP_URL: the address the shop is reached at, its sub-folder included — every address the shop hands out is built on it. |
+| `url` | string | yes | APP_URL: the shop's public address, including any sub-folder. Every address the shop gives out is built on it. |
 | `debug` | boolean | yes |  |
 | `timezone` | string | yes |  |
 
@@ -4308,19 +5307,19 @@ String: `app`, `database`, `telegram`, `mail`, `advanced`.
 
 ### ConfigMailSettings
 
-The shop's email (MAIL_* in config.php) — a website's sign-up codes and password resets, and the notices to a customer Telegram cannot reach, go out by it: how, every mail driver described with its settings, and who the emails come from.
+The shop's email settings (MAIL_* in config.php), used for the website's sign-up and password reset codes and for notices to customers Telegram cannot reach: the transport, every mail driver described with its settings, and the sender.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `transport` | [MailTransport](#mailtransport) | yes |  |
-| `from_address` | string | yes | The address the shop's emails come from; empty: no email goes out. |
-| `from_name` | string | yes | The name they come from; empty: the shop's name. |
-| `drivers` | list of [DriverDescription](#driverdescription) | yes | Every mail driver, its form described; its `sender` trait says which address its emails may come from. |
-| `values` | map of [DriverValues](#drivervalues) | yes | Each driver's settings by its key — as config.php holds them, else their defaults; a secret as its SecretState. |
+| `from_address` | string | yes | The sender address of the shop's emails; empty means no email is sent. |
+| `from_name` | string | yes | The sender name; empty means the shop's name. |
+| `drivers` | list of [DriverDescription](#driverdescription) | yes | Every mail driver with its form. Its `sender` trait says which sender address it can use. |
+| `values` | map of [DriverValues](#drivervalues) | yes | Each driver's settings, keyed by driver: the stored values, else the defaults. A secret is a SecretState. |
 
 ### ConfigSettingsResponse
 
-The panel's own configuration, read from config.php.
+The installation's configuration, read from config.php.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4339,8 +5338,8 @@ The panel's own configuration, read from config.php.
 | `meta.timezones[].id` | string | yes |  |
 | `meta.timezones[].label` | string | yes |  |
 | `meta.log_levels` | list of string | yes |  |
-| `meta.cron_url` | string or null | yes | The cron trigger with its token masked, like the token; null without one. The whole address is GET /api/admin/settings/config/cron-url. |
-| `meta.webhook_url` | string | yes | The main bot's webhook, its secret masked. |
+| `meta.cron_url` | string or null | yes | The cron trigger address with its token masked; null without a token. The full address is at `GET /api/admin/settings/config/cron-url`. |
+| `meta.webhook_url` | string | yes | The main bot's webhook address, with its secret masked. |
 
 ### ConfigTelegramSettings
 
@@ -4356,37 +5355,37 @@ The panel's own configuration, read from config.php.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `url` | string or null | yes | The cron trigger, token and all — for the screen's copy action; null without a token. |
+| `url` | string or null | yes | The full cron trigger address, token included, for the copy button; null without a token. |
 
 ### CustomEmojiRow
 
-A premium emoji an admin showed the bot (/emoji), offered by the bot texts and keyboards editors.
+A premium emoji an admin sent the bot with /emoji, offered by the bot texts and keyboards editors.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id` | string | yes | Telegram's custom emoji id — digits, kept as a string. |
-| `emoji` | string | yes | The plain emoji it stands for: what goes inside its &lt;tg-emoji&gt;. |
-| `format` | string: `static`, `animated`, `video` or null | yes | How Telegram draws it: a still picture, a Lottie animation or a WebM video (see …/animation); null = not known yet. |
-| `repaint` | boolean | yes | Telegram paints it in the colour of the text around it (its needs_repainting). |
+| `id` | string | yes | Telegram's custom emoji id: digits, as a string. |
+| `emoji` | string | yes | The plain emoji it stands for, which goes inside its &lt;tg-emoji&gt; tag. |
+| `format` | string: `static`, `animated`, `video` or null | yes | How Telegram draws it: a still picture, a Lottie animation or a WebM video (see `…/animation`); null while unknown. |
+| `repaint` | boolean | yes | Telegram paints it in the colour of the surrounding text (`needs_repainting`). |
 | `updated_at` | string (date-time) | yes |  |
 
 ### CustomEmojisResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `emojis` | list of [CustomEmojiRow](#customemojirow) | yes | The latest seen first. |
-| `status` | object or null | yes | Whether the bot's own premium emoji came through, as the last /emoji found; null before the first. |
+| `emojis` | list of [CustomEmojiRow](#customemojirow) | yes | Most recently seen first. |
+| `status` | object or null | yes | Whether the bot can send premium emoji, as the last /emoji check found; null before the first check. |
 | `status.ok` | boolean | yes |  |
 | `status.checked_at` | string (date-time) | yes |  |
 
 ### DatabaseCheck
 
-What answered a database probe.
+The database server a probe reached.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `version` | string | yes | The server and its version: "MariaDB 10.4.32", "SQLite 3.45.1" |
-| `tables` | integer | yes | How many tables its database holds |
+| `tables` | integer | yes | The number of tables in the database |
 
 ### DatabaseCheckResponse
 
@@ -4396,68 +5395,187 @@ What answered a database probe.
 
 ### DatabaseSettings
 
-The database part of config.php: the driver DB_CONNECTION names, the drivers the admin may pick — each described, its form —, and the driver's fields as config.php holds them.
+The database settings in config.php: the driver DB_CONNECTION names, the drivers the admin may pick (each described with its form), and the chosen driver's stored values.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `driver` | string | yes | The DriverDescription.key config.php names. |
-| `drivers` | list of [DriverDescription](#driverdescription) | yes | The installable drivers, and the one the shop runs on |
+| `driver` | string | yes | The chosen driver (`DriverDescription.key`) named in config.php. |
+| `drivers` | list of [DriverDescription](#driverdescription) | yes | The installable drivers, plus the one the shop runs on |
 | `values` | [DriverValues](#drivervalues) | yes |  |
+
+### DiscountCodeResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `code` | [DiscountCodeRow](#discountcoderow) | yes |  |
+
+### DiscountCodeRow
+
+A discount code («کد تخفیف») a customer types at checkout, in the bot or on the website. Stored and matched in upper case.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `code` | string | yes |  |
+| `note` | string or null | yes | The admin's private note about it. |
+| `type` | [DiscountType](#discounttype) | yes |  |
+| `value` | string or null | yes | For `percent`: the whole percent; for `fixed`: Toman; null for `free`. |
+| `max_discount` | string or null | yes | For `percent`: the most Toman it takes off; null for no cap. |
+| `min_amount` | string or null | yes | The minimum order amount (after the automatic discount) for the code to apply; null for none. |
+| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | yes | The order types it applies to; null for every type a discount can apply to. |
+| `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The plans it applies to (for a renewal or extra, the service's plan); null for any. |
+| `servers` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The servers it applies to (for a purchase, the chosen server; for a renewal or extra, the service's); null for any. |
+| `first_purchase_only` | boolean | yes | Only for customers who have not bought a service yet. |
+| `starts_at` | string (date-time) or null | yes |  |
+| `ends_at` | string (date-time) or null | yes | When it stops applying; it may end at any hour of the day. |
+| `max_uses` | integer or null | yes | Total uses allowed; null for no limit. |
+| `per_user` | integer or null | yes | Uses allowed per customer; null for no limit. |
+| `enabled` | boolean | yes |  |
+| `uses` | integer | yes | Orders made with it that are not cancelled. An unpaid order frees its use when it is cancelled or expires (see the `hold_minutes` bot setting). |
+| `state` | [DiscountState](#discountstate) | yes |  |
+| `created_at` | string (date-time) | yes |  |
+
+### DiscountCodesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `codes` | list of [DiscountCodeRow](#discountcoderow) | yes |  |
+| `meta` | [PageMeta](API-Schemas.md#pagemeta) | yes |  |
+
+### DiscountState
+
+A code's or sale's current state: `active`, switched `off`, `scheduled` (not started), `ended`, or (codes only) `used_up`.
+
+String: `active`, `off`, `scheduled`, `ended`, `used_up`.
+
+### DiscountType
+
+What a discount code takes off: a `percent` of the amount (capped at `max_discount` Toman when set), a `fixed` number of Toman (never more than the amount), or the whole amount (`free`).
+
+String: `percent`, `fixed`, `free`.
 
 ### DriverDescription
 
-A driver — one way of doing a thing through someone else: a database, a way email goes out — as the panels show it (Descriptor::toArray()): its name and words, and its form, every field described.
+A driver (a database, a mail transport, a panel connector, a payment gateway, a captcha) as the panels show it (`Descriptor::toArray()`): its key, label and description, and its form with every field described.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `key` | string | yes | What config.php, a row or a request names it by. |
+| `key` | string | yes | The name config.php, a database row or a request uses for it. |
 | `label` | string | yes |  |
 | `description` | string | yes |  |
-| `notes` | list of string | yes | Short lines under the description: the versions it needs, its caveats. |
+| `notes` | list of string | yes | Short notes under the description, such as required versions and caveats. |
 | `fields` | list of [FieldDescription](#fielddescription) | yes |  |
-| `traits` | map of string or number or boolean or list of string or number or boolean or null | yes | What its family says of it beyond this: a database driver's `installable` (the installer offers it); a mail driver's `sender` (who it can send from, in words); a payment gateway's `kind` (instant — it settles at once, the wallet —, or manual — a card transfer whose receipt a person accepts) and `builtin` (part of the shop itself: never added nor deleted); a panel connector's `mark` (the two letters its card draws), `vendor`, `docs` (its project's address) and what its panel can do — `inbounds` (services sold on inbounds the owner picks; without, a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. |
+| `traits` | map of string or number or boolean or list of string or number or boolean or null | yes | Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet, or `manual`, a card transfer whose receipt a person approves) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. |
 
 ### DriverValues
 
-A driver's fields by name as a screen shows them (Form::present()): as config.php holds them, else their defaults — a secret as its SecretState, never the secret.
+A driver's field values by name, as a screen shows them (`Form::present()`): the stored values, else the defaults. A secret is a SecretState, never the secret itself.
 
 Map of string or number or boolean or list of number or [SecretState](#secretstate).
 
 ### FieldDescription
 
-One field of a driver's form as a generic form draws it (Field::describe()): the screens hold no driver's code.
+One field of a driver's form, described for a generic form (`Field::describe()`), so the screens need no driver-specific code.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | The key it is sent under, and the one a 422 names. |
+| `name` | string | yes | The key the value is sent under, and the field a 422 names. |
 | `type` | [FieldType](#fieldtype) | yes |  |
 | `label` | string | yes |  |
-| `hint` | string or null | yes | The line under it. |
+| `hint` | string or null | yes | The help line under the field. |
 | `placeholder` | string or null | yes |  |
-| `required` | boolean | yes | A form that leaves it empty is refused — a secret's: one must end up kept, the stored one staying while it is left blank. |
-| `secret` | boolean | yes | Never sent back — its value is a SecretState —: left blank or left out it keeps the stored one, `clear_<name>: true` empties it. |
-| `bound_to` | list of string | yes | A secret's: the fields it belongs with. While one of them moves a blank one is refused (in `moved`'s words), to be typed again or cleared. |
-| `moved` | string or null | yes | What the server says of a blank secret while a field it belongs with moved — the hint to show before it is asked. |
+| `required` | boolean | yes | The form is refused when it is empty. For a secret: a value must end up stored, and a blank one keeps the stored value. |
+| `secret` | boolean | yes | Never sent back (its value is a SecretState). Left blank or out, the stored value stays; `clear_<name>: true` empties it. |
+| `bound_to` | list of string | yes | For a secret: the fields it belongs with. When one of them changes, a blank secret is refused (with the `moved` message) and must be typed again or cleared. |
+| `moved` | string or null | yes | The server's message for a blank secret after a field it belongs with changed; show it as a hint before saving. |
 | `advanced` | boolean | yes | Drawn under «تنظیمات پیشرفته». |
-| `options` | list of object | yes | A choice's values and their words, in order. |
+| `options` | list of object | yes | A choice's values and their labels, in order. |
 | `options[].value` | string | yes |  |
 | `options[].label` | string | yes |  |
-| `when` | map of list of string | yes | Shown — and read, and required when it is — only while each named field (one before it) holds one of these values: a switch as "true" or "false", a number as its digits. Hidden, what is kept of it stays. |
-| `unit` | string or null | yes | Said after a number: «ثانیه». |
-| `min` | number or null | yes | The least a number may be — each of a list's, an amount's. |
-| `max` | number or null | yes | The most. |
-| `ltr` | boolean | yes | Latin content (a host, a username): drawn left to right, as a number, a secret, an email, a web address and a path are. |
-| `default` | string or number or boolean or list of number or null | yes | What it holds while nothing is kept; null for a secret. |
+| `when` | map of list of string | yes | The field is shown (and read, and required if it is) only while each named earlier field holds one of these values: a switch as "true" or "false", a number as its digits. While hidden, its stored value is kept. |
+| `unit` | string or null | yes | Shown after a number, such as «ثانیه». |
+| `min` | number or null | yes | The smallest value of a number, an amount, or each item of a list. |
+| `max` | number or null | yes | The largest value. |
+| `ltr` | boolean | yes | Latin content (a host, a username), drawn left to right like numbers, secrets, emails, web addresses and paths. |
+| `default` | string or number or boolean or list of number or null | yes | The value while nothing is stored; null for a secret. |
 
 ### FieldType
 
-What a field holds, as a generic form draws it: a line of text, a whole number, an amount of Toman, a short list of numbers typed as text, an on/off switch, one of a few values, a secret, an email address, a web address, a file's path, a few lines of text, or a bank card's number (drawn in groups of four, as it is printed, and sent as its digits).
+A field's kind, which decides how a generic form draws it: a line of text, a whole number, an amount of Toman, a short list of numbers typed as text, an on/off switch, one of a few values, a secret, an email address, a web address, a file path, a few lines of text, or a bank card number (drawn in groups of four and sent as digits).
 
 String: `text`, `number`, `amount`, `list`, `toggle`, `choice`, `secret`, `email`, `url`, `path`, `textarea`, `card`.
 
+### GiftCodeBatch
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `batch` | string or null | yes |  |
+| `total` | integer | yes |  |
+| `redeemed` | integer | yes |  |
+| `expired` | integer | yes | Expired without being redeemed. |
+| `unused` | integer | yes | Not yet redeemed. |
+| `created_at` | string (date-time) | yes | When its newest codes were created. |
+
+### GiftCodeBatchResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `batch` | string | yes |  |
+| `codes` | list of string | yes | The new codes, for copying. |
+
+### GiftCodeBatchesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `batches` | list of [GiftCodeBatch](#giftcodebatch) | yes |  |
+
+### GiftCodeRow
+
+A gift code («کد هدیه»), redeemable once by one customer of the shop.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `code` | string | yes | Upper-case Latin letters and digits, as stored and matched. Customers may type it in any case, with dashes and spaces. |
+| `batch` | string or null | yes | Its batch label. |
+| `kind` | [GiftCodeKind](API-Schemas.md#giftcodekind) | yes |  |
+| `amount` | string or null | yes | Toman, for the wallet; null for a plan. |
+| `plan` | [RewardPlanRef](#rewardplanref) or null | yes | The plan it gives; null for a Toman code, or when the plan was deleted (then nobody can redeem it). |
+| `expires_at` | string (date-time) or null | yes | When it expires (the first moment it can no longer be redeemed); null for never. |
+| `status` | [GiftCodeStatus](#giftcodestatus) | yes |  |
+| `redeemed_by` | [UserRef](API-Schemas.md#userref) or null | yes | Who redeemed it; null while unredeemed, or once their account is gone. |
+| `redeemed_at` | string (date-time) or null | yes |  |
+| `order` | [RewardOrderRef](#rewardorderref) or null | yes | For a redeemed plan code: the order that delivered its service. |
+| `created_at` | string (date-time) | yes |  |
+
+### GiftCodeStatus
+
+A gift code's status: `unused`, `redeemed` by a customer, or `expired` without being redeemed.
+
+String: `unused`, `redeemed`, `expired`.
+
+### GiftCodesDeletedResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `deleted` | integer | yes |  |
+
+### GiftCodesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `codes` | list of [GiftCodeRow](#giftcoderow) | yes |  |
+| `meta` | [PageMeta](API-Schemas.md#pagemeta) | yes |  |
+
+### GiftCodesUnusedResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `codes` | list of string | yes |  |
+
 ### GrantReach
 
-Whom a grant would reach by what the shop last knew: running services, and those still waiting for their first connection.
+How many services a grant would reach, from the stored data: running ones, and ones still waiting for their first connection.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4471,7 +5589,7 @@ Whom a grant would reach by what the shop last knew: running services, and those
 | `status` | string: `ok`, `degraded` | yes |  |
 | `version` | string | yes |  |
 | `installed` | boolean | yes |  |
-| `database` | string: `ok`, `unavailable` | yes | Never why: the log has that. |
+| `database` | string: `ok`, `unavailable` | yes | Never the reason; that is in the log. |
 
 ### InboundsResponse
 
@@ -4487,23 +5605,23 @@ Whom a grant would reach by what the shop last knew: running services, and those
 
 ### InstallStatus
 
-GET /api/install, and every installer step's answer — where the installation stands.
+The installation's progress. The answer of `GET /api/install` and of every installer step.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `requirements` | list of object | yes |  |
 | `requirements[].name` | string | yes |  |
-| `requirements[].label` | string | yes | In the installer's words |
+| `requirements[].label` | string | yes | The installer's label for it |
 | `requirements[].ok` | boolean | yes |  |
-| `requirements[].optional` | boolean | yes | What the shop runs without — the owner's panel updating it itself needs it: shown, and holding nothing up. |
-| `ready` | boolean | yes | Every requirement that is not optional is met. |
-| `database` | object | yes | The database step's settings, and whether a database answers to what config.php names (not asked before the step wrote one). |
-| `database.driver` | string | yes | The DriverDescription.key config.php names. |
-| `database.drivers` | list of [DriverDescription](#driverdescription) | yes | The installable drivers, and the one the shop runs on |
+| `requirements[].optional` | boolean | yes | Not needed to run the shop (only the panel's self-update needs it). Shown, but blocks nothing. |
+| `ready` | boolean | yes | Every non-optional requirement is met. |
+| `database` | object | yes | The database step's settings, and whether the database config.php names answers (not checked before the step has written one). |
+| `database.driver` | string | yes | The chosen driver (`DriverDescription.key`) named in config.php. |
+| `database.drivers` | list of [DriverDescription](#driverdescription) | yes | The installable drivers, plus the one the shop runs on |
 | `database.values` | [DriverValues](#drivervalues) | yes |  |
 | `database.connected` | boolean | yes |  |
-| `database.tables` | boolean | yes | Every table of database/schema.php is there. |
-| `database.error` | string or null | yes | Why it does not answer, in the admin's words |
+| `database.tables` | boolean | yes | Every table of database/schema.php exists. |
+| `database.error` | string or null | yes | Why the database does not answer, for the admin |
 | `admin` | object | yes |  |
 | `admin.configured` | boolean | yes |  |
 | `admin.username` | string | yes |  |
@@ -4516,38 +5634,38 @@ GET /api/install, and every installer step's answer — where the installation s
 
 ### KeyboardAction
 
-Something a menu button can stand for.
+An action a menu button can trigger.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `key` | string | yes |  |
 | `title` | string | yes |  |
-| `label` | string | yes | The default label (emoji + title). |
-| `screen` | string | yes | The `menu:*` callback an inline button carries. |
+| `label` | string | yes | The default label (emoji and title). |
+| `screen` | string | yes | The `menu:*` callback data an inline button carries. |
 
 ### KeyboardButtonInput
 
-A button as the editor sends it back (a KeyboardButtonSpec): each action once a keyboard, each label once.
+A button as the editor sends it (a KeyboardButtonSpec). Each action and each label may appear only once per keyboard.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `action` | string | yes | A KeyboardAction.key. |
-| `label` | string | yes | Plain text — a premium emoji goes in `icon`. |
-| `style` | [ButtonStyle](#buttonstyle) or null | no |  |
-| `icon` | string or null | no | A premium emoji's id; null — none. |
+| `action` | string | yes | An action key (`KeyboardAction.key`). |
+| `label` | string | yes | Plain text; a premium emoji goes in `icon`. |
+| `style` | [ButtonStyle](API-Schemas.md#buttonstyle) or null | no |  |
+| `icon` | string or null | no | A premium emoji's id; null for none. |
 
 ### KeyboardButtonSpec
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `action` | string | yes | An action of the bot (see KeyboardAction.key). |
-| `label` | string | yes | What the button says; for a reply keyboard also what the tap sends. |
-| `style` | [ButtonStyle](#buttonstyle) or null | yes |  |
-| `icon` | string matching `^[0-9]{1,20}$` or null | yes | A premium emoji's id (see CustomEmojiRow), drawn before the label — Telegram's `icon_custom_emoji_id`, shown only while the bot's owner has Telegram Premium; null = none. |
+| `action` | string | yes | A bot action (`KeyboardAction.key`). |
+| `label` | string | yes | The button text; on a reply keyboard, also what a tap sends. |
+| `style` | [ButtonStyle](API-Schemas.md#buttonstyle) or null | yes |  |
+| `icon` | string matching `^[0-9]{1,20}$` or null | yes | A premium emoji's id (see CustomEmojiRow), shown before the label (Telegram's `icon_custom_emoji_id`). It shows only while the bot's owner has Telegram Premium. Null for none. |
 
 ### KeyboardLayoutData
 
-One of the bot's keyboards as the admin laid it out; rows are in reading order (first = rightmost).
+One of the bot's keyboards as laid out. Rows are in reading order (the first button is the rightmost).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4572,16 +5690,81 @@ String: `reply`, `inline`.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `keyboards` | list of [KeyboardLayoutData](#keyboardlayoutdata) | yes |  |
-| `actions` | list of [KeyboardAction](#keyboardaction) | yes | What a button of this shop's menu can do — an agent's bot has no «نمایندگی», which its layouts never show and a save refuses. |
-| `styles` | list of [ButtonStyle](#buttonstyle) | yes |  |
+| `actions` | list of [KeyboardAction](#keyboardaction) | yes | The actions this shop's menu buttons can have. An agent's bot has no «نمایندگی»: its layouts never show it, and saving it is refused. |
+| `styles` | list of [ButtonStyle](API-Schemas.md#buttonstyle) | yes |  |
 | `limits` | object | yes |  |
 | `limits.rows` | integer | yes |  |
 | `limits.per_row` | integer | yes |  |
 | `limits.label` | integer | yes |  |
 
+### LotteryDrawRow
+
+One nightly draw among buyers («قرعه‌کشی شبانه»): its day, its entries, its prize (as it was then), and its winners in the order drawn.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `day` | string (date) | yes | The day it was drawn for, in the shop's time zone. |
+| `entries` | integer | yes | Its entries: the paid orders of the previous 24 hours, or the buyers (one entry each). |
+| `prize` | object | yes |  |
+| `prize.kind` | [LotteryPrizeKind](#lotteryprizekind) | yes |  |
+| `prize.amount` | string or null | yes | Toman (wallet), GB (traffic) or days (days); null for a plan. |
+| `prize.plan` | [RewardPlanRef](#rewardplanref) or null | yes | For a plan prize: the plan; null once it is deleted. |
+| `prize.words` | string | yes | What it gives, as the customer reads it. |
+| `winners` | list of [LotteryWinnerRow](#lotterywinnerrow) | yes |  |
+| `created_at` | string (date-time) | yes |  |
+
+### LotteryDrawsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `draws` | list of [LotteryDrawRow](#lotterydrawrow) | yes |  |
+| `meta` | [PageMeta](API-Schemas.md#pagemeta) | yes |  |
+
+### LotteryPrizeKind
+
+What the nightly draw gives each winner: Toman in the wallet (`wallet`), GB of `traffic` or `days` on one of their running services, or a free service of a `plan`.
+
+String: `wallet`, `traffic`, `days`, `plan`.
+
+### LotteryWinnerRow
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `customer` | [UserRef](API-Schemas.md#userref) | yes |  |
+| `outcome` | string or null | yes | What they were given, as they read it. |
+| `order_id` | integer or null | yes | For a plan prize: the order that delivered its service. |
+| `subscription_id` | integer or null | yes | The service that got the traffic or days, or the plan's new service. |
+
+### LoyaltyTierResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `tier` | [LoyaltyTierRow](#loyaltytierrow) | yes |  |
+
+### LoyaltyTierRow
+
+A loyalty tier («سطح وفاداری»). A customer is on the highest tier whose `min_spent` they reached; it gives them a discount on purchases and extra cashback on payments.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes |  |
+| `min_spent` | string | yes | Toman a customer must have spent: paid and unrefunded purchases, renewals and extras. |
+| `discount_percent` | integer | yes | 0 to 100; 0 for none. At checkout the largest automatic discount applies (a sale, the personal discount, or this). |
+| `cashback_percent` | integer | yes | 0 to 100; 0 for none. Added to the cashback rules' percent while cashback is on. |
+| `customers` | integer | yes | How many customers are on it now. |
+
+### LoyaltyTiersResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `tiers` | list of [LoyaltyTierRow](#loyaltytierrow) | yes | Lowest threshold first. |
+
 ### MailEncryption
 
-An SMTP connection: tls — STARTTLS, required; ssl — TLS from the first byte; none.
+An SMTP connection's encryption: `tls` (STARTTLS, required), `ssl` (TLS from the first byte) or `none`.
 
 String: `tls`, `ssl`, `none`.
 
@@ -4589,24 +5772,24 @@ String: `tls`, `ssl`, `none`.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `sent` | boolean | yes | True: the transport took it — whether it lands in the inbox is the mail server's. |
+| `sent` | boolean | yes | True: the transport accepted it. Whether it reaches the inbox is up to the mail server. |
 
 ### MailTransport
 
-How the shop's email goes out: none, or a mail driver's key (DriverDescription.key) — smtp, an account on a mail server; native, the host's own mail, as PHP's mail() sends it (php.ini's sendmail_path); resend, Resend's API (resend.com), with its API key and the sender's domain verified there.
+How the shop sends email: `none`, or a mail driver's key (`DriverDescription.key`): `smtp`, an account on a mail server; `native`, the host's own mail through PHP's mail() (php.ini's sendmail_path); `resend`, Resend's API (resend.com), with an API key and the sender's domain verified there.
 
 String: `none`, `smtp`, `native`, `resend`.
 
 ### ManualGatewayConfig
 
-A card-to-card method's settings (ManualMethodRow.config): the manual driver's form, each field as the row keeps it — one kept before the field existed at its default.
+A card-to-card method's settings (`ManualMethodRow.config`): the manual driver's form values as stored. A field added after the method was saved shows its default.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `card_number` | string | yes | Bare 16 digits. |
+| `card_number` | string | yes | 16 digits, no separators. |
 | `card_holder` | string | yes |  |
 | `instructions` | string | yes |  |
-| `auto_approve_after` | integer | yes | Minutes a receipt may wait for an admin before it is accepted on its own; 0 = only by hand. |
+| `auto_approve_after` | integer | yes | Minutes a receipt sent in the bot may wait for review before it is approved automatically; 0 for manual approval only. |
 
 ### ManualMethodRow
 
@@ -4619,25 +5802,25 @@ A card-to-card method.
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
-| `label` | string | yes | What the customer sees on the button: "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one line about the method (its masked card and holder), as the payments screen shows it; null when it has none. |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. |
 | `config` | [ManualGatewayConfig](#manualgatewayconfig) | yes |  |
 | `enabled` | boolean | yes |  |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
-| `counts.payments` | integer | yes | The payments made with it; a method that has any is not deleted. |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
 | `created_at` | string (date-time) | yes |  |
 | `updated_at` | string (date-time) | yes |  |
 
 ### MassGrantAudience
 
-Every service, the agents' only, or one server's.
+Who a mass gift reaches: `all` services, only the `agents`' services, one `server`'s, or one customer `group`'s (a group of the main shop).
 
-String: `all`, `agents`, `server`.
+String: `all`, `agents`, `server`, `group`.
 
 ### MassGrantPart
 
-A mass gift's part on one server: a server grant, worked through on its own.
+A mass gift's part on one server: a server grant, applied separately.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4648,7 +5831,7 @@ A mass gift's part on one server: a server grant, worked through on its own.
 | `granted` | integer | yes |  |
 | `skipped` | integer | yes |  |
 | `failed` | integer | yes |  |
-| `waiting_reason` | string or null | yes | As a server grant's (ServerGrantRow.waiting_reason). |
+| `waiting_reason` | string or null | yes | Same as `ServerGrantRow.waiting_reason`. |
 | `last_failure` | string or null | yes |  |
 
 ### MassGrantResponse
@@ -4659,7 +5842,7 @@ A mass gift's part on one server: a server grant, worked through on its own.
 
 ### MassGrantRow
 
-A grant: days and traffic for the running services on every server (or the agents' only, or one server's — a server page's too), a part per server; its numbers are the parts' added up, its status and end its parts'.
+A grant: days and traffic for the running services on every server, or only the agents', one customer group's, or one server's (including grants made on a server's page). It has one part per server; its numbers are the parts' totals, and its status and end come from its parts.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4670,7 +5853,8 @@ A grant: days and traffic for the running services on every server (or the agent
 | `notify` | boolean | yes |  |
 | `include_unstarted` | boolean | yes |  |
 | `audience` | [MassGrantAudience](#massgrantaudience) | yes |  |
-| `server` | [NamedRef](API-Schemas.md#namedref) or null | yes | The one server, for audience server. |
+| `server` | [NamedRef](API-Schemas.md#namedref) or null | yes | The server, for the `server` audience. |
+| `group` | [NamedRef](API-Schemas.md#namedref) or null | yes | The customer group, for the `group` audience; also null once the group is deleted, after which the gift reaches no one else. |
 | `status` | [ServerGrantStatus](#servergrantstatus) | yes |  |
 | `total` | integer | yes |  |
 | `granted` | integer | yes |  |
@@ -4683,7 +5867,7 @@ A grant: days and traffic for the running services on every server (or the agent
 
 ### MassGrantsResponse
 
-The mass gift card: the latest grants — the servers' pages' too —, and whom a new one would reach — everyone, the agents, on each server.
+The mass gift card: the latest grants (including those made on servers' pages), and how many services a new one would reach for each audience: everyone, the agents, each server, and each customer group of the main shop.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4696,10 +5880,15 @@ The mass gift card: the latest grants — the servers' pages' too —, and whom 
 | `audience.servers[].name` | string | yes |  |
 | `audience.servers[].running` | integer | yes |  |
 | `audience.servers[].unstarted` | integer | yes |  |
+| `audience.groups` | list of object | yes | The main shop's customer groups, in the admin's order, including groups with no running services. |
+| `audience.groups[].id` | integer | yes |  |
+| `audience.groups[].name` | string | yes |  |
+| `audience.groups[].running` | integer | yes |  |
+| `audience.groups[].unstarted` | integer | yes |  |
 
 ### NumbersInput
 
-A short list of whole numbers — the amounts a screen offers as buttons —: a list, or the text an admin types ("50, 100, 200", or a space between; a comma between groups of three digits sets a number's thousands apart: "50,000, 100,000" is two numbers); kept without repeats, smallest first.
+A short list of whole numbers, such as the amounts a screen offers as buttons. A list, or text as the admin types it ("50, 100, 200", or separated by spaces; a comma between groups of three digits is a thousands separator, so "50,000, 100,000" is two numbers). Stored without repeats, smallest first.
 
 One of:
 - list of [WholeNumberInput](API-Schemas.md#wholenumberinput)
@@ -4709,7 +5898,7 @@ One of:
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `core_name` | string or null | yes | What the panel calls its core ("Xray"); null when it has no named one. |
+| `core_name` | string or null | yes | The name of the panel's core ("Xray"); null when it has none. |
 | `core_state` | string: `running`, `stopped`, `error`, `unknown` | yes |  |
 | `core_version` | string | yes |  |
 | `core_error` | string | yes |  |
@@ -4723,7 +5912,7 @@ One of:
 
 ### PaymentDriversResponse
 
-The gateway drivers a method is made from, in the order they are registered: each described with its form — a method's settings — and its traits: `kind`, how it settles (a GatewayKind), and `builtin`, part of the shop itself (the wallet: one row in every shop, never added or deleted, nothing to set).
+The gateway drivers a payment method can use, in registration order. Each has its form (the method's settings) and its traits: `kind`, how it settles (a GatewayKind), and `builtin`, part of every shop (the wallet: one row per shop, never added or deleted, with no settings).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4737,7 +5926,7 @@ The gateway drivers a method is made from, in the order they are registered: eac
 
 ### PaymentMethodRow
 
-One row per method the customer may pick, in checkout order — as its driver describes it: `config` is its driver's form, each field as the row keeps it (a closed shape per driver).
+A payment method, in checkout order, as its driver describes it. `config` holds the driver's form values as stored (one closed shape per driver).
 
 One of:
 - [ManualMethodRow](#manualmethodrow)
@@ -4752,28 +5941,28 @@ One of:
 
 ### Probe
 
-Outcome of talking to a panel.
+The result of contacting a panel.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `ok` | boolean | yes |  |
-| `error` | string or null | yes | Persian sentence: what went wrong and what to change. |
-| `error_detail` | string or null | yes | Technical detail behind it (panel wording, cURL text), Latin. |
+| `error` | string or null | yes | A Persian sentence: what went wrong and what to change. |
+| `error_detail` | string or null | yes | The technical detail behind it (the panel's message, cURL text), in English. |
 | `status` | [PanelStatusInfo](#panelstatusinfo) or null | yes |  |
-| `inbounds` | list of [ProbeInbound](#probeinbound) or null | yes | Null when the panel could not list them — a check then leaves the stored ones as they were. |
-| `serves_subscriptions` | boolean or null | yes | Whether the panel serves subscription links; null when that could not be asked. |
-| `subscription_probed` | boolean | yes | False when the connection worked but the subscription question failed. |
+| `inbounds` | list of [ProbeInbound](#probeinbound) or null | yes | Null when the panel could not list them; a check then leaves the stored ones unchanged. |
+| `serves_subscriptions` | boolean or null | yes | Whether the panel serves subscription links; null when that could not be checked. |
+| `subscription_probed` | boolean | yes | False when the connection worked but the subscription check failed. |
 
 ### ProbeInbound
 
-An inbound as the panel reports it — from a probe, or the cached copy in server_inbounds.
+An inbound as the panel reports it, from a probe or from the stored copy.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `remote_key` | string | yes | The panel's own identifier, opaque. |
+| `remote_key` | string | yes | The panel's own identifier (opaque). |
 | `tag` | string | yes |  |
-| `protocol` | string or null | yes | Null for what is not one protocol (a PasarGuard group). |
-| `port` | integer or null | yes | Null for what has no port of its own (a PasarGuard group). |
+| `protocol` | string or null | yes | Null when it is not a single protocol (a PasarGuard group). |
+| `port` | integer or null | yes | Null when it has no port of its own (a PasarGuard group). |
 | `remark` | string | yes |  |
 | `enabled` | boolean | yes |  |
 | `network` | string or null | yes |  |
@@ -4788,17 +5977,17 @@ An inbound as the panel reports it — from a probe, or the cached copy in serve
 
 ### QrBackgroundInfo
 
-The picture QR codes are drawn on.
+The background picture QR cards are drawn on.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `custom` | boolean | yes | False = the shipped picture. |
+| `custom` | boolean | yes | False for the default picture. |
 | `mime` | string | yes |  |
 | `width` | integer | yes |  |
 | `height` | integer | yes |  |
 | `size` | integer | yes |  |
-| `updated_at` | integer | yes | File mtime (unix seconds) — a cache-buster for the preview. |
-| `max_bytes` | integer | yes | The largest upload taken. |
+| `updated_at` | integer | yes | The file's modification time (unix seconds), used to bust the preview's cache. |
+| `max_bytes` | integer | yes | The largest upload accepted. |
 
 ### QrBackgroundResponse
 
@@ -4810,8 +5999,8 @@ The picture QR codes are drawn on.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `file` | string | yes | Where the key is, from the shop's own folder: storage/recovery-key.txt. |
-| `expires_at` | string (date-time) | yes | When it stops opening anything — an hour after it was made. |
+| `file` | string | yes | The key file, relative to the app folder: storage/recovery-key.txt. |
+| `expires_at` | string (date-time) | yes | When the key expires: an hour after it was made. |
 
 ### ReleaseInfo
 
@@ -4819,34 +6008,34 @@ A release as GitHub lists it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `version` | string | yes | Its version (its tag, without the v). |
+| `version` | string | yes | Its version (the tag without the v). |
 | `published_at` | string (date-time) or null | yes |  |
-| `notes` | string | yes | Its notes, as plain text: shown as they are, line breaks kept — never as HTML. |
+| `notes` | string | yes | Its release notes as plain text, line breaks kept. Never render them as HTML. |
 | `url` | string | yes | Its page on GitHub. |
 
 ### ReportGroupData
 
-The admins' report group.
+The report group, where the bot reports to the shop's admins.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `connected` | boolean | yes |  |
-| `chat_id` | integer or null | yes | -100… — a Telegram id, shown as is. |
+| `chat_id` | integer or null | yes | A Telegram chat id (-100…), shown as is. |
 | `title` | string or null | yes |  |
 | `connected_at` | string (date-time) or null | yes |  |
-| `problem` | string or null | yes | What keeps reports from reaching the group, in the admin's words; null when nothing does. |
-| `paused_until` | string (date-time) or null | yes | Sending waits until then: a flood limit, an unreachable Telegram, the group's problem. |
-| `waiting` | integer | yes | Reports queued and not sent yet. |
+| `problem` | string or null | yes | What keeps reports from reaching the group; null when nothing does. |
+| `paused_until` | string (date-time) or null | yes | Sending is paused until then (a flood limit, Telegram unreachable, or a problem with the group). |
+| `waiting` | integer | yes | Reports queued but not sent yet. |
 | `topics` | list of [ReportTopicInfo](#reporttopicinfo) | yes |  |
-| `link` | object or null | yes | The connect link outstanding: Telegram's add-to-group link, the command that does the same typed into the group, when both stop working. |
+| `link` | object or null | yes | The pending connect link: Telegram's add-to-group link, the equivalent command to type in the group, and when both expire. |
 | `link.url` | string | yes |  |
 | `link.command` | string | yes |  |
 | `link.expires_at` | string (date-time) | yes |  |
-| `attempt` | object or null | yes | The last group offered with that link and refused, and why. |
+| `attempt` | object or null | yes | The last group that tried that link and was refused, and why. |
 | `attempt.title` | string | yes |  |
 | `attempt.message` | string | yes |  |
 | `attempt.at` | string (date-time) | yes |  |
-| `bot_username` | string or null | yes | The bot's @username without "@"; null until the bot has run once. |
+| `bot_username` | string or null | yes | The bot's username without "@"; null until the bot has run once. |
 
 ### ReportGroupResponse
 
@@ -4856,7 +6045,7 @@ The admins' report group.
 
 ### ReportGroupTestResponse
 
-Messages queued, and how many went out right away.
+How many test messages were queued, and how many were sent right away.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4866,23 +6055,73 @@ Messages queued, and how many went out right away.
 
 ### ReportTopicInfo
 
-One topic of the report group, in the group's order.
+A topic of the report group, in the group's order.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `key` | [ReportTopicKey](#reporttopickey) | yes |  |
-| `title` | string | yes | Its name in the group, and its switch's label. |
-| `about` | string | yes | What comes to it. |
-| `ready` | boolean | yes | Whether the bot has made it in the connected group. |
-| `enabled` | boolean | yes | Whether the admin wants its reports (`report_<key>` of the bot settings). |
+| `title` | string | yes | Its name in the group, and the label of its switch. |
+| `about` | string | yes | What it reports. |
+| `ready` | boolean | yes | Whether the bot has created it in the connected group. |
+| `enabled` | boolean | yes | Whether its reports are on (the bot setting `report_<key>`). |
 
 ### ReportTopicKey
 
 String: `purchases`, `renewals`, `wallet`, `receipts`, `users`, `errors`, `agency`, `tickets`, `reviews`.
 
+### RewardOrderRef
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `status` | [OrderStatus](API-Schemas.md#orderstatus) | yes |  |
+
+### RewardPlanRef
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes |  |
+
+### RewardServiceRef
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes | The client's name on the panel. |
+
+### SaleResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `sale` | [SaleRow](#salerow) | yes |  |
+
+### SaleRow
+
+A timed sale («فروش ویژه»): a percent off the listed plans, for the listed order types, between its start and end. It is one of the automatic discounts; at checkout the largest applies.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes | The name customers see, such as «فروش ویژه نوروز». |
+| `percent` | integer | yes |  |
+| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | yes | Null for every type a discount can apply to. |
+| `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | Null for every plan (for an extra, the service's plan counts). |
+| `starts_at` | string (date-time) or null | yes |  |
+| `ends_at` | string (date-time) or null | yes |  |
+| `enabled` | boolean | yes |  |
+| `state` | [DiscountState](#discountstate) | yes |  |
+| `created_at` | string (date-time) | yes |  |
+
+### SalesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `sales` | list of [SaleRow](#salerow) | yes |  |
+
 ### SecretState
 
-A secret as the settings screen sees it: never the value, only whether one is stored and a recognisable hint.
+A secret as a settings screen sees it: never the value, only whether one is stored and a short hint to recognise it.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4913,7 +6152,7 @@ A secret as the settings screen sees it: never the value, only whether one is st
 
 ### ServerDriversResponse
 
-The panel connectors a server is added with, in their order (each a PanelDriver): each one's words and the versions it needs (`notes`), what the add-server picker draws it by (`traits`: `mark`, two letters; `vendor`; `docs_url`) and what its panels can do (`inbounds`, `link_rotation`) — and a server's form on it: its name, the connector's connection, then the server's own columns.
+The panel connectors a server can use, in order. Each has its description and required versions (`notes`), what the add-server picker shows (`traits`: `mark`, two letters; `vendor`; `docs_url`), what its panels support (`inbounds`, `link_rotation`), and the whole server form for it: the name, the connector's connection fields, then the server's own fields.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4927,25 +6166,25 @@ The panel connectors a server is added with, in their order (each a PanelDriver)
 
 ### ServerGrantRow
 
-«افزودن زمان و حجم»: a grant's part on a server — the grant's terms, and how far it got there, worked through a batch at a time.
+A grant's part on one server («افزودن زمان و حجم»): the grant's terms and its progress there. It is applied a batch at a time.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id` | integer | yes | The part's: what /servers/{id}/grants/{grant} names. |
-| `mass_grant_id` | integer or null | yes | The grant (a «هدیه همگانی») it is this server's part of, when it reaches beyond this server; null for a grant for this server alone. |
-| `agents_only` | boolean | yes | Only the agents' services (a mass gift for the agents). |
+| `id` | integer | yes | The part's id, as used in `/servers/{id}/grants/{grant}`. |
+| `mass_grant_id` | integer or null | yes | The mass gift («هدیه همگانی») this is a part of, when the grant covers more than this server; null for a grant for this server only. |
+| `agents_only` | boolean | yes | Only the agents' services (a mass gift for agents). |
 | `days` | integer | yes |  |
 | `traffic_bytes` | integer | yes |  |
-| `reason` | string or null | yes | What the customers read with it. |
-| `notify` | boolean | yes | Whether the customers are told in the bot. |
-| `include_unstarted` | boolean | yes | The admin's tick: services still waiting for their first connection get it too, not only running ones. |
+| `reason` | string or null | yes | The reason the customers read with it. |
+| `notify` | boolean | yes | Whether customers are notified in the bot. |
+| `include_unstarted` | boolean | yes | Services still waiting for their first connection get it too, not only running ones. |
 | `status` | [ServerGrantStatus](#servergrantstatus) | yes |  |
-| `total` | integer | yes | Every active service it goes through, as issued — which of them takes it is the panel's word as each one's turn comes; granted + skipped + failed is how far it got. |
+| `total` | integer | yes | The active services it goes through, counted when issued. The panel decides for each one, at its turn, whether it takes the grant. granted + skipped + failed is the progress. |
 | `granted` | integer | yes |  |
-| `skipped` | integer | yes | Services it was not for when their turn came (switched off, gone, ended beyond what it gives, still waiting for their first connection without the tick). |
+| `skipped` | integer | yes | Services it did not apply to when their turn came (switched off, gone, ended, or still waiting for their first connection without `include_unstarted`). |
 | `failed` | integer | yes |  |
-| `waiting_reason` | string or null | yes | Why it waits at the service it was on, in the owner's words — what keeps the shop from working with the panel (ProviderErrorPresenter::describe(): out of reach, a credential refused or missing…); tried again by itself. Null while it moves on. |
-| `last_failure` | string or null | yes | The latest service the panel refused, and why. |
+| `waiting_reason` | string or null | yes | Why it is paused at its current service: what keeps the shop from using the panel (unreachable, a credential refused or missing…). It retries by itself. Null while it is moving. |
+| `last_failure` | string or null | yes | The last service the panel refused, and why. |
 | `reviewer` | string or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
 | `finished_at` | string (date-time) or null | yes |  |
@@ -4956,7 +6195,7 @@ String: `running`, `done`, `cancelled`.
 
 ### ServerGrantsResponse
 
-A server's grants card: its latest grants, and whom a new one would reach by what the shop last knew.
+A server's grants card: its latest grants, and how many services a new grant would reach (from the stored data).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4969,10 +6208,10 @@ A server's grants card: its latest grants, and whom a new one would reach by wha
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `remote_key` | string | yes | The panel's own identifier, opaque. |
+| `remote_key` | string | yes | The panel's own identifier (opaque). |
 | `tag` | string | yes |  |
-| `protocol` | string or null | yes | Null for what is not one protocol (a PasarGuard group). |
-| `port` | integer or null | yes | Null for what has no port of its own (a PasarGuard group). |
+| `protocol` | string or null | yes | Null when it is not a single protocol (a PasarGuard group). |
+| `port` | integer or null | yes | Null when it has no port of its own (a PasarGuard group). |
 | `remark` | string | yes |  |
 | `enabled` | boolean | yes |  |
 | `network` | string or null | yes |  |
@@ -4997,20 +6236,20 @@ A server's grants card: its latest grants, and whom a new one would reach by wha
 | `driver` | string | yes |  |
 | `driver_label` | string | yes |  |
 | `base_url` | string | yes |  |
-| `form` | [DriverValues](#drivervalues) or null | yes | Its form — the fields its connector's description (ServerDriversResponse) lists — as the server keeps it: how the shop signs in to the panel (`auth_mode`, and each secret as its SecretState: whether one is kept, never the secret), the connection's options, the server's own columns; null while this installation has not its connector. |
+| `form` | [DriverValues](#drivervalues) or null | yes | The server's stored form values, with the fields its connector lists (ServerDriversResponse): how the shop signs in to the panel (`auth_mode`, and each secret as a SecretState that says whether one is stored, never the secret), the connection options, and the server's own fields. Null when this installation does not have its connector. |
 | `is_active` | boolean | yes |  |
 | `capacity` | integer or null | yes |  |
 | `sort` | integer | yes |  |
 | `notes` | string or null | yes |  |
 | `last_checked_at` | string (date-time) or null | yes |  |
 | `last_error` | string or null | yes |  |
-| `serves_subscriptions` | boolean or null | yes | Whether the panel hands out subscription links as of the last check; null = never asked. A server without them cannot be sold. |
-| `unsellable_reason` | string or null | yes | Why nothing can be sold or moved onto the server now (switched off, without subscription links, full, its connector missing…); null when it can. |
+| `serves_subscriptions` | boolean or null | yes | Whether the panel served subscription links at the last check; null if never checked. A server without them cannot be sold. |
+| `unsellable_reason` | string or null | yes | Why nothing can be sold on or moved to the server now (switched off, no subscription links, full, connector missing…); null when it can. |
 | `counts` | object | yes |  |
 | `counts.inbounds` | integer | yes |  |
 | `counts.selectable_inbounds` | integer | yes |  |
-| `counts.active_subscriptions` | integer | yes | Its services running now, every shop's — the main bot's and the agents' bots': what its capacity counts. |
-| `counts.shop_active_subscriptions` | integer | yes | Of them, the shop's the panel has open — the ones its subscriptions screen lists (`?server=`); the rest are other shops'. |
+| `counts.active_subscriptions` | integer | yes | Its active services across all shops (the main bot's and the agents'); this is what its capacity counts. |
+| `counts.shop_active_subscriptions` | integer | yes | Of those, the ones in the shop the panel has open: what its subscriptions screen lists with `?server=`. |
 | `created_at` | string (date-time) | yes |  |
 | `updated_at` | string (date-time) | yes |  |
 
@@ -5022,11 +6261,11 @@ A server's grants card: its latest grants, and whom a new one would reach by wha
 
 ### Session
 
-Who is signed in to a panel and the shop the request was worked in: on the owner's panel the one login config.php keeps and the shop the request named (X-Shop), on an agent's their bot and its shop.
+Who is signed in to a panel, and the shop the request worked in. On the owner's panel: the login from config.php and the shop the request named (`X-Shop`). On an agent's panel: their bot and its shop.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `name` | string | yes | The owner's login, or the agent's bot (@username) — what their decisions are recorded under. |
+| `name` | string | yes | The owner's login, or the agent's bot (@username). Their decisions are recorded under this name. |
 | `shop` | [ShopRef](#shopref) | yes |  |
 
 ### SessionResponse
@@ -5041,16 +6280,16 @@ A bot's shop: the main bot's, or an agent's.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `id` | integer | yes | The bot's id — 1 is the main bot. |
-| `name` | string | yes | The main bot's «فروشگاه اصلی»; an agent's bot's title, else — not handed over yet — «نماینده: » and the agent's name. |
-| `username` | string or null | yes | The bot's @username, without the @. |
-| `status` | string: `active`, `disabled` | yes | disabled: an agent whose agency ended — the shop is kept, its bot does not run. |
+| `id` | integer | yes | The bot's id; 1 is the main bot. |
+| `name` | string | yes | «فروشگاه اصلی» for the main bot; an agent's bot's title, or «نماینده: » and the agent's name while the agent has not connected a bot yet. |
+| `username` | string or null | yes | The bot's username, without the @. |
+| `status` | string: `active`, `disabled` | yes | `disabled`: an agent whose agency ended. The shop is kept, but its bot does not run. |
 
 ### ShopsResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `shops` | list of [ShopRef](#shopref) | yes | Every shop the owner may open — the main bot's first. |
+| `shops` | list of [ShopRef](#shopref) | yes | Every shop the owner may open, the main bot's first. |
 
 ### SystemResponse
 
@@ -5060,17 +6299,17 @@ A bot's shop: the main bot's, or an agent's.
 
 ### SystemStatus
 
-Whether the machinery behind the shop is alive — the owner's alone.
+The system's health: the version, PHP, the bots and the scheduler. Owner only.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `version` | string | yes |  |
 | `php` | string | yes |  |
-| `bot` | object | yes | The bot of the shop the request names (the dashboard's): the main bot, or an agent's. |
-| `bot.id` | integer | yes | The bot's id — 1 is the main bot. |
-| `bot.configured` | boolean | yes | It has a token to run on. |
-| `bot.enabled` | boolean | yes | Its shop's master switch (تنظیمات ربات), independent of whether the process is running. |
-| `bot.username` | string or null | yes | Its @username, without the @; null while unknown. |
+| `bot` | object | yes | The bot of the shop the request names (the dashboard's shop): the main bot or an agent's. |
+| `bot.id` | integer | yes | The bot's id; 1 is the main bot. |
+| `bot.configured` | boolean | yes | It has a token. |
+| `bot.enabled` | boolean | yes | The shop's master switch (bot settings), whether or not the process is running. |
+| `bot.username` | string or null | yes | Its username, without the @; null while unknown. |
 | `bot.mode` | [BotMode](#botmode) | yes |  |
 | `bot.last_update_at` | string (date-time) or null | yes |  |
 | `main_bot` | [BotRuntime](#botruntime) | yes |  |
@@ -5080,17 +6319,17 @@ Whether the machinery behind the shop is alive — the owner's alone.
 
 ### TrafficLine
 
-One line of an agent's traffic.
+One line of an agent's traffic ledger.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `type` | string: `purchase`, `sale`, `renewal`, `extension`, `refund`, `adjust` | yes | Bought, drawn by a sale or a renewal of their bot or by the traffic the shop gave one of its services, given back (a failed delivery or extension), or set right by the shop. |
-| `bytes` | integer | yes | Signed: in (+) or out (-). |
+| `type` | string: `purchase`, `sale`, `renewal`, `extension`, `refund`, `adjust` | yes | `purchase`: bought. `sale`, `renewal`, `extension`: used by a sale or renewal of their bot, or by traffic the shop added to one of its services. `refund`: returned after a failed delivery or extension. `adjust`: corrected by the shop. |
+| `bytes` | integer | yes | Signed: added (+) or used (-). |
 | `balance_after` | integer | yes |  |
 | `description` | string or null | yes |  |
 | `order_id` | integer or null | yes |  |
-| `reviewer` | string or null | yes | Who moved it — an adjustment, an extension: the agent's bot, the owner's login (which anyone but the owner reads as «پشتیبانی»), or one of the shop's admins on its website. |
+| `reviewer` | string or null | yes | Who made the change, for an adjustment or extension: the agent's bot, the owner's login (which anyone but the owner sees as «پشتیبانی»), or a website admin. |
 | `created_at` | string (date-time) or null | yes |  |
 
 ### TrafficLinesResponse
@@ -5102,22 +6341,22 @@ One line of an agent's traffic.
 
 ### UnregisteredMethodRow
 
-A method whose driver is no longer installed — no checkout offers it, switched on or not —; it can only be switched off or deleted.
+A method whose driver is no longer installed. No checkout offers it, even when switched on; it can only be switched off or deleted.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `driver` | string | yes |  |
 | `driver_label` | string | yes |  |
-| `kind` | string: `null` or null | yes | No driver says how it settles. |
+| `kind` | string: `null` or null | yes | Unknown without the driver. |
 | `builtin` | boolean | yes |  |
-| `label` | string | yes | What the customer sees on the button: "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one line about the method (its masked card and holder), as the payments screen shows it; null when it has none. |
-| `config` | object | yes | Not shown — no driver says which of its settings are secrets. |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. |
+| `config` | object | yes | Not shown, since without the driver it is unknown which settings are secrets. |
 | `enabled` | boolean | yes |  |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
-| `counts.payments` | integer | yes | The payments made with it; a method that has any is not deleted. |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
 | `created_at` | string (date-time) | yes |  |
 | `updated_at` | string (date-time) | yes |  |
 
@@ -5131,37 +6370,37 @@ A method whose driver is no longer installed — no checkout offers it, switched
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `version` | string | yes | The version it installs. |
-| `from` | string | yes | The version the shop ran when it began — the one a rollback puts back. |
+| `version` | string | yes | The version being installed. |
+| `from` | string | yes | The version running when it started; a rollback restores it. |
 | `step` | [UpdateStep](#updatestep) | yes |  |
-| `progress` | integer, at least 0 | yes | How far into its step, in percent. |
-| `error` | string or null | yes | Why its step was last refused, in the owner's words; null while nothing stands in its way. |
-| `cancel` | boolean | yes | It may still be given up: nothing of the app's was replaced yet. |
-| `rollback` | boolean | yes | It may be taken back: installed, the version it replaced kept, and the database not changed by it. |
-| `finished_at` | string (date-time) or null | yes | When it was installed or taken back; null while under way. |
+| `progress` | integer, at least 0 | yes | Progress of the current step, in percent. |
+| `error` | string or null | yes | Why the step last failed; null when nothing is wrong. |
+| `cancel` | boolean | yes | It can still be cancelled: none of the app's files were replaced yet. |
+| `rollback` | boolean | yes | It can be rolled back: it is installed, the replaced version is kept, and it did not change the database. |
+| `finished_at` | string (date-time) or null | yes | When it was installed or rolled back; null while running. |
 
 ### UpdateStatus
 
-AmoBot's own update: the version the shop runs, the newest release GitHub publishes, and the update under way or the last one. The shop installs only a release the key built into it signed.
+AmoBot's update status: the running version, the newest release on GitHub, and the current or last update. Only releases signed with the release key built into the app are installed.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `current` | string | yes | The version the shop runs. |
-| `latest` | [ReleaseInfo](#releaseinfo) or null | yes | The newest release, as last read; null while GitHub publishes none, or before it was first read. |
-| `checked_at` | string (date-time) or null | yes | When GitHub was last read; null before it ever was. |
-| `available` | boolean | yes | The newest release is newer than the version the shop runs, and no update is under way — nor has just installed it. |
-| `blocker` | string or null | yes | What keeps the shop from updating itself — no release key to check a release with, PHP without its sodium or zip extension, PHP that may not change the app's files, a release without its signed files — in the owner's words, with the way out (an update by hand: docs/Upgrading.md); null when nothing does. |
-| `run` | [UpdateRun](#updaterun) or null | yes | The update under way, or the last one; null when there is none. |
+| `current` | string | yes | The running version. |
+| `latest` | [ReleaseInfo](#releaseinfo) or null | yes | The newest release, as last read; null when GitHub has none, or before the first check. |
+| `checked_at` | string (date-time) or null | yes | When GitHub was last checked; null before the first check. |
+| `available` | boolean | yes | The newest release is newer than the running version, and no update is running or has just installed it. |
+| `blocker` | string or null | yes | Why the shop cannot update itself (no release key, PHP without the sodium or zip extension, PHP not allowed to change the app's files, or a release without its signed files), with the alternative: a manual update (docs/Upgrading.md). Null when nothing blocks it. |
+| `run` | [UpdateRun](#updaterun) or null | yes | The current or last update; null when there is none. |
 
 ### UpdateStep
 
-Where an update stands: its files fetched and checked (download), unpacked (extract), the host checked (preflight), installed (install) — then done, or taken back once installed (rolled_back). An install that failed was taken back by itself and stays at install, its error said.
+An update's step: `download` (fetch and verify the files), `extract` (unpack), `preflight` (check the host), `install`, then `done`, or `rolled_back` after a rollback. A failed install is rolled back automatically and stays at `install` with its error.
 
 String: `download`, `extract`, `preflight`, `install`, `done`, `rolled_back`.
 
 ### WalletMethodRow
 
-The wallet, the shop's own method.
+The wallet, the built-in method.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -5170,69 +6409,69 @@ The wallet, the shop's own method.
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
-| `label` | string | yes | What the customer sees on the button: "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one line about the method (its masked card and holder), as the payments screen shows it; null when it has none. |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. |
 | `config` | object | yes | Nothing to configure. |
 | `enabled` | boolean | yes |  |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
-| `counts.payments` | integer | yes | The payments made with it; a method that has any is not deleted. |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
 | `created_at` | string (date-time) | yes |  |
 | `updated_at` | string (date-time) | yes |  |
 
 ### WebhookOutcome
 
-What putting the bots on webhooks, or taking them off, did for one of them — in the owner's words, never a token nor the secret a webhook's address ends with.
+The result of setting or deleting the webhook for one bot. The message never contains a token or the webhook address's secret.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `bot` | object | yes |  |
-| `bot.id` | integer | yes | The bot's id — 1 is the main bot. |
-| `bot.username` | string or null | yes | Its @username, without the @; null while unknown. |
+| `bot.id` | integer | yes | The bot's id; 1 is the main bot. |
+| `bot.username` | string or null | yes | Its username, without the @; null while unknown. |
 | `done` | boolean | yes |  |
-| `message` | string | yes | What happened, or why it did not. |
+| `message` | string | yes | What happened, or why it failed. |
 
 ### WebhooksResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `bots` | list of [WebhookOutcome](#webhookoutcome) | yes | Every bot the shop runs, the main one first; none while no bot has a token. |
+| `bots` | list of [WebhookOutcome](#webhookoutcome) | yes | Every running bot, the main one first. Empty while no bot has a token. |
 
 ### Website
 
-The shop's website as its panel shows it — never a secret, only whether one is kept.
+The website's settings, as the panel shows them. Secrets are never included, only whether one is stored.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `enabled` | boolean | yes | Off: the Store API answers its key with a 404. |
-| `key` | string matching `^[0-9a-f]{24}$` | yes | The store key, which names the shop in the API's address — no secret; a new one ends the old address. |
-| `base_url` | string | yes | What the site's developer is handed: APP_URL, then /api/store/v1/ and the key — every endpoint under it. |
-| `url` | string or null | yes | The site's address, without a trailing slash: its origin may call the API from a browser. |
-| `origins` | list of string | yes | The other origins that may (scheme://host[:port]) — a site being built on http://localhost:3000. |
+| `enabled` | boolean | yes | When off, the Store API answers 404 for its key. |
+| `key` | string matching `^[0-9a-f]{24}$` | yes | The store key, which names the shop in the API's address. Not a secret; a new key ends the old address. |
+| `base_url` | string | yes | The base address for the site's developer: APP_URL, then /api/store/v1/ and the key. Every endpoint is under it. |
+| `url` | string or null | yes | The site's address, without a trailing slash. Its origin may call the API from a browser. |
+| `origins` | list of string | yes | Other origins allowed to call it (scheme://host[:port]), such as a site in development on http://localhost:3000. |
 | `telegram` | object | yes |  |
-| `telegram.enabled` | boolean | yes | Customers sign in with their Telegram account. |
-| `telegram.client_id` | string or null | yes | The Client ID @BotFather shows for the site (Bot Settings › Login Widget), digits; null while none is set. |
-| `telegram.bot_id` | integer or null | yes | The shop's bot's own Telegram id, a hint beside the Client ID; null while the bot has none. |
-| `telegram.has_secret` | boolean | yes | A client secret is kept: the redirect flow can exchange a code. The popup needs none. |
+| `telegram.enabled` | boolean | yes | Customers can sign in with Telegram. |
+| `telegram.client_id` | string or null | yes | The Client ID @BotFather shows for the site (Bot Settings › Login Widget), as digits; null while none is set. |
+| `telegram.bot_id` | integer or null | yes | The shop's bot's own Telegram id, shown as a hint beside the Client ID; null while unknown. |
+| `telegram.has_secret` | boolean | yes | A client secret is stored, so the redirect flow can exchange a code. The popup does not need one. |
 | `email` | object | yes |  |
-| `email.enabled` | boolean | yes | Customers sign up with their email and a password. |
-| `email.mail_ready` | boolean | yes | Whether the installation's email goes out (the owner's «تنظیمات پنل › ایمیل»): email sign-up is not switched on, and answers nobody, without it. |
+| `email.enabled` | boolean | yes | Customers can sign up with an email and a password. |
+| `email.mail_ready` | boolean | yes | Whether the installation can send email (the owner's «تنظیمات پنل › ایمیل»). Without it, email sign-up cannot be switched on and does not work. |
 | `google` | object | yes |  |
-| `google.client_id` | string or null | yes | The site's OAuth client id in Google Cloud (….apps.googleusercontent.com); null: Google sign-in off. |
-| `captcha` | object | yes | The captcha the website's forms ask — a sign-up, a sign-in with a password, a password reset, a review, and any of the site's own (the Store API's POST /captcha/verify) —: its driver, every captcha described (its form), and each one's fields as the website keeps them, else their defaults (a secret as its SecretState). |
-| `captcha.driver` | string: `none`, `turnstile`, `altcha` | yes | The captcha asked — a CaptchaDriver —, or none. |
+| `google.client_id` | string or null | yes | The site's OAuth client id in Google Cloud (….apps.googleusercontent.com); null when Google sign-in is off. |
+| `captcha` | object | yes | The captcha the website's forms use (sign-up, password sign-in, password reset, reviews, and the site's own forms through the Store API's `POST /captcha/verify`): the chosen driver, every captcha driver with its form, and each driver's stored values or defaults (a secret as a SecretState). |
+| `captcha.driver` | string: `none`, `turnstile`, `altcha` | yes | The chosen captcha (a CaptchaDriver), or `none`. |
 | `captcha.drivers` | list of [DriverDescription](#driverdescription) | yes |  |
-| `captcha.values` | map of [DriverValues](#drivervalues) | yes | Each captcha driver's fields by its key. |
+| `captcha.values` | map of [DriverValues](#drivervalues) | yes | Each captcha driver's values, keyed by driver. |
 | `reviews` | object | yes |  |
-| `reviews.enabled` | boolean | yes | The website shows the reviews support approved and takes new ones (the Store API's GET and POST /reviews, a 404 while off) — a guest's only while it asks a captcha. Off at first. |
-| `staff` | object | yes | The door the website opens to the shop's admins (its customers whose role is admin): its admin API, /api/store/v1/{store}/admin/* — the panels' operations of the shop's daily work. |
-| `staff.enabled` | boolean | yes | The shop's admins work the shop from the website. Off at first. |
-| `staff.strong_sign_in` | boolean | yes | They must have signed in strongly — Telegram, Google, or a password with its second step. On at first. |
-| `staff.grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | yes | What it lets them do beyond the shop's daily work, in the grants' order. None at first. |
+| `reviews.enabled` | boolean | yes | The website shows approved reviews and accepts new ones (the Store API's `GET` and `POST /reviews`, which answer 404 while off). Guests can write only while a captcha is set. Off by default. |
+| `staff` | object | yes | Access for the shop's admins (customers whose role is admin) to the website's admin API, `/api/store/v1/{store}/admin/*`: the panels' daily-work operations. |
+| `staff.enabled` | boolean | yes | Admins can use the admin API. Off by default. |
+| `staff.strong_sign_in` | boolean | yes | Admins must sign in strongly: Telegram, Google, or a password with its second step. On by default. |
+| `staff.grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | yes | What admins may do beyond the daily work, in the grants' order. None by default. |
 
 ### WebsiteAltchaRequest
 
-ALTCHA: no keys — the shop issues and checks its challenges itself.
+ALTCHA: no keys; the shop issues and checks the challenges itself.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -5240,7 +6479,7 @@ ALTCHA: no keys — the shop issues and checks its challenges itself.
 
 ### WebsiteCaptchaOffRequest
 
-No captcha: the forms ask none.
+No captcha.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -5248,7 +6487,7 @@ No captcha: the forms ask none.
 
 ### WebsiteCaptchaRequest
 
-The captcha the website's forms ask, as its card sends it: its driver — `none` for none — and the driver's form whole, checked by it; a secret left blank or left out keeps the one kept while the driver and the fields it belongs with stay (`clear_<name>: true` empties it). Refused under `captcha.<field>`. A closed shape per driver.
+The website's captcha, as its settings card sends it: the driver (`none` for none) and the driver's whole form, validated by the driver. A secret left blank or out keeps the stored one while the driver and the fields it belongs with stay the same; `clear_<name>: true` empties it. Refusals are reported under `captcha.<field>`. One closed shape per driver.
 
 One of:
 - [WebsiteCaptchaOffRequest](#websitecaptchaoffrequest)
@@ -5263,11 +6502,68 @@ One of:
 
 ### WebsiteTurnstileRequest
 
-Cloudflare Turnstile: the widget's keys, as the Cloudflare dashboard shows them.
+Cloudflare Turnstile: the widget's keys from the Cloudflare dashboard.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `turnstile` | yes |  |
-| `site_key` | string | yes | Public — the widget is drawn with it. 64 characters at most, printable Latin. |
-| `secret_key` | string | no | Blank: the one kept stays — while the site key stays. |
-| `clear_secret_key` | boolean | no | True: the kept secret is emptied. |
+| `site_key` | string | yes | Public; the widget is drawn with it. At most 64 printable Latin characters. |
+| `secret_key` | string | no | Blank: the stored secret stays, as long as the site key stays the same. |
+| `clear_secret_key` | boolean | no | True empties the stored secret. |
+
+### WheelPrizeKind
+
+What a lucky wheel slice gives: `nothing` («پوچ»), Toman in the wallet (`wallet`), GB of `traffic` or `days` on one of the customer's running services, or a free service of a `plan`.
+
+String: `nothing`, `wallet`, `traffic`, `days`, `plan`.
+
+### WheelPrizeResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `prize` | [WheelPrizeRow](#wheelprizerow) | yes |  |
+
+### WheelPrizeRow
+
+A lucky wheel («گردونه شانس») slice. Its chance is its weight divided by the total weight of the enabled slices the customer can receive at the moment of the spin.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `label` | string | yes | The text the wheel shows. |
+| `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
+| `amount` | string or null | yes | Toman (wallet), GB (traffic) or days (days); null for nothing and plan. |
+| `plan` | [RewardPlanRef](#rewardplanref) or null | yes | For a plan slice: the plan; null once the plan is deleted (then nobody can win it). |
+| `weight` | integer | yes |  |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+
+### WheelPrizesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `prizes` | list of [WheelPrizeRow](#wheelprizerow) | yes |  |
+
+### WheelSpinRow
+
+A lucky wheel spin: the slice it landed on (as the slice was then) and the result.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `customer` | [UserRef](API-Schemas.md#userref) | yes |  |
+| `label` | string | yes |  |
+| `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
+| `amount` | string or null | yes |  |
+| `given` | boolean | yes | The prize was given (for a plan: ordered). False when it could not be: the cost was refunded and the spin does not count for the cooldown. |
+| `outcome` | string or null | yes | Why it was not given; null when it was. |
+| `order` | [RewardOrderRef](#rewardorderref) or null | yes | For a plan slice: the order that delivered its service. |
+| `subscription` | [RewardServiceRef](#rewardserviceref) or null | yes | The service that got the traffic or days, or the plan's new service. |
+| `created_at` | string (date-time) | yes |  |
+
+### WheelSpinsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `spins` | list of [WheelSpinRow](#wheelspinrow) | yes |  |
+| `meta` | [PageMeta](API-Schemas.md#pagemeta) | yes |  |

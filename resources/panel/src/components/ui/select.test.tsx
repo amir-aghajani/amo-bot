@@ -28,7 +28,7 @@ function ServerPicker() {
 }
 
 describe('an option with a hint', () => {
-  it('shows it under its words, out of its name and of the field once picked', () => {
+  it('shows it under the option’s label, but not in its name nor in the field once picked', () => {
     render(<ServerPicker />)
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'سرور' }), { key: 'Enter' })
 

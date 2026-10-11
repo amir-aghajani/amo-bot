@@ -8,18 +8,14 @@ use App\Core\Support\FileLock;
 use App\Core\Support\Files;
 
 /**
- * config.php — the shop's own configuration, as WordPress keeps its own in wp-config.php: a PHP file beside the app that
- * returns its settings. The web installer makes it, the owner's settings screen and their login change write it, and
- * the owner may edit it by hand in their host's file manager — no shell, no environment needed. The app reads it at
- * boot (Application, through ConfigValues); what shows or changes it reads it here.
- *
- * Every write renders the whole file anew, in ConfigKeys' order and with its words — a setting the file does not set is
- * shown commented out at its default, for the owner to see and set; one of no section's is kept, under «Other
- * settings» — and writes it whole (Files::writeAtomically()) under a lock: two writers change it one after the other.
+ * config.php, the shop's configuration — a PHP file returning its settings, like WordPress's wp-config.php, because a
+ * shared host has no shell or environment to set and its file manager edits a file. Every write renders the whole file
+ * anew in ConfigKeys' order with its comments (an unset setting shown commented out at its default) and writes it
+ * atomically under a lock, so two writers take turns.
  */
 final class ConfigFile
 {
-    /** A config.php the web server may not write, in the owner's words: what to fix. */
+    /** The message the owner gets when the web server may not write config.php. */
     public const UNWRITABLE = 'فایل config.php نوشته نشد؛ به وب‌سرور اجازه نوشتن روی آن (و روی پوشه برنامه، که فایل در آن است) را بدهید.';
 
     private const WIDTH = 120;
@@ -43,8 +39,8 @@ final class ConfigFile
     ) {}
 
     /**
-     * What the config.php at `$path` sets; nothing when there is none. One that does not parse stops whoever reads it
-     * (a ParseError, its line in the message): the shop does not start on a half-written configuration.
+     * The settings the config.php at `$path` returns; none when there is no file. A file that does not parse throws a
+     * ParseError: the shop never starts on a broken configuration.
      *
      * @return array<string, mixed>
      * @throws \UnexpectedValueException when it returns no array of settings
@@ -95,7 +91,7 @@ final class ConfigFile
     }
 
     /**
-     * Set settings in one write — the file made when there is none —, the rest kept as they are.
+     * Set settings in one write (making the file if needed), the rest kept as they are.
      *
      * @param array<string, string|int|float|bool> $values
      * @throws \RuntimeException when it cannot be written: the file is then as it was
@@ -121,7 +117,7 @@ final class ConfigFile
     }
 
     /**
-     * The file for `$settings`: every section of ConfigKeys with its settings in order, then whatever else it sets.
+     * The file's text: every ConfigKeys section with its settings in order, then whatever else it sets.
      *
      * @param array<string, mixed> $settings
      */

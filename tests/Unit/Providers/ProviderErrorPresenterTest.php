@@ -17,7 +17,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A connector failure in words: the owner's diagnosis with its detail, and the summary everyone else reads — which never
+ * A connector failure in words: the owner's diagnosis with its detail, and the summary everyone else reads, which never
  * carries anything of the panel itself.
  */
 final class ProviderErrorPresenterTest extends TestCase

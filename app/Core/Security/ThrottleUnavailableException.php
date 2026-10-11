@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Security;
 
-/** The throttle cannot keep count, so it lets nobody try: the operator's to fix, and the error log says what. */
+/** The throttle's folder is not writable, so it lets nobody try; the message says which folder to fix. */
 final class ThrottleUnavailableException extends \RuntimeException
 {
     public function __construct(string $directory)

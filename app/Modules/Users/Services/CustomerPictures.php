@@ -23,19 +23,12 @@ use Psr\Http\Message\UploadedFileInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * The one rule for a picture the shop is sent — a card transfer's receipt, a support ticket's picture —, wherever it
- * comes from. Sent in the bot, it stays Telegram's: the shop keeps its file id and asks Telegram for its bytes when a
- * screen shows it, keeping them a short while for the reads that follow (fromTelegram(), Core\Support\FileCache); a file
- * sent there is a picture by what it says it is, how big Telegram knows it to be and its bytes (isPicture()). Uploaded —
- * from a website, from a panel —, it is judged by its bytes alone, never by what its sender says it is: a JPEG, a PNG or
- * a WebP (what the panels show), MAX_BYTES at most, read no further (judge()) — and none at all while the host's disk has
- * less than ROOM left, or once the shop's uploads took DAY_MEGABYTES in a day (a 503, StorageFullException). What a
- * customer uploads — receipts and tickets' pictures alike — is one budget, UPLOADS in UPLOAD_WINDOW (budget()). Kept in
- * its kind's folder under a name of the shop's own — the device's name only ever a label (cleanName()) —, as GD writes
- * it again when the host has GD (keep(): no larger than MAX_SIDE, turned as its camera said, nothing of the sender's file
- * kept but its pixels), read back (read(), a report's photo by its reference()), and deleted only here, once what made it
- * is undone or over (discard()). Served by its bytes' own type (served(): what ApiController::bytes() shows as itself, or
- * hands over as a file to save).
+ * The rules for every picture customers (and support) send — receipts and ticket pictures. One sent in the bot stays on
+ * Telegram: the shop keeps its file id and fetches the bytes when shown (fromTelegram(), cached briefly). An upload is
+ * judged by its bytes alone (JPEG, PNG or WebP, up to MAX_BYTES), refused while the disk is nearly full or the shop's
+ * daily quota is used (StorageFullException), held to one per-customer budget (budget()), re-encoded with GD when
+ * available (no larger than MAX_SIDE, rotated upright, metadata dropped), kept under a name the shop makes, and
+ * deleted only through discard().
  */
 final class CustomerPictures
 {
@@ -46,7 +39,7 @@ final class CustomerPictures
     public const UPLOADS = 10;
     public const UPLOAD_WINDOW = 3600;
 
-    /** The budget's refusal, in the customer's words: TooManyAttemptsException::wait() adds the wait. */
+    /** The budget's refusal, worded for the customer: TooManyAttemptsException::wait() adds the wait. */
     public const TOO_MANY = 'تصویر زیادی فرستاده‌اید';
 
     /** The room the shop keeps free on the host's disk: an upload that would eat into it is refused (the container's). */
@@ -55,7 +48,7 @@ final class CustomerPictures
     /**
      * The megabytes a shop's uploads may take in a day — every picture of it kept, a customer's or support's, counted by
      * the megabytes it begins —: accounts made by the hundred fill no host's disk. Past it the shop takes no picture until
-     * its day is over, and its owner hears it in the log once.
+     * its day is over, and a warning is logged once.
      */
     public const DAY_MEGABYTES = 1024;
 
@@ -169,7 +162,7 @@ final class CustomerPictures
 
     /**
      * An upload kept in its kind's folder — as GD writes it again (fitted()), counted in its shop's day by the megabytes it
-     * begins, written whole, under a name of the shop's own: `$prefix` (whose it is: the shop and the row) and a random
+     * begins, written whole, under a name the shop makes: `$prefix` (whose it is: the shop and the row) and a random
      * part, never the sender's file name —: its name there, what its row records.
      *
      * @throws StorageFullException 503: it would take the shop's uploads past DAY_MEGABYTES today — nothing kept
@@ -271,8 +264,8 @@ final class CustomerPictures
     }
 
     /**
-     * No picture is taken while the disk the pictures go to has less than the room the shop keeps free — the owner hears
-     * it in the log; a host that does not say how much is free takes it.
+     * No picture is taken while the disk the pictures go to has less than the room the shop keeps free (a warning is
+     * logged); a host that does not say how much is free takes it.
      *
      * @throws StorageFullException
      */
@@ -304,7 +297,7 @@ final class CustomerPictures
     }
 
     /**
-     * The shop's day of uploads is spent: no picture is taken until it is over — its owner hears it once a day.
+     * The shop's day of uploads is spent: no picture is taken until it is over — a warning is logged once a day.
      *
      * @throws StorageFullException
      */

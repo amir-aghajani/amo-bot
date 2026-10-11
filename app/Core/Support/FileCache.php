@@ -5,22 +5,19 @@ declare(strict_types=1);
 namespace App\Core\Support;
 
 /**
- * Files kept a short while, by key: what another service hands over — and would hand over again, unchanged — as a screen
- * reads it again and again (a picture Telegram keeps: a receipt, a ticket's, a premium emoji's), so it is fetched once
- * in KEEP_SECONDS, then afresh. Each is a file of its own in the folder (the container's `files.cache`, storage/cache/files),
- * named by its key's hash and its owner's alone, as every file the app writes (Files); the ones past their time go as
- * new ones are kept. A folder that cannot be written keeps nothing — never an error: the answer is fetched each time.
+ * A short-lived file cache (`files.cache`, storage/cache/files) for what another service would hand over again
+ * unchanged — a picture Telegram keeps — so a screen's repeated reads fetch it once per KEEP_SECONDS. Stale files go as
+ * new ones are kept; an unwritable folder keeps nothing, never an error.
  */
 final class FileCache
 {
-    /** How long a file is kept from when it was fetched: a screen's reads of it in a row, never a copy that outlives a change. */
+    /** How long a file is kept after it was fetched. */
     public const KEEP_SECONDS = 600;
 
     public function __construct(private readonly string $directory) {}
 
     /**
-     * What `$key` holds while it is fresh — else what `$fetch` answers, kept for the reads that follow (an answer of none
-     * is not kept: it is asked again).
+     * What `$key` holds while fresh, else what `$fetch` returns, kept (a null is not kept).
      *
      * @param \Closure(): ?string $fetch
      */

@@ -8,15 +8,9 @@ use App\Modules\Telegram\Update\GroupHandler;
 use App\Modules\Telegram\Update\Update;
 
 /**
- * What else a group sends that concerns the report group — its connect command and its buttons have routes of their own
- * (routes/bot.php); the rest of a group's chatter is not the bot's business (as an admin there, it is sent every
- * message):
- *  - the bot's own membership changing (my_chat_member) — removed, demoted, given its rights back;
- *  - the group's new title;
- *  - a reply to one of a ticket's reports, support's answer to it (TicketReplies::answer());
- *  - a reply to the bot's prompt for a rejection's reason (ReceiptReview::reason()).
- * Each reply's reader says whether the reply was its own, by the message it answers as the bot recorded it — never by
- * that message's words —, a ticket's first: a reply to a ticket's report always reaches the ticket.
+ * A group's other updates (as an admin there, the bot gets every message): the bot's membership changing, the group's
+ * new title, a reply answering a ticket (TicketReplies), and a reply giving a receipt's rejection its reason
+ * (ReceiptReview::reason()). Ticket replies are asked first; the rest of the chatter is ignored.
  */
 final class ReportGroupUpdates implements GroupHandler
 {

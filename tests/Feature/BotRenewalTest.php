@@ -40,8 +40,8 @@ use Tests\Fakes\FakeProvider;
  * «♻️ تمدید سرویس» in the bot — from a service's screen, or from the menu, which also lists the services that ended: the
  * renewal's checkout says what the plan renews it with, for how much, and the service as the renewal would leave it; a
  * way to pay picked, the renewal is ordered (or the open one found) and paid — the wallet renews it at once, a card once
- * support approved its receipt. A service its customer may not renew, or one whose renewal is under way, is said so in a
- * popup and nothing is ordered; in an agent's bot their traffic must cover the plan.
+ * support approved its receipt. A service its customer may not renew, or one whose renewal is under way, gets a popup
+ * saying so and nothing is ordered; in an agent's bot their traffic must cover the plan.
  */
 final class BotRenewalTest extends BotTestCase
 {
@@ -214,7 +214,7 @@ final class BotRenewalTest extends BotTestCase
             $test->subscription->forceFill(['plan_id' => null])->save();
         }];
         yield 'a plan that renews nothing' => [static function (self $test): void {
-            $test->plan->forceFill(['duration_days' => 0, 'traffic_gb' => 0])->save();
+            $test->plan->forceFill(['duration_hours' => 0, 'traffic_gb' => 0])->save();
         }];
     }
 
@@ -243,16 +243,16 @@ final class BotRenewalTest extends BotTestCase
         self::assertSame([RenewalHandler::checkoutCallback($ended->id, 1), RenewalHandler::checkoutCallback($this->subscription->id, 1)], array_slice($this->callbacks(0), 0, 2), 'the ended one too, newest first');
 
         $this->send($this->tap(RenewalHandler::checkoutCallback($ended->id, 1)));
-        self::assertSame([$this->checkoutText($ended, Messages::expiry(null, 30), Messages::bytes(Traffic::bytesOfGb(30)))], $this->said(), "a fresh term from its next connection, and the plan's traffic");
+        self::assertSame([$this->checkoutText($ended, Messages::expiry(null, 30 * 24), Messages::bytes(Traffic::bytesOfGb(30)))], $this->said(), "a fresh term from its next connection, and the plan's traffic");
         self::assertSame(MenuHandler::renewalsCallback(1), $this->callbacks(0)[1], 'back to the list');
 
         $this->send($this->tap(CallbackData::build(RenewalHandler::checkoutCallback($ended->id, 1), $this->wallet->id)));
         $ended->refresh();
-        self::assertSame([SubscriptionStatus::Active, null, 30, Traffic::bytesOfGb(30), 0], [$ended->status, $ended->expires_at, $ended->duration_days, $ended->traffic_limit_bytes, $ended->usedBytes()], 'running again, its clock waiting for the next connection');
+        self::assertSame([SubscriptionStatus::Active, null, 30 * 24, Traffic::bytesOfGb(30), 0], [$ended->status, $ended->expires_at, $ended->duration_hours, $ended->traffic_limit_bytes, $ended->usedBytes()], 'running again, its clock waiting for the next connection');
         self::assertSame([self::text(BotText::Renewed, [
             'client' => 'ali_2',
             'plan' => 'یک‌ماهه',
-            'expires' => Messages::expiry(null, 30),
+            'expires' => Messages::expiry(null, 30 * 24),
             'remaining' => Messages::bytes(Traffic::bytesOfGb(30)),
             'leftover' => '',
         ])], $this->said());
@@ -376,7 +376,7 @@ final class BotRenewalTest extends BotTestCase
         return self::text(BotText::RenewCheckout, [
             'client' => $subscription->remote_name,
             'plan' => 'یک‌ماهه',
-            'duration' => Messages::duration(30),
+            'duration' => Messages::duration(30 * 24),
             'traffic' => Messages::traffic(Traffic::bytesOfGb(30)),
             'amount' => Money::format('120000'),
             'expires' => $expires,
@@ -388,7 +388,7 @@ final class BotRenewalTest extends BotTestCase
     /** The renewed deadline, and the 60 days to it. */
     private function renewedExpiry(): string
     {
-        return Messages::expiry(Carbon::parse(self::RENEWED_DEADLINE), 60);
+        return Messages::expiry(Carbon::parse(self::RENEWED_DEADLINE), 60 * 24);
     }
 
     /** The 12 GB left of the period in use, usable until its deadline; the renewed period's 30 GB from then on. */

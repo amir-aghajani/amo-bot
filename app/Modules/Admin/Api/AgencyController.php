@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
-use App\Core\Database\PageRequest;
 use App\Core\Http\ApiController;
 use App\Modules\Agency\DTO\AgencyTerms;
 use App\Modules\Agency\Models\AgencyRequest;
@@ -17,11 +16,10 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * «نمایندگان»: the agency program's numbers, the requests to become an agent — approved on a level or rejected — and the
- * agents, whose level and credit change, whose traffic the shop sets right, or whose agency ends. Each decision is
- * AgencyActions', which tells the customer; a request decided meanwhile (in the report group, a moment earlier) is a 422
- * on `status`. The program's rules are AgencySettingsController's, the levels their own list (AgencyLevelsController).
- * The owner's panel only, in the main bot's shop (the agents are its customers).
+ * «نمایندگان» (the owner's panel, in the main bot's shop, whose customers the agents are): the program's numbers, the
+ * requests to become an agent (approved on a level, or rejected), and the agents — terms changed, traffic set right,
+ * agency ended. Each decision is AgencyActions', which tells the customer; a request decided meanwhile (in the report
+ * group) is a 422 on `status`.
  */
 final class AgencyController extends ApiController
 {
@@ -39,7 +37,7 @@ final class AgencyController extends ApiController
     /** GET /agency/requests?status=&search=&page= */
     public function requests(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->directory->requests(PageRequest::fromQuery($request->getQueryParams()))->toArray('requests'));
+        return $this->json($response, $this->directory->requests($this->pageRequest($request))->toArray('requests'));
     }
 
     /**
@@ -70,7 +68,7 @@ final class AgencyController extends ApiController
     /** GET /agency/agents?level=&search=&page= */
     public function agents(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->directory->agents(PageRequest::fromQuery($request->getQueryParams()))->toArray('agents'));
+        return $this->json($response, $this->directory->agents($this->pageRequest($request))->toArray('agents'));
     }
 
     /**
@@ -106,7 +104,7 @@ final class AgencyController extends ApiController
      */
     public function traffic(Request $request, Response $response, array $args): Response
     {
-        return $this->json($response, $this->directory->trafficLedger($this->load(User::class, $args), PageRequest::fromQuery($request->getQueryParams()))->toArray('lines'));
+        return $this->json($response, $this->directory->trafficLedger($this->load(User::class, $args), $this->pageRequest($request))->toArray('lines'));
     }
 
     /**

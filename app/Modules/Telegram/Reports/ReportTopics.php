@@ -14,11 +14,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
 
 /**
- * The topics of the report group, one per Topic, made by the bot itself (createForumTopic: the topic's name, its colour —
- * one of Telegram's six — and a custom emoji icon when one of Topic::icons() is among Telegram's topic icons) and kept
- * by their thread (`report_topics`). A topic the group lacks is made when it is asked for: when the group is connected
- * or checked, by the first report bound for it, again after an admin deleted it. Making one is leased on its row, so
- * two processes never make the same topic twice; one whose maker went quiet is taken over.
+ * The report group's topics, one per Topic, made by the bot (name, colour, and an icon when Telegram offers one of
+ * Topic::icons()) and kept by thread id (`report_topics`). A missing topic is made when needed; making one is leased on
+ * its row, so two processes never make the same topic twice, and one whose maker went quiet is taken over.
  */
 final class ReportTopics
 {
@@ -38,7 +36,7 @@ final class ReportTopics
         return ReportTopic::query()->where('topic', $topic->value)->whereNotNull('thread_id')->exists();
     }
 
-    /** The thread the connected group has the topic in — what is written there is about it —; null while it has none. */
+    /** The topic's thread in the connected group; null while it has none. */
     public function thread(Topic $topic): ?int
     {
         $thread = ReportTopic::query()->where('topic', $topic->value)->value('thread_id');
@@ -47,8 +45,7 @@ final class ReportTopics
     }
 
     /**
-     * Whether a message of a group (`$chatId`) was written in the topic: the connected group, in the topic's thread —
-     * where a reply to the bot's words about it is written.
+     * Whether a group message was written in the topic's thread of the connected group.
      *
      * @param array<string, mixed> $message
      */
@@ -60,8 +57,8 @@ final class ReportTopics
     }
 
     /**
-     * The thread a topic's reports go to, made first when the group does not have it yet. Null when there is no group,
-     * or someone else is making the topic right now — what goes there waits for the next round.
+     * The thread a topic's reports go to, made first when missing. Null when no group is connected, or another process
+     * is making the topic right now (its reports wait for the next round).
      *
      * @param array<string, string>|null $icons Telegram's topic icons, when the caller asked for them already (icons())
      * @throws TelegramApiException when Telegram refuses to make it
@@ -78,7 +75,7 @@ final class ReportTopics
             return $row->thread_id;
         }
 
-        // Held longer than the making can take — each call as long as one can be —: nobody takes it over while it goes on.
+        // Held longer than making can take, so nobody takes it over meanwhile.
         $seconds = self::CALLS_TO_MAKE * BotApi::longestCall((float) $this->config->get('app.http_timeout', 30));
         $lease = Lease::take($row, $seconds, static fn(Builder $query) => $query->whereNull('thread_id'));
         if ($lease === null) {
@@ -88,7 +85,7 @@ final class ReportTopics
         try {
             $thread = $this->make($chatId, $topic, $icons ?? $this->icons());
             if (!$lease->finish(['thread_id' => $thread])) {
-                // Our hold ran out mid-call and someone else made it meanwhile: theirs is kept, ours stays empty.
+                // The hold ran out mid-call and another process made it: theirs is kept, ours is left unused.
                 $this->logger->warning('Report topic {topic} was made twice in chat {chat}; thread {thread} is left unused', ['topic' => $topic->value, 'chat' => $chatId, 'thread' => $thread]);
 
                 return ReportTopic::query()->where('topic', $topic->value)->first()?->thread_id;
@@ -103,8 +100,7 @@ final class ReportTopics
     }
 
     /**
-     * The topic's thread is gone (an admin deleted the topic): forget it — unless someone already did and made a new
-     * one — and make it again.
+     * An admin deleted the topic: forget that thread (unless another process already replaced it) and make it again.
      *
      * @throws TelegramApiException
      */
@@ -141,8 +137,8 @@ final class ReportTopics
     }
 
     /**
-     * Telegram's topic icons — the custom emoji id by its emoji (without the variation selector) — asked once for every
-     * topic made in one go; none when Telegram cannot say (the topics get their colours alone).
+     * Telegram's topic icons, custom emoji id by emoji (without the variation selector); none when Telegram cannot say,
+     * and the topics get their colours alone.
      *
      * @return array<string, string>
      */
@@ -169,8 +165,7 @@ final class ReportTopics
     }
 
     /**
-     * Ask Telegram for the topic: its title, its colour, and an icon from Telegram's topic icons when one of the topic's
-     * emoji is among them — an icon Telegram refuses costs the icon, not the topic.
+     * Create the topic with its title, colour and icon (when one fits); an icon Telegram refuses costs the icon only.
      *
      * @param array<string, string> $icons
      * @throws TelegramApiException

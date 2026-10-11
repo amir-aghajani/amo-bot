@@ -12,10 +12,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Exception\HttpNotFoundException;
 
-/**
- * The bot's keyboards for the layout editor: each keyboard's rows, the actions a button can stand
- * for and Telegram's button styles.
- */
+/** The bot's keyboards for the layout editor: each keyboard's rows, the actions a button may stand for, the button styles. */
 final class KeyboardsController extends ApiController
 {
     public function __construct(private readonly KeyboardLayouts $layouts) {}

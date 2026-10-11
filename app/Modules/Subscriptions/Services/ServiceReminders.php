@@ -13,17 +13,18 @@ use App\Modules\Users\Enums\UserStatus;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * «یادآوری»: tells the customer in the bot that a service ends soon — within the admin's days of its deadline — or that
- * its traffic runs low — the admin's share of its quota used (ReminderSettings). Each once while the service stays past
- * its threshold: a mark on the row (`expiry_reminded_at`, `traffic_reminded_at`) is claimed before the reminder goes and
- * cleared once the service is back under the threshold — renewed, given more traffic, its counters reset, or no longer
- * running — so the next time it gets near, it is reminded again. The rows are read as the last sync left them
- * (Tasks\SyncSubscriptionsTask). A service whose «تمدید خودکار» is on hears about its deadline from the renewal instead
- * (renewed, or the wallet short); a banned customer hears nothing.
+ * «یادآوری»: tells the customer a service ends soon (within the admin's days of its deadline, for a term longer than
+ * those days) or its traffic runs low (the admin's share of its quota used), by ReminderSettings.
+ *
+ * Each reminder goes once while the service stays past its threshold: a mark on the row (`expiry_reminded_at`,
+ * `traffic_reminded_at`) is claimed before it goes, and cleared (rearm()) once the service is back under the threshold —
+ * renewed, given traffic, counters reset, or no longer running — so it is reminded again next time. The rows are read
+ * as the last sync left them. A service with «تمدید خودکار» on hears about its deadline from the renewal instead; a
+ * banned customer hears nothing.
  */
 final class ServiceReminders
 {
-    /** At most this many reminders a run; the rest go on the next — paced as every bulk send of the bot's (Pacer). */
+    /** At most this many reminders a run, the rest on the next, paced like every bulk send (Pacer). */
     private const BATCH = 100;
 
     public function __construct(
@@ -33,7 +34,7 @@ final class ServiceReminders
         private readonly Pacer $pacer,
     ) {}
 
-    /** Send the reminders that are due, as the admin set them; answers how many went out. */
+    /** Send the reminders that are due; returns how many went out. */
     public function send(): int
     {
         $sent = $this->settings->expiryEnabled() ? $this->expiry($this->settings->expiryDays(), self::BATCH) : 0;
@@ -44,7 +45,10 @@ final class ServiceReminders
         return $sent;
     }
 
-    /** Services ending within `$days` days. */
+    /**
+     * Services ending within `$days` days, among those whose term is longer than that: a shorter one (an hourly plan's)
+     * would be reminded the moment its clock started.
+     */
     private function expiry(int $days, int $limit): int
     {
         $window = now()->addDays($days);
@@ -52,12 +56,13 @@ final class ServiceReminders
 
         $walletOn = $this->autoRenewal->walletOn();
         $sent = 0;
-        foreach (self::due(Subscription::expiringWithin($days), 'expiry_reminded_at')->lazyById(self::BATCH) as $subscription) {
+        $ending = Subscription::expiringWithin($days)->where('duration_hours', '>', $days * ServiceTerms::HOURS_A_DAY);
+        foreach (self::due($ending, 'expiry_reminded_at')->lazyById(self::BATCH) as $subscription) {
             if ($sent >= $limit) {
                 break;
             }
-            $renewable = $walletOn && AutoRenewal::renewable($subscription);
-            // «تمدید خودکار» speaks for itself: it renews the service, or tells them the wallet is short.
+            $renewable = $walletOn && $this->autoRenewal->renews($subscription);
+            // «تمدید خودکار» speaks for itself: it renews the service, or says the wallet is short.
             if ($renewable && $subscription->auto_renew) {
                 continue;
             }
@@ -90,8 +95,8 @@ final class ServiceReminders
     }
 
     /**
-     * Clear the mark of every service back under its threshold (`$under`) or no longer running: it is reminded again the
-     * next time it gets near.
+     * Clear the mark of every service back under its threshold (`$under`) or no longer running, so it is reminded again
+     * the next time it gets near.
      *
      * @param \Closure(Builder<Subscription>): mixed $under
      */
@@ -104,7 +109,7 @@ final class ServiceReminders
     }
 
     /**
-     * Those of them not reminded yet, whose customer the bot still serves.
+     * Narrow to those not reminded yet whose customer is not banned.
      *
      * @param Builder<Subscription> $query
      * @return Builder<Subscription>

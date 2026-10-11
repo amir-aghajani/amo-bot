@@ -8,8 +8,8 @@ use App\Modules\Auth\Actor;
 use App\Modules\Auth\ActorKind;
 
 /**
- * Where a ticket's message was written (`ticket_messages.channel`): the shop's website or its bot — the customer's —, a
- * panel, the website's admin side (one of the shop's admins on it) or the report group — support's.
+ * Where a ticket's message was written (`ticket_messages.channel`): the website or the bot (the customer's), or a panel,
+ * the website's admin API or the report group (support's).
  */
 enum TicketChannel: string
 {
@@ -24,8 +24,8 @@ enum TicketChannel: string
     case Group = 'group';
 
     /**
-     * Where support wrote, by who wrote it: a panel's principal on the panel, one of the shop's admins on the website or
-     * in the report group where they are.
+     * Where support wrote, by who wrote it: a panel's principal on the panel, a shop admin on the website or in the
+     * report group.
      *
      * @throws \LogicException for the shop itself, which writes no ticket's message
      */
@@ -39,7 +39,7 @@ enum TicketChannel: string
         };
     }
 
-    /** «از وب‌سایت» — where it came from, as the report group reads it. */
+    /** Where it came from, as the report group reads it («از وب‌سایت»). */
     public function source(): string
     {
         return match ($this) {

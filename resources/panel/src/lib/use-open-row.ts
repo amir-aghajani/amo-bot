@@ -12,11 +12,9 @@ interface UseOpenRowOptions<Row> {
 }
 
 /**
- * The row a list page has open in its modal, kept fresh while it is open: the copy the page handed in (from the
- * list, or an operation's answer) until the row's own query has read it again since — and the live updates reload
- * that query whenever its kind changes, so the modal follows the row even after it left the list (another tab, a
- * filter it no longer matches). A row deleted meanwhile (its read answers 404 — a service deleted elsewhere, an unpaid
- * order that expired) is `gone`: the modal keeps what it last showed, says so and offers nothing more.
+ * The row a list page has open in its modal, kept fresh: the copy the page handed in until the row's own query has read
+ * it again since. The live updates refetch that query, so the modal follows the row even after it left the list. A row
+ * deleted meanwhile (its read answers 404) is `gone`: the modal keeps what it last showed and offers nothing more.
  */
 export function useOpenRow<Row extends { id: number }>({ queryKey, read, list }: UseOpenRowOptions<Row>) {
   const queryClient = useQueryClient()

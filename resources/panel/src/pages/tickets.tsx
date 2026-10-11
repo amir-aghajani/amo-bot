@@ -25,9 +25,8 @@ import { usePagedList } from '@/lib/use-paged-list'
 const QUEUE: TicketStatus[] = ['open', 'answered', 'closed']
 
 /**
- * The support tickets of the shop, the conversation that moved last first (no column sorts them, by decision: that is
- * the one to look at), with the queue waiting on an answer up front and counted: open one to answer it, close it or open
- * it again.
+ * «پشتیبانی»: the support tickets, most recent activity first, the ones waiting on an answer as the first tab. No column
+ * sorts them: the conversation that moved last is the one to look at.
  */
 export function TicketsPage() {
   const tabs = useId()

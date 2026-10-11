@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Info } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { AppLoading } from '@/components/app-status'
@@ -9,45 +9,36 @@ import { PublicPanel, PublicScreen } from '@/components/public-screen'
 import { TextLink } from '@/components/text-link'
 import { api, ApiError } from '@/lib/api'
 import { useAppName } from '@/lib/app-info'
-import { useAuth } from '@/lib/auth'
+import { afterSignIn, useAuth, type LoginArrival } from '@/lib/auth'
 import { isolate } from '@/lib/direction'
 import { useDocumentTitle } from '@/lib/document-title'
 import { messageOf } from '@/lib/failure'
 import { preloadPage } from '@/lib/prefetch'
 
-/** What the guard that sent the agent here left in the history entry: the page they were on, whether their session ended. */
-type Arrival = { from?: string; expired?: boolean } | null
-
-/** The link is another agent's than the one signed in to this browser: refused unspent until the agent says to replace them (409 on `replace`). */
+/** The link belongs to another agent than the one signed in here: refused unspent until the agent says to replace them. */
 const anotherAgent = (failure: unknown) => failure instanceof ApiError && failure.status === 409 && failure.field('replace') !== undefined
 
 /**
- * An agent's only way in: the one-time link their account in the main bot gives them («نمایندگی» ← «🔐 ورود به پنل»).
- * The link carries its code in the fragment (`#code=…`), which a browser never sends to a server; the page takes it off
- * the address bar at once and spends it once — after the panel's first question about its session has been answered,
- * so the two answers' session cookies cannot cross —, a fresh link opened in a tab already on this page as well. A link
- * of another agent's, opened where an agent is signed in (one sent them «my panel's link»), asks before it takes that
- * session's place; staying keeps it, and the panel it opens. Signed in, the panel goes back to the page the session ended
- * on — its query string too, as the owner's does —, never to this page. Without a link, or with one that no longer
- * works, the page says where to get a fresh one — and to an agent signed in already, whose session such a link leaves
- * as it was, the way back to their panel.
+ * An agent's only way in: the one-time link from «نمایندگی» ← «🔐 ورود به پنل» in the main bot. The code rides in the
+ * address's fragment (`#code=…`), which no browser sends to a server; the page takes it off the address bar at once and
+ * spends it once — after `/auth/me` has answered, so the two answers' session cookies cannot cross. A link opened where
+ * another agent is signed in asks before replacing that session. Signed in, the panel returns to the page the session
+ * ended on. Without a working link the page says where to get one.
  */
 export function LoginPage() {
   const { session, loading, enter } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const appName = useAppName()
-  // Where signing in leads: back where the guard came from — kept while a fresh link lands in this tab, whose own
-  // history entry carries nothing (state adjusted during render) —, never to this page.
-  const arrival = location.state as Arrival
+  // Where signing in leads. A fresh link opened in this tab carries no history state, so the last `from` is kept.
+  const arrival = location.state as LoginArrival | null
   const [from, setFrom] = useState(arrival?.from)
   if (arrival?.from !== undefined && arrival.from !== from) setFrom(arrival.from)
-  const destination = from && from !== '/login' ? from : '/'
-  // The link's code, read as a link lands — the first, or a fresh one opened in this tab while it shows this page (state
-  // adjusted during render) —; the address bar loses it right away.
+  const destination = afterSignIn(from)
+  // The link's code, as it lands — the first, or a fresh link opened while this page is on screen.
   const linked = new URLSearchParams(location.hash.slice(1)).get('code')
   const [code, setCode] = useState(linked)
-  // The link's outcome: being checked, or refused — in words, and the failure they came of (a wait counts down).
+  // The link's outcome: being checked, or refused (with the failure, whose wait may count down).
   const [link, setLink] = useState<{ checking: boolean; error: string | null; failure?: unknown }>({ checking: linked !== null, error: null })
   // Another agent's link, waiting for the agent's word: replace the session open here, or keep it.
   const [asking, setAsking] = useState<{ code: string; signingIn: boolean; error: string | null } | null>(null)
@@ -56,7 +47,7 @@ export function LoginPage() {
     setLink({ checking: true, error: null })
     setAsking(null)
   }
-  // A code works once: a second mount (StrictMode) must not spend a second request on it.
+  // A code works once: StrictMode's second mount must not spend a second request on it.
   const tried = useRef<string | null>(null)
   const expired = arrival?.expired === true
 
@@ -70,21 +61,26 @@ export function LoginPage() {
     if (location.hash !== '') navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: location.state })
   }, [location, navigate])
 
+  /** Spend the code (in place of another agent's session with `replace`), then go where signing in leads. */
+  const signIn = useCallback(
+    (linkCode: string, replace?: true) =>
+      enter(() => api.post('/auth/link', replace ? { code: linkCode, replace } : { code: linkCode }, { signIn: true })).then(() => navigate(destination, { replace: true })),
+    [enter, navigate, destination],
+  )
+
   useEffect(() => {
     if (code === null || loading || tried.current === code) return
     tried.current = code
     // A link that no longer works (a 401) refuses only itself: a session open in this browser stays.
-    enter(() => api.post('/auth/link', { code }, { signIn: true }))
-      .then(() => navigate(destination, { replace: true }))
-      .catch((failure: unknown) => {
-        if (!anotherAgent(failure)) {
-          setLink({ checking: false, error: messageOf(failure), failure })
-          return
-        }
+    signIn(code).catch((failure: unknown) => {
+      if (anotherAgent(failure)) {
         setLink({ checking: false, error: null })
         setAsking({ code, signingIn: false, error: null })
-      })
-  }, [code, loading, enter, navigate, destination])
+      } else {
+        setLink({ checking: false, error: messageOf(failure), failure })
+      }
+    })
+  }, [code, loading, signIn])
 
   if (link.checking) {
     return <AppLoading label="در حال ورود به پنل نمایندگی…" />
@@ -94,12 +90,10 @@ export function LoginPage() {
     return <Navigate to={destination} replace />
   }
 
-  /** The agent said to replace the session open here: the link signs in, in its place. */
+  /** The agent agreed to replace the session open here. */
   const replace = (question: { code: string }) => {
     setAsking({ code: question.code, signingIn: true, error: null })
-    enter(() => api.post('/auth/link', { code: question.code, replace: true }, { signIn: true }))
-      .then(() => navigate(destination, { replace: true }))
-      .catch((failure: unknown) => setAsking({ code: question.code, signingIn: false, error: messageOf(failure) }))
+    signIn(question.code, true).catch((failure: unknown) => setAsking({ code: question.code, signingIn: false, error: messageOf(failure) }))
   }
   const open = session ? isolate(session.name) : ''
 

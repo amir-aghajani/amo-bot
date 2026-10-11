@@ -8,10 +8,9 @@ use App\Core\Exceptions\ValidationException;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * The `Idempotency-Key` header every request of the Store API that orders something carries — a key the website makes
- * for each checkout attempt (a UUID): the same key from the same customer, with the same way to pay, is answered by the
- * order it came to, never a second one (Payments\Services\Checkout; `request_keys` keeps each key's order and the way to
- * pay it was first sent with). 1 to 64 Latin letters, digits, `-` and `_`.
+ * The `Idempotency-Key` header every ordering request carries: a key the website makes per checkout attempt (a UUID). The
+ * same key from the same customer with the same way to pay is answered by the order it came to, never a second one
+ * (`request_keys`, Payments\Services\Checkout). 1 to 64 Latin letters, digits, `-` and `_`.
  */
 final class IdempotencyKey
 {

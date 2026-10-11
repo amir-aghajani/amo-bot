@@ -7,26 +7,21 @@ namespace App\Core\Session;
 use App\Core\Support\Files;
 
 /**
- * The panels' session: PHP's own, so any shared host runs it with no service of its own. Started for the panels' API
- * alone (SessionMiddleware on /api/admin and /api/agent); on the command line — the bot, the tests — there is no cookie,
- * and the session is a plain array in memory.
+ * The panels' session: PHP's own, so any host runs it. On the CLI (the tests) it is an in-memory array.
  *
- * A session idle longer than its lifetime starts empty, whenever the host's collector comes by: the moment it was last
- * used is kept in it, written at most once a minute so a request that changes nothing does not rewrite its file.
- *
- * PHP holds a session's file locked while a request has it open, so the browser's requests would run one after the
- * other: a request lets go of it (release()) as soon as it has what it needs — every read at once (SessionMiddleware),
- * since only signing in or out, changing the login or ending an agent's other sessions writes to it.
+ * An idle session (past SESSION_LIFETIME) starts empty whatever the host's collector does: the last use is kept in it,
+ * written at most once a minute. PHP locks the session file while a request holds it, so a request lets go (release())
+ * as soon as it can; after that a change would be lost, so set(), remove() and regenerate() throw.
  */
 final class Session
 {
     /** When the session was last used (unix seconds). */
     private const LAST_USED = '_last_used';
 
-    /** True when running without a real PHP session (CLI / tests): $_SESSION is a plain in-memory array. */
+    /** Running without a real PHP session (CLI, tests): $_SESSION is a plain array. */
     private bool $inMemory = false;
 
-    /** The request let go of the session (release()): nothing is written to it until the next one starts. */
+    /** The request let go of the session (release()). */
     private bool $released = false;
 
     /**
@@ -36,7 +31,7 @@ final class Session
      */
     public function __construct(private readonly array $config) {}
 
-    /** @param bool $https The request came over HTTPS: the cookie never travels in clear text then */
+    /** @param bool $https The request came over HTTPS: the cookie is then always secure */
     public function start(bool $https): void
     {
         $this->released = false;
@@ -70,7 +65,7 @@ final class Session
     }
 
     /**
-     * A new id for the session (a sign-in, a sign-out): an id someone learnt before is worth nothing after.
+     * A new session id (at a sign-in or sign-out), so an id someone learnt before is worth nothing.
      *
      * @throws \LogicException once the request let go of the session (release())
      */
@@ -83,11 +78,9 @@ final class Session
     }
 
     /**
-     * Done with the session for this request, its lock let go: one that keeps something is written as it stands, one
-     * that holds nothing but the moment it was used — nobody signed in, or they signed out — goes, its file too. PHP makes
-     * the file as it opens a session, and every request without a cookie opens one: left for the collector, they would
-     * let anyone fill a shared host's file quota one request at a time. What it held can still be read; a change cannot
-     * be kept any more, so set(), remove() and regenerate() refuse one — a write that would be lost is a mistake to see.
+     * Let go of the session for the rest of this request: written if it holds anything, destroyed with its file if it
+     * holds only its last use (nobody signed in) — PHP makes a file for every cookieless request, and left to the
+     * collector they would let anyone fill a shared host's file quota. Its values can still be read.
      */
     public function release(): void
     {
@@ -100,7 +93,7 @@ final class Session
         }
     }
 
-    /** The request is over: the session let go (release()), and the next request's to hold. */
+    /** The request is over: release(), and ready for the next request. */
     public function end(): void
     {
         $this->release();
@@ -124,7 +117,7 @@ final class Session
             'lifetime' => 0,
             'path' => $cookie['path'],
             'domain' => $cookie['domain'],
-            // The setting forces it where PHP sees plain HTTP behind a proxy that hides the HTTPS the browser speaks.
+            // SESSION_SECURE_COOKIE forces it behind a proxy that hides the browser's HTTPS.
             'secure' => $cookie['secure'] || $https,
             'httponly' => $cookie['httponly'],
             'samesite' => $cookie['samesite'],
@@ -136,7 +129,7 @@ final class Session
         $savePath = $this->config['save_path'];
         if (Files::writableDirectory($savePath)) {
             session_save_path($savePath);
-            // The app's own folder is cleaned by PHP's collector, which some hosts switch off (they clean only theirs).
+            // PHP's collector cleans the app's own folder; some hosts switch it off and clean only theirs.
             ini_set('session.gc_probability', '1');
             ini_set('session.gc_divisor', '100');
         }

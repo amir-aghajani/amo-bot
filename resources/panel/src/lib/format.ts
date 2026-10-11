@@ -1,8 +1,8 @@
 /*
- * Every number and date the panels show, in Persian: Persian digits, the Jalali calendar for dates, "۳ روز قبل" for how
- * long ago. Money is always Toman. Quantities, money and dates only — identifiers (ids, ports, versions) keep their Latin
- * digits and never come through here. Each formatter is made once. A date and a time read in the shop's zone
- * (setShopTimeZone), as the bot words them for the customer, whatever zone the browser is in.
+ * Every quantity, amount and date the panels show, in Persian: Persian digits, the Jalali calendar, Toman for money.
+ * Identifiers (ids, ports, versions) keep their Latin digits and never come through here. Dates are shown in the shop's
+ * time zone (setShopTimeZone), as the bot words them for customers, whatever zone the browser is in. Where a formatter
+ * mirrors the bot's wording, its PHP counterpart is named (Messages::…).
  */
 
 const LOCALE = 'fa-IR'
@@ -72,9 +72,21 @@ export function amountDraft(value: string): string {
 /** What 0 means for a quota, a term or a number of devices — no limit — in the bot's one word for it (Messages::UNLIMITED). */
 export const UNLIMITED = 'نامحدود'
 
-/** A term: "۳۰ روز", 0 = نامحدود. */
+/** A number of days (extra time sold, an order's): "۳۰ روز", 0 = نامحدود. */
 export function formatDays(days: number): string {
   return days > 0 ? `${formatNumber(days)} روز` : UNLIMITED
+}
+
+const HOURS_IN_DAY = 24
+const MINUTES_IN_DAY = 1_440
+
+/** A term in hours (`duration_hours`) as the bot words it (Messages::duration): "۳۰ روز", "۶ ساعت", "۱ روز و ۶ ساعت"; 0 = نامحدود. */
+export function formatDuration(hours: number): string {
+  if (hours <= 0) return UNLIMITED
+  const parts: string[] = []
+  if (hours >= HOURS_IN_DAY) parts.push(`${formatNumber(Math.floor(hours / HOURS_IN_DAY))} روز`)
+  if (hours % HOURS_IN_DAY !== 0) parts.push(`${formatNumber(hours % HOURS_IN_DAY)} ساعت`)
+  return parts.join(' و ')
 }
 
 /** Devices at once: "۲ دستگاه", 0 = نامحدود. */
@@ -90,8 +102,8 @@ export function formatGb(gb: number): string {
 const BYTE_UNITS = ['بایت', 'کیلوبایت', 'مگابایت', 'گیگابایت', 'ترابایت']
 
 /**
- * An amount of traffic or memory: "۱٫۵ گیگابایت", "۵۱۲ مگابایت"; none is "۰ گیگابایت", in the unit traffic is counted in
- * everywhere else (a quota of 0 is `UNLIMITED` — say so yourself).
+ * An amount of traffic or memory in its largest unit: "۱٫۵ گیگابایت", "۵۱۲ مگابایت"; zero is "۰ گیگابایت". (A quota of
+ * 0 means unlimited — the caller says `UNLIMITED` itself.)
  */
 export function formatBytes(bytes: number): string {
   let value = Math.max(0, bytes)
@@ -105,9 +117,9 @@ export function formatBytes(bytes: number): string {
 }
 
 /** "۳۰ دقیقه", "۲ ساعت", "۱ ساعت و ۳۰ دقیقه", "۱ روز" — a span of minutes, worded as the bot words it (Persian::minutes). */
-export function formatDuration(minutes: number): string {
+export function formatMinutes(minutes: number): string {
   minutes = Math.max(0, Math.round(minutes))
-  if (minutes >= 1440 && minutes % 1440 === 0) return `${formatNumber(minutes / 1440)} روز`
+  if (minutes >= MINUTES_IN_DAY && minutes % MINUTES_IN_DAY === 0) return `${formatNumber(minutes / MINUTES_IN_DAY)} روز`
   const parts: string[] = []
   if (minutes >= 60) parts.push(`${formatNumber(Math.floor(minutes / 60))} ساعت`)
   if (minutes % 60 !== 0 || parts.length === 0) parts.push(`${formatNumber(minutes % 60)} دقیقه`)
@@ -128,17 +140,17 @@ export function toLatinDigits(text: string): string {
 }
 
 /**
- * Only the digits of what was typed (Persian ones too) — for a whole number the field takes nothing else of (a card's
- * digits, a page, minutes); an amount that may have decimals is `decimalOf`'s, never this, which would read «1.5» as 15.
+ * The digits of what was typed (Persian ones too), for a field that takes nothing else (a card number, a page, minutes).
+ * Never for an amount: «1.5» would read as 15 — use `decimalOf`.
  */
 export function digitsOnly(text: string): string {
   return toLatinDigits(text).replace(/\D/g, '')
 }
 
 /**
- * An amount as typed — Persian or Arabic digits, «٬» «,» or spaces between thousands, «٫» «.» or the «/» a Persian hand
- * writes for the decimal point — the way the API takes one (Input::decimal: "1.5", two decimals at most); null when it
- * is no such number: never read as another one.
+ * A typed amount in the API's form ("1.5", two decimals at most, as Input::decimal reads it): Persian or Arabic digits,
+ * «٬» «,» or spaces between groups of three, «٫» «.» or «/» for the decimal point. Null for anything else — never
+ * misread as another number.
  */
 export function decimalOf(typed: string): string | null {
   // Thousands set apart only between groups of three, as Input::decimalOf() reads them: «2,5» is no 25.
@@ -148,27 +160,21 @@ export function decimalOf(typed: string): string | null {
   return match && whole.length <= 12 ? whole + (match[2] ?? '') : null
 }
 
-/**
- * A typed amount as a request carries it: in the API's form when it reads as one (decimalOf), else as typed — for the API
- * to refuse in its own words.
- */
+/** A typed amount as a request sends it: the API's form when it is one (decimalOf), else as typed, for the API to refuse. */
 export function decimalInput(typed: string): string {
   return decimalOf(typed) ?? typed.trim()
 }
 
-/**
- * A whole number as an admin types it into a setting — "10000", "10,000", "۱۰٬۰۰۰" —, its thousands set apart only
- * between groups of three, as the API reads it (Input::wholeOf()): its digits, or null when it is no such number.
- */
+/** A typed whole number ("10000", "10,000", "۱۰٬۰۰۰") as its digits, read as Input::wholeOf() reads it; else null. */
 export function wholeOf(typed: string): string | null {
   const number = decimalOf(typed)
   return number !== null && !number.includes('.') ? number : null
 }
 
 /**
- * The numbers of a list an admin types — "50000, 100000", "50,000 100,000", "۵۰٬۰۰۰، ۱۰۰٬۰۰۰" —, as the API reads them
- * (Input::numbersOf()): apart by spaces, «،» or a comma — but a comma between groups of three digits, which sets a
- * number's thousands apart —, each read as wholeOf() reads one; null when one is no such number.
+ * A typed list of whole numbers ("50000, 100000", "50,000 100,000", "۵۰٬۰۰۰، ۱۰۰٬۰۰۰"), read as Input::numbersOf()
+ * reads it: separated by spaces, «،» or commas — except a comma between groups of three digits, which is a thousands
+ * separator. Null when one item is not a whole number.
  */
 export function wholesOf(typed: string): string[] | null {
   const items =
@@ -195,7 +201,6 @@ export function formatCountdown(seconds: number): string {
   return toPersianDigits(`${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`)
 }
 
-const MINUTES_IN_DAY = 1_440
 const MINUTES_IN_MONTH = 43_200
 const MINUTES_IN_YEAR = 525_600
 
@@ -203,9 +208,8 @@ const MINUTES_IN_YEAR = 525_600
 const whole = (value: number): number => Math.round(value) || 0
 
 /**
- * The time between two moments in its largest unit, rounded: "۴۰ ثانیه", "۵ دقیقه", "۳ ساعت", "۱۲ روز" (up to a month
- * of 30 days), "۴ ماه", "۲ سال" — 12 months are "۱ سال". Days and longer go by the calendar: an hour daylight saving took
- * or gave between the two is no part of them.
+ * The time between two moments in its largest unit, rounded: "۴۰ ثانیه", "۵ دقیقه", "۳ ساعت", "۱۲ روز", "۴ ماه",
+ * "۲ سال" (a month is 30 days; 12 months are "۱ سال"). Days and longer ignore a daylight-saving hour in between.
  */
 function distance(from: Date, to: Date): string {
   const [start, end] = from.getTime() <= to.getTime() ? [from, to] : [to, from]
@@ -236,22 +240,24 @@ export function timeAgo(moment: Moment | null | undefined): string {
   return date > now ? `در ${distance(now, date)}` : `${distance(date, now)} قبل`
 }
 
+const HOUR_MS = 3_600_000
 const DAY_MS = 86_400_000
 
-/** How long until a deadline, as the bot words it for the customer: "۱۲ روز مانده", "کمتر از یک روز مانده", "تمام شده". */
-export function timeLeft(iso: string): string {
-  const days = (toDate(iso).getTime() - Date.now()) / DAY_MS
+/** Whether a deadline is less than a day away — not past yet: then its hour matters, and the hours left are counted. */
+const withinADay = (left: number): boolean => left > 0 && left < DAY_MS
 
-  return days <= 0 ? 'تمام شده' : days < 1 ? 'کمتر از یک روز مانده' : `${formatNumber(Math.ceil(days))} روز مانده`
+/** How long until a deadline, rounded up, as the bot words it (Messages::expiry): "۱۲ روز مانده", "۵ ساعت مانده", "تمام شده". */
+export function timeLeft(iso: string): string {
+  const left = toDate(iso).getTime() - Date.now()
+
+  if (left <= 0) return 'تمام شده'
+  return withinADay(left) ? `${formatNumber(Math.ceil(left / HOUR_MS))} ساعت مانده` : `${formatNumber(Math.ceil(left / DAY_MS))} روز مانده`
 }
 
-/** The zone dates and times read in: the shop's, once /api/app said it; the browser's own until then. */
+/** The zone dates are shown in: the shop's once /api/app said it, the browser's until then. */
 let shopTimeZone: string | undefined
 
-/**
- * Show every date and time in the shop's zone (APP_TIMEZONE, which GET /api/app says — lib/app-info): the zone the bot
- * words its dates in for the customer. A zone the browser does not know leaves the browser's own.
- */
+/** Show every date in the shop's zone (APP_TIMEZONE, from /api/app). A zone the browser does not know is ignored. */
 export function setShopTimeZone(zone: string | undefined): void {
   try {
     shopTimeZone = zone ? new Intl.DateTimeFormat(LOCALE, { timeZone: zone }).resolvedOptions().timeZone : undefined
@@ -260,10 +266,7 @@ export function setShopTimeZone(zone: string | undefined): void {
   }
 }
 
-/**
- * The zone dates and times read in now, by its name ("Asia/Tehran"): the shop's (`shop`) once /api/app said it, else the
- * browser's own — what today's day is in (lib/jalali), and what a moment shown before the shop's zone is known names.
- */
+/** The zone dates are shown in now ("Asia/Tehran"), and whether it is the shop's (`shop`) or still the browser's. */
 export function shownTimeZone(): { zone: string; shop: boolean } {
   return shopTimeZone === undefined ? { zone: new Intl.DateTimeFormat().resolvedOptions().timeZone, shop: false } : { zone: shopTimeZone, shop: true }
 }
@@ -287,16 +290,21 @@ export function formatDate(moment: Moment | null | undefined, options: Intl.Date
   return jalali({ ...options, timeZone: shopTimeZone }).format(toDate(moment))
 }
 
+/** A service's end as the bot words it (Messages::expiry): the day, and its hour too when it is less than a day away. */
+export function formatDeadline(iso: string): string {
+  return withinADay(toDate(iso).getTime() - Date.now()) ? formatDate(iso) : formatDate(iso, { dateStyle: 'medium' })
+}
+
 /**
- * A day of the shop's calendar as the API sends one ("2026-09-17" — the dashboard's days, the shop's already) as a short
- * Jalali day for chart axes and tooltips, "۲۶ شهریور": that very day, in whatever zone the browser is.
+ * A calendar day the API sends ("2026-09-17", already the shop's day) as a short Jalali day, "۲۶ شهریور" — the same day
+ * whatever the browser's zone (it is read at UTC).
  */
 export function formatDay(day: string, options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }): string {
   const [year = NaN, month = NaN, date = NaN] = day.split('-').map(Number)
   return jalali({ ...options, timeZone: 'UTC' }).format(Date.UTC(year, month - 1, date))
 }
 
-/** The first letters of a name's first two words — of a handle («@agent_bot»), its first letter, not the «@». */
+/** The first letters of a name's first two words; a handle («@agent_bot») gives its first letter, not the «@». */
 export function initials(name: string): string {
   return name
     .trim()

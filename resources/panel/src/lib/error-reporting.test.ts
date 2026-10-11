@@ -1,3 +1,4 @@
+import { setImmediate } from 'node:timers'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api'
@@ -6,9 +7,9 @@ import { reportBug, reportCrash, startErrorReporting } from '@/lib/error-reporti
 import { noContent, refusal, server, withHeaders } from '@/test/server'
 
 /*
- * The panel's own failures told to the shop's log (lib/error-reporting): what nothing handled — a press's error, a
+ * The panel's own failures reported to the shop's log (lib/error-reporting): what nothing handled — a press's error, a
  * promise's rejection — and what a screen could not draw; each failure once in a while, a few a minute at most, none
- * while the server asks to wait, never the server's own answers or the browser's noise. What nothing handled is told to
+ * while the server asks to wait, never the server's own answers or the browser's noise. What nothing handled is shown to
  * the admin too, once a burst.
  */
 
@@ -39,7 +40,7 @@ beforeEach(() => {
 afterEach(() => stop())
 
 describe('what nothing handled', () => {
-  it('is told to the log, and to the admin in a toast with a way to reload', () => {
+  it('is reported to the log, and shown to the admin in a toast with a reload button', () => {
     window.history.replaceState(null, '', '/agent/login#code=secret-code')
 
     unhandled(new TypeError('x is undefined'))
@@ -50,7 +51,7 @@ describe('what nothing handled', () => {
     expect(toast.error).toHaveBeenCalledWith('خطایی در پنل رخ داد', expect.objectContaining({ action: expect.objectContaining({ label: 'بارگذاری دوباره' }) as object }))
   })
 
-  it('says where the page was by its path and its query’s names alone — never a search’s words nor the fragment', () => {
+  it('reports the page address as its path and query parameter names only, never values or the fragment', () => {
     window.history.replaceState(null, '', '/admin/s/7/users?search=0912%20sara&status=banned&search=x#code=secret')
 
     unhandled(new TypeError('x is undefined'))
@@ -58,7 +59,7 @@ describe('what nothing handled', () => {
     expect(sent.map((report) => report.address)).toEqual(['/admin/s/7/users?search&status'])
   })
 
-  it('is told to the admin once a burst, however many come', () => {
+  it('shows the admin one toast per burst, however many errors come', () => {
     unhandled(new TypeError('one'))
     rejected(new TypeError('two'))
     vi.advanceTimersByTime(9_000)
@@ -72,7 +73,7 @@ describe('what nothing handled', () => {
     expect(toast.error).toHaveBeenCalledTimes(2)
   })
 
-  it('that is the server’s answer is not the panel’s failure: told to the admin in its words, never to the log', () => {
+  it('that is a server answer is not a panel bug: shown in a toast with its message, never reported to the log', () => {
     rejected(new ApiError(409, 'این پلن فروخته شده است.'))
 
     expect(sent).toEqual([])
@@ -97,7 +98,7 @@ describe('what nothing handled', () => {
 })
 
 describe('the reports', () => {
-  it('send the same failure once in a while — the same words from another place of the code are another', () => {
+  it('send the same failure once per window; the same message from another place in the code counts as another', () => {
     const crash = new TypeError('x is undefined')
     reportCrash(crash, '\n    at PlanRow')
     reportCrash(crash, '\n    at PlanRow')
@@ -129,8 +130,8 @@ describe('the reports', () => {
     server().on('POST', '/api/admin/client-errors', withHeaders(refusal(429, 'گزارش خطا زیاد فرستاده شد.'), { 'Retry-After': '120' }))
 
     reportBug(new Error('first'))
-    // The refusal comes back.
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    // The refusal comes back (the event loop turns once — no timer's tick).
+    await new Promise((resolve) => setImmediate(resolve))
     reportBug(new Error('second'))
     vi.advanceTimersByTime(119_000)
     reportBug(new Error('third'))

@@ -10,9 +10,9 @@ import { lazyPage } from '@/lib/lazy-page'
 import { STORAGE_KEYS } from '@/lib/storage'
 
 /*
- * Never a blank screen: a page that throws while drawing shows what happened in its place (ErrorState) and is told to
- * the shop's log (lib/error-reporting), and a page file an upgrade replaced reloads the tab once for the new build
- * (lib/lazy-page, the boundary) — a second failure soon after says the reload did not help, and is told to the log.
+ * Never a blank screen: a page that throws while drawing shows what happened in its place (ErrorState) and is reported
+ * to the shop's log (lib/error-reporting), and a page file an upgrade replaced reloads the tab once for the new build
+ * (lib/lazy-page, the boundary) — a second failure soon after says the reload did not help, and is reported to the log.
  */
 
 const STALE = 'Failed to fetch dynamically imported module: http://localhost/admin/assets/plans-Bx1.js'
@@ -122,21 +122,8 @@ async function mount(load: () => Promise<{ Page: () => ReactNode }>) {
   await act(() => vi.advanceTimersByTimeAsync(1_000))
 }
 
-describe('a lazy page', () => {
-  it('draws the page once its file has come', async () => {
-    await mount(() => Promise.resolve({ Page: () => <p>صفحه پلن‌ها</p> }))
-
-    expect(screen.getByText('صفحه پلن‌ها')).toBeTruthy()
-  })
-
-  it('reloads for the new build when its file is gone, and keeps the loading screen meanwhile', async () => {
-    await mount(() => Promise.reject(new TypeError(STALE)))
-
-    expect(reload).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('status').textContent).toBe('در حال بارگذاری…')
-    expect(screen.queryByRole('heading', { name: FAILURE_KINDS['stale-build'].title })).toBeNull()
-  })
-
+// How a lazy page loads (and reloads for a new build) is lib/lazy-page.test's; here, what reaches the boundary.
+describe('a lazy page that fails to load', () => {
   it('shows the new-build screen when a reload a moment ago did not help', async () => {
     sessionStorage.setItem(STORAGE_KEYS.reloadedAt, String(Date.now()))
 

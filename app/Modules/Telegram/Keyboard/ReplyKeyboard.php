@@ -5,11 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Keyboard;
 
 /**
- * Builder for reply keyboards — the persistent buttons under the text field. A tap sends the
- * button's label as an ordinary message, so labels double as routes (Dispatcher::text()).
- *
- * Telegram lays a row out left to right in array order, whatever the language; for a Persian
- * screen list the buttons right-to-left reversed, so the first one a reader meets is last in the row.
+ * Builder for reply keyboards — the persistent buttons under the text field. A tap sends the button's label as a
+ * message, so labels double as routes (Dispatcher::text()). Rows go left to right as given.
  *
  *   ReplyKeyboard::make()->row('🔐 خرید', ReplyKeyboard::button('🔑 تست', 'primary'))->row('☎️ پشتیبانی')->build();
  */

@@ -20,9 +20,8 @@ interface Held {
 }
 
 /**
- * A field held to what the server takes, with how much of it is used under it. The browser stops it at the limit and
- * counts as it stops (UTF-16 units: an emoji is two, where the server counts one), so a note is never refused for its
- * length after it is sent.
+ * A field held to the server's limit, with a count under it. The browser stops typing at `maxLength`, counting UTF-16
+ * units (an emoji is two where the server counts one), so a note is never refused for its length after it is sent.
  */
 function Counted({ value, max, describedBy, field }: { value: string; max: number; describedBy?: string; field: (held: Held) => ReactNode }) {
   const count = useId()
@@ -40,14 +39,13 @@ function Counted({ value, max, describedBy, field }: { value: string; max: numbe
 
 type NoteInputProps = Omit<ComponentProps<'textarea'>, 'maxLength' | 'value' | 'className'> & {
   value: string
-  /** What the server takes of this text, when it is not a decision's note's: a ticket's answer (Support\Services\Tickets::BODY_MAX), a refund's note (LEDGER_NOTE_MAX). */
+  /** The server's limit when it is not NOTE_MAX: a ticket's answer (Tickets::BODY_MAX), a refund's note (LEDGER_NOTE_MAX). */
   max?: number
 }
 
 /**
- * A note the customer reads — why a payment was rejected, an order cancelled, a service switched off, what a gift is
- * for, support's answer to a ticket: a textarea held to what the server takes, NOTE_MAX unless it is told another
- * (Counted).
+ * A note the customer reads (why a payment was rejected, support's answer to a ticket): a textarea held to the server's
+ * limit, with a count.
  */
 export function NoteInput({ value, max = NOTE_MAX, 'aria-describedby': describedBy, ...props }: NoteInputProps) {
   return <Counted value={value} max={max} describedBy={describedBy} field={(held) => <Textarea {...props} value={value} {...held} />} />

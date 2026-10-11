@@ -10,7 +10,7 @@ import { useForm } from '@/lib/use-form'
 
 interface CategoryFormProps {
   category: PlanCategoryRow | null
-  /** What else shows the categories — its list's (useRows' `invalidates`) —, read again once it is saved. */
+  /** Other reads to refresh once it is saved (useRows' `invalidates`). */
   invalidates: readonly QueryKey[]
   onSaved: (category: PlanCategoryRow) => void
   onCancel: () => void

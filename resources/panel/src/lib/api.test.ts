@@ -11,8 +11,8 @@ import { html, json, noContent, offline, refusal, server, silent, withHeaders } 
 
 const VIP = { group: { id: 7, name: 'VIP', sort: 1, counts: { users: 0 } } }
 
-/** Writes as the compiler holds them to their operations — never run: `pnpm typecheck` is their test. */
-async function typedWrites() {
+/** How the compiler holds writes to their operations. Never run: `pnpm typecheck` is their test. */
+export async function typedWrites() {
   const answer: CustomerGroupResponse = await api.post('/customer-groups', { name: 'VIP' })
   // @ts-expect-error a field the operation does not read
   await api.post('/customer-groups', { name: 'VIP', color: 'gold' })
@@ -64,10 +64,6 @@ describe('a request', () => {
     const [request] = server().sent('POST', '/api/admin/plans/3/duplicate')
     expect(request?.body).toBeUndefined()
     expect(request?.headers['content-type']).toBeUndefined()
-  })
-
-  it('takes, for a write, the body its operation reads and gives its answer — held by the compiler (pnpm typecheck)', () => {
-    expect(typedWrites).toBeTypeOf('function')
   })
 
   it('puts a read’s search, filters and page after the address, and nothing when there are none', async () => {
@@ -147,7 +143,7 @@ describe('the shop a request names', () => {
     expect(agents.mediaUrl('/payments/7/receipt')).toBe('/api/agent/payments/7/receipt')
   })
 
-  it('is told apart when it is not there: the tab is at the address of no shop', () => {
+  it('is recognised when it does not exist: the tab is at the address of a missing shop', () => {
     expect(shopMissing(new ApiError(404, 'این فروشگاه پیدا نشد.', { shop: ['این فروشگاه پیدا نشد.'] }))).toBe(true)
     expect(shopMissing(new ApiError(404, 'مورد درخواستی پیدا نشد.'))).toBe(false)
     expect(shopMissing(new ApiError(422, 'شماره درستی ندارد.', { shop: ['شماره درستی ندارد.'] }))).toBe(false)
@@ -170,7 +166,7 @@ describe('a file the browser asks for itself — a picture, a video, a download'
     expect(server().requests.map((request) => request.headers['x-shop'])).toEqual(['1', '1'])
   })
 
-  it('is read as its bytes when the panel handles it itself, else the failure the API words', async () => {
+  it('is read as bytes when the panel fetches it itself, else as the API’s failure', async () => {
     server()
       .on('GET', '/api/admin/bot/custom-emojis/5/animation', { kind: 'response', status: 200, body: 'tgs bytes', type: 'application/octet-stream' })
       .on('GET', '/api/admin/bot/custom-emojis/6/animation', refusal(404, 'این ایموجی تصویر متحرکی ندارد.'))
@@ -222,7 +218,7 @@ describe('a failure', () => {
     expect(isTransportError(error)).toBe(false)
   })
 
-  it('carries the API’s words and what it says under each field', async () => {
+  it('carries the API’s message and its field errors', async () => {
     server().on('POST', '/api/admin/agency/levels', refusal(422, 'نام سطح را وارد کنید.', { name: ['نام سطح را وارد کنید.', 'second'], price_per_gb: ['قیمت معتبر نیست.'] }))
 
     const error = await api.post('/agency/levels', { name: '', price_per_gb: 'x' }).catch((failure: unknown) => failure)

@@ -7,8 +7,8 @@ namespace App\Modules\Providers\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * A server with services on it — any bot's — is not deleted: they are moved elsewhere or deleted first, or the server is
- * switched off instead. The message is the Persian sentence the admin sees.
+ * A server with any bot's services on it is not deleted: they are moved or deleted first, or the server is switched off
+ * instead. A 409; the message is the sentence the owner sees.
  */
 final class ServerInUseException extends DomainRuleException
 {

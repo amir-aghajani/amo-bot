@@ -8,9 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * The shop's copy of what a panel attaches clients to (DTO\InboundInfo), as much of it as the admin picks by — refreshed
- * by every check of the server. `enabled` follows the panel (one that vanished from it stays, switched off: services and
- * plans may still point at it); `is_selectable` is the admin opting it in for sale, and stays the admin's.
+ * The shop's copy of an inbound (or a PasarGuard group) clients are attached to (DTO\InboundInfo), refreshed by every
+ * check of the server. `enabled` follows the panel — one that vanished from it stays, switched off, since services and
+ * plans may still point at it; `is_selectable` is the owner opting it in for sale.
  *
  * @property int $id
  * @property int $server_id

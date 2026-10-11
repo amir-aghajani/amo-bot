@@ -10,7 +10,7 @@ the shops' updater installs a release only when the key built into them signed i
 
 `App\Core\Application::VERSION` is the version. The installer records it in `storage/installed.lock`, and every update
 moves it: the database's upgrades start from there. A release that changes `database/schema.php` ships the same change
-as `database/upgrades/<its version>.php` (the rule is in that folder's README).
+as `database/upgrades/<its version>.php` ([Database](Database.md)).
 
 ## The signing key
 
@@ -58,15 +58,16 @@ that writes zips (Windows 10+, macOS) or `zip` (Linux), and, to sign, PHP's sodi
 
 ## Publishing it
 
-1. Write the version's notes in `CHANGELOG.md`, under a heading of its own (`## 1.2.3`, or `## [1.2.3] - <date>`).
+1. In [Releases](Releases.md), rename the `## Unreleased` heading to the version's (`## Version 1.2.3`) and start a new,
+   empty `## Unreleased` above it.
 2. Set `Application::VERSION`, commit, and push a tag `v<version>` — `v1.2.3` for `1.2.3` — on a commit CI passed on
    every PHP version.
 
-`.github/workflows/release.yml` checks that the tag names `Application::VERSION`, that `CHANGELOG.md` has the version's
+`.github/workflows/release.yml` checks that the tag names `Application::VERSION`, that `docs/Releases.md` has the version's
 section and that the signing secret is set — no unsigned release is ever published —, runs `composer check` (on PHP
 8.2) and `pnpm check` again, builds and signs the release with `scripts/release.php` (the key the shops trust now taken
 from the last release's tag), and publishes the GitHub release: the zip, `release.json` and `release.json.sig`, its
-notes the changelog's section. The shops' daily check sees it within a day; «بررسی دوباره» at once.
+notes that section of [Releases](Releases.md). The shops' daily check sees it within a day; «بررسی دوباره» at once.
 
 Every push to `main` and every pull request runs the checks on PHP 8.2–8.4 and builds the panels
 (`.github/workflows/ci.yml`, [Testing](Testing.md#ci)).

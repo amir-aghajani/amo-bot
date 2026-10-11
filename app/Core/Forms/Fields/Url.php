@@ -11,11 +11,9 @@ use App\Support\Input;
 use App\Support\Validation;
 
 /**
- * A web address — the shop's, a website's, the Bot API's, a panel's —: http or https with a host, absolute, kept without
- * the slash at its end, and nothing an address of a server does not carry: no credentials (an address is shown and
- * logged; where the form has fields of their own for them, `credentials` says so), no query, no fragment. `max`
- * characters at most; blank only while it is not `required`; held off the pages it must not reach into when the field
- * names them (`pages`, a pattern on its path — a panel's own pages).
+ * A web address (the shop's, a website's, the Bot API's, a panel's): absolute http(s) with a host, kept without its
+ * trailing slash, never with credentials (addresses are shown and logged), a query or a fragment. `pages` is a pattern
+ * on the path for pages it must not point into (a panel's dashboard instead of its base).
  *
  * @extends Field<string>
  */
@@ -27,15 +25,15 @@ final class Url extends Field
         string $default,
         /** What its refusals call it: «آدرس سایت», «آدرس پنل». */
         private readonly string $label,
-        /** What one that is no http(s) address with a host is told. */
+        /** The refusal of anything but an http(s) address with a host. */
         private readonly string $refusal,
         private readonly bool $required = true,
         private readonly ?int $max = null,
-        /** What one with credentials in it is told, where the form keeps them in fields of their own; null: its refusal. */
+        /** The refusal of one with credentials in it, where the form has fields for them; null: `$refusal`. */
         private readonly ?string $credentials = null,
         /** A pattern on its path for the pages it must not reach into; null for none. */
         private readonly ?string $pages = null,
-        /** What one that reaches into them is told. */
+        /** The refusal of one that reaches into them. */
         private readonly string $pagesRefusal = '',
         ?FieldSpec $spec = null,
     ) {

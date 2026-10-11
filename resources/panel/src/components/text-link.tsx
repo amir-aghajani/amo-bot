@@ -29,8 +29,8 @@ export function externalHref(address: string): string | null {
 }
 
 /**
- * A link in the panel's link blue: `to` another screen of the panel, or `href` out of it (in a new tab) — an address
- * that leads nowhere it may (externalHref) is its words alone.
+ * A link in the panel's link blue: `to` another screen of the panel, or `href` out of it (a new tab). An `href` that
+ * externalHref refuses renders as plain text.
  */
 export function TextLink({ to, href, inline = false, className, children }: TextLinkProps) {
   const classes = cn(

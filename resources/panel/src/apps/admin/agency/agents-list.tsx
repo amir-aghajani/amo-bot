@@ -28,9 +28,8 @@ import { usePagedList } from '@/lib/use-paged-list'
 const SORTS: AgentSort[] = ['joined', 'balance', 'traffic', 'sold']
 
 /**
- * The agents, by level or all — each name the way to their page as a customer —: their bot and its traffic, what it
- * sold, what they owe; their level and credit, their traffic set right, their shop opened in the panel, or the end of
- * their agency.
+ * The agents, filterable by level: their bot, its traffic and sales, and their balance. The row menu changes their
+ * terms, adjusts their traffic, opens their shop or ends their agency.
  */
 export function AgentsList() {
   const list = usePagedList({

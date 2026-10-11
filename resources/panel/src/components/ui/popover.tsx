@@ -4,11 +4,10 @@ import { usePortalContainer } from '@/components/portal-container'
 import { cn } from '@/lib/utils'
 
 /*
- * A card that opens beside its trigger on a press — a tap, a click, Enter — and closes on Escape or a press outside, the
- * focus going into it and back to the trigger: drawn as the panel's other floating layers (the menus) — the popover
- * surface, 12px corners, a hairline, the soft shadow —, kept off the window's edges and never wider than the room beside
- * its trigger. One of the panel's own: it portals into the open dialog (PortalContainerContext), as the menus do —
- * re-apply that one-line `container` if the component is reinstalled with the shadcn CLI.
+ * A card that opens beside its trigger on a press (a tap, a click, Enter) and closes on Escape or a press outside, the
+ * focus going in and back to the trigger. Styled like the menus, kept off the window's edges and never wider than the
+ * room beside its trigger. Local change to re-apply after a shadcn reinstall: it portals into the open dialog
+ * (the one-line `container` from PortalContainerContext), as the menus do.
  */
 
 function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {

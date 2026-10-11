@@ -16,8 +16,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Puts the shop on webhooks: every bot's registered at its address under APP_URL (Http\Urls) — BotWebhooks::enable(),
- * which the owner's panel runs too. An agent's bot Telegram refuses gets the reason on its row, as the poller gives it.
+ * Puts every bot on webhooks under APP_URL (BotWebhooks::enable(), which the owner's panel runs too). An agent's bot
+ * Telegram refuses gets the reason on its row.
  */
 #[AsCommand(name: 'bot:webhook:set', description: 'Register every bot\'s webhook (the main one at APP_URL/webhooks/telegram/{secret})')]
 final class BotWebhookSetCommand extends EveryBotCommand

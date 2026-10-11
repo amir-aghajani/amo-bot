@@ -5,15 +5,26 @@ declare(strict_types=1);
 namespace Tests\Unit\Telegram;
 
 use App\Modules\Telegram\Messages;
+use App\Support\Persian;
 use App\Support\Traffic;
+use Illuminate\Support\Carbon;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 /**
- * The one way the bot words traffic, terms and placeholders.
+ * How the bot words traffic, terms (in days, hours or both), when a service ends, shares, gifts and
+ * placeholders.
  */
 final class MessagesTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->app(); // the shop's zone the dates are read in
+        Carbon::setTestNow('2026-09-20 12:00:00');
+    }
+
     /** @return iterable<string, array{int, string}> */
     public static function amounts(): iterable
     {
@@ -37,8 +48,33 @@ final class MessagesTest extends TestCase
         self::assertSame('۳۰ گیگابایت', Messages::traffic(30 * Traffic::GIGABYTE));
         self::assertSame('۵۱۲ مگابایت', Messages::traffic(512 * Traffic::MEGABYTE));
         self::assertSame(Messages::UNLIMITED, Messages::traffic(0));
-        self::assertSame('۳۰ روز', Messages::duration(30));
-        self::assertSame(Messages::UNLIMITED, Messages::duration(0));
+    }
+
+    public function testATermReadsInDaysInHoursOrBoth(): void
+    {
+        self::assertSame(
+            [Messages::UNLIMITED, '۶ ساعت', '۱ روز', '۱ روز و ۶ ساعت', '۳۰ روز'],
+            array_map(Messages::duration(...), [0, 6, 24, 30, 720]),
+        );
+    }
+
+    public function testATermWaitingForTheFirstConnectionSaysHowLongItRuns(): void
+    {
+        self::assertSame('⏳ در انتظار اولین اتصال (۶ ساعت)', Messages::expiry(null, 6));
+        self::assertSame('⏳ در انتظار اولین اتصال (۳۰ روز)', Messages::expiry(null, 720));
+        self::assertSame(Messages::UNLIMITED, Messages::expiry(null, 0));
+    }
+
+    public function testTheLastDayIsCountedInHoursWithTheTimeItEnds(): void
+    {
+        $soon = now()->addHours(4)->addMinutes(10);
+        self::assertSame(Persian::date($soon, withTime: true) . ' (۵ ساعت مانده)', Messages::expiry($soon, 6), 'rounded up, with the time of day');
+
+        $later = now()->addDays(3)->addHours(2);
+        self::assertSame(Persian::date($later) . ' (۴ روز مانده)', Messages::expiry($later, 720));
+
+        $gone = now()->subHour();
+        self::assertSame(Persian::date($gone) . ' (تمام شده)', Messages::expiry($gone, 6));
     }
 
     public function testAPercentIsWholeAndRoundedDown(): void
@@ -48,7 +84,7 @@ final class MessagesTest extends TestCase
         self::assertSame('۰٪', Messages::percent(5, 0), 'nothing to share out');
     }
 
-    public function testAGiftNamesWhatItBrings(): void
+    public function testAGiftNamesWhatItBringsItsDaysAsATerm(): void
     {
         self::assertSame('۳ روز و ۱۰ گیگابایت', Messages::gift(3, 10 * Traffic::GIGABYTE));
         self::assertSame('۳ روز', Messages::gift(3, 0));

@@ -14,8 +14,7 @@ declare(strict_types=1);
  *
  * A generated page says so at its top and is never edited by hand: change what it is made from, then run the script.
  * The check also follows every link between pages — to the page and to its heading, under the anchors GitHub and Docsify
- * both give it —, holds every page to its name's form and to the sidebar, and every link of README.md, CONTRIBUTING.md,
- * SECURITY.md and CHANGELOG.md.
+ * both give it —, holds every page to its name's form and to the sidebar, and every link of README.md.
  * The wiki's form is the same pages with their links to each other written without `.md`; .github/workflows/wiki.yml
  * publishes it.
  */
@@ -72,7 +71,7 @@ foreach (generatedPages($root) as $name => $markdown) {
 // --- the generated pages ---------------------------------------------------------------------------------------------
 
 /**
- * Every file written from the code, by its name in docs/. Each generator answers the files it writes.
+ * Every file written from the code, by its name in docs/. Each generator returns the files it writes.
  *
  * @return array<string, string>
  */
@@ -116,7 +115,7 @@ function bootApplication(string $root): Application
 
 /**
  * docs/Config-Reference.md: every setting config.php may hold, by section, as the file lists them (ConfigKeys::SECTIONS)
- * — its default and its words —, and after the setting that names a driver, each driver's own settings as its form
+ * — its default and its description —, and after the setting that names a driver, each driver's own settings as its form
  * describes them (the database's DB_*, the mail's MAIL_*).
  *
  * @return array<string, string>
@@ -130,10 +129,10 @@ function configReference(Container $container): array
         generatedNotice('App\Core\Config\ConfigKeys::SECTIONS and the forms of the drivers registered in bootstrap/container.php'),
         '# config.php reference',
         '',
-        'Every setting `config.php` may hold, section by section in the order the file lists them: what the shop runs with',
-        'while the file does not set it, and what it is for — the words the file itself says above each setting. A setting',
-        'that names a driver (`DB_CONNECTION`, `MAIL_TRANSPORT`) is followed by each driver\'s own settings, as the panel',
-        'shows them. [Configuration](Configuration.md) says how the file is made, edited and kept safe.',
+        'Every setting `config.php` can hold, by section, in the order the file lists them: its default (used while the file',
+        'does not set it) and what it is for (the same text the file shows above the setting). After a setting that picks a',
+        'driver (`DB_CONNECTION`, `MAIL_TRANSPORT`) come each driver\'s own settings, as the panel shows them.',
+        '[Configuration](Configuration.md) explains how the file is created, edited and protected.',
     ];
 
     foreach (ConfigKeys::SECTIONS as $section => $settings) {
@@ -209,7 +208,7 @@ function fieldWords(Field $field, array $keys): string
         $words[] = 'required';
     }
     if ($described['secret']) {
-        $words[] = 'a secret: the panel never shows it, and a blank one keeps the one kept';
+        $words[] = 'a secret: the panel never shows it, and leaving it blank keeps the stored value';
     }
     if ($described['advanced']) {
         $words[] = 'under «تنظیمات پیشرفته»';
@@ -228,27 +227,27 @@ function botTextsReference(): array
 {
     $kinds = [
         TextKind::Message->value => 'A message the bot sends.',
-        TextKind::Caption->value => 'The caption of the QR card a service is delivered on.',
+        TextKind::Caption->value => 'The caption of the QR card a service is delivered with.',
         TextKind::Popup->value => 'The short notice a tapped button shows.',
         TextKind::Button->value => 'A button\'s label.',
-        TextKind::Part->value => 'A piece another text takes in (a status, a note, a hint under a screen); emptied, it leaves nothing.',
+        TextKind::Part->value => 'A piece included in other texts (a status, a note, a hint under a screen); if emptied, it is left out.',
     ];
 
     $lines = [
         generatedNotice('App\Modules\Telegram\Texts\TextCatalog'),
         '# Bot texts reference',
         '',
-        'Everything the bot says to a customer is one of these texts. The owner — or an agent, in their own shop — rewords any',
-        'of them on «متن‌های ربات» in the panel, which shows each text\'s title and where the customer meets it, and checks',
-        'every wording before it is kept: [Bot texts and keyboards](Bot-Texts-And-Keyboards.md). A text is filled with its',
-        'variables as it is sent; a required one cannot be left out of a wording. The words in «» are the panel\'s own.',
+        'Everything the bot says to a customer is one of these texts. The owner, or an agent in their own shop, can reword any',
+        'of them on the panel\'s «متن‌های ربات» screen, which shows each text\'s title and where the customer sees it, and',
+        'validates every wording before saving it ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)). Variables are',
+        'filled in when a text is sent; a required variable cannot be left out of a wording. Words in «» are the panel\'s labels.',
         '',
         '## Kinds',
         '',
-        'What a text is decides what it may hold: Telegram HTML (and premium emoji) in a message, a caption or a part; plain',
-        'text in a notice or a button. Its length is counted as Telegram counts it — the text without its tags.',
+        'A text\'s kind decides what it may contain: Telegram HTML (and premium emoji) in a message, a caption or a part; plain',
+        'text in a popup or a button. Length is counted as Telegram counts it: the visible text, without tags.',
         '',
-        '| Kind | Where it ends up | Telegram HTML | At most |',
+        '| Kind | Where it is used | Telegram HTML | Maximum length |',
         '|---|---|---|---|',
     ];
     foreach (TextKind::cases() as $kind) {
@@ -260,8 +259,8 @@ function botTextsReference(): array
         '',
         '## Variables',
         '',
-        'A variable means the same thing in every text that offers it; a text may describe one its own way (said beside it',
-        'below). The example is what the panel\'s preview fills it with.',
+        'A variable means the same in every text that offers it; a text may describe it differently (shown beside it below).',
+        'The example is the value the panel\'s preview uses.',
         '',
         '| Variable | What it holds | Example |',
         '|---|---|---|',
@@ -274,7 +273,7 @@ function botTextsReference(): array
     $agentShop = (new Bot())->forceFill(['id' => Bot::MAIN + 1]);
     foreach (TextCatalog::GROUPS as $group => $title) {
         $texts = array_values(array_filter(BotText::cases(), static fn(BotText $text): bool => TextCatalog::spec($text)->group === $group));
-        $lines = [...$lines, '', '## Group: ' . $group, '', '«' . $title . '» on the screen.', '', '| Text | Title | Kind | Where the customer meets it | Variables |', '|---|---|---|---|---|'];
+        $lines = [...$lines, '', '## Group: ' . $group, '', '«' . $title . '» on the screen.', '', '| Text | Title | Kind | Where the customer sees it | Variables |', '|---|---|---|---|---|'];
         foreach ($texts as $text) {
             $spec = TextCatalog::spec($text);
             $variables = [];
@@ -282,7 +281,7 @@ function botTextsReference(): array
                 $variables[] = '`%' . $name . '%`' . ($own === null ? '' : ' («' . $own . '»)') . (in_array($name, $spec->required, true) ? ' (required)' : '');
             }
             $mainOnly = !CurrentBot::run($agentShop, static fn(): bool => TextCatalog::says($text));
-            $lines[] = '| `' . $text->value . '` | «' . cell($spec->title) . '»' . ($mainOnly ? ' (the main bot\'s only)' : '') . ' | `' . $spec->kind->value . '` | «' . cell($spec->description) . '» | ' . ($variables === [] ? '—' : cell(implode(', ', $variables))) . ' |';
+            $lines[] = '| `' . $text->value . '` | «' . cell($spec->title) . '»' . ($mainOnly ? ' (main bot only)' : '') . ' | `' . $spec->kind->value . '` | «' . cell($spec->description) . '» | ' . ($variables === [] ? '—' : cell(implode(', ', $variables))) . ' |';
         }
     }
 
@@ -313,7 +312,7 @@ function apiReference(): array
             $reached[$name][$operation['page']] = true;
         }
     }
-    // Where each shape is told: on the one page that reaches it, else once on the shared page.
+    // Where each shape is documented: on the one page that reaches it, else once on the shared page.
     $homes = array_map(static fn(array $pages): string => count($pages) === 1 ? (string) array_key_first($pages) : $shared, $reached);
     ksort($homes, SORT_STRING);
 
@@ -340,11 +339,11 @@ function apiReference(): array
         generatedNotice('resources/api/openapi.yaml, as tests/Support/ApiDescription.php expands it'),
         '# API schemas',
         '',
-        'The shapes more than one of the API\'s reference pages use — the [Store API](Store-API-Reference.md), its',
-        '[admin API](Store-Admin-API-Reference.md) and the [panels\' API](Panels-API-Reference.md) —, each told once, and the',
-        'answers the description names once for many operations (a refusal\'s, a picture\'s). A shape one page alone uses is',
-        'on that page. Every object is closed: an answer holds the fields listed and no other — each of them, `null` where its',
-        'type says so —, and a request sends none but these.',
+        'The schemas used by more than one API reference page (the [Store API](Store-API-Reference.md), its',
+        '[admin API](Store-Admin-API-Reference.md) and the [panels\' API](Panels-API-Reference.md)), each documented once, and',
+        'the shared responses many operations use (an error, a picture). A schema only one page uses is documented on that',
+        'page. Every object is closed: an answer has exactly the fields listed (each one present, `null` where its type',
+        'allows), and a request may send only these fields.',
         '',
         '## Responses',
     ];
@@ -386,7 +385,7 @@ function apiJson(mixed $node, string $key = ''): mixed
 
 /**
  * The reference's pages for the operations, by their file: each its title, what its intro says — the parameters every
- * operation of it takes told there once, from the description — and its sections in order, each a heading and a line.
+ * operation of it takes, documented there once from the description — and its sections in order, each a heading and a line.
  *
  * @param array<string, mixed> $api
  * @return array<string, array{title: string, intro: list<string>, sections: array<string, array{0: string, 1: string}>}>
@@ -400,19 +399,19 @@ function apiPages(array $api): array
         'Store-API-Reference.md' => [
             'title' => 'Store API reference',
             'intro' => [
-                'Every operation of a shop\'s website\'s API as its description says it — who may call it, its parameters, its',
-                'body field by field and its answers —, then the shapes its answers are made of. How to use them — signing in,',
-                'buying, the checkout\'s keys, the errors worth telling apart — is told on the [Store API](Store-API.md)\'s pages;',
-                'what the shop\'s admins have on the website is the [admin API reference](Store-Admin-API-Reference.md). The',
-                'description is `resources/api/openapi.yaml`, and the same as one JSON file — for Swagger UI, Redoc or a client',
-                'generator — is `docs/openapi.json` ([on GitHub](https://github.com/amir-aghajani/amo-bot/blob/main/docs/openapi.json)).',
+                'Every operation of the Store API, the API of a shop\'s website: who may call it, its parameters, its body field',
+                'by field and its answers, followed by the schemas its answers use. How to use it (signing in, buying,',
+                'idempotency keys, which errors to handle) is explained on the [Store API](Store-API.md) pages; the operations',
+                'for the shop\'s admins are in the [admin API reference](Store-Admin-API-Reference.md). The source is',
+                '`resources/api/openapi.yaml`; the same description as one JSON file, for Swagger UI, Redoc or a client',
+                'generator, is `docs/openapi.json` ([on GitHub](https://github.com/amir-aghajani/amo-bot/blob/main/docs/openapi.json)).',
                 '',
-                'Paths are under the website\'s base address, `{APP_URL}/api/store/v1/{store}`',
+                'Paths are relative to the website\'s base address, `{APP_URL}/api/store/v1/{store}`',
                 '([the base address](Store-API.md#the-base-address)):',
                 '',
                 ...$store,
                 '',
-                'Every operation may also answer the one error shape ([errors](Store-API.md#errors)). Objects are closed',
+                'Every operation may also return the common error shape ([errors](Store-API.md#errors)). Objects are closed',
                 '([API schemas](API-Schemas.md)).',
                 '',
                 '## The customer scheme',
@@ -420,69 +419,69 @@ function apiPages(array $api): array
                 apiText($api['components']['securitySchemes']['customer']['description']),
             ],
             'sections' => [
-                'public' => ['Public', 'Anyone may call these: the store key alone.'],
-                'customer' => ['Signed-in customer', 'The signed-in customer\'s own, with their bearer token ([the customer scheme](#the-customer-scheme)).'],
+                'public' => ['Public', 'Anyone can call these; only the store key is needed.'],
+                'customer' => ['Signed-in customer', 'For the signed-in customer, with their bearer token ([the customer scheme](#the-customer-scheme)).'],
             ],
         ],
         'Store-Admin-API-Reference.md' => [
             'title' => 'Admin API reference',
             'intro' => [
-                'The shop\'s admins\' API on its website: every operation of the shop\'s daily work the panels have that its admins',
-                'have too — the description marks them (`x-staff`), and the tests give each its path here —, as its description',
-                'says it. How a website signs its admins in and uses it is [the shop\'s admins](Store-API-Admins.md). Each answers',
-                'as in the panels ([the panels\' API](Panels-API-Reference.md)); here it asks an admin\'s bearer token',
-                '([the customer scheme](Store-API-Reference.md#the-customer-scheme)) whose sign-in is at most 12 hours old — a',
-                'way in proven on the session, its sign-in or `POST /me/reauthenticate` since —, and refuses at the door with a',
-                '`403` ([StaffRefused](API-Schemas.md#response-staffrefused)).',
+                'The API a shop\'s website offers its admins: the panels\' daily-work operations that admins may also use (marked',
+                '`x-staff` in the description; the tests give each one its path here). How a website signs its admins in and uses',
+                'this API is explained in [the shop\'s admins](Store-API-Admins.md). Each operation answers as in the panels',
+                '([the panels\' API](Panels-API-Reference.md)), but here it needs an admin\'s bearer token',
+                '([the customer scheme](Store-API-Reference.md#the-customer-scheme)) whose sign-in is at most 12 hours old',
+                '(counted from the sign-in, or from the last `POST /me/reauthenticate`). A refusal at the door is a `403`',
+                '([StaffRefused](API-Schemas.md#response-staffrefused)).',
                 '',
-                'Paths are under the website\'s base address and `/admin`, `{APP_URL}/api/store/v1/{store}/admin`:',
+                'Paths are relative to the website\'s base address plus `/admin`, `{APP_URL}/api/store/v1/{store}/admin`:',
                 '',
                 ...$store,
                 '',
-                'Every operation may also answer the one error shape ([errors](Store-API.md#errors)). Objects are closed',
+                'Every operation may also return the common error shape ([errors](Store-API.md#errors)). Objects are closed',
                 '([API schemas](API-Schemas.md)).',
                 '',
                 '## Grants',
                 '',
-                'The website\'s `staff_grants`, each one of '
+                'The website\'s `staff_grants` setting holds any of '
                     . implode(', ', array_map(static fn(string $value): string => '`' . $value . '`', $grant['enum'])) . '. '
                     . apiText($grant['description']),
-                'An operation that asks one says which — and asks a sign-in of the last 15 minutes too, as approving a payment does',
-                'without a grant (`x-staff-recent`).',
+                'An operation that needs a grant says which, and also needs a sign-in from the last 15 minutes, as approving a payment',
+                'does without a grant (`x-staff-recent`).',
             ],
             'sections' => [
-                'admin' => ['Operations', 'The shop\'s daily work, each operation as the panels\' own answers it (linked).'],
+                'admin' => ['Operations', 'The shop\'s daily work; each operation answers like its panel counterpart (linked).'],
             ],
         ],
         'Panels-API-Reference.md' => [
             'title' => 'Panels\' API reference',
             'intro' => [
                 'The panels\' JSON API, for contributors: every operation the owner\'s panel (`/api/admin/…`) and an agent\'s',
-                '(`/api/agent/…`) call, the web installer\'s (`/api/install/…`) and the two anyone may ask, as the description',
-                'says it — the description the panels\' TypeScript types are generated from (`pnpm api:types`) and the tests hold',
-                'every request and answer to ([Extending](Extending.md#a-panel-screen-and-its-api)).',
+                'panel (`/api/agent/…`) call, the web installer\'s (`/api/install/…`), and the two public ones. The panels\'',
+                'TypeScript types are generated from this description (`pnpm api:types`), and the tests check every request and',
+                'answer against it ([Extending](Extending.md#a-panel-screen-and-its-api)).',
                 '',
-                'A panel\'s request carries its session cookie: every operation asks the panel\'s sign-in but signing in and its',
-                'recovery. One that changes something carries `X-Requested-With: XMLHttpRequest` too (the CSRF guard). The',
-                'parameters the panels\' operations take everywhere:',
+                'Panel requests carry the session cookie; every operation needs the panel\'s sign-in, except signing in and login',
+                'recovery. A request that changes something also sends `X-Requested-With: XMLHttpRequest` (the CSRF guard). The',
+                'parameters every panel operation takes:',
                 '',
                 ...apiParameterTable($api, ['Panel', 'Shop']),
                 '',
-                'Every operation may also answer the one error shape. Objects are closed ([API schemas](API-Schemas.md)).',
+                'Every operation may also return the common error shape. Objects are closed ([API schemas](API-Schemas.md)).',
             ],
             'sections' => [
-                'both' => ['Both panels', 'The same screens of the shop in both panels: `{panel}` is `admin` in the owner\'s and `agent` in an agent\'s. One the shop\'s admins also have on its website says so.'],
-                'owner' => ['The owner\'s panel', 'What only the owner\'s panel has.'],
-                'agent' => ['An agent\'s panel', 'What only an agent\'s panel has.'],
-                'installer' => ['The web installer', 'Until the shop is installed, each request with the install key (`X-Install-Key`: the text of storage/install-key.txt, which the first request makes).'],
-                'installation' => ['The installation', 'Anyone may ask these.'],
+                'both' => ['Both panels', 'Screens both panels have: `{panel}` is `admin` in the owner\'s panel and `agent` in an agent\'s. An operation the website\'s admins can also use says so.'],
+                'owner' => ['The owner\'s panel', 'Operations only the owner\'s panel has.'],
+                'agent' => ['An agent\'s panel', 'Operations only an agent\'s panel has.'],
+                'installer' => ['The web installer', 'Available only until the shop is installed; each request needs the install key (`X-Install-Key`: the text of storage/install-key.txt, which the first request creates).'],
+                'installation' => ['The installation', 'Anyone can call these.'],
             ],
         ],
     ];
 }
 
 /**
- * Every operation of the description, in its order, with the page and the section it is told in, its heading (its method
+ * Every operation of the description, in its order, with the page and the section it is documented in, its heading (its method
  * and its path under the page's base) and its parameters as it takes them.
  *
  * @param array<string, mixed> $api
@@ -585,7 +584,7 @@ function apiParameterRow(array $parameter, \Closure $link): string
 }
 
 /**
- * How an operation is told: its heading, its summary, who may call it (and where else it is), its parameters but the ones
+ * How an operation is documented: its heading, its summary, who may call it (and where else it is), its parameters but the ones
  * its page's intro tells, its body field by field, and its answers.
  *
  * @param array<string, mixed> $api
@@ -609,9 +608,9 @@ function apiOperation(array $api, array $operation, \Closure $link, array $inlin
         default => '',
     };
     $who = [
-        'public' => isset($op['security']) ? 'anyone — or the signed-in customer, their bearer token with it ([the customer scheme](#the-customer-scheme)).' : 'anyone.',
+        'public' => isset($op['security']) ? 'anyone; with a bearer token, the signed-in customer ([the customer scheme](#the-customer-scheme)).' : 'anyone.',
         'customer' => 'the signed-in customer ([the customer scheme](#the-customer-scheme)).',
-        'admin' => 'one of the shop\'s admins, signed in on its website' . $needs . '.',
+        'admin' => 'an admin of the shop, signed in on its website' . $needs . '.',
     ][$operation['section']] ?? null;
     if ($who !== null) {
         $facts[] = '- **Who:** ' . $who;
@@ -621,10 +620,10 @@ function apiOperation(array $api, array $operation, \Closure $link, array $inlin
         $facts[] = '- **In the panels:** [`' . $heading . '`](Panels-API-Reference.md#' . githubSlug($heading) . ').';
     } elseif ($grant !== null) {
         $heading = strtoupper($operation['method']) . ' ' . substr($operation['path'], strlen(ApiDescription::PANELS));
-        $facts[] = '- **On the website:** the shop\'s admins have it too, as [`' . $heading . '`](Store-Admin-API-Reference.md#' . githubSlug($heading) . ')' . $needs . '.';
+        $facts[] = '- **On the website:** the website\'s admins can also use it, as [`' . $heading . '`](Store-Admin-API-Reference.md#' . githubSlug($heading) . ')' . $needs . '.';
     }
     if (isset($op['x-captcha'])) {
-        $facts[] = '- **Captcha:** the website\'s, for the action `' . $op['x-captcha'] . '` — the widget\'s token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).';
+        $facts[] = '- **Captcha:** the website\'s captcha, for the action `' . $op['x-captcha'] . '`: send the widget\'s token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).';
     }
     if ($facts !== []) {
         $lines = [...$lines, '', ...$facts];
@@ -693,9 +692,9 @@ function apiSchemaSections(array $api, array $names, \Closure $link, array $inli
 }
 
 /**
- * A shape as these pages tell it: an object's fields as a table (an inner object's under its field's name), the values of
- * an enum, each shape of a choice — a request's body told where it is sent, a shape told elsewhere linked —, else its
- * type in a line.
+ * How these pages document a shape: an object's fields as a table (an inner object's under its field's name), an enum's
+ * values, or each shape of a choice (a request body inline where it is sent, a shape documented elsewhere as a link);
+ * anything else as its type in one line.
  *
  * @param array<string, mixed> $api
  * @param array<string, mixed> $schema
@@ -760,7 +759,7 @@ function apiFieldRows(array $schema, string $prefix, \Closure $link): array
 }
 
 /**
- * A schema's type in a few words — a shape told elsewhere as a link to it, a list of what, an enum's values, a string's
+ * A schema's type in a few words — a shape documented elsewhere as a link to it, a list of what, an enum's values, a string's
  * format and pattern, a number's least —, `or null` where it may be.
  *
  * @param array<string, mixed> $schema
@@ -790,7 +789,7 @@ function apiType(array $schema, \Closure $link): string
         $words .= ', at least ' . $schema['minimum'];
     }
     if (isset($schema['maxItems'])) {
-        $words .= ', ' . $schema['maxItems'] . ' at most';
+        $words .= ', at most ' . $schema['maxItems'];
     }
 
     return $words . (($schema['nullable'] ?? false) === true ? ' or null' : '');
@@ -818,7 +817,7 @@ function apiContent(array $response, \Closure $link): string
 }
 
 /**
- * How a page names a shape: a link to where it is told — on this page, on another, or on the shared page.
+ * How a page names a shape: a link to where it is documented — on this page, on another, or on the shared page.
  *
  * @param array<string, string> $homes Each shape's page
  * @return \Closure(string): string
@@ -836,7 +835,7 @@ function apiLink(array $homes, string $page): \Closure
 }
 
 /**
- * The shapes a request's body alone uses — told at the operation that takes it, field by field, never under «Schemas»:
+ * The shapes a request's body alone uses — documented at the operation that takes it, field by field, never under «Schemas»:
  * one no other shape, answer or parameter names, or a choice of such a body.
  *
  * @param array<string, mixed> $api
@@ -890,7 +889,7 @@ function inlinedSchemas(array $api): array
 
 /**
  * The shapes an operation reaches — its parameters' (its path's too), its body's, its answers' (the description's own
- * answers too), and every shape they name in turn —, but the bodies told where they are sent.
+ * answers too), and every shape they name in turn —, but the bodies documented where they are sent.
  *
  * @param array<string, mixed> $api
  * @param array{op: array<string, mixed>, parameters: list<array<string, mixed>>} $operation
@@ -939,7 +938,7 @@ function schemaRefs(mixed $node): array
     return $names;
 }
 
-/** An operation's summary in a few words: up to where it goes on — a colon, a dash, a semicolon, the end of a sentence. */
+/** The start of an operation's summary, for the operations table: up to the first colon, dash, semicolon or sentence end. */
 function apiGist(string $summary): string
 {
     $summary = (string) preg_replace('/\s+/', ' ', trim($summary));
@@ -949,8 +948,8 @@ function apiGist(string $summary): string
 }
 
 /**
- * The description's words as Markdown reads them: on one line, and a `<` or `>` outside a code span written as an entity
- * (else a page would take `<token>` for a tag and drop it).
+ * A description as Markdown text: on one line, with `<` and `>` outside code spans written as entities (otherwise a page
+ * would take `<token>` for an HTML tag and drop it).
  */
 function apiText(string $text): string
 {
@@ -1020,7 +1019,7 @@ function stalePages(string $root, string $docs): array
  * What is wrong with the tree's pages and links: a page whose name is not of the tree's form, or that the sidebar does
  * not list; a heading GitHub and Docsify would give two anchors; a link between pages to a page or a heading that is
  * not there, or one that leaves the tree (the wiki and Pages have nothing but docs/); and the links of the repository's
- * own pages (README.md, CONTRIBUTING.md, SECURITY.md, CHANGELOG.md) to its files.
+ * front page (README.md) to its files.
  *
  * @return list<string>
  */
@@ -1077,8 +1076,8 @@ function linkProblems(string $root, string $docs): array
         }
     }
 
-    // The repository's own pages link to its files, to the tree's pages (docs/Page-Name.md#anchor) and to themselves.
-    foreach (['README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md'] as $file) {
+    // The repository's front page links to its files, to the tree's pages (docs/Page-Name.md#anchor) and to itself.
+    foreach (['README.md'] as $file) {
         $markdown = readPage($root . '/' . $file);
         $anchors[$file] = numbered(array_map(static fn(array $heading): string => githubSlug($heading[1]), headings($markdown)));
         foreach (links($markdown) as [$line, $target]) {

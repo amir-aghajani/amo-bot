@@ -13,11 +13,8 @@ use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
 /**
- * The queues that wait on a human (GET /queues, both panels — the numbers the sidebar shows beside the payments, the
- * orders, the tickets and the reviews): the receipts to review, the orders paid and not delivered — those whose delivery
- * failed and, with time alone, those nobody is delivering, while what paid them stands —, the support tickets waiting on
- * an answer and the customers' reviews waiting on support. Each shop its own; the dashboard's attention card counts the
- * same.
+ * GET /queues (both panels): receipts to review, stuck orders (failed, or stale with nobody delivering, while their payment
+ * stands), tickets and reviews waiting on support — per shop, and the same numbers on the dashboard.
  */
 final class AdminQueuesApiTest extends HttpTestCase
 {

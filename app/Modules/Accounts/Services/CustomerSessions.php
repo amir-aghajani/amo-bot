@@ -19,20 +19,15 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
 /**
- * A customer's sign-ins on the shop's website, one per device: open() hands the site a bearer token — 64 hex
- * characters, shown once; only its sha256 is kept — and find() knows a request by it, in the current shop only. A
- * customer keeps MAX_SESSIONS at most: the newest; one more ends the oldest. A session ends after IDLE_DAYS unused,
- * LIFETIME_DAYS after the sign-in whatever its use, when the customer ends it (signing out, or from their session list),
- * when they set a new password (every one of theirs, endAll(); every other one when they change it from a session,
- * endOthers()), or when support signs them out everywhere from a panel (signOutEverywhere(), logged); what ended goes
- * with the hourly housekeeping (prune()). A session's use is written at most every TOUCH_MINUTES, not on every request.
+ * A customer's sign-ins on the website, one per device. open() hands the site a bearer token (64 hex characters, shown
+ * once, only its sha256 kept) and find() knows a request by it, in the current shop only. A customer keeps the newest
+ * MAX_SESSIONS. A session ends after IDLE_DAYS unused, LIFETIME_DAYS after the sign-in, when the customer signs out or
+ * ends it, when a new password is set, or when support signs them out everywhere.
  *
- * A session knows when a way into the account was last proven on it (`authenticated_at`: the sign-in, or the customer
- * asked again since — reauthenticated()): what changes how the account is signed in to asks it to be recent
- * (isRecent(), RECENT_SECONDS), so a bearer token alone — one that leaked — changes none of it; the shop's admin API on
- * the website asks it of every admin's session over a longer while (provenUntil()). And how it was signed in (`method`,
- * a strong way proven on it since taking a password alone's place): what that API asks of an admin's session while the
- * website asks a strong sign-in (isStrong()).
+ * `authenticated_at` is when a way in was last proven on the session (the sign-in, or POST /me/reauthenticate): changes
+ * to how the account is signed in to ask it to be recent (isRecent()), so a leaked token alone changes nothing; the
+ * website's admin API asks it over a working day (provenUntil()). `method` is how it was signed in (a strong way proven
+ * since replaces a password alone), which the admin API may ask to be strong (isStrong()).
  */
 final class CustomerSessions
 {
@@ -53,10 +48,7 @@ final class CustomerSessions
         private readonly LoggerInterface $logger,
     ) {}
 
-    /**
-     * A new session for the customer, on the device the request came from — signed in now, the way `$method` says; their
-     * oldest ended past MAX_SESSIONS.
-     */
+    /** A new session on the device the request came from, signed in now by `$method`; their oldest ends past MAX_SESSIONS. */
     public function open(User $user, ServerRequestInterface $request, SignInMethod $method): SignedIn
     {
         $token = bin2hex(random_bytes(32));
@@ -79,16 +71,13 @@ final class CustomerSessions
         return new SignedIn($token, $session);
     }
 
-    /** Whether a way into the account was proven on the session within RECENT_SECONDS: what a change of how it is signed in to asks. */
+    /** Whether a way in was proven on the session within RECENT_SECONDS. */
     public static function isRecent(CustomerSession $session): bool
     {
         return self::provenUntil($session, self::RECENT_SECONDS) !== null;
     }
 
-    /**
-     * Until when a way into the account proven on the session — its sign-in, or POST /me/reauthenticate since — counts
-     * for `$seconds`; null once it no longer does (prove one again).
-     */
+    /** Until when the last proof on the session counts, given it lasts `$seconds`; null once it no longer does. */
     public static function provenUntil(CustomerSession $session, int $seconds): ?Carbon
     {
         $until = $session->authenticated_at?->copy()->addSeconds($seconds);
@@ -97,9 +86,8 @@ final class CustomerSessions
     }
 
     /**
-     * A way into the account proven again on the session (POST /me/reauthenticate): it may change how the account is
-     * signed in to for RECENT_SECONDS — and it stands signed in the stronger way from now on, when `$method` is one and
-     * its own was not (SignInMethod::strong()): a password alone proven again takes nothing away.
+     * A way in proven again on the session: recent from now, and upgraded to `$method` when that is strong and its own
+     * was not (a password alone proven again never downgrades it).
      */
     public function reauthenticated(CustomerSession $session, SignInMethod $method): void
     {
@@ -107,13 +95,13 @@ final class CustomerSessions
         $session->forceFill(['authenticated_at' => now()] + ($upgrade ? ['method' => $method] : []))->save();
     }
 
-    /** Whether the session was signed in strongly — or a strong way proven on it since: what the website's admins are asked. */
+    /** Whether the session was signed in strongly, or a strong way was proven on it since. */
     public static function isStrong(CustomerSession $session): bool
     {
         return $session->method?->strong() === true;
     }
 
-    /** The current shop's session the token opens, its customer with it — null for one that ended, or no token of this shop's. */
+    /** The current shop's live session the token opens, with its customer; null for none. */
     public function find(string $token): ?CustomerSession
     {
         if (preg_match('/^[0-9a-f]{64}$/', $token) !== 1) {
@@ -123,7 +111,7 @@ final class CustomerSessions
         return self::live(CustomerSession::query()->with('user'))->where('token_hash', hash('sha256', $token))->first();
     }
 
-    /** The session's use, written when the last one written is TOUCH_MINUTES old. */
+    /** Record the session's use — written at most every TOUCH_MINUTES, not on every request. */
     public function touch(CustomerSession $session): void
     {
         if ($session->last_used_at === null || $session->last_used_at->lt(now()->subMinutes(self::TOUCH_MINUTES))) {
@@ -137,7 +125,7 @@ final class CustomerSessions
         CustomerSession::query()->whereKey($session->id)->delete();
     }
 
-    /** End every session of the customer's — a new password signs them out everywhere. */
+    /** End every session of the customer's (a new password signs them out everywhere). */
     public function endAll(User $user): void
     {
         CustomerSession::query()->where('user_id', $user->id)->delete();
@@ -149,7 +137,7 @@ final class CustomerSessions
         CustomerSession::query()->where('user_id', $user->id)->whereKeyNot($keep->id)->delete();
     }
 
-    /** Support signs the customer out of the website on every device — from a panel, or the shop's website: logged with who did. */
+    /** Support signs the customer out on every device (a panel, or a shop admin on the website); logged with who did. */
     public function signOutEverywhere(User $user, Actor $actor): void
     {
         $this->endAll($user);
@@ -163,7 +151,7 @@ final class CustomerSessions
     }
 
     /**
-     * End one of the customer's sessions by its number — another customer's is as missing as one that never was.
+     * End one of the customer's sessions by its id; another customer's is a 404.
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
@@ -183,7 +171,7 @@ final class CustomerSessions
     }
 
     /**
-     * A session as the customer's list shows it — `current` is the one the request came with.
+     * A session as the customer's list shows it; `current` marks the one the request came with.
      *
      * @return array{id: int, device: string|null, ip: string|null, created_at: string, last_used_at: string|null, current: bool}
      */
@@ -199,7 +187,7 @@ final class CustomerSessions
         ];
     }
 
-    /** Forget every shop's sessions that ended — at their end, or unused for IDLE_DAYS: their tokens open nothing any more. */
+    /** Delete every shop's ended sessions (hourly housekeeping). */
     public function prune(): void
     {
         $since = self::idleSince();
@@ -212,7 +200,7 @@ final class CustomerSessions
     }
 
     /**
-     * Sessions that have not ended: before their end, and used — or, never used, opened — within IDLE_DAYS.
+     * Sessions that have not ended: before their end, and used (or, never used, opened) within IDLE_DAYS.
      *
      * @param Builder<CustomerSession> $sessions
      * @return Builder<CustomerSession>

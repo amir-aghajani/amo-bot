@@ -7,10 +7,7 @@ namespace App\Modules\Payments\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Payments\Models\PaymentMethod;
 
-/**
- * The wallet (and any other built-in driver) is part of the shop: its one row can be switched off,
- * never deleted.
- */
+/** A built-in method (the wallet) can be switched off, never deleted. */
 final class BuiltinMethodException extends DomainRuleException
 {
     public function __construct(PaymentMethod $method)

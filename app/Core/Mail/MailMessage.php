@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Core\Mail;
 
 /**
- * One email the shop sends: to whom, about what, its HTML body and the plain text beside it (a reader that shows no HTML
- * reads that). `fromName` is who it comes from in words when config.php names nobody (MAIL_FROM_NAME): the shop the
- * email is about — an agent's shop, its bot's name.
+ * One email: recipient, subject, HTML and plain-text bodies. `fromName` is the sender's name when MAIL_FROM_NAME is
+ * empty: the shop the email is about (an agent's bot's name).
  */
 final class MailMessage
 {

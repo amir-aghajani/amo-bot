@@ -10,10 +10,8 @@ use App\Modules\Users\Models\User;
 use Tests\HttpTestCase;
 
 /**
- * A customer's page in either panel (GET /users/{id}): their row as the users table has it, the referral program's facts
- * about them, and an agent's agency as the agents list shows it — the shop's own customer alone, another shop's is not
- * found —; and the lists the page links to, each narrowed to the customer (`user=`): their orders, their payments, their
- * services.
+ * A customer's page in either panel: their row, referral facts and agency (own shop's customer only), and the lists
+ * it links to narrowed with `user=`.
  */
 final class CustomerPageApiTest extends HttpTestCase
 {

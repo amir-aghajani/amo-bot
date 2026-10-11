@@ -49,13 +49,13 @@ describe('an agent’s bot short of traffic', () => {
 })
 
 describe('nothing waiting', () => {
-  it('is said of the payments, the orders, the tickets, the reviews and the servers in the main bot’s shop', async () => {
+  it('names payments, orders, tickets, reviews and servers in the main bot’s shop', async () => {
     await draw(<AttentionCard attention={NONE_WAITING} trafficShortage={null} expiringDays={3} />)
 
     expect(screen.getByText('پرداخت‌ها، سفارش‌ها، تیکت‌ها، نظرات و سرورها در وضعیت عادی هستند.')).toBeTruthy()
   })
 
-  it('is said of the payments, the orders, the tickets and the reviews alone in an agent’s shop, which has no servers', async () => {
+  it('names only payments, orders, tickets and reviews in an agent’s shop, which has no servers', async () => {
     await draw(<AttentionCard attention={NONE_WAITING} trafficShortage={null} expiringDays={3} />, AGENT_SHOP)
 
     expect(screen.getByText('پرداخت‌ها، سفارش‌ها، تیکت‌ها و نظرات در وضعیت عادی هستند.')).toBeTruthy()
@@ -67,7 +67,7 @@ describe('nothing waiting', () => {
 const link = (name: RegExp) => screen.getByRole('link', { name }).getAttribute('href')
 
 describe('the queues', () => {
-  it('lead to their lists, in their lists’ words — the orders paid and not delivered, the tickets waiting on an answer, the reviews waiting on support, the services ending soonest first', async () => {
+  it('link to their lists, with the lists’ labels: the orders paid and not delivered, the tickets waiting on an answer, the reviews waiting on support, the services ending soonest first', async () => {
     const attention = { payments_to_review: 2, stuck_orders: 3, open_tickets: 5, pending_reviews: 1, pending_orders: 0, servers_with_errors: 0, expiring_soon: 4 }
     await draw(<AttentionCard attention={attention} trafficShortage={null} expiringDays={3} />)
 

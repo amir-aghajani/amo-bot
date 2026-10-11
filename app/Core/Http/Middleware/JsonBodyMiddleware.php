@@ -12,19 +12,14 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * A request's body as the shop reads it: JSON — what the panels, the installer and Telegram's webhooks send —, held to
- * MAX_BYTES before any of it is decoded. Nothing the shop takes comes near that, so a larger body — said by its
- * Content-Length, or found as it is read (one sent in chunks says none) — is refused with a 413 whoever sent it, before
- * it costs more than that: decoding it whole would hold many times its size in memory, signed in or not. The decoded
- * body is the request's parsed body: an object or a list; anything else — not JSON, a bare value — none. No other kind
- * of body is read: a file upload (multipart) is PHP's, to its own limits and its route's (a QR background's), and a form
- * PHP parsed itself stays as PHP left it. But a POST past PHP's own limit (php.ini's post_max_size) PHP takes nothing of
- * — no field, no file, no byte —, and it would reach its route as a request that sent nothing ("write the message"): one
- * that came so, its Content-Length past that limit, is the same 413.
+ * Reads a JSON body, no further than MAX_BYTES: a larger one (by its Content-Length, or as it is read — a chunked body
+ * declares none) is a 413 before it is decoded, signed in or not. The parsed body is an object or a list, else null.
+ * Other bodies are not read (a multipart upload is PHP's). A POST past php.ini's post_max_size arrives emptied by PHP
+ * and would look like a request that sent nothing, so it is the same 413.
  */
 final class JsonBodyMiddleware implements MiddlewareInterface
 {
-    /** The largest body read: a bot text, a keyboard, a plan with all its servers or an update of Telegram's, many times over. */
+    /** The largest body read: far more than anything the shop takes (a keyboard, a plan with its servers, an update). */
     public const MAX_BYTES = 1_048_576;
 
     public const TOO_LARGE = 'درخواست بزرگ‌تر از حد مجاز است.';
@@ -64,10 +59,7 @@ final class JsonBodyMiddleware implements MiddlewareInterface
         return $handler->handle($request->withBody($this->streams->createStream($json))->withParsedBody(is_array($parsed) ? $parsed : null));
     }
 
-    /**
-     * Whether PHP took nothing of the request's body for its size: a POST whose Content-Length is past post_max_size,
-     * which PHP empties before the app sees it (only that header says what was sent). None past a limit of none (0).
-     */
+    /** Whether PHP emptied the body for its size: a POST whose Content-Length is past post_max_size (0: no limit). */
     private static function pastPhpsLimit(ServerRequestInterface $request, ?int $declared): bool
     {
         $limit = ini_get('post_max_size');

@@ -7,13 +7,10 @@ namespace App\Modules\Auth\Exceptions;
 use App\Core\Exceptions\DomainRuleException;
 
 /**
- * A decision this actor may not make, whatever the row's state allows (403) — one of the shop's admins, who is its
- * customer too, deciding about themselves: their own payment approved or given back, their own wallet, their own service
- * changed (days and traffic, switched off or on, moved, deleted), their own request to become an agent approved (the
- * report group's buttons), their own review approved, rejected or deleted; or, on the shop's website, about an admin's
- * account or an agent's — the owner's partner — (a ban, two-factor sign-in, the devices signed in), which is the
- * panels'; or approving a payment there without a receipt in review — a service given away. The owner and an agent are
- * refused none of it.
+ * A decision this actor may not make whatever the row's state (403): a shop's admin — also its customer — deciding about
+ * themselves (their payment, wallet, service, agency request, review, referral alert); from the website, touching an
+ * admin's or an agent's account, or approving a payment with no receipt in review. The owner and agents are refused
+ * none of these.
  */
 final class ActorRefusedException extends DomainRuleException
 {
@@ -22,6 +19,7 @@ final class ActorRefusedException extends DomainRuleException
     public const OWN_SERVICE = 'سرویس خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.';
     public const OWN_REQUEST = 'درخواست نمایندگی خودتان را نمی‌توانید تایید کنید؛ این کار با مدیر دیگری است.';
     public const OWN_REVIEW = 'نظر خودتان را نمی‌توانید تایید، رد یا حذف کنید؛ این کار با مدیر دیگری است.';
+    public const OWN_ALERT = 'هشدار زیرمجموعه‌گیری خودتان را نمی‌توانید رفع کنید؛ این کار با مدیر دیگری است.';
     public const ADMIN_ACCOUNT = 'حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.';
     public const AGENT_ACCOUNT = 'حساب نماینده‌ها فقط از پنل تغییر می‌کند.';
     public const RECEIPT_FIRST = 'از وب‌سایت فقط پرداختی تایید می‌شود که رسیدش رسیده و در انتظار بررسی است.';
@@ -54,6 +52,11 @@ final class ActorRefusedException extends DomainRuleException
     public static function ownReview(): self
     {
         return new self(self::OWN_REVIEW);
+    }
+
+    public static function ownAlert(): self
+    {
+        return new self(self::OWN_ALERT);
     }
 
     public static function adminAccount(): self

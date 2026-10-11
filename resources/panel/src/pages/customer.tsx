@@ -2,6 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { EllipsisVertical } from 'lucide-react'
 import { useParams } from 'react-router'
 import { BackLink } from '@/components/back-link'
+import { DiscountCard } from '@/components/customer/discount-card'
+import { LoyaltyCard } from '@/components/customer/loyalty-card'
 import { OrdersCard } from '@/components/customer/orders-card'
 import { PaymentsCard } from '@/components/customer/payments-card'
 import { AgencyCard, GroupsCard, ReferralCard, WalletCard } from '@/components/customer/profile-cards'
@@ -39,13 +41,9 @@ export interface CustomerPageProps {
 }
 
 /**
- * One customer of the shop (`/users/:id`, both panels), as support answers them: who they are — the three identifiers
- * apart —, their account (ban, the bot's admin role), their latest services, payments and orders (each opening its own
- * screen's dialog, and the way to all of them on that screen, narrowed to the customer) and support tickets (each leading
- * to its own page, and the way to all of them on the tickets screen), their wallet, what the referral
- * program knows of them, their groups, their account on the shop's website (its ways in, two-factor sign-in, the devices
- * signed in, the accounts merged into it), and an agent's agency. Another shop's customer is not found. Another
- * customer's page starts afresh: nothing of one — a draft, an open dialog — is left on another.
+ * One customer (`/users/:id`, both panels), where support answers them from: identity, account actions, their latest
+ * services, payments, orders and tickets, wallet, referral facts, groups, website account and agency. The page is keyed
+ * on the customer, so nothing of one (a draft, an open dialog) is left on another.
  */
 export function CustomerPage(props: CustomerPageProps) {
   const id = Number(useParams().id)
@@ -96,7 +94,7 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
     )
   }
 
-  const { user, referral, agency, account: website } = detail.data
+  const { user, referral, agency, account: website, loyalty } = detail.data
 
   return (
     <Page width="default">
@@ -143,6 +141,9 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
         <div className="grid min-w-0 content-start gap-4">
           <WalletCard customer={user} credit={agency?.credit_limit ?? null} invalidates={elsewhere} onChanged={changed} />
           <ReferralCard customer={user} referral={referral} />
+          {/* While the shop has loyalty tiers: one the customer is on, or the next to reach. */}
+          {(loyalty.tier || loyalty.next) && <LoyaltyCard loyalty={loyalty} />}
+          <DiscountCard customer={user} invalidates={elsewhere} onSaved={changed} />
           {/* The groups' counts move too. */}
           <GroupsCard customer={user} invalidates={[...elsewhere, queryKeys.customerGroups]} onSaved={changed} />
           <WebsiteAccountCard customer={user} account={website} />
@@ -155,11 +156,7 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
   )
 }
 
-/**
- * Under the name: the customer's number in the shop («#12» in the users list's search is them alone), the handle and
- * the Telegram id — never blended with it; none for a customer who signed up on the website —, their email, the
- * verified phone, when they came and were last seen.
- */
+/** Under the name: the customer's number, handle and Telegram id (kept apart), email, verified phone, and when they joined and were last seen. */
 function Identity({ user }: { user: UserRow }) {
   return (
     <>
