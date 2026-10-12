@@ -137,10 +137,11 @@ discount and then their code ([discounts](Store-API-Shop.md#discounts)), the wal
 checkout at the plan's `offer_price` from the customer's own read of it, with the plan's `checkout_note` under it, and
 the answer's `order.amount` as what was charged — its `pricing` says which price it was, `discounts` what was taken off.
 
-**A free plan** (`price` `"0.00"` — a free test —, or a free first purchase, `first_purchase_price` `"0.00"`) is taken,
-not paid: whichever way to pay `method_id` names, the shop's own wallet settles it on the spot, taking nothing — no
-transfer, no line in the customer's wallet — and the answer is `settled` with its service, its payment the wallet's at
-`"0.00"`. Show such a plan's checkout as one button («دریافت رایگان»), sending the first of the ways to pay.
+**A free plan** (`price` `"0.00"`, or a free first purchase, `first_purchase_price` `"0.00"`; a free test account is no
+plan, and is taken in the bot alone) is taken, not paid: whichever way to pay `method_id` names, the shop's own wallet
+settles it on the spot, taking nothing — no transfer, no line in the customer's wallet — and the answer is `settled`
+with its service, its payment the wallet's at `"0.00"`. Show such a plan's checkout as one button («دریافت رایگان»),
+sending the first of the ways to pay.
 
 ## A renewal
 

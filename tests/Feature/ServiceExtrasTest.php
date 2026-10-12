@@ -255,7 +255,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
         self::assertSame([self::text(BotText::ExtraFailed, ['extra' => '۱۰ گیگابایت', 'client' => 'ali_1'])], $this->telegram()->sentTo(self::TELEGRAM_ID), 'paid: support finishes it, nothing to pay again');
     }
 
-    public function testARefundGivesTheMoneyBackAndLeavesWhatWasDelivered(): void
+    public function testARefundGivesTheMoneyBackAndTakesBackWhatWasDelivered(): void
     {
         $this->extrasOnSale();
         $service = $this->mirrored('ali_1');
@@ -267,8 +267,8 @@ final class ServiceExtrasTest extends DatabaseTestCase
 
         self::assertSame([PaymentStatus::Refunded, OrderStatus::Refunded], [$payment->refresh()->status, $result->order()->refresh()->status]);
         self::assertSame('18000.00', $this->ali->balance(), 'to the wallet, as a purchase\'s');
-        self::assertSame(40 * Traffic::GIGABYTE, $service->refresh()->traffic_limit_bytes, 'the service keeps it: support takes a service in hand from its own screen');
-        self::assertCount(1, FakeProvider::$updated);
+        self::assertSame(30 * Traffic::GIGABYTE, $service->refresh()->traffic_limit_bytes, 'its 10 GB taken back off the service');
+        self::assertCount(2, FakeProvider::$updated, 'given, then taken back');
     }
 
     public function testAnAgentsCustomerBuysTrafficOutOfTheAgentsPoolAndTimeCostsItNothing(): void

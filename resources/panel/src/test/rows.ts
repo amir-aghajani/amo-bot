@@ -18,6 +18,8 @@ import type {
   SaleRow,
   ServerRow,
   SubscriptionRow,
+  TestAccountRow,
+  TestServerRow,
   TicketDetail,
   TicketMessageRow,
   TicketRow,
@@ -26,6 +28,7 @@ import type {
   WheelPrizeRow,
   WheelSpinRow,
 } from '@/lib/api-types'
+import { MEGABYTE } from '@/lib/format'
 
 /*
  * Rows as the API hands them to the screens, for the tests that need a whole one — each with `overrides` merged last.
@@ -60,6 +63,16 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     expiry_reminder_days: 3,
     traffic_reminder: false,
     traffic_reminder_percent: 80,
+    expired_cleanup: false,
+    expired_cleanup_hours: 24,
+    test_enabled: false,
+    test_per_user: 1,
+    test_period_days: 0,
+    test_daily_limit: 0,
+    test_newcomers_only: false,
+    test_cleanup: true,
+    test_cleanup_hours: 24,
+    test_unused_days: 7,
     referral_enabled: false,
     referral_rate: 10,
     referral_renewal_rate: 10,
@@ -115,6 +128,7 @@ export function subscriptionRow(overrides: Partial<SubscriptionRow> = {}): Subsc
     status: 'active',
     name: 'amir_1',
     link: 'https://sub.example.com/s/Zx81',
+    is_test: false,
     user: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null },
     plan: { id: 3, name: 'طلایی' },
     server: { id: 1, name: 'آلمان' },
@@ -129,6 +143,8 @@ export function subscriptionRow(overrides: Partial<SubscriptionRow> = {}): Subsc
     expiring_soon: false,
     last_synced_at: '2026-10-06T09:00:00Z',
     disabled_at: null,
+    ended_at: null,
+    removes_at: null,
     created_at: '2026-09-19T10:00:00Z',
     actions: { sync: true, disable: true, enable: false, move: true, delete: true, extend: true },
     ...overrides,
@@ -575,6 +591,33 @@ export function wheelSpinRow(overrides: Partial<WheelSpinRow> = {}): WheelSpinRo
     created_at: '2026-10-06T09:00:00Z',
     ...overrides,
   }
+}
+
+/**
+ * Test 51 of customer 10's on server 1 «آلمان»: 500 MB for a day from the first connection, made and waiting for it, no
+ * purchase since.
+ */
+export function testAccountRow(overrides: Partial<TestAccountRow> = {}): TestAccountRow {
+  return {
+    id: 51,
+    customer: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null },
+    server: { id: 1, name: 'آلمان' },
+    traffic_bytes: 500 * MEGABYTE,
+    duration_hours: 24,
+    on_hold: true,
+    state: 'waiting',
+    subscription: { id: 7, name: 'test_amir_1', status: 'active', traffic: { limit: 500 * MEGABYTE, used: 0 }, starts_at: null, expires_at: null },
+    bought_after: false,
+    created_at: '2026-10-06T09:00:00Z',
+    issued_at: '2026-10-06T09:00:00Z',
+    ended_at: null,
+    ...overrides,
+  }
+}
+
+/** Server 1 «آلمان» giving tests now: 500 MB for a day from the first connection. */
+export function testServerRow(overrides: Partial<TestServerRow> = {}): TestServerRow {
+  return { id: 1, name: 'آلمان', test_enabled: true, test_traffic_mb: 500, test_duration_hours: 24, test_on_hold: true, available: true, ...overrides }
 }
 
 /** Code 21 of the shop: NOWRUZ, 20% off anything a code takes, for anyone, no window, used once of a hundred. */

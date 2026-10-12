@@ -11,6 +11,56 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.3.0
+
+### Added
+
+- **Free test accounts** («اکانت تست») — a customer takes a free test in the bot to try the shop before buying: from
+  the menu's «🧪 اکانت تست», with `/free`, or from the link `https://t.me/<bot>?start=usertest`, which opens the test
+  screen even for a newcomer the phone or the required channels held back first. The screen lists the servers that give
+  a test now; a tap makes one at once and sends it like a bought service. Each server has its own terms, which the owner
+  sets on its page: whether it gives tests, their traffic and hours, and whether the hours count from the first
+  connection or from the moment the test is made. Each shop has its own rules on the new «فروشگاه › اکانت تست» page:
+  the switch, how many tests a customer gets — for good or within so many days —, a cap a day, and newcomers only. A
+  test is no purchase: it is never renewed and takes no extras, reminders or gifts. The tests that ended, or were never
+  connected, are removed from their panels by themselves after a while — each read from its panel again first —,
+  quietly, and still count in the quota. In an agent's shop each test's traffic comes out of the agent's pool. The page
+  lists every test given, with whether the customer bought after it, and the services list marks the tests and filters
+  by them; «رو به انقضا» and the dashboard's counts leave them out. The website's services say `is_test`. Off until a
+  shop switches it on and the owner switches a server on for tests.
+- **Automatic removal of ended services** («حذف خودکار سرویس‌های منقضی‌شده») — a shop may have its ended services —
+  their time or traffic ran out, or their panel no longer has them — removed from their panels and the shop by
+  themselves, quietly, so many hours after they ended: «فاصله حذف (ساعت)», 0 to 8760, 24 by default, `0` at once, on the
+  new «تنظیمات ربات › سرویس‌های منقضی‌شده». The orders that sold one keep their record. Never removed: a service
+  switched off by support, one with an order still open (a renewal waiting for its receipt, a delivery waiting for
+  support's retry), and one renewed or extended in time — each is read from its panel again just before. The bot's
+  service screen tells the customer when it goes unless renewed («🗑️ اگر این سرویس تا … تمدید نشود، حذف می‌شود.»), the
+  panels' service dialog shows it, and the website's services say `ended_at` and `removes_at`. Off until a shop switches
+  it on. The bot says it on a renewal's checkout too, where renewing keeps the service.
+
+### Changed
+
+- **The panels' top bar is on every screen**, desktop too, and stays at the top while the page scrolls: the page's
+  name and the dark/light switch. The sign-in screens and the installer have the switch as well.
+- **A refund takes back what its order gave**: «بازپرداخت» of a purchase removes the service it made — its client off
+  its panel, the service off the shop —, and of a renewal or extra traffic or time takes its days and traffic back off
+  the service (a renewal's as it gave them), before the money goes back; the customer's message says so, and in an
+  agent's shop the traffic it drew goes back to the agent. A refund is refused, with nothing refunded, while the panel
+  does not answer, another paid or open order holds a purchase's service, or a renewal's or an extra's service is
+  switched off.
+
+### Upgrading
+
+- The database gains each server's test terms, the mark on a test's service, and the table of the tests given. The
+  panel's update runs this upgrade by itself; a shop updated by hand runs it from «تنظیمات پنل › به‌روزرسانی». A menu
+  saved before this release needs the «اکانت تست» button added on «کیبوردها»: the tests page says so while the switch
+  is on.
+- The database keeps when each service ended. The services already ended are given theirs as it upgrades — the deadline
+  they passed, else when the shop last read them from their panel —, so a shop that switches the removal on counts its
+  hours from then.
+- A renewal delivered from this release on keeps what it gave its service, which its refund takes back. A renewal
+  delivered before has nothing kept: its refund takes back its plan's term and traffic as the plan is then.
+
 ## Version 0.2.0
 
 ### Added

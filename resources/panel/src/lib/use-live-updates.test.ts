@@ -43,6 +43,8 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.planOptions, // the plan form's servers and inbounds
     queryKeys.massGrants, // the mass gift's servers
     queryKeys.dashboards, // the servers whose panel failed
+    queryKeys.everyServerTestAccount, // a server's test terms, on its page
+    queryKeys.testServers, // every server's test terms, and whether it gives a test now
   ],
   grants: [queryKeys.everyServerGrants, queryKeys.massGrants],
   plans: [
@@ -66,6 +68,7 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.queues, // the sidebar's stuck orders
     queryKeys.discountCodes, // each code's uses: the orders made with it, not cancelled
     queryKeys.loyaltyTiers, // how many customers each tier holds: what they spent
+    queryKeys.tests, // whether a test's customer bought after it
   ],
   payments: [
     queryKeys.payments,
@@ -92,7 +95,10 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.everyServerGrants, // whom a grant would reach
     queryKeys.massGrants,
     queryKeys.dashboards,
+    queryKeys.tests, // where each test stands: its service
+    queryKeys.testServers, // a server's room, so whether it gives a test
   ],
+  tests: [queryKeys.tests], // the tests given: a new one, one found ended or removed
   referrals: [
     queryKeys.referrals,
     queryKeys.referrers,
@@ -113,6 +119,7 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.plans, // an agent's plans their traffic no longer covers, or covers again
     queryKeys.shops, // the owner's picker: the agents' bots
     queryKeys.dashboards, // an agent's traffic too short to sell anything
+    queryKeys.testServers, // an agent's traffic too short to give a test
   ],
   channels: [queryKeys.botChannels],
   broadcasts: [queryKeys.broadcasts],

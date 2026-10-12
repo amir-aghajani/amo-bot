@@ -15,17 +15,20 @@ less than a day before its end the bot and the panels give its hour too, and the
 |---|---|
 | «همه» | Every service |
 | «فعال» | Running, or waiting for their first connection |
-| «رو به انقضا» | Active services ending within three days (counted beside it); one still waiting has no end yet |
+| «رو به انقضا» | Active services ending within three days (counted beside it); one still waiting has no end yet, and a free test is never here |
 | «منقضی‌شده» | Ended by time or traffic — renewed, they run again |
 | «غیرفعال» | Switched off by support |
 | «حذف‌شده» | Gone from their panel, found so by a sync or a read — nothing but delete is offered |
 
-- **Filters**: «سرور» (a server's page links here, with its active services), and a customer, from their page. Search by
-  a service's number (`#12` is service 12 alone), its name on the panel, a piece of its link, or the customer.
+- **Filters**: «سرور» (a server's page links here, with its active services), «نوع» — «همه», «اکانت تست» for the
+  free tests, «سرویس عادی» for every other service, sold or given ([below](#test-services)) —, and a customer, from
+  their page. Search by a service's number (`#12` is service 12 alone), its name on the panel, a piece of its link, or
+  the customer.
 - **Sorting**: newest first, or by «پایان» (soonest first; the ones that never end, or have not started, last) or
   «مصرف» from their headers.
-- **A row**: the service's name with its plan, the customer, the server, the traffic used («X از Y», amber at 80%, red
-  when used up) and its end («۵ روز مانده», amber within three days), its status, and «جزئیات».
+- **A row**: the service's name with its plan (a free test's «تست» badge), the customer, the server, the traffic used
+  («X از Y», amber at 80%, red when used up) and its end («۵ روز مانده», amber within three days), its status, and
+  «جزئیات».
 
 Tick services to [move them](#moving-services) together: the selection stays while you page and sort, and goes with
 another tab, server, customer or search.
@@ -35,7 +38,9 @@ another tab, server, customer or search.
 The link, with «کپی» (a link that no longer works — the client gone from its panel — is shown for what it was, said
 dead); the customer, the plan, the server, the traffic, the end and the term, the devices, when it was first used and
 bought, whether «تمدید خودکار» is on, the next period when a renewal is queued («دوره بعدی»), and when the panel was last
-asked. Then what may be done with it now:
+asked. While the shop is to remove it by itself — an ended service while [the automatic removal](#what-runs-by-itself)
+is on, a free test by its rules —, «حذف خودکار» says when, with the time left; «در نوبت حذف» once that moment passed,
+until the next run takes it. Then what may be done with it now:
 
 | Operation | Offered | What it does | The customer |
 |---|---|---|---|
@@ -91,6 +96,20 @@ While it runs, the dialog's one button is «توقف بعد از این سروی
 A panel that fails «حذف سرویس» asks whether to delete the service from the shop alone: «حذف فقط از فروشگاه» deletes it
 here and leaves its client on the panel — **it keeps working until you remove it there** —; «لغو حذف» changes nothing.
 
+## Test services
+
+A free test a customer took in the bot ([Test accounts](Test-Accounts.md)) is a service like the others, marked «تست»
+where a service shows its plan — in the list and on the customer's page —; its dialog's «پلن» reads «اکانت تست رایگان».
+It has no plan, so it is never renewed — by the customer or by «تمدید خودکار», which its dialog does not show —, buys no
+extra traffic or time, is not reminded of its end, and a server's «افزودن زمان و حجم» and the mass gift pass it by. It
+is never among «رو به انقضا» — here or on the dashboard, whose «اشتراک‌های فعال» leaves it out too — and its end is never
+amber; it still takes room in its server's «ظرفیت».
+
+Every operation above still works on it: read it, give it days and traffic (it runs again until it ends again), switch
+it off or on, move it (if the target has its name, the new one still starts with `test_`), delete it. A test deleted
+here still counts in its customer's quota. The tests that ended, and those never connected, are removed by themselves
+([below](#what-runs-by-itself)).
+
 ## Agents' shops
 
 Working an agent's shop — the agent in their panel, or you with their shop open — has rules of its own:
@@ -130,12 +149,27 @@ own), a failure in a short word. And **an admin never changes their own service*
 - **The next period** — with the traffic not carried, a renewal queues the next period; when the paid one ends, what is
   left of the old traffic goes and the new period's begins.
 - **«یادآوری»** — a service near its end, or near its traffic's end, is told once while it stays there (both off until
-  switched on, [Bot settings](Bot-Settings.md#reminders)).
+  switched on, [Bot settings](Bot-Settings.md#reminders)). A free test never is.
+- **The automatic removal**, every 15 minutes after the sync, in every shop that has ended services or tests — a
+  stopped agent's too —, by each shop's rules, quietly (the customer not told): a service that ended — its time or
+  traffic ran out, or its panel no longer has it — is removed from its panel and the shop «فاصله حذف» hours after it
+  ended, while the shop's «حذف خودکار سرویس‌های منقضی‌شده» is on (off until switched on,
+  [Bot settings](Bot-Settings.md#ended-services)); the orders that sold it keep their record. A free test that ended
+  goes after the shop's own grace, and one never connected after its days
+  ([Test accounts](Test-Accounts.md#the-clean-up)). When a service ended is the deadline it passed, else when its panel
+  said its traffic was used up or its client gone; one that runs again starts afresh. Each is read from its panel again
+  first, so one renewed, extended or connected to since the sync stays. One switched off here is left for you, and one
+  with an order about it still open — a renewal waiting for its receipt, a delivery waiting for support's retry —
+  waits for it. A run takes at most 100 of each rule in a shop, the oldest first; the rest wait for the next. The bot's
+  service screen and the shop's website tell the customer when an ended service goes.
 
 ## Watch out for
 
 - **«حذف سرویس» leaves no trace** and cannot be undone; the customer of a running service is told. To stop a service
   for a while, switch it off.
+- **A service the automatic removal takes is gone for good** too: its customer can no longer renew it, and a new
+  purchase gets a new link to add to their app. Set «فاصله حذف» with that in mind — long enough for a customer to come
+  back and renew.
 - **A client left on its panel keeps working** until you remove it there.
 - **«غیرفعال» is yours, «منقضی‌شده» the panel's**: a switched-off service is switched on here; an ended one is renewed.
 - **The subscriptions list shows the open shop's services**: an agent's customers' services on your servers are in their

@@ -92,7 +92,8 @@ it: the sign-in page's «رمز را فراموش کرده‌اید؟» ([the pa
 
 ## Appearance
 
-«ظاهر» — «تیره» (the default) or «روشن», kept in this browser alone.
+«ظاهر» — «تیره» (the default) or «روشن», kept in this browser alone; the switch in the top bar of every screen changes
+it too.
 
 ## Update
 

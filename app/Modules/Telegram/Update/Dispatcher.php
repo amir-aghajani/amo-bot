@@ -20,7 +20,8 @@ use Psr\Log\LoggerInterface;
  * Routes each update to its handler, as routes/bot.php registers them. Every update is served once: a copy Telegram
  * sends again is recognised by its id, and a chat sending faster than a person is ignored while it floods
  * (ReceivedUpdates). A group's update goes to the group routes only (no user, session or gates). A private chat's update
- * — whose chat must be its sender's — passes the ban check and the gates, then takes the first route that matches:
+ * — whose chat must be its sender's — passes the ban check and the gates (a /start link a gate holds back waits in the
+ * chat for the update that gets through), then takes the first route that matches:
  *   1. /command             (navigation)
  *   2. reply-keyboard label (navigation)
  *   3. contact card         (navigation)
@@ -32,6 +33,9 @@ use Psr\Log\LoggerInterface;
  */
 final class Dispatcher
 {
+    /** What a t.me link's `?start=` can carry (Telegram's deep-link payload); other text after /start was typed. */
+    private const START_PAYLOAD = '/^[A-Za-z0-9_-]{1,64}$/';
+
     /** @var list<class-string<Gate>> In the order they run. */
     private array $gates = [];
 
@@ -282,6 +286,8 @@ final class Dispatcher
 
         foreach ($this->gates as $gate) {
             if (!$this->container->get($gate)->pass($ctx)) {
+                self::keepStartLink($ctx);
+
                 return;
             }
         }
@@ -296,6 +302,19 @@ final class Dispatcher
         }
 
         $this->container->get($route->handler)->handle($ctx);
+    }
+
+    /**
+     * A /start link a gate held back (`?start=usertest` before the phone was in) is kept in the chat, so it still opens
+     * once the update that gets through lands on the menu (StartHandler, JoinHandler). Only what a link can carry is
+     * kept (START_PAYLOAD).
+     */
+    private static function keepStartLink(Context $ctx): void
+    {
+        $link = $ctx->update->command() === 'start' ? (string) $ctx->update->commandArgument() : '';
+        if (preg_match(self::START_PAYLOAD, $link) === 1) {
+            $ctx->session->keepStartLink($link);
+        }
     }
 
     /**

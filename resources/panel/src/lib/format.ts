@@ -101,6 +101,9 @@ export function formatGb(gb: number): string {
 
 const BYTE_UNITS = ['بایت', 'کیلوبایت', 'مگابایت', 'گیگابایت', 'ترابایت']
 
+/** A megabyte in bytes: traffic kept in whole MB (a test's) as formatBytes takes it. */
+export const MEGABYTE = 1024 ** 2
+
 /**
  * An amount of traffic or memory in its largest unit: "۱٫۵ گیگابایت", "۵۱۲ مگابایت"; zero is "۰ گیگابایت". (A quota of
  * 0 means unlimited — the caller says `UNLIMITED` itself.)
@@ -169,6 +172,12 @@ export function decimalInput(typed: string): string {
 export function wholeOf(typed: string): string | null {
   const number = decimalOf(typed)
   return number !== null && !number.includes('.') ? number : null
+}
+
+/** A typed whole number (wholeOf) as a number, for a hint or a preview to work with; null while it is none. */
+export function wholeNumberOf(typed: string): number | null {
+  const number = wholeOf(typed)
+  return number === null ? null : Number(number)
 }
 
 /**

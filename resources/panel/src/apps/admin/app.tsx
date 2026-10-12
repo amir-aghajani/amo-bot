@@ -27,6 +27,7 @@ import {
   ReviewsPage,
   SalesPage,
   SubscriptionsPage,
+  TestsPage,
   TicketPage,
   TicketsPage,
   UsersPage,
@@ -85,6 +86,9 @@ const ownerServers: ServerChoices = () =>
 
 const serverPage = (id: number) => `/servers/${id}`
 
+/** A server page's «اکانت تست» card, where the owner sets what a test on it gets. */
+const testCard = (id: number) => `/servers/${id}#test-account`
+
 /** An agent on the agents list, found by their Telegram id (else their email): where their level, credit, traffic and agency are managed. */
 const agentPage = (agent: AgentRow) => `/agents/list?search=${encodeURIComponent(agent.user.telegram_id ?? agent.user.email ?? '')}`
 
@@ -120,6 +124,7 @@ export const ADMIN_ROUTES: RouteObject[] = [
                   { path: 'servers', element: <ServersPage /> },
                   { path: 'servers/:id', element: <ServerDetailPage /> },
                   { path: 'plans', element: <PlansPage addServers="/servers" /> },
+                  { path: 'tests/:section?', element: <TestsPage serverPage={testCard} /> },
                   { path: 'categories', element: <PlanCategoriesPage /> },
                   { path: 'payment-methods', element: <PaymentMethodsPage /> },
                   { path: 'users', element: <UsersPage /> },

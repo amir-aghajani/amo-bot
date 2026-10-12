@@ -993,7 +993,7 @@ Change the service's subscription link (`link_rotation`). Every device on the ol
 
 ### GET /subscriptions/{id}/renewal
 
-Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, its plan deleted or renewing nothing, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered).
+Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, a free test account, its plan deleted or renewing nothing, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1063,7 +1063,7 @@ The extra traffic and time a service can buy now. As the bot's «🔋 حجم ا�
 
 ### POST /subscriptions/{id}/extra-traffic
 
-Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
+Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1094,7 +1094,7 @@ Extra traffic for a service: how much, and the payment method.
 
 ### POST /subscriptions/{id}/extra-time
 
-Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
+Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -2171,17 +2171,20 @@ One of the customer's services, as last read from its panel (`synced_at`), with 
 | `id` | integer | yes |  |
 | `name` | string | yes | Its name on the panel ("amir_2", "USER_7"). |
 | `status` | [SubscriptionStatus](API-Schemas.md#subscriptionstatus) | yes |  |
-| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan it was sold or last renewed on; null once that plan is deleted. |
+| `is_test` | boolean | yes | A free test account («اکانت تست»), taken in the bot: it has no plan and can be neither renewed nor bought extras (`extras`); the shop may remove it some time after it ends, or some days after it was made while never connected (`removes_at`). |
+| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan it was sold or last renewed on; null for a test account, or once that plan is deleted. |
 | `server` | [NamedRef](API-Schemas.md#namedref) | yes | The server it is on («لوکیشن» in the bot). |
 | `link` | string or null | yes | The subscription link; null once the panel no longer has the service (deleted). |
 | `traffic` | [StoreServiceTraffic](#storeservicetraffic) | yes |  |
 | `term` | [StoreServiceTerm](#storeserviceterm) | yes |  |
+| `ended_at` | string (date-time) or null | yes | When it ended: its end date passed, its traffic ran out, or its panel no longer has it. Null while it runs, and after its end date until the shop next reads its panel (`term.expires_at` says when). |
+| `removes_at` | string (date-time) or null | yes | When the shop will remove it by itself — from its panel and from the customer's services —, by the shop's rules now; null when it will not. Set only for a service that ended (or a test account never connected) in a shop that removes such services: renewing it or adding to it before then keeps it, and the moment can move when the shop changes its rules. A moment already past: it goes at the shop's next check (every 15 minutes). A service switched off by support, or with an order still open (a renewal waiting for its receipt), is not removed. |
 | `auto_renew` | object | yes | Auto-renewal («تمدید خودکار»): the service is renewed from the wallet before it ends, on its plan at the plan's price. |
 | `auto_renew.on` | boolean | yes | The customer's switch. |
 | `auto_renew.offered` | boolean | yes | The switch can be set (`PATCH`): the service is active, has an end date and still has its plan, and the wallet payment method is on. |
 | `auto_renew.days_before` | integer | yes | How many days before its end it is renewed when the switch is on. A shop-wide setting, 1 to 30. |
 | `renewable` | boolean | yes | The customer can renew it now on its plan: it is active or ended, its plan still exists and the renewal adds something, and in an agent's shop the agent's traffic covers it. |
-| `extras` | object | yes | Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel). Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. |
+| `extras` | object | yes | Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. |
 | `extras.traffic` | boolean | yes |  |
 | `extras.time` | boolean | yes |  |
 | `link_rotation` | boolean | yes | Its link can be changed now (`POST …/rotate-link`): it is active and its server can rotate links. |

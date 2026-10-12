@@ -26,8 +26,9 @@ webhooks. A poller still running when the webhooks are set is told Telegram now 
 ## The scheduler
 
 The shop's timed work — card receipts nobody reviewed, deliveries a dying process left, unpaid orders that expire,
-broadcasts, automatic renewals, the sync of every service with its panel, reminders, the report groups' queue and the
-housekeeping — runs in the scheduler, which the host's cron starts every minute in one of two ways:
+broadcasts, automatic renewals, the sync of every service with its panel, reminders, the removal of ended services and
+free tests, the report groups' queue and the housekeeping — runs in the scheduler, which the host's cron starts every
+minute in one of two ways:
 
 - **a cron job that runs `php bin/console schedule:run`** — cPanel › *Cron Jobs*, the line in
   [Installation](Installation.md#shared-hosting);
@@ -46,7 +47,7 @@ agents' bots. The dashboard's system card says when it last ran. What runs, and 
 | minute | «افزودن زمان و حجم» and «هدیه همگانی» no open screen is working on |
 | minute | the report groups' messages, at Telegram's pace |
 | 10 minutes | a renewed service's next period, where the paid one ended |
-| 15 minutes | every running service read from its panel, then «یادآوری» |
+| 15 minutes | every running service read from its panel, then «یادآوری», then the services that are done with removed — the ended ones so many hours after their end while the shop removes them ([Bot settings](Bot-Settings.md#ended-services)), the free tests that ended or never connected ([Test accounts](Test-Accounts.md#the-clean-up)) — and the test claims a dead process left given back, in every shop that has some, a stopped agent's too, by its own rules |
 | 30 minutes | «تمدید خودکار» |
 | hour | unpaid orders nobody touched for 48 hours, cancelled |
 | hour | the updates the bots took (kept 48 hours, so one Telegram sends again is served once), forgotten |

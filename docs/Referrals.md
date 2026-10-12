@@ -64,7 +64,7 @@ line in plain words («هدیه شروع زیرمجموعه‌گیری (کارب
 bot (and on their website, by email for one without Telegram). It is paid:
 
 - **«با اولین خرید»** (the default): when the newcomer's first purchase **with a price** is paid — any way to pay, the
-  wallet too. A free plan (a free trial) neither brings it nor uses it up: their first paid purchase later still does. A
+  wallet too. A free plan neither brings it nor uses it up: their first paid purchase later still does. A
   service given free (a prize, a gift code's, a reward's) is no purchase, nor is a top-up. A newcomer made up for the
   gift buys nothing and brings nothing.
 - **«با عضویت»**: as the newcomer joins through the link — the bot's first `/start` or the website's sign-up.

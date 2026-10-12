@@ -163,9 +163,26 @@ describe('a refund', () => {
 
     expect(within(dialog()).getByLabelText('توضیح').getAttribute('maxlength')).toBe('190')
     expect(within(dialog()).getByText('۰ از ۱۹۰ کاراکتر')).toBeTruthy()
+    expect(within(dialog()).getByText(/سرویسی که با این خرید ساخته شده از پنل و فروشگاه حذف می‌شود/)).toBeTruthy()
   })
 
-  it('of a service’s extra says what was added stays', () => {
+  it('of a renewal says what it gave is taken back', () => {
+    show(
+      paymentRow({
+        status: 'paid',
+        reviewer: 'root',
+        order: { ...paymentRow().order, type: 'renewal', status: 'fulfilled', subscription_id: 1 },
+        actions: { ...paymentRow().actions, approve: false, reject: false, cancel: false, refund: true },
+      }),
+    )
+    fireEvent.click(button('بازپرداخت به کیف پول'))
+
+    expect(
+      within(dialog()).getByText('مبلغ به کیف پول مشتری برمی‌گردد و زمان و حجمی که این تمدید به سرویس داده پس گرفته می‌شود. اگر پنل جواب ندهد یا سرویس غیرفعال باشد، بازپرداخت انجام نمی‌شود.'),
+    ).toBeTruthy()
+  })
+
+  it('of a service’s extra says what was added is taken back', () => {
     show(
       paymentRow({
         status: 'paid',
@@ -176,7 +193,7 @@ describe('a refund', () => {
     )
     fireEvent.click(button('بازپرداخت به کیف پول'))
 
-    expect(within(dialog()).getByText('مبلغ به کیف پول مشتری برمی‌گردد و پرداخت «بازپرداخت‌شده» می‌شود؛ زمانی که به سرویس اضافه شده سر جایش می‌ماند.')).toBeTruthy()
+    expect(within(dialog()).getByText('مبلغ به کیف پول مشتری برمی‌گردد و زمانی که به سرویس اضافه شده پس گرفته می‌شود. اگر پنل جواب ندهد یا سرویس غیرفعال باشد، بازپرداخت انجام نمی‌شود.')).toBeTruthy()
   })
 })
 

@@ -7,6 +7,7 @@ import { ListView, RowTitleButton } from '@/components/list-view'
 import { StatusBadge } from '@/components/status-badge'
 import { MoveDialog } from '@/components/subscriptions/move-dialog'
 import type { ServerChoices } from '@/components/subscriptions/server-choices'
+import { ServicePlan } from '@/components/subscriptions/service-plan'
 import { ServiceExpiry, UsageMeter } from '@/components/subscriptions/service-usage'
 import { SubscriptionModal } from '@/components/subscriptions/subscription-modal'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -62,7 +63,7 @@ export function ServicesCard({ customer, servers, serverPage, traffic }: Service
                         {subscription.name}
                       </bdi>
                     </RowTitleButton>
-                    <span className="text-footnote text-muted-foreground">{subscription.plan?.name ?? 'پلن حذف شده'}</span>
+                    <ServicePlan subscription={subscription} />
                   </div>
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">{subscription.server.name}</TableCell>

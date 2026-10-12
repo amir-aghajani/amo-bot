@@ -79,7 +79,7 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`POST /api/{panel}/payments/{id}/remind`](#post-apipanelpaymentsidremind) | Remind the customer to pay |
 | [`POST /api/{panel}/payments/{id}/retry`](#post-apipanelpaymentsidretry) | Retry the delivery of what a paid payment bought |
 | [`POST /api/{panel}/payments/{id}/refund`](#post-apipanelpaymentsidrefund) | Refund a paid payment |
-| [`GET /api/{panel}/subscriptions`](#get-apipanelsubscriptions) | All services sold |
+| [`GET /api/{panel}/subscriptions`](#get-apipanelsubscriptions) | All the shop's services |
 | [`GET /api/{panel}/subscriptions/{id}`](#get-apipanelsubscriptionsid) | One service, as the list shows it |
 | [`POST /api/{panel}/subscriptions/{id}/sync`](#post-apipanelsubscriptionsidsync) | Refresh a service's usage and term from its panel |
 | [`POST /api/{panel}/subscriptions/{id}/extend`](#post-apipanelsubscriptionsidextend) | Add days and traffic to a service, on top of what it has |
@@ -161,6 +161,8 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`PATCH /api/{panel}/wheel/prizes/{id}`](#patch-apipanelwheelprizesid) | Switch a wheel slice on or off |
 | [`DELETE /api/{panel}/wheel/prizes/{id}`](#delete-apipanelwheelprizesid) | Delete a wheel slice |
 | [`GET /api/{panel}/wheel/spins`](#get-apipanelwheelspins) | The wheel spins, newest first, each with the slice it landed on and what it gave |
+| [`GET /api/{panel}/tests`](#get-apipaneltests) | The free test accounts the shop gave, newest first, each with where it stands and whether the customer bought after it |
+| [`GET /api/{panel}/tests/servers`](#get-apipaneltestsservers) | Every server, in its order, with its test terms and whether it would give a test in this shop now (the shop's own switch and quota aside) |
 | [`GET /api/{panel}/loyalty/tiers`](#get-apipanelloyaltytiers) | The loyalty tiers, lowest threshold first, each with its current number of customers |
 | [`POST /api/{panel}/loyalty/tiers`](#post-apipanelloyaltytiers) | Add a loyalty tier |
 | [`PUT /api/{panel}/loyalty/tiers/{id}`](#put-apipanelloyaltytiersid) | Update a loyalty tier |
@@ -1361,7 +1363,7 @@ Retry the delivery of what a paid payment bought.
 
 ### POST /api/{panel}/payments/{id}/refund
 
-Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone (a top-up already spent, an agent's traffic already sold).
+Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are.
 
 - **On the website:** the website's admins can also use it, as [`POST /payments/{id}/refund`](Store-Admin-API-Reference.md#post-paymentsidrefund), when the website grants `refunds` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
@@ -1388,7 +1390,7 @@ Support's note on a refund. It is a line of the message the customer gets and th
 
 ### GET /api/{panel}/subscriptions
 
-All services sold. Newest first, or sorted by `sort` and `dir`.
+All the shop's services: sold, renewed or given, and the free test accounts (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.
 
 - **On the website:** the website's admins can also use it, as [`GET /subscriptions`](Store-Admin-API-Reference.md#get-subscriptions).
 
@@ -1398,6 +1400,7 @@ All services sold. Newest first, or sorted by `sort` and `dir`.
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `status` | query | string | no | The status tab. Empty for all |
+| `kind` | query | [SubscriptionKind](API-Schemas.md#subscriptionkind) | no | Only the services of this kind. Empty for all |
 | `server` | query | integer | no |  |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `page` | query | integer, at least 1 | no |  |
@@ -2043,6 +2046,26 @@ One of:
 | `expiry_reminder_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 30. |
 | `traffic_reminder` | boolean | yes |  |
 | `traffic_reminder_percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 50 to 99. |
+
+**`BotExpiredServicesSettingsRequest`** — «سرویس‌های منقضی‌شده»: the automatic removal of ended services, and how long after its end a service goes.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `expired_cleanup` | boolean | yes |  |
+| `expired_cleanup_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 8760 (a year); 0 removes at once. |
+
+**`BotTestAccountsSettingsRequest`** — «اکانت تست رایگان»: the switch, the quota and the clean-up. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `test_enabled` | boolean | yes |  |
+| `test_per_user` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
+| `test_period_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 365; 0 for good. |
+| `test_daily_limit` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100,000; 0 for no cap. |
+| `test_newcomers_only` | boolean | yes |  |
+| `test_cleanup` | boolean | yes |  |
+| `test_cleanup_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 720. |
+| `test_unused_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 365; 0 never. |
 
 **`BotReferralSettingsRequest`**
 
@@ -3162,6 +3185,37 @@ The wheel spins, newest first, each with the slice it landed on and what it gave
 | `200` | OK | [WheelSpinsResponse](#wheelspinsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /api/{panel}/tests
+
+The free test accounts the shop gave, newest first, each with where it stands and whether the customer bought after it. One customer's or all.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `status` | query | [TestAccountState](#testaccountstate) | no | Only tests in this state. Empty for all |
+| `user` | query | integer | no | A customer's id: only their rows (their page links here) |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `page` | query | integer, at least 1 | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [TestAccountsResponse](#testaccountsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/tests/servers
+
+Every server, in its order, with its test terms and whether it would give a test in this shop now (the shop's own switch and quota aside). The terms are the owner's (`PUT /api/admin/servers/{id}/test-account`).
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [TestServersResponse](#testserversresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /api/{panel}/loyalty/tiers
 
 The loyalty tiers, lowest threshold first, each with its current number of customers.
@@ -3390,6 +3444,8 @@ Operations only the owner's panel has.
 | [`POST /api/admin/servers/{id}/test`](#post-apiadminserversidtest) | Check a saved server's panel |
 | [`POST /api/admin/servers/{id}/inbounds/sync`](#post-apiadminserversidinboundssync) | Read the panel's inbounds again |
 | [`PATCH /api/admin/servers/{id}/inbounds/{inbound}`](#patch-apiadminserversidinboundsinbound) | Switch whether an inbound is sold |
+| [`GET /api/admin/servers/{id}/test-account`](#get-apiadminserversidtest-account) | A server's free test accounts («اکانت تست») |
+| [`PUT /api/admin/servers/{id}/test-account`](#put-apiadminserversidtest-account) | Save a server's test terms |
 | [`GET /api/admin/servers/{id}/grants`](#get-apiadminserversidgrants) | A server's latest grants |
 | [`POST /api/admin/servers/{id}/grants`](#post-apiadminserversidgrants) | Give days and traffic to the services on a server |
 | [`POST /api/admin/servers/{id}/grants/{grant}/run`](#post-apiadminserversidgrantsgrantrun) | Apply a grant to the next few services |
@@ -3939,6 +3995,51 @@ Whether an inbound is sold on plans that sell the whole server.
 | Status | What it is | Body |
 |---|---|---|
 | `200` | Changed | [InboundsResponse](#inboundsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/admin/servers/{id}/test-account
+
+A server's free test accounts («اکانت تست»): whether it gives them, and what each gets. The same in every shop.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ServerTestAccountResponse](#servertestaccountresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/admin/servers/{id}/test-account
+
+Save a server's test terms. A test already given keeps the terms it got.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+A server's test terms, saved whole. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `test_enabled` | boolean | yes |  |
+| `test_traffic_mb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 102,400 MB. |
+| `test_duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 720 hours. |
+| `test_on_hold` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [ServerTestAccountResponse](#servertestaccountresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/admin/servers/{id}/grants
@@ -5137,6 +5238,16 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `expiry_reminder_days` | integer | yes |  |
 | `traffic_reminder` | boolean | yes | Remind the customer once `traffic_reminder_percent` of a service's quota is used. |
 | `traffic_reminder_percent` | integer | yes |  |
+| `expired_cleanup` | boolean | yes | «سرویس‌های منقضی‌شده»: an ended service — its time or traffic ran out, or its panel no longer has it — is removed from its panel and the shop by itself, `expired_cleanup_hours` after it ended (checked every 15 minutes), without a word to the customer; its orders stay. A service renewed meanwhile, switched off by support, or with an order still open (a renewal waiting for its receipt) is kept. Free test accounts go by their own rule (`test_cleanup`). Off by default. |
+| `expired_cleanup_hours` | integer | yes | How many hours an ended service is kept before it is removed; 0 at once. |
+| `test_enabled` | boolean | yes | «اکانت تست رایگان»: customers can take a free test account with the bot's «اکانت تست» button, on a server that gives tests. What a test gets is each server's (`PUT /api/admin/servers/{id}/test-account`); in an agent's shop its traffic comes from the agent's bot. |
+| `test_per_user` | integer | yes | How many tests a customer may take: for good, or within `test_period_days`. Bot admins have no quota. |
+| `test_period_days` | integer | yes | The window `test_per_user` counts over, in days; 0 for good. |
+| `test_daily_limit` | integer | yes | The most tests the shop gives in one day of its time zone; 0 for no cap. |
+| `test_newcomers_only` | boolean | yes | Only customers who never bought a service with a price can take one. |
+| `test_cleanup` | boolean | yes | Tests that ended are removed from their panels by themselves (checked every 15 minutes). A removed test still counts in the quota. |
+| `test_cleanup_hours` | integer | yes | How many hours an ended test is kept before it is removed; 0 at once. |
+| `test_unused_days` | integer | yes | While `test_cleanup` is on, after how many days a test that never connected is removed (its hours wait for the first connection); 0 never. |
 | `referral_enabled` | boolean | yes | «زیرمجموعه‌گیری»: the referral program. Referral links bring new customers, and their payments earn the referrer `referral_rate` percent. |
 | `referral_rate` | integer | yes |  |
 | `referral_renewal_rate` | integer | yes | The percent a referred customer's renewal earns instead (0: renewals earn nothing). |
@@ -5177,7 +5288,7 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 
 ### BotSettingsGroup
 
-String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `extras`, `reminders`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`.
+String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`.
 
 ### BotSettingsResponse
 
@@ -6253,6 +6364,23 @@ A server's grants card: its latest grants, and how many services a new grant wou
 | `created_at` | string (date-time) | yes |  |
 | `updated_at` | string (date-time) | yes |  |
 
+### ServerTestAccount
+
+A server's free test accounts («اکانت تست»): whether it gives them, and what each gets. A test is made on every inbound the server sells.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `test_enabled` | boolean | yes | The server gives free tests (the bot settings switch them on for the shop as a whole). |
+| `test_traffic_mb` | integer | yes | A test's traffic, in MB. |
+| `test_duration_hours` | integer | yes | A test's term, in hours. |
+| `test_on_hold` | boolean | yes | The hours count from the customer's first connection; otherwise from the moment the test is made. |
+
+### ServerTestAccountResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `test_account` | [ServerTestAccount](#servertestaccount) | yes |  |
+
 ### ServersResponse
 
 | Field | Type | Required | What it is |
@@ -6316,6 +6444,66 @@ The system's health: the version, PHP, the bots and the scheduler. Owner only.
 | `cron` | object | yes |  |
 | `cron.last_run_at` | string (date-time) or null | yes |  |
 | `cron.tasks` | integer | yes |  |
+
+### TestAccountRow
+
+A free test account («اکانت تست») the shop gave, with the terms it got (as its server's were then).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `customer` | [UserRef](API-Schemas.md#userref) | yes |  |
+| `server` | [NamedRef](API-Schemas.md#namedref) or null | yes | Null once the server is deleted. |
+| `traffic_bytes` | integer | yes |  |
+| `duration_hours` | integer | yes |  |
+| `on_hold` | boolean | yes | Its hours counted from the first connection; otherwise from the moment it was made. |
+| `state` | [TestAccountState](#testaccountstate) | yes |  |
+| `subscription` | object or null | yes | Its service, as last read from its panel; null while it is being made and once it is removed. |
+| `subscription.id` | integer | yes |  |
+| `subscription.name` | string | yes | The client's name on the panel ("test_ali_1"). |
+| `subscription.status` | [SubscriptionStatus](API-Schemas.md#subscriptionstatus) | yes |  |
+| `subscription.traffic` | object | yes | In bytes; a limit of 0 means unlimited. |
+| `subscription.traffic.limit` | integer | yes |  |
+| `subscription.traffic.used` | integer | yes |  |
+| `subscription.starts_at` | string (date-time) or null | yes | When the first connection started its hours; null until then. |
+| `subscription.expires_at` | string (date-time) or null | yes | Null while it waits for the first connection. |
+| `bought_after` | boolean | yes | The customer bought a service with a price after taking it. |
+| `created_at` | string (date-time) | yes |  |
+| `issued_at` | string (date-time) or null | yes | When its service was made; null while it is being made. |
+| `ended_at` | string (date-time) or null | yes | When it ended — its deadline, or when the shop found its traffic used up or its client gone (its removal is counted from then); null while it runs (and past its deadline until the shop next reads its panel), and once it is removed. |
+
+### TestAccountState
+
+Where a free test account stands: `making` (its panel is still being asked), `waiting` (its hours start at the first connection), `running`, `disabled` (switched off by support), `ended` (its time or traffic ran out, or its panel no longer has it), `removed` (deleted from its panel and the shop; it still counts in the customer's quota).
+
+String: `making`, `waiting`, `running`, `disabled`, `ended`, `removed`.
+
+### TestAccountsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `tests` | list of [TestAccountRow](#testaccountrow) | yes |  |
+| `meta` | [PageMeta](API-Schemas.md#pagemeta) | yes |  |
+
+### TestServerRow
+
+A server with its test terms (`ServerTestAccount`), and whether it would give a test in this shop now.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes |  |
+| `test_enabled` | boolean | yes | The server gives free tests (the bot settings switch them on for the shop as a whole). |
+| `test_traffic_mb` | integer | yes | A test's traffic, in MB. |
+| `test_duration_hours` | integer | yes | A test's term, in hours. |
+| `test_on_hold` | boolean | yes | The hours count from the customer's first connection; otherwise from the moment the test is made. |
+| `available` | boolean | yes | The server would give a test in this shop now: it is switched on for tests (`test_enabled`), it can take a client (switched on, serving subscription links, with room, and an inbound it sells where its panel has inbounds), and in an agent's shop the agent's bot has a test's traffic left. The shop's own rules are not counted: its switch (the bot settings' `test_enabled`), the daily cap and each customer's quota. While the shop's switch is off, no customer gets a test, whatever this says. |
+
+### TestServersResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `servers` | list of [TestServerRow](#testserverrow) | yes |  |
 
 ### TrafficLine
 

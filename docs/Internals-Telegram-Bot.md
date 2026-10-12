@@ -56,7 +56,8 @@ else in a message.
 
 `Session\ChatSession` holds the step a chat is at (`state`, e.g. `topup.amount`, `receipt:12`) and that step's scratch.
 `enter()` moves to a step, `clear()` leaves the flow. Keys starting with `_` are the chat's own facts (whether a reply
-keyboard is shown, a recent channel check, a kept discount code) and survive every flow. A last step that must run once
+keyboard is shown, a recent channel check, a kept discount code, a `/start` link a gate held back) and survive every
+flow. A last step that must run once
 — a broadcast sent, a link changed, a wallet payment — ends with `claim(state)`, one conditional update, so of two taps
 at the same moment only one acts. The dispatcher saves the session once, after the update.
 
@@ -100,6 +101,13 @@ handler: the bot only renders.
   another ticket arrives (`leaveOtherTicket()`).
 - **Pictures** (a receipt, a ticket's picture) are a photo or a file judged by its bytes: `Update::picture()` with
   `CustomerPictures::isPicture()`.
+- **Free tests**: `TestAccountHandler::home()` draws the test screen for the menu, `/free` and the `?start=usertest`
+  link — the link's as a new message under the greeting (`StartHandler::open()`, `MainMenu::screen(fresh: true)`).
+  `test:{server}` takes one through `Subscriptions\Services\TestAccounts` and sends it with `ServiceCard`
+  (`TestDelivered`). Every refusal is a text of its own, and a refused tap redraws the screen through `home()`, as it
+  judges now — the servers still giving a test, or why none. A test made whose card Telegram refused still counts: the
+  customer gets `TestUnsent` with the same «📊 مشاهده سرویس» button. A test's service screen has no renewal button,
+  since it has no plan.
 
 Adding a screen: a handler with its prefix constant and builders, its line in `routes/bot.php` (with `navigation: true`
 when it should leave the flow), its texts as `BotText` cases, and a feature test on `BotTestCase`.
@@ -135,9 +143,13 @@ same checks as a save; one that fails them shows the built-in menu, so a bad row
 keyboard's tap arrives as its label, so labels are unique and double as routes.
 
 The **gates** (`MaintenanceGate`, `PhoneGate`, `ChannelGate`, in that order) run before any handler; a gate that holds an
-update back answers it itself, and bot admins pass them all. `ChannelMembership` trusts a confirmed membership for a few
-minutes; a channel Telegram cannot answer for counts as joined and is flagged, because a broken channel must not lock
-the shop.
+update back answers it itself, and bot admins pass them all. A `/start` link a gate held back is kept as the chat fact
+`_start` (`Dispatcher::keepStartLink()`) — only what a t.me link can carry (Latin letters, digits, `_` and `-`, 64 at
+most), with when it was kept — and taken by the update that gets through within the hour — the contact card, a later
+`/start` or `/menu` (`StartHandler`), or «عضو شدم» (`JoinHandler`) —, so a newcomer the gates stopped still lands
+where the link leads (`ChatSession::takeStartLink()`; an older one goes unopened). `ChannelMembership` trusts a
+confirmed membership for a few minutes; a channel Telegram cannot answer for counts as joined and is flagged, because a
+broken channel must not lock the shop.
 
 ## Delivering a service
 

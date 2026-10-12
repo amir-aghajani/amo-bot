@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { PowerOff } from 'lucide-react'
 import { ChannelsSection } from '@/components/bot/settings/channels-section'
+import { ExpiredServicesSection } from '@/components/bot/settings/expired-services-section'
 import { ExtrasSection } from '@/components/bot/settings/extras-section'
 import { GeneralSection } from '@/components/bot/settings/general-section'
 import { QrSection } from '@/components/bot/settings/qr-section'
@@ -47,7 +48,7 @@ export function BotSettingsPage() {
   )
 }
 
-const EMPTY = { general: null, channels: null, wallet: null, renewal: null, extras: null, reminders: null, referral: null, reports: null, qr: null }
+const EMPTY = { general: null, channels: null, wallet: null, renewal: null, extras: null, reminders: null, expired_services: null, referral: null, reports: null, qr: null }
 
 function sectionsOf(data: BotSettingsResponse) {
   const { settings } = data
@@ -58,6 +59,7 @@ function sectionsOf(data: BotSettingsResponse) {
     renewal: <RenewalSection settings={settings} />,
     extras: <ExtrasSection settings={settings} />,
     reminders: <RemindersSection settings={settings} />,
+    expired_services: <ExpiredServicesSection settings={settings} />,
     referral: <ReferralSection settings={settings} />,
     reports: <ReportsSection settings={settings} />,
     qr: <QrSection data={data} />,

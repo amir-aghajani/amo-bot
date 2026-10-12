@@ -35,8 +35,8 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * The main menu's screens, reached from a reply-keyboard label or a `menu:*` callback: the plan list (by category when
  * the shop has any), «سرویس‌های من» and the renewals list (paged), the wallet, the referral screen and «آموزش». The
- * agency, support, gift-code and wheel screens are their own handlers' home(). With an inline menu every screen carries
- * «بازگشت» to it (MainMenu::screen()).
+ * agency, support, gift-code, wheel and free-test screens are their own handlers' home(). With an inline menu every
+ * screen carries «بازگشت» to it (MainMenu::screen()).
  */
 final class MenuHandler implements Handler
 {
@@ -60,6 +60,7 @@ final class MenuHandler implements Handler
         private readonly TicketHandler $supportScreens,
         private readonly GiftCodeHandler $giftScreens,
         private readonly WheelHandler $wheelScreens,
+        private readonly TestAccountHandler $testScreens,
         private readonly Loyalty $loyalty,
     ) {}
 
@@ -108,6 +109,7 @@ final class MenuHandler implements Handler
             $screen === MainMenu::SUPPORT => $this->supportScreens->home($ctx),
             $screen === MainMenu::GIFT => $this->giftScreens->home($ctx),
             $screen === MainMenu::WHEEL => $this->wheelScreens->home($ctx),
+            $screen === MainMenu::TEST => $this->testScreens->home($ctx),
             $screen === MainMenu::TUTORIAL => $this->menu->screen($ctx, $this->texts->get(BotText::Tutorial)),
             default => $this->home($ctx),
         };

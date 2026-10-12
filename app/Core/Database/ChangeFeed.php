@@ -51,6 +51,7 @@ final class ChangeFeed
         'bots' => 'agency',
         'traffic_transactions' => 'agency',
         'subscriptions' => 'subscriptions',
+        'test_accounts' => 'tests',
         'bot_channels' => 'channels',
         'broadcasts' => 'broadcasts',
         'broadcast_pins' => 'broadcasts',

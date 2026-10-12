@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Services;
 
+use App\Core\Exceptions\DomainRuleException;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
@@ -12,6 +13,7 @@ use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Exceptions\OrderNotPayableException;
 use App\Modules\Orders\Services\OrderActions;
+use App\Modules\Payments\Contracts\RefundedOrders;
 use App\Modules\Payments\Enums\CancelOutcome;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\RefundRefusedException;
@@ -40,6 +42,7 @@ final class PaymentActions
         private readonly OrderActions $orders,
         private readonly GatewayRegistry $gateways,
         private readonly CustomerNotifier $notifier,
+        private readonly RefundedOrders $refunded,
     ) {}
 
     /**
@@ -146,22 +149,29 @@ final class PaymentActions
     }
 
     /**
-     * Gives a paid payment back (PaymentService::refund()) and tells the customer. An admin never refunds their own.
+     * Gives a paid payment back and tells the customer: what a delivered order gave a service goes first — a purchase's
+     * service off its panel and the shop, a renewal's or an extra's term and traffic (RefundedOrders) —, then the money
+     * (PaymentService::refund()), only while the order is in the state it was judged by: one delivered meanwhile is
+     * refused, never refunded with what it gave. An admin never refunds their own.
      *
      * @throws ActorRefusedException 403 their own payment
      * @throws ValidationException 422 on `status`
-     * @throws RefundRefusedException what the order put in the shop is no longer there
+     * @throws RefundRefusedException what the order put in the shop is no longer there, or its service cannot go
+     * @throws DomainRuleException the service's change refused (busy, too many panel operations): nothing refunded
      */
     public function refund(Payment $payment, Actor $actor, ?string $note): Payment
     {
         $this->allow($payment, 'refund');
-        if ($actor->is($payment->order->user_id)) {
+        $order = $payment->order;
+        if ($actor->is($order->user_id)) {
             throw ActorRefusedException::ownPayment();
         }
-        if (!$this->payments->refund($payment, $actor->name(), $note)) {
+        $state = $order->status;
+        $removed = $state === OrderStatus::Fulfilled ? $this->refunded->takeBack($order, $actor) : null;
+        if (!$this->payments->refund($payment, $actor->name(), $note, $state)) {
             throw ValidationException::on('status', self::DECIDED_MEANWHILE);
         }
-        $this->notifier->paymentRefunded($payment);
+        $this->notifier->paymentRefunded($payment, $removed);
 
         return $payment;
     }

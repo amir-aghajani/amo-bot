@@ -13,6 +13,8 @@ use App\Modules\Auth\Actor;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Notifications\Services\CustomerNotifier;
+use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Providers\Exceptions\PanelFailedException;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Models\Server;
@@ -23,6 +25,7 @@ use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Exceptions\MoveException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
 use App\Modules\Subscriptions\Models\Subscription;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -180,14 +183,16 @@ final class SubscriptionActions
 
     /**
      * Delete the service for good: its client off the panel and its row gone (ProvisioningService::delete()). The
-     * customer is notified only when a running service was taken away.
+     * customer is notified only when a running service was taken away — and not at all when `$notify` is off (a refund
+     * says it in its own message).
      *
      * @param bool $leavePanel do not contact the panel (out of reach): the row goes and the client stays on the panel
      *                         for the admin to remove
      * @throws ActorRefusedException 403 a shop admin's own service
      * @throws ValidationException|PanelFailedException|ServiceBusyException|TooManyAttemptsException
+     * @throws ModelNotFoundException when the service is gone meanwhile
      */
-    public function delete(Subscription $subscription, Actor $actor, ?string $note, bool $leavePanel): void
+    public function delete(Subscription $subscription, Actor $actor, ?string $note, bool $leavePanel, bool $notify = true): void
     {
         self::notTheirOwn($subscription, $actor);
         if ($leavePanel) {
@@ -195,9 +200,25 @@ final class SubscriptionActions
         }
         $this->panelWork($subscription, $actor);
         $running = $subscription->isActive();
-        if ($this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->delete($subscription, $leavePanel)) && $running) {
+        if ($this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->delete($subscription, $leavePanel)) && $running && $notify) {
             $this->notifier->serviceDeleted($subscription, $note);
         }
+    }
+
+    /**
+     * Take back what a refunded renewal or extra gave the service (ProvisioningService::undo(), once), under the
+     * panel-work limit; a panel that fails it is a 502 worded for the reader. False when its panel no longer has the
+     * client: there was nothing to take back.
+     *
+     * @throws PanelFailedException|ServiceBusyException|TooManyAttemptsException
+     * @throws RefundRefusedException while the service is switched off
+     * @throws ModelNotFoundException when the service is gone meanwhile
+     */
+    public function takeBack(Order $order, Subscription $subscription, Actor $actor): bool
+    {
+        $this->panelWork($subscription, $actor);
+
+        return $this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->undo($order, $subscription));
     }
 
     /**

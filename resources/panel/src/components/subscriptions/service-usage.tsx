@@ -57,3 +57,21 @@ export function ServiceExpiry({ subscription }: { subscription: Pick<Subscriptio
     </div>
   )
 }
+
+/**
+ * When the shop removes an ended service by itself (`removes_at`): the moment, and the time left — or, the moment past,
+ * that it waits for the clean-up's next run (every 15 minutes).
+ */
+export function ServiceRemoval({ at }: { at: string }) {
+  return (
+    <div className="grid gap-0.5">
+      <span className="whitespace-nowrap">{formatDate(at)}</span>
+      <span className="text-footnote text-muted-foreground">{removalLeft(at)}</span>
+    </div>
+  )
+}
+
+/** How long until a removal, as timeLeft() words it; once its moment passed, that it waits its turn. */
+function removalLeft(at: string): string {
+  return Date.parse(at) > Date.now() ? timeLeft(at) : 'در نوبت حذف'
+}

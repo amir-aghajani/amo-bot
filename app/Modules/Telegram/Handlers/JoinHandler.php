@@ -8,20 +8,20 @@ use App\Modules\Telegram\Channels\ChannelMembership;
 use App\Modules\Telegram\Channels\JoinPrompt;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
-use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
 /**
  * «عضو شدم» under the join screen: the memberships checked again without the cache. Still missing a channel, the screen
- * shrinks to what is left; all joined (or the rule switched off), the menu opens.
+ * shrinks to what is left; all joined (or the rule switched off), the menu opens — and the /start link a gate held
+ * back, if one waits (StartHandler::open()).
  */
 final class JoinHandler implements Handler
 {
     public function __construct(
         private readonly ChannelMembership $membership,
         private readonly JoinPrompt $prompt,
-        private readonly MainMenu $menu,
+        private readonly StartHandler $start,
         private readonly BotTexts $texts,
     ) {}
 
@@ -37,6 +37,6 @@ final class JoinHandler implements Handler
 
         $ctx->answer($this->texts->get(BotText::JoinDone));
         $ctx->edit($this->texts->message(BotText::JoinDone));
-        $this->menu->show($ctx, $this->texts->welcome($ctx->user->name()));
+        $this->start->open($ctx, $ctx->session->takeStartLink());
     }
 }

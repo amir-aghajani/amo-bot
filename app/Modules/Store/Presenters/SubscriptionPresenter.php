@@ -23,12 +23,13 @@ final class SubscriptionPresenter
     /**
      * The service. The flags say what the customer may do now: `$autoRenewOffered` (its switch is offered, renewing
      * `$autoRenewDays` before its end), `$renewable`, `$extras` (each kind null when none may be bought), `$linkRotation`.
-     * `$client` is what its panel was just asked, when it was (POST …/refresh): whether it is connected.
+     * `$removesAt` is when the shop removes it by itself (ServiceCleanup::removesAt()). `$client` is what its panel was
+     * just asked, when it was (POST …/refresh): whether it is connected.
      *
      * @param array{traffic: ExtraOffer|null, time: ExtraOffer|null} $extras
      * @return array<string, mixed>
      */
-    public static function present(Subscription $subscription, bool $autoRenewOffered, int $autoRenewDays, bool $renewable, array $extras, bool $linkRotation, ?ClientInfo $client = null): array
+    public static function present(Subscription $subscription, bool $autoRenewOffered, int $autoRenewDays, bool $renewable, array $extras, bool $linkRotation, ?Carbon $removesAt, ?ClientInfo $client = null): array
     {
         $plan = $subscription->plan;
         $server = $subscription->server;
@@ -37,12 +38,15 @@ final class SubscriptionPresenter
             'id' => $subscription->id,
             'name' => $subscription->remote_name,
             'status' => $subscription->status->value,
+            'is_test' => $subscription->is_test,
             'plan' => $plan === null ? null : ['id' => $plan->id, 'name' => $plan->name],
             'server' => ['id' => $server->id, 'name' => $server->name],
             // The panel no longer has the client: the link it handed out works no more.
             'link' => $subscription->status === SubscriptionStatus::Deleted ? null : $subscription->subscription_url,
             'traffic' => self::traffic($subscription),
             'term' => self::term($subscription),
+            'ended_at' => $subscription->ended_at?->toIso8601String(),
+            'removes_at' => $removesAt?->toIso8601String(),
             'auto_renew' => ['on' => $subscription->auto_renew, 'offered' => $autoRenewOffered, 'days_before' => $autoRenewDays],
             'renewable' => $renewable,
             'extras' => ['traffic' => $extras['traffic'] !== null, 'time' => $extras['time'] !== null],

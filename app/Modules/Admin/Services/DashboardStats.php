@@ -81,7 +81,8 @@ final class DashboardStats
             'revenue' => ['value' => self::money($revenue['value']), 'previous' => self::money($revenue['previous'])],
             'orders' => ['value' => (int) $orders['value'], 'previous' => (int) $orders['previous']],
             'new_users' => ['value' => (int) $users['value'], 'previous' => (int) $users['previous']],
-            'active_subscriptions' => Subscription::active()->count(),
+            // The services sold: a free test is no service of the shop's.
+            'active_subscriptions' => Subscription::active()->where('is_test', false)->count(),
             'users_total' => User::query()->count(),
         ];
     }

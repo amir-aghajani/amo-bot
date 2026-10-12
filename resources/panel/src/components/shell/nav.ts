@@ -7,6 +7,7 @@ import {
   Dices,
   FerrisWheel,
   Flame,
+  FlaskConical,
   Gift,
   Globe,
   HandCoins,
@@ -114,6 +115,7 @@ export const SHOP_GROUP: NavGroup = {
   icon: Store,
   items: [
     { id: 'plans', title: 'پلن‌ها', to: '/plans', icon: Package },
+    { id: 'tests', title: 'اکانت تست', to: '/tests', icon: FlaskConical },
     { id: 'categories', title: 'دسته‌بندی‌ها', to: '/categories', icon: Tags },
     { id: 'payment-methods', title: 'روش‌های پرداخت', to: '/payment-methods', icon: Banknote },
   ],
@@ -158,6 +160,13 @@ export const DISCOUNT_SECTIONS: NavSection<'codes' | 'settings'>[] = [
   { value: 'settings', title: 'تنظیمات', to: '/discounts/settings' },
 ]
 
+/** «اکانت تست»: the tests customers took, every server's test terms, and its rules (a group of the bot settings). */
+export const TEST_SECTIONS: NavSection<'tests' | 'servers' | 'settings'>[] = [
+  { value: 'tests', title: 'اکانت‌ها', to: '/tests' },
+  { value: 'servers', title: 'سرورها', to: '/tests/servers' },
+  { value: 'settings', title: 'تنظیمات', to: '/tests/settings' },
+]
+
 /** «گردونه شانس»: its slices, the spins customers made, and its rules (a group of the bot settings). */
 export const WHEEL_SECTIONS: NavSection<'prizes' | 'spins' | 'settings'>[] = [
   { value: 'prizes', title: 'جوایز', to: '/wheel' },
@@ -196,10 +205,10 @@ export const BROADCAST_MESSAGES: NavSection<'messages'> = { value: 'messages', t
 
 /**
  * The bot settings' sections — a subject each (the renewal one holds two groups: its rule and «تمدید خودکار»). The gift
- * codes' switch, the lucky wheel's rules, cashback's switch and the nightly draw's rules are groups of the bot settings
- * too, set on their own pages.
+ * codes' switch, the lucky wheel's rules, cashback's switch, the nightly draw's rules and the test accounts' rules are
+ * groups of the bot settings too, set on their own pages.
  */
-export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts'>
+export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts' | 'test_accounts'>
 
 export const BOT_SETTINGS_SECTIONS: NavSection<BotSettingsSection>[] = [
   { value: 'general', title: 'عمومی', to: '/bot-settings/general' },
@@ -208,6 +217,7 @@ export const BOT_SETTINGS_SECTIONS: NavSection<BotSettingsSection>[] = [
   { value: 'renewal', title: 'تمدید سرویس', to: '/bot-settings/renewal' },
   { value: 'extras', title: 'حجم و زمان اضافه', to: '/bot-settings/extras' },
   { value: 'reminders', title: 'یادآوری', to: '/bot-settings/reminders' },
+  { value: 'expired_services', title: 'سرویس‌های منقضی‌شده', to: '/bot-settings/expired-services' },
   { value: 'referral', title: 'زیرمجموعه‌گیری', to: '/bot-settings/referral' },
   { value: 'reports', title: 'گروه گزارش‌ها', to: '/bot-settings/reports' },
   { value: 'qr', title: 'کد QR', to: '/bot-settings/qr' },
@@ -281,8 +291,8 @@ export function areaFor(nav: PanelNav, pathname: string): NavArea | null {
 }
 
 /**
- * The current page's name, for the phone's topbar and the tab's title; null at an address no page has (the not-found
- * page names itself).
+ * The current page's name, for the topbar and the tab's title; null at an address no page has (the not-found page
+ * names itself).
  */
 export function pageTitle(nav: PanelNav, pathname: string): string | null {
   return settingsGroupOf(nav, pathname)?.title ?? menuItems(nav).find((item) => isNavItemActive(item, pathname))?.title ?? null

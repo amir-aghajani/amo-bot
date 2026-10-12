@@ -38,6 +38,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $subscription_id
  * @property int|null $traffic_bytes The traffic an order brings: an agent's (traffic orders), a service's extra (extra traffic)
  * @property int|null $days The days an extra time order brings its service
+ * @property int|null $given_hours The term a renewal gave its service, as delivered (its refund takes it back)
+ * @property int|null $given_bytes The traffic a renewal gave its service, as delivered (its refund takes it back)
  * @property string $amount
  * @property OrderPricing $pricing Which of the plan's prices it was made at
  * @property string $discount_amount The Toman all its discounts took off
@@ -46,6 +48,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $notes Why the delivery failed (safe for any reader of the shop) or why it was cancelled
  * @property string|null $diagnosis The owner-only detail of a panel that failed the delivery (OrderDirectory::notes())
  * @property Carbon|null $fulfilled_at
+ * @property Carbon|null $taken_back_at When a refund took back what the renewal or extra gave its service — once
  * @property Carbon $created_at
  * @property Carbon $updated_at
  * @property-read User $user
@@ -72,6 +75,8 @@ class Order extends Model
         'subscription_id',
         'traffic_bytes',
         'days',
+        'given_hours',
+        'given_bytes',
         'amount',
         'pricing',
         'discount_amount',
@@ -80,6 +85,7 @@ class Order extends Model
         'notes',
         'diagnosis',
         'fulfilled_at',
+        'taken_back_at',
     ];
 
     /** @var array<string, string> */
@@ -93,7 +99,10 @@ class Order extends Model
         'discount_code_id' => 'integer',
         'traffic_bytes' => 'integer',
         'days' => 'integer',
+        'given_hours' => 'integer',
+        'given_bytes' => 'integer',
         'fulfilled_at' => 'datetime',
+        'taken_back_at' => 'datetime',
     ];
 
     /** A sale: paid, and delivered or being delivered. */
@@ -101,6 +110,12 @@ class Order extends Model
 
     /** Paid and not given back: a sale, or a failed delivery waiting for support's retry. */
     public const KEPT = [...self::SOLD, OrderStatus::Failed->value];
+
+    /**
+     * Not finished with: waiting for a payment, being delivered, or failed and waiting for support's retry. A service
+     * such an order is about is neither renewed again by the timer nor removed by it.
+     */
+    public const OPEN = [OrderStatus::Pending->value, OrderStatus::Paid->value, OrderStatus::Processing->value, OrderStatus::Failed->value];
 
     /** Paid at some point, whatever happened since: KEPT, or refunded. */
     private const EVER_PAID = [...self::KEPT, OrderStatus::Refunded->value];
@@ -141,7 +156,8 @@ class Order extends Model
 
     /**
      * Purchases with a price that were ever paid: what money-like rewards count as "bought" (referral gifts, the
-     * fake-referral alert, the wheel's buyers-only rule), since a free trial must not unlock them.
+     * fake-referral alert, the wheel's buyers-only rule), since a free plan must not unlock them — and what makes a
+     * customer no newcomer for free test accounts (their newcomers-only rule, the tests list's «خرید کرد»).
      *
      * @return Builder<static>
      */

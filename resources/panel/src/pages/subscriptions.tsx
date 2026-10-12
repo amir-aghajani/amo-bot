@@ -11,6 +11,7 @@ import { SearchBox } from '@/components/search-box'
 import { StatusBadge, statusTabs } from '@/components/status-badge'
 import { MoveDialog } from '@/components/subscriptions/move-dialog'
 import { shopServerChoices, useServerChoices, type ServerChoices } from '@/components/subscriptions/server-choices'
+import { ServicePlan } from '@/components/subscriptions/service-plan'
 import { ServiceExpiry, UsageMeter } from '@/components/subscriptions/service-usage'
 import { SubscriptionModal } from '@/components/subscriptions/subscription-modal'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { UserIdentity } from '@/components/user-identity'
 import { api } from '@/lib/api'
-import type { SubscriptionResponse, SubscriptionRow, SubscriptionSort, SubscriptionsResponse, SubscriptionStatus } from '@/lib/api-types'
+import type { SubscriptionKind, SubscriptionResponse, SubscriptionRow, SubscriptionSort, SubscriptionsResponse, SubscriptionStatus } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { SUBSCRIPTION_STATUS, type Status } from '@/lib/statuses'
@@ -31,6 +32,9 @@ type Filter = SubscriptionStatus | 'expiring'
 
 const QUEUE: Filter[] = ['active', 'expiring', 'expired', 'disabled', 'deleted']
 const TABS: Record<Filter, Status> = { ...SUBSCRIPTION_STATUS, expiring: { label: 'رو به انقضا', tone: 'warning' } }
+
+/** The kind pill's words: the free test accounts, or every other service — sold, renewed or given. */
+const KINDS: Record<SubscriptionKind, string> = { test: 'اکانت تست', regular: 'سرویس عادی' }
 
 /** What the headers sort the services by — the list's own order, the newest first, leads. */
 const SORTS: SubscriptionSort[] = ['created', 'expires', 'used']
@@ -54,15 +58,17 @@ export function SubscriptionsPage({ servers: readServers = shopServerChoices, se
     read: (query) => api.get<SubscriptionsResponse>('/subscriptions', query),
     list: 'subscriptions',
     statuses: ['', ...QUEUE],
-    params: ['server', 'user'],
+    params: ['server', 'user', 'kind'],
+    choices: { kind: Object.keys(KINDS) },
     sorts: SORTS,
     address: '/subscriptions',
   })
   const servers = useServerChoices(readServers)
   const opened = useOpenRow({ queryKey: queryKeys.subscription, read: (id) => api.get<SubscriptionResponse>(`/subscriptions/${id}`).then((data) => data.subscription), list })
   const [moving, setMoving] = useState<SubscriptionRow[] | null>(null)
-  // Ticks belong to one list: another tab, server, customer or search starts with nothing selected (its pages keep theirs).
-  const selection = useSelection<SubscriptionRow>(`${list.filter}|${list.params.server}|${list.params.user}|${list.typed.trim()}`)
+  // Ticks belong to one list: another tab, server, kind, customer or search starts with nothing selected (its pages
+  // keep theirs).
+  const selection = useSelection<SubscriptionRow>(`${list.filter}|${list.params.server}|${list.params.user}|${list.params.kind}|${list.typed.trim()}`)
   const days = list.meta?.expiring_days
 
   // An operation's fresh row goes into the list, the modal and the selection (what else it moved is read again — the
@@ -88,7 +94,7 @@ export function SubscriptionsPage({ servers: readServers = shopServerChoices, se
     <Page>
       <PageHeader
         title="اشتراک‌ها"
-        description="سرویس‌هایی که مشتری‌ها خریده‌اند، همان‌طور که فروشگاه آخرین بار از پنل دید. هر کدام را باز کنید تا لینک و مصرفش را ببینید، از پنل به‌روزش کنید، زمان و حجمش را بیشتر کنید، به سرور دیگری منتقلش کنید، غیرفعال یا حذفش کنید؛ برای انتقال چند سرویس با هم، انتخابشان کنید."
+        description="سرویس‌های مشتری‌ها (خریده‌شده، هدیه یا اکانت تست)، همان‌طور که فروشگاه آخرین بار از پنل دید. هر کدام را باز کنید تا لینک و مصرفش را ببینید، از پنل به‌روزش کنید، زمان و حجمش را بیشتر کنید، به سرور دیگری منتقلش کنید، غیرفعال یا حذفش کنید؛ برای انتقال چند سرویس با هم، انتخابشان کنید."
       />
 
       <PageTabs id={tabs} value={list.filter} tabs={statusTabs(TABS, QUEUE, { expiring: list.meta?.expiring })} onChange={list.setFilter} aria-label="وضعیت اشتراک" />
@@ -101,6 +107,12 @@ export function SubscriptionsPage({ servers: readServers = shopServerChoices, se
             value={list.params.server ?? ''}
             options={[{ value: '', label: 'همه' }, ...(servers.data ?? []).map((server) => ({ value: String(server.id), label: server.name }))]}
             onChange={(value) => list.setParam('server', value)}
+          />
+          <FilterSelect
+            label="نوع"
+            value={list.params.kind ?? ''}
+            options={[{ value: '', label: 'همه' }, ...Object.entries(KINDS).map(([value, label]) => ({ value, label }))]}
+            onChange={(value) => list.setParam('kind', value)}
           />
           <CustomerFilter value={list.params.user ?? ''} onClear={() => list.setParam('user', '')} />
         </div>
@@ -242,7 +254,7 @@ function SubscriptionsTable({
                       {subscription.name}
                     </bdi>
                   </RowTitleButton>
-                  <span className="text-footnote text-muted-foreground">{subscription.plan?.name ?? 'پلن حذف شده'}</span>
+                  <ServicePlan subscription={subscription} />
                 </div>
               </TableCell>
               <TableCell>

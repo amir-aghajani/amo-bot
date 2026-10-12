@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { BrandMark } from '@/components/brand-mark'
+import { HeaderActions } from '@/components/shell/header-actions'
 import { cn } from '@/lib/utils'
 
 interface PublicScreenProps {
@@ -11,20 +12,28 @@ interface PublicScreenProps {
   children: ReactNode
 }
 
-/** A screen outside the panel's shell — a sign-in, the installer: the brand, a title that speaks, then the screen's panels. */
+/**
+ * A screen outside the panel's shell — a sign-in, the installer: a bare header stuck to the top with the header's
+ * actions (HeaderActions), then the brand, a title that speaks, and the screen's panels.
+ */
 export function PublicScreen({ title, description, wide = false, children }: PublicScreenProps) {
   return (
-    <div className={cn('login-backdrop flex min-h-svh flex-col items-center px-4 py-10', !wide && 'justify-center')}>
-      <main className={cn('w-full', wide ? 'max-w-xl' : 'max-w-[24rem]')}>
-        <div className="mb-7 flex flex-col items-center gap-4 text-center">
-          <BrandMark className="size-10 rounded-lg" />
-          <div className="grid gap-1.5">
-            <h1 className="text-display font-medium">{title}</h1>
-            {description && <p className="text-body text-muted-foreground">{description}</p>}
+    <div className="login-backdrop flex min-h-svh flex-col">
+      <header className="sticky top-0 z-20 flex h-(--topbar-height) shrink-0 items-center justify-end px-3 backdrop-blur-sm md:px-6">
+        <HeaderActions />
+      </header>
+      <div className={cn('flex flex-1 flex-col items-center px-4 pb-10', wide ? 'pt-4' : 'justify-center')}>
+        <main className={cn('w-full', wide ? 'max-w-xl' : 'max-w-[24rem]')}>
+          <div className="mb-7 flex flex-col items-center gap-4 text-center">
+            <BrandMark className="size-10 rounded-lg" />
+            <div className="grid gap-1.5">
+              <h1 className="text-display font-medium">{title}</h1>
+              {description && <p className="text-body text-muted-foreground">{description}</p>}
+            </div>
           </div>
-        </div>
-        {children}
-      </main>
+          {children}
+        </main>
+      </div>
     </div>
   )
 }

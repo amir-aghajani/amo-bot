@@ -9,12 +9,22 @@ use App\Modules\Telegram\Models\TelegramSession;
 /**
  * One chat's conversation: the step of a flow it is at (`state`, e.g. "topup.amount", "receipt:12") with that step's
  * scratch, and the chat's own facts, which outlive every flow (data keys starting with "_": whether a reply keyboard is
- * shown, a recent membership check). Handlers change it; the dispatcher saves it after the update.
+ * shown, a recent membership check, a /start link a gate held back). Handlers change it; the dispatcher saves it after
+ * the update.
  */
 final class ChatSession
 {
     /** Whether a reply keyboard is on the client's screen: Telegram keeps one there until a message takes it away. */
     private const REPLY_KEYBOARD = '_keyboard';
+
+    /**
+     * What a /start link carried ("usertest") when a gate held it back, and when it was kept, until the update that gets
+     * through takes it.
+     */
+    private const START_LINK = '_start';
+
+    /** Seconds a held /start link waits: one taken later belongs to a visit long over. */
+    private const START_LINK_WAITS = 3600;
 
     private bool $dirty = false;
 
@@ -95,6 +105,33 @@ final class ChatSession
     public function markReplyKeyboard(bool $shown): void
     {
         $this->put(self::REPLY_KEYBOARD, $shown);
+    }
+
+    /** Keep what a /start link carried while a gate holds the customer back (the phone asked for, a channel to join). */
+    public function keepStartLink(string $argument): void
+    {
+        $this->put(self::START_LINK, ['link' => $argument, 'at' => now()->getTimestamp()]);
+    }
+
+    /**
+     * The /start link a gate held back, taken: it opens once, with the update that got through. Null when none waits, or
+     * the one kept is over an hour old (it goes all the same).
+     */
+    public function takeStartLink(): ?string
+    {
+        $kept = $this->get(self::START_LINK);
+        if ($kept === null) {
+            return null;
+        }
+
+        $data = $this->model->data ?? [];
+        unset($data[self::START_LINK]);
+        $this->model->data = $data;
+        $this->dirty = true;
+
+        $link = is_array($kept) && (int) ($kept['at'] ?? 0) >= now()->getTimestamp() - self::START_LINK_WAITS ? ($kept['link'] ?? null) : null;
+
+        return is_string($link) ? $link : null;
     }
 
     /** Write what the update changed (Eloquent skips values that are as they were). */

@@ -13,9 +13,10 @@ import { useDocumentTitle } from '@/lib/document-title'
 import { useLiveUpdates } from '@/lib/use-live-updates'
 
 /**
- * The signed-in layout: the sidebar at the inline start and the page beside it, which owns the scroll and sets its own
- * width (components/page); on a phone the sidebar is a drawer under a slim topbar. Each panel passes its own navigation
- * and extras (`panel`). Also runs the live updates, and a strip over the page while they cannot reach the server.
+ * The signed-in layout: the sidebar at the inline start and the page beside it under the topbar, which stays at the top;
+ * the page owns the scroll and sets its own width (components/page). On a phone the sidebar is a drawer the topbar's menu
+ * button opens. Each panel passes its own navigation and extras (`panel`). Also runs the live updates, and a strip over
+ * the page while they cannot reach the server.
  */
 export function AppShell({ panel }: { panel: PanelShell }) {
   const live = useLiveUpdates()

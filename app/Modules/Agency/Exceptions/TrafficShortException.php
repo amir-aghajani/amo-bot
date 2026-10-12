@@ -18,5 +18,8 @@ final class TrafficShortException extends DomainRuleException
     /** What an extension of one service gives, then what is left. */
     public const EXTENSION = 'حجم نمایندگی کافی نیست: این افزایش %s می‌خواهد و %s مانده است؛ حجم بیشتر را از ربات اصلی بخرید.';
 
+    /** What a free test account needs, then what is left. */
+    public const TEST = 'حجم نمایندگی کافی نیست: اکانت تست %s می‌خواهد و %s مانده است.';
+
     public const UNLIMITED = 'پلن‌های حجم نامحدود در ربات نماینده فروخته نمی‌شوند؛ برای پلن حجم تعیین کنید.';
 }

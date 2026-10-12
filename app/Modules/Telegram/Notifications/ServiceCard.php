@@ -9,6 +9,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\RenewalSettings;
+use App\Modules\Subscriptions\Services\ServiceCleanup;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\Limits;
 use App\Modules\Telegram\BotSettings;
@@ -36,15 +37,17 @@ final class ServiceCard
         private readonly BotApi $api,
         private readonly BotSettings $settings,
         private readonly RenewalSettings $renewal,
+        private readonly ServiceCleanup $cleanup,
         private readonly QrCard $qr,
         private readonly BotTexts $texts,
     ) {}
 
     /**
-     * What every text about one service is filled with. The link is the one subscription link the row keeps, never the
-     * per-inbound config links (a panel with thirty inbounds would make a wall of them; the link carries them all).
+     * What every text about one service is filled with; a free test, which has no plan, is named as one. The link is the
+     * one subscription link the row keeps, never the per-inbound config links (a panel with thirty inbounds would make a
+     * wall of them; the link carries them all).
      *
-     * @return array{client: string, plan: string, server: string, duration: string, expires: string, traffic: string, remaining: string, subscription: string}
+     * @return array{client: string, plan: string|Html, server: string, duration: string, expires: string, traffic: string, remaining: string, subscription: string}
      */
     public function values(Subscription $subscription): array
     {
@@ -52,7 +55,7 @@ final class ServiceCard
 
         return [
             'client' => $subscription->remote_name,
-            'plan' => $subscription->plan->name ?? '',
+            'plan' => $subscription->is_test ? $this->texts->part(BotText::TestPlanName) : ($subscription->plan->name ?? ''),
             'server' => $subscription->server->name,
             'duration' => Messages::duration($subscription->duration_hours),
             'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
@@ -189,6 +192,21 @@ final class ServiceCard
             'date' => Persian::date($subscription->period_ends_at),
             'next' => Messages::bytes($subscription->next_period_bytes ?? 0),
         ]);
+    }
+
+    /**
+     * The line saying when the shop removes the service by itself (ServiceCleanup::removesAt()): an ended service unless
+     * it is renewed first, a free test by the test accounts' rule. For its screen and its renewal's checkout; '' when the
+     * shop does not remove it.
+     */
+    public function removal(Subscription $subscription): Html|string
+    {
+        $at = $this->cleanup->removesAt($subscription);
+        if ($at === null) {
+            return '';
+        }
+
+        return $this->texts->part($subscription->is_test ? BotText::ServiceTestRemoval : BotText::ServiceRemoval, ['date' => Persian::date($at, withTime: true)]);
     }
 
     /** Whether the renewal carried the traffic left into the renewed period: more is left than the plan gives. */

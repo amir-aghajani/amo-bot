@@ -2,7 +2,7 @@ import { ErrorState } from '@/components/error-state'
 import { Page } from '@/components/page'
 import { useTitleSubject } from '@/lib/document-title'
 
-/** The not-found page's name: the tab's, and the phone topbar's at an address no page of the panel has. */
+/** The not-found page's name: the tab's, and the topbar's at an address no page of the panel has. */
 export const NOT_FOUND_TITLE = 'صفحه پیدا نشد'
 
 /**

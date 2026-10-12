@@ -50,6 +50,7 @@ use App\Modules\Admin\Api\ServerGrantsController;
 use App\Modules\Admin\Api\ServersController;
 use App\Modules\Admin\Api\SubscriptionsController;
 use App\Modules\Admin\Api\SystemController;
+use App\Modules\Admin\Api\TestAccountsController;
 use App\Modules\Admin\Api\TicketsController;
 use App\Modules\Admin\Api\UsersController;
 use App\Modules\Admin\Api\WebsiteController;
@@ -269,6 +270,9 @@ return static function (App $app): void {
         $shop->delete('/wheel/prizes/{id:[0-9]+}', [WheelController::class, 'destroy']);
         $shop->get('/wheel/spins', [WheelController::class, 'spins']);
 
+        $shop->get('/tests', [TestAccountsController::class, 'index']);
+        $shop->get('/tests/servers', [TestAccountsController::class, 'servers']);
+
         $shop->get('/loyalty/tiers', [LoyaltyTiersController::class, 'index']);
         $shop->post('/loyalty/tiers', [LoyaltyTiersController::class, 'store']);
         $shop->put('/loyalty/tiers/{id:[0-9]+}', [LoyaltyTiersController::class, 'update']);
@@ -323,6 +327,8 @@ return static function (App $app): void {
                 $owner->post('/servers/{id:[0-9]+}/test', [ServersController::class, 'check']);
                 $owner->post('/servers/{id:[0-9]+}/inbounds/sync', [ServersController::class, 'syncInbounds']);
                 $owner->patch('/servers/{id:[0-9]+}/inbounds/{inbound:[0-9]+}', [ServersController::class, 'updateInbound']);
+                $owner->get('/servers/{id:[0-9]+}/test-account', [TestAccountsController::class, 'show']);
+                $owner->put('/servers/{id:[0-9]+}/test-account', [TestAccountsController::class, 'update']);
                 $owner->get('/servers/{id:[0-9]+}/grants', [ServerGrantsController::class, 'index']);
                 $owner->post('/servers/{id:[0-9]+}/grants', [ServerGrantsController::class, 'store']);
                 $owner->post('/servers/{id:[0-9]+}/grants/{grant:[0-9]+}/run', [ServerGrantsController::class, 'run']);

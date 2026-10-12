@@ -1142,6 +1142,62 @@
                 }
             }
         },
+        "/api/admin/servers/{id}/test-account": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Id"
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "get": {
+                "summary": "A server's free test accounts («اکانت تست»): whether it gives them, and what each gets. The same in every shop.",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ServerTestAccountResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            },
+            "put": {
+                "summary": "Save a server's test terms. A test already given keeps the terms it got.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ServerTestAccountRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Saved",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ServerTestAccountResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/admin/servers/{id}/grants": {
             "parameters": [
                 {
@@ -3062,7 +3118,7 @@
             ],
             "post": {
                 "x-staff": "refunds",
-                "summary": "Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone (a top-up already spent, an agent's traffic already sold).",
+                "summary": "Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -3101,13 +3157,21 @@
             ],
             "get": {
                 "x-staff": true,
-                "summary": "All services sold. Newest first, or sorted by `sort` and `dir`.",
+                "summary": "All the shop's services: sold, renewed or given, and the free test accounts (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/Search"
                     },
                     {
                         "$ref": "#/components/parameters/Status"
+                    },
+                    {
+                        "name": "kind",
+                        "in": "query",
+                        "description": "Only the services of this kind. Empty for all",
+                        "schema": {
+                            "$ref": "#/components/schemas/SubscriptionKind"
+                        }
                     },
                     {
                         "name": "server",
@@ -6331,6 +6395,81 @@
                 }
             }
         },
+        "/api/{panel}/tests": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Panel"
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "get": {
+                "summary": "The free test accounts the shop gave, newest first, each with where it stands and whether the customer bought after it. One customer's or all.",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Only tests in this state. Empty for all",
+                        "schema": {
+                            "$ref": "#/components/schemas/TestAccountState"
+                        }
+                    },
+                    {
+                        "$ref": "#/components/parameters/Customer"
+                    },
+                    {
+                        "$ref": "#/components/parameters/Search"
+                    },
+                    {
+                        "$ref": "#/components/parameters/Page"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TestAccountsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/{panel}/tests/servers": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Panel"
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "get": {
+                "summary": "Every server, in its order, with its test terms and whether it would give a test in this shop now (the shop's own switch and quota aside). The terms are the owner's (`PUT /api/admin/servers/{id}/test-account`).",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TestServersResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/{panel}/loyalty/tiers": {
             "parameters": [
                 {
@@ -8355,7 +8494,7 @@
                 }
             ],
             "get": {
-                "summary": "Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, its plan deleted or renewing nothing, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered).",
+                "summary": "Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, a free test account, its plan deleted or renewing nothing, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered).",
                 "security": [
                     {
                         "customer": []
@@ -8468,7 +8607,7 @@
                 }
             ],
             "post": {
-                "summary": "Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.",
+                "summary": "Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.",
                 "security": [
                     {
                         "customer": []
@@ -8519,7 +8658,7 @@
                 }
             ],
             "post": {
-                "summary": "Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.",
+                "summary": "Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.",
                 "security": [
                     {
                         "customer": []
@@ -11558,7 +11697,7 @@
             ],
             "post": {
                 "x-staff": "refunds",
-                "summary": "Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone (a top-up already spent, an agent's traffic already sold).",
+                "summary": "Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -11605,7 +11744,7 @@
             ],
             "get": {
                 "x-staff": true,
-                "summary": "All services sold. Newest first, or sorted by `sort` and `dir`.",
+                "summary": "All the shop's services: sold, renewed or given, and the free test accounts (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -11633,6 +11772,14 @@
                     },
                     {
                         "$ref": "#/components/parameters/Status"
+                    },
+                    {
+                        "name": "kind",
+                        "in": "query",
+                        "description": "Only the services of this kind. Empty for all",
+                        "schema": {
+                            "$ref": "#/components/schemas/SubscriptionKind"
+                        }
                     },
                     {
                         "name": "server",
@@ -14105,6 +14252,10 @@
                             "subscriptions": {
                                 "type": "integer"
                             },
+                            "tests": {
+                                "type": "integer",
+                                "description": "The free test accounts given."
+                            },
                             "referrals": {
                                 "type": "integer",
                                 "description": "Referral commissions, bonuses, rewards and alerts."
@@ -14961,7 +15112,8 @@
                                 "$ref": "#/components/schemas/CountKpi"
                             },
                             "active_subscriptions": {
-                                "type": "integer"
+                                "type": "integer",
+                                "description": "Active services, free test accounts aside."
                             },
                             "users_total": {
                                 "type": "integer"
@@ -15012,7 +15164,7 @@
                             },
                             "expiring_soon": {
                                 "type": "integer",
-                                "description": "Active services ending within `expiring_days`."
+                                "description": "Active services ending within `expiring_days`, free test accounts aside."
                             }
                         }
                     },
@@ -16238,6 +16390,7 @@
                     "status",
                     "name",
                     "link",
+                    "is_test",
                     "user",
                     "plan",
                     "server",
@@ -16252,6 +16405,8 @@
                     "expiring_soon",
                     "last_synced_at",
                     "disabled_at",
+                    "ended_at",
+                    "removes_at",
                     "created_at",
                     "actions"
                 ],
@@ -16270,6 +16425,10 @@
                         "type": "string",
                         "description": "The customer's subscription link."
                     },
+                    "is_test": {
+                        "type": "boolean",
+                        "description": "A free test account («اکانت تست»): no plan, never renewed, never counted as ending soon (`expiring_soon`); removed by the tests' own rule (`removes_at`)."
+                    },
                     "user": {
                         "$ref": "#/components/schemas/UserRef"
                     },
@@ -16280,7 +16439,7 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "Null once the plan is deleted."
+                        "description": "Null for a test account, or once the plan is deleted."
                     },
                     "server": {
                         "$ref": "#/components/schemas/NamedRef"
@@ -16351,7 +16510,7 @@
                     },
                     "expiring_soon": {
                         "type": "boolean",
-                        "description": "Active, and ending within the list's `meta.expiring_days`."
+                        "description": "Active, no free test account, and ending within the list's `meta.expiring_days`."
                     },
                     "last_synced_at": {
                         "type": "string",
@@ -16363,6 +16522,18 @@
                         "type": "string",
                         "format": "date-time",
                         "nullable": true
+                    },
+                    "ended_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When it ended: the deadline it passed, or when the shop found its traffic used up or its client gone from the panel. Null while it runs, and past a deadline until the shop next reads its panel."
+                    },
+                    "removes_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the shop removes it from its panel and the shop by itself, by its rules now: `expired_cleanup_hours` after it ended while `expired_cleanup` is on; a test, while `test_cleanup` is on, `test_cleanup_hours` after it ended — or, never connected, `test_unused_days` after it was made. Null when no rule removes it: it runs (a test never connected aside), it is switched off, or the rule is off. A moment already past: it goes at the next check (every 15 minutes), unless an order of it is still open."
                     },
                     "created_at": {
                         "type": "string",
@@ -16464,6 +16635,14 @@
                     }
                 }
             },
+            "SubscriptionKind": {
+                "description": "The services list's `kind` filter: the free test accounts (`test`), or every other service — sold, renewed or given (`regular`).",
+                "type": "string",
+                "enum": [
+                    "test",
+                    "regular"
+                ]
+            },
             "SubscriptionSort": {
                 "description": "The services list's sort keys: creation time (the default), end date (services that never end or have not started come after every deadline), or traffic used.",
                 "type": "string",
@@ -16489,7 +16668,7 @@
                     },
                     "meta": {
                         "type": "object",
-                        "description": "`expiring` counts active services ending within `expiring_days` (the tab's count; the dashboard uses the same window).",
+                        "description": "`expiring` counts active services ending within `expiring_days`, free test accounts aside (the tab's count; the dashboard uses the same window).",
                         "additionalProperties": false,
                         "required": [
                             "page",
@@ -17981,6 +18160,82 @@
                         "items": {
                             "$ref": "#/components/schemas/ServerInboundRow"
                         }
+                    }
+                }
+            },
+            "ServerTestAccount": {
+                "description": "A server's free test accounts («اکانت تست»): whether it gives them, and what each gets. A test is made on every inbound the server sells.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "test_enabled",
+                    "test_traffic_mb",
+                    "test_duration_hours",
+                    "test_on_hold"
+                ],
+                "properties": {
+                    "test_enabled": {
+                        "type": "boolean",
+                        "description": "The server gives free tests (the bot settings switch them on for the shop as a whole)."
+                    },
+                    "test_traffic_mb": {
+                        "type": "integer",
+                        "description": "A test's traffic, in MB."
+                    },
+                    "test_duration_hours": {
+                        "type": "integer",
+                        "description": "A test's term, in hours."
+                    },
+                    "test_on_hold": {
+                        "type": "boolean",
+                        "description": "The hours count from the customer's first connection; otherwise from the moment the test is made."
+                    }
+                }
+            },
+            "ServerTestAccountResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "test_account"
+                ],
+                "properties": {
+                    "test_account": {
+                        "$ref": "#/components/schemas/ServerTestAccount"
+                    }
+                }
+            },
+            "ServerTestAccountRequest": {
+                "description": "A server's test terms, saved whole. Every refusal is returned at once, under its field.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "test_enabled",
+                    "test_traffic_mb",
+                    "test_duration_hours",
+                    "test_on_hold"
+                ],
+                "properties": {
+                    "test_enabled": {
+                        "type": "boolean"
+                    },
+                    "test_traffic_mb": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "1 to 102,400 MB."
+                    },
+                    "test_duration_hours": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "1 to 720 hours."
+                    },
+                    "test_on_hold": {
+                        "type": "boolean"
                     }
                 }
             },
@@ -21635,6 +21890,218 @@
                     }
                 }
             },
+            "TestAccountState": {
+                "description": "Where a free test account stands: `making` (its panel is still being asked), `waiting` (its hours start at the first connection), `running`, `disabled` (switched off by support), `ended` (its time or traffic ran out, or its panel no longer has it), `removed` (deleted from its panel and the shop; it still counts in the customer's quota).",
+                "type": "string",
+                "enum": [
+                    "making",
+                    "waiting",
+                    "running",
+                    "disabled",
+                    "ended",
+                    "removed"
+                ]
+            },
+            "TestAccountRow": {
+                "description": "A free test account («اکانت تست») the shop gave, with the terms it got (as its server's were then).",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "customer",
+                    "server",
+                    "traffic_bytes",
+                    "duration_hours",
+                    "on_hold",
+                    "state",
+                    "subscription",
+                    "bought_after",
+                    "created_at",
+                    "issued_at",
+                    "ended_at"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "customer": {
+                        "$ref": "#/components/schemas/UserRef"
+                    },
+                    "server": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/NamedRef"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "Null once the server is deleted."
+                    },
+                    "traffic_bytes": {
+                        "type": "integer"
+                    },
+                    "duration_hours": {
+                        "type": "integer"
+                    },
+                    "on_hold": {
+                        "type": "boolean",
+                        "description": "Its hours counted from the first connection; otherwise from the moment it was made."
+                    },
+                    "state": {
+                        "$ref": "#/components/schemas/TestAccountState"
+                    },
+                    "subscription": {
+                        "type": "object",
+                        "nullable": true,
+                        "description": "Its service, as last read from its panel; null while it is being made and once it is removed.",
+                        "additionalProperties": false,
+                        "required": [
+                            "id",
+                            "name",
+                            "status",
+                            "traffic",
+                            "starts_at",
+                            "expires_at"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "The client's name on the panel (\"test_ali_1\")."
+                            },
+                            "status": {
+                                "$ref": "#/components/schemas/SubscriptionStatus"
+                            },
+                            "traffic": {
+                                "type": "object",
+                                "description": "In bytes; a limit of 0 means unlimited.",
+                                "additionalProperties": false,
+                                "required": [
+                                    "limit",
+                                    "used"
+                                ],
+                                "properties": {
+                                    "limit": {
+                                        "type": "integer"
+                                    },
+                                    "used": {
+                                        "type": "integer"
+                                    }
+                                }
+                            },
+                            "starts_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true,
+                                "description": "When the first connection started its hours; null until then."
+                            },
+                            "expires_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true,
+                                "description": "Null while it waits for the first connection."
+                            }
+                        }
+                    },
+                    "bought_after": {
+                        "type": "boolean",
+                        "description": "The customer bought a service with a price after taking it."
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "issued_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When its service was made; null while it is being made."
+                    },
+                    "ended_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When it ended — its deadline, or when the shop found its traffic used up or its client gone (its removal is counted from then); null while it runs (and past its deadline until the shop next reads its panel), and once it is removed."
+                    }
+                }
+            },
+            "TestAccountsResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "tests",
+                    "meta"
+                ],
+                "properties": {
+                    "tests": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TestAccountRow"
+                        }
+                    },
+                    "meta": {
+                        "$ref": "#/components/schemas/PageMeta"
+                    }
+                }
+            },
+            "TestServerRow": {
+                "description": "A server with its test terms (`ServerTestAccount`), and whether it would give a test in this shop now.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "name",
+                    "test_enabled",
+                    "test_traffic_mb",
+                    "test_duration_hours",
+                    "test_on_hold",
+                    "available"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "test_enabled": {
+                        "type": "boolean",
+                        "description": "The server gives free tests (the bot settings switch them on for the shop as a whole)."
+                    },
+                    "test_traffic_mb": {
+                        "type": "integer",
+                        "description": "A test's traffic, in MB."
+                    },
+                    "test_duration_hours": {
+                        "type": "integer",
+                        "description": "A test's term, in hours."
+                    },
+                    "test_on_hold": {
+                        "type": "boolean",
+                        "description": "The hours count from the customer's first connection; otherwise from the moment the test is made."
+                    },
+                    "available": {
+                        "type": "boolean",
+                        "description": "The server would give a test in this shop now: it is switched on for tests (`test_enabled`), it can take a client (switched on, serving subscription links, with room, and an inbound it sells where its panel has inbounds), and in an agent's shop the agent's bot has a test's traffic left. The shop's own rules are not counted: its switch (the bot settings' `test_enabled`), the daily cap and each customer's quota. While the shop's switch is off, no customer gets a test, whatever this says."
+                    }
+                }
+            },
+            "TestServersResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "servers"
+                ],
+                "properties": {
+                    "servers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TestServerRow"
+                        }
+                    }
+                }
+            },
             "LoyaltyTierRow": {
                 "description": "A loyalty tier («سطح وفاداری»). A customer is on the highest tier whose `min_spent` they reached; it gives them a discount on purchases and extra cashback on payments.",
                 "type": "object",
@@ -22625,6 +23092,16 @@
                     "expiry_reminder_days",
                     "traffic_reminder",
                     "traffic_reminder_percent",
+                    "expired_cleanup",
+                    "expired_cleanup_hours",
+                    "test_enabled",
+                    "test_per_user",
+                    "test_period_days",
+                    "test_daily_limit",
+                    "test_newcomers_only",
+                    "test_cleanup",
+                    "test_cleanup_hours",
+                    "test_unused_days",
                     "referral_enabled",
                     "referral_rate",
                     "referral_renewal_rate",
@@ -22765,6 +23242,46 @@
                     },
                     "traffic_reminder_percent": {
                         "type": "integer"
+                    },
+                    "expired_cleanup": {
+                        "type": "boolean",
+                        "description": "«سرویس‌های منقضی‌شده»: an ended service — its time or traffic ran out, or its panel no longer has it — is removed from its panel and the shop by itself, `expired_cleanup_hours` after it ended (checked every 15 minutes), without a word to the customer; its orders stay. A service renewed meanwhile, switched off by support, or with an order still open (a renewal waiting for its receipt) is kept. Free test accounts go by their own rule (`test_cleanup`). Off by default."
+                    },
+                    "expired_cleanup_hours": {
+                        "type": "integer",
+                        "description": "How many hours an ended service is kept before it is removed; 0 at once."
+                    },
+                    "test_enabled": {
+                        "type": "boolean",
+                        "description": "«اکانت تست رایگان»: customers can take a free test account with the bot's «اکانت تست» button, on a server that gives tests. What a test gets is each server's (`PUT /api/admin/servers/{id}/test-account`); in an agent's shop its traffic comes from the agent's bot."
+                    },
+                    "test_per_user": {
+                        "type": "integer",
+                        "description": "How many tests a customer may take: for good, or within `test_period_days`. Bot admins have no quota."
+                    },
+                    "test_period_days": {
+                        "type": "integer",
+                        "description": "The window `test_per_user` counts over, in days; 0 for good."
+                    },
+                    "test_daily_limit": {
+                        "type": "integer",
+                        "description": "The most tests the shop gives in one day of its time zone; 0 for no cap."
+                    },
+                    "test_newcomers_only": {
+                        "type": "boolean",
+                        "description": "Only customers who never bought a service with a price can take one."
+                    },
+                    "test_cleanup": {
+                        "type": "boolean",
+                        "description": "Tests that ended are removed from their panels by themselves (checked every 15 minutes). A removed test still counts in the quota."
+                    },
+                    "test_cleanup_hours": {
+                        "type": "integer",
+                        "description": "How many hours an ended test is kept before it is removed; 0 at once."
+                    },
+                    "test_unused_days": {
+                        "type": "integer",
+                        "description": "While `test_cleanup` is on, after how many days a test that never connected is removed (its hours wait for the first connection); 0 never."
                     },
                     "referral_enabled": {
                         "type": "boolean",
@@ -22964,6 +23481,8 @@
                     "auto_renew",
                     "extras",
                     "reminders",
+                    "expired_services",
+                    "test_accounts",
                     "referral",
                     "reports",
                     "qr",
@@ -23051,6 +23570,12 @@
                     },
                     {
                         "$ref": "#/components/schemas/BotRemindersSettingsRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BotExpiredServicesSettingsRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BotTestAccountsSettingsRequest"
                     },
                     {
                         "$ref": "#/components/schemas/BotReferralSettingsRequest"
@@ -23230,6 +23755,72 @@
                             }
                         ],
                         "description": "Whole Toman, 0 to 10,000,000. Thousands separators are accepted only between groups of three digits (\"10,000\")."
+                    }
+                }
+            },
+            "BotTestAccountsSettingsRequest": {
+                "description": "«اکانت تست رایگان»: the switch, the quota and the clean-up. Every refusal is returned at once, under its field.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "test_enabled",
+                    "test_per_user",
+                    "test_period_days",
+                    "test_daily_limit",
+                    "test_newcomers_only",
+                    "test_cleanup",
+                    "test_cleanup_hours",
+                    "test_unused_days"
+                ],
+                "properties": {
+                    "test_enabled": {
+                        "type": "boolean"
+                    },
+                    "test_per_user": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "1 to 100."
+                    },
+                    "test_period_days": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "0 to 365; 0 for good."
+                    },
+                    "test_daily_limit": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "0 to 100,000; 0 for no cap."
+                    },
+                    "test_newcomers_only": {
+                        "type": "boolean"
+                    },
+                    "test_cleanup": {
+                        "type": "boolean"
+                    },
+                    "test_cleanup_hours": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "0 to 720."
+                    },
+                    "test_unused_days": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "0 to 365; 0 never."
                     }
                 }
             },
@@ -23613,6 +24204,28 @@
                             }
                         ],
                         "description": "50 to 99."
+                    }
+                }
+            },
+            "BotExpiredServicesSettingsRequest": {
+                "description": "«سرویس‌های منقضی‌شده»: the automatic removal of ended services, and how long after its end a service goes.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "expired_cleanup",
+                    "expired_cleanup_hours"
+                ],
+                "properties": {
+                    "expired_cleanup": {
+                        "type": "boolean"
+                    },
+                    "expired_cleanup_hours": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "0 to 8760 (a year); 0 removes at once."
                     }
                 }
             },
@@ -27195,11 +27808,14 @@
                     "id",
                     "name",
                     "status",
+                    "is_test",
                     "plan",
                     "server",
                     "link",
                     "traffic",
                     "term",
+                    "ended_at",
+                    "removes_at",
                     "auto_renew",
                     "renewable",
                     "extras",
@@ -27220,6 +27836,10 @@
                     "status": {
                         "$ref": "#/components/schemas/SubscriptionStatus"
                     },
+                    "is_test": {
+                        "type": "boolean",
+                        "description": "A free test account («اکانت تست»), taken in the bot: it has no plan and can be neither renewed nor bought extras (`extras`); the shop may remove it some time after it ends, or some days after it was made while never connected (`removes_at`)."
+                    },
                     "plan": {
                         "allOf": [
                             {
@@ -27227,7 +27847,7 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "The plan it was sold or last renewed on; null once that plan is deleted."
+                        "description": "The plan it was sold or last renewed on; null for a test account, or once that plan is deleted."
                     },
                     "server": {
                         "allOf": [
@@ -27247,6 +27867,18 @@
                     },
                     "term": {
                         "$ref": "#/components/schemas/StoreServiceTerm"
+                    },
+                    "ended_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When it ended: its end date passed, its traffic ran out, or its panel no longer has it. Null while it runs, and after its end date until the shop next reads its panel (`term.expires_at` says when)."
+                    },
+                    "removes_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the shop will remove it by itself — from its panel and from the customer's services —, by the shop's rules now; null when it will not. Set only for a service that ended (or a test account never connected) in a shop that removes such services: renewing it or adding to it before then keeps it, and the moment can move when the shop changes its rules. A moment already past: it goes at the shop's next check (every 15 minutes). A service switched off by support, or with an order still open (a renewal waiting for its receipt), is not removed."
                     },
                     "auto_renew": {
                         "type": "object",
@@ -27278,7 +27910,7 @@
                     },
                     "extras": {
                         "type": "object",
-                        "description": "Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel). Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell.",
+                        "description": "Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell.",
                         "additionalProperties": false,
                         "required": [
                             "traffic",

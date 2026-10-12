@@ -67,7 +67,7 @@ The sidebar, top to bottom:
 | «نظرات» | Customers' reviews from the shop's website, with the number waiting on you ([Reviews](Reviews.md)) |
 | «سرورها» — the owner's | The VPN panels the shop sells on ([Servers](Servers.md)) |
 | «حساب نمایندگی» — an agent's | Their account with the main bot ([below](#an-agents-account)) |
-| «فروشگاه» | «پلن‌ها», «دسته‌بندی‌ها», «روش‌های پرداخت» ([Plans](Plans.md), [Payment methods](Payment-Methods.md)) |
+| «فروشگاه» | «پلن‌ها», «اکانت تست», «دسته‌بندی‌ها», «روش‌های پرداخت» ([Plans](Plans.md), [Test accounts](Test-Accounts.md), [Payment methods](Payment-Methods.md)) |
 | «فروش» | «کاربران», «سفارش‌ها» (stuck orders counted), «پرداخت‌ها» (receipts to review counted), «اشتراک‌ها», «زیرمجموعه‌گیری» — and the owner's «نمایندگان» ([Customers](Customers.md), [Orders and payments](Orders-And-Payments.md), [Services](Services.md), [Referrals](Referrals.md), [Agency](Agency.md)) |
 | «تخفیف و جوایز» | «کدهای تخفیف», «فروش ویژه», «سطوح وفاداری», «کش‌بک», «کدهای هدیه», «گردونه شانس», «قرعه‌کشی» ([Discounts](Discounts.md), [Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md), [Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)) |
 | «ربات» | «کیبوردها», «متن‌های ربات», «ارسال همگانی» ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md), [Broadcasts](Broadcasts.md)) |
@@ -80,14 +80,18 @@ pressed, and the browser remembers it; the group of the page on screen is always
 **Pages made of sections** list their sections in the sidebar in the menu's place, each with an address of its own:
 «کاربران» (the customers, «گروه‌ها»), «زیرمجموعه‌گیری» («معرف‌ها», «زیرمجموعه‌ها», «پورسانت‌ها», «هشدارها»), the owner's
 «نمایندگان» («درخواست‌ها» — with the number waiting —, «نماینده‌ها», «سطح‌ها», «تنظیمات»), «کدهای تخفیف» («کدها»,
-«تنظیمات»), «گردونه شانس» («جوایز», «چرخش‌ها», «تنظیمات»), «ارسال همگانی» («پیام همگانی», the owner's «هدیه همگانی»),
-and the settings. «منوی اصلی» shows the menu again without leaving the page; on a phone a «بخش» picker under the
-page's title does it. Moving between a page's sections keeps what was typed in each.
+«تنظیمات»), «گردونه شانس» («جوایز», «چرخش‌ها», «تنظیمات»), «اکانت تست» («اکانت‌ها», «سرورها», «تنظیمات»), «ارسال
+همگانی» («پیام همگانی», the owner's «هدیه همگانی»), and the settings. «منوی اصلی» shows the menu again without leaving
+the page; on a phone a «بخش» picker under the page's title does it. Moving between a page's sections keeps what was
+typed in each.
 
 **The icon rail**: the sidebar folds to icons with «جمع کردن سایدبار» or Ctrl+B (⌘+B on a Mac); a group's pages open
 from its icon. The browser remembers the choice; until one is made, a window narrower than a tablet's shows the rail.
-**On a phone** there is no sidebar: «باز کردن منو» in the top bar opens it as a drawer, beside the page's name and the
-dark/light switch. Dialogs open as a full-width sheet from the bottom of the screen.
+
+**The top bar** stays at the top of every page while it scrolls: the page's name, and the dark/light switch («تم روشن» /
+«تم تاریک»). The sign-in screens and the installer have it too, with the switch alone. **On a phone** there is no
+sidebar: «باز کردن منو» in the top bar opens it as a drawer. Dialogs open as a full-width sheet from the bottom of the
+screen.
 
 ## The dashboard
 
@@ -98,14 +102,15 @@ What the shop did over a range and what waits on someone, read again every minut
 - **The figures** — «درآمد»: the money that came in — card payments and the like, by when they were paid; a purchase
   from the wallet is not counted again (its money was counted when the wallet was charged), and a refunded wallet
   top-up is not counted at all. «سفارش‌ها»: every order placed, of any kind and in any state — unpaid and cancelled ones
-  too, so it is not sales. «کاربران جدید»: customers who joined. «اشتراک‌های فعال»: services running now, with how many
-  end within three days. Each of the first three shows its change against the period before («بدون مقایسه» when there
-  was nothing then).
+  too, so it is not sales. «کاربران جدید»: customers who joined. «اشتراک‌های فعال»: services running now, free tests
+  aside, with how many end within three days. Each of the first three shows its change against the period before
+  («بدون مقایسه» when there was nothing then).
 - **The chart** — revenue, orders or newcomers a day; hover over a day, or focus the chart and use the arrow keys, to
   read it.
 - **«نیازمند توجه»** — what waits on a person now, whatever the range: «پرداخت‌های در انتظار بررسی», «سفارش‌های نیازمند
-  رسیدگی», «تیکت‌های در انتظار پاسخ», «نظرات در انتظار بررسی», «سرورهای دارای خطا» (the main shop's dashboard alone), «اشتراک‌های رو به انقضا
-  (۳ روز)» and «سفارش‌های در انتظار پرداخت» — each a link to its list, filtered. With nothing waiting it says
+  رسیدگی», «تیکت‌های در انتظار پاسخ», «نظرات در انتظار بررسی», «سرورهای دارای خطا» (the main shop's dashboard alone),
+  «اشتراک‌های رو به انقضا (۳ روز)» (free tests aside) and «سفارش‌های در انتظار پرداخت» — each a link to its list,
+  filtered. With nothing waiting it says
   «همه‌چیز مرتب است». An agent's bot whose traffic no longer covers its smallest plan is said first, with how to buy more.
 - **«آخرین سفارش‌ها»** and **«مشتریان جدید»** — the latest eight of each; a number opens the order, a name the customer's
   page.
@@ -122,9 +127,10 @@ server stays among «سرورهای دارای خطا» until its panel answers 
 «حساب نمایندگی», an agent's alone: the traffic their bot may still sell («حجم باقی‌مانده»), their level's price per GB,
 their wallet with the shop and the credit it may go below zero by; their bot («ربات شما»: its @username and state —
 «فعال», «غیرفعال», «وصل نشده», «مشکل دارد» —, when it was first connected, and what to do when it is not); the traffic's
-ledger («گردش حجم»: purchases, sales, renewals, traffic added to services, traffic given back, corrections by support,
-each with the balance after it); and «ورود به پنل», whose «خروج از مرورگرهای دیگر» signs every other browser out of
-their panel. Traffic is bought in the main bot («نمایندگی» › «💾 خرید حجم»), not here ([Agency](Agency.md)).
+ledger («گردش حجم»: purchases, sales — each free test their bot made among them, «اکانت تست · سرویس …» —, renewals,
+traffic added to services, traffic given back, corrections by support, each with the balance after it); and «ورود به
+پنل», whose «خروج از مرورگرهای دیگر» signs every other browser out of their panel. Traffic is bought in the main bot
+(«نمایندگی» › «💾 خرید حجم»), not here ([Agency](Agency.md)).
 
 ## Lists
 
@@ -167,7 +173,7 @@ have ▲▼ instead, and no pages.
 
 ## The look
 
-Dark or light: «تنظیمات پنل › ظاهر», or the switch in a phone's top bar. Dark is the default; the choice is kept in the
-browser, for both panels. Dates are Jalali and read in the shop's time zone (`APP_TIMEZONE`), whatever the browser's;
+Dark or light: «تنظیمات پنل › ظاهر», or the switch in the top bar of every screen. Dark is the default; the choice is
+kept in the browser, for both panels. Dates are Jalali and read in the shop's time zone (`APP_TIMEZONE`), whatever the browser's;
 quantities, money and dates use Persian digits, while numbers that are identifiers — `#12`, a Telegram id, a port —
 keep Latin ones.

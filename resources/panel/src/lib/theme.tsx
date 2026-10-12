@@ -48,7 +48,7 @@ export function useTheme(): ThemeState {
   return context
 }
 
-/** The one-tap switch to the other theme, as the phone's topbar offers it: what it does and its icon. */
+/** The one-tap switch to the other theme, as every screen's header offers it: what it does and its icon. */
 export function useThemeSwitch(): { toggle: () => void; label: string; icon: LucideIcon } {
   const { theme, toggle } = useTheme()
 

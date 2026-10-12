@@ -204,7 +204,7 @@ final class CashbackTest extends DatabaseTestCase
         self::assertSame(WalletService::describeRefund($payment, null, lessCashback: true), WalletTransaction::query()->where('user_id', $this->ali->id)->latest('id')->value('description'));
         self::assertSame('108000.00', WalletTransaction::query()->where('user_id', $this->ali->id)->latest('id')->value('amount'));
         $told = Notification::query()->where('user_id', $this->ali->id)->where('type', NoticeType::PaymentRefunded->value)->sole()->text;
-        self::assertStringEndsWith(self::text(BotText::CashbackTakenBack, ['cashback_amount' => Money::format('12000')]), $told);
+        self::assertStringContainsString(self::text(BotText::CashbackTakenBack, ['cashback_amount' => Money::format('12000')]), $told);
     }
 
     public function testARefundOfAnOrderWithoutCashbackGivesItAllBack(): void

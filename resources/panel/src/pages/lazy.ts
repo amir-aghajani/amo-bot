@@ -78,6 +78,10 @@ export const SubscriptionsPage = lazyPage(
   () => import('@/pages/subscriptions'),
   (module) => module.SubscriptionsPage,
 )
+export const TestsPage = lazyPage(
+  () => import('@/pages/tests'),
+  (module) => module.TestsPage,
+)
 export const TicketPage = lazyPage(
   () => import('@/pages/ticket'),
   (module) => module.TicketPage,

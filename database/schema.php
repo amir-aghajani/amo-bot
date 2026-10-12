@@ -322,6 +322,10 @@ return [
          * the last contact and why it failed (a failed panel is left alone a while). `serves_subscriptions` is what the
          * last check learned (null: never asked); a server serving no subscription links is not sold.
          *
+         * `test_*` are the free test accounts («اکانت تست») the panel gives: whether it gives them, and what each gets —
+         * traffic, hours, and whether the hours count from the first connection (`test_on_hold`) or from the moment the
+         * test is made.
+         *
          * `server_inbounds` mirrors what the panel attaches clients to, by the connector's own `remote_key` — never the
          * protocol settings, which carry every client's secrets. `is_selectable` is the admin offering it for sale;
          * `enabled` follows the panel (one it no longer lists is kept, switched off).
@@ -343,6 +347,11 @@ return [
             $table->text('last_error')->nullable();
             $table->boolean('serves_subscriptions')->nullable();
             $table->json('meta')->nullable();
+            $table->boolean('test_enabled')->default(false);
+            // 500 MB.
+            $table->unsignedBigInteger('test_traffic_bytes')->default(524288000);
+            $table->unsignedInteger('test_duration_hours')->default(24);
+            $table->boolean('test_on_hold')->default(true);
             $table->timestamps();
 
             $table->index(['is_active', 'sort']);
@@ -436,13 +445,21 @@ return [
          * A customer's service: one client on one panel. `remote_name` is the client's panel-wide name ("amir_1",
          * "USER_7") and `subscription_url` the one link the customer gets. Counters, quota and term mirror the panel as
          * of `last_synced_at`; `status` is the shop's own. A change made on the panel holds the row with a lease, so two
-         * never interleave.
+         * never interleave. `is_test` marks a free test account: no plan, never renewed, removed once it ends while its
+         * shop cleans up. `ended_at` is when it ended — its deadline, or when the shop found its traffic used up or its
+         * client gone from the panel; null while it runs —, what the automatic removal of ended services counts from.
+         *
+         * `test_accounts` — the free tests given, each shop's: what the quota counts, so a test removed from its panel
+         * still counts. A row is claimed (`issued_at` null) before the panel is asked, issued once the service is made,
+         * and deleted again when that failed. `subscription_id` is the service while it lasts. The terms are kept as
+         * they were given.
          */
         'subscriptions' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
             $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
+            $table->boolean('is_test')->default(false);
             $table->foreignId('server_id')->constrained('servers')->restrictOnDelete();
             $table->string('remote_name', 191);
             $table->string('subscription_url', 500);
@@ -459,6 +476,7 @@ return [
             $table->timestamp('last_synced_at')->nullable();
             // When support switched it off.
             $table->timestamp('disabled_at')->nullable();
+            $table->timestamp('ended_at')->nullable();
             // The customer's «تمدید خودکار» switch, and when they were last told their wallet could not pay it (once per
             // renewal window).
             $table->boolean('auto_renew')->default(false);
@@ -486,6 +504,27 @@ return [
             // A plan's services by state (the plans screen), and the renewed periods due to begin.
             $table->index(['plan_id', 'status']);
             $table->index(['bot_id', 'period_ends_at']);
+            // A shop's test accounts by state: the clean-up's and the screen's.
+            $table->index(['bot_id', 'is_test', 'status']);
+        },
+
+        'test_accounts' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('server_id')->nullable()->constrained('servers')->nullOnDelete();
+            $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->nullOnDelete();
+            $table->unsignedBigInteger('traffic_bytes');
+            $table->unsignedInteger('duration_hours');
+            $table->boolean('on_hold');
+            $table->timestamp('issued_at')->nullable();
+            $table->timestamps();
+
+            // A customer's tests in a window (their quota); the shop's in a day (its cap) and newest first (the list).
+            $table->index(['user_id', 'bot_id', 'created_at']);
+            $table->index(['bot_id', 'created_at']);
+            // A service's test, let go when the service is deleted (ProvisioningService).
+            $table->index('subscription_id');
         },
 
         /*
@@ -685,6 +724,9 @@ return [
             // What an order brings: traffic (an agent's, or a service's extra) or days (a service's extra time).
             $table->unsignedBigInteger('traffic_bytes')->nullable();
             $table->unsignedInteger('days')->nullable();
+            // What a renewal gave its service — its plan's term and traffic as delivered —, what its refund takes back.
+            $table->unsignedInteger('given_hours')->nullable();
+            $table->unsignedBigInteger('given_bytes')->nullable();
             $table->decimal('amount', 14, 2);
             // Which of the plan's prices it was made at (Orders\Enums\OrderPricing).
             $table->string('pricing', 16)->default('regular');
@@ -695,6 +737,8 @@ return [
             $table->text('notes')->nullable();
             $table->text('diagnosis')->nullable();
             $table->timestamp('fulfilled_at')->nullable();
+            // When a refund took back what a renewal or an extra gave its service: once.
+            $table->timestamp('taken_back_at')->nullable();
             $table->timestamps();
 
             // A customer's orders by status, counted from the index with the shop's `bot_id` filter (the users screen,

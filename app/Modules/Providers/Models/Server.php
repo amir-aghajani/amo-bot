@@ -35,6 +35,10 @@ use Illuminate\Support\Carbon;
  * @property string|null $last_error why that last contact failed, worded for the owner; null when it answered
  * @property bool|null $serves_subscriptions Whether the panel handed out subscription links as of the last check; null = never asked
  * @property array<string, mixed>|null $meta
+ * @property bool $test_enabled whether the panel gives free test accounts («اکانت تست»)
+ * @property int $test_traffic_bytes a test's traffic
+ * @property int $test_duration_hours a test's term
+ * @property bool $test_on_hold whether a test's term counts from its first connection, else from the moment it is made
  * @property Carbon $created_at
  * @property Carbon $updated_at
  * @property-read Collection<int, ServerInbound> $inbounds
@@ -63,6 +67,10 @@ class Server extends Model
         'last_error',
         'serves_subscriptions',
         'meta',
+        'test_enabled',
+        'test_traffic_bytes',
+        'test_duration_hours',
+        'test_on_hold',
     ];
 
     protected $hidden = ['password', 'api_token', 'totp_secret'];
@@ -78,6 +86,10 @@ class Server extends Model
         'last_checked_at' => 'datetime',
         'serves_subscriptions' => 'boolean',
         'meta' => 'array',
+        'test_enabled' => 'boolean',
+        'test_traffic_bytes' => 'integer',
+        'test_duration_hours' => 'integer',
+        'test_on_hold' => 'boolean',
     ];
 
     /**

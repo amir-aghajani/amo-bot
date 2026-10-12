@@ -212,7 +212,7 @@ final class AutoRenewal
             $open = Order::query()
                 ->where('subscription_id', $subscription->id)
                 ->where('type', OrderType::Renewal->value)
-                ->whereIn('status', [OrderStatus::Pending->value, OrderStatus::Paid->value, OrderStatus::Processing->value, OrderStatus::Failed->value])
+                ->whereIn('status', Order::OPEN)
                 ->exists();
             if ($row === null || !$row->auto_renew || $open) {
                 return null;

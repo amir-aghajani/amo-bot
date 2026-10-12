@@ -104,18 +104,40 @@ rule's refusal (no server can sell the plan now, the agent's traffic is short �
 
 «بازپرداخت» gives back what a payment paid, by what its order bought:
 
-- **A service, a renewal, or a service's extra traffic or time** — the amount into the customer's wallet («بازگشت وجه
-  پرداخت #12»), less the cashback the order earned, if any
-  ([Cashback](Loyalty-Cashback-And-Draws.md#a-refund)). What was delivered stays as it is — the service, the traffic or
-  days added to it: switch it off or delete it from [its dialog](Services.md) if it must go.
+- **A service** — the service the purchase made goes first: its client off its panel and the service off the shop,
+  quietly (the refund's message says so). Then the amount goes into the customer's wallet («بازگشت وجه پرداخت #12»),
+  less the cashback the order earned, if any ([Cashback](Loyalty-Cashback-And-Draws.md#a-refund)). In an agent's shop the
+  traffic the sale drew goes back into the agent's pool («بازگشت حجم سفارش بازپرداخت‌شده #12»). Refused, with nothing
+  refunded, while:
+  - its panel does not answer — the refusal says what the panel said; delete the service from
+    [its dialog](Services.md#when-the-panel-fails-a-delete) with «حذف فقط از فروشگاه», then refund;
+  - another order of the service is paid or still open — a renewal, extra traffic or time —, named in the refusal: it
+    paid for that service too. Refund or cancel it first, or delete the service yourself and then refund.
+
+  A purchase whose service is gone already (deleted, or its delivery failed) is refunded with nothing to remove.
+- **A renewal, or a service's extra traffic or time** — once delivered, what it gave the service is taken back first, on
+  its panel: a renewal's term and traffic as it gave them (even if its plan changed since), an extra's days or traffic.
+  The deadline moves back by them — to now, ending the service, when that is past —, and the quota shrinks by them
+  (never to nothing: a service that used more than it keeps ends by traffic). A service that never ends, or is
+  unlimited, keeps that part. A renewal queued behind the current period loses its traffic. Then the amount goes into
+  the customer's wallet, less the cashback the order earned; in an agent's shop the traffic it drew goes back to the
+  agent's pool. It is taken back once: a refund refused after it (decided meanwhile) takes nothing more the next time.
+  Refused, with nothing refunded, while the service is switched off by support (changing it on its panel would switch
+  it on: switch it on, or delete it, first) or its panel does not answer (refund again once it does). One never
+  delivered (its delivery failed) gave nothing, and nothing is taken back; a service gone already has nothing to take
+  back either.
 - **A top-up of the wallet** — give the money back yourself, outside the shop: the refund takes the same amount out of
   their wallet, and is refused once they spent it (an agent's credit counting). A top-up never delivered moves nothing
   in the wallet, and the customer is told their balance did not change.
 - **An agent's traffic** — the amount into the agent's wallet, and the traffic out of their bot's pool — refused, all of
   it, once they sold from it.
 
-It is refused while the order is being delivered. The customer is told, as a reply to their receipt. A referrer's
-commission stays paid; the traffic a refunded purchase drew from an agent's pool does not come back.
+It is refused while the order is being delivered — and when it was delivered in the moment between the refund's
+check and the refund itself: refund it again, and what it gave is taken back then. The customer is told, as a reply to
+their receipt — with a line saying the purchase's service was removed
+(«🗑️ سرویس … که با این خرید ساخته شده بود حذف شد.»), or what the renewal or extra gave was taken back
+(«↩️ زمان و حجمی که این سفارش به سرویس … داده بود پس گرفته شد.») — bot texts you may reword.
+A referrer's commission stays paid.
 
 ## What runs by itself
 

@@ -31,11 +31,11 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * The subscriptions screen: the list (tabs, the "expiring" one, server filter, search) and the modal's operations — sync,
- * switch off and on, move to another server with what is left, delete (leaving the client on an unreachable panel when
- * allowed). The customer is told of a switch, gets the new link after a move, and hears of a delete only when it took a
- * running service. A service another change holds is a 409; a panel failure is a 502 worded for the reader; an agent's
- * shop is rate-limited on the owner's panels.
+ * The subscriptions screen: the list (tabs, the "expiring" one, server filter, search; when a service ended and when the
+ * shop removes it by itself) and the modal's operations — sync, switch off and on, move to another server with what is
+ * left, delete (leaving the client on an unreachable panel when allowed). The customer is told of a switch, gets the new
+ * link after a move, and hears of a delete only when it took a running service. A service another change holds is a 409;
+ * a panel failure is a 502 worded for the reader; an agent's shop is rate-limited on the owner's panels.
  */
 final class AdminSubscriptionsApiTest extends HttpTestCase
 {
@@ -140,6 +140,34 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
         self::assertSame([true, ['starts_at' => now()->addDays(5)->toIso8601String(), 'traffic' => 30 * Traffic::GIGABYTE]], [$row($queued)['auto_renew'], $row($queued)['next_period']]);
         self::assertSame([false, null], [$row($plain)['auto_renew'], $row($plain)['next_period']]);
+    }
+
+    public function testTheRowSaysWhenAServiceEndedAndWhenTheShopRemovesIt(): void
+    {
+        $over = ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subHours(2), 'ended_at' => now()->subHours(2)];
+        $ended = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1', $over);
+        $test = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_2', ['is_test' => true, 'plan_id' => null] + $over);
+        $running = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_3');
+        $off = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_4', ['status' => SubscriptionStatus::Disabled, 'disabled_at' => now()->subHours(2)]);
+
+        $times = fn(): array => array_map(
+            static fn(array $row): array => [$row['ended_at'], $row['removes_at']],
+            array_column($this->decode($this->get('/api/admin/subscriptions'))['subscriptions'], null, 'id'),
+        );
+        // Newest first: the switched-off one and the running one say nothing.
+        $shown = static fn(array $sold, array $tried): array => [$off->id => [null, null], $running->id => [null, null], $test->id => $tried, $ended->id => $sold];
+
+        self::assertSame($shown(
+            ['2026-09-20T10:00:00+00:00', null],
+            ['2026-09-20T10:00:00+00:00', '2026-09-21T10:00:00+00:00'],
+        ), $times(), "the shop keeps its ended services until it says otherwise; a test goes by the tests' own rule (a day)");
+
+        $this->botSettings('expired_services', ['expired_cleanup' => true, 'expired_cleanup_hours' => 12]);
+        self::assertSame($shown(
+            ['2026-09-20T10:00:00+00:00', '2026-09-20T22:00:00+00:00'],
+            ['2026-09-20T10:00:00+00:00', '2026-09-21T10:00:00+00:00'],
+        ), $times(), 'its end and twelve hours; a running service and one support switched off have neither');
+        self::assertSame('2026-09-20T22:00:00+00:00', $this->decode($this->get("/api/admin/subscriptions/{$ended->id}"))['subscription']['removes_at']);
     }
 
     public function testSyncReadsThePanelAndMarksAClientItNoLongerHasDeleted(): void

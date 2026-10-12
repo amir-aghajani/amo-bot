@@ -267,10 +267,7 @@ final class CheckoutScreen
         $this->card->sendSettled($ctx->chatId(), $order, match ($order->type) {
             OrderType::Traffic => ['reply_markup' => $this->buttons->backOnly(MainMenu::AGENCY)],
             OrderType::WalletTopUp => ['reply_markup' => $this->buttons->backOnly(MainMenu::WALLET)],
-            OrderType::Renewal, OrderType::ExtraTraffic, OrderType::ExtraTime => ['reply_markup' => InlineKeyboard::make()->row(InlineKeyboard::callback(
-                $this->texts->get(BotText::ReminderOpenService),
-                SubscriptionHandler::serviceCallback((int) $order->subscription_id),
-            ))->build()],
+            OrderType::Renewal, OrderType::ExtraTraffic, OrderType::ExtraTime => ['reply_markup' => $this->buttons->serviceOnly((int) $order->subscription_id)],
             OrderType::Purchase => [],
         });
     }

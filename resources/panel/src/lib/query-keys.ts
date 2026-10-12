@@ -31,6 +31,9 @@ export const queryKeys = {
   everyServer: ['server'] as const,
   serverGrants: (id: number) => ['server-grants', id] as const,
   everyServerGrants: ['server-grants'] as const,
+  /** A server's free test accounts (its page's «اکانت تست» card, the owner's). */
+  serverTestAccount: (id: number) => ['server-test-account', id] as const,
+  everyServerTestAccount: ['server-test-account'] as const,
   massGrants: ['mass-grants'] as const,
   serverDrivers: ['server-drivers'] as const,
   paymentMethods: ['payment-methods'] as const,
@@ -87,6 +90,9 @@ export const queryKeys = {
   /** The lucky wheel's slices, and the spins customers made (pages/wheel). */
   wheelPrizes: ['wheel-prizes'] as const,
   wheelSpins: ['wheel-spins'] as const,
+  /** The free test accounts given, and every server with its test terms (pages/tests). */
+  tests: ['tests'] as const,
+  testServers: ['test-servers'] as const,
   /** The loyalty tiers (pages/loyalty), the cashback rules (pages/cashback) and the nightly draws (pages/lottery). */
   loyaltyTiers: ['loyalty-tiers'] as const,
   cashbackRules: ['cashback-rules'] as const,

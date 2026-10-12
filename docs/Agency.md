@@ -54,11 +54,17 @@ settings, website — and their account, with the traffic's history. They cannot
 ## Their traffic
 
 Every purchase and renewal their bot delivers draws its plan's traffic from their pool, once per order; a failed delivery
-gives it back. **A pool too short fails the order**: it waits for a retry («نیازمند رسیدگی» in their shop), and the
+gives it back, and so does a purchase, a renewal or extra traffic refunded — the refund takes what it gave back off
+the service. **A pool too short fails the order**: it waits for a retry («نیازمند رسیدگی» in their shop), and the
 agent is told in the main bot, with «💾 خرید حجم». The GB their shop gives a service by hand («افزایش زمان و حجم») comes
 out of it too, and so does the extra traffic their customers buy («حجم و زمان اضافه»), which is never offered beyond
 what the pool holds; the extra days cost it nothing. So in their shop a plan needs traffic (unlimited plans are not sold
 there), and a plan their pool cannot cover is not offered; their dashboard says when their traffic sells nothing.
+
+**Free tests** their bot gives draw their traffic too, as each is made — a «فروش» line «اکانت تست · سرویس …» in their
+traffic's history, written with the test itself, so a test that falls through draws nothing —, and a server whose test
+their pool cannot cover is not offered for one. The terms are each server's, yours; the switch, the quota and the
+clean-up are theirs ([Test accounts](Test-Accounts.md#agents-shops)).
 
 Your own gifts — a server's, the mass gift — draw nothing from it.
 

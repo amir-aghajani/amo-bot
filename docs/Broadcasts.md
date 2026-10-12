@@ -52,16 +52,16 @@ From the panel, «ادامه» leaves the next batch to the scheduler. An agent'
 
 - **«به چه سرویس‌هایی»** — «همه سرویس‌ها», «فقط سرویس‌های نماینده‌ها» (what the bots of the agencies that stand sold),
   «سرویس‌های یک سرور» or «سرویس‌های مشتری‌های یک گروه» — then «گروه مشتریان»: one of the main shop's customer groups
-  ([«گروه‌ها»](Customers.md), on the users page), each with how many of its customers' services run; the gift reaches
-  the running services of the customers in it as each one's turn comes.
+  ([«گروه‌ها»](Customers.md), on the users page), each with how many of its customers' services run, free tests aside;
+  the gift reaches the running services of the customers in it as each one's turn comes.
 - «تعداد روز» (0 to 365), «حجم (گیگابایت)» (0 to 10000), «دلیل» (300 characters, the customers read it), «سرویس‌های در
   انتظار اولین اتصال هم شامل شوند» (off) and «پیام به مشتری‌ها» (on) — as a [server's](Servers.md#adding-days-and-traffic).
 
 «شروع هدیه» gives it as **one part per server**, each worked through on its own — service by service, the panel's word
 deciding at each one's turn, exactly as a server's «افزودن زمان و حجم»: a panel out of reach holds its own server's part
-only, and the rest go on. It reaches the services of every shop that existed as you gave it, and each customer is told by
-their own shop's bot. The card works it while open, the scheduler every minute otherwise; «توقف» stops every part still
-going — what was given stays given.
+only, and the rest go on. It reaches the services of every shop that existed as you gave it — never a free test —, and
+each customer is told by their own shop's bot. The card works it while open, the scheduler every minute otherwise;
+«توقف» stops every part still going — what was given stays given.
 
 «هدیه جدید» waits while a gift on the list is running, and a server already running one refuses a new gift that would
 reach it. The list shows the latest ten gifts — a server's own among them —, each server's part on that server's page

@@ -25,7 +25,6 @@ use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\Limits;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Handlers\ReceiptHandler;
-use App\Modules\Telegram\Handlers\SubscriptionHandler;
 use App\Modules\Telegram\Handlers\TicketHandler;
 use App\Modules\Telegram\Handlers\TicketMessageHandler;
 use App\Modules\Telegram\Keyboard\Buttons;
@@ -107,10 +106,12 @@ final class CustomerNotifier
     }
 
     /**
-     * The payment was refunded, with support's note: a purchase's money came back as balance; a top-up's charge went out
-     * of the wallet again (or, never delivered, the wallet is as it was). Cashback the order earned is said taken back.
+     * The payment was refunded, with support's note. A service's money came back as balance, and what the refund took
+     * back of the service (`$service`, its panel name; null for nothing) is said: a purchase's service removed, a
+     * renewal's or an extra's term and traffic. A top-up's charge went out of the wallet again (or, never delivered, the
+     * wallet is as it was). Cashback the order earned is said taken back.
      */
-    public function paymentRefunded(Payment $payment): void
+    public function paymentRefunded(Payment $payment, ?string $service = null): void
     {
         $order = $payment->order;
         [$text, $type] = match (true) {
@@ -124,7 +125,17 @@ final class CustomerNotifier
             'amount' => Money::format($payment->amount),
             'order' => $payment->order_id,
             'note' => $this->adminNote($payment->note),
-        ] + ($text === BotText::TopupRefundedUndelivered ? [] : ['balance' => Messages::balance($order->user->balance())])) . $this->cashbackTakenBack($order), self::replyingToReceipt($payment)));
+        ] + ($text === BotText::TopupRefundedUndelivered ? [] : ['balance' => Messages::balance($order->user->balance())])) . $this->cashbackTakenBack($order) . $this->takenBack($order, $service), self::replyingToReceipt($payment)));
+    }
+
+    /** The line under a refund saying what it took back of `$service`: a purchase's service, another's gift; '' for none. */
+    private function takenBack(Order $order, ?string $service): string
+    {
+        if ($service === null) {
+            return '';
+        }
+
+        return (string) $this->texts->part($order->type === OrderType::Purchase ? BotText::PaymentRefundedService : BotText::PaymentRefundedTakenBack, ['client' => $service]);
     }
 
     /**
@@ -196,7 +207,7 @@ final class CustomerNotifier
     {
         $this->tell($subscription, NoticeType::ExpiryReminder, fn(): array => $this->message($this->card->text($subscription, BotText::ExpiryReminder, [
             'hint' => $autoRenewHint ? $this->texts->part(BotText::ReminderAutoRenewHint) : '',
-        ]), ['reply_markup' => $this->serviceButton($subscription)]));
+        ]), ['reply_markup' => $this->buttons->serviceOnly($subscription->id)]));
     }
 
     /** «یادآوری»: most of the service's traffic is used — how much and what is left; the button opens its screen. */
@@ -204,7 +215,7 @@ final class CustomerNotifier
     {
         $this->tell($subscription, NoticeType::TrafficReminder, fn(): array => $this->message($this->card->text($subscription, BotText::TrafficReminder, [
             'percent' => Messages::percent($subscription->usedBytes(), $subscription->traffic_limit_bytes),
-        ]), ['reply_markup' => $this->serviceButton($subscription)]));
+        ]), ['reply_markup' => $this->buttons->serviceOnly($subscription->id)]));
     }
 
     /** «تمدید خودکار» renewed the service: what the wallet paid, its balance, the new deadline (the link is unchanged). */
@@ -536,12 +547,6 @@ final class CustomerNotifier
     private function ticketButtons(Ticket $ticket, array ...$first): array
     {
         return InlineKeyboard::make()->row(InlineKeyboard::callback($this->texts->get(BotText::TicketView), TicketHandler::viewFromNotice($ticket->id)), ...$first)->build();
-    }
-
-    /** @return array{inline_keyboard: list<list<array<string, mixed>>>} The one button under a reminder: the service's screen. */
-    private function serviceButton(Subscription $subscription): array
-    {
-        return InlineKeyboard::make()->row(InlineKeyboard::callback($this->texts->get(BotText::ReminderOpenService), SubscriptionHandler::serviceCallback($subscription->id)))->build();
     }
 
     /** Support's note on its own line (BotText::AdminNote), or '' when they left none. */

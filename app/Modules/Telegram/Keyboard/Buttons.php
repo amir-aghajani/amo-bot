@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Keyboard;
 
 use App\Modules\Telegram\Handlers\AgencyHandler;
+use App\Modules\Telegram\Handlers\SubscriptionHandler;
 use App\Modules\Telegram\Handlers\TopUpHandler;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
 /**
  * The buttons shared by many screens, in the admin's wording: «⬅️ بازگشت», «بعدی» / «قبلی», «➕ افزایش موجودی»,
- * «💾 خرید حجم».
+ * «💾 خرید حجم», «📊 مشاهده سرویس».
  */
 final class Buttons
 {
@@ -66,6 +67,17 @@ final class Buttons
     public function topUp(): array
     {
         return InlineKeyboard::callback($this->texts->get(BotText::WalletTopup), TopUpHandler::START, 'success');
+    }
+
+    /**
+     * A keyboard that is just «📊 مشاهده سرویس», the way to a service's own screen under a message about it (a delivery,
+     * a notice).
+     *
+     * @return array{inline_keyboard: list<list<array<string, mixed>>>}
+     */
+    public function serviceOnly(int $subscriptionId): array
+    {
+        return InlineKeyboard::make()->row(InlineKeyboard::callback($this->texts->get(BotText::ReminderOpenService), SubscriptionHandler::serviceCallback($subscriptionId)))->build();
     }
 
     /**

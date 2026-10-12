@@ -24,9 +24,9 @@ use App\Modules\Telegram\Messages;
 /**
  * An agent's prepaid traffic: the one writer of `traffic_transactions` (through Core\Database\Ledger), whose last line
  * is what their bot may still sell. Bought from the main bot (add(), taken back by a refund); drawn by every delivery
- * of their bot, once per order, and given back if it fails (draw(), giveBack()); drawn for an extension a shop gives one
- * of their services (extending()); set right by the owner (adjust()). The balance never goes below zero: what it cannot
- * cover fails with TrafficShortException.
+ * of their bot, once per order, and given back if it fails or is refunded (draw(), giveBack()); drawn for an extension a
+ * shop gives one of their services (extending()) and for a free test account their bot makes (drawTest()); set right by
+ * the owner (adjust()). The balance never goes below zero: what it cannot cover fails with TrafficShortException.
  */
 final class TrafficPool
 {
@@ -35,10 +35,13 @@ final class TrafficPool
     public const LINE_RENEWAL = 'تمدید · سفارش #%d';
     public const LINE_EXTRA = 'حجم اضافه · سفارش #%d';
     public const LINE_GIVEN_BACK = 'بازگشت حجم سفارش ناموفق #%d';
+    public const LINE_REFUNDED = 'بازگشت حجم سفارش بازپرداخت‌شده #%d';
     public const LINE_TAKEN_BACK = 'برگشت خرید حجم · سفارش #%d';
     /** The service's panel name; the panels put the line's kind («افزایش حجم», «بازگشت حجم») before it. */
     public const LINE_EXTENSION = 'سرویس %s';
     public const LINE_EXTENSION_GIVEN_BACK = 'افزایش ناموفق · سرویس %s';
+    /** A free test account the agent's bot made: the service's panel name. */
+    public const LINE_TEST = 'اکانت تست · سرویس %s';
     /** An adjustment the shop wrote no note for. */
     public const LINE_ADJUSTED = 'اصلاح توسط پشتیبانی';
 
@@ -120,13 +123,13 @@ final class TrafficPool
         });
     }
 
-    /** Gives back what a failed delivery drew (once; nothing when it drew nothing). */
-    public function giveBack(Order $order, Bot $bot): void
+    /** Gives back what a failed — or `$refunded` — delivery drew (once; nothing when it drew nothing). */
+    public function giveBack(Order $order, Bot $bot, bool $refunded = false): void
     {
-        $this->write($bot, static function () use ($order): ?array {
+        $this->write($bot, static function () use ($order, $refunded): ?array {
             $net = self::netFor($order);
 
-            return $net < 0 ? [TrafficTransactionType::Refund, -$net, $order, sprintf(self::LINE_GIVEN_BACK, $order->id)] : null;
+            return $net < 0 ? [TrafficTransactionType::Refund, -$net, $order, sprintf($refunded ? self::LINE_REFUNDED : self::LINE_GIVEN_BACK, $order->id)] : null;
         });
     }
 
@@ -158,6 +161,23 @@ final class TrafficPool
 
             throw $e;
         }
+    }
+
+    /**
+     * Draws a free test account's traffic for the service `$name` the bot just made — in the transaction that records the
+     * test, so a test that falls through draws nothing.
+     *
+     * @throws TrafficShortException when the pool does not have it
+     */
+    public function drawTest(Bot $bot, int $bytes, string $name): void
+    {
+        $this->write($bot, static function (int $balance) use ($bytes, $name): array {
+            if ($balance < $bytes) {
+                throw new TrafficShortException(sprintf(TrafficShortException::TEST, Messages::bytes($bytes), Messages::bytes(max(0, $balance))));
+            }
+
+            return [TrafficTransactionType::Sale, -$bytes, null, sprintf(self::LINE_TEST, $name)];
+        });
     }
 
     /** The pool's lines, newest first, each reviewer as its reader may see it (Reviewers). */

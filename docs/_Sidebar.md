@@ -16,6 +16,7 @@
   - [Customers](Customers.md)
   - [Orders and payments](Orders-And-Payments.md)
   - [Services](Services.md)
+  - [Test accounts](Test-Accounts.md)
   - [Support tickets](Support-Tickets.md)
   - [Reviews](Reviews.md)
   - [Discounts](Discounts.md)

@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginPage } from '@/apps/agent/pages/login'
 import type { AppInfo, Session, SessionResponse } from '@/lib/api-types'
 import { AuthProvider, useAuth } from '@/lib/auth'
+import { ThemeProvider } from '@/lib/theme'
 import { testQueryClient, until } from '@/test/render'
 import { json, refusal, server } from '@/test/server'
 
@@ -46,20 +47,22 @@ function FreshLink() {
 function open(at: InitialEntry) {
   render(
     <StrictMode>
-      <QueryClientProvider client={testQueryClient()}>
-        <MemoryRouter initialEntries={[at]}>
-          <AuthProvider>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/later" element={<Later />} />
-              <Route path="/" element={<p>داشبورد</p>} />
-              <Route path="*" element={<p>صفحه دیگر پنل</p>} />
-            </Routes>
-            <Address />
-            <FreshLink />
-          </AuthProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={testQueryClient()}>
+          <MemoryRouter initialEntries={[at]}>
+            <AuthProvider>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/later" element={<Later />} />
+                <Route path="/" element={<p>داشبورد</p>} />
+                <Route path="*" element={<p>صفحه دیگر پنل</p>} />
+              </Routes>
+              <Address />
+              <FreshLink />
+            </AuthProvider>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ThemeProvider>
     </StrictMode>,
   )
 }

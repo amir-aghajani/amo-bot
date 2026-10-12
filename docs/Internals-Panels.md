@@ -131,9 +131,12 @@ a draft of its own. Signing out and opening another shop ask first (`confirmLeav
 
 ## The shell
 
-`AppShell` is the two-column layout: the sidebar and the page, which owns the scroll. Below 48rem (`PHONE`) the
-sidebar becomes a drawer behind a slim topbar; between 48 and 64rem it starts as an icon rail; the admin's choice is
-remembered and Ctrl/⌘+B toggles it. The shell is hand-written, not shadcn's sidebar.
+`AppShell` is the two-column layout: the sidebar and the page, which owns the scroll, under a topbar stuck to the top
+at every width (the page's name and `HeaderActions`, the theme switch; `--topbar-height`, which the connection banner
+and the browser's scroll padding clear). Below 48rem (`PHONE`) the sidebar becomes a drawer the topbar's menu button
+opens; between 48 and 64rem it starts as an icon rail; the admin's choice is remembered and Ctrl/⌘+B toggles it. The
+shell is hand-written, not shadcn's sidebar. `PublicScreen` (the sign-ins, the installer) has a bare topbar with
+`HeaderActions` alone.
 
 The navigation is data (`components/shell/nav.ts`): top-level items, groups that fold open (the group of the page on
 screen always open), and the settings at the foot. **A page made of sections gets a column of its own** instead of
@@ -230,13 +233,13 @@ has lives in `apps/<panel>/pages`, and the parts of a page in a domain folder of
   list (`invalidates`), and a refusal because the row moved on reads it again (`onStale`).
 - **A settings card** — `SectionCard` on a settings-group hook: `useBotSettingsGroup` (one bot-settings group per PUT),
   `useConfigGroup` (config.php), `useWebsiteGroup` (a PATCH of the card's own fields). A bot-settings card drawn on a
-  page of its own (cashback, discount codes, gift codes, the draw, the wheel) waits for the settings in
-  `WithBotSettings`.
+  page of its own (cashback, discount codes, gift codes, the draw, the wheel, the test accounts) waits for the settings
+  in `WithBotSettings`.
 
 Where the panels differ the app passes the difference in, never a role check: `PlansPage({addServers})`,
-`SubscriptionsPage({servers, serverPage, traffic})`, `CustomerPage({…, agentPage})`, `DashboardPage({aside,
-trafficHelp})`, `BroadcastsPage({more})`, `WebsiteSettingsPage({mailSettings})`. What depends on the shop shown (an
-agent's shop has no agency, needs traffic on every plan) asks `useMainShop()`.
+`TestsPage({serverPage})`, `SubscriptionsPage({servers, serverPage, traffic})`, `CustomerPage({…, agentPage})`,
+`DashboardPage({aside, trafficHelp})`, `BroadcastsPage({more})`, `WebsiteSettingsPage({mailSettings})`. What depends
+on the shop shown (an agent's shop has no agency, needs traffic on every plan) asks `useMainShop()`.
 
 ### Sales and support queues
 
@@ -268,6 +271,13 @@ save jumps to the first tab with an error. Its `reads` compares prices by their 
 is only true when the server would store something else. The bulk price change (`BulkPricesModal`) must be previewed,
 and applies exactly the request it previewed. A payment method is added through a `PickerModal` of the drivers'
 descriptions; its form (`MethodForm`) is drawn with `DriverFields`.
+
+The free test accounts' page (`pages/tests.tsx`, `components/tests`) is a sectioned page: the tests (a server-paged
+list), every server's terms (`testServersQuery`, which the page's notices read too) and the rules' bot-settings card.
+The owner's app passes `serverPage`, so a server leads to its own «اکانت تست» card
+(`components/servers/test-account-card`, saved on its own at `/servers/{id}/test-account`, which scrolls itself into
+view at `#test-account` once it has loaded); an agent's lists them read-only. A free test's «تست» badge in the
+services lists is `ServicePlan`.
 
 ### Discounts and rewards
 

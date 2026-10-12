@@ -81,7 +81,7 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 | [`POST /payments/{id}/remind`](#post-paymentsidremind) | Remind the customer to pay |
 | [`POST /payments/{id}/retry`](#post-paymentsidretry) | Retry the delivery of what a paid payment bought |
 | [`POST /payments/{id}/refund`](#post-paymentsidrefund) | Refund a paid payment |
-| [`GET /subscriptions`](#get-subscriptions) | All services sold |
+| [`GET /subscriptions`](#get-subscriptions) | All the shop's services |
 | [`GET /subscriptions/{id}`](#get-subscriptionsid) | One service, as the list shows it |
 | [`POST /subscriptions/{id}/sync`](#post-subscriptionsidsync) | Refresh a service's usage and term from its panel |
 | [`POST /subscriptions/{id}/extend`](#post-subscriptionsidextend) | Add days and traffic to a service, on top of what it has |
@@ -1343,7 +1343,7 @@ Retry the delivery of what a paid payment bought.
 
 ### POST /payments/{id}/refund
 
-Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone (a top-up already spent, an agent's traffic already sold).
+Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are.
 
 - **Who:** an admin of the shop, signed in on its website, when the website grants `refunds` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/refund`](Panels-API-Reference.md#post-apipanelpaymentsidrefund).
@@ -1373,7 +1373,7 @@ Support's note on a refund. It is a line of the message the customer gets and th
 
 ### GET /subscriptions
 
-All services sold. Newest first, or sorted by `sort` and `dir`.
+All the shop's services: sold, renewed or given, and the free test accounts (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/subscriptions`](Panels-API-Reference.md#get-apipanelsubscriptions).
@@ -1384,6 +1384,7 @@ All services sold. Newest first, or sorted by `sort` and `dir`.
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `status` | query | string | no | The status tab. Empty for all |
+| `kind` | query | [SubscriptionKind](API-Schemas.md#subscriptionkind) | no | Only the services of this kind. Empty for all |
 | `server` | query | integer | no |  |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `page` | query | integer, at least 1 | no |  |

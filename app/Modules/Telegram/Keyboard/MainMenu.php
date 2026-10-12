@@ -9,6 +9,7 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Referrals\Services\ReferralSettings;
 use App\Modules\Rewards\Services\GiftCodeSettings;
 use App\Modules\Rewards\Services\WheelSettings;
+use App\Modules\Subscriptions\Services\TestAccountSettings;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
@@ -27,6 +28,7 @@ final class MainMenu
     public const PREFIX = 'menu:';
 
     public const PLANS = 'menu:plans';
+    public const TEST = 'menu:test';
     public const SUBSCRIPTIONS = 'menu:subs';
     public const RENEW = 'menu:renew';
     public const WALLET = 'menu:wallet';
@@ -41,6 +43,7 @@ final class MainMenu
     /** Every action a menu button can stand for: key => admin-facing title, default label, the screen it opens. */
     public const ACTIONS = [
         'buy' => ['title' => 'خرید اشتراک', 'label' => Messages::MENU_BUY, 'screen' => self::PLANS],
+        'test' => ['title' => 'اکانت تست', 'label' => Messages::MENU_TEST, 'screen' => self::TEST],
         'services' => ['title' => 'سرویس‌های من', 'label' => Messages::MENU_SERVICES, 'screen' => self::SUBSCRIPTIONS],
         'renew' => ['title' => 'تمدید سرویس', 'label' => Messages::MENU_RENEW, 'screen' => self::RENEW],
         'wallet' => ['title' => 'کیف پول + شارژ', 'label' => Messages::MENU_WALLET, 'screen' => self::WALLET],
@@ -58,6 +61,7 @@ final class MainMenu
         private readonly AgencySettings $agency,
         private readonly GiftCodeSettings $giftCodes,
         private readonly WheelSettings $wheel,
+        private readonly TestAccountSettings $tests,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
     ) {}
@@ -65,6 +69,7 @@ final class MainMenu
     /**
      * The layout a fresh shop starts with (rows in reading order, right to left):
      *   [ خرید اشتراک ]
+     *   [ اکانت تست ]                 — only while free test accounts are switched on (markup())
      *   [ سرویس‌های من | تمدید سرویس ]
      *   [ آموزش | کیف پول + شارژ ]
      *   [ پشتیبانی | زیرمجموعه‌گیری ] — «زیرمجموعه‌گیری» only while the referral program runs (markup())
@@ -77,6 +82,7 @@ final class MainMenu
 
         return (new KeyboardLayout(KeyboardLayout::TYPE_REPLY, [
             [$button('buy')],
+            [$button('test')],
             [$button('services'), $button('renew')],
             [$button('tutorial'), $button('wallet')],
             [$button('support'), $button('affiliates')],
@@ -154,16 +160,22 @@ final class MainMenu
     }
 
     /**
-     * A screen the menu opens, in place of the tapped message; with an inline menu it also gets «بازگشت» to the menu,
-     * since nothing under the text field leads back.
+     * A screen the menu opens, in place of the tapped message — or, `$fresh`, as a new message (under the greeting a
+     * /start link opened); with an inline menu it also gets «بازگشت» to the menu, since nothing under the text field
+     * leads back.
      */
-    public function screen(Context $ctx, string $text, ?InlineKeyboard $keyboard = null, ?string $backStyle = null): void
+    public function screen(Context $ctx, string $text, ?InlineKeyboard $keyboard = null, ?string $backStyle = null, bool $fresh = false): void
     {
         if ($this->isInline()) {
             $keyboard = ($keyboard ?? InlineKeyboard::make())->row($this->buttons->back(self::HOME, $backStyle));
         }
 
-        $ctx->edit($text, $keyboard === null ? [] : ['reply_markup' => $keyboard->build()]);
+        $options = $keyboard === null ? [] : ['reply_markup' => $keyboard->build()];
+        if ($fresh) {
+            $ctx->reply($text, $options);
+        } else {
+            $ctx->edit($text, $options);
+        }
     }
 
     /**
@@ -179,6 +191,7 @@ final class MainMenu
             'agency' => !$this->agency->enabled() && !$user->isAgent(),
             'gift' => !$this->giftCodes->enabled(),
             'wheel' => !$this->wheel->enabled(),
+            'test' => !$this->tests->enabled(),
         ]));
 
         return $this->layout()->without(...$off)->markup();

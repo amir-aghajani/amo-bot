@@ -199,6 +199,7 @@ Each area's version number from the change feed. An area nothing was written to 
 | `versions.orders` | integer | no |  |
 | `versions.payments` | integer | no |  |
 | `versions.subscriptions` | integer | no |  |
+| `versions.tests` | integer | no | The free test accounts given. |
 | `versions.referrals` | integer | no | Referral commissions, bonuses, rewards and alerts. |
 | `versions.agency` | integer | no | The agency's levels and requests, the agents' bots and their traffic. |
 | `versions.channels` | integer | no | The channels a customer must join. |
@@ -311,7 +312,7 @@ A customer's referral details: who referred them, how many customers they referr
 | `kpis.revenue.previous` | string | yes |  |
 | `kpis.orders` | [CountKpi](#countkpi) | yes |  |
 | `kpis.new_users` | [CountKpi](#countkpi) | yes |  |
-| `kpis.active_subscriptions` | integer | yes |  |
+| `kpis.active_subscriptions` | integer | yes | Active services, free test accounts aside. |
 | `kpis.users_total` | integer | yes |  |
 | `series` | list of [SeriesPoint](#seriespoint) | yes |  |
 | `attention` | object | yes |  |
@@ -321,7 +322,7 @@ A customer's referral details: who referred them, how many customers they referr
 | `attention.pending_reviews` | integer | yes | Reviews waiting for approval (the reviews list's `pending` tab). |
 | `attention.pending_orders` | integer | yes |  |
 | `attention.servers_with_errors` | integer | yes | Servers whose panel failed its last check. Always 0 in an agent's shop. |
-| `attention.expiring_soon` | integer | yes | Active services ending within `expiring_days`. |
+| `attention.expiring_soon` | integer | yes | Active services ending within `expiring_days`, free test accounts aside. |
 | `traffic_shortage` | [TrafficShortage](#trafficshortage) or null | yes | Set when an agent's shop has too little traffic to sell anything; null otherwise, and always null in the main shop. |
 | `expiring_days` | integer | yes | The "ending soon" window in days, the same as on the subscriptions screen. |
 | `recent_orders` | list of [RecentOrder](#recentorder) | yes |  |
@@ -1079,6 +1080,12 @@ What each grant lets the website's admins do beyond the daily work: `catalog` (p
 
 String: `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`.
 
+### SubscriptionKind
+
+The services list's `kind` filter: the free test accounts (`test`), or every other service — sold, renewed or given (`regular`).
+
+String: `test`, `regular`.
+
 ### SubscriptionResponse
 
 | Field | Type | Required | What it is |
@@ -1095,8 +1102,9 @@ A service, as a row of the subscriptions screen: a client on a panel, as last re
 | `status` | [SubscriptionStatus](#subscriptionstatus) | yes |  |
 | `name` | string | yes | The client's name on the panel ("amir_2", "USER_7"). |
 | `link` | string | yes | The customer's subscription link. |
+| `is_test` | boolean | yes | A free test account («اکانت تست»): no plan, never renewed, never counted as ending soon (`expiring_soon`); removed by the tests' own rule (`removes_at`). |
 | `user` | [UserRef](#userref) | yes |  |
-| `plan` | [NamedRef](#namedref) or null | yes | Null once the plan is deleted. |
+| `plan` | [NamedRef](#namedref) or null | yes | Null for a test account, or once the plan is deleted. |
 | `server` | [NamedRef](#namedref) | yes |  |
 | `traffic` | object | yes | In bytes; a limit of 0 means unlimited. |
 | `traffic.limit` | integer | yes |  |
@@ -1110,9 +1118,11 @@ A service, as a row of the subscriptions screen: a client on a panel, as last re
 | `next_period.traffic` | integer | yes |  |
 | `starts_at` | string (date-time) or null | yes | When the first connection started the term; null until then. |
 | `expires_at` | string (date-time) or null | yes | Null while waiting for the first connection, or without a term. |
-| `expiring_soon` | boolean | yes | Active, and ending within the list's `meta.expiring_days`. |
+| `expiring_soon` | boolean | yes | Active, no free test account, and ending within the list's `meta.expiring_days`. |
 | `last_synced_at` | string (date-time) or null | yes | When the panel was last read for it; the numbers are from then. |
 | `disabled_at` | string (date-time) or null | yes |  |
+| `ended_at` | string (date-time) or null | yes | When it ended: the deadline it passed, or when the shop found its traffic used up or its client gone from the panel. Null while it runs, and past a deadline until the shop next reads its panel. |
+| `removes_at` | string (date-time) or null | yes | When the shop removes it from its panel and the shop by itself, by its rules now: `expired_cleanup_hours` after it ended while `expired_cleanup` is on; a test, while `test_cleanup` is on, `test_cleanup_hours` after it ended — or, never connected, `test_unused_days` after it was made. Null when no rule removes it: it runs (a test never connected aside), it is switched off, or the rule is off. A moment already past: it goes at the next check (every 15 minutes), unless an order of it is still open. |
 | `created_at` | string (date-time) | yes |  |
 | `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.sync` | boolean | yes |  |
@@ -1137,7 +1147,7 @@ String: `active`, `expired`, `disabled`, `deleted`.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `subscriptions` | list of [SubscriptionRow](#subscriptionrow) | yes |  |
-| `meta` | object | yes | `expiring` counts active services ending within `expiring_days` (the tab's count; the dashboard uses the same window). |
+| `meta` | object | yes | `expiring` counts active services ending within `expiring_days`, free test accounts aside (the tab's count; the dashboard uses the same window). |
 | `meta.page` | integer | yes |  |
 | `meta.per_page` | integer | yes |  |
 | `meta.total` | integer | yes |  |

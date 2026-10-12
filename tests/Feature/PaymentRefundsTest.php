@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Core\Exceptions\ValidationException;
+use App\Modules\Agency\Models\TrafficTransaction;
+use App\Modules\Agency\Services\TrafficPool;
+use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
@@ -11,8 +15,12 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
+use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Enums\WalletTransactionType;
@@ -21,12 +29,17 @@ use App\Modules\Users\Models\WalletTransaction;
 use App\Modules\Users\Services\WalletService;
 use App\Support\Money;
 use App\Support\Traffic;
+use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * Refunds by what the order bought: a service's money to the wallet (the service stays); an agent's traffic out of their
- * pool (refused once sold); a top-up out of the wallet (refused once spent). Failed deliveries are refundable, running ones
- * are not; the customer is notified; the note fits a ledger line.
+ * Refunds by what the order bought: a purchase's money to the wallet and its service off its panel and the shop —
+ * refused, with nothing refunded, while its panel fails or another order holds the service, and in an agent's shop the
+ * sale's traffic back in their pool; a renewal's or an extra's money to the wallet and what it gave its service taken
+ * back, once (refused while the service is switched off or its panel fails); an agent's traffic out of their pool
+ * (refused once sold); a top-up out of the wallet (refused once spent). Failed deliveries are refundable with nothing
+ * taken back, running ones are not, nor one delivered since it was read; the customer is notified; the note fits a
+ * ledger line.
  */
 final class PaymentRefundsTest extends HttpTestCase
 {
@@ -44,10 +57,11 @@ final class PaymentRefundsTest extends HttpTestCase
         $this->card = $this->cardMethod();
     }
 
-    public function testAPurchaseIsRefundedToTheWalletAndItsServiceStays(): void
+    public function testAPurchaseIsRefundedToTheWalletAndItsServiceGoes(): void
     {
         $server = $this->sellingServer('Berlin');
         $payment = $this->paidByCard($this->purchaseOrder($this->ali, $this->plan(['price' => '50000.00'], $server), $server), $this->card);
+        $service = $payment->order->subscription ?? self::fail('nothing delivered');
         $this->telegram()->reset();
 
         $refunded = $this->postJson("/api/admin/payments/{$payment->id}/refund", ['note' => 'اشتباه واریز شده بود']);
@@ -56,14 +70,15 @@ final class PaymentRefundsTest extends HttpTestCase
         $row = $this->decode($refunded)['payment'];
         self::assertSame(['refunded', 'refunded', 'اشتباه واریز شده بود'], [$row['status'], $row['order']['status'], $row['refund_note']]);
         self::assertSame('50000.00', $this->ali->balance(), 'the amount went to the wallet');
-        self::assertSame(SubscriptionStatus::Active, $payment->order->subscription?->status, 'the service stays — switching it off is the services screen\'s');
+        self::assertFalse(Subscription::query()->whereKey($service->id)->exists(), 'its service went with it');
+        self::assertSame([['server' => $server->id, 'name' => $service->remote_name]], FakeProvider::$deleted, 'off its panel too');
         self::assertSame(WalletService::describeRefund($payment, 'اشتباه واریز شده بود'), $this->lastLine()->description);
         self::assertSame([self::text(BotText::PaymentRefunded, [
             'amount' => Money::format('50000'),
             'order' => $payment->order_id,
             'note' => self::text(BotText::AdminNote, ['comment' => 'اشتباه واریز شده بود']),
             'balance' => Messages::balance('50000.00'),
-        ])], $this->telegram()->sentTo(1001));
+        ]) . self::text(BotText::PaymentRefundedService, ['client' => $service->remote_name])], $this->telegram()->sentTo(1001), 'one message: the money and the service');
         self::assertSame(self::RECEIPT_MESSAGE, $this->telegram()->replyTarget(0), 'a reply to the receipt');
         self::assertArrayNotHasKey('reply_markup', $this->telegram()->params(0), 'no keyboard on a verdict');
 
@@ -71,19 +86,206 @@ final class PaymentRefundsTest extends HttpTestCase
         self::assertSame(422, $this->postJson("/api/admin/payments/{$payment->id}/retry")->getStatusCode(), 'nothing failed');
     }
 
-    public function testARenewalIsRefundedToTheWalletAndWhatItGaveTheServiceStays(): void
+    public function testAPanelThatFailsRefundsNothing(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $payment = $this->paidByCard($this->purchaseOrder($this->ali, $this->plan(['price' => '50000.00'], $server), $server), $this->card);
+        FakeProvider::$unreachable = true;
+        $this->telegram()->reset();
+
+        $refused = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+
+        self::assertSame(422, $refused->getStatusCode(), (string) $refused->getBody());
+        self::assertStringStartsWith('سرویس این سفارش روی پنلش تغییر نکرد و چیزی بازپرداخت نشد', $this->decode($refused)['message']);
+        self::assertSame([PaymentStatus::Paid, SubscriptionStatus::Active], [$payment->refresh()->status, $payment->order->subscription?->status], 'nothing moved');
+        self::assertSame('0.00', $this->ali->balance());
+        self::assertSame([], $this->telegram()->calls());
+    }
+
+    public function testAServiceAnotherOrderHoldsIsNotTakenBack(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00'], $server);
+        $payment = $this->paidByCard($this->purchaseOrder($this->ali, $plan, $server), $this->card);
+        $service = $payment->order->subscription ?? self::fail('nothing delivered');
+        $renewal = $this->renew($service);
+
+        $refused = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertSame(RefundRefusedException::serviceInUse($renewal->id)->getMessage(), $this->decode($refused)['message']);
+        self::assertSame(PaymentStatus::Paid, $payment->refresh()->status);
+        self::assertTrue(Subscription::query()->whereKey($service->id)->exists());
+
+        // Support deleted the service from the services screen: the purchase is refunded with nothing left to remove.
+        $this->service(ProvisioningService::class)->delete($service);
+        self::assertSame(200, $this->postJson("/api/admin/payments/{$payment->id}/refund", [])->getStatusCode());
+        self::assertSame('50000.00', $this->ali->balance());
+    }
+
+    public function testAnAgentsRefundedSaleGivesItsTrafficBack(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $bot = $this->agentBot(traffic: 10);
+        CurrentBot::run($bot, function () use ($bot, $server): void {
+            $reza = $this->customer(['telegram_id' => 7003, 'username' => 'reza']);
+            $order = $this->buy($reza, $this->plan(['price' => '50000.00', 'traffic_gb' => 4], $server), $server);
+            self::assertSame(Traffic::bytesOfGb(6), $bot->trafficBalance());
+
+            $this->service(PaymentActions::class)->refund($order->payments()->firstOrFail(), $this->panelActor(), null);
+
+            self::assertSame(Traffic::bytesOfGb(10), $bot->trafficBalance(), 'its 4 GB back');
+            self::assertSame(sprintf(TrafficPool::LINE_REFUNDED, $order->id), TrafficTransaction::query()->latest('id')->value('description'));
+            self::assertFalse(Subscription::query()->where('user_id', $reza->id)->exists());
+        });
+    }
+
+    public function testARenewalsRefundTakesBackWhatItGave(): void
     {
         $server = $this->sellingServer('Berlin');
         $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
         $subscription = $this->buy($this->ali, $plan, $server)->subscription ?? self::fail('nothing delivered');
         $renewal = $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $subscription, $plan), $this->card);
         self::assertSame([OrderStatus::Fulfilled, 60 * 24], [$renewal->order->status, $subscription->refresh()->duration_hours], 'renewed: a term not started yet runs longer');
+        self::assertSame([720, 30 * Traffic::GIGABYTE], [$renewal->order->refresh()->given_hours, $renewal->order->given_bytes], 'what it gave, kept');
+        // The plan changes after the renewal: the refund takes back what the renewal gave, not what the plan gives now.
+        $plan->forceFill(['duration_hours' => 24 * 90, 'traffic_gb' => 100])->save();
+        $this->telegram()->reset();
 
         $row = $this->decode($this->postJson("/api/admin/payments/{$renewal->id}/refund", []))['payment'];
 
         self::assertSame(['refunded', 'refunded'], [$row['status'], $row['order']['status']]);
         self::assertSame('50000.00', $this->ali->balance(), 'the amount went to the wallet');
-        self::assertSame([SubscriptionStatus::Active, 60 * 24], [$subscription->refresh()->status, $subscription->duration_hours], 'the renewed term stays');
+        $subscription->refresh();
+        self::assertSame([SubscriptionStatus::Active, 720, 30 * Traffic::GIGABYTE], [$subscription->status, $subscription->duration_hours, $subscription->traffic_limit_bytes], 'its term and traffic back to what the purchase gave');
+        self::assertNotNull($renewal->order->refresh()->taken_back_at);
+        self::assertStringEndsWith(self::text(BotText::PaymentRefundedTakenBack, ['client' => $subscription->remote_name]), $this->telegram()->sentTo(1001)[0]);
+    }
+
+    public function testARenewalNeverDeliveredHasNothingTakenBack(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
+        $subscription = $this->buy($this->ali, $plan, $server)->subscription ?? self::fail('nothing delivered');
+        FakeProvider::$refusing[$server->id] = ['updateClient'];
+        $renewal = $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $subscription, $plan), $this->card);
+        self::assertSame(OrderStatus::Failed, $renewal->order->status);
+        FakeProvider::$refusing = [];
+
+        self::assertSame(200, $this->postJson("/api/admin/payments/{$renewal->id}/refund", [])->getStatusCode());
+
+        $subscription->refresh();
+        self::assertSame([SubscriptionStatus::Active, 720, 30 * Traffic::GIGABYTE], [$subscription->status, $subscription->duration_hours, $subscription->traffic_limit_bytes], 'it gave nothing, and nothing is taken');
+        self::assertNull($renewal->order->refresh()->taken_back_at);
+        self::assertSame('50000.00', $this->ali->balance());
+    }
+
+    public function testAnOrderDeliveredSinceItWasJudgedIsNotRefunded(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
+        $subscription = $this->buy($this->ali, $plan, $server)->subscription ?? self::fail('nothing delivered');
+        FakeProvider::$refusing[$server->id] = ['updateClient'];
+        $renewal = $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $subscription, $plan), $this->card);
+        self::assertSame(OrderStatus::Failed, $renewal->order->status, 'read as failed: nothing to take back');
+        FakeProvider::$refusing = [];
+
+        // Support's retry delivers it before the refund takes the order.
+        self::assertTrue($this->service(OrderService::class)->deliver(Order::query()->findOrFail($renewal->order_id)));
+        try {
+            $this->service(PaymentActions::class)->refund($renewal, $this->panelActor(), null);
+            self::fail('A renewal delivered meanwhile was refunded with what it gave.');
+        } catch (ValidationException $e) {
+            self::assertSame([PaymentService::DELIVERY_RUNNING], $e->errors()['status']);
+        }
+        self::assertSame([PaymentStatus::Paid, OrderStatus::Fulfilled, 60 * 24], [$renewal->refresh()->status, $renewal->order->status, $subscription->refresh()->duration_hours], 'nothing moved');
+
+        // Tried again, it is judged as it is: what it gave goes, then the money.
+        $this->service(PaymentActions::class)->refund($renewal, $this->panelActor(), null);
+        self::assertSame([720, '50000.00'], [$subscription->refresh()->duration_hours, $this->ali->balance()]);
+    }
+
+    public function testAnExtrasRefundTakesBackItsTrafficOrDays(): void
+    {
+        $this->extrasOnSale();
+        $server = $this->sellingServer('Berlin');
+        $subscription = $this->subscription($this->ali, $this->plan(['price' => '50000.00'], $server), $server, 'ali_1', ['expires_at' => now()->addDays(10)]);
+        FakeProvider::mirror($subscription);
+        $traffic = $this->paidExtra($subscription, ExtraKind::Traffic, 10, '18000');
+        $time = $this->paidExtra($subscription, ExtraKind::Time, 7, '7000');
+        self::assertSame([40 * Traffic::GIGABYTE, now()->addDays(17)->toIso8601String()], [$subscription->traffic_limit_bytes, $subscription->expires_at?->toIso8601String()]);
+
+        $this->service(PaymentActions::class)->refund($traffic->payments()->firstOrFail(), $this->panelActor(), null);
+        self::assertSame(30 * Traffic::GIGABYTE, $subscription->refresh()->traffic_limit_bytes, 'its 10 GB back');
+
+        $this->service(PaymentActions::class)->refund($time->payments()->firstOrFail(), $this->panelActor(), null);
+        self::assertSame(now()->addDays(10)->toIso8601String(), $subscription->refresh()->expires_at?->toIso8601String(), 'its 7 days back');
+    }
+
+    public function testWhatAnOrderGaveIsTakenBackOnce(): void
+    {
+        $this->extrasOnSale();
+        $server = $this->sellingServer('Berlin');
+        $subscription = $this->subscription($this->ali, $this->plan(['price' => '50000.00'], $server), $server, 'ali_1', ['expires_at' => now()->addDays(10)]);
+        FakeProvider::mirror($subscription);
+        $order = $this->paidExtra($subscription, ExtraKind::Traffic, 10, '18000');
+
+        // The panel took it back, then the refund was decided otherwise; the next try takes nothing more.
+        self::assertTrue($this->service(ProvisioningService::class)->undo($order, $subscription));
+        self::assertTrue($this->service(ProvisioningService::class)->undo($order, $subscription));
+
+        self::assertSame(30 * Traffic::GIGABYTE, $subscription->refresh()->traffic_limit_bytes);
+    }
+
+    public function testAServiceSwitchedOffIsNotTakenFrom(): void
+    {
+        $this->extrasOnSale();
+        $server = $this->sellingServer('Berlin');
+        $subscription = $this->subscription($this->ali, $this->plan(['price' => '50000.00'], $server), $server, 'ali_1', ['expires_at' => now()->addDays(10)]);
+        FakeProvider::mirror($subscription);
+        $order = $this->paidExtra($subscription, ExtraKind::Traffic, 10, '18000');
+        $subscription->forceFill(['status' => SubscriptionStatus::Disabled])->save();
+
+        $refused = $this->postJson("/api/admin/payments/{$order->payments()->firstOrFail()->id}/refund", []);
+
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertSame(RefundRefusedException::serviceDisabled()->getMessage(), $this->decode($refused)['message']);
+        self::assertSame(40 * Traffic::GIGABYTE, $subscription->refresh()->traffic_limit_bytes, 'nothing taken');
+        self::assertCount(1, FakeProvider::$updated, 'its panel never asked: an update would switch it on');
+    }
+
+    public function testAnExtraWhosePanelFailsWaitsForThePanel(): void
+    {
+        $this->extrasOnSale();
+        $server = $this->sellingServer('Berlin');
+        $subscription = $this->subscription($this->ali, $this->plan(['price' => '50000.00'], $server), $server, 'ali_1', ['expires_at' => now()->addDays(10)]);
+        FakeProvider::mirror($subscription);
+        $order = $this->paidExtra($subscription, ExtraKind::Traffic, 10, '18000');
+        FakeProvider::$unreachable = true;
+
+        $refused = $this->postJson("/api/admin/payments/{$order->payments()->firstOrFail()->id}/refund", []);
+
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertStringEndsWith('وقتی پنل جواب داد، دوباره بازپرداخت کنید.', $this->decode($refused)['message'], 'no advice to delete the service for its extra');
+        self::assertSame([PaymentStatus::Paid, 40 * Traffic::GIGABYTE], [$order->payments()->firstOrFail()->status, $subscription->refresh()->traffic_limit_bytes]);
+    }
+
+    public function testAnAgentsRefundedRenewalGivesItsTrafficBack(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $bot = $this->agentBot(traffic: 10);
+        CurrentBot::run($bot, function () use ($bot, $server): void {
+            $reza = $this->customer(['telegram_id' => 7003, 'username' => 'reza']);
+            $plan = $this->plan(['price' => '50000.00', 'traffic_gb' => 4], $server);
+            $service = $this->buy($reza, $plan, $server)->subscription ?? self::fail('nothing delivered');
+            $renewal = $this->renew($service);
+            self::assertSame(Traffic::bytesOfGb(2), $bot->trafficBalance());
+
+            $this->service(PaymentActions::class)->refund($renewal->payments()->firstOrFail(), $this->panelActor(), null);
+
+            self::assertSame(Traffic::bytesOfGb(6), $bot->trafficBalance(), 'the renewal\'s 4 GB back');
+            self::assertSame(4 * Traffic::GIGABYTE, $service->refresh()->traffic_limit_bytes);
+        });
     }
 
     public function testATopUpRefundTakesTheTopUpBackOutOfTheWalletWhileItIsThere(): void

@@ -35,10 +35,10 @@ use Psr\Log\LoggerInterface;
  * Days and traffic the owner gives running services — «افزودن زمان و حجم» on a server's page, «هدیه همگانی» on the
  * broadcasts page — with a reason the customers read.
  *
- * Who gets it: the active services that existed when it was issued (every bot's), narrowed by its audience (every
- * server, the agents' bots, one customer group, one server), and running when their turn comes by the panel's word
- * (share()). Services still waiting for their first connection only when the owner ticks `include_unstarted`; ended or
- * switched-off services never.
+ * Who gets it: the active services that existed when it was issued (every bot's, free tests aside), narrowed by its
+ * audience (every server, the agents' bots, one customer group, one server), and running when their turn comes by the
+ * panel's word (share()). Services still waiting for their first connection only when the owner ticks
+ * `include_unstarted`; ended or switched-off services never.
  *
  * How it runs: one part per server it reaches, each worked through one service at a time past a cursor by whoever holds
  * the part's lease — the open screen, or Tasks\GrantsTask every minute — so it finishes however many services there are,
@@ -90,7 +90,7 @@ final class Grants
         }
         $serverIds = $server !== null
             ? [$server->id]
-            : self::forAudience(Subscription::active(Subscription::acrossShops()), $audience, $group?->id)->distinct()->orderBy('server_id')->pluck('server_id')->map(intval(...))->all();
+            : self::forAudience(self::services(), $audience, $group?->id)->distinct()->orderBy('server_id')->pluck('server_id')->map(intval(...))->all();
 
         try {
             return $this->db->transaction(function () use ($values, $audience, $server, $group, $serverIds, $actor): Grant {
@@ -235,7 +235,7 @@ final class Grants
         $all = $agents = self::NOBODY;
         $servers = [];
         $agentBots = Bot::activeAgents()->pluck('id')->map(intval(...))->all();
-        foreach (self::tally(Subscription::active(Subscription::acrossShops())) as ['server' => $server, 'bot' => $bot, 'reach' => $reach]) {
+        foreach (self::tally(self::services()) as ['server' => $server, 'bot' => $bot, 'reach' => $reach]) {
             $all = self::together($all, $reach);
             $agents = in_array($bot, $agentBots, true) ? self::together($agents, $reach) : $agents;
             $servers[$server] = self::together($servers[$server] ?? self::NOBODY, $reach);
@@ -260,7 +260,7 @@ final class Grants
     public function reach(Server $server): array
     {
         $reach = self::NOBODY;
-        foreach (self::tally(Subscription::active(Subscription::acrossShops())->where('server_id', $server->id)) as $row) {
+        foreach (self::tally(self::services()->where('server_id', $server->id)) as $row) {
             $reach = self::together($reach, $row['reach']);
         }
 
@@ -444,9 +444,20 @@ final class Grants
      */
     private static function candidates(Grant $grant, int $serverId): Builder
     {
-        return self::forAudience(Subscription::active(Subscription::acrossShops()), $grant->audience, $grant->customer_group_id)
+        return self::forAudience(self::services(), $grant->audience, $grant->customer_group_id)
             ->where('server_id', $serverId)
             ->where('id', '<=', $grant->upto_subscription_id);
+    }
+
+    /**
+     * The services a grant is for, every bot's: the active ones that are no free test (a test is removed once it ends,
+     * and days given would make it a service).
+     *
+     * @return Builder<Subscription>
+     */
+    private static function services(): Builder
+    {
+        return Subscription::active(Subscription::acrossShops())->where('is_test', false);
     }
 
     /**
@@ -462,7 +473,7 @@ final class Grants
             return [];
         }
 
-        $rows = Subscription::active(Subscription::acrossShops())->toBase()
+        $rows = self::services()->toBase()
             ->join('customer_group_user', 'customer_group_user.user_id', '=', 'subscriptions.user_id')
             ->whereIn('customer_group_user.customer_group_id', $groups->modelKeys())
             ->select('customer_group_user.customer_group_id')

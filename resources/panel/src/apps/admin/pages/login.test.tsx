@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoginPage } from '@/apps/admin/pages/login'
 import type { Session } from '@/lib/api-types'
 import { AuthProvider } from '@/lib/auth'
+import { ThemeProvider } from '@/lib/theme'
 import { testQueryClient, until } from '@/test/render'
 import { json, refusal, server, withHeaders } from '@/test/server'
 
@@ -23,16 +24,18 @@ function Address() {
 
 function open(at: InitialEntry) {
   render(
-    <QueryClientProvider client={testQueryClient()}>
-      <MemoryRouter initialEntries={[at]}>
-        <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="*" element={<Address />} />
-          </Routes>
-        </AuthProvider>
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <ThemeProvider>
+      <QueryClientProvider client={testQueryClient()}>
+        <MemoryRouter initialEntries={[at]}>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="*" element={<Address />} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </ThemeProvider>,
   )
 }
 

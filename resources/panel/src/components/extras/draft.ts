@@ -1,5 +1,5 @@
 import type { ExtraOption, ExtraOptionInput, ExtraPrices, ExtraPricesRequest } from '@/lib/api-types'
-import { amountDraft, decimalOf, wholeOf } from '@/lib/format'
+import { amountDraft, decimalOf, wholeNumberOf, wholeOf } from '@/lib/format'
 
 /*
  * A price list of «حجم و زمان اضافه» — the shop's (the bot settings' `extra_…`) or a plan's own (`extras.…`) — as a form
@@ -160,7 +160,7 @@ export function extraOffer(draft: ExtraPricesDraft, kind: ExtraKind): ExtraOffer
   const unit = positive(tomanOf(prices.unit))
   const buttons = new Map<number, number | null>()
   for (const row of prices.rows) {
-    const quantity = positive(numberOf(wholeOf(row.quantity)))
+    const quantity = positive(wholeNumberOf(row.quantity))
     if (quantity === null || buttons.has(quantity)) continue
     const own = row.price.trim() === '' ? null : positive(tomanOf(row.price))
     if (row.price.trim() !== '' && own === null) continue
@@ -168,14 +168,13 @@ export function extraOffer(draft: ExtraPricesDraft, kind: ExtraKind): ExtraOffer
   }
   const offered = [...buttons].map(([quantity, price]) => ({ quantity, price }))
   offered.sort((a, b) => a.quantity - b.quantity)
-  const [min, max] = [numberOf(wholeOf(prices.min)), numberOf(wholeOf(prices.max))]
+  const [min, max] = [wholeNumberOf(prices.min), wholeNumberOf(prices.max)]
   return {
     buttons: offered,
     typed: unit !== null && min !== null && max !== null && min <= max ? { min, max, price: unit } : null,
   }
 }
 
-const numberOf = (digits: string | null): number | null => (digits === null ? null : Number(digits))
 const positive = (number: number | null): number | null => (number !== null && number >= 1 ? number : null)
 
 /**

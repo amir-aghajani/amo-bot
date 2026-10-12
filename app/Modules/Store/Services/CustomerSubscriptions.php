@@ -24,6 +24,7 @@ use App\Modules\Subscriptions\Services\CustomerExtras;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Subscriptions\Services\RenewalSettings;
+use App\Modules\Subscriptions\Services\ServiceCleanup;
 use App\Modules\Users\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -58,6 +59,7 @@ final class CustomerSubscriptions
         private readonly CustomerRenewal $renewal,
         private readonly CustomerExtras $extras,
         private readonly RenewalSettings $renewalSettings,
+        private readonly ServiceCleanup $cleanup,
         private readonly RateLimiter $limiter,
         private readonly LoggerInterface $logger,
     ) {}
@@ -141,7 +143,8 @@ final class CustomerSubscriptions
 
     /**
      * Services as the website shows them: what each may do is judged for them all at once (the wallet, an agent's
-     * traffic, the extras' prices); `$clients` is what their panels were just asked, by id.
+     * traffic, the extras' prices), and when each goes by the shop's rules (read once); `$clients` is what their panels
+     * were just asked, by id.
      *
      * @param Collection<int, Subscription> $subscriptions Read with RELATIONS
      * @param array<int, ClientInfo> $clients
@@ -161,6 +164,7 @@ final class CustomerSubscriptions
             renewable: $plans[$subscription->id] !== null,
             extras: $extras[$subscription->id],
             linkRotation: $this->provisioning->rotatable($subscription),
+            removesAt: $this->cleanup->removesAt($subscription),
             client: $clients[$subscription->id] ?? null,
         ))->all());
     }

@@ -32,6 +32,8 @@ final class CustomerExtras
     public const NO_TERM = 'زمان این سرویس نامحدود است.';
     public const TIME_OVER = 'زمان این سرویس تمام شده است؛ اول زمانش را بخرید یا سرویس را تمدید کنید.';
     public const TRAFFIC_OVER = 'حجم این سرویس تمام شده است؛ اول حجمش را بخرید یا سرویس را تمدید کنید.';
+    /** A free test account takes nothing: it is removed once it ends. */
+    public const TEST = 'اکانت تست حجم و زمان اضافه نمی‌گیرد؛ برای ادامه یک پلن بخرید.';
 
     /** The shop sells none of the kind for the service now: its prices offer none, or an agent's pool covers none. */
     public const NOT_SOLD = 'این فروشگاه برای این سرویس %s نمی‌فروشد.';
@@ -87,6 +89,9 @@ final class CustomerExtras
     {
         if (!in_array($subscription->status, self::STATES, true)) {
             return self::NOT_RUNNING;
+        }
+        if ($subscription->is_test) {
+            return self::TEST;
         }
 
         return match ($kind) {

@@ -10,7 +10,9 @@ use App\Core\Exceptions\ValidationException;
 use App\Core\Support\Sleeper;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Catalog\Services\ServerSelector;
+use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Providers\Contracts\ProviderInterface;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\DTO\ClientSpec;
@@ -19,9 +21,11 @@ use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Providers\Models\ServerInbound;
 use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Providers\Services\ServerHealth;
 use App\Modules\Providers\Support\PanelConnection;
+use App\Modules\Subscriptions\DTO\TestTerms;
 use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Exceptions\ExtraUnavailableException;
@@ -29,16 +33,18 @@ use App\Modules\Subscriptions\Exceptions\MoveException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
 use App\Modules\Subscriptions\Exceptions\ServiceNotReadException;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Models\TestAccount;
 use App\Modules\Users\Models\User;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Carbon;
 use Psr\Log\LoggerInterface;
 
 /**
- * Every change of a service on its panel — created for a purchase, renewed, given days and traffic, sold extras, started
- * on a queued period, re-linked, switched, moved, deleted — and every read back.
+ * Every change of a service on its panel — created for a purchase or as a free test, renewed, given days and traffic,
+ * sold extras, started on a queued period, re-linked, switched, moved, deleted — and every read back.
  *
  * The panel is the truth about a client: its answers reach the row through one mapping (values()), stamped with when
  * the panel was asked. Three rules keep concurrent work safe:
@@ -107,50 +113,42 @@ final class ProvisioningService
         $user = $order->user;
         ['server' => $server, 'inbounds' => $inbounds] = $this->selector->resolve($plan, $order->server_id);
 
-        // The customer gets one subscription link and nothing else: a panel that stopped serving links since its last
-        // check gets no client, and the order fails with the reason.
-        if (!$this->onPanel($server, static fn(ProviderInterface $panel): bool => $panel->servesSubscriptions())) {
-            throw new NoServerAvailableException("سرور اشتراک (Subscription) در پنل «{$server->name}» فعال نیست؛ آن را فعال کنید و سرور را دوباره بررسی کنید.");
-        }
-
         // One client on every inbound the plan sells there; its term starts at the first connection.
         $spec = $this->spec($user, $this->naming->next($user, $server), $plan->trafficBytes(), ServiceTerms::termOf($plan->duration_hours), $plan->ip_limit);
-        $observed = now();
-        $client = $this->onPanel($server, static fn(ProviderInterface $panel): ClientInfo => $panel->createClient($inbounds->pluck('remote_key')->values()->all(), $spec));
-        if ($client->subscriptionUrl === null) {
-            $this->takeBack($server, $spec->name);
-
-            throw new NoServerAvailableException("پنل «{$server->name}» برای کلاینت لینک اشتراک نساخت؛ سرور اشتراک پنل را بررسی کنید.");
-        }
-
-        try {
-            $subscription = $this->db->transaction(function () use ($order, $user, $plan, $server, $spec, $client, $observed, $complete): Subscription {
-                $subscription = new Subscription([
-                    'user_id' => $user->id,
-                    'plan_id' => $plan->id,
-                    'server_id' => $server->id,
-                    'remote_name' => $client->name,
-                    'status' => SubscriptionStatus::Active,
-                    'ip_limit' => $spec->ipLimit,
-                    'duration_hours' => $plan->duration_hours,
-                    // «تمدید خودکار» starts as the admin set it for new services, on a plan that can renew itself at all.
-                    'auto_renew' => $this->renewal->autoRenewByDefault() && $this->renewal->autoRenews($plan),
-                ]);
-                $subscription->fill(self::mirror($subscription, $client, $observed))->save();
-                $order->forceFill(['subscription_id' => $subscription->id])->save();
-                // Whoever words the delivery reads the service off this order.
-                $order->setRelation('subscription', $subscription);
-                $complete($subscription);
-
-                return $subscription;
-            });
-        } catch (\Throwable $e) {
-            $this->takeBack($server, $spec->name);
-
-            throw $e;
-        }
+        $subscription = $this->create($server, $inbounds, $spec, [
+            'user_id' => $user->id,
+            'plan_id' => $plan->id,
+            'duration_hours' => $plan->duration_hours,
+            // «تمدید خودکار» starts as the admin set it for new services, on a plan that can renew itself at all.
+            'auto_renew' => $this->renewal->autoRenewByDefault() && $this->renewal->autoRenews($plan),
+        ], static function (Subscription $subscription) use ($order, $complete): void {
+            $order->forceFill(['subscription_id' => $subscription->id])->save();
+            // Whoever words the delivery reads the service off this order.
+            $order->setRelation('subscription', $subscription);
+            $complete($subscription);
+        });
 
         $this->logger->info('Provisioned subscription {id} for user {user} on {server}', ['id' => $subscription->id, 'user' => $user->id, 'server' => $server->name]);
+
+        return $subscription;
+    }
+
+    /**
+     * Create a free test account's client — on every inbound the server sells, named "test_…" — and its service row: no
+     * plan, marked a test, its term as the server's test terms say (from the first connection, or from now). `$issued`
+     * runs in the transaction that writes the row; if that transaction fails, the client is deleted from the panel again.
+     *
+     * @param Collection<int, ServerInbound> $inbounds
+     * @param \Closure(Subscription): void $issued
+     * @throws NoServerAvailableException when the panel serves no subscription links, or gave no link
+     * @throws ProviderException
+     */
+    public function provisionTest(User $user, Server $server, Collection $inbounds, TestTerms $terms, \Closure $issued): Subscription
+    {
+        $spec = $this->spec($user, $this->naming->next($user, $server, test: true), $terms->bytes, $terms->expiry(), 0);
+        $subscription = $this->create($server, $inbounds, $spec, ['user_id' => $user->id, 'is_test' => true, 'duration_hours' => $terms->hours], $issued);
+
+        $this->logger->info('Made test account {id} for user {user} on {server}', ['id' => $subscription->id, 'user' => $user->id, 'server' => $server->name]);
 
         return $subscription;
     }
@@ -172,9 +170,55 @@ final class ProvisioningService
             $this->read($subscription, $lease);
 
             $terms = ServiceTerms::renewal($subscription, $plan, $this->renewal->carriesTraffic());
-            $this->applyTerms($subscription, $terms, $lease, ['plan_id' => $plan->id, 'status' => SubscriptionStatus::Active, 'ip_limit' => $terms->ipLimit, 'disabled_at' => null] + $terms->columns(), $complete);
+            // What it gives is kept on the order with its completion: a refund takes back that much.
+            $given = ['given_hours' => $plan->duration_hours, 'given_bytes' => $plan->trafficBytes()];
+            $this->applyTerms($subscription, $terms, $lease, ['plan_id' => $plan->id, 'status' => SubscriptionStatus::Active, 'ip_limit' => $terms->ipLimit, 'disabled_at' => null] + $terms->columns(), static function (Subscription $renewed) use ($order, $given, $complete): void {
+                $order->forceFill($given)->save();
+                $complete($renewed);
+            });
 
             return $subscription;
+        });
+    }
+
+    /**
+     * Undo what a refunded renewal or extra gave its service (ServiceTerms::takeBack()), from what the panel says
+     * right now: a renewal's term and traffic as delivered (`given_hours`, `given_bytes`; its plan's as it is now for one
+     * delivered before they were kept), an extra's days or traffic. Once: the order is marked taken back in the
+     * transaction that writes the row, and checked under the service's hold, so a second refund of it takes nothing. A
+     * service switched off is refused under the hold too, since the panel's update would switch it on. True when it was
+     * taken back, now or before; false when the panel no longer has the client — nothing to take back.
+     *
+     * @throws RefundRefusedException the service is switched off
+     * @throws ProviderException|ServiceBusyException
+     * @throws ModelNotFoundException when the service is gone
+     */
+    public function undo(Order $order, Subscription $subscription): bool
+    {
+        return $this->holding($subscription, function (Lease $lease) use ($order, $subscription): bool {
+            if (Order::query()->whereKey($order->id)->whereNotNull('taken_back_at')->exists()) {
+                return true;
+            }
+            if ($subscription->status === SubscriptionStatus::Disabled) {
+                throw RefundRefusedException::serviceDisabled();
+            }
+            if ($this->read($subscription, $lease, required: false) === null) {
+                return false;
+            }
+
+            $renewal = $order->type === OrderType::Renewal;
+            $terms = ServiceTerms::takeBack(
+                $subscription,
+                $renewal ? $order->given_hours ?? $order->plan->duration_hours ?? 0 : (int) $order->days * ServiceTerms::HOURS_A_DAY,
+                $renewal ? $order->given_bytes ?? $order->plan?->trafficBytes() ?? 0 : (int) $order->traffic_bytes,
+                $renewal,
+            );
+            $this->applyTerms($subscription, $terms, $lease, $terms->columns(), static function () use ($order): void {
+                $order->forceFill(['taken_back_at' => now()])->save();
+            });
+            $this->logger->info('Subscription {id} gave back what refunded order {order} gave it', ['id' => $subscription->id, 'order' => $order->id]);
+
+            return true;
         });
     }
 
@@ -463,42 +507,69 @@ final class ProvisioningService
     }
 
     /**
-     * The admin's delete: the client off the panel and the row gone for good. The orders that sold or renewed it stay
-     * (the sales record) and point at nothing. A client the panel no longer has counts as deleted, and one already found
-     * gone is not asked about again; with `$leavePanel` (the panel is out of reach) the panel is not contacted and the
-     * client stays there for the admin to remove. True when this call removed the row.
+     * Delete a service: the client off the panel and the row gone for good. The orders that sold or renewed it stay (the
+     * sales record) and point at nothing; a test's record (`test_accounts`) stays for its quota. A client the panel no
+     * longer has counts as deleted, and one already found gone is not asked about again; with `$leavePanel` (the panel is
+     * out of reach) the panel is not contacted and the client stays there for the admin to remove. True when this call
+     * removed the row.
      *
      * @throws ProviderException|ServiceBusyException
      */
     public function delete(Subscription $subscription, bool $leavePanel = false): bool
     {
-        return $this->holding($subscription, function (Lease $lease) use ($subscription, $leavePanel): bool {
-            if (!$leavePanel && $subscription->status !== SubscriptionStatus::Deleted) {
-                try {
-                    $this->held($lease, $subscription->server, static fn(ProviderInterface $panel) => $panel->deleteClient($subscription->remote_name));
-                } catch (NotFoundException) {
-                    // Deleted on the panel already (by hand, or by the panel's own clean-up).
-                }
+        return $this->holding($subscription, fn(Lease $lease): bool => $this->remove($subscription, $lease, $leavePanel));
+    }
+
+    /**
+     * Delete a service only while `$still` holds of it as its panel says now: held, read from its panel (unless it is
+     * gone from it already), judged, then deleted as delete() does. What a timer removes on a rule (the test accounts'
+     * clean-up), so a change made since it chose the service — days support gave, the customer's first connection — is
+     * never lost. True when this call removed the row.
+     *
+     * @param \Closure(Subscription): bool $still
+     * @throws ProviderException|ServiceBusyException
+     * @throws ModelNotFoundException when the service is gone
+     */
+    public function deleteIf(Subscription $subscription, \Closure $still): bool
+    {
+        return $this->holding($subscription, function (Lease $lease) use ($subscription, $still): bool {
+            if ($subscription->status !== SubscriptionStatus::Deleted) {
+                $this->read($subscription, $lease, required: false);
             }
 
-            $deleted = $this->db->transaction(static function () use ($subscription): bool {
-                // The foreign key would let the orders go by itself, but a database cascade is no statement the change
-                // feed sees: written here, the orders screen follows.
-                Order::query()->where('subscription_id', $subscription->id)->update(['subscription_id' => null]);
-
-                return $subscription->newModelQuery()->whereKey($subscription->id)->delete() === 1;
-            });
-            if ($deleted) {
-                $this->logger->info('Deleted subscription {id} ({name}) from {server}{left}', [
-                    'id' => $subscription->id,
-                    'name' => $subscription->remote_name,
-                    'server' => $subscription->server->name,
-                    'left' => $leavePanel ? ' (its client was left on the panel)' : '',
-                ]);
-            }
-
-            return $deleted;
+            return $still($subscription) && $this->remove($subscription, $lease, leavePanel: false);
         });
+    }
+
+    /** The held service deleted (delete()); true when this call removed the row. */
+    private function remove(Subscription $subscription, Lease $lease, bool $leavePanel): bool
+    {
+        if (!$leavePanel && $subscription->status !== SubscriptionStatus::Deleted) {
+            try {
+                $this->held($lease, $subscription->server, static fn(ProviderInterface $panel) => $panel->deleteClient($subscription->remote_name));
+            } catch (NotFoundException) {
+                // Deleted on the panel already (by hand, or by the panel's own clean-up).
+            }
+        }
+
+        $deleted = $this->db->transaction(static function () use ($subscription): bool {
+            // The foreign key would let the orders go by itself, but a database cascade is no statement the change feed
+            // sees: written here, the orders and the test accounts screens follow.
+            Order::query()->where('subscription_id', $subscription->id)->update(['subscription_id' => null]);
+            TestAccount::query()->where('subscription_id', $subscription->id)->update(['subscription_id' => null]);
+
+            return $subscription->newModelQuery()->whereKey($subscription->id)->delete() === 1;
+        });
+        if ($deleted) {
+            $this->logger->info('Deleted subscription {id} ({name}) from {server}{left}', [
+                'id' => $subscription->id,
+                'name' => $subscription->remote_name,
+                'server' => $subscription->server->name,
+                'left' => $leavePanel ? ' (its client was left on the panel)' : '',
+            ]);
+        }
+
+        return $deleted;
     }
 
     /**
@@ -657,7 +728,7 @@ final class ProvisioningService
 
     /**
      * The row's new values from the panel's answer (mirror(); deleted when the panel no longer has the client) and the
-     * change's own (`$own`), with the status that follows from both.
+     * change's own (`$own`), with the status that follows from both and when it ended (endedAt()).
      *
      * @param array<string, mixed> $own
      * @return array<string, mixed>
@@ -665,12 +736,27 @@ final class ProvisioningService
     private static function values(Subscription $subscription, ?ClientInfo $client, Carbon $observedAt, array $own = []): array
     {
         if ($client === null) {
-            return ['status' => SubscriptionStatus::Deleted, 'last_synced_at' => $observedAt];
+            return ['status' => SubscriptionStatus::Deleted, 'ended_at' => $subscription->ended_at ?? $observedAt, 'last_synced_at' => $observedAt];
         }
         $values = array_replace(self::mirror($subscription, $client, $observedAt), $own);
-        $values['status'] = self::statusOf((clone $subscription)->forceFill($values));
+        $row = (clone $subscription)->forceFill($values);
+        $values['status'] = self::statusOf($row);
+        $values['ended_at'] = self::endedAt($row->forceFill(['status' => $values['status']]), $subscription->ended_at, $observedAt);
 
         return $values;
+    }
+
+    /**
+     * When the service ended, as it now stands: null while it runs; once it ended, when it was first found so — the
+     * deadline it passed, else (its traffic used up) the moment the panel said it. Support's switch leaves it as it was.
+     */
+    private static function endedAt(Subscription $row, ?Carbon $was, Carbon $observedAt): ?Carbon
+    {
+        return match ($row->status) {
+            SubscriptionStatus::Active => null,
+            SubscriptionStatus::Expired => $was ?? ($row->expires_at !== null && $row->expires_at->lte($observedAt) ? $row->expires_at : $observedAt),
+            default => $was,
+        };
     }
 
     /**
@@ -748,6 +834,51 @@ final class ProvisioningService
         $this->health->contacted($server, null);
 
         return $result;
+    }
+
+    /**
+     * Make the client on the server's `$inbounds` and its service row — `$row`'s own columns, the rest as the panel
+     * answered —, `$complete` in the transaction that writes it. The customer gets one subscription link and nothing
+     * else: a panel that stopped serving links since its last check gets no client, and one that answers without a link,
+     * or a transaction that fails, has the client taken back.
+     *
+     * @param Collection<int, ServerInbound> $inbounds
+     * @param array<string, mixed> $row
+     * @param \Closure(Subscription): void $complete
+     * @throws NoServerAvailableException|ProviderException
+     */
+    private function create(Server $server, Collection $inbounds, ClientSpec $spec, array $row, \Closure $complete): Subscription
+    {
+        if (!$this->onPanel($server, static fn(ProviderInterface $panel): bool => $panel->servesSubscriptions())) {
+            throw new NoServerAvailableException("سرور اشتراک (Subscription) در پنل «{$server->name}» فعال نیست؛ آن را فعال کنید و سرور را دوباره بررسی کنید.");
+        }
+
+        $observed = now();
+        $client = $this->onPanel($server, static fn(ProviderInterface $panel): ClientInfo => $panel->createClient($inbounds->pluck('remote_key')->values()->all(), $spec));
+        if ($client->subscriptionUrl === null) {
+            $this->takeBack($server, $spec->name);
+
+            throw new NoServerAvailableException("پنل «{$server->name}» برای کلاینت لینک اشتراک نساخت؛ سرور اشتراک پنل را بررسی کنید.");
+        }
+
+        try {
+            return $this->db->transaction(static function () use ($server, $spec, $row, $client, $observed, $complete): Subscription {
+                $subscription = new Subscription($row + [
+                    'server_id' => $server->id,
+                    'remote_name' => $client->name,
+                    'status' => SubscriptionStatus::Active,
+                    'ip_limit' => $spec->ipLimit,
+                ]);
+                $subscription->fill(self::mirror($subscription, $client, $observed))->save();
+                $complete($subscription);
+
+                return $subscription;
+            });
+        } catch (\Throwable $e) {
+            $this->takeBack($server, $spec->name);
+
+            throw $e;
+        }
     }
 
     /** Delete a client just made for something that fell through; a failure is logged, never thrown over the reason. */

@@ -9,6 +9,7 @@ use App\Modules\Catalog\Models\Plan;
 use App\Modules\Rewards\Forms\PrizePlan;
 use App\Modules\Settings\Exceptions\UnknownGroupException;
 use App\Modules\Settings\Services\Settings;
+use App\Modules\Subscriptions\Services\ExpiredServicesSettings;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Telegram\BotSettings;
@@ -20,8 +21,9 @@ use Tests\HttpTestCase;
 /**
  * The bot settings screen — every bot its own, in both panels: the modules' groups (the switches, the channel rule, the
  * wallet's top-up amounts, the QR code and its picture, renewal and its automatic kind, extra traffic and time and their
- * prices, reminders, referrals, the report group's topics — the agency's only in the main bot's shop), each saved on its
- * own and refused whole, with each group's bounds. (The field engine itself: Unit\Core\Forms.)
+ * prices, reminders, the removal of ended services, referrals, the report group's topics — the agency's only in the main
+ * bot's shop), each saved on its own and refused whole, with each group's bounds. (The field engine itself:
+ * Unit\Core\Forms.)
  */
 final class AdminBotSettingsApiTest extends HttpTestCase
 {
@@ -61,6 +63,16 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'expiry_reminder_days' => 3,
             'traffic_reminder' => false,
             'traffic_reminder_percent' => 80,
+            'expired_cleanup' => false,
+            'expired_cleanup_hours' => 24,
+            'test_enabled' => false,
+            'test_per_user' => 1,
+            'test_period_days' => 0,
+            'test_daily_limit' => 0,
+            'test_newcomers_only' => false,
+            'test_cleanup' => true,
+            'test_cleanup_hours' => 24,
+            'test_unused_days' => 7,
             'referral_enabled' => false,
             'referral_rate' => 10,
             'referral_renewal_rate' => 10,
@@ -99,7 +111,7 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'lottery_plan_id' => null,
             'lottery_entries' => 'order',
             'lottery_exclude_agents' => true,
-        ], $this->decode($response)['settings'], 'renewal: the traffic left not carried; automatic renewal two days before the deadline, off for new services; extra traffic and time, reminders and referrals off until the admin turns them on; every report topic wanted (no group until one is connected)');
+        ], $this->decode($response)['settings'], 'renewal: the traffic left not carried; automatic renewal two days before the deadline, off for new services; extra traffic and time, reminders, the removal of ended services, test accounts and referrals off until the admin turns them on (a day after its end; a test each, for good; ended tests cleaned up); every report topic wanted (no group until one is connected)');
 
         $background = $this->decode($response)['qr_background'];
         self::assertFalse($background['custom'], 'the shipped picture until the admin uploads one');
@@ -267,6 +279,29 @@ final class AdminBotSettingsApiTest extends HttpTestCase
         self::assertSame(['درصد باید عددی بین 50 تا 99 باشد.'], $errors['traffic_reminder_percent']);
         self::assertSame([Validation::NOT_A_SWITCH], $errors['traffic_reminder']);
         self::assertTrue($this->decode($this->get('/api/admin/bot/settings'))['settings']['expiry_reminder'], 'nothing stored from a refused save');
+    }
+
+    public function testTheExpiredServicesGroupTakesTheSwitchAndTheHoursAfterTheEnd(): void
+    {
+        $response = $this->putJson('/api/admin/bot/settings/expired_services', ['expired_cleanup' => true, 'expired_cleanup_hours' => '۱۲']);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $settings = $this->decode($response)['settings'];
+        self::assertSame([true, 12], [$settings['expired_cleanup'], $settings['expired_cleanup_hours']], 'Persian digits accepted');
+        self::assertTrue($settings['test_cleanup'], "the tests' own rule is untouched");
+        $expired = $this->service(ExpiredServicesSettings::class);
+        self::assertSame([true, 12], [$expired->enabled(), $expired->hours()]);
+
+        $bad = $this->unchecked()->putJson('/api/admin/bot/settings/expired_services', ['expired_cleanup_hours' => ExpiredServicesSettings::HOURS_MAX + 1]);
+        self::assertSame(422, $bad->getStatusCode());
+        self::assertSame([
+            'expired_cleanup' => [Validation::NOT_A_SWITCH],
+            'expired_cleanup_hours' => ['فاصله حذف باید عددی بین 0 تا 8760 ساعت باشد.'],
+        ], $this->decode($bad)['errors'], 'a missing switch is not "off"; more than a year is refused');
+        self::assertSame(12, $this->decode($this->get('/api/admin/bot/settings'))['settings']['expired_cleanup_hours'], 'nothing stored from a refused save');
+
+        $atOnce = $this->putJson('/api/admin/bot/settings/expired_services', ['expired_cleanup' => true, 'expired_cleanup_hours' => 0]);
+        self::assertSame(0, $this->decode($atOnce)['settings']['expired_cleanup_hours'], '0: removed as soon as it ends');
     }
 
     public function testTheReferralGroupTakesItsCommissionsGiftsRewardAndAlerts(): void

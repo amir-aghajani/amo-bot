@@ -18,11 +18,14 @@ every 15 minutes).
     "id": 9,
     "name": "ali_1",
     "status": "active",
+    "is_test": false,
     "plan": { "id": 3, "name": "یک ماهه ۵۰ گیگ" },
     "server": { "id": 2, "name": "هلند" },
     "link": "https://sub.example.net/sub/3d9e6b1f0a72",
     "traffic": { "limit_bytes": 107374182400, "used_bytes": 42949672960, "remaining_bytes": 64424509440 },
     "term": { "duration_days": 60, "duration_hours": 1440, "starts_at": "2026-09-20T10:00:00+00:00", "expires_at": "2026-11-19T10:00:00+00:00", "awaits_first_use": false },
+    "ended_at": null,
+    "removes_at": null,
     "auto_renew": { "on": true, "offered": true, "days_before": 2 },
     "renewable": true,
     "extras": { "traffic": true, "time": true },
@@ -39,11 +42,14 @@ every 15 minutes).
 |---|---|
 | `name` | its name on the server (`ali_1`, `USER_7`) — what the customer quotes to support |
 | `status` | `active` running (or waiting for its first connection); `expired` its time or traffic ran out; `disabled` switched off by support; `deleted` gone from its server |
-| `plan` | the plan it was sold or last renewed on; `null` once that plan was deleted |
+| `is_test` | a free test account the customer took in the bot ([Test accounts](Test-Accounts.md)): no plan, `renewable` false, both `extras` false, `auto_renew.offered` false (the field is there) — and once it ends, or if it is never connected, the shop may remove it, quietly (`removes_at`) |
+| `plan` | the plan it was sold or last renewed on; `null` for a free test, or once that plan was deleted |
 | `server` | where it is («لوکیشن») |
 | `link` | the one subscription link the customer adds to their app — show it with a copy button and a QR code the site draws; `null` once `deleted` |
 | `traffic` | `limit_bytes` (`0` unlimited), `used_bytes`, `remaining_bytes` (`null` when unlimited) |
 | `term` | `duration_hours` the term exactly, in hours (`0` never ends — a one-hour test says `1`, a month `720`), `duration_days` the same in whole days, rounded up (kept for the sites made before `duration_hours`), `starts_at` (the first connection), `expires_at`, `awaits_first_use` |
+| `ended_at` | when it ended — the deadline it passed, else when its server said its traffic was used up or it was gone; `null` while it runs (a renewal or an extra that brings it back clears it) |
+| `removes_at` | when the shop removes it by itself, from its server and the shop: an ended service while the shop's automatic removal is on, a free test by the shop's rules for tests; `null` when it does not. Show it on an ended service — "renew before … to keep it" — and drop the service from your screens once it is gone (`404`). A moment already passed means it goes at the shop's next check (every 15 minutes); an order about it still open makes it wait |
 | `auto_renew` | `on` the customer's switch, `offered` whether it may be set, `days_before` how many days before its end the wallet renews it — the shop's rule, one for every service ([automatic renewal](#automatic-renewal)) |
 | `renewable` | it may be renewed now ([a renewal](Store-API-Buying.md#a-renewal)): active or ended, its plan still there and renewing something — and in an agent's shop covered by their traffic |
 | `extras` | `traffic` and `time`: whether extra traffic, and extra time, may be bought for it now ([extra traffic and time](Store-API-Buying.md#extra-traffic-and-time)) — the shop sells it, and the service can take it: traffic while it has a quota and its time has not run out, time while it has a term and its traffic has not run out |

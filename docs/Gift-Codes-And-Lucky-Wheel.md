@@ -6,9 +6,9 @@ customer spins in the bot every so often for a prize. Both are under «تخفی�
 its own: the owner's, and each agent's in their bot.
 
 What either gives reaches the customer the shop's one way for prizes and gifts: Toman is a line of their wallet's
-ledger; traffic or days go to their newest running service that takes them (in an agent's shop, the GB come out of the
-agent's traffic); a plan's service is an order at no price, settled by the shop and delivered as any order — sent to the
-customer like a bought one, and never counted as their first purchase.
+ledger; traffic or days go to their newest running service that takes them — never a free test — (in an agent's shop,
+the GB come out of the agent's traffic); a plan's service is an order at no price, settled by the shop and delivered
+as any order — sent to the customer like a bought one, and never counted as their first purchase.
 
 ## Gift codes
 

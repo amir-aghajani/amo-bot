@@ -14,15 +14,18 @@ and keyboards](Bot-Texts-And-Keyboards.md)). The labels below are the shop's def
 4. **The channels**, when the shop asks them — a button per channel to join, then «✅ عضو شدم».
 
 The bot's admins pass 2 to 4. A first `/start` from an invite link makes the newcomer the link owner's referral, before
-any of these ([Referrals](Referrals.md)). Anything the bot does not understand — a word typed, a button of a screen long
-gone — is answered «متوجه نشدم. لطفا از منوی زیر استفاده کنید.» with the menu; a chat that sends more than 20 updates in
-ten seconds is not answered while it keeps on.
+any of these ([Referrals](Referrals.md)). A `/start` from the test link (`?start=usertest`) that 2 to 4 hold back waits
+in the chat for an hour: the test screen opens once the customer gets through — the number sent, «✅ عضو شدم», or a
+`/start` or `/menu` in that hour ([a free test](#a-free-test)). Anything the bot does
+not understand — a word typed, a button of a screen long gone — is answered «متوجه نشدم. لطفا از منوی زیر استفاده
+کنید.» with the menu; a chat that sends more than 20 updates in ten seconds is not answered while it keeps on.
 
 ## For customers
 
 | Button | What it opens |
 |---|---|
 | «🔐 خرید اشتراک» | [Buying](#buying) |
+| «🧪 اکانت تست» | While the shop gives tests: the servers giving one now, each with its traffic and term; a tap makes one ([a free test](#a-free-test)) |
 | «🛍️ سرویس‌های من» | The running services (and those waiting for their first connection), newest first, five a page; each opens [its screen](#a-services-screen) |
 | «♻️ تمدید سرویس» | The services that may be renewed — running or ended, on a plan still there —, five a page; each opens its renewal ([renewing](#renewing)) |
 | «💰 کیف پول + شارژ» | The balance («… تومان بدهی» for a debt; an agent's credit), the latest five lines, and «➕ افزایش موجودی» ([the wallet](#the-wallet)) |
@@ -86,18 +89,40 @@ A plan may have a price for your agents and your colleagues — «قیمت نم�
 checkout, and their services renew at it, by hand or by «تمدید خودکار». A colleague who has bought nothing yet and could
 pay a first-purchase price too pays the lower. The report group's sale says «🤝 قیمت نماینده».
 
+### A free test
+
+«🧪 اکانت تست» on the menu, `/free`, or the shop's link `https://t.me/<bot>?start=usertest` (the greeting and the menu,
+then the screen under them) opens the test screen: «🧪 اکانت تست رایگان», a line for each server giving a test now — its
+traffic and term, «(از اولین اتصال)» when the term counts from the first connection — and a «🌍 …» button for each. A
+tap makes the test at once and sends it as a bought service comes — a QR card of its link, or text —, with «📊 مشاهده
+سرویس». A test that could not be sent still counts: the bot says so («⚠️ اکانت تست شما ساخته شد ولی ارسال آن ناموفق
+بود؛ …») with the same button to open it. It is then one of their services, its plan named «اکانت تست»: no renewal, no
+extra traffic or time, no reminders; once it ends, or if it is never connected, the shop removes it after a while,
+without a word — its screen says when.
+
+What a customer may take is the shop's rule — so many tests each, in all or within so many days, a cap a day, perhaps
+for newcomers only ([Test accounts](Test-Accounts.md#the-quota)). A test refused says why, with «🔐 خرید اشتراک» under
+it where buying is the way on; a quota used for now says when the next test is possible. A tap on a server that
+stopped giving tests since the screen was drawn shows the screen again as it is now. A panel that fails to make one
+says so («⚠️ ساخت اکانت تست الان ممکن نشد؛ …»), and nothing of the quota is spent. The bot's admins are held to the
+switch alone, though their tests count toward the shop's cap a day.
+
 ### A service's screen
 
 Its status, name, plan, location, quota, what is used and left, when it ends — «⏳ در انتظار اولین اتصال (n روز)» until
 the first connection starts its days —, its last connection and whether it is online now: read from its panel as the
-screen opens (a panel that cannot be read shows the last numbers, said to be so). Its buttons:
+screen opens (a panel that cannot be read shows the last numbers, said to be so). While the shop removes ended services
+by itself ([Bot settings](Bot-Settings.md#ended-services)), the screen of one that ended — and its renewal's checkout,
+from «♻️ تمدید سرویس» too — says when it goes: «🗑️ اگر این سرویس تا … تمدید نشود، حذف می‌شود.» — renewed before then,
+it stays; removed, it is gone with its link, and a new purchase brings a new one. A free test's screen says «🗑️ این اکانت تست … حذف می‌شود.» by the shop's own rule for
+tests. Its buttons:
 
 - «🔄 به‌روزرسانی اطلاعات» — read it again;
-- «♻️ تمدید سرویس» — [its renewal](#renewing);
+- «♻️ تمدید سرویس» — [its renewal](#renewing) (a free test has none);
 - «🔗 لینک اشتراک» — the link in place of the screen, as a QR card or text, a tap to copy — no panel asked, so it works
   while the panel is down;
 - «🔋 حجم اضافه» and «⏳ زمان اضافه» — [more traffic or time](#extra-traffic-and-time) for this service, each while the
-  shop sells it for the service;
+  shop sells it for the service (never for a free test);
 - «🔁 تمدید خودکار: روشن / خاموش» — the wallet renews it days before its end — while the shop offers it ([Bot
   settings](Bot-Settings.md#renewal)); turned on, it says when and how much;
 - «⚠️ ارسال گزارش اختلال» — a support ticket about this service, its first message awaited;
@@ -197,4 +222,5 @@ request — another admin decides.
 
 - **A relabelled keyboard button** — a customer's old keyboard sends the old label once, answered with the new menu.
 - **A contact card sent at any step** goes to the menu, leaving the step.
-- **The menu's buttons for referrals, the agency, gift codes and the wheel** show only while their programs run.
+- **The menu's buttons for free tests, referrals, the agency, gift codes and the wheel** show only while their programs
+  run.

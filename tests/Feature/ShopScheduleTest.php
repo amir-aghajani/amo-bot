@@ -11,6 +11,7 @@ use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
 use App\Modules\Rewards\Tasks\NightlyDrawTask;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
+use App\Modules\Subscriptions\Tasks\CleanupServicesTask;
 use App\Modules\Subscriptions\Tasks\GrantsTask;
 use App\Modules\Subscriptions\Tasks\NextPeriodTask;
 use App\Modules\Subscriptions\Tasks\SendRemindersTask;
@@ -24,8 +25,9 @@ use Tests\DatabaseTestCase;
 
 /**
  * The schedule (bootstrap/schedule.php) as the container builds it: every task at its interval, in the order a run takes
- * them — a shop's work in every bot's shop, the servers' work once across them, the reminders right after the sync they
- * read, the report groups last — and the whole of it run together on a shop with something in it, no task failing.
+ * them — a shop's work in every bot's shop, the servers' work once across them, the reminders and the clean-up of
+ * ended services right after the sync they read, the report groups last — and the whole of it run together on a shop
+ * with something in it, no task failing.
  */
 final class ShopScheduleTest extends DatabaseTestCase
 {
@@ -43,6 +45,7 @@ final class ShopScheduleTest extends DatabaseTestCase
             GrantsTask::class => [1, 'across shops'],
             SyncSubscriptionsTask::class => [15, 'across shops'],
             SendRemindersTask::class => [15, 'each shop'],
+            CleanupServicesTask::class => [15, 'across shops'],
             PruneUpdatesTask::class => [60, 'across shops'],
             PruneAccountsTask::class => [60, 'across shops'],
             PruneTicketsTask::class => [60, 'each shop'],

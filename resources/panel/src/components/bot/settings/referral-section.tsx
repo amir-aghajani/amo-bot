@@ -11,7 +11,7 @@ import { TextLink } from '@/components/text-link'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotReferralSettingsRequest, BotSettingsData, ReferralStartTrigger } from '@/lib/api-types'
-import { amountDraft, digitsOnly, formatMoney, formatNumber, wholeOf } from '@/lib/format'
+import { amountDraft, digitsOnly, formatMoney, formatNumber, wholeNumberOf, wholeOf } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { trimmed } from '@/lib/use-form'
 
@@ -53,7 +53,7 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
   const { values, set, error } = group
   const rate = Number(digitsOnly(values.referral_rate))
   const renewalRate = wholeOf(values.referral_renewal_rate)
-  const every = Number(wholeOf(values.referral_reward_every) ?? 0)
+  const every = wholeNumberOf(values.referral_reward_every) ?? 0
   const off = !values.referral_enabled
 
   return (

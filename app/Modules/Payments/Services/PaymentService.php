@@ -244,19 +244,22 @@ final class PaymentService
 
     /**
      * Gives a paid payment back, in one transaction, by what its order bought:
-     * - a service, a renewal or an extra: the amount (less the cashback it earned) goes to the customer's wallet; what was
-     *   delivered stays (support switches the service off separately);
+     * - a service, a renewal or an extra: the amount (less the cashback it earned) goes to the customer's wallet. What it
+     *   gave was taken back already (PaymentActions::refund(), RefundedOrders) — a purchase's service removed, a
+     *   renewal's or an extra's term and traffic —, and in an agent's shop the traffic it drew goes back to the pool;
      * - an agent's traffic: the amount goes to their wallet and the traffic comes back out of their pool (refused once sold);
      * - a top-up: support returns the money outside the shop, so the top-up comes back out of the wallet (refused once spent).
-     * Refused while the order's delivery is under way. A referrer's commission stands. True when this call refunded it.
+     * Refused while the order's delivery is under way, and — given `$seen`, the state what it gave was taken back by — when
+     * the order is no longer in that state (delivered since). A referrer's commission stands. True when this call refunded
+     * it.
      *
      * @throws RefundRefusedException what the order put in the shop is no longer there
-     * @throws ValidationException 422 on `status`: the order's delivery is under way
+     * @throws ValidationException 422 on `status`: the order's delivery is under way, or ended since it was seen
      */
-    public function refund(Payment $payment, string $reviewer, ?string $note): bool
+    public function refund(Payment $payment, string $reviewer, ?string $note, ?OrderStatus $seen = null): bool
     {
         try {
-            return $this->refundWithin($payment, $reviewer, $note);
+            return $this->refundWithin($payment, $reviewer, $note, $seen);
         } catch (RefundRefusedException|ValidationException $e) {
             // The rollback took the moves back; the models must not go on believing them.
             $payment->refresh();
@@ -266,9 +269,9 @@ final class PaymentService
         }
     }
 
-    private function refundWithin(Payment $payment, string $reviewer, ?string $note): bool
+    private function refundWithin(Payment $payment, string $reviewer, ?string $note, ?OrderStatus $seen): bool
     {
-        return $this->db->transaction(function () use ($payment, $reviewer, $note): bool {
+        return $this->db->transaction(function () use ($payment, $reviewer, $note, $seen): bool {
             $order = $payment->order;
             // The order first, under a lock: a delivery claiming it now waits for this transaction, then finds it refunded.
             $state = Order::query()->whereKey($order->id)->lockForUpdate()->value('status');
@@ -276,7 +279,8 @@ final class PaymentService
                 return false;
             }
             $delivered = $state === OrderStatus::Fulfilled;
-            if (!in_array($state, [OrderStatus::Paid, OrderStatus::Failed, OrderStatus::Fulfilled], true) || !Transitions::move($order, 'status', [$state], OrderStatus::Refunded)) {
+            $refundable = in_array($state, [OrderStatus::Paid, OrderStatus::Failed, OrderStatus::Fulfilled], true) && ($seen === null || $state === $seen);
+            if (!$refundable || !Transitions::move($order, 'status', [$state], OrderStatus::Refunded)) {
                 throw ValidationException::on('status', self::DELIVERY_RUNNING);
             }
 
@@ -298,6 +302,11 @@ final class PaymentService
                 if (!$this->pool->takeBack($order, $bot)) {
                     throw RefundRefusedException::trafficSold($bot->trafficBalance());
                 }
+            }
+            // An agent's sale undone: the traffic it drew (a purchase, a renewal, extra traffic) goes back to the agent, once.
+            // (Traffic an agent bought is the main shop's sale, taken back above.)
+            if (!$order->shop()->isMain() && $order->type !== OrderType::Traffic) {
+                $this->pool->giveBack($order, $order->shop(), refunded: true);
             }
             // The cashback the order earned comes back out of what the refund gives — never more than it gives: a share
             // of it. A free order (a plan at no price) was paid nothing, and nothing goes back.

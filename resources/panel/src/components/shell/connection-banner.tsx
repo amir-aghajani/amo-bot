@@ -16,7 +16,7 @@ export function ConnectionBanner({ unreachable }: { unreachable: boolean }) {
   const words = !online ? 'اتصال اینترنت قطع است؛ تا برگشتن آن صفحه‌ها به‌روز نمی‌شوند و تغییرها منتظر می‌مانند.' : unreachable ? 'سرور پاسخ نمی‌دهد؛ صفحه‌ها تا برگشتن ارتباط به‌روز نمی‌شوند.' : null
 
   return (
-    <div role="status" className="sticky top-(--topbar-height) z-10 md:top-0">
+    <div role="status" className="sticky top-(--topbar-height) z-10">
       {words && (
         <p className="flex items-center justify-center gap-2 border-b border-warning-line/60 bg-warning-soft px-4 py-1.5 text-center text-footnote text-warning">
           <Icon className="size-3.5 shrink-0" aria-hidden />

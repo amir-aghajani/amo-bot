@@ -9,6 +9,7 @@ use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
 use App\Modules\Rewards\Tasks\NightlyDrawTask;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
+use App\Modules\Subscriptions\Tasks\CleanupServicesTask;
 use App\Modules\Subscriptions\Tasks\GrantsTask;
 use App\Modules\Subscriptions\Tasks\NextPeriodTask;
 use App\Modules\Subscriptions\Tasks\SendRemindersTask;
@@ -45,6 +46,10 @@ return static function (Scheduler $schedule): void {
     // end or low on traffic are reminded. In this order, so the reminders read what the sync just brought.
     $schedule->everyMinutes(15, SyncSubscriptionsTask::class);
     $schedule->everyMinutes(15, SendRemindersTask::class, eachBot: true);
+    // The services that are done with removed from their panels, by each shop's rules: its ended services so many hours
+    // after they ended (off until it switches it on), its free tests that ended or never connected — in every shop that
+    // has some, a stopped agent's too; after the sync, so it reads what the sync just brought.
+    $schedule->everyMinutes(15, CleanupServicesTask::class);
     // The updates the bots took, remembered so one Telegram sends again is served once: forgotten once it cannot come again.
     $schedule->everyMinutes(60, PruneUpdatesTask::class);
     // The websites' sessions that ended, the sign-in challenges that expired and the notices half a year old, every shop's.

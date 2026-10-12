@@ -39,6 +39,7 @@ final class Messages
 
     // The main menu's default labels; a reply-keyboard tap sends its label, so these are routes too (MainMenu).
     public const MENU_BUY = '🔐 خرید اشتراک';
+    public const MENU_TEST = '🧪 اکانت تست';
     public const MENU_SERVICES = '🛍️ سرویس‌های من';
     public const MENU_RENEW = '♻️ تمدید سرویس';
     public const MENU_TUTORIAL = '📚 آموزش';

@@ -124,6 +124,31 @@ final class UpgradesTest extends TestCase
         self::assertSame([1 => '15', $agent => '5'], $renewal, 'a rate the shop set carries over; one set already stays — once, however often it runs');
     }
 
+    public function testTheServicesThatEndedAreGivenWhenTheyEnded(): void
+    {
+        $installed = self::firstRelease();
+        $user = $installed->table('users')->insertGetId(['telegram_id' => 1]);
+        $server = $installed->table('servers')->insertGetId(['name' => 'Berlin', 'driver' => 'fake', 'base_url' => 'https://berlin.test']);
+        $past = gmdate('Y-m-d H:i:s', time() - 86400);
+        $read = gmdate('Y-m-d H:i:s', time() - 3600);
+        $service = static fn(string $name, string $status, ?string $expires): array => [
+            'user_id' => $user, 'server_id' => $server, 'remote_name' => $name, 'subscription_url' => "https://berlin.test/sub/{$name}",
+            'status' => $status, 'expires_at' => $expires, 'last_synced_at' => $read,
+        ];
+        $installed->table('subscriptions')->insert([
+            $service('timed_out', 'expired', $past),
+            $service('used_up', 'expired', gmdate('Y-m-d H:i:s', time() + 86400)),
+            $service('gone', 'deleted', null),
+            $service('running', 'active', gmdate('Y-m-d H:i:s', time() + 86400)),
+        ]);
+
+        self::upgradeToCode($installed);
+        self::upgradeToCode($installed);
+
+        $ended = $installed->table('subscriptions')->orderBy('id')->pluck('ended_at', 'remote_name')->all();
+        self::assertSame(['timed_out' => $past, 'used_up' => $read, 'gone' => $read, 'running' => null], $ended, 'the deadline it passed, else its last read — once');
+    }
+
     public function testTheUpgradesBetweenTwoVersionsRunInVersionOrder(): void
     {
         foreach (['0.1.0', '0.2.0', '0.3.0', '0.10.0', '0.11.0'] as $version) {

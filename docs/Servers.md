@@ -38,7 +38,7 @@ Under «تنظیمات پیشرفته»:
 | «بررسی گواهی TLS» | On. Off for a panel with a self-signed certificate |
 | «تایم‌اوت اتصال (ثانیه)» | 5 to 120, 30 by default: how long a call to the panel may take (connecting gives up after 10 seconds at most) |
 | «آدرس اشتراک» | Blank: the subscription links are the panel's own. Set, the full prefix before the link's token, when the links must come from another address (a reverse proxy): `https://sub.example.com/sub` |
-| «ظرفیت» | How many **active** services it may hold — every shop's together. Blank is unlimited; **`0` is full** |
+| «ظرفیت» | How many **active** services it may hold — every shop's together, free tests too. Blank is unlimited; **`0` is full** |
 | «یادداشت» | Your own note, 1000 characters at most; shown nowhere but this form |
 | «فعال» | Off, nothing new is sold on it or moved to it |
 | «رنگ دکمه در ربات» | Its button among a plan's locations in the bot: blue, green, red, or «پیش‌فرض تلگرام». Every shop's bot shows it so |
@@ -88,6 +88,7 @@ whose connector this installation no longer has is not checked: «کانکتور
   its active services: every shop's — what its capacity counts —, and, when agents' customers have services here too,
   how many of them are the open shop's (a link to them on «اشتراک‌ها», which lists the open shop's alone).
 - **«اینباندها»** — [below](#inbounds).
+- **«اکانت تست»** — the free tests customers may take on it ([below](#test-accounts)).
 - **«تنظیمات اتصال»** — the form again, with «تست اتصال», «بازگردانی تغییرات» and «ذخیره تغییرات» (both held until a
   field differs from what is saved). Every field but the
   connector changes here (another kind of panel is another server). **Saving does not check it again**: press «بررسی
@@ -107,6 +108,23 @@ The shop reads them only on «به‌روزرسانی از پنل», «بررس�
 ones come not for sale. One the panel no longer lists is switched off and kept with your choice, for when it comes back;
 it cannot be switched on meanwhile, nor can an inbound disabled on the panel.
 
+### Test accounts
+
+The card «اکانت تست» sets what a free test on this server gets, in every shop — the main bot's and each agent's —, and
+is saved on its own:
+
+- «اکانت تست روی این سرور» — off at first; on, customers may take a test here while their shop gives tests (its hint
+  links to «اکانت تست › تنظیمات», where a shop switches tests on);
+- «حجم (مگابایت)» — 1 to 102400, 500 by default;
+- «مدت (ساعت)» — 1 to 720, 24 by default;
+- «شروع از اولین اتصال» — on at first: the hours count from the customer's first connection; off, from the moment the
+  test is made.
+
+A test is one client — on a panel with inbounds, on every inbound marked «فروش» —, made only while the server can sell.
+It takes room in the server's «ظرفیت» as any active service. A change holds for the tests made from then on. Agents
+see these terms on their tests page and cannot change them. The shop's own rules — the switch, the quota, the
+clean-up — are on «فروشگاه › اکانت تست» ([Test accounts](Test-Accounts.md)).
+
 ### Adding days and traffic
 
 «افزودن زمان و حجم» › «افزودن به سرویس‌ها» gives the services on this server days and traffic — an outage made good, a
@@ -119,11 +137,11 @@ gift:
 - «پیام به مشتری‌ها» — on: each customer is told by their shop's bot, or by email when Telegram cannot reach them, and
   the notice is kept on their website.
 
-**Who gets it**: the services of every shop that were on this server when you gave it — none bought afterwards — and
-running. Running is the panel's word, asked at each service's turn: one that ended by time or traffic, or was switched
-off — by support or on the panel — is passed by; days go only to a service that ends some day, traffic only to one with
-a quota. The dialog counts whom it reaches from the shop's copy now; the card's progress says how many were checked,
-given, passed by and failed.
+**Who gets it**: the services of every shop that were on this server when you gave it — none bought afterwards, and no
+free test — and running. Running is the panel's word, asked at each service's turn: one that ended by time or traffic,
+or was switched off — by support or on the panel — is passed by; days go only to a service that ends some day, traffic
+only to one with a quota. The dialog counts whom it reaches from the shop's copy now; the card's progress says how many
+were checked, given, passed by and failed.
 
 **How it runs**: one service at a time, by the card while the page is open, else by the scheduler every minute. One
 gift runs on a server at a time — a [mass gift](Broadcasts.md#the-mass-gift)'s part on it too. A panel out of reach

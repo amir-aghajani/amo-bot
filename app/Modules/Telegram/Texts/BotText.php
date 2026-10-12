@@ -88,6 +88,8 @@ enum BotText: string
     case ReceiptRejected = 'receipt_rejected';
     case OrderCancelledByAdmin = 'order_cancelled_by_admin';
     case PaymentRefunded = 'payment_refunded';
+    case PaymentRefundedService = 'payment_refunded_service';
+    case PaymentRefundedTakenBack = 'payment_refunded_taken_back';
     case TopupRefunded = 'topup_refunded';
     case TopupRefundedUndelivered = 'topup_refunded_undelivered';
     case AdminNote = 'admin_note';
@@ -108,6 +110,8 @@ enum BotText: string
     case ServiceDetails = 'service_details';
     case ServiceRotateHint = 'service_rotate_hint';
     case ServiceStale = 'service_stale';
+    case ServiceRemoval = 'service_removal';
+    case ServiceTestRemoval = 'service_test_removal';
     case ServiceStatusActive = 'service_status_active';
     case ServiceStatusDisabled = 'service_status_disabled';
     case ServiceStatusExpired = 'service_status_expired';
@@ -353,6 +357,22 @@ enum BotText: string
     case WheelNothing = 'wheel_nothing';
     case WheelFailed = 'wheel_failed';
     case WheelRefunded = 'wheel_refunded';
+
+    // free test accounts («🧪 اکانت تست»)
+    case TestScreen = 'test_screen';
+    case TestServerLine = 'test_server_line';
+    case TestOnHold = 'test_on_hold';
+    case TestOff = 'test_off';
+    case TestNewcomersOnly = 'test_newcomers_only';
+    case TestUsed = 'test_used';
+    case TestUsedUntil = 'test_used_until';
+    case TestDailyLimit = 'test_daily_limit';
+    case TestNoServer = 'test_no_server';
+    case TestBuyButton = 'test_buy_button';
+    case TestDelivered = 'test_delivered';
+    case TestUnsent = 'test_unsent';
+    case TestFailed = 'test_failed';
+    case TestPlanName = 'test_plan_name';
 
     // loyalty tiers, cashback and the nightly draw («سطح وفاداری»، «کش‌بک»، «قرعه‌کشی شبانه»)
     case LoyaltyTierLine = 'loyalty_tier_line';

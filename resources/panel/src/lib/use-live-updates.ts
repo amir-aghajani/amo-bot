@@ -35,15 +35,26 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
     queryKeys.massGrants,
   ],
   // The servers and their inbounds — and whether a plan's entry, a move or the plan form can sell on one —, the mass
-  // gift's servers, the dashboard's failing ones.
-  servers: [queryKeys.servers, queryKeys.serverChoices, queryKeys.everyServer, queryKeys.plans, queryKeys.planOptions, queryKeys.massGrants, queryKeys.dashboards],
+  // gift's servers, the dashboard's failing ones, each server's test terms and whether it gives a test now.
+  servers: [
+    queryKeys.servers,
+    queryKeys.serverChoices,
+    queryKeys.everyServer,
+    queryKeys.plans,
+    queryKeys.planOptions,
+    queryKeys.massGrants,
+    queryKeys.dashboards,
+    queryKeys.everyServerTestAccount,
+    queryKeys.testServers,
+  ],
   // A grant under way moves its cursor every second: its cards alone.
   grants: [queryKeys.everyServerGrants, queryKeys.massGrants],
   // The catalogue — and an agent's smallest plan on sale, which their traffic is held against (account, dashboard).
   plans: [queryKeys.plans, queryKeys.planCategories, queryKeys.planOptions, queryKeys.account, queryKeys.dashboards],
   payment_methods: [queryKeys.paymentMethods],
   // The orders, the payments made for them, a customer's and an agent's bot's counts, each plan's sales, the dashboard,
-  // the sidebar's count of the stuck ones, each discount code's uses, each loyalty tier's customers.
+  // the sidebar's count of the stuck ones, each discount code's uses, each loyalty tier's customers, whether a test's
+  // customer bought after it.
   orders: [
     queryKeys.orders,
     queryKeys.everyOrder,
@@ -57,11 +68,12 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
     queryKeys.queues,
     queryKeys.discountCodes,
     queryKeys.loyaltyTiers,
+    queryKeys.tests,
   ],
   // The payments, the orders they pay, each method's count, the dashboard's revenue, the sidebar's receipts to review.
   payments: [queryKeys.payments, queryKeys.everyPayment, queryKeys.orders, queryKeys.everyOrder, queryKeys.paymentMethods, queryKeys.dashboards, queryKeys.queues],
   // The services, the orders that sold them, the counts of a customer, an agent's bot, a plan and a server — a server's
-  // room, so whether it can sell —, whom a grant would reach, the dashboard.
+  // room, so whether it can sell or give a test —, whom a grant would reach, the dashboard, where each test stands.
   subscriptions: [
     queryKeys.subscriptions,
     queryKeys.everySubscription,
@@ -78,11 +90,15 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
     queryKeys.everyServerGrants,
     queryKeys.massGrants,
     queryKeys.dashboards,
+    queryKeys.tests,
+    queryKeys.testServers,
   ],
+  // The free test accounts given: a new one, one the clean-up found ended or removed.
+  tests: [queryKeys.tests],
   // The commissions and the alerts on referrers — and what a customer's referrals earned them, on their page.
   referrals: [queryKeys.referrals, queryKeys.referrers, queryKeys.invitees, queryKeys.referralCommissions, queryKeys.referralAlerts, queryKeys.everyUser],
   // The agency's levels and requests, the agents' bots and their traffic — on an agent's page too; an agent's traffic too
-  // short to sell anything (account, dashboard), or a plan of theirs (plans) —, the owner's shops.
+  // short to sell anything (account, dashboard), or a plan of theirs (plans), or to give a test —, the owner's shops.
   agency: [
     queryKeys.agency,
     queryKeys.agencyLevels,
@@ -95,6 +111,7 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
     queryKeys.plans,
     queryKeys.shops,
     queryKeys.dashboards,
+    queryKeys.testServers,
   ],
   channels: [queryKeys.botChannels],
   broadcasts: [queryKeys.broadcasts],

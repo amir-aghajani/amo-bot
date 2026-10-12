@@ -35,11 +35,11 @@ final class AdminKeyboardsApiTest extends HttpTestCase
         self::assertSame('منوی شروع', $start['title']);
         self::assertTrue($start['is_default']);
         self::assertSame('reply', $start['type']);
-        self::assertSame([['buy'], ['services', 'renew'], ['tutorial', 'wallet'], ['support', 'affiliates'], ['agency'], ['gift', 'wheel']], array_map(static fn(array $row): array => array_column($row, 'action'), $start['rows']), 'rows in reading order; the editor shows «زیرمجموعه‌گیری», «نمایندگی», «کد هدیه» and «گردونه شانس» whether or not their programs run');
+        self::assertSame([['buy'], ['test'], ['services', 'renew'], ['tutorial', 'wallet'], ['support', 'affiliates'], ['agency'], ['gift', 'wheel']], array_map(static fn(array $row): array => array_column($row, 'action'), $start['rows']), 'rows in reading order; the editor shows «اکانت تست», «زیرمجموعه‌گیری», «نمایندگی», «کد هدیه» and «گردونه شانس» whether or not their programs run');
         self::assertSame(Messages::MENU_BUY, $start['rows'][0][0]['label']);
         self::assertNull($start['rows'][0][0]['style']);
 
-        self::assertSame(['buy', 'services', 'renew', 'wallet', 'affiliates', 'agency', 'tutorial', 'support', 'gift', 'wheel'], array_column($data['actions'], 'key'));
+        self::assertSame(['buy', 'test', 'services', 'renew', 'wallet', 'affiliates', 'agency', 'tutorial', 'support', 'gift', 'wheel'], array_column($data['actions'], 'key'));
         self::assertSame(['primary', 'success', 'danger'], $data['styles']);
         self::assertSame(8, $data['limits']['per_row']);
     }
@@ -171,20 +171,20 @@ final class AdminKeyboardsApiTest extends HttpTestCase
         self::assertSame(['rows.1.0' => ['این دکمه در ربات وجود ندارد.']], $this->decode($refused)['errors'], 'nor taken');
 
         $default = $this->decode($this->postJson('/api/agent/keyboards/start/reset'))['keyboard'];
-        self::assertSame([['buy'], ['services', 'renew'], ['tutorial', 'wallet'], ['support', 'affiliates'], ['gift', 'wheel']], $actions($default), 'its built-in menu has none either');
+        self::assertSame([['buy'], ['test'], ['services', 'renew'], ['tutorial', 'wallet'], ['support', 'affiliates'], ['gift', 'wheel']], $actions($default), 'its built-in menu has none either');
     }
 
     public function testAButtonTheBotNoLongerHasIsNeitherShownNorTaken(): void
     {
-        // A layout saved when the menu still had «اکانت تست».
+        // A layout saved with a button an older version had («raffle»), which the bot no longer has.
         $this->service(Settings::class)->set('bot.keyboard.start', ['type' => 'reply', 'rows' => [
-            [['action' => 'trial', 'label' => '🔑 اکانت تست', 'style' => null, 'icon' => null], ['action' => 'buy', 'label' => 'خرید', 'style' => null, 'icon' => null]],
+            [['action' => 'raffle', 'label' => '🎟 قرعه', 'style' => null, 'icon' => null], ['action' => 'buy', 'label' => 'خرید', 'style' => null, 'icon' => null]],
         ]]);
 
         $keyboard = $this->decode($this->get('/api/admin/keyboards'))['keyboards'][0];
         self::assertSame([['buy']], array_map(static fn(array $row): array => array_column($row, 'action'), $keyboard['rows']), 'the rest of the admin\'s layout stands');
 
-        $refused = $this->putJson('/api/admin/keyboards/start', ['type' => 'reply', 'rows' => [[['action' => 'trial', 'label' => '🔑 اکانت تست'], ['action' => 'buy', 'label' => 'خرید']]]]);
+        $refused = $this->putJson('/api/admin/keyboards/start', ['type' => 'reply', 'rows' => [[['action' => 'raffle', 'label' => '🎟 قرعه'], ['action' => 'buy', 'label' => 'خرید']]]]);
         self::assertSame(422, $refused->getStatusCode());
         self::assertSame(['rows.0.0' => ['این دکمه در ربات وجود ندارد.']], $this->decode($refused)['errors']);
     }

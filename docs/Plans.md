@@ -27,7 +27,9 @@ colleagues) — and the servers it can be bought on. «افزودن پلن» ope
 - «قیمت (تومان)» — the plan's regular price, for every purchase and renewal: whole Toman (`120000`, `۱۲۰٬۰۰۰` and
   `120,000` are all fine; a fraction is refused). `0` makes the plan free for everyone: its checkout offers one
   «🎁 دریافت رایگان» instead of the ways to pay, and the service comes at once, nothing taken (the shop's wallet settles
-  it, even while it is switched off). A free test for newcomers alone is a first-purchase price of `0` instead.
+  it, even while it is switched off). A free first plan for newcomers alone is a first-purchase price of `0` instead;
+  a free test that is no purchase at all — on each server's own terms, by the shop's quota — is a
+  [test account](Test-Accounts.md).
 - «قیمت خرید اول (تومان)» — optional, beside it: what a customer who has never bought a service in the shop pays for
   the plan as their first purchase ([below](#first-purchase-price)). Whole Toman, typed as the price is, and less than
   it; `0` makes the first purchase free; blank is none — everyone pays the plan's price. Renewals are at the plan's
@@ -67,7 +69,8 @@ Less than a day before the end, the bot and the panels give its hour too, and th
 ### First-purchase price
 
 «قیمت خرید اول» is a price of the plan for a customer's first purchase in the shop, below its price — a newcomer's
-discount, or a free test. Every customer sees the plan: a newcomer at this price, everyone else at the plan's price.
+discount, or a free first plan. Every customer sees the plan: a newcomer at this price, everyone else at the plan's
+price.
 
 - **Who gets it** — a customer who has never bought a service in the shop. A purchase of theirs paid at some point,
   whatever came of it since (delivered, failed, refunded), counts as having bought; an order never paid, or cancelled

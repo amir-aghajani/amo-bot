@@ -15,7 +15,8 @@ use Illuminate\Database\Query\Expression;
 
 /**
  * The subscriptions screen («اشتراک‌ها»: both panels and the website's admin API): a searchable, filterable page of the
- * shop's services as last seen on their panels, each with what its modal may do now (SubscriptionActions::allowed()).
+ * shop's services as last seen on their panels, each with what its modal may do now (SubscriptionActions::allowed()) and
+ * when the shop removes it by itself (ServiceCleanup::removesAt()).
  */
 final class SubscriptionDirectory
 {
@@ -25,12 +26,18 @@ final class SubscriptionDirectory
     /** The window of that tab, and of the dashboard's card that links to it. */
     public const EXPIRING_DAYS = 3;
 
-    public function __construct(private readonly SubscriptionActions $actions) {}
+    /** The `kind` filter's values: the free test accounts alone, or every other service (sold, renewed or given). */
+    private const KINDS = ['test' => true, 'regular' => false];
+
+    public function __construct(
+        private readonly SubscriptionActions $actions,
+        private readonly ServiceCleanup $cleanup,
+    ) {}
 
     /**
-     * The page asked for, filtered by `status` (a SubscriptionStatus, or EXPIRING), `server`, `user` and the search box
-     * (applySearch()); newest first, or sorted by its end (no deadline after every deadline) or the traffic used. With
-     * the expiring tab's count and window.
+     * The page asked for, filtered by `status` (a SubscriptionStatus, or EXPIRING), `kind` (KINDS), `server`, `user` and
+     * the search box (applySearch()); newest first, or sorted by its end (no deadline after every deadline) or the traffic
+     * used. With the expiring tab's count and window.
      */
     public function search(PageRequest $list): Page
     {
@@ -38,6 +45,10 @@ final class SubscriptionDirectory
         $status = $list->enum('status', SubscriptionStatus::class);
         if ($status !== null) {
             $query->where('status', $status->value);
+        }
+        $test = self::KINDS[$list->text('kind')] ?? null;
+        if ($test !== null) {
+            $query->where('is_test', $test);
         }
         $server = $list->id('server');
         if ($server !== null) {
@@ -67,6 +78,7 @@ final class SubscriptionDirectory
             'status' => $subscription->status->value,
             'name' => $subscription->remote_name,
             'link' => $subscription->subscription_url,
+            'is_test' => $subscription->is_test,
             'user' => UserDirectory::presentRef($subscription->user),
             'plan' => $subscription->plan === null ? null : ['id' => $subscription->plan->id, 'name' => $subscription->plan->name],
             'server' => ['id' => $subscription->server->id, 'name' => $subscription->server->name],
@@ -85,6 +97,8 @@ final class SubscriptionDirectory
             'expiring_soon' => $subscription->isExpiringWithin(self::EXPIRING_DAYS),
             'last_synced_at' => $subscription->last_synced_at?->toIso8601String(),
             'disabled_at' => $subscription->disabled_at?->toIso8601String(),
+            'ended_at' => $subscription->ended_at?->toIso8601String(),
+            'removes_at' => $this->cleanup->removesAt($subscription)?->toIso8601String(),
             'created_at' => $subscription->created_at->toIso8601String(),
             'actions' => $this->actions->allowed($subscription),
         ];

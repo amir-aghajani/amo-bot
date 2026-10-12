@@ -65,7 +65,8 @@ loyalty, cashback and the draw care about). The resulting `Quote` is written ont
 included, never a service given free — decides first-purchase prices and first-purchase codes (the owner's earlier
 decision). `paidPurchases()` — the same, but with a price above zero — is what money-like rewards read: a referral's
 first purchase for the start gift, the plan reward's buyers, the «nobody buys» alert and the wheel's buyers-only rule,
-since a free trial must not unlock them. A first purchase is decided at delivery too
+since a free plan must not unlock them — and what makes a customer no newcomer for the free test accounts: their
+newcomers-only rule and the tests list's «خرید کرد». A first purchase is decided at delivery too
 (`OrderService::deliverPurchase()`): of two ordered at the first-purchase price before either was paid, the one paid
 second fails for support to refund.
 
@@ -113,8 +114,18 @@ is the gateway's part (the wallet's debit), the payment's move and the order's c
 compare-and-swap throws and rolls the debit back. The delivery runs after the commit, since it talks to a panel. A
 receipt sent in the bot may be accepted by its method's review window (`AutoApproveReceiptsTask`); one uploaded from the
 website always waits for support, because its account may be a throwaway email. Refunds go by what the order bought:
-a service's money back to the wallet (less any cashback, the service stays), an agent's traffic out of their pool, a
-top-up back out of the wallet — refused once spent or sold.
+what it gave a service taken back first, then its money back to the wallet (less any cashback; in an agent's shop the
+traffic it drew goes back to the pool, `TrafficPool::giveBack(refunded: true)`), an agent's traffic out of their pool, a
+top-up back out of the wallet — refused once spent or sold. Taking back is the services side's: Payments owns
+`Contracts\RefundedOrders` and Subscriptions' `RefundedDeliveries` implements it. A purchase's service goes through the
+services screen's own delete (`SubscriptionActions::delete()`, no message of its own), refused while another paid or
+open order (`Order::OPEN`, `Order::KEPT`) holds it. A renewal's or an extra's gift is undone by
+`ProvisioningService::undo()` (`ServiceTerms::takeBack()`): a renewal's term and traffic as `given_hours` and
+`given_bytes` kept them at delivery, an extra's `days` or `traffic_bytes`; once — `taken_back_at` is written with the
+row and checked under the service's hold —, and refused, under that hold, while the service is switched off. Only a
+delivered order is taken back from. A refusal, or a panel that fails, leaves the payment unrefunded:
+`PaymentActions::refund()` asks it before `PaymentService::refund()`, and hands that the order's state it judged by
+(`$seen`) — an order delivered in between is refused under the order's lock, to be refunded again (and taken back).
 
 `PaymentActions` and `OrderActions` are support's decisions, wherever they are made (both panels, the website's admin
 API, the report group's buttons, the timer). Each checks its rule (`allowed()`), who decides (an `Auth\Actor`: nobody

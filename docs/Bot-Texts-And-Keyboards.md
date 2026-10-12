@@ -58,8 +58,9 @@ the last `/emoji` found them refused.
 - **Rows** — 12 at most, 8 buttons a row; the first row is the top one, a row's first button its rightmost. Drag a button
   anywhere — under the last row to make a new one —, or use its dialog. ▲▼ moves a row; its bin removes it.
 - **A button** — «افزودن دکمه», or a tap on one:
-  - «دکمه» — what it does: «خرید اشتراک», «سرویس‌های من», «تمدید سرویس», «کیف پول + شارژ», «زیرمجموعه‌گیری», «نمایندگی»,
-    «آموزش» (the text «آموزش», a short guide you may reword), «پشتیبانی», «کد هدیه» or «گردونه شانس». Each once.
+  - «دکمه» — what it does: «خرید اشتراک», «اکانت تست», «سرویس‌های من», «تمدید سرویس», «کیف پول + شارژ»,
+    «زیرمجموعه‌گیری», «نمایندگی», «آموزش» (the text «آموزش», a short guide you may reword), «پشتیبانی», «کد هدیه» or
+    «گردونه شانس». Each once.
   - «متن دکمه» — its label, 64 characters, an emoji welcome; no two alike (a keyboard's tap arrives as its label).
   - «آیکون دکمه» — a premium emoji before the label (seen only as above). A premium emoji's tag pasted into the label is
     offered «انتقال به آیکون دکمه».
@@ -69,10 +70,10 @@ the last `/emoji` found them refused.
 The preview shows the menu under your greeting. «ذخیره» checks the keyboard as a whole and says what is wrong under its
 row; «بازگشت به پیش‌فرض» brings the shop's own layout back — saved at once, asked first, no way back.
 
-The shop's layout: «خرید اشتراک»; «سرویس‌های من» | «تمدید سرویس»; «آموزش» | «کیف پول + شارژ»; «پشتیبانی» |
-«زیرمجموعه‌گیری»; «نمایندگی»; «کد هدیه» | «گردونه شانس». **«زیرمجموعه‌گیری», «نمایندگی», «کد هدیه» and «گردونه شانس» show
-only while their programs run** (an agent keeps «نمایندگی», their account), so they can stay on the layout; a layout
-without one is pointed out on its program's page. An agent's bot has no «نمایندگی».
+The shop's layout: «خرید اشتراک»; «اکانت تست»; «سرویس‌های من» | «تمدید سرویس»; «آموزش» | «کیف پول + شارژ»; «پشتیبانی» |
+«زیرمجموعه‌گیری»; «نمایندگی»; «کد هدیه» | «گردونه شانس». **«اکانت تست», «زیرمجموعه‌گیری», «نمایندگی», «کد هدیه» and
+«گردونه شانس» show only while their programs run** (an agent keeps «نمایندگی», their account), so they can stay on the
+layout; a layout without one is pointed out on its program's page. An agent's bot has no «نمایندگی».
 
 ## Watch out for
 

@@ -6,12 +6,14 @@ namespace Tests\Feature;
 
 use App\Modules\Telegram\Session\ChatSession;
 use App\Modules\Telegram\Session\SessionStore;
+use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 
 /**
  * A chat's conversation (Session\ChatSession): a step of a flow with its scratch, left behind by the next step or by
  * leaving the flow while the chat's own facts (the `_` keys) stay through both; a last step that runs once however many
- * taps reach it in the same moment; and its row written only when an update changed something.
+ * taps reach it in the same moment; a held /start link taken once, within the hour; and its row written only when an
+ * update changed something.
  */
 final class ChatSessionTest extends BotTestCase
 {
@@ -61,6 +63,23 @@ final class ChatSessionTest extends BotTestCase
         self::assertNull($this->session()->state());
     }
 
+    public function testAHeldStartLinkOpensOnceWithinTheHour(): void
+    {
+        Carbon::setTestNow('2026-10-07 12:00:00');
+        $this->keep('usertest');
+
+        Carbon::setTestNow('2026-10-07 13:00:00');
+        $session = $this->session();
+        self::assertSame('usertest', $session->takeStartLink(), 'an hour on, it still opens');
+        $session->save();
+        self::assertNull($this->session()->takeStartLink(), 'once');
+
+        Carbon::setTestNow('2026-10-07 12:00:00');
+        $this->keep('usertest');
+        Carbon::setTestNow('2026-10-07 13:00:01');
+        self::assertNull($this->session()->takeStartLink(), 'past the hour, nothing');
+    }
+
     public function testTheMenuAgainWritesNothing(): void
     {
         // A chat with two facts: a membership confirmed (the channel rule) and the menu's keyboard on its screen.
@@ -90,5 +109,13 @@ final class ChatSessionTest extends BotTestCase
     private function session(): ChatSession
     {
         return $this->service(SessionStore::class)->load(self::CHAT);
+    }
+
+    /** A /start link a gate held back, kept in the chat now. */
+    private function keep(string $link): void
+    {
+        $session = $this->session();
+        $session->keepStartLink($link);
+        $session->save();
     }
 }

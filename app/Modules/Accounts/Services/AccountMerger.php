@@ -46,6 +46,8 @@ final class AccountMerger
         'account_merges.user_id' => ['how' => 'move', 'as' => 'merges'],
         'notifications.user_id' => ['how' => 'move', 'as' => 'notifications'],
         'subscriptions.user_id' => ['how' => 'move', 'as' => 'subscriptions'],
+        // The tests both accounts took count against the one they become: a merge never gives a test back.
+        'test_accounts.user_id' => ['how' => 'move', 'as' => 'test_accounts'],
         'orders.user_id' => ['how' => 'move', 'as' => 'orders'],
         // A website request's key names one order a customer: a key both accounts used stays the survivor's.
         'request_keys.user_id' => ['how' => 'union', 'key' => 'key', 'as' => 'request_keys'],

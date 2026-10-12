@@ -14,6 +14,7 @@ import {
   SETTINGS,
   SHOP_GROUP,
   SUPPORT,
+  TEST_SECTIONS,
   USER_SECTIONS,
   WEBSITE_SETTINGS,
   WHEEL_SECTIONS,
@@ -72,6 +73,7 @@ export const ADMIN_NAV: PanelNav = {
     broadcasts: [BROADCAST_MESSAGES, GIFTS_SECTION],
     wheel: WHEEL_SECTIONS,
     discounts: DISCOUNT_SECTIONS,
+    tests: TEST_SECTIONS,
   },
   settings: {
     item: SETTINGS,

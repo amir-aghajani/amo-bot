@@ -87,8 +87,9 @@ The «قرعه‌کشی» page opens with the card «قرعه‌کشی شبان�
 
 - «ساعت قرعه‌کشی» — the hour of the shop's day (its time zone, `APP_TIMEZONE`), 22:00 by default;
 - «تعداد برنده‌ها» — 1 to 20, a customer once;
-- «جایزه هر برنده» — «شارژ کیف پول» (Toman, 1,000 or more), «حجم» (GB, to their newest running service that takes it),
-  «زمان» (days, the same), or «سرویس رایگان» (a plan's service given free, sent to them as a bought one);
+- «جایزه هر برنده» — «شارژ کیف پول» (Toman, 1,000 or more), «حجم» (GB, to their newest running service that takes it,
+  never a free test), «زمان» (days, the same), or «سرویس رایگان» (a plan's service given free, sent to them as a bought
+  one);
 - «شانس شرکت‌کننده‌ها» — «هر خرید یک شانس» (every paid order an entry) or «هر خریدار یک شانس» (every buyer once);
 - «نماینده‌ها شرکت داده نشوند» — on by default, the main shop only.
 

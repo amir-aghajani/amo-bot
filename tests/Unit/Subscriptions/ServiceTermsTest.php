@@ -13,8 +13,8 @@ use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
- * Every rule of what a renewal, a grant, extra traffic or time and a renewed period give a service, worked out from the
- * row alone — the numbers ProvisioningService then sends to the panel.
+ * Every rule of what a renewal, a grant, extra traffic or time and a renewed period give a service, and what a refund
+ * takes back of them, worked out from the row alone — the numbers ProvisioningService then sends to the panel.
  */
 final class ServiceTermsTest extends TestCase
 {
@@ -198,6 +198,96 @@ final class ServiceTermsTest extends TestCase
         $grant = ServiceTerms::grant(self::row(usedGb: 20, daysLeft: 5), 3, 0);
         self::assertSame(['duration_hours' => 720 + 3 * 24, 'period_ends_at' => null, 'next_period_bytes' => null], $grant->columns());
         self::assertSame(1, $grant->ipLimit, "a grant keeps the service's own IP limit");
+    }
+
+    public function testATakeBackUndoesWhatARenewalGave(): void
+    {
+        // Renewed on the 30-day, 30 GB plan: 35 days and 60 GB, 20 used.
+        $renewed = self::row(usedGb: 20, daysLeft: 35, limitGb: 60)->forceFill(['duration_hours' => 1440]);
+
+        $terms = ServiceTerms::takeBack($renewed, 720, 30 * Traffic::GIGABYTE, renewal: true);
+
+        self::assertSame('2026-09-25 12:00:00', $terms->expiry->deadline()?->format('Y-m-d H:i:s'), 'back to its old deadline');
+        self::assertSame([720, 30 * Traffic::GIGABYTE], [$terms->durationHours, $terms->totalBytes]);
+        self::assertFalse($terms->resetCounters);
+    }
+
+    public function testATakeBackLeavesTheServiceAsEachRenewalOrExtraFoundIt(): void
+    {
+        $running = static fn(): Subscription => self::row(usedGb: 20, daysLeft: 5);
+        $waiting = static fn(): Subscription => self::row(usedGb: 0, daysLeft: null);
+        $renewal = static fn(Plan $plan, bool $carry): \Closure => static fn(Subscription $row): ServiceTerms => ServiceTerms::renewal($row, $plan, $carry);
+        $extra = static fn(int $days, int $gb): \Closure => static fn(Subscription $row): ServiceTerms => ServiceTerms::extra($row, $days, $gb * Traffic::GIGABYTE);
+        $cases = [
+            'a running service renewed, traffic carried' => [$running, $renewal(self::plan(), true), 720, 30, true],
+            'a running service renewed, its period queued' => [$running, $renewal(self::plan(), false), 720, 30, true],
+            'a term not started, renewed' => [$waiting, $renewal(self::plan(), false), 720, 30, true],
+            'an hourly renewal' => [$running, $renewal(self::plan(['duration_hours' => 6, 'traffic_gb' => 1]), true), 6, 1, true],
+            'extra days on a running service' => [$running, $extra(7, 0), 7 * 24, 0, false],
+            'extra days on a term not started' => [$waiting, $extra(7, 0), 7 * 24, 0, false],
+            'extra traffic' => [$running, $extra(0, 10), 0, 10, false],
+        ];
+
+        foreach ($cases as $case => [$row, $give, $hours, $gb, $isRenewal]) {
+            $given = $give($row())->preview($row());
+            $back = ServiceTerms::takeBack($given, $hours, $gb * Traffic::GIGABYTE, $isRenewal);
+
+            $was = $row();
+            self::assertSame(
+                [$was->expires_at?->format('Y-m-d H:i:s'), ServiceTerms::expiryOf($was)->pendingSeconds(), 720, 30 * Traffic::GIGABYTE, null, null],
+                [$back->expiry->deadline()?->format('Y-m-d H:i:s'), $back->expiry->pendingSeconds(), $back->durationHours, $back->totalBytes, $back->periodEndsAt, $back->nextPeriodBytes],
+                $case,
+            );
+        }
+    }
+
+    public function testATakeBackEndsAServiceThatHadEndedBeforeIt(): void
+    {
+        $ended = self::row(usedGb: 30, daysLeft: -1, status: SubscriptionStatus::Expired);
+
+        $renewed = ServiceTerms::takeBack(ServiceTerms::renewal($ended, self::plan(), carryTraffic: false)->preview($ended), 720, 30 * Traffic::GIGABYTE, renewal: true);
+        self::assertSame(['2026-09-20 12:00:00', 1], [$renewed->expiry->deadline()?->format('Y-m-d H:i:s'), $renewed->totalBytes], 'its new term and fresh count gone: it ends now');
+
+        $days = ServiceTerms::takeBack(ServiceTerms::extra($ended, 7, 0)->preview($ended), 7 * 24, 0, renewal: false);
+        self::assertSame('2026-09-20 12:00:00', $days->expiry->deadline()?->format('Y-m-d H:i:s'), 'the days that restarted it gone: it ends now');
+    }
+
+    public function testATakeBackPastWhatIsLeftEndsTheServiceNow(): void
+    {
+        $terms = ServiceTerms::takeBack(self::row(usedGb: 50, daysLeft: 3, limitGb: 60), 30 * 24, 30 * Traffic::GIGABYTE, renewal: true);
+
+        self::assertSame('2026-09-20 12:00:00', $terms->expiry->deadline()?->format('Y-m-d H:i:s'), 'its deadline moved before now: it ends now');
+        self::assertSame(30 * Traffic::GIGABYTE, $terms->totalBytes, 'used 50 of what is now 30: it ends by traffic too');
+
+        $waiting = ServiceTerms::takeBack(self::row(usedGb: 0, daysLeft: null), 30 * 24, 0, renewal: true);
+        self::assertSame('2026-09-20 12:00:00', $waiting->expiry->deadline()?->format('Y-m-d H:i:s'), 'a term never started with nothing left of it ends now');
+
+        $shorter = ServiceTerms::takeBack(self::row(usedGb: 0, daysLeft: null)->forceFill(['duration_hours' => 1440]), 30 * 24, 0, renewal: true);
+        self::assertSame(30 * 86400, $shorter->expiry->pendingSeconds(), 'what is left of it still waits for the first connection');
+
+        $all = ServiceTerms::takeBack(self::row(usedGb: 0, daysLeft: 3), 0, 30 * Traffic::GIGABYTE, renewal: false);
+        self::assertSame(1, $all->totalBytes, 'never 0, which would be unlimited');
+    }
+
+    public function testATakeBackLeavesWhatCannotBeCounted(): void
+    {
+        $unlimited = ServiceTerms::takeBack(self::row(usedGb: 5, daysLeft: 10, limitGb: 0), 0, 30 * Traffic::GIGABYTE, renewal: true);
+        self::assertSame(0, $unlimited->totalBytes, 'still unlimited');
+
+        $endless = ServiceTerms::takeBack(self::row(usedGb: 5, daysLeft: null)->forceFill(['duration_hours' => 0]), 30 * 24, 0, renewal: true);
+        self::assertNull($endless->expiry->deadline());
+        self::assertNull($endless->expiry->pendingSeconds(), 'still never ends');
+    }
+
+    public function testATakeBackShrinksAQueuedPeriod(): void
+    {
+        $queued = static fn(): Subscription => self::row(usedGb: 20, daysLeft: 35, limitGb: 60)->forceFill(['period_ends_at' => now()->addDays(5), 'next_period_bytes' => 30 * Traffic::GIGABYTE]);
+
+        $renewal = ServiceTerms::takeBack($queued(), 720, 30 * Traffic::GIGABYTE, renewal: true);
+        self::assertSame([null, null], [$renewal->periodEndsAt, $renewal->nextPeriodBytes], 'the renewal taken back: nothing queued');
+
+        $extra = ServiceTerms::takeBack($queued(), 2 * 24, 10 * Traffic::GIGABYTE, renewal: false);
+        self::assertSame(['2026-09-23 12:00:00', 20 * Traffic::GIGABYTE], [$extra->periodEndsAt?->format('Y-m-d H:i:s'), $extra->nextPeriodBytes], 'an extra\'s days move it back, its traffic comes off');
     }
 
     /** A 30-day service with `$limitGb` (0 = unlimited) and `$usedGb` used, `$daysLeft` to go — null: the clock never started. */

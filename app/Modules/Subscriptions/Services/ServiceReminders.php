@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Builder;
  * `traffic_reminded_at`) is claimed before it goes, and cleared (rearm()) once the service is back under the threshold —
  * renewed, given traffic, counters reset, or no longer running — so it is reminded again next time. The rows are read
  * as the last sync left them. A service with «تمدید خودکار» on hears about its deadline from the renewal instead; a
- * banned customer hears nothing.
+ * banned customer and a free test hear nothing.
  */
 final class ServiceReminders
 {
@@ -109,7 +109,7 @@ final class ServiceReminders
     }
 
     /**
-     * Narrow to those not reminded yet whose customer is not banned.
+     * Narrow to those not reminded yet whose customer is not banned, free tests aside (nothing renews one).
      *
      * @param Builder<Subscription> $query
      * @return Builder<Subscription>
@@ -117,6 +117,7 @@ final class ServiceReminders
     private static function due(Builder $query, string $mark): Builder
     {
         return $query->whereNull($mark)
+            ->where('is_test', false)
             ->whereHas('user', static fn(Builder $user) => $user->where('status', UserStatus::Active->value))
             ->with(['user', 'plan', 'server'])
             ->oldest('id');

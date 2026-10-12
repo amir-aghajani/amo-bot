@@ -11,7 +11,8 @@ use App\Modules\Subscriptions\Models\Subscription;
 use Illuminate\Support\Carbon;
 
 /**
- * The new quota and term a service gets from a renewal, a grant, an extra bought, or the start of a queued period.
+ * The new quota and term a service gets from a renewal, a grant, an extra bought, or the start of a queued period — and
+ * keeps when a refund takes a renewal or an extra back.
  * Pure arithmetic on the row as the panel last reported it — no panel, no database — so every rule lives and is tested
  * here; ProvisioningService sends the result to the panel and records what the panel answers.
  *
@@ -197,6 +198,39 @@ final class ServiceTerms
         }
 
         return self::grant($subscription, $days, $bytes);
+    }
+
+    /**
+     * What a refund takes back of a renewal or an extra: `$hours` off the service's term and `$bytes` off its quota, as
+     * far as the service still has them. A deadline moved back before now ends the service now, and so does a term still
+     * waiting for the first connection with nothing left of it; the quota never goes below 1 byte (0 would be unlimited),
+     * so a service that used more than it keeps ends by traffic. A service that never ends, or is unlimited, keeps that
+     * part. A queued renewal period loses the traffic taken (cleared when none is left of it); an extra's days move it
+     * back as they had moved it forward, a renewal's leave it where it was.
+     */
+    public static function takeBack(Subscription $subscription, int $hours, int $bytes, bool $renewal): self
+    {
+        $now = Carbon::now();
+        $hours = $subscription->hasTerm() ? $hours : 0;
+        $back = $subscription->expires_at?->copy()->subHours($hours);
+        $left = $subscription->duration_hours - $hours;
+        $expiry = match (true) {
+            $hours === 0 => self::expiryOf($subscription),
+            $back !== null => Expiry::at(($back->lt($now) ? $now : $back)->toDateTimeImmutable()),
+            $left > 0 => self::termOf($left),
+            default => Expiry::at($now->toDateTimeImmutable()),
+        };
+
+        $limit = $subscription->traffic_limit_bytes;
+        $total = $limit === 0 || $bytes === 0 ? $limit : max(1, $limit - $bytes);
+        $next = $subscription->next_period_bytes;
+        [$periodEnds, $nextBytes] = match (true) {
+            $next === null => [null, null],
+            $next - $bytes <= 0 => [null, null],
+            default => [$renewal ? $subscription->period_ends_at : $subscription->period_ends_at?->copy()->subHours($hours), $next - $bytes],
+        };
+
+        return new self($total, $expiry, $hours === 0 ? $subscription->duration_hours : max(1, $left), $subscription->ip_limit, periodEndsAt: $periodEnds, nextPeriodBytes: $nextBytes);
     }
 
     /**

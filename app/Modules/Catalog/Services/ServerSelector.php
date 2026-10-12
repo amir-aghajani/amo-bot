@@ -116,6 +116,17 @@ final class ServerSelector
     }
 
     /**
+     * What a free test account on the server gets — every inbound the server sells, or an empty list on a panel without
+     * inbounds — while it can take a client now; null while it cannot.
+     *
+     * @return Collection<int, ServerInbound>|null
+     */
+    public function testInbounds(Server $server): ?Collection
+    {
+        return $this->readiness->problem($server) === null ? $this->inbounds($server, null) : null;
+    }
+
+    /**
      * Why customers are not shown each plan now (its switch aside), by id; null for one they are shown.
      *
      * @param Collection<int, Plan> $plans

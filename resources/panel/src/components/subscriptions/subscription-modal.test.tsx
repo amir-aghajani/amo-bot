@@ -4,13 +4,15 @@ import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SubscriptionModal } from '@/components/subscriptions/subscription-modal'
 import type { Session, SubscriptionRow } from '@/lib/api-types'
+import { formatDate } from '@/lib/format'
 import { AGENT_SHOP, OWNER, signedIn, until } from '@/test/render'
 import { subscriptionRow } from '@/test/rows'
 import { json, noContent, refusal, server, type Answer, type SentRequest } from '@/test/server'
 
 /*
  * A service's dialog (components/subscriptions/subscription-modal): a delete whose panel fails, then «حذف فقط از
- * فروشگاه» and its refusal; a dead link with nothing to copy; the focus after an operation; an hourly plan's terms.
+ * فروشگاه» and its refusal; a dead link with nothing to copy; the focus after an operation; an hourly plan's terms; a
+ * free test's plan line, and no auto-renewal; when an ended service goes by itself, while the shop removes it.
  */
 
 const SERVICE = subscriptionRow()
@@ -174,5 +176,42 @@ describe('its facts', () => {
     show(subscriptionRow({ duration_hours: 6, expires_at: new Date(Date.now() + 3 * 3_600_000).toISOString() }))
 
     expect(await screen.findByText('۳ ساعت مانده')).toBeTruthy()
+  })
+
+  it('name a sold service’s plan, and whether it renews itself', async () => {
+    show(subscriptionRow({ auto_renew: true }))
+
+    expect(await screen.findByText('تمدید خودکار')).toBeTruthy()
+    expect(fact('تمدید خودکار')).toBe('روشن')
+    expect(fact('پلن')).toBe('طلایی')
+  })
+
+  it('say when an ended service goes by itself, and how long is left', async () => {
+    const at = new Date(Date.now() + 10 * 3_600_000).toISOString()
+    show(subscriptionRow({ status: 'expired', ended_at: new Date(Date.now() - 2 * 3_600_000).toISOString(), removes_at: at }))
+
+    expect(await screen.findByText('حذف خودکار')).toBeTruthy()
+    expect(fact('حذف خودکار')).toBe(`${formatDate(at)}۱۰ ساعت مانده`)
+  })
+
+  it('say a removal whose moment passed waits its turn', async () => {
+    show(subscriptionRow({ status: 'expired', ended_at: new Date(Date.now() - 30 * 3_600_000).toISOString(), removes_at: new Date(Date.now() - 60_000).toISOString() }))
+    expect(await screen.findByText('در نوبت حذف')).toBeTruthy()
+  })
+
+  it('say nothing of a removal while no rule removes the service', async () => {
+    show(subscriptionRow({ status: 'expired', ended_at: new Date(Date.now() - 2 * 3_600_000).toISOString() }))
+
+    expect(await screen.findByText('پایان')).toBeTruthy()
+    expect(screen.queryByText('حذف خودکار')).toBeNull()
+  })
+
+  it('say a free test is one, with no plan and no auto-renewal — a test is never renewed', async () => {
+    show(subscriptionRow({ is_test: true, plan: null, duration_hours: 24 }))
+
+    expect(await screen.findByText('اکانت تست رایگان')).toBeTruthy()
+    expect(fact('پلن')).toBe('اکانت تست رایگان')
+    expect(screen.queryByText('پلن حذف شده')).toBeNull()
+    expect(screen.queryByText('تمدید خودکار')).toBeNull()
   })
 })

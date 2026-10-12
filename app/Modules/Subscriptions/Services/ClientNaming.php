@@ -13,8 +13,9 @@ use App\Modules\Users\Models\User;
 /**
  * What a customer's client is called on the panel, so the panel's client list reads as people: "<username>_<n>" (amir_1,
  * amir_2 … across every server, n from the customer's own counter), or "USER_<n>" from one counter shared by every
- * customer without a username. Counters only go up, so a deleted service's number is never reused. A panel's names are
- * unique across every bot's services on it, so a name already taken there is skipped.
+ * customer without a username; a free test account's starts with "test_" (test_amir_3), so the panel's list tells
+ * tests apart. Counters only go up, so a deleted service's number is never reused. A panel's names are unique across
+ * every bot's services on it, so a name already taken there is skipped.
  *
  * The client's comment ties it back to the account: "<telegram id> | <username or USER>", "web#<user id> | USER" for a
  * customer without Telegram, plus "| @<agent bot>" for a service an agent's bot sold.
@@ -26,6 +27,9 @@ final class ClientNaming
 
     /** Stands in for the Telegram id in the comment of a customer without Telegram, before their user id. */
     private const WEB = 'web#';
+
+    /** What a free test account's name starts with. */
+    private const TEST = 'test_';
 
     /** The `sequences` counter behind "USER_<n>". */
     private const ANONYMOUS_SEQUENCE = 'clients.anonymous';
@@ -39,26 +43,29 @@ final class ClientNaming
     ) {}
 
     /**
-     * The next name for this customer on this server. A username can move between Telegram accounts, so a name a service
-     * there already carries is skipped for the next number.
+     * The next name for this customer on this server — a `$test` account's with "test_" before it. A username can move
+     * between Telegram accounts, so a name a service there already carries is skipped for the next number.
      */
-    public function next(User $user, Server $server): string
+    public function next(User $user, Server $server, bool $test = false): string
     {
         $username = self::username($user);
 
         do {
-            $name = $username !== null
+            $name = ($test ? self::TEST : '') . ($username !== null
                 ? $username . '_' . $this->sequences->next(self::CUSTOMER_SEQUENCE . $user->id)
-                : self::ANONYMOUS . '_' . $this->sequences->next(self::ANONYMOUS_SEQUENCE);
+                : self::ANONYMOUS . '_' . $this->sequences->next(self::ANONYMOUS_SEQUENCE));
         } while (self::taken($server, $name));
 
         return $name;
     }
 
-    /** The name a service keeps on the server it moves to — its own, unless taken there, then the customer's next. */
+    /**
+     * The name a service keeps on the server it moves to — its own, unless taken there, then the customer's next (a test's
+     * still "test_…").
+     */
     public function nameOn(Subscription $subscription, Server $server): string
     {
-        return self::taken($server, $subscription->remote_name) ? $this->next($subscription->user, $server) : $subscription->remote_name;
+        return self::taken($server, $subscription->remote_name) ? $this->next($subscription->user, $server, $subscription->is_test) : $subscription->remote_name;
     }
 
     /**

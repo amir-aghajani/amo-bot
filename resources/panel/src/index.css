@@ -192,13 +192,8 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* What the browser scrolls into view (a focused control, the skip link's target) clears the page's edge… */
-    scroll-padding-top: 1rem;
-
-    /* …and on a phone (below `md`, lib/use-media-query's PHONE) the sticky topbar too. */
-    @media (width < 48rem) {
-      scroll-padding-top: calc(var(--topbar-height) + 1rem);
-    }
+    /* What the browser scrolls into view (a focused control, the skip link's target) clears the sticky header. */
+    scroll-padding-top: calc(var(--topbar-height) + 1rem);
   }
 
   /* Motion is decorative everywhere in the panel; honour the OS preference wholesale. */

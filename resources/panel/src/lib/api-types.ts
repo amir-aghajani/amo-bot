@@ -327,6 +327,8 @@ export interface ChangesResponse {
     orders?: number
     payments?: number
     subscriptions?: number
+    /** The free test accounts given. */
+    tests?: number
     /** Referral commissions, bonuses, rewards and alerts. */
     referrals?: number
     /** The agency's levels and requests, the agents' bots and their traffic. */
@@ -601,6 +603,7 @@ export interface DashboardResponse {
     }
     orders: CountKpi
     new_users: CountKpi
+    /** Active services, free test accounts aside. */
     active_subscriptions: number
     users_total: number
   }
@@ -617,7 +620,7 @@ export interface DashboardResponse {
     pending_orders: number
     /** Servers whose panel failed its last check. Always 0 in an agent's shop. */
     servers_with_errors: number
-    /** Active services ending within `expiring_days`. */
+    /** Active services ending within `expiring_days`, free test accounts aside. */
     expiring_soon: number
   }
   /** Set when an agent's shop has too little traffic to sell anything; null otherwise, and always null in the main shop. */
@@ -983,8 +986,10 @@ export interface SubscriptionRow {
   name: string
   /** The customer's subscription link. */
   link: string
+  /** A free test account («اکانت تست»): no plan, never renewed, never counted as ending soon (`expiring_soon`); removed by the tests' own rule (`removes_at`). */
+  is_test: boolean
   user: UserRef
-  /** Null once the plan is deleted. */
+  /** Null for a test account, or once the plan is deleted. */
   plan: NamedRef | null
   server: NamedRef
   /** In bytes; a limit of 0 means unlimited. */
@@ -1009,11 +1014,15 @@ export interface SubscriptionRow {
   starts_at: string | null
   /** Null while waiting for the first connection, or without a term. */
   expires_at: string | null
-  /** Active, and ending within the list's `meta.expiring_days`. */
+  /** Active, no free test account, and ending within the list's `meta.expiring_days`. */
   expiring_soon: boolean
   /** When the panel was last read for it; the numbers are from then. */
   last_synced_at: string | null
   disabled_at: string | null
+  /** When it ended: the deadline it passed, or when the shop found its traffic used up or its client gone from the panel. Null while it runs, and past a deadline until the shop next reads its panel. */
+  ended_at: string | null
+  /** When the shop removes it from its panel and the shop by itself, by its rules now: `expired_cleanup_hours` after it ended while `expired_cleanup` is on; a test, while `test_cleanup` is on, `test_cleanup_hours` after it ended — or, never connected, `test_unused_days` after it was made. Null when no rule removes it: it runs (a test never connected aside), it is switched off, or the rule is off. A moment already past: it goes at the next check (every 15 minutes), unless an order of it is still open. */
+  removes_at: string | null
   created_at: string
   /** Which operations its current state allows (the server decides). */
   actions: {
@@ -1051,12 +1060,15 @@ export interface SubscriptionDeleteRequest {
   leave_panel?: boolean
 }
 
+/** The services list's `kind` filter: the free test accounts (`test`), or every other service — sold, renewed or given (`regular`). */
+export type SubscriptionKind = 'test' | 'regular'
+
 /** The services list's sort keys: creation time (the default), end date (services that never end or have not started come after every deadline), or traffic used. */
 export type SubscriptionSort = 'created' | 'expires' | 'used'
 
 export interface SubscriptionsResponse {
   subscriptions: SubscriptionRow[]
-  /** `expiring` counts active services ending within `expiring_days` (the tab's count; the dashboard uses the same window). */
+  /** `expiring` counts active services ending within `expiring_days`, free test accounts aside (the tab's count; the dashboard uses the same window). */
   meta: {
     page: number
     per_page: number
@@ -1518,6 +1530,32 @@ export interface InboundSellableRequest {
 
 export interface InboundsResponse {
   inbounds: ServerInboundRow[]
+}
+
+/** A server's free test accounts («اکانت تست»): whether it gives them, and what each gets. A test is made on every inbound the server sells. */
+export interface ServerTestAccount {
+  /** The server gives free tests (the bot settings switch them on for the shop as a whole). */
+  test_enabled: boolean
+  /** A test's traffic, in MB. */
+  test_traffic_mb: number
+  /** A test's term, in hours. */
+  test_duration_hours: number
+  /** The hours count from the customer's first connection; otherwise from the moment the test is made. */
+  test_on_hold: boolean
+}
+
+export interface ServerTestAccountResponse {
+  test_account: ServerTestAccount
+}
+
+/** A server's test terms, saved whole. Every refusal is returned at once, under its field. */
+export interface ServerTestAccountRequest {
+  test_enabled: boolean
+  /** 1 to 102,400 MB. */
+  test_traffic_mb: WholeNumberInput
+  /** 1 to 720 hours. */
+  test_duration_hours: WholeNumberInput
+  test_on_hold: boolean
 }
 
 export type ServerGrantStatus = 'running' | 'done' | 'cancelled'
@@ -2617,6 +2655,70 @@ export interface WheelSpinsResponse {
   meta: PageMeta
 }
 
+/** Where a free test account stands: `making` (its panel is still being asked), `waiting` (its hours start at the first connection), `running`, `disabled` (switched off by support), `ended` (its time or traffic ran out, or its panel no longer has it), `removed` (deleted from its panel and the shop; it still counts in the customer's quota). */
+export type TestAccountState = 'making' | 'waiting' | 'running' | 'disabled' | 'ended' | 'removed'
+
+/** A free test account («اکانت تست») the shop gave, with the terms it got (as its server's were then). */
+export interface TestAccountRow {
+  id: number
+  customer: UserRef
+  /** Null once the server is deleted. */
+  server: NamedRef | null
+  traffic_bytes: number
+  duration_hours: number
+  /** Its hours counted from the first connection; otherwise from the moment it was made. */
+  on_hold: boolean
+  state: TestAccountState
+  /** Its service, as last read from its panel; null while it is being made and once it is removed. */
+  subscription: {
+    id: number
+    /** The client's name on the panel ("test_ali_1"). */
+    name: string
+    status: SubscriptionStatus
+    /** In bytes; a limit of 0 means unlimited. */
+    traffic: {
+      limit: number
+      used: number
+    }
+    /** When the first connection started its hours; null until then. */
+    starts_at: string | null
+    /** Null while it waits for the first connection. */
+    expires_at: string | null
+  } | null
+  /** The customer bought a service with a price after taking it. */
+  bought_after: boolean
+  created_at: string
+  /** When its service was made; null while it is being made. */
+  issued_at: string | null
+  /** When it ended — its deadline, or when the shop found its traffic used up or its client gone (its removal is counted from then); null while it runs (and past its deadline until the shop next reads its panel), and once it is removed. */
+  ended_at: string | null
+}
+
+export interface TestAccountsResponse {
+  tests: TestAccountRow[]
+  meta: PageMeta
+}
+
+/** A server with its test terms (`ServerTestAccount`), and whether it would give a test in this shop now. */
+export interface TestServerRow {
+  id: number
+  name: string
+  /** The server gives free tests (the bot settings switch them on for the shop as a whole). */
+  test_enabled: boolean
+  /** A test's traffic, in MB. */
+  test_traffic_mb: number
+  /** A test's term, in hours. */
+  test_duration_hours: number
+  /** The hours count from the customer's first connection; otherwise from the moment the test is made. */
+  test_on_hold: boolean
+  /** The server would give a test in this shop now: it is switched on for tests (`test_enabled`), it can take a client (switched on, serving subscription links, with room, and an inbound it sells where its panel has inbounds), and in an agent's shop the agent's bot has a test's traffic left. The shop's own rules are not counted: its switch (the bot settings' `test_enabled`), the daily cap and each customer's quota. While the shop's switch is off, no customer gets a test, whatever this says. */
+  available: boolean
+}
+
+export interface TestServersResponse {
+  servers: TestServerRow[]
+}
+
 /** A loyalty tier («سطح وفاداری»). A customer is on the highest tier whose `min_spent` they reached; it gives them a discount on purchases and extra cashback on payments. */
 export interface LoyaltyTierRow {
   id: number
@@ -2951,6 +3053,26 @@ export interface BotSettingsData {
   /** Remind the customer once `traffic_reminder_percent` of a service's quota is used. */
   traffic_reminder: boolean
   traffic_reminder_percent: number
+  /** «سرویس‌های منقضی‌شده»: an ended service — its time or traffic ran out, or its panel no longer has it — is removed from its panel and the shop by itself, `expired_cleanup_hours` after it ended (checked every 15 minutes), without a word to the customer; its orders stay. A service renewed meanwhile, switched off by support, or with an order still open (a renewal waiting for its receipt) is kept. Free test accounts go by their own rule (`test_cleanup`). Off by default. */
+  expired_cleanup: boolean
+  /** How many hours an ended service is kept before it is removed; 0 at once. */
+  expired_cleanup_hours: number
+  /** «اکانت تست رایگان»: customers can take a free test account with the bot's «اکانت تست» button, on a server that gives tests. What a test gets is each server's (`PUT /api/admin/servers/{id}/test-account`); in an agent's shop its traffic comes from the agent's bot. */
+  test_enabled: boolean
+  /** How many tests a customer may take: for good, or within `test_period_days`. Bot admins have no quota. */
+  test_per_user: number
+  /** The window `test_per_user` counts over, in days; 0 for good. */
+  test_period_days: number
+  /** The most tests the shop gives in one day of its time zone; 0 for no cap. */
+  test_daily_limit: number
+  /** Only customers who never bought a service with a price can take one. */
+  test_newcomers_only: boolean
+  /** Tests that ended are removed from their panels by themselves (checked every 15 minutes). A removed test still counts in the quota. */
+  test_cleanup: boolean
+  /** How many hours an ended test is kept before it is removed; 0 at once. */
+  test_cleanup_hours: number
+  /** While `test_cleanup` is on, after how many days a test that never connected is removed (its hours wait for the first connection); 0 never. */
+  test_unused_days: number
   /** «زیرمجموعه‌گیری»: the referral program. Referral links bring new customers, and their payments earn the referrer `referral_rate` percent. */
   referral_enabled: boolean
   referral_rate: number
@@ -3034,7 +3156,23 @@ export interface QrBackgroundInfo {
 }
 
 export type BotSettingsGroup =
-  'general' | 'channels' | 'wallet' | 'renewal' | 'auto_renew' | 'extras' | 'reminders' | 'referral' | 'reports' | 'qr' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts'
+  | 'general'
+  | 'channels'
+  | 'wallet'
+  | 'renewal'
+  | 'auto_renew'
+  | 'extras'
+  | 'reminders'
+  | 'expired_services'
+  | 'test_accounts'
+  | 'referral'
+  | 'reports'
+  | 'qr'
+  | 'gift_codes'
+  | 'wheel'
+  | 'cashback'
+  | 'lottery'
+  | 'discounts'
 
 export interface BotSettingsResponse {
   settings: BotSettingsData
@@ -3063,6 +3201,8 @@ export type BotSettingsRequest =
   | BotAutoRenewSettingsRequest
   | BotExtrasSettingsRequest
   | BotRemindersSettingsRequest
+  | BotExpiredServicesSettingsRequest
+  | BotTestAccountsSettingsRequest
   | BotReferralSettingsRequest
   | BotReportsSettingsRequest
   | BotQrSettingsRequest
@@ -3112,6 +3252,23 @@ export interface BotWheelSettingsRequest {
   wheel_buyers_only: boolean
   /** Whole Toman, 0 to 10,000,000. Thousands separators are accepted only between groups of three digits ("10,000"). */
   wheel_cost: WholeNumberInput
+}
+
+/** «اکانت تست رایگان»: the switch, the quota and the clean-up. Every refusal is returned at once, under its field. */
+export interface BotTestAccountsSettingsRequest {
+  test_enabled: boolean
+  /** 1 to 100. */
+  test_per_user: WholeNumberInput
+  /** 0 to 365; 0 for good. */
+  test_period_days: WholeNumberInput
+  /** 0 to 100,000; 0 for no cap. */
+  test_daily_limit: WholeNumberInput
+  test_newcomers_only: boolean
+  test_cleanup: boolean
+  /** 0 to 720. */
+  test_cleanup_hours: WholeNumberInput
+  /** 0 to 365; 0 never. */
+  test_unused_days: WholeNumberInput
 }
 
 export interface BotGeneralSettingsRequest {
@@ -3221,6 +3378,13 @@ export interface BotRemindersSettingsRequest {
   traffic_reminder: boolean
   /** 50 to 99. */
   traffic_reminder_percent: WholeNumberInput
+}
+
+/** «سرویس‌های منقضی‌شده»: the automatic removal of ended services, and how long after its end a service goes. */
+export interface BotExpiredServicesSettingsRequest {
+  expired_cleanup: boolean
+  /** 0 to 8760 (a year); 0 removes at once. */
+  expired_cleanup_hours: WholeNumberInput
 }
 
 export interface BotReferralSettingsRequest {
@@ -4371,7 +4535,9 @@ export interface StoreSubscription {
   /** Its name on the panel ("amir_2", "USER_7"). */
   name: string
   status: SubscriptionStatus
-  /** The plan it was sold or last renewed on; null once that plan is deleted. */
+  /** A free test account («اکانت تست»), taken in the bot: it has no plan and can be neither renewed nor bought extras (`extras`); the shop may remove it some time after it ends, or some days after it was made while never connected (`removes_at`). */
+  is_test: boolean
+  /** The plan it was sold or last renewed on; null for a test account, or once that plan is deleted. */
   plan: NamedRef | null
   /** The server it is on («لوکیشن» in the bot). */
   server: NamedRef
@@ -4379,6 +4545,10 @@ export interface StoreSubscription {
   link: string | null
   traffic: StoreServiceTraffic
   term: StoreServiceTerm
+  /** When it ended: its end date passed, its traffic ran out, or its panel no longer has it. Null while it runs, and after its end date until the shop next reads its panel (`term.expires_at` says when). */
+  ended_at: string | null
+  /** When the shop will remove it by itself — from its panel and from the customer's services —, by the shop's rules now; null when it will not. Set only for a service that ended (or a test account never connected) in a shop that removes such services: renewing it or adding to it before then keeps it, and the moment can move when the shop changes its rules. A moment already past: it goes at the shop's next check (every 15 minutes). A service switched off by support, or with an order still open (a renewal waiting for its receipt), is not removed. */
+  removes_at: string | null
   /** Auto-renewal («تمدید خودکار»): the service is renewed from the wallet before it ends, on its plan at the plan's price. */
   auto_renew: {
     /** The customer's switch. */
@@ -4390,7 +4560,7 @@ export interface StoreSubscription {
   }
   /** The customer can renew it now on its plan: it is active or ended, its plan still exists and the renewal adds something, and in an agent's shop the agent's traffic covers it. */
   renewable: boolean
-  /** Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel). Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. */
+  /** Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. */
   extras: {
     traffic: boolean
     time: boolean
@@ -5067,6 +5237,8 @@ export type PanelWrite =
   | { method: 'POST'; path: `/servers/${number}/inbounds/sync`; body: undefined; answer: ServerDetailResponse }
   /** Switch whether an inbound is sold. */
   | { method: 'PATCH'; path: `/servers/${number}/inbounds/${number}`; body: InboundSellableRequest; answer: InboundsResponse }
+  /** Save a server's test terms. A test already given keeps the terms it got. */
+  | { method: 'PUT'; path: `/servers/${number}/test-account`; body: ServerTestAccountRequest; answer: ServerTestAccountResponse }
   /** Give days and traffic to the services on a server. */
   | { method: 'POST'; path: `/servers/${number}/grants`; body: ServerGrantRequest; answer: ServerGrantResponse }
   /** Apply a grant to the next few services. */
@@ -5149,7 +5321,7 @@ export type PanelWrite =
   | { method: 'POST'; path: `/payments/${number}/remind`; body: undefined; answer: ReminderResponse }
   /** Retry the delivery of what a paid payment bought. */
   | { method: 'POST'; path: `/payments/${number}/retry`; body: undefined; answer: PaymentResponse }
-  /** Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone (a top-up already spent, an agent's traffic already sold). */
+  /** Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are. */
   | { method: 'POST'; path: `/payments/${number}/refund`; body: RefundRequest; answer: PaymentResponse }
   /** Refresh a service's usage and term from its panel. */
   | { method: 'POST'; path: `/subscriptions/${number}/sync`; body: undefined; answer: SubscriptionResponse }
@@ -5375,9 +5547,9 @@ export type StoreWrite =
   | { method: 'POST'; path: `/subscriptions/${number}/rotate-link`; body: undefined; answer: StoreSubscriptionResponse }
   /** Renew a service, paid with `method_id`, as the GET previews it. The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key`, it returns the renewal that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/renewal`; body: StoreRenewalRequest; answer: StoreCheckoutResponse }
-  /** Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  /** Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-traffic`; body: StoreExtraTrafficRequest; answer: StoreCheckoutResponse }
-  /** Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  /** Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-time`; body: StoreExtraTimeRequest; answer: StoreCheckoutResponse }
   /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
   | { method: 'POST'; path: '/orders'; body: StoreOrderRequest; answer: StoreCheckoutResponse }

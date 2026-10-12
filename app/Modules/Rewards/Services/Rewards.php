@@ -95,12 +95,12 @@ final class Rewards
     }
 
     /**
-     * Whether the service can take it: active, and for days one that ends some day with traffic left, for traffic one with
-     * a quota and time left.
+     * Whether the service can take it: active and no free test (removed once it ends), and for days one that ends some day
+     * with traffic left, for traffic one with a quota and time left.
      */
     private static function takes(Subscription $subscription, Reward $reward): bool
     {
-        return $subscription->isActive() && match ($reward->kind) {
+        return $subscription->isActive() && !$subscription->is_test && match ($reward->kind) {
             RewardKind::Days => $subscription->hasTerm() && !$subscription->isExpiredByTraffic(),
             RewardKind::Traffic => $subscription->traffic_limit_bytes > 0 && !$subscription->isExpiredByTime(),
             default => false,

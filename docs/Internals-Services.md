@@ -1,15 +1,16 @@
 # Internals: services
 
 How the shop's services live on the VPN panels, and the pieces around them: the panel connectors, provisioning and
-every later change of a service, grants, renewals and reminders, the shops of the agent bots, the notices a customer
-gets, support tickets and reviews. What an owner sees of them is in [Servers](Servers.md), [Services](Services.md),
+every later change of a service, grants, renewals and reminders, free test accounts, the automatic removal of what is
+done with, the shops of the agent bots, the notices a customer gets, support tickets and reviews. What an owner sees
+of them is in [Servers](Servers.md), [Services](Services.md), [Test accounts](Test-Accounts.md),
 [Support tickets](Support-Tickets.md) and [Reviews](Reviews.md); how to add a panel connector is in
 [Drivers](Drivers.md#a-vpn-panel-connector).
 
 | Module | Holds |
 |---|---|
 | `app/Modules/Providers` | Servers, the connector contract, the 3x-ui and PasarGuard connectors, panel health |
-| `app/Modules/Subscriptions` | Services, provisioning, the operations, grants, renewals, extras, reminders, the sync |
+| `app/Modules/Subscriptions` | Services, provisioning, the operations, grants, renewals, extras, reminders, free test accounts, the automatic removal, the sync |
 | `app/Modules/Bots` | The bots, `CurrentBot` and the shop scope |
 | `app/Modules/Notifications` | Every notice a customer gets, kept for their website and sent by Telegram or email |
 | `app/Modules/Support` | Support tickets and their pictures |
@@ -79,7 +80,11 @@ subscription link and nothing else.
 A **service** (`Subscriptions\Models\Subscription`) is one client on a panel, with one subscription link. The panel is
 the truth: `ProvisioningService` maps every answer onto the row through one function (`values()` → `mirror()`), stamped
 with when the panel was asked (`last_synced_at`), and works out the status from the result — a service whose time or
-traffic ran out ends, one the panel extended runs again; support's switch and a deleted row stay.
+traffic ran out ends, one the panel extended runs again; support's switch and a deleted row stay. With the status it
+keeps when the service ended (`ended_at`, `endedAt()`), on every read and every change: null while it runs, so a
+renewal or an extension clears it; once ended, the deadline it passed, else the moment the panel said its traffic was
+used up or its client gone — an end already kept stays; support's switch leaves it as it was. The automatic removal
+counts from it ([below](#the-automatic-removal)).
 
 **The term starts at the first connection**: a new client gets `Expiry::afterFirstUse()`, and `expires_at`
 stays null until the panel starts the clock (`Subscription::awaitsFirstUse()`). A term is counted in hours everywhere
@@ -155,6 +160,78 @@ failure that may have reached the panel (a timeout) is counted failed, not retri
 generated unique column); MySQL cannot cascade on such a column, so `ServerService::delete()` removes a server's parts
 itself. Who gets it is decided per service at its turn, by the panel's word: running, not switched off, and — unless
 ticked — not still waiting for the first connection.
+
+## Test accounts
+
+A free test account («اکانت تست», [Test accounts](Test-Accounts.md)) is a service with `is_test` set and no plan.
+`Subscriptions\Services\TestAccounts` gives them: `offer()` lists the servers a customer may take one on now, `issue()`
+takes one.
+
+- **The quota** (`TestAccountSettings`, the `test_accounts` settings group) is judged by `admit()`: the switch; then,
+  for anyone but a bot admin, newcomers only (`Order::paidPurchases()`), the customer's tests for good or within a
+  window (the refusal carries when the next one is possible), and the shop's cap a day of its clock — which counts
+  every `test_accounts` row of the day, an admin's too. Each refusal is a `TestAccountRefusedException` with its
+  `Enums\TestRefusal`.
+- **Judged under a lock, claimed before the panel is asked.** `claim()` locks the shop's `bots` row while there is a cap
+  a day (else the customer's `users` row), judges the quota again and writes the `test_accounts` row with `issued_at`
+  null; so of two taps at once one is refused. The provisioning's transaction links the service and stamps
+  `issued_at`; a failure deletes the claim (only while still unissued) and goes up as it came. A claim whose process
+  died is deleted by the clean-up's first run 30 minutes after it was made.
+- **The terms are the server's.** `TestServers` holds the owner's form for `servers.test_*` (read as `DTO\TestTerms`)
+  and `choices()`: switched on for tests, able to take a client (`ServerSelector::testInbounds()` — `ServerReadiness`,
+  then every inbound for sale), and in an agent's shop a pool holding the test's traffic.
+- **Made like a sale.** `ProvisioningService::provisionTest()` goes through the same `create()` as `provision()` — one
+  client on every inbound, the panel's link required, the client taken back if the row's transaction fails —, named by
+  `ClientNaming` with `test_` before the customer's name (a move that must rename it keeps the prefix), with no IP
+  limit and `TestTerms::expiry()`: from the first connection, or a deadline from now.
+- **An agent's pool** is drawn in the transaction that writes the service row and issues the claim (the closure
+  `issue()` hands `provisionTest()`): `TrafficPool::drawTest()` writes one `sale` line «اکانت تست · سرویس …», so a test
+  that falls through draws nothing and nothing is given back. A pool short at that moment (`TrafficShortException`)
+  rolls the row back, takes the client off the panel and is the no-server refusal; the bot's tap then redraws the
+  screen.
+- **What a test never gets** is decided where each feature picks its services: renewals and «تمدید خودکار» need a plan,
+  `CustomerExtras::problem()` refuses it, and `ServiceReminders`, `Grants::services()` and `Rewards::takes()` leave
+  `is_test` out. `Subscription::expiringWithin()` (and `isExpiringWithin()`) leaves tests out, so automatic renewal,
+  the end reminders, the services list's «رو به انقضا» and the dashboard's count never see one; the dashboard's active
+  services leave them out too. `Server::activeServices()` counts them: a test takes room in the server's capacity. A
+  test makes no order, so it is never a purchase.
+- **The panels' page** is `TestAccountDirectory`: the shop's tests with where each stands (`Enums\TestState`, worked out
+  from the service as last seen, and asked of the database the same way for the filter) and whether the customer bought
+  after it (one subquery for the page); every server with its terms and whether it gives a test now in this shop.
+- **The clean-up** is [the automatic removal](#the-automatic-removal)'s: `Tasks\CleanupServicesTask` deletes the
+  claims a dead process left, and — while the shop's clean-up is on (`TestAccountSettings::cleansUp()`) — removes the
+  tests that ended, after the shop's hours from their end, and the ones on hold never connected, after its days.
+
+The `test_accounts` row outlives its service (`subscription_id` is set null by `delete()`, which the change feed sees),
+so the quota still counts a removed test; `AccountMerger` moves the rows to the account that stays.
+
+## The automatic removal
+
+`ServiceCleanup` is the one rule of when the shop removes a service by itself, by two settings groups:
+`ExpiredServicesSettings` (`expired_services`, off by default: a service that ended, so many hours after its end, 0 to
+8760) and `TestAccountSettings` (a free test so many hours after it ended, or so many days after it was made while it
+still waits for its first connection). A service is over by `Subscription::isOver()` — `over()` asks the database the
+same: ended, gone from its panel, or active past its deadline before a sync said so; a switched-off one never is. The
+hours count from `ended_at`, else that passed deadline, else the row's last change.
+
+- `removesAt()` — when it goes by the rules now, or null: what the bot's service screen (`SubscriptionHandler`), the
+  panels' rows (`SubscriptionDirectory`) and the Store API (`SubscriptionPresenter`) show as `removes_at`. Open orders
+  are left out of it: the removal itself waits for them.
+- `due()` — the current shop's services whose time came, at most 100 of each rule (the ended tests, the tests never
+  connected, the ended services), the lowest id first, none with an order about it in `Order::OPEN` (pending, paid,
+  processing, or failed and waiting for support's retry — the list that also keeps `AutoRenewal` from ordering a
+  second renewal).
+- `stillDue()` — `removesAt()` passed and still no open order, judged on the row as its panel has it now.
+
+`Tasks\CleanupServicesTask` (every 15 minutes, right after the sync) is no `eachBot` task: it finds the shops with
+services over, test services or unissued test claims across every bot (`Subscription::acrossShops()`) — an agent's bot
+that stopped running too, since its services sit on the installation's panels — and works each in its own shop
+(`CurrentBot::run()`), within the run's share of the scheduler's time. In each it deletes the test claims a dead
+process left, then takes `due()` one by one through `ProvisioningService::deleteIf()`: the service held, read from its
+panel again (unless already gone from it), judged by `stillDue()`, and only then deleted as `delete()` does — so a
+renewal, an extension or a first connection since the sync is never lost. A server in backoff waits unless the service
+is already gone from its panel; a busy service or a panel failure waits for a later run, logged; one that breaks stops
+no other. Nobody is told. The orders and the `test_accounts` rows lose their link to the service and stay.
 
 ## The sync and the tasks
 

@@ -15,6 +15,7 @@ use App\Modules\Rewards\Enums\RewardKind;
 use App\Modules\Rewards\Models\LotteryDraw;
 use App\Modules\Rewards\Models\LotteryWinner;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\TestAccounts;
 use App\Modules\Support\Models\Ticket;
 use App\Modules\Support\Services\Tickets;
 use App\Modules\Users\Models\CustomerGroup;
@@ -46,6 +47,10 @@ final class ListQueriesTest extends HttpTestCase
         $this->referralProgram();
         // The shop sells extras: what each of a customer's services may buy is judged with its page.
         $this->extrasOnSale();
+        // Free test accounts on: each customer takes one, the screen of tests and its servers grow with the rows.
+        $this->botSettings('test_accounts', ['test_enabled' => true, 'test_per_user' => 1, 'test_period_days' => 0, 'test_daily_limit' => 0, 'test_newcomers_only' => false, 'test_cleanup' => true, 'test_cleanup_hours' => 24, 'test_unused_days' => 7]);
+        // Ended services removed: every service row — the panels' and the website's — says when it goes, by rules read once.
+        $this->botSettings('expired_services', ['expired_cleanup' => true, 'expired_cleanup_hours' => 24]);
         $website = $this->website(['reviews_enabled' => true]);
         $this->rows(2);
         $referrer = $this->referrer ?? self::fail('No customer was made.');
@@ -88,6 +93,8 @@ final class ListQueriesTest extends HttpTestCase
             '/api/admin/gift-codes/batches',
             '/api/admin/wheel/prizes',
             '/api/admin/wheel/spins',
+            '/api/admin/tests',
+            '/api/admin/tests/servers',
             '/api/admin/loyalty/tiers',
             '/api/admin/cashback/rules',
             '/api/admin/lottery/draws',
@@ -128,10 +135,10 @@ final class ListQueriesTest extends HttpTestCase
 
     /**
      * `$count` more of everything: a customer — brought by the first one — in a group of their own, who bought a plan on a
-     * server of its own by card (the order, the payment, the service, the commission), asked to become an agent, opened
-     * a ticket about their service and wrote a review (approved); an agent; a guest's review waiting on support; and the
-     * first customer's own purchase of that plan — the notice of it —, a line of their wallet, a ticket of theirs and
-     * support's answer in their first.
+     * server of its own by card (the order, the payment, the service, the commission), took a free test there, asked to
+     * become an agent, opened a ticket about their service and wrote a review (approved); an agent; a guest's review
+     * waiting on support; and the first customer's own purchase of that plan — the notice of it —, a line of their
+     * wallet, a ticket of theirs and support's answer in their first.
      */
     private function rows(int $count): void
     {
@@ -141,9 +148,10 @@ final class ListQueriesTest extends HttpTestCase
             $customer = $this->customer(['telegram_id' => 50_000 + $n, 'username' => "customer{$n}", 'referred_by' => $this->referrer?->id]);
             $this->referrer ??= $customer;
             $this->customerGroup("گروه {$n}", [$customer]);
-            $server = $this->sellingServer("سرور {$n}");
+            $server = $this->sellingServer("سرور {$n}", ['test_enabled' => true]);
             $plan = $this->plan(['name' => "پلن {$n}"], $server);
             $this->paidByCard($this->purchaseOrder($customer, $plan, $server), $this->card);
+            $this->service(TestAccounts::class)->issue($customer, $server->id);
             $this->wallet($customer, (string) (10_000 * $n));
             $this->agencyRequest($customer);
             // An alert on them as a referrer: the referrers list marks them, the alerts list names them.

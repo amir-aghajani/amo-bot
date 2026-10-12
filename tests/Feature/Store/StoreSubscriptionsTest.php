@@ -20,6 +20,7 @@ use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
 use App\Modules\Subscriptions\Exceptions\ServiceNotReadException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ProvisioningService;
+use App\Modules\Subscriptions\Services\TestAccounts;
 use App\Modules\Users\Models\User;
 use App\Support\Traffic;
 use App\Support\Validation;
@@ -30,7 +31,8 @@ use Tests\HttpTestCase;
 
 /**
  * A customer's own services as last synced, with what they may do: refresh from the panel (502 while it cannot be read),
- * «تمدید خودکار» while offered, a new link (refusals, panel failures summarised, busy services), with the bot silent.
+ * «تمدید خودکار» while offered, a new link (refusals, panel failures summarised, busy services), with the bot silent; a
+ * free test told apart; and when an ended one — or a test never connected — goes, while the shop removes them.
  */
 final class StoreSubscriptionsTest extends HttpTestCase
 {
@@ -88,11 +90,14 @@ final class StoreSubscriptionsTest extends HttpTestCase
             'id' => $subscription->id,
             'name' => 'ali_1',
             'status' => 'active',
+            'is_test' => false,
             'plan' => ['id' => $this->plan->id, 'name' => 'یک‌ماهه'],
             'server' => ['id' => $this->server->id, 'name' => 'Berlin'],
             'link' => 'https://fake.test/sub/ali_1',
             'traffic' => ['limit_bytes' => 30 * Traffic::GIGABYTE, 'used_bytes' => 3 * Traffic::GIGABYTE, 'remaining_bytes' => 27 * Traffic::GIGABYTE],
             'term' => ['duration_days' => 30, 'duration_hours' => 720, 'starts_at' => '2026-10-07T12:00:00+00:00', 'expires_at' => '2026-11-06T12:00:00+00:00', 'awaits_first_use' => false],
+            'ended_at' => null,
+            'removes_at' => null,
             'auto_renew' => ['on' => true, 'offered' => true, 'days_before' => 2],
             'renewable' => true,
             'extras' => ['traffic' => false, 'time' => false],
@@ -124,6 +129,44 @@ final class StoreSubscriptionsTest extends HttpTestCase
         self::assertSame([['on' => false, 'offered' => false, 'days_before' => 2], false], [$row['auto_renew'], $row['renewable']], 'it never ends, and its plan renews nothing');
 
         self::assertSame(['ends_at' => '2026-10-12T12:00:00+00:00', 'bytes' => 30 * Traffic::GIGABYTE], $one($renewed)['next_period']);
+    }
+
+    public function testAnEndedServiceSaysWhenTheShopRemovesItWhileTheShopDoes(): void
+    {
+        $ended = $this->subscription($this->customer, $this->plan, $this->server, 'ali_1', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subHours(2), 'ended_at' => now()->subHours(2)]);
+        $running = $this->subscription($this->customer, $this->plan, $this->server, 'ali_2');
+        $times = fn(): array => array_map(
+            static fn(array $row): array => [$row['ended_at'], $row['removes_at']],
+            array_column($this->decode($this->get($this->storeApi($this->website, '/subscriptions')))['subscriptions'], null, 'name'),
+        );
+
+        self::assertSame(['ali_2' => [null, null], 'ali_1' => ['2026-10-07T10:00:00+00:00', null]], $times(), 'the shop keeps its ended services until it says otherwise');
+
+        $this->botSettings('expired_services', ['expired_cleanup' => true, 'expired_cleanup_hours' => 12]);
+        self::assertSame(['ali_2' => [null, null], 'ali_1' => ['2026-10-07T10:00:00+00:00', '2026-10-07T22:00:00+00:00']], $times(), 'its end and twelve hours; a running one has neither');
+        self::assertSame('2026-10-07T22:00:00+00:00', $this->decode($this->get($this->storeApi($this->website, "/subscriptions/{$ended->id}")))['subscription']['removes_at']);
+        self::assertNull($this->decode($this->get($this->storeApi($this->website, "/subscriptions/{$running->id}")))['subscription']['removes_at']);
+    }
+
+    public function testAFreeTestSaysSoTakesNothingAndGoesByTheTestsRule(): void
+    {
+        $this->extrasOnSale();
+        $this->botSettings('test_accounts', ['test_enabled' => true, 'test_per_user' => 1, 'test_period_days' => 0, 'test_daily_limit' => 0, 'test_newcomers_only' => false, 'test_cleanup' => true, 'test_cleanup_hours' => 24, 'test_unused_days' => 7]);
+        $this->server->forceFill(['test_enabled' => true])->save();
+        $test = $this->service(TestAccounts::class)->issue($this->customer, $this->server->id);
+        $one = fn(): array => $this->decode($this->get($this->storeApi($this->website, "/subscriptions/{$test->id}")))['subscription'];
+
+        $row = $one();
+        self::assertSame(
+            [true, null, false, false, ['traffic' => false, 'time' => false]],
+            [$row['is_test'], $row['plan'], $row['renewable'], $row['auto_renew']['offered'], $row['extras']],
+            'no plan to renew it on, and no extras though the shop sells them',
+        );
+        self::assertSame([true, null, '2026-10-14T12:00:00+00:00'], [$row['term']['awaits_first_use'], $row['ended_at'], $row['removes_at']], 'never connected: removed a week after it was made');
+
+        $test->forceFill(['status' => SubscriptionStatus::Expired, 'starts_at' => now()->subDay(), 'expires_at' => now()->subHours(2), 'ended_at' => now()->subHours(2)])->save();
+        $row = $one();
+        self::assertSame(['2026-10-07T10:00:00+00:00', '2026-10-08T10:00:00+00:00'], [$row['ended_at'], $row['removes_at']], "ended: a day after its end, by the tests' own rule while the shop keeps its other ended services");
     }
 
     public function testWhatTheyMayDoIsTheBotsRules(): void

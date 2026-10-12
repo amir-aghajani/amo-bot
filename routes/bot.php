@@ -20,6 +20,7 @@ use App\Modules\Telegram\Handlers\ReceiptHandler;
 use App\Modules\Telegram\Handlers\RenewalHandler;
 use App\Modules\Telegram\Handlers\StartHandler;
 use App\Modules\Telegram\Handlers\SubscriptionHandler;
+use App\Modules\Telegram\Handlers\TestAccountHandler;
 use App\Modules\Telegram\Handlers\TicketHandler;
 use App\Modules\Telegram\Handlers\TicketMessageHandler;
 use App\Modules\Telegram\Handlers\TopUpHandler;
@@ -78,6 +79,10 @@ return static function (Dispatcher $bot): void {
     // «🎁 کد هدیه»: the code typed; «🎡 گردونه شانس»: a spin.
     $bot->state(GiftCodeHandler::STATE, GiftCodeHandler::class);
     $bot->callback(WheelHandler::PREFIX, WheelHandler::class);
+
+    // «🧪 اکانت تست»: /free opens its screen as the menu's button does; a server tapped takes a test there.
+    $bot->command(TestAccountHandler::COMMAND, TestAccountHandler::class);
+    $bot->callback(TestAccountHandler::PREFIX, TestAccountHandler::class);
 
     // Bot admins only (anyone else gets no answer): /broadcast.
     $bot->command(BroadcastHandler::COMMAND, BroadcastHandler::class, adminOnly: true);

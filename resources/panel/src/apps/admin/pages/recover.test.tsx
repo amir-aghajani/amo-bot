@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RecoverPage } from '@/apps/admin/pages/recover'
 import type { Session } from '@/lib/api-types'
 import { AuthProvider } from '@/lib/auth'
+import { ThemeProvider } from '@/lib/theme'
 import { testQueryClient, until } from '@/test/render'
 import { json, refusal, server, withHeaders } from '@/test/server'
 
@@ -25,16 +26,18 @@ function Address() {
 
 function open() {
   render(
-    <QueryClientProvider client={testQueryClient()}>
-      <MemoryRouter initialEntries={['/recover']}>
-        <AuthProvider>
-          <Routes>
-            <Route path="/recover" element={<RecoverPage />} />
-            <Route path="*" element={<Address />} />
-          </Routes>
-        </AuthProvider>
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <ThemeProvider>
+      <QueryClientProvider client={testQueryClient()}>
+        <MemoryRouter initialEntries={['/recover']}>
+          <AuthProvider>
+            <Routes>
+              <Route path="/recover" element={<RecoverPage />} />
+              <Route path="*" element={<Address />} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </ThemeProvider>,
   )
 }
 

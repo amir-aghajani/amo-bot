@@ -71,7 +71,9 @@ final class LayersTest extends TestCase
         // and asks the owner's password (Auth's AdminAccount) before every bot's token goes to another Bot API address.
         'Settings' => ['Auth', 'Bots', 'Telegram'],
         'Store' => ['Accounts', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Notifications', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Subscriptions', 'Support', 'Telegram', 'Users'],
-        // Traffic given in an agent's shop is the agent's (Agency); «تمدید خودکار» pays from the wallet (Payments).
+        // Traffic given in an agent's shop is the agent's (Agency); «تمدید خودکار» pays from the wallet, and a refund
+        // takes back what its order gave a service through Payments' RefundedOrders, which RefundedDeliveries
+        // implements (Payments).
         'Subscriptions' => ['Agency', 'Auth', 'Bots', 'Catalog', 'Notifications', 'Orders', 'Payments', 'Providers', 'Settings', 'Telegram', 'Users'],
         'Support' => ['Auth', 'Bots', 'Notifications', 'Subscriptions', 'Telegram', 'Users'],
         'Telegram' => ['Agency', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Notifications', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Subscriptions', 'Support', 'Users'],

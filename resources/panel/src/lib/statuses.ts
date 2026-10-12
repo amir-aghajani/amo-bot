@@ -17,6 +17,7 @@ import type {
   ServerGrantStatus,
   ServerRow,
   SubscriptionStatus,
+  TestAccountState,
   TicketChannel,
   TicketStatus,
   UserStatus,
@@ -113,6 +114,16 @@ export const SUBSCRIPTION_STATUS: Record<SubscriptionStatus, Status> = {
   expired: { label: 'منقضی‌شده', tone: 'neutral' },
   disabled: { label: 'غیرفعال', tone: 'neutral' },
   deleted: { label: 'حذف‌شده', tone: 'neutral' },
+}
+
+/** A free test account: its service's state, or that it is still being made or was removed (still counted in the quota). */
+export const TEST_STATE: Record<TestAccountState, Status> = {
+  making: { label: 'در حال ساخت', tone: 'info' },
+  waiting: { label: 'در انتظار اولین اتصال', tone: 'warning' },
+  running: { label: 'فعال', tone: 'success' },
+  disabled: { label: 'غیرفعال', tone: 'neutral' },
+  ended: { label: 'تمام‌شده', tone: 'neutral' },
+  removed: { label: 'حذف‌شده', tone: 'neutral' },
 }
 
 export const USER_STATUS: Record<UserStatus, Status> = {

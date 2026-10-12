@@ -80,10 +80,10 @@ final class RenewalHandler implements Handler, DiscountableCheckout
     }
 
     /**
-     * The renewal's checkout: the plan's term, traffic and the customer's price with its discount lines, the service's
-     * end and traffic as the renewal would leave them (and what of the current period's traffic expires), the plan's
-     * note, and the ways to pay. From the menu's list it also offers the service's extras: the way to a service whose
-     * traffic or time ran out, which «سرویس‌های من» does not list.
+     * The renewal's checkout: the plan's term and traffic, the customer's price, the service's end and traffic as the
+     * renewal would leave them (and what of the current period's traffic expires), the price's discount lines, when the
+     * shop removes the service unless it is renewed, the plan's note, and the ways to pay. From the menu's list it also offers
+     * the service's extras: the way to a service whose traffic or time ran out, which «سرویس‌های من» does not list.
      *
      * @throws DiscountCodeRefusedException when `$typed` does not hold
      */
@@ -108,11 +108,13 @@ final class RenewalHandler implements Handler, DiscountableCheckout
             'remaining' => $values['remaining'],
             'leftover' => $this->card->periodNote($preview->after),
         ]);
+        // The removal line goes under the discount lines: they belong with the price.
+        $text = BotTexts::paragraphs($this->screen->priced($text, $quote, $dropped), $this->card->removal($subscription));
 
         $pay = static fn(PaymentMethod $method): string => CallbackData::build(self::PREFIX, $subscription->id, $from, $method->id);
         $back = $from > 0 ? MenuHandler::renewalsCallback($from) : SubscriptionHandler::serviceCallback($subscription->id);
         $instead = $from > 0 ? $this->extras->buttons($subscription) : [];
-        $this->screen->show($ctx, $this->screen->withNote($this->screen->priced($text, $quote, $dropped), $plan), OrderType::Renewal, $pay, $back, $instead, free: !Money::isPositive($quote->amount()), quote: $quote, checkout: $at);
+        $this->screen->show($ctx, $this->screen->withNote($text, $plan), OrderType::Renewal, $pay, $back, $instead, free: !Money::isPositive($quote->amount()), quote: $quote, checkout: $at);
     }
 
     /** A way to pay picked: the renewal ordered (or the open one found) and paid — unless one is under way already. */

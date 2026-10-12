@@ -6,7 +6,7 @@ import { Fact, FactList } from '@/components/fact-list'
 import { OperationsSection, useOperations, type OperationSpec } from '@/components/operations'
 import { StatusBadge } from '@/components/status-badge'
 import { ExtendForm } from '@/components/subscriptions/extend-form'
-import { ServiceExpiry, UsageMeter } from '@/components/subscriptions/service-usage'
+import { ServiceExpiry, ServiceRemoval, UsageMeter } from '@/components/subscriptions/service-usage'
 import { SkipServerPrompt } from '@/components/subscriptions/skip-server-prompt'
 import { TextLink } from '@/components/text-link'
 import { Button } from '@/components/ui/button'
@@ -218,7 +218,7 @@ function LinkBox({ link, dead }: { link: string; dead: boolean }) {
   )
 }
 
-/** Everything known about the service, as of the panel's last answer. */
+/** Everything known about the service, as of the panel's last answer — and when the shop removes it by itself, if it does. */
 function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; serverPage?: (id: number) => string }) {
   return (
     <FactList>
@@ -227,7 +227,7 @@ function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; se
         {subscription.status === 'disabled' && subscription.disabled_at && <span className="ms-2 text-footnote text-muted-foreground">از {formatDate(subscription.disabled_at)}</span>}
       </Fact>
       <CustomerFacts user={subscription.user} />
-      <Fact label="پلن">{subscription.plan?.name ?? <span className="text-muted-foreground">پلن حذف شده</span>}</Fact>
+      <Fact label="پلن">{subscription.is_test ? 'اکانت تست رایگان' : (subscription.plan?.name ?? <span className="text-muted-foreground">پلن حذف شده</span>)}</Fact>
       <Fact label="سرور">{serverPage ? <TextLink to={serverPage(subscription.server.id)}>{subscription.server.name}</TextLink> : subscription.server.name}</Fact>
       <Fact label="مصرف">
         <UsageMeter traffic={subscription.traffic} className="max-w-64" />
@@ -235,8 +235,13 @@ function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; se
       <Fact label="پایان">
         <ServiceExpiry subscription={subscription} />
       </Fact>
+      {subscription.removes_at && (
+        <Fact label="حذف خودکار">
+          <ServiceRemoval at={subscription.removes_at} />
+        </Fact>
+      )}
       <Fact label="مدت">{formatDuration(subscription.duration_hours)}</Fact>
-      {subscription.duration_hours > 0 && <Fact label="تمدید خودکار">{subscription.auto_renew ? 'روشن' : <span className="text-muted-foreground">خاموش</span>}</Fact>}
+      {subscription.duration_hours > 0 && !subscription.is_test && <Fact label="تمدید خودکار">{subscription.auto_renew ? 'روشن' : <span className="text-muted-foreground">خاموش</span>}</Fact>}
       {subscription.next_period && (
         <Fact label="دوره بعدی">
           از {formatDate(subscription.next_period.starts_at, { dateStyle: 'medium' })}، حداکثر {formatBytes(subscription.next_period.traffic)}

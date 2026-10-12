@@ -27,6 +27,8 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $user_id
  * @property int|null $plan_id
+ * @property bool $is_test a free test account (Services\TestAccounts): no plan, never renewed, removed once it ends while
+ *                         its shop cleans up
  * @property int $server_id
  * @property string $remote_name
  * @property string $subscription_url
@@ -41,6 +43,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $expires_at null = never, or not started yet (awaitsFirstUse())
  * @property Carbon|null $last_synced_at when the panel was last read for it: the moment the numbers above are from
  * @property Carbon|null $disabled_at when support switched it off (status disabled)
+ * @property Carbon|null $ended_at when it ended — the deadline it passed, or when the panel said its traffic was used up
+ *                                 or its client gone; null while it runs. The automatic removal counts from it.
  * @property bool $auto_renew the customer's «تمدید خودکار»: renewed from the wallet before the deadline (AutoRenewal)
  * @property Carbon|null $renewal_notified_at when the customer was last told the wallet could not pay an automatic renewal
  * @property Carbon|null $expiry_reminded_at when the customer was reminded that it ends soon (ServiceReminders); null = not while it is near
@@ -64,9 +68,13 @@ class Subscription extends Model
 
     protected $table = 'subscriptions';
 
+    /** A row made in this request reads as the table's default says before it is read back. */
+    protected $attributes = ['is_test' => false];
+
     protected $fillable = [
         'user_id',
         'plan_id',
+        'is_test',
         'server_id',
         'remote_name',
         'subscription_url',
@@ -80,6 +88,7 @@ class Subscription extends Model
         'expires_at',
         'last_synced_at',
         'disabled_at',
+        'ended_at',
         'auto_renew',
         'renewal_notified_at',
         'expiry_reminded_at',
@@ -91,6 +100,7 @@ class Subscription extends Model
     /** @var array<string, string> */
     protected $casts = [
         'status' => SubscriptionStatus::class,
+        'is_test' => 'boolean',
         'traffic_limit_bytes' => 'integer',
         'upload_bytes' => 'integer',
         'download_bytes' => 'integer',
@@ -100,6 +110,7 @@ class Subscription extends Model
         'expires_at' => 'datetime',
         'last_synced_at' => 'datetime',
         'disabled_at' => 'datetime',
+        'ended_at' => 'datetime',
         'auto_renew' => 'boolean',
         'renewal_notified_at' => 'datetime',
         'expiry_reminded_at' => 'datetime',
@@ -160,12 +171,12 @@ class Subscription extends Model
         return $this->traffic_limit_bytes > 0 && $this->usedBytes() >= $this->traffic_limit_bytes;
     }
 
-    /** Whether it is among expiringWithin($days): active, its deadline in the window. */
+    /** Whether it is among expiringWithin($days): active, no free test, its deadline in the window. */
     public function isExpiringWithin(int $days): bool
     {
         $now = Carbon::now();
 
-        return $this->isActive() && $this->expires_at !== null && $this->expires_at->between($now, $now->copy()->addDays($days));
+        return $this->isActive() && !$this->is_test && $this->expires_at !== null && $this->expires_at->between($now, $now->copy()->addDays($days));
     }
 
     /**
@@ -201,7 +212,7 @@ class Subscription extends Model
 
     /**
      * Active subscriptions whose deadline falls within the next `$days` days; one still waiting for its first connection
-     * has no deadline and is not among them.
+     * has no deadline and is not among them, and a free test — which nothing renews — never is.
      *
      * @return Builder<static>
      */
@@ -209,7 +220,30 @@ class Subscription extends Model
     {
         $now = Carbon::now();
 
-        return static::active()->whereBetween('expires_at', [$now, $now->copy()->addDays($days)]);
+        return static::active()->where('is_test', false)->whereBetween('expires_at', [$now, $now->copy()->addDays($days)]);
+    }
+
+    /** Whether it is over at `$now`, as over() asks the database: ended, gone from its panel, or past its deadline. */
+    public function isOver(Carbon $now): bool
+    {
+        return in_array($this->status, [SubscriptionStatus::Expired, SubscriptionStatus::Deleted], true)
+            || ($this->isActive() && $this->expires_at !== null && $this->expires_at->lte($now));
+    }
+
+    /**
+     * Narrow to the subscriptions that are over at `$now`: ended by time or traffic, gone from their panel, or past their
+     * deadline before a sync said so — what the clean-up removes (ended services and free tests, ServiceCleanup), the
+     * shops it visits (Tasks\CleanupServicesTask), and the tests list's «ended».
+     *
+     * @template T of Model
+     * @param Builder<T> $query Subscriptions, or a relation's query of them
+     * @return Builder<T>
+     */
+    public static function over(Builder $query, Carbon $now): Builder
+    {
+        return $query->where(static fn(Builder $over) => $over
+            ->whereIn('status', [SubscriptionStatus::Expired->value, SubscriptionStatus::Deleted->value])
+            ->orWhere(static fn(Builder $late) => $late->where('status', SubscriptionStatus::Active->value)->where('expires_at', '<=', $now)));
     }
 
     /** @return BelongsTo<User, $this> The customer, in the subscription's own shop whatever shop the code works in. */

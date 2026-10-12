@@ -229,10 +229,12 @@ final class SubscriptionHandler implements Handler
             }),
         ]);
 
-        // The traffic that expires with the current period, the link-change hint, and the stale flag.
+        // The traffic that expires with the current period, when the shop removes the service, the link-change hint,
+        // and the stale flag.
         return BotTexts::paragraphs(
             $text,
             $this->card->periodNote($subscription),
+            $this->card->removal($subscription),
             $rotates ? $this->texts->part(BotText::ServiceRotateHint) : '',
             $live ? '' : $this->texts->part(BotText::ServiceStale),
         );
@@ -253,8 +255,8 @@ final class SubscriptionHandler implements Handler
 
     /**
      * The screen's buttons (Telegram lays a row out left to right, so a row's first button sits on the left): refresh;
-     * renew | link; the extras; the «تمدید خودکار» switch while offered; report | change link (when the panel can);
-     * back to the list page the service is on.
+     * renew (none without a plan: a free test, or a service whose plan was deleted) | link; the extras; the «تمدید خودکار»
+     * switch while offered; report | change link (when the panel can); back to the list page the service is on.
      *
      * @return array<string, mixed>
      */
@@ -265,10 +267,11 @@ final class SubscriptionHandler implements Handler
         $autoRenew = $subscription->auto_renew
             ? InlineKeyboard::callback($this->texts->get(BotText::ServiceAutoRenewOn), self::serviceCallback($id, 'autorenew'), 'success')
             : InlineKeyboard::callback($this->texts->get(BotText::ServiceAutoRenewOff), self::serviceCallback($id, 'autorenew'));
+        $renew = $subscription->plan_id === null ? [] : [InlineKeyboard::callback($this->texts->get(BotText::ServiceRenew), self::serviceCallback($id, 'renew'), 'success')];
 
         return InlineKeyboard::make()
             ->row(InlineKeyboard::callback($this->texts->get(BotText::ServiceRefresh), self::serviceCallback($id, 'refresh'), 'primary'))
-            ->row($this->linkButton($subscription), InlineKeyboard::callback($this->texts->get(BotText::ServiceRenew), self::serviceCallback($id, 'renew'), 'success'))
+            ->row($this->linkButton($subscription), ...$renew)
             ->row(...$this->extras->buttons($subscription))
             ->row(...$this->autoRenewal->offeredFor($subscription) ? [$autoRenew] : [])
             ->row(...$rotates ? [InlineKeyboard::callback($this->texts->get(BotText::ServiceRotate), self::serviceCallback($id, 'rotate')), $report] : [$report])

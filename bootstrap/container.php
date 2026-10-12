@@ -50,6 +50,7 @@ use App\Modules\Bots\Scheduling\BotShops;
 use App\Modules\Bots\ShopScopeMiddleware;
 use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Installer\Services\InstallKey;
+use App\Modules\Payments\Contracts\RefundedOrders;
 use App\Modules\Payments\Drivers\Manual\ManualDriver;
 use App\Modules\Payments\Drivers\Wallet\WalletDriver;
 use App\Modules\Payments\GatewayRegistry;
@@ -67,9 +68,12 @@ use App\Modules\Settings\Services\DatabaseSettings;
 use App\Modules\Settings\Services\MailSettings;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Store\Http\WebsiteCorsPolicy;
+use App\Modules\Subscriptions\Services\ExpiredServicesSettings;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
+use App\Modules\Subscriptions\Services\RefundedDeliveries;
 use App\Modules\Subscriptions\Services\ReminderSettings;
 use App\Modules\Subscriptions\Services\RenewalSettings;
+use App\Modules\Subscriptions\Services\TestAccountSettings;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Emoji\PremiumEmojiStatus;
@@ -230,6 +234,9 @@ return [
         ->constructorParameter('schedulerLock', get('schedule.lock'))
         ->constructorParameter('routes', get('routes.cache')),
 
+    // A refund takes back what its order gave a service: the services' side of it (Payments names no service).
+    RefundedOrders::class => autowire(RefundedDeliveries::class),
+
     // Where the scheduler remembers when each task last ran; the shops it goes round are the bots'.
     'schedule.state' => factory(fn(Application $app) => $app->storagePath('cache/schedule.json')),
     Shops::class => autowire(BotShops::class),
@@ -273,6 +280,8 @@ return [
         $c->get(RenewalSettings::class),
         $c->get(ExtrasSettings::class),
         $c->get(ReminderSettings::class),
+        $c->get(ExpiredServicesSettings::class),
+        $c->get(TestAccountSettings::class),
         $c->get(ReferralSettings::class),
         $c->get(ReportSettings::class),
         $c->get(DiscountSettings::class),

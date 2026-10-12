@@ -23,6 +23,7 @@ use App\Modules\Rewards\Enums\RewardKind;
 use App\Modules\Rewards\Models\Cashback;
 use App\Modules\Rewards\Models\LotteryDraw;
 use App\Modules\Rewards\Models\LotteryWinner;
+use App\Modules\Subscriptions\Models\TestAccount;
 use App\Modules\Telegram\Broadcasts\Audience;
 use App\Modules\Telegram\Broadcasts\BroadcastMode;
 use App\Modules\Telegram\Broadcasts\BroadcastService;
@@ -95,6 +96,7 @@ final class AccountMergerTest extends DatabaseTestCase
         $cashback = Cashback::query()->create(['order_id' => $order->id, 'user_id' => $ali->id, 'percent' => 10, 'amount' => '1000']);
         $draw = LotteryDraw::query()->create(['day' => '2026-09-12', 'entries' => 1, 'prize_kind' => RewardKind::Wallet, 'prize_amount' => '5000']);
         $win = LotteryWinner::query()->create(['lottery_draw_id' => $draw->id, 'user_id' => $ali->id, 'outcome' => 'جایزه']);
+        $test = TestAccount::query()->create(['user_id' => $ali->id, 'server_id' => $server->id, 'traffic_bytes' => 1, 'duration_hours' => 1, 'on_hold' => true, 'issued_at' => now()]);
         $request = $this->agencyRequest($ali);
         $this->service(CustomerNotifier::class)->referralJoined($ali, $nima);
         $token = $this->customerSession($ali);
@@ -113,6 +115,7 @@ final class AccountMergerTest extends DatabaseTestCase
         self::assertSame($sara->id, $review->refresh()->user_id, 'its reviews of the shop');
         self::assertSame([$sara->id, $sara->id], [$gift->refresh()->redeemed_by, $spin->refresh()->user_id], 'the gift code it took, its spins of the wheel');
         self::assertSame([$sara->id, $sara->id], [$cashback->refresh()->user_id, $win->refresh()->user_id], 'the cashback its orders earned, the nightly draws it won');
+        self::assertSame($sara->id, $test->refresh()->user_id, 'its free tests count against the one it became');
         self::assertSame($sara->id, AgencyRequest::query()->findOrFail($request->id)->user_id);
         self::assertSame([$sara->id], Broadcast::query()->pluck('user_id')->unique()->values()->all(), 'the broadcasts it sent as a bot admin');
         self::assertSame([[$pinnedBoth->id, $sara->id], [$pinnedAli->id, $sara->id]], BroadcastPin::query()->whereIn('user_id', [$sara->id, $ali->id])->orderBy('broadcast_id')->get()->map(static fn(BroadcastPin $pin): array => [$pin->broadcast_id, $pin->user_id])->all(), 'one pin a broadcast: its own kept, the other moved');
@@ -144,7 +147,7 @@ final class AccountMergerTest extends DatabaseTestCase
         $merge = AccountMerge::query()->latest('id')->firstOrFail();
         self::assertSame([$ali->id, AccountMerger::BY_CUSTOMER], [$merge->merged_user_id, $merge->actor]);
         self::assertSame(['telegram_id' => 7003, 'username' => 'ali', 'email' => null, 'google' => true, 'first_name' => 'Ali', 'last_name' => null, 'created_at' => '2026-09-10T10:00:00+00:00'], $merge->merged);
-        self::assertSame(['referrals' => 1, 'agency_requests' => 1, 'wallet_lines' => 2, 'groups' => 1, 'sessions' => 1, 'merges' => 1, 'notifications' => 1, 'subscriptions' => 1, 'orders' => 1, 'request_keys' => 0, 'commissions' => 0, 'tickets' => 1, 'reviews' => 1, 'broadcasts' => 2, 'pins' => 1, 'bots' => 1, 'gift_codes' => 1, 'wheel_spins' => 1, 'cashbacks' => 1, 'lottery_wins' => 1, 'referral_bonuses' => 0, 'referral_bonuses_given' => 0, 'referral_rewards' => 0, 'referral_alerts' => 0], $merge->moved);
+        self::assertSame(['referrals' => 1, 'agency_requests' => 1, 'wallet_lines' => 2, 'groups' => 1, 'sessions' => 1, 'merges' => 1, 'notifications' => 1, 'subscriptions' => 1, 'test_accounts' => 1, 'orders' => 1, 'request_keys' => 0, 'commissions' => 0, 'tickets' => 1, 'reviews' => 1, 'broadcasts' => 2, 'pins' => 1, 'bots' => 1, 'gift_codes' => 1, 'wheel_spins' => 1, 'cashbacks' => 1, 'lottery_wins' => 1, 'referral_bonuses' => 0, 'referral_bonuses_given' => 0, 'referral_rewards' => 0, 'referral_alerts' => 0], $merge->moved);
         self::assertTrue($logs->hasInfoThatContains('was merged into customer'));
     }
 

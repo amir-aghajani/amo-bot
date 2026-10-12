@@ -30,6 +30,7 @@ import {
   timeAgo,
   timeLeft,
   UNLIMITED,
+  wholeNumberOf,
   wholeOf,
   wholesOf,
 } from '@/lib/format'
@@ -306,6 +307,10 @@ describe('a typed whole number, and a list of them', () => {
   it('is read as the API reads a setting’s: its thousands set apart between groups of three, nothing else', () => {
     expect([wholeOf('10,000'), wholeOf('۱۰٬۰۰۰'), wholeOf('10000')]).toEqual(['10000', '10000', '10000'])
     for (const typed of ['1,5000', '10.5', '10000 تومان', '']) expect(wholeOf(typed)).toBeNull()
+  })
+
+  it('is a number for a hint to word, null while it is none', () => {
+    expect([wholeNumberOf('۱٬۰۰۰'), wholeNumberOf('0'), wholeNumberOf('1.5'), wholeNumberOf('')]).toEqual([1000, 0, null, null])
   })
 
   it('is a list apart by spaces, «،» or a comma — but a comma between groups of three, which splits no amount', () => {

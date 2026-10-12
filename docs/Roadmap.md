@@ -33,7 +33,9 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Extra traffic and time for a service («حجم و زمان اضافه»), hourly plans, first-purchase and agent prices
 - ✅ Discounts and rewards: discount codes, timed sales, a customer's own discount, loyalty tiers, cashback, gift codes,
   the lucky wheel, a nightly draw among the day's buyers, referral start gifts and plan rewards with fake-referral alerts
-- [ ] A test account («اکانت تست»)
+- ✅ Free test accounts («اکانت تست»): taken in the bot from the menu, `/free` or a start link, on each server's own
+  terms (traffic, hours, from the first connection or from the moment it is made), by each shop's quota; removed by
+  themselves once they end; in an agent's shop drawn from the agent's traffic
 - [ ] Subscription link endpoint `/sub/{uuid}` of our own (today the panel's native subscription URL is handed out)
 
 ## The shop's website
@@ -55,7 +57,7 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Lists: paged on the server, sorted by a column, filtered (status, customer, server, a range of days in the Jalali calendar), searched (`#12` is that row), the view kept in the address; the stuck-orders queue («نیازمند رسیدگی»), the receipts to review and the tickets waiting on an answer counted in the menu
 - ✅ A customer's page: their services, payments, orders and tickets, wallet, referrals, groups, agency, website account
 - ✅ Extend one service: days and traffic on top of what it has (an agent's GB from their traffic)
-- ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked, live preview), settings (master switch, phone, required channels, wallet, renewal, reminders, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
+- ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked, live preview), settings (master switch, phone, required channels, wallet, renewal, reminders, the removal of ended services, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
 - ✅ Settings: the panel's own configuration in `config.php` (application, database, Telegram, email, advanced), the bots' webhooks set or removed, the owner's login changed and recovered without a shell; the website's settings in both panels
 - ✅ Failures drawn one way (what failed, why, what to do, the request's id), offline and stale-build handling
 - ✅ «تخفیف و جوایز»: discount codes, sales, loyalty tiers, cashback, gift codes, the lucky wheel and the nightly draw;
@@ -63,7 +65,7 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - [ ] Activity log
 
 ## Scheduled tasks
-- ✅ Auto-approval of unreviewed receipts, paid orders a dying process left undelivered resumed, walked-away checkouts dropped, broadcasts in batches, automatic renewal, the next renewed period, grants, the periodic sync of every running service, reminders, the report groups' queue, the housekeeping — one run's time shared over them
+- ✅ Auto-approval of unreviewed receipts, paid orders a dying process left undelivered resumed, walked-away checkouts dropped, broadcasts in batches, automatic renewal, the next renewed period, grants, the periodic sync of every running service, reminders, the removal of ended services and free tests, the report groups' queue, the housekeeping — one run's time shared over them
 
 ## More connectors and gateways
 - [ ] Panels: Marzban, Hiddify, WireGuard-based panels

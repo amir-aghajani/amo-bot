@@ -23,13 +23,13 @@ A new shop sells once it has a bot, a server, a plan and a way to pay. In order:
 4. **A way to pay** — the wallet is built in; for card-to-card payments add your card in «فروشگاه › روش‌های پرداخت»
    ([Payment methods](Payment-Methods.md)).
 5. **The bot's rules and words** — the support contact, required channels, top-ups, renewals, the prices of extra
-   traffic and time, and reminders in
-   «تنظیمات ربات» ([Bot settings](Bot-Settings.md)); the welcome, the texts and the menu in «ربات»
-   ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)).
+   traffic and time, reminders and the removal of ended services in «تنظیمات ربات» ([Bot settings](Bot-Settings.md));
+   the welcome, the texts and the menu in «ربات» ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)).
 6. **The report group** — a Telegram group where sales, receipts, failed deliveries and tickets reach the shop's admins,
    with buttons to act on them ([Report group](Telegram-Group.md)). The buttons answer the bot's admins alone: start
    the bot from your own Telegram account, then «فروش › کاربران» › your row's menu › «مدیر ربات کردن».
-7. **Then, as the shop grows**: [discounts](Discounts.md), [loyalty tiers and cashback](Loyalty-Cashback-And-Draws.md),
+7. **Then, as the shop grows**: [free test accounts](Test-Accounts.md), [discounts](Discounts.md),
+   [loyalty tiers and cashback](Loyalty-Cashback-And-Draws.md),
    [gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md), the [referral program](Referrals.md),
    [agents](Agency.md) with bots of their own, and a [website](Website.md) of the shop's own.
 
@@ -64,6 +64,7 @@ live: there is no need to reload.
 | [Customers](Customers.md) | The customers, a customer's page, bans and the bot's admins, groups, the wallet |
 | [Orders and payments](Orders-And-Payments.md) | Receipts, approvals, rejections, refunds, reminders, stuck orders |
 | [Services](Services.md) | Customers' services: read, extended, switched, moved, deleted — and what runs by itself |
+| [Test accounts](Test-Accounts.md) | Free tests in the bot: each server's terms, the shop's quota, the clean-up |
 | [Support tickets](Support-Tickets.md) | Answering customers, from the panel and from the report group |
 | [Reviews](Reviews.md) | Customers' reviews from the website: approved, rejected, deleted |
 | [Discounts](Discounts.md) | Discount codes, timed sales and a customer's own discount, and how they add up |

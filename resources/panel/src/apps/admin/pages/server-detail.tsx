@@ -12,6 +12,7 @@ import { InboundsCard } from '@/components/servers/inbounds-card'
 import { serverDriversQuery } from '@/components/servers/queries'
 import { ServerForm } from '@/components/servers/server-form'
 import { StatusCard } from '@/components/servers/status-card'
+import { TestAccountCard } from '@/components/servers/test-account-card'
 import { useServer, type ServerPage } from '@/components/servers/use-server'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,7 +26,10 @@ function createdProbe(state: unknown): Probe | null {
   return typeof state === 'object' && state !== null && 'probe' in state ? (state.probe as Probe) : null
 }
 
-/** One server: its inbounds (what is sold), its connection, its state and checks, the gifts to its services, and deleting it. */
+/**
+ * One server: its inbounds (what is sold), its free test accounts, its connection, its state and checks, the gifts to its
+ * services, and deleting it.
+ */
 export function ServerDetailPage() {
   const id = Number(useParams().id)
   const location = useLocation()
@@ -97,6 +101,7 @@ export function ServerDetailPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="grid min-w-0 content-start gap-4 xl:col-span-2">
           <InboundsCard page={page} inbounds={inbounds} />
+          <TestAccountCard serverId={server.id} />
           <ConnectionCard page={page} server={server} drivers={drivers} driver={driver} />
         </div>
 

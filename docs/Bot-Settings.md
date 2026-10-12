@@ -6,6 +6,11 @@ nothing differs from what is saved), every refusal under its field at once, and 
 seconds; leaving a card with a change unsaved asks first. The agency's
 rules are the main shop's, on the agents page ([Agency](Agency.md)).
 
+Some programs keep their part of these settings on their own pages: discount codes ([Discounts](Discounts.md)),
+cashback and the nightly draw ([Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md)), gift codes and the lucky
+wheel ([Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)), and free test accounts, on «اکانت تست ›
+تنظیمات» ([Test accounts](Test-Accounts.md#the-shops-rules)).
+
 ## General
 
 «عمومی»:
@@ -92,8 +97,9 @@ a purchase — the wallet adds it at once, a card waits for its receipt —, eac
 
 What counts as a change is what the save would keep: an empty row, the rows' order or how a number is written is none.
 Traffic is offered for a service with a quota, days for one with a term — neither for one switched off by support, nor
-for one ended on both counts, which a renewal is for. In an agent's shop the extra traffic its customers buy comes out of
-the agent's traffic, and no more is offered than is left ([Agency](Agency.md)); extra days cost it nothing.
+for one ended on both counts, which a renewal is for, nor for a free test ([Test accounts](Test-Accounts.md)). In an
+agent's shop the extra traffic its customers buy comes out of the agent's traffic, and no more is offered than is left
+([Agency](Agency.md)); extra days cost it nothing.
 
 ## Reminders
 
@@ -106,6 +112,35 @@ renewal or more traffic:
 - **«یادآوری تمام شدن حجم»** — «بعد از مصرف چند درصد حجم», 50 to 99, 80 by default. Unlimited services never.
 
 Each comes with «📊 مشاهده سرویس». The services are read from their panels every 15 minutes, and the reminders follow.
+A free test is never reminded.
+
+## Ended services
+
+«سرویس‌های منقضی‌شده», the card «حذف سرویس‌های منقضی‌شده» — whether a service that ended goes by itself:
+
+- **«حذف خودکار سرویس‌های منقضی‌شده»** (off) — on, a service that ended — its time or traffic ran out, or its panel no
+  longer has it — is removed from its panel and the shop once it has been over the hours below, quietly: the customer is
+  not told, and the orders that sold it keep their record. Off, an ended service stays until the customer renews it or
+  you delete it.
+- **«فاصله حذف (ساعت)»** — 0 to 8760 (a year), 24 by default, counted from when the service ended: the deadline it
+  passed, else when its panel said its traffic was used up or its client gone. `0` removes it at once. The field's hint
+  says what the number means («۱ روز بعد از پایان حذف می‌شود.»); it is held while the switch is off.
+
+Never removed:
+
+- a service switched off by support;
+- one with an order about it still open — waiting for its payment (a renewal whose receipt waits for review), being
+  delivered, or failed and waiting for support's retry;
+- one renewed or extended since the shop last read it: each is read from its panel again just before it goes. One that
+  runs again starts its hours anew if it ends again.
+
+The services are checked every 15 minutes, right after they are read from their panels; one whose panel the shop leaves
+alone after a failure waits for a later check, and one its panel no longer has goes without asking it
+([Services](Services.md#what-runs-by-itself)). While the rule is on, the customer sees when an ended service goes: its
+screen in the bot and its renewal's checkout say «🗑️ اگر این سرویس تا … تمدید نشود، حذف می‌شود.» (a bot text you may
+reword or empty), and the
+shop's website reads the moment as `removes_at`. A service's dialog in the panels shows it as «حذف خودکار». Free tests
+go by their own rule, on «اکانت تست › تنظیمات» ([Test accounts](Test-Accounts.md#the-clean-up)).
 
 ## Referrals
 
@@ -132,6 +167,8 @@ Each comes with «📊 مشاهده سرویس». The services are read from the
 
 - **The bot's admins are customers given the role** on «کاربران» ([Customers](Customers.md#the-bots-admins)) — your panel
   login is not one of them.
-- **Reminders, automatic renewals and approvals by themselves need the scheduler** running — the cron or the poller
-  ([Running in production](Running-In-Production.md)).
+- **Reminders, automatic renewals, the removal of ended services and approvals by themselves need the scheduler**
+  running — the cron or the poller ([Running in production](Running-In-Production.md)).
+- **A removed service is gone for good**: its customer can no longer renew it, and a new purchase gets a new link. Give
+  «فاصله حذف» hours enough for a customer to come back and renew.
 - **Viewing an agent's shop**, you edit that agent's bot.

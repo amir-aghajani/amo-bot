@@ -44,7 +44,9 @@ const ACTIONS: Record<Action, OperationSpec> = {
     icon: Undo2,
     tone: 'danger',
     done: 'به کیف پول بازپرداخت شد',
-    confirm: 'مبلغ به کیف پول مشتری برمی‌گردد و پرداخت «بازپرداخت‌شده» می‌شود؛ سرویسی که تحویل شده سر جایش می‌ماند.',
+    // A purchase's: its service goes with it (refused while its panel fails, or another order holds the service).
+    confirm:
+      'مبلغ به کیف پول مشتری برمی‌گردد و سرویسی که با این خرید ساخته شده از پنل و فروشگاه حذف می‌شود. اگر پنل جواب ندهد یا سفارش دیگری (تمدید، حجم یا زمان اضافه) روی سرویس باشد، بازپرداخت انجام نمی‌شود.',
     // Its wallet line carries it: held to a ledger line's note.
     note: { label: 'توضیح', placeholder: 'اختیاری؛ در تراکنش کیف پول مشتری ثبت می‌شود', max: LEDGER_NOTE_MAX },
   },
@@ -66,9 +68,17 @@ function approveOf(payment: PaymentRow): OperationSpec {
   return { ...ACTIONS.approve, label: `${payment.status === 'awaiting_review' ? 'تایید' : 'تایید دستی'} و ${does}`, done: `تایید شد و ${done}` }
 }
 
-/** A refund means a different thing for what the payment paid for: a service, a service's extra, an agent's traffic, a wallet top-up. */
+/** A refund's words where it takes back what the order gave a service — refused while its panel fails or it is disabled. */
+const takesBack = (what: string) => `مبلغ به کیف پول مشتری برمی‌گردد و ${what} پس گرفته می‌شود. اگر پنل جواب ندهد یا سرویس غیرفعال باشد، بازپرداخت انجام نمی‌شود.`
+
+/**
+ * A refund means a different thing for what the payment paid for: a service (it goes), a renewal or a service's extra
+ * (what it gave is taken back), an agent's traffic, a wallet top-up.
+ */
 function refundOf(payment: PaymentRow): OperationSpec {
   switch (payment.order.type) {
+    case 'renewal':
+      return { ...ACTIONS.refund, confirm: takesBack('زمان و حجمی که این تمدید به سرویس داده') }
     case 'traffic':
       return {
         ...ACTIONS.refund,
@@ -76,10 +86,7 @@ function refundOf(payment: PaymentRow): OperationSpec {
       }
     case 'extra_traffic':
     case 'extra_time':
-      return {
-        ...ACTIONS.refund,
-        confirm: `مبلغ به کیف پول مشتری برمی‌گردد و پرداخت «بازپرداخت‌شده» می‌شود؛ ${payment.order.type === 'extra_traffic' ? 'حجمی' : 'زمانی'} که به سرویس اضافه شده سر جایش می‌ماند.`,
-      }
+      return { ...ACTIONS.refund, confirm: takesBack(`${payment.order.type === 'extra_traffic' ? 'حجمی' : 'زمانی'} که به سرویس اضافه شده`) }
     case 'wallet_topup':
       return {
         ...ACTIONS.refund,
