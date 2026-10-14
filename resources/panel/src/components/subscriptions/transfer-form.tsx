@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useId } from 'react'
 import { useQuery, type QueryKey } from '@tanstack/react-query'
 import { Forward } from 'lucide-react'
 import { Field } from '@/components/field'
@@ -11,7 +11,7 @@ import { messageOf } from '@/lib/failure'
 import { digitsOnly } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { useForm } from '@/lib/use-form'
-import { SEARCH_DELAY_MS } from '@/lib/use-paged-list'
+import { useSettled } from '@/lib/use-settled'
 
 interface TransferFormProps {
   subscription: SubscriptionRow
@@ -74,11 +74,7 @@ interface Lookup {
 
 /** The server's answer for the typed id — asked once typing pauses —, about the id on screen only. */
 function useRecipient(subscription: number, typed: string): Lookup {
-  const [settled, setSettled] = useState(typed)
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSettled(typed), SEARCH_DELAY_MS)
-    return () => window.clearTimeout(timer)
-  }, [typed])
+  const settled = useSettled(typed)
 
   const found = useQuery({
     queryKey: queryKeys.transferRecipient(subscription, settled),

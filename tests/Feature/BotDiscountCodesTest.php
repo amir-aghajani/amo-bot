@@ -77,32 +77,32 @@ final class BotDiscountCodesTest extends BotTestCase
 
     public function testTheCheckoutOffersACodeOnlyWhileTheShopHasOne(): void
     {
-        $this->send($this->tap($this->checkout()));
-        self::assertNotContains(DiscountCodeHandler::askCallback($this->checkout()), $this->callbacks(0), 'no code in the shop: nobody is asked for one');
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
+        self::assertNotContains(DiscountCodeHandler::askCallback($this->checkoutOf($this->plan, $this->server)), $this->callbacks(0), 'no code in the shop: nobody is asked for one');
 
         $this->discountCode('NOWRUZ', 20);
-        $this->send($this->tap($this->checkout()));
-        self::assertContains(DiscountCodeHandler::askCallback($this->checkout()), $this->callbacks(0));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
+        self::assertContains(DiscountCodeHandler::askCallback($this->checkoutOf($this->plan, $this->server)), $this->callbacks(0));
     }
 
     public function testACodeTypedIsAppliedRemovedAndPaid(): void
     {
         $this->discountCode('NOWRUZ', 20);
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
 
-        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkout())));
+        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkoutOf($this->plan, $this->server))));
         self::assertSame([self::text(BotText::DiscountCodeAsk)], $this->said());
 
         $this->send($this->message('nowruz'));
         self::assertSame([$this->checkoutText('80000', ['کد NOWRUZ' => '20000'], '100000')], $this->said(), 'drawn again as a new message, with its line');
-        self::assertContains(DiscountCodeHandler::removeCallback($this->checkout()), $this->callbacks(0));
+        self::assertContains(DiscountCodeHandler::removeCallback($this->checkoutOf($this->plan, $this->server)), $this->callbacks(0));
 
-        $this->send($this->tap(DiscountCodeHandler::removeCallback($this->checkout())));
+        $this->send($this->tap(DiscountCodeHandler::removeCallback($this->checkoutOf($this->plan, $this->server))));
         self::assertSame([$this->checkoutText('100000')], $this->said(), 'taken off');
 
-        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkout())));
+        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkoutOf($this->plan, $this->server))));
         $this->send($this->message('NOWRUZ'));
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $this->wallet)));
 
         $order = Order::query()->sole();
         self::assertSame([OrderStatus::Fulfilled, '80000.00', '20000.00'], [$order->status, $order->amount, $order->discount_amount]);
@@ -112,13 +112,13 @@ final class BotDiscountCodesTest extends BotTestCase
     public function testACodeThatDoesNotHoldSaysWhyAndAnotherIsAwaited(): void
     {
         $this->discountCode('ONCE', 20, ['ends_at' => now()->subHour()]);
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
         $this->discountCode('GOOD', 10);
-        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkout())));
+        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkoutOf($this->plan, $this->server))));
 
         $this->send($this->message('ONCE'));
         self::assertSame([self::text(BotText::DiscountCodeRefused, ['reason' => DiscountCodes::ENDED])], $this->said());
-        self::assertSame([$this->checkout()], $this->callbacks(0), '«بازگشت» to the checkout');
+        self::assertSame([$this->checkoutOf($this->plan, $this->server)], $this->callbacks(0), '«بازگشت» to the checkout');
 
         $this->send($this->message('gööd'));
         self::assertSame([self::text(BotText::DiscountCodeRefused, ['reason' => DiscountCodes::NOT_FOUND])], $this->said(), 'still awaited');
@@ -130,17 +130,17 @@ final class BotDiscountCodesTest extends BotTestCase
     public function testACardsScreenKeepsTheCodeAndItIsJudgedAgainAsItIsPaid(): void
     {
         $code = $this->discountCode('LAST', 50, ['max_uses' => 1]);
-        $this->send($this->tap($this->checkout()));
-        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkout())));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
+        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkoutOf($this->plan, $this->server))));
         $this->send($this->message('LAST'));
 
-        $this->send($this->tap($this->pay($this->card)));
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $this->card)));
         $order = Order::query()->sole();
         self::assertSame(['50000.00', $code->id], [$order->amount, $order->discount_code_id]);
 
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
         self::assertSame([$this->checkoutText('50000', ['کد LAST' => '50000'], '100000')], $this->said(), 'back from the card: still applied — its own order holds the use');
-        $this->send($this->tap($this->pay($this->card)));
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $this->card)));
         self::assertSame(1, Order::query()->count(), 'the same order found');
 
         // Someone else's order took the use once theirs was cancelled.
@@ -148,20 +148,20 @@ final class BotDiscountCodesTest extends BotTestCase
         $sara = $this->customer(['telegram_id' => 7001]);
         $this->service(OrderService::class)->openPurchase($sara, $this->plan, $this->server, quote: $this->service(\App\Modules\Orders\Services\Pricing::class)->purchase($sara, $this->plan, $this->server, 'LAST'));
 
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $this->wallet)));
         self::assertSame([self::text(BotText::DiscountCodeLost, ['reason' => DiscountCodes::USED_UP])], $this->said());
         self::assertSame(0, Order::query()->where('user_id', $this->ali->id)->where('status', OrderStatus::Pending->value)->count(), 'nothing ordered');
         self::assertSame('500000.00', $this->ali->balance());
 
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
         self::assertSame([$this->checkoutText('100000')], $this->said(), 'the checkout without it');
     }
 
     public function testAFreeCodeTakesItFree(): void
     {
         $this->discountCode('GIFT', 0, ['type' => DiscountType::Free]);
-        $this->send($this->tap($this->checkout()));
-        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkout())));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
+        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkoutOf($this->plan, $this->server))));
         $this->send($this->message('GIFT'));
 
         self::assertSame(self::text(BotText::CheckoutFree), $this->inlineKeyboard(0)[0][0]['text']);
@@ -219,15 +219,5 @@ final class BotDiscountCodesTest extends BotTestCase
         $parts[] = self::text(BotText::CheckoutBeforeDiscount, ['regular' => Money::format((string) $before)]);
 
         return BotTexts::paragraphs($text, implode("\n", $parts));
-    }
-
-    private function checkout(): string
-    {
-        return PurchaseHandler::serverCallback($this->plan->id, $this->server->id);
-    }
-
-    private function pay(PaymentMethod $method): string
-    {
-        return CallbackData::build($this->checkout(), $method->id);
     }
 }

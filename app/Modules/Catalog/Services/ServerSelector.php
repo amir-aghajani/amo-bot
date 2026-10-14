@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Catalog\Services;
 
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
+use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanServer;
@@ -18,8 +20,9 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 /**
  * What of the catalogue can be sold right now — one judgement for the bot, the website, moving a service and the panels'
  * explanations. A customer only sees servers that can deliver today (ServerReadiness, plus something sellable where the
- * panel deals in inbounds) and, in an agent's shop, plans the agent's prepaid traffic covers. A list's plans and servers
- * are read in one go, never a few queries per plan.
+ * panel deals in inbounds) and, in an agent's shop, plans the agent's prepaid traffic covers, on servers the owner does
+ * not keep from that shop (Bot::hiddenServerIds()), while its selling is not suspended (Bot::sells()). A list's
+ * plans and servers are read in one go, never a few queries per plan.
  */
 final class ServerSelector
 {
@@ -27,6 +30,12 @@ final class ServerSelector
     private const NO_SERVER = 'این پلن روی هیچ سروری نیست؛ از فرم پلن یک سرور به آن اضافه کنید.';
     private const NO_CHOICE = 'هیچ‌کدام از سرورهای این پلن الان قابل فروش نیست؛ دلیل هر کدام کنار نام همان سرور آمده است.';
     private const NOT_COVERED = 'حجم باقی‌مانده نمایندگی کمتر از حجم این پلن است؛ با خرید حجم، پلن دوباره در ربات دیده می‌شود.';
+
+    /** An agent's plan the owner keeps from sale (Plan::$hidden_by_owner). */
+    public const HIDDEN_PLAN = 'مدیر فروشگاه اصلی این پلن را پنهان کرده است؛ تا آن را آزاد نکند، به مشتری‌ها فروخته نمی‌شود.';
+
+    /** A server the owner keeps from an agent's shop (Bot::hiddenServerIds()). */
+    public const HIDDEN_SERVER = 'مدیر فروشگاه اصلی این سرور را برای این فروشگاه پنهان کرده است؛ سرویس تازه‌ای روی آن ساخته نمی‌شود.';
 
     public function __construct(
         private readonly ProviderRegistry $providers,
@@ -41,18 +50,25 @@ final class ServerSelector
      */
     public function choices(Plan $plan): array
     {
-        return $this->choicesAmong(self::entriesOf(new Collection([$plan]))[$plan->id]);
+        return $this->choicesAmong(self::entriesOf(new Collection([$plan]))[$plan->id], $plan->shop()->hiddenServerIds());
     }
 
-    /** Why customers are not sold on the server (for the plan's `$entry`, when given) right now; null when they are. */
+    /**
+     * Why customers of the current shop are not sold on the server (for the plan's `$entry`, when given) right now — the
+     * owner keeping it from this shop first —; null when they are.
+     */
     public function problem(Server $server, ?PlanServer $entry = null): ?string
     {
+        if (CurrentBot::get()->hidesServer($server->id)) {
+            return self::HIDDEN_SERVER;
+        }
+
         return $this->readiness->problem($server) ?? ($entry !== null && $this->inbounds($server, $entry) === null ? self::NO_INBOUND : null);
     }
 
     /**
      * Whether the plan may be offered: always in the main shop; in an agent's, while their traffic (read afresh) covers
-     * its quota. Delivery does not ask — it draws the traffic itself (TrafficPool::draw()).
+     * its quota and their selling is not suspended. Delivery does not ask — it draws the traffic itself (TrafficPool::draw()).
      */
     public function covers(Plan $plan): bool
     {
@@ -93,7 +109,8 @@ final class ServerSelector
         }
         $balance = $bot->trafficBalance();
         $smallest = Plan::active()->where('traffic_gb', '>', 0)->reorder('traffic_gb')->first();
-        if ($balance > 0 && ($smallest === null || $this->covers($smallest))) {
+        // The traffic alone: a suspended shop sells nothing whatever it holds, which its own notice says.
+        if ($balance > 0 && ($smallest === null || self::coveredBy($smallest, $balance))) {
             return null;
         }
 
@@ -102,7 +119,8 @@ final class ServerSelector
 
     /**
      * The inbounds a service of `$plan` gets when moved to `$server`: the plan's entry there if it has one, else every
-     * inbound the server sells.
+     * inbound the server sells. A server the owner keeps from an agent's shop is no matter here — the owner's moves of a
+     * server's services carry theirs too; a move by hand asks it itself (SubscriptionActions::move()).
      *
      * @return Collection<int, ServerInbound>
      * @throws NoServerAvailableException saying why the server cannot take it
@@ -170,14 +188,16 @@ final class ServerSelector
     }
 
     /**
-     * The customer's choice of server: with no id, the plan's only choice (several require a pick).
+     * The customer's choice of server: with no id, the plan's only choice (several require a pick). For a paid order's
+     * delivery (`$paid`) the server it names is one even when the owner has kept it from the shop since: what was paid is
+     * delivered.
      *
      * @return array{server: Server, inbounds: Collection<int, ServerInbound>}
      * @throws NoServerAvailableException
      */
-    public function resolve(Plan $plan, ?int $serverId): array
+    public function resolve(Plan $plan, ?int $serverId, bool $paid = false): array
     {
-        $choices = $this->choices($plan);
+        $choices = $paid && $serverId !== null ? $this->choicesAmong(self::entriesOf(new Collection([$plan]))[$plan->id], []) : $this->choices($plan);
         if ($choices === []) {
             throw new NoServerAvailableException("هیچ‌کدام از سرورهای پلن «{$plan->name}» الان در دسترس نیست.");
         }
@@ -211,10 +231,13 @@ final class ServerSelector
         $balances = [];
         $weighed = [];
         foreach ($plans as $plan) {
-            $choices = $this->choicesAmong($entries[$plan->id]);
+            $shop = $plan->shop();
+            $choices = $this->choicesAmong($entries[$plan->id], $shop->hiddenServerIds());
             $weighed[$plan->id] = [
                 'reason' => match (true) {
                     $entries[$plan->id]->isEmpty() => self::NO_SERVER,
+                    $plan->hidden_by_owner => self::HIDDEN_PLAN,
+                    !$shop->sells() => SellingSuspendedException::STAFF,
                     $choices === [] => self::NO_CHOICE,
                     !self::covered($plan, $balances) => self::NOT_COVERED,
                     default => null,
@@ -227,7 +250,8 @@ final class ServerSelector
     }
 
     /**
-     * covers(), caching each shop's traffic in `$balances` (by bot id) over a list.
+     * covers(), caching each shop's traffic in `$balances` (by bot id) over a list. A shop whose selling is suspended
+     * covers nothing.
      *
      * @param array<int, int> $balances
      */
@@ -235,15 +259,13 @@ final class ServerSelector
     {
         $bot = $plan->shop();
 
-        return $bot->isMain() || self::coveredBy($plan, $balances[$bot->id] ??= $bot->trafficBalance());
+        return $bot->isMain() || ($bot->sells() && self::coveredBy($plan, $balances[$bot->id] ??= $bot->trafficBalance()));
     }
 
-    /** Whether `$balance` bytes cover the plan's quota; an unlimited plan cannot be paid from prepaid traffic. */
+    /** Whether `$balance` bytes of an agent's pool pay for the plan's quota, as its delivery asks (Bot::trafficRefusal()). */
     private static function coveredBy(Plan $plan, int $balance): bool
     {
-        $bytes = $plan->trafficBytes();
-
-        return $bytes > 0 && $balance >= $bytes;
+        return Bot::trafficRefusal($plan->trafficBytes(), $balance) === null;
     }
 
     /**
@@ -271,15 +293,20 @@ final class ServerSelector
     }
 
     /**
-     * The entries a customer may pick, as choices() hands them out.
+     * The entries a customer may pick, as choices() hands them out: none on a server of `$hidden` (those the owner keeps
+     * from the shop, Bot::hiddenServerIds()).
      *
      * @param Collection<int, PlanServer> $entries
+     * @param list<int> $hidden
      * @return list<array{server: Server, inbounds: Collection<int, ServerInbound>}>
      */
-    private function choicesAmong(Collection $entries): array
+    private function choicesAmong(Collection $entries, array $hidden): array
     {
         $choices = [];
         foreach ($entries as $entry) {
+            if (in_array((int) $entry->server_id, $hidden, true)) {
+                continue;
+            }
             $inbounds = $this->readiness->problem($entry->server) === null ? $this->inbounds($entry->server, $entry) : null;
             if ($inbounds !== null) {
                 $choices[] = ['server' => $entry->server, 'inbounds' => $inbounds];

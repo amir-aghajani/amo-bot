@@ -12,6 +12,8 @@ type Key = readonly unknown[]
 const FAMILIES: [family: Key, member: (id: number) => Key][] = [
   [queryKeys.everyServer, queryKeys.server],
   [queryKeys.everyServerGrants, queryKeys.serverGrants],
+  [queryKeys.everyServerMigrations, queryKeys.serverMigrations],
+  [queryKeys.everyServerMigration, queryKeys.serverMigration],
   [queryKeys.everyServerTestAccount, queryKeys.serverTestAccount],
   [queryKeys.everyOrder, queryKeys.order],
   [queryKeys.everyPayment, queryKeys.payment],

@@ -300,14 +300,18 @@ final class CustomerRenewal
     /**
      * What the renewal's checkout renews with (preview()) — the service's own plan, the plan named among its choices, or
      * the package named — or why there is none (refusal()), asked in RenewalRefusal's order after the method (its
-     * callers' first question): what is named against the service's own plan, whether it may be renewed now at all, its
-     * window, a renewal under way, then what is named among what it may pick. Nothing is priced. The builder and the
+     * callers' first question): whether its shop sells at all (an agent's whose selling is suspended renews nothing),
+     * what is named against the service's own plan, whether it may be renewed now at all, its window, a renewal under
+     * way, then what is named among what it may pick. Nothing is priced. The builder and the
      * plans on sale are read once, and only when asked; the plans read come with it (picks()' list), none when unread.
      *
      * @return array{Plan|CustomPrice|RenewalRefusal, Collection<int, Plan>}
      */
     private function renewsWith(Subscription $subscription, int|CustomPrice|null $with): array
     {
+        if (!$subscription->shop()->sells()) {
+            return [RenewalRefusal::SellingSuspended, new Collection()];
+        }
         $own = $this->planFor($subscription);
         if ($own !== null && $with instanceof CustomPrice) {
             return [RenewalRefusal::RenewsOnItsPlan, new Collection()];

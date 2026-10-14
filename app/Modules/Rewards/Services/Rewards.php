@@ -29,8 +29,10 @@ use Psr\Log\LoggerInterface;
  * - traffic or days: granted on a running service of theirs (ProvisioningService::grant()); in an agent's shop the GB
  *   come out of the agent's pool;
  * - a plan: a free service — a purchase order at no price (`pricing` gift) on the plan's first server that can deliver
- *   it, settled by the shop's wallet row taking nothing, then delivered like any order.
- * The caller says what the reward was for, and words a panel failure while granting.
+ *   it, settled by the shop's wallet row taking nothing, then delivered like any order; never of a plan the owner keeps
+ *   from an agent's sale (Plan::$hidden_by_owner).
+ * The caller says what the reward was for, and words a panel failure while granting. An agent's shop whose selling is
+ * suspended (Bot::sells()) gives only Toman.
  */
 final class Rewards
 {
@@ -50,10 +52,15 @@ final class Rewards
      * Gives `$reward` to the customer. `$reason` is the wallet line's words; `$service` is where traffic or days go (else
      * their newest service that takes them); `$tell` sends a plan's service to the customer once delivered.
      *
-     * @throws RewardUnavailableException nothing was given: no running service takes it, or no server delivers the plan
+     * @throws RewardUnavailableException nothing was given: no running service takes it, no server delivers the plan, or
+     *                                    the shop's selling is suspended
      */
     public function give(User $user, Reward $reward, string $reason, ?Subscription $service = null, bool $tell = true): Given
     {
+        // An agent's shop whose selling is suspended gives no service, traffic or days — Toman to the wallet still.
+        if ($reward->kind->isSold() && !$user->shop()->sells()) {
+            throw new RewardUnavailableException(RewardUnavailableException::SUSPENDED);
+        }
         $given = match ($reward->kind) {
             RewardKind::Nothing => new Given($reward),
             RewardKind::Wallet => $this->credit($user, $reward, $reason),
@@ -133,11 +140,14 @@ final class Rewards
         return new Given($reward, subscription: $service->refresh());
     }
 
-    /** @throws RewardUnavailableException */
+    /** @throws RewardUnavailableException a plan the owner keeps from an agent's sale, or one no server delivers now */
     private function plan(User $user, Reward $reward): Given
     {
         $plan = $reward->plan ?? throw new \LogicException('A plan reward without its plan.');
-        $choice = $this->selector->choices($plan)[0] ?? throw new RewardUnavailableException(RewardUnavailableException::NO_SERVER);
+        $choice = $plan->hidden_by_owner ? null : ($this->selector->choices($plan)[0] ?? null);
+        if ($choice === null) {
+            throw new RewardUnavailableException(RewardUnavailableException::NO_SERVER);
+        }
 
         $order = $this->orders->openGift($user, $plan, $choice['server']);
         ['payment' => $payment] = $this->payments->createForOrder($order, $this->methods->wallet());

@@ -11,25 +11,29 @@ It runs on shared hosting — cPanel, DirectAdmin and the like —, the one way 
 nothing else, the panels ship as static files, a web installer sets the shop up from the browser, the host's cron runs
 its scheduler and Telegram reaches its bots through webhooks — no shell, Composer or Node on the host.
 
-> **Status:** pre-release (0.4.0). The [Roadmap](docs/Roadmap.md) says what is done and what is left,
+> **Status:** pre-release (0.5.0). The [Roadmap](docs/Roadmap.md) says what is done and what is left,
 > [Releases](docs/Releases.md) what each release brought.
 
 ## Features
 
 - **A bot that sells** — plans by category and location, services the customer builds by the gigabyte and the day, the
-  wallet and card-to-card payments with a receipt, the subscription link delivered as a QR card, renewals by hand and
-  automatic (by the methods and within the window the owner allows), extra traffic, time or devices for a service, each
-  on its own, at the owner's prices, services handed to another customer or added by their link, free test accounts,
-  reminders before a service ends, referrals, and support tickets. Every word it says and its whole menu are the
-  owner's to reword.
-- **The owner's panel** — servers, plans, payment methods, customers, orders and payments (receipts reviewed one after
-  another), services (extended, switched, moved between servers), support, broadcasts, gifts of days and traffic, the
-  bot's texts, menu and rules; live as the shop moves, light and dark, on a phone too.
+  wallet — money sent to another customer too — and card-to-card payments with a receipt (several cards a method, each
+  with a daily cap, and buttons that copy the card and the sum), the subscription link delivered as a QR card, renewals
+  by hand and automatic (by the methods and within the window the owner allows), extra traffic, time or devices for a
+  service, each on its own, at the owner's prices, services handed to another customer or added by their link, free
+  test accounts, reminders before a service ends, referrals, and support tickets. Every word it says and its whole menu
+  are the owner's to reword.
+- **The owner's panel** — servers (a SOCKS5 proxy for a panel out of the host's reach, and all of a server's services
+  moved to another in the background, even from a panel that is down), plans, payment methods (each with its least and
+  most amount), customers (an order made for one by hand), orders and payments (receipts reviewed one after another, or
+  rejected in bulk), services (extended, switched, moved between servers), support, broadcasts, gifts of days and
+  traffic, the bot's texts, menu and rules; live as the shop moves, light and dark, on a phone too.
 - **Discounts and rewards** — discount codes, timed sales, a customer's own discount, loyalty tiers by what a customer
   spent, cashback, gift codes, a lucky wheel in the bot, a nightly draw among the day's buyers, and referral gifts with
   an alert for fake referrals.
 - **Resellers** — agents with a bot, a shop and a panel of their own on the same servers, who buy the traffic their bot
-  sells.
+  sells; the owner says which servers and plans each sells, until when, and the least they buy a month — past it, their
+  selling pauses while their customers' services go on.
 - **VPN panels through connectors** — 3X-UI v3 and PasarGuard 3.1+. A new panel, payment gateway, database, mail service
   or captcha is a driver.
 - **A report group** — sales, receipts with approve and reject buttons, failed deliveries, agency requests and support

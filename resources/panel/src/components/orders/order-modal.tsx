@@ -6,6 +6,7 @@ import { Fact, FactList } from '@/components/fact-list'
 import { OperationsSection, useOperations, type OperationSpec } from '@/components/operations'
 import { DiscountFact } from '@/components/orders/order-discounts'
 import { orderBrings } from '@/components/orders/order-subject'
+import { Reviewer } from '@/components/reviewer'
 import { StatusBadge } from '@/components/status-badge'
 import { searchLink, TextLink } from '@/components/text-link'
 import { CustomerFacts } from '@/components/user-identity'
@@ -14,7 +15,7 @@ import type { OrderRow } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
 import { formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { ORDER_PRICING, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS, RENEWAL_METHOD, SUBSCRIPTION_STATUS } from '@/lib/statuses'
+import { MANUAL_PAYMENT, ORDER_PRICING, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS, RENEWAL_METHOD, SUBSCRIPTION_STATUS } from '@/lib/statuses'
 
 type Action = keyof OrderRow['actions']
 
@@ -96,7 +97,8 @@ function OrderBody({ order, onClose, onChanged, onStale }: { order: OrderRow; on
 /** Everything known about the order, including what it brings when that is an amount and a special price beside the amount. */
 function Facts({ order }: { order: OrderRow }) {
   const brings = orderBrings(order)
-  const pricing = ORDER_PRICING[order.pricing]
+  // One support made by hand says how it was paid in place of its price.
+  const pricing = order.manual ? MANUAL_PAYMENT[order.manual.payment] : ORDER_PRICING[order.pricing]
 
   return (
     <FactList>
@@ -118,6 +120,12 @@ function Facts({ order }: { order: OrderRow }) {
         )}
       </Fact>
       <DiscountFact order={order} />
+      {order.manual && (
+        <Fact label="ثبت دستی">
+          توسط <Reviewer name={order.manual.by ?? 'پشتیبانی'} />
+        </Fact>
+      )}
+      {order.manual?.note && <Fact label="یادداشت پشتیبانی">{order.manual.note}</Fact>}
       <CustomerFacts user={order.user} />
       {/* A service the customer built has no plan: what it was built of, in its place. */}
       {order.package_name && <Fact label="پلن">{order.package_name}</Fact>}

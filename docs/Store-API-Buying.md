@@ -7,8 +7,8 @@ checkout — the one the bot's purchases go through — so the same rules answer
 ## The flow
 
 1. The customer is signed in.
-2. Read the ways to pay that kind of order:
-   `GET /payment-methods?for=purchase|renewal|wallet_topup|extra_traffic|extra_time|extra_devices`.
+2. Read the ways to pay that kind of order at its price:
+   `GET /payment-methods?for=purchase|renewal|wallet_topup|extra_traffic|extra_time|extra_devices&amount=…`.
 3. When they confirm, make the attempt's `Idempotency-Key`.
 4. Send the order: `POST /orders`, `POST /subscriptions/{id}/renewal`, `POST /subscriptions/{id}/extra-traffic`,
    `POST /subscriptions/{id}/extra-time`, `POST /subscriptions/{id}/extra-devices` or `POST /wallet/top-up`.
@@ -17,17 +17,24 @@ checkout — the one the bot's purchases go through — so the same rules answer
    for the review ([the review](#the-review)).
 
 Nothing is ordered until the way to pay is picked: browsing plans and opening a checkout cost nothing. While the shop
-takes no orders — `GET /`'s `shop.taking_orders` is `false`, its bot switched off — every ordering request and every
-receipt is `503` (`فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.`), a request made again too.
+takes no orders — `GET /`'s `shop.taking_orders` is `false` — every ordering request is `503`, a request made again too:
+
+- **Its bot switched off** — `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.`, and every receipt is `503` too.
+- **An agent's shop whose selling the main shop suspended** ([the agent's terms](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum))
+  — `فروش این فروشگاه فعلا متوقف است؛ سرویس‌های فعلی شما مثل قبل کار می‌کنند. برای اطلاعات بیشتر با پشتیبانی در تماس
+  باشید.` A receipt is still taken: an order made before is still paid. What only prices an order answers in the same
+  words with a `422` on `status` instead — a renewal's preview (`GET /subscriptions/{id}/renewal`) and a code's check
+  for a renewal or an extra (`POST /discount-codes/check`) —; the catalogue offers no plan, and a code's check for a
+  purchase is a `422` on `plan_id`.
 
 ## Ways to pay
 
-`GET /payment-methods?for=purchase` → `200`
+`GET /payment-methods?for=purchase&amount=120000` → `200`
 ```json
 {
   "methods": [
-    { "id": 1, "label": "کیف پول", "kind": "instant" },
-    { "id": 2, "label": "کارت به کارت (ملت)", "kind": "manual" }
+    { "id": 1, "label": "کیف پول", "kind": "instant", "min_amount": null, "max_amount": "5000000.00" },
+    { "id": 2, "label": "کارت به کارت (ملت)", "kind": "manual", "min_amount": "10000.00", "max_amount": null }
   ]
 }
 ```
@@ -35,8 +42,17 @@ receipt is `503` (`فروشگاه فعلا سفارش نمی‌گیرد؛ کمی
 In checkout order, as the bot offers them. `kind: "instant"` is the wallet — paid at once from the balance (an agent's
 credit counting); `"manual"` is a card-to-card transfer and its receipt. A way of paying whose driver is no longer
 installed is never offered (an earlier payment made with one shows it in its order with `kind: null`). The wallet is
-never offered for a top-up — and is for extra traffic, time or devices. An empty list means the shop takes no way to pay
-that kind of order now. `for` is required: anything but the six kinds is `422` on `for`.
+never offered for a top-up — and is for extra traffic, time or devices. `for` is required: anything but the six kinds is
+`422` on `for`.
+
+Each way is offered for the amounts between its `min_amount` and `max_amount` (Toman; `null`: no bound). With `amount`
+— the price to pay, after its discounts (a quote's `amount`, `POST /discount-codes/check`'s), as the bot reads one:
+Persian digits and separators are fine; anything else is `422` on `amount` — only the ways that take it are listed: within
+their bounds, and a card-to-card way with a card that has room for it today (the shop may cap what each card takes in a
+day) — or a card-to-card way the customer holds an unpaid payment of, for that kind and amount, whatever its card's room
+or switch now: asking again shows them that payment, on its card. Without `amount`, every way of the
+kind (a card-to-card way while a card of it is switched on), whatever its bounds — check them yourself. An empty list
+means the shop takes no way to pay that kind of order, or that amount, now; say so («برای این مبلغ روش پرداختی نیست»).
 
 ## The Idempotency-Key
 
@@ -75,7 +91,8 @@ the bot, say), so a new attempt does not make a duplicate either; after a price 
 a customer's checkout: 30 ordering requests in 10 minutes — purchases, renewals, extras and top-ups together, retries
 among them —, then `429`; and 5 unpaid orders open — the bot's among them —, past which a new one is `422` with no field
 (`سفارش‌های پرداخت‌نشده شما زیاد است؛ اول آن‌ها را پرداخت کنید یا بگذارید منقضی شوند.`). Paying one, or letting it
-expire, makes room; one whose receipt is with support never expires, so it waits for support's decision.
+expire, makes room; one whose receipt is with support — or whose card payment went to support's private chat — never
+expires, so it waits for support's decision.
 
 ```ts
 /** The same ordering request again — same body, same key — after a failure that may not have reached the shop. */
@@ -102,8 +119,8 @@ const { checkout } = await retrying(() =>
 )
 ```
 
-A `503` because the shop takes no orders is a 5xx too: the retry above meets it again until the bot is switched back on —
-show its message rather than retrying for long. After any other 5xx, retry with the same key, never a new one: a wallet
+A `503` because the shop takes no orders is a 5xx too: the retry above meets it again until the bot is switched back on
+(or an agent's suspended selling resumes) — show its message rather than retrying for long. After any other 5xx, retry with the same key, never a new one: a wallet
 payment may have gone through before the failure (a `500` there can leave the order paid and `failed`, for support to
 deliver), and only the same key finds it.
 
@@ -149,6 +166,11 @@ at a time, in this order, each a `422` on its field:
 4. `method_id` — `روش پرداخت را انتخاب کنید.`, `این روش پرداخت برای این سفارش در دسترس نیست.`, or the wallet short of
    the price ([refusals and what to do](#refusals-and-what-to-do)).
 5. `discount_code` — the code does not hold for it, worded for the customer ([discount codes](#discount-codes)).
+6. `method_id` again, once the price is known — a way that does not take it: outside its bounds (`«کارت به کارت (ملت)»
+   برای مبلغ‌های بین ۱۰٬۰۰۰ تومان و ۵۰۰٬۰۰۰ تومان است؛ روش دیگری انتخاب کنید.`), or a card-to-card way none of whose cards
+   has room for it today (`«کارت به کارت (ملت)» امروز برای این مبلغ در دسترس نیست؛ روش دیگری انتخاب کنید.`). Nothing is
+   left ordered — should no card take it after all as its payment is made, the order just made is cancelled at once, and
+   the key is free for this way or another —; read the ways to pay for that amount again.
 
 Then the unpaid-order cap of [the Idempotency-Key](#the-idempotency-key). A request made again with its key whose order
 is no longer to be paid is answered by that order before any of these is asked (or refused on `idempotency_key`); one
@@ -294,7 +316,8 @@ answers a checkout ([what a checkout answers](#what-a-checkout-answers)). Both r
 renewing nothing, without a plan while neither a plan on sale is sold on its server nor the builder is offered, or — an
 agent's shop — more than the agent's traffic), or `برای سرویس ali_1 یک تمدید در حال بررسی یا انجام است.` while another
 renewal of it is with support or being delivered. The `POST` is refused as
-`POST /orders` is, too ([refusals and what to do](#refusals-and-what-to-do)). Offer renewal while the service's
+`POST /orders` is, too ([refusals and what to do](#refusals-and-what-to-do)) — in an agent's shop whose selling is
+suspended, a `503`, which the preview says as a `422` on `status` in the same words. Offer renewal while the service's
 `renewable` is true — or, for a service without a plan, while its `picks_plan` is true (below).
 
 **Not yet.** A shop may hold a running service back until it nears its end («آستانه مجاز تمدید»): its
@@ -516,7 +539,8 @@ package built) or `extra_traffic` / `extra_time` / `extra_devices` (`subscriptio
 ```
 
 A code that does not hold is a `422` on `code`, worded for the customer; the rest of the request is refused as the
-checkout's own would be (`plan_id`, `server_id`, `status`, `gb`, `days`, `devices`, a `404` for a service not theirs).
+checkout's own would be (`plan_id`, `server_id`, `status`, `gb`, `days`, `devices`, a `404` for a service not theirs) —
+in an agent's shop whose selling is suspended, a renewal or an extra on `status` where the checkout answers `503`.
 
 - **Its uses.** A use is an order made with the code that is not cancelled. An order nobody pays gives its use back as it
   is cancelled or expires — an order made with a code expires once the shop's hold is over (60 minutes by default, set
@@ -539,8 +563,14 @@ checkout's own would be (`plan_id`, `server_id`, `status`, `gb`, `days`, `device
 `amount` is whole Toman: a JSON number, the text a customer typed (`"۵۰٬۰۰۰ تومان"` is fine), or an amount as this API
 writes one — `GET /wallet`'s presets as they are (`"50000.00"`; a fraction other than `.00` is refused). It must be
 within `GET /wallet`'s `top_up.min` and `top_up.max` (`422` on `amount`, e.g. `مبلغ شارژ باید بین ۱۰٬۰۰۰ تومان و
-۵۰۰٬۰۰۰٬۰۰۰ تومان باشد.`). Any way to pay but the wallet (`GET /payment-methods?for=wallet_topup`; the wallet is `422` on
-`method_id`, `کیف پول با خودش شارژ نمی‌شود؛ روش دیگری انتخاب کنید.`); once paid, the amount lands on the balance.
+۵۰۰٬۰۰۰٬۰۰۰ تومان باشد.`). Any way to pay but the wallet that takes the amount (`GET
+/payment-methods?for=wallet_topup&amount=…`; the wallet is `422` on `method_id`, `کیف پول با خودش شارژ نمی‌شود؛ روش دیگری
+انتخاب کنید.`); once paid, the amount lands on the balance.
+
+Paid by card, a top-up may ask a few Toman more than `amount`, at random — while the shop adds such a sum to card-to-card
+top-ups, so each transfer is a different amount and its receipt is told apart: `transfer.amount` (and the payment's
+`amount`) is then, say, `"50037.00"` while `order.amount` stays `"50000.00"`. Show `transfer.amount` as what to transfer;
+the whole of it lands on the balance once approved.
 
 ## What a checkout answers
 
@@ -583,7 +613,7 @@ support. Support's own notes on an order are never in the answer.
       "payments": [
         {
           "id": 88,
-          "method": { "id": 1, "label": "کیف پول", "kind": "instant" },
+          "method": { "id": 1, "label": "کیف پول", "kind": "instant", "min_amount": null, "max_amount": "5000000.00" },
           "status": "paid",
           "amount": "120000.00",
           "created_at": "2026-10-07T12:00:00+00:00",
@@ -640,7 +670,7 @@ support. Support's own notes on an order are never in the answer.
       "payments": [
         {
           "id": 89,
-          "method": { "id": 2, "label": "کارت به کارت (ملت)", "kind": "manual" },
+          "method": { "id": 2, "label": "کارت به کارت (ملت)", "kind": "manual", "min_amount": "10000.00", "max_amount": null },
           "status": "pending",
           "amount": "120000.00",
           "created_at": "2026-10-07T12:10:00+00:00",
@@ -655,7 +685,9 @@ support. Support's own notes on an order are never in the answer.
       "amount": "120000.00",
       "card": "6037997700001119",
       "holder": "محمد کریمی",
-      "instructions": "شماره پیگیری را نگه دارید."
+      "bank": "ملت",
+      "instructions": "شماره پیگیری را نگه دارید.",
+      "contact": null
     },
     "subscription": null
   }
@@ -678,10 +710,12 @@ A wallet purchase, renewal or extra made on the site sends no notice: this answe
 | `422` on `method` | a renewal method the shop does not offer (switched off since the page was drawn) | preview the renewal again and offer its `methods` |
 | `422` on `idempotency_key` | a key reused for something else or with another `method_id`, or none | a new key for a new attempt — and look at `GET /orders` first, the earlier attempt may have gone through |
 | `422`, no field: `سفارش‌های پرداخت‌نشده شما زیاد است؛ اول آن‌ها را پرداخت کنید یا بگذارید منقضی شوند.` | 5 unpaid orders open; nothing was ordered | link to the orders: pay one, or let it expire |
+| `422` on `status`: `رسید سفارش #142 هنوز در حال بررسی پشتیبانی است؛ …` | a card while the shop takes one receipt at a time and the customer's last receipt (of that order) is still with support; nothing was ordered | show the message, link to that order; the wallet still pays |
 | `409` `این سفارش همین حالا جای دیگری پرداخت یا بسته شد؛ وضعیت آن را در سفارش‌ها ببینید.` | the order was paid or closed elsewhere in the same moment; nothing was charged | show the orders |
 | `409` `این سفارش لغو شده است؛ پرداخت نشد یا پشتیبانی آن را لغو کرد. برای خرید دوباره از نو شروع کنید.` | made again with its key, its order was cancelled since — by support, or unpaid for 48 hours; nothing was charged | a new attempt, with a new key |
 | `429` `درخواست پرداخت زیادی فرستاده‌اید؛ ۸ دقیقه دیگر دوباره امتحان کنید.` | 30 ordering requests in 10 minutes | hold the pay button for `Retry-After` |
 | `503` `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.` | the shop takes no orders now (its bot switched off); nothing was ordered | say so; offer it again later |
+| `503` `فروش این فروشگاه فعلا متوقف است؛ …` | an agent's shop whose selling the main shop suspended; nothing was ordered (a renewal's preview and a code's check say it as a `422` on `status`) | say so; the customer's services keep working, and a receipt for an earlier order is still taken |
 | `404` | a service that is not this customer's | — |
 
 `POST /orders` → `422`
@@ -696,7 +730,10 @@ A wallet purchase, renewal or extra made on the site sends no notice: this answe
 ## Card transfer and the receipt
 
 After a `transfer` outcome, show `transfer.card` grouped and left-to-right (`6037 9977 0000 1119`, with a copy button),
-`holder`, `amount` and `instructions` (the shop's note, `null` without one). Once the customer has paid, upload the
+`holder`, `bank` when there is one, `amount` (with a copy button too, copying the digits alone — `120000` —, as a banking
+app takes them) and `instructions` (the shop's note, `null` without one). The card is the payment's own: a shop with
+several cards shows each payment one of them, picked at random, and the same one every time after — a request made
+again with its key answers the same card, even if the shop switched it off since. Once the customer has paid, upload the
 receipt for `transfer.payment_id`:
 
 ```ts
@@ -728,7 +765,7 @@ The answer is the order, its payment now `awaiting_review` with `receipt.sent_at
     "payments": [
       {
         "id": 89,
-        "method": { "id": 2, "label": "کارت به کارت (ملت)", "kind": "manual" },
+        "method": { "id": 2, "label": "کارت به کارت (ملت)", "kind": "manual", "min_amount": "10000.00", "max_amount": null },
         "status": "awaiting_review",
         "amount": "120000.00",
         "created_at": "2026-10-07T12:10:00+00:00",
@@ -755,7 +792,9 @@ words.
 
 Refusals: `404` for a payment that is not theirs; `422` on `status` when the payment awaits no receipt — one sent already
 (`رسید این پرداخت رسیده و در انتظار بررسی است.`), refused (`رسید این پرداخت رد شده است.`), cancelled (`این پرداخت لغو
-شده است.`), paid, or not a card transfer —, then on `file` (`تصویر رسید را بفرستید.`, `تصویر رسید باید JPG، PNG یا WebP
+شده است.`), paid, or not a card transfer —, or while the shop takes one receipt at a time and another receipt of the
+customer's is still with support (`رسید سفارش #142 هنوز در حال بررسی پشتیبانی است؛ …`, naming its order; the same
+refuses a new card checkout), then on `file` (`تصویر رسید را بفرستید.`, `تصویر رسید باید JPG، PNG یا WebP
 باشد.`, `حجم تصویر رسید حداکثر ۱۰ مگابایت می‌تواند باشد.`) and on `note` (`توضیح حداکثر 1024 کاراکتر است.`) together;
 `503` while the shop takes no orders; `503` too while the server's disk is too full to take a picture (`فضای ذخیره سرور
 پر شده و فعلا تصویری پذیرفته نمی‌شود؛ کمی بعد دوباره امتحان کنید.`), or once the shop took 1 GB of pictures in a day —
@@ -765,6 +804,28 @@ refused for them later;
 `429` past 10 pictures in an hour — the customer's receipts and their tickets' pictures together, one budget
 ([the tickets' limits](Store-API-Support-Tickets.md#limits)), a receipt counted once it passed its checks (`تصویر زیادی
 فرستاده‌اید؛ …`).
+
+### Card payments in support's private chat
+
+A payment made while the shop takes card payments in support's private chat (the bot setting «هدایت پرداخت کارت به
+کارت به پیوی پشتیبانی») is shown no card: its `transfer` has `card`, `holder` and `bank` `null`, and `contact` says where
+to go — `text`, support's contact as the shop wrote it, and `url`, it as a link to open (`https://t.me/…` for a handle,
+`tel:` for a phone number; `null` when it is none of these). Show the order's number, `amount` and `instructions` (the
+bot shows the same note) and send the customer there with the order's number: support gives them the card, takes the
+receipt in that chat and approves the payment in its panel — no upload here. `contact` is `null` whenever a card is
+shown. A request made again answers the same payment — given a card, should the shop show cards again since.
+
+```json
+"transfer": {
+  "payment_id": 89,
+  "amount": "120000.00",
+  "card": null,
+  "holder": null,
+  "bank": null,
+  "instructions": "شماره پیگیری را نگه دارید.",
+  "contact": { "text": "@amo_support", "url": "https://t.me/amo_support" }
+}
+```
 
 ## The review
 

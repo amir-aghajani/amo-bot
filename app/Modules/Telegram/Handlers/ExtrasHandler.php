@@ -39,7 +39,8 @@ use App\Support\Traffic;
  *                                         shop prices any amount, one typed is awaited too (state `extra.{kind}`)
  *   extra:{service}:{kind}:{q}          → the checkout of `q` of the kind, with the service as it would leave it
  *   extra:{service}:{kind}:{q}:{method} → pay at what it costs now: ordered, or the open order of the same found
- * A service that cannot take the kind now gets a popup saying why; an amount no longer sold shows the kind's screen.
+ * A service that cannot take the kind now gets a popup saying why (an agent's shop whose selling is suspended, its
+ * words in place of the screen); an amount no longer sold shows the kind's screen.
  */
 final class ExtrasHandler implements Handler, RedrawableCheckout
 {
@@ -202,7 +203,7 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
         };
 
         $pay = static fn(PaymentMethod $method): string => CallbackData::build(self::PREFIX, $subscription->id, $kind->value, $quantity, $method->id);
-        $this->screen->show($ctx, $this->screen->priced($text, $quote, $dropped), $kind->orderType(), $pay, self::screenCallback($subscription->id, $kind), free: !Money::isPositive($price), quote: $quote, checkout: $at);
+        $this->screen->show($ctx, $this->screen->priced($text, $quote, $dropped), $kind->orderType(), $quote->amount(), $pay, self::screenCallback($subscription->id, $kind), free: !Money::isPositive($price), quote: $quote, checkout: $at);
     }
 
     /** The kind's screen, while the service may take the kind now. */
@@ -345,11 +346,18 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
 
     /**
      * The service cannot take the kind now: a popup on the button pressed, nothing else changes — or, for an amount
-     * typed (no button to answer), a message with the way back to the service, the amount no longer awaited.
+     * typed (no button to answer), a message with the way back to the service, the amount no longer awaited. An agent's
+     * shop whose selling is suspended sells no extra: it says so in place of the screen (CheckoutScreen::paused()).
      */
     private function unavailable(Context $ctx, Subscription $subscription): void
     {
-        $ctx->alert($this->texts->get(BotText::ExtraUnavailable), ['reply_markup' => $this->buttons->backOnly(SubscriptionHandler::serviceCallback($subscription->id))]);
+        $back = SubscriptionHandler::serviceCallback($subscription->id);
+        if (!$subscription->shop()->sells()) {
+            $this->screen->paused($ctx, $back);
+
+            return;
+        }
+        $ctx->alert($this->texts->get(BotText::ExtraUnavailable), ['reply_markup' => $this->buttons->backOnly($back)]);
     }
 
     /** The hint at an amount typed — its range and the unit price as charged —; '' while no amount may be typed. */

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Payments\Drivers\Outside\OutsideGateway;
 use App\Modules\Payments\Drivers\Wallet\WalletGateway;
 use Illuminate\Database\Schema\Blueprint;
 
@@ -21,6 +22,14 @@ return [
          * `telegram_id`, `username` and `title` are what Telegram reports; `problem` is what keeps the bot from running.
          * `panel_epoch` goes up to end the agent's panel sessions; `login_code` is the sha256 of their last one-time
          * panel link, valid until `login_code_expires_at`.
+         *
+         * An agent's terms of selling (Agency\Services\AgencyStanding): their agency ends at `agency_expires_at` (null:
+         * never), and they buy at least `monthly_minimum` Toman of traffic each Jalali month (null: no minimum) —
+         * `minimum_checked_month` is the last month («1405-07») judged against it, or the one it was set in, which is not
+         * judged; `expiry_warned_at` and `minimum_warned_month` keep each warning to once. While `selling_suspended_at`
+         * is set the shop sells nothing new — `suspension_reason` says why: expired, minimum or manual —, its bot and its
+         * existing services running on. `bot_hidden_servers` (below the servers) are the servers the owner keeps from the
+         * agent's shop.
          */
         'bots' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -35,6 +44,13 @@ return [
             $table->string('login_code', 64)->nullable();
             $table->timestamp('login_code_expires_at')->nullable();
             $table->timestamp('connected_at')->nullable();
+            $table->timestamp('agency_expires_at')->nullable();
+            $table->timestamp('expiry_warned_at')->nullable();
+            $table->decimal('monthly_minimum', 14, 2)->nullable();
+            $table->string('minimum_checked_month', 7)->nullable();
+            $table->string('minimum_warned_month', 7)->nullable();
+            $table->timestamp('selling_suspended_at')->nullable();
+            $table->string('suspension_reason', 16)->nullable();
             $table->timestamps();
         },
 
@@ -96,6 +112,9 @@ return [
          * `agency_level_id`, and `credit_limit` is how far below zero their wallet may go.
          *
          * `agency_requests` — a customer asking to become an agent, approved (with a level) or rejected (with a `reason`).
+         *
+         * `wallet_transfers` — «انتقال موجودی»: money a customer sent another of the shop from their wallet, with the two
+         * ledger lines it wrote (`debit_id`, `credit_id`) and the website request's Idempotency-Key (`request_key`).
          *
          * `customer_groups` — the admin's groups of customers («گروه»), members in `customer_group_user`.
          */
@@ -171,6 +190,25 @@ return [
             // A customer's last line (their balance, off the index alone) and their ledger newest first. Named: the
             // default name would pass MySQL's 64 characters after the longest prefix.
             $table->index(['user_id', 'id', 'balance_after'], 'wallet_transactions_balance_index');
+        },
+
+        'wallet_transfers' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->foreignId('sender_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('recipient_id')->constrained('users')->cascadeOnDelete();
+            $table->decimal('amount', 14, 2);
+            // The sender's line and the recipient's: a panel shows each line's other customer.
+            $table->foreignId('debit_id')->unique()->constrained('wallet_transactions')->cascadeOnDelete();
+            $table->foreignId('credit_id')->unique()->constrained('wallet_transactions')->cascadeOnDelete();
+            // Null from the bot. The same key from the same sender is answered by this transfer.
+            $table->string('request_key', 64)->nullable();
+            $table->timestamp('created_at')->nullable();
+
+            // What a sender sent today (their daily cap), and a sender's key answered once.
+            $table->index(['sender_id', 'created_at']);
+            $table->unique(['sender_id', 'request_key']);
+            $table->index('recipient_id');
         },
 
         'customer_groups' => static function (Blueprint $table): void {
@@ -322,6 +360,9 @@ return [
          * the last contact and why it failed (a failed panel is left alone a while). `serves_subscriptions` is what the
          * last check learned (null: never asked); a server serving no subscription links is not sold.
          *
+         * `proxy_*` are the SOCKS5 proxy the shop reaches the panel through, when `proxy_enabled` (a panel the shop's host
+         * cannot reach directly): its host, port and optional login; `proxy_password` is encrypted.
+         *
          * `test_*` are the free test accounts («اکانت تست») the panel gives: whether it gives them, and what each gets —
          * traffic, hours, and whether the hours count from the first connection (`test_on_hold`) or from the moment the
          * test is made.
@@ -339,6 +380,11 @@ return [
             $table->text('password')->nullable();
             $table->text('api_token')->nullable();
             $table->text('totp_secret')->nullable();
+            $table->boolean('proxy_enabled')->default(false);
+            $table->string('proxy_host')->nullable();
+            $table->unsignedSmallInteger('proxy_port')->nullable();
+            $table->string('proxy_username')->nullable();
+            $table->text('proxy_password')->nullable();
             $table->boolean('is_active')->default(true);
             $table->unsignedInteger('capacity')->nullable();
             $table->integer('sort')->default(0);
@@ -417,6 +463,8 @@ return [
             $table->string('button_style', 16)->nullable();
             $table->unsignedTinyInteger('button_row')->default(1);
             $table->boolean('is_active')->default(true);
+            // An agent's plan the owner keeps from sale («پنهان‌شده توسط مدیر»), whatever its own switch says.
+            $table->boolean('hidden_by_owner')->default(false);
             $table->integer('sort')->default(0);
             $table->timestamps();
 
@@ -439,6 +487,17 @@ return [
             $table->foreignId('server_inbound_id')->constrained('server_inbounds')->cascadeOnDelete();
 
             $table->primary(['plan_server_id', 'server_inbound_id']);
+        },
+
+        /*
+         * The servers the owner keeps from an agent's shop: its plans are not sold on them, its free tests not given there
+         * and its services not moved there; the services it already has on them run on (Bots\Models\Bot::hidesServer()).
+         */
+        'bot_hidden_servers' => static function (Blueprint $table): void {
+            $table->foreignId('bot_id')->constrained('bots')->cascadeOnDelete();
+            $table->foreignId('server_id')->constrained('servers')->cascadeOnDelete();
+
+            $table->primary(['bot_id', 'server_id']);
         },
 
         /*
@@ -585,23 +644,104 @@ return [
         },
 
         /*
+         * A server's services moved to another in bulk («انتقال سرویس‌ها»): `mode` migrate («مهاجرت») while the source's
+         * panel answers, rescue («نجات») when it does not. A job covers every shop's services on the source when it was
+         * started (`upto_subscription_id`) — the active ones, those switched off by support with `include_disabled`, only
+         * `plan_ids`' when given — and is worked through past its cursor by whoever holds its lease, as a grant's part
+         * is. One open job (queued, running, paused) per source: `open_source_id` (generated) is unique; MySQL cannot
+         * cascade on the column it is computed from, so ServerService::delete() removes a server's jobs itself.
+         *
+         * `migration_failures` — each service a job could not move, and why. `migration_leftovers` — each client a move
+         * left on a panel (a rescue's on the source's, one a panel did not say it deleted or made), a job's or a single
+         * move's (no `migration_id`), removed once that panel answers again (`removed_at`); it outlives its job, which a
+         * deleted server takes with it.
+         */
+        'server_migrations' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('source_server_id')->constrained('servers')->restrictOnDelete();
+            $table->foreignId('target_server_id')->constrained('servers')->restrictOnDelete();
+            $table->string('mode', 8);
+            $table->boolean('include_disabled')->default(false);
+            $table->json('plan_ids')->nullable();
+            $table->boolean('notify')->default(true);
+            $table->string('status', 16);
+            $table->unsignedBigInteger('upto_subscription_id')->default(0);
+            $table->unsignedBigInteger('last_subscription_id')->default(0);
+            $table->unsignedInteger('total')->default(0);
+            $table->unsignedInteger('moved')->default(0);
+            $table->unsignedInteger('failed')->default(0);
+            $table->unsignedInteger('skipped')->default(0);
+            $table->string('waiting_reason', 500)->nullable();
+            $table->string('reason', 500)->nullable();
+            $table->string('last_failure', 500)->nullable();
+            $table->string('reviewer', 191)->nullable();
+            $table->string('lease_token', 32)->nullable();
+            $table->timestamp('leased_until')->nullable();
+            $table->timestamp('created_at')->nullable();
+            $table->timestamp('started_at')->nullable();
+            $table->timestamp('finished_at')->nullable();
+            $table->unsignedBigInteger('open_source_id')->nullable()->storedAs("case when status in ('queued', 'running', 'paused') then source_server_id end");
+
+            $table->unique('open_source_id');
+            // A server's jobs, newest first (its page); whether a server is the target of one open; the jobs under way (the task).
+            $table->index(['source_server_id', 'status']);
+            $table->index(['target_server_id', 'status']);
+            $table->index('status');
+        },
+
+        'migration_failures' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('migration_id')->constrained('server_migrations')->cascadeOnDelete();
+            $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->nullOnDelete();
+            $table->string('remote_name', 191);
+            $table->string('reason', 500);
+            $table->timestamp('created_at')->nullable();
+
+            $table->index('migration_id');
+            $table->index('subscription_id');
+        },
+
+        'migration_leftovers' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('migration_id')->nullable()->constrained('server_migrations')->nullOnDelete();
+            $table->foreignId('server_id')->constrained('servers')->cascadeOnDelete();
+            $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->nullOnDelete();
+            $table->string('remote_name', 191);
+            $table->string('last_error', 500)->nullable();
+            $table->timestamp('created_at')->nullable();
+            $table->timestamp('removed_at')->nullable();
+
+            // A server's clients still to remove (its page, the task); a job's.
+            $table->index(['server_id', 'removed_at']);
+            $table->index('migration_id');
+            $table->index('subscription_id');
+        },
+
+        /*
          * Money.
          *
-         * `payment_methods` — one row per instance of a gateway driver (one per card for card-to-card): `config` is the
-         * driver's settings, `sort` the checkout order. The wallet is a built-in row of every shop.
+         * `payment_methods` — one row per instance of a gateway driver: `config` is the driver's settings, `sort` the
+         * checkout order, `min_amount` and `max_amount` the amounts it is offered for (null: no bound). The wallet is a
+         * built-in row of every shop.
+         *
+         * `payment_cards` — the cards a card-to-card method shows, one picked at random per payment among the enabled ones
+         * whose `daily_cap` (Toman a day on the shop's clock; null: none) leaves room; `bank` is the owner's word for it.
          *
          * `orders` — a purchase (`plan_id` and the chosen `server_id`), a renewal or an extra (`subscription_id`), a
          * wallet top-up, or an agent's traffic (`traffic_bytes`). `status` moves pending → paid → processing → fulfilled
          * (or failed), every step a compare-and-swap so nothing is delivered twice. `notes` is why it failed or was
          * cancelled, in words anyone may read; `diagnosis` the panel's failure in full, shown to the owner alone.
+         * `created_by` and `support_note` mark one support made for its customer by hand, paid at once: free, from the
+         * wallet, or by the outside row — money support took outside the shop, another built-in row of every shop.
          *
          * `request_keys` — the website's ordering requests by Idempotency-Key and the order each came to, with the way to
          * pay it asked for: the same request again gets that order back, never a second one. Kept a week.
          *
-         * `payments` — one attempt to pay an order through a method (a method with payments is never deleted). A receipt
-         * sent in the bot is Telegram's file (`receipt_file_id`, `receipt_message_id`); one uploaded on the website is a
-         * file under storage/uploads/receipts (`receipt_path`). `note` is the latest verdict's word; `reviewer` who
-         * decided (none when the review window accepted it).
+         * `payments` — one attempt to pay an order through a method (a method with payments is never deleted); a card
+         * transfer's `card_id` is the card it was shown, the same every time it is shown (a card with payments is never
+         * deleted either). A receipt sent in the bot is Telegram's file (`receipt_file_id`, `receipt_message_id`); one
+         * uploaded on the website is a file under storage/uploads/receipts (`receipt_path`). `note` is the latest
+         * verdict's word; `reviewer` who decided (none when the review window accepted it).
          *
          * `referral_commissions` — what a payment earned the referrer, once per payment; `referrer_id` is kept as it was
          * when earned, and `notified_at` is claimed by the one message that tells them.
@@ -616,11 +756,29 @@ return [
             $table->string('driver', 32);
             $table->string('label', 60);
             $table->json('config');
+            $table->decimal('min_amount', 14, 2)->nullable();
+            $table->decimal('max_amount', 14, 2)->nullable();
             $table->boolean('enabled')->default(true);
             $table->integer('sort')->default(0);
             $table->timestamps();
 
             $table->index(['enabled', 'sort']);
+        },
+
+        'payment_cards' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->foreignId('payment_method_id')->constrained('payment_methods')->cascadeOnDelete();
+            $table->string('number', 16);
+            $table->string('holder', 100);
+            $table->string('bank', 60)->nullable();
+            $table->boolean('enabled')->default(true);
+            $table->integer('sort')->default(0);
+            $table->decimal('daily_cap', 14, 2)->nullable();
+            $table->timestamps();
+
+            // A method's cards in their order (its form, the pick).
+            $table->index(['payment_method_id', 'sort']);
         },
 
         /*
@@ -773,6 +931,10 @@ return [
             $table->foreignId('discount_code_id')->nullable()->constrained('discount_codes')->nullOnDelete();
             $table->text('notes')->nullable();
             $table->text('diagnosis')->nullable();
+            // An order support made for its customer by hand (Orders\Services\ManualOrders): who made it — the name a
+            // decision keeps —, and their note; both null for an order the customer made.
+            $table->string('created_by', 191)->nullable();
+            $table->text('support_note')->nullable();
             $table->timestamp('fulfilled_at')->nullable();
             // When a refund took back what a renewal or an extra gave its service: once.
             $table->timestamp('taken_back_at')->nullable();
@@ -894,6 +1056,7 @@ return [
             $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
             $table->foreignId('order_id')->constrained('orders')->cascadeOnDelete();
             $table->foreignId('payment_method_id')->constrained('payment_methods')->restrictOnDelete();
+            $table->foreignId('card_id')->nullable()->constrained('payment_cards')->restrictOnDelete();
             $table->string('status', 16)->default('pending');
             $table->decimal('amount', 14, 2);
             $table->string('reference', 191)->nullable();
@@ -915,6 +1078,9 @@ return [
             $table->index(['bot_id', 'status', 'paid_at', 'payment_method_id', 'amount', 'order_id'], 'payments_takings_index');
             $table->index(['bot_id', 'created_at', 'status', 'amount']);
             $table->index(['payment_method_id', 'bot_id']);
+            // What a card took in today (its daily cap), summed from the index alone; a card's payments, counted from it —
+            // both read without the shop's `bot_id` filter (PaymentCards): a card's payments are its shop's.
+            $table->index(['card_id', 'created_at', 'status', 'amount']);
         },
 
         'referral_commissions' => static function (Blueprint $table): void {
@@ -1266,9 +1432,11 @@ return [
         'bots' => static fn(): array => [
             ['id' => 1, 'created_at' => now(), 'updated_at' => now()],
         ],
-        // The wallet: the payment method every shop has (an agent's shop gets its own as it opens).
+        // The wallet and the outside row (money support took outside the shop): the payment methods every shop has (an
+        // agent's shop gets its own as it opens).
         'payment_methods' => static fn(): array => [
             ['driver' => WalletGateway::key(), 'label' => WalletGateway::label(), 'config' => '[]', 'enabled' => true, 'sort' => 1, 'created_at' => now(), 'updated_at' => now()],
+            ['driver' => OutsideGateway::key(), 'label' => OutsideGateway::label(), 'config' => '[]', 'enabled' => true, 'sort' => 2, 'created_at' => now(), 'updated_at' => now()],
         ],
     ],
 ];

@@ -62,7 +62,9 @@ admins only of people you trust.
 ## The wallet
 
 «کیف پول» shows the balance — a debt as «… تومان بدهی» —, a credit or a debit, and the ledger's latest 50 lines (top-ups,
-purchases, refunds, commissions, and support's own lines, each with who wrote it).
+purchases, refunds, commissions, and support's own lines, each with who wrote it). A wallet transfer's line («انتقال
+موجودی», [Bot settings](Bot-Settings.md#wallet-transfers)) links the other customer — «به …» whom the money went to,
+«از …» whom it came from.
 
 - **«افزایش» / «کاهش»** — an amount in whole Toman, and an optional note of 190 characters at most, which the customer
   reads in their wallet's history — in the bot's «کیف پول» and on the website; without one the line reads «افزایش
@@ -93,7 +95,9 @@ leave it —, but a broadcast aimed at it then reaches nobody.
 
 **The header**: their name and status, «مدیر», «نماینده» for an agent; «مشتری #12»; their handle and Telegram id (or
 «بدون تلگرام»), their email, their verified phone; when they joined and were last seen. «گفتگو در تلگرام», and the ⋮ with
-the role and the ban.
+«افزودن سفارش» — a service made for them by hand, free, from their wallet (whatever the wallet's least and most amount)
+or paid outside the shop, delivered at once ([Orders and payments](Orders-And-Payments.md#orders-support-makes)) —, the
+role and the ban.
 
 **The main column** — their latest five of each, every row opening what the list itself opens:
 

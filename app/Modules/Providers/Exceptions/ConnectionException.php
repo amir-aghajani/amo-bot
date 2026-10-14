@@ -7,11 +7,11 @@ namespace App\Modules\Providers\Exceptions;
 use App\Modules\Providers\Enums\ConnectionFailure;
 
 /**
- * The panel could not be reached at all: `failure` says why (its name, the port, a timeout, its TLS certificate), so
- * the admin knows what to fix; `detail` is what the transport said (cURL's message: the host and the port). The
- * transport's own exception is not kept with it: its message names the request's whole address, whose path may be the
- * panel's secret, and a logged exception prints the ones it was chained to — what the diagnosis needs is `failure` and
- * `detail`, scrubbed of any address.
+ * The panel could not be reached at all: `failure` says why (its name, the port, a timeout, its TLS certificate, its
+ * proxy), so the admin knows what to fix; `detail` is what the transport said (cURL's message: the host and the port).
+ * The transport's own exception is not kept with it: its message names the request's whole address, whose path may be
+ * the panel's secret, and a logged exception prints the ones it was chained to — what the diagnosis needs is `failure`
+ * and `detail`, scrubbed of any address (a proxy's, with its login, too).
  */
 final class ConnectionException extends ProviderException
 {
@@ -22,10 +22,10 @@ final class ConnectionException extends ProviderException
         parent::__construct("The panel could not be reached ({$failure->value}): {$detail}");
     }
 
-    /** A Guzzle/cURL transport failure, classified — and let go of. */
-    public static function fromTransport(\Throwable $e): self
+    /** A Guzzle/cURL transport failure, classified — of a request sent through the panel's proxy when `$proxied` — and let go of. */
+    public static function fromTransport(\Throwable $e, bool $proxied = false): self
     {
-        return new self(ConnectionFailure::of($e->getMessage()), self::tidy($e->getMessage()));
+        return new self(ConnectionFailure::of($e->getMessage(), $proxied), self::tidy($e->getMessage()));
     }
 
     public function unavailable(): bool
@@ -33,15 +33,22 @@ final class ConnectionException extends ProviderException
         return true;
     }
 
+    /** A timeout or a connection cut off, not one never made (ConnectionFailure::beforeRequest()). */
+    public function mayHaveBeenDone(): bool
+    {
+        return !$this->failure->beforeRequest();
+    }
+
     /**
      * Guzzle's message without the link to cURL's manual and without the request's address — the one it ends with
-     * ("… for https://host/path"), or any other —: cURL names the host and the port itself, never the path.
+     * ("… for https://host/path"), or any other, a proxy's (socks5h://user:password@host:port) too —: cURL names the
+     * host and the port itself, never the path or a login.
      */
     private static function tidy(string $message): string
     {
         $message = preg_replace('~\s*\(see https?://curl\.[^)]*\)~', '', $message) ?? $message;
         $message = preg_replace('~\s+for https?://\S+$~', '', $message) ?? $message;
-        $message = preg_replace('~https?://[^\s()<>"\']+~', '[address]', $message) ?? $message;
+        $message = preg_replace('~\b[a-z][a-z0-9+.-]*://[^\s()<>"\']+~i', '[address]', $message) ?? $message;
 
         return trim($message);
     }

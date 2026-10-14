@@ -17,6 +17,8 @@ enum TestRefusal: string
     case DailyLimit = 'daily_limit';
     /** No server gives a test now (none switched on for tests, none can take a client, or an agent's pool is short). */
     case NoServer = 'no_server';
+    /** The agent's shop sells nothing new now, free tests neither (Bot::sells()). */
+    case Suspended = 'suspended';
 
     public function message(): string
     {
@@ -26,6 +28,7 @@ enum TestRefusal: string
             self::Used => 'سهمیه اکانت تست شما تمام شده است.',
             self::DailyLimit => 'سقف اکانت‌های تست امروز پر شده است.',
             self::NoServer => 'فعلا سروری برای اکانت تست در دسترس نیست.',
+            self::Suspended => 'فعلا اکانت تست داده نمی‌شود.',
         };
     }
 }

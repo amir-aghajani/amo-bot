@@ -30,4 +30,10 @@ final class UnexpectedResponseException extends ProviderException
     {
         return true;
     }
+
+    /** A 5xx page from something in front of the panel (a proxy that gave up waiting): the panel may have done it. */
+    public function mayHaveBeenDone(): bool
+    {
+        return $this->httpStatus >= 500;
+    }
 }

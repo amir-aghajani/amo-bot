@@ -9,13 +9,11 @@ use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Models\Order;
-use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Store\Models\Website;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
 use Illuminate\Support\Carbon;
-use Psr\Http\Message\ResponseInterface;
 use Tests\HttpTestCase;
 
 /**
@@ -57,7 +55,7 @@ final class StoreFirstPurchasePricesTest extends HttpTestCase
     {
         $this->bearer($this->customerSession($this->ali));
         // A card order still to be paid is no purchase.
-        self::assertSame('transfer', $this->decode($this->purchase($this->plain, $this->cardMethod(), 'card-1'))['checkout']['outcome'] ?? null);
+        self::assertSame('transfer', $this->decode($this->placeOrder($this->website, $this->plain, $this->server, $this->cardMethod(), key: 'card-1'))['checkout']['outcome'] ?? null);
         self::assertSame([[$this->plan->id, '150000.00', '50000.00'], [$this->plain->id, '300000.00', null]], $this->catalogue(), 'one who has bought nothing yet');
 
         $this->buy($this->ali, $this->plain, $this->server);
@@ -90,17 +88,17 @@ final class StoreFirstPurchasePricesTest extends HttpTestCase
     {
         $this->bearer($this->customerSession($this->ali));
 
-        $first = $this->purchase($this->plan, $this->walletMethod(), 'first-1');
+        $first = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'first-1');
         self::assertSame(200, $first->getStatusCode(), (string) $first->getBody());
         $checkout = $this->decode($first)['checkout'];
         self::assertSame(['settled', 'fulfilled', '50000.00'], [$checkout['outcome'], $checkout['order']['status'], $checkout['order']['amount']], 'their first purchase, at its price');
         self::assertSame('450000.00', $this->ali->balance());
 
-        $next = $this->decode($this->purchase($this->plan, $this->walletMethod(), 'first-2'))['checkout'];
+        $next = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'first-2'))['checkout'];
         self::assertSame(['settled', '150000.00'], [$next['outcome'], $next['order']['amount']], 'the next one at the plan\'s price');
         self::assertSame('300000.00', $this->ali->balance());
 
-        $madeAgain = $this->decode($this->purchase($this->plan, $this->walletMethod(), 'first-1'))['checkout'];
+        $madeAgain = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'first-1'))['checkout'];
         self::assertSame([$checkout['order']['id'], '50000.00'], [$madeAgain['order']['id'], $madeAgain['order']['amount']], 'made again with its key: its own order, at its own price');
         self::assertSame('300000.00', $this->ali->balance(), 'nothing charged again');
     }
@@ -110,7 +108,7 @@ final class StoreFirstPurchasePricesTest extends HttpTestCase
         $this->wallet($this->ali, '60000.00');
         $this->bearer($this->customerSession($this->ali));
 
-        $first = $this->purchase($this->plan, $this->walletMethod(), 'first-1');
+        $first = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'first-1');
 
         self::assertSame(['settled', '50000.00'], [$this->decode($first)['checkout']['outcome'] ?? null, $this->decode($first)['checkout']['order']['amount'] ?? null], 'judged by what it costs them, not by the plan\'s price');
         self::assertSame('10000.00', $this->ali->balance());
@@ -143,10 +141,5 @@ final class StoreFirstPurchasePricesTest extends HttpTestCase
         }
 
         return $plans;
-    }
-
-    private function purchase(Plan $plan, PaymentMethod $method, string $key): ResponseInterface
-    {
-        return $this->send('POST', $this->storeApi($this->website, '/orders'), ['plan_id' => $plan->id, 'server_id' => $this->server->id, 'method_id' => $method->id], ['Idempotency-Key' => $key]);
     }
 }

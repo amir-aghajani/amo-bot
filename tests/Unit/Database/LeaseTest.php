@@ -134,6 +134,38 @@ final class LeaseTest extends DatabaseTestCase
         self::assertNull($this->take($this->fresh()), 'done: not workable any more');
     }
 
+    public function testARunGoesItemByItemPastTheCursorAndIsLetGoHoweverItEnds(): void
+    {
+        $worked = [];
+        // Items 3, 5 and 8, the cursor moved onto each as it is worked; a step at `$waitAt` cannot go on.
+        $run = function (float $until, ?\Closure $start = null, ?int $waitAt = null) use (&$worked): bool {
+            $row = $this->fresh();
+            $lease = $this->take($row) ?? self::fail('the run is free');
+
+            return $lease->work(
+                $until,
+                next: static fn(): ?\stdClass => ($id = current(array_filter([3, 5, 8], static fn(int $id): bool => $id > $row->cursor))) === false ? null : (object) ['id' => $id],
+                step: static function (\stdClass $item) use ($lease, $waitAt, &$worked): bool {
+                    $worked[] = $item->id;
+
+                    return $item->id !== $waitAt && $lease->write(['cursor' => $item->id]);
+                },
+                finish: static fn(): bool => $lease->finish(['status' => 'done']),
+                start: $start,
+            );
+        };
+
+        self::assertFalse($run(microtime(true) + 60, waitAt: 5), 'a step that cannot go on stops the call');
+        self::assertSame([[3, 5], 3, 'sending', null], [$worked, $this->fresh()->cursor, $this->fresh()->status, $this->fresh()->lease_token], 'waiting at 5, let go');
+
+        self::assertFalse($run(microtime(true) + 60, start: static fn(): bool => false), 'so does a start that cannot');
+        self::assertFalse($run(microtime(true) - 1), 'and a turn whose time is over');
+        self::assertSame([[3, 5], null], [$worked, $this->fresh()->lease_token], 'not a step more, let go each time');
+
+        self::assertTrue($run(microtime(true) + 60, start: static fn(): bool => true));
+        self::assertSame([[3, 5, 5, 8], 8, 'done', null], [$worked, $this->fresh()->cursor, $this->fresh()->status, $this->fresh()->lease_token], 'through every item: finished by this call');
+    }
+
     public function testMySqlReportsTheRowsAnUpdateMatchedAsSqliteDoes(): void
     {
         // A renewal or a compare-and-swap that writes what is already there must not read as lost.

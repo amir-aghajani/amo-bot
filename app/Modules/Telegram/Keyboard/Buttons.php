@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Keyboard;
 
+use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Handlers\AgencyHandler;
 use App\Modules\Telegram\Handlers\SubscriptionHandler;
 use App\Modules\Telegram\Handlers\TopUpHandler;
@@ -12,11 +13,14 @@ use App\Modules\Telegram\Texts\BotTexts;
 
 /**
  * The buttons shared by many screens, in the admin's wording: «⬅️ بازگشت», «بعدی» / «قبلی», «➕ افزایش موجودی»,
- * «💾 خرید حجم», «📊 مشاهده سرویس».
+ * «💾 خرید حجم», «📊 مشاهده سرویس», «💬 پیام به پشتیبانی».
  */
 final class Buttons
 {
-    public function __construct(private readonly BotTexts $texts) {}
+    public function __construct(
+        private readonly BotTexts $texts,
+        private readonly BotSettings $bot,
+    ) {}
 
     /**
      * «⬅️ بازگشت» to a screen — its callback data.
@@ -81,18 +85,41 @@ final class Buttons
     }
 
     /**
-     * The answers to a question about a change of a service that cannot be taken back («تغییر لینک», «انتقال سرویس»), in
-     * one row: «انصراف» back to the service's screen, and the red `$yes` to `$confirm`. Telegram lays a row out left to
+     * The answers to a question about something that cannot be taken back (a link changed, a service handed on, money
+     * sent), in one row: «انصراف» back to `$cancelTo`, and the red `$yes` to `$confirm`. Telegram lays a row out left to
      * right, so "yes" is read first, on the right.
+     *
+     * @return array{inline_keyboard: list<list<array<string, mixed>>>}
+     */
+    public function confirm(string $cancelTo, BotText $yes, string $confirm): array
+    {
+        return InlineKeyboard::make()->row(
+            InlineKeyboard::callback($this->texts->get(BotText::Cancel), $cancelTo),
+            InlineKeyboard::callback($this->texts->get($yes), $confirm, 'danger'),
+        )->build();
+    }
+
+    /**
+     * confirm() for a change of a service («تغییر لینک», «انتقال سرویس»): «انصراف» back to the service's screen.
      *
      * @return array{inline_keyboard: list<list<array<string, mixed>>>}
      */
     public function confirmChange(int $subscriptionId, BotText $yes, string $confirm): array
     {
-        return InlineKeyboard::make()->row(
-            InlineKeyboard::callback($this->texts->get(BotText::Cancel), SubscriptionHandler::serviceCallback($subscriptionId)),
-            InlineKeyboard::callback($this->texts->get($yes), $confirm, 'danger'),
-        )->build();
+        return $this->confirm(SubscriptionHandler::serviceCallback($subscriptionId), $yes, $confirm);
+    }
+
+    /**
+     * «💬 پیام به پشتیبانی», opening support's private chat, under a card payment taken there: while the support contact
+     * is a web or Telegram link (BotSettings::supportChatUrl()) — a phone number is no button, the words say where to go.
+     *
+     * @return list<array<string, mixed>> The row's button; none without such a link
+     */
+    public function supportChat(): array
+    {
+        $url = $this->bot->supportChatUrl();
+
+        return $url === null ? [] : [InlineKeyboard::url($this->texts->get(BotText::CardToSupportButton), $url)];
     }
 
     /**

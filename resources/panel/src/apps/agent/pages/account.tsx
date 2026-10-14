@@ -4,6 +4,7 @@ import { Bot, LogOut, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { BUY_TRAFFIC } from '@/apps/agent/buy-traffic'
 import { accountQuery } from '@/apps/agent/queries'
+import { SellingNotice, StandingFacts, SUSPENDED_SALES } from '@/components/agency/agency-standing'
 import { AgentBotName } from '@/components/agency/agent-bot-name'
 import { TrafficLedger } from '@/components/agency/traffic-ledger'
 import { TrafficShortageNotice } from '@/components/agency/traffic-shortage'
@@ -25,7 +26,8 @@ import { queryKeys } from '@/lib/query-keys'
 
 /**
  * «حساب نمایندگی», the agent's own page: their bot and its state, the traffic left with its ledger, their level, wallet
- * and credit, and signing out other browsers. Traffic is bought, and the bot's token handed over, in the main bot.
+ * and credit, their terms of selling (an end, a monthly minimum, and why their bot sells nothing when it does not), and
+ * signing out other browsers. Traffic is bought, and the bot's token handed over, in the main bot.
  */
 export function AccountPage() {
   const { data, error, isPending, refetch } = useQuery(accountQuery)
@@ -63,6 +65,7 @@ export function AccountPage() {
           </Callout>
         ))}
       {data?.traffic_shortage && <TrafficShortageNotice shortage={data.traffic_shortage} help={BUY_TRAFFIC} />}
+      <SellingNotice standing={account?.standing} />
 
       <StatGrid label="حجم، سطح و کیف پول">
         {/* Where traffic is bought shows once: in the notice while the traffic sells nothing, else under the figure. */}
@@ -84,30 +87,55 @@ export function AccountPage() {
       </StatGrid>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
-        <Card>
-          <CardHeader>
-            <CardHeading>
-              <CardTitle>ربات شما</CardTitle>
-              <CardDescription>برای عوض کردن توکن، توکن تازه را از ربات اصلی بفرستید.</CardDescription>
-            </CardHeading>
-          </CardHeader>
-          <CardContent>
-            {isPending ? (
-              <Skeleton className="h-24 w-full" />
-            ) : !bot ? (
-              <Dash />
-            ) : (
-              <FactList>
-                <Fact label="ربات">
-                  <AgentBotName bot={bot} />
-                </Fact>
-                <Fact label="نام">{bot.title ?? <Dash />}</Fact>
-                {/* When the token was first handed over — whether the bot runs now is its status above. */}
-                <Fact label="اولین اتصال">{bot.connected_at ? formatDate(bot.connected_at) : <Dash />}</Fact>
-              </FactList>
-            )}
-          </CardContent>
-        </Card>
+        <div className="grid content-start gap-4">
+          <Card>
+            <CardHeader>
+              <CardHeading>
+                <CardTitle>ربات شما</CardTitle>
+                <CardDescription>برای عوض کردن توکن، توکن تازه را از ربات اصلی بفرستید.</CardDescription>
+              </CardHeading>
+            </CardHeader>
+            <CardContent>
+              {isPending ? (
+                <Skeleton className="h-24 w-full" />
+              ) : !bot ? (
+                <Dash />
+              ) : (
+                <FactList>
+                  <Fact label="ربات">
+                    <AgentBotName bot={bot} />
+                  </Fact>
+                  <Fact label="نام">{bot.title ?? <Dash />}</Fact>
+                  {/* When the token was first handed over — whether the bot runs now is its status above. */}
+                  <Fact label="اولین اتصال">{bot.connected_at ? formatDate(bot.connected_at) : <Dash />}</Fact>
+                </FactList>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardHeading>
+                <CardTitle>شرایط فروش</CardTitle>
+                <CardDescription>
+                  پایان نمایندگی و کف خرید حجم ماهانه را مدیر فروشگاه اصلی تعیین می‌کند. بعد از پایان نمایندگی، یا ماهی که خرید حجمش به کف نرسد، در ربات شما {SUSPENDED_SALES} تازه انجام نمی‌شود؛
+                  سرویس‌های فعلی مشتری‌ها کار می‌کنند.
+                </CardDescription>
+              </CardHeading>
+            </CardHeader>
+            <CardContent>
+              {isPending ? (
+                <Skeleton className="h-24 w-full" />
+              ) : !account ? (
+                <Dash />
+              ) : (
+                <FactList>
+                  <StandingFacts standing={account.standing} />
+                </FactList>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         <Card>
           <CardHeader>

@@ -48,9 +48,13 @@ What the code does by itself, in short — [Running in production](Running-In-Pr
   the role is for people the owner trusts. The shop's configuration is the panels' alone.
 - Moving the Bot API's address — where every bot's token goes — asks the owner's current password, a wrong one counted
   as a failed sign-in.
-- Secrets at rest — the servers' panel credentials, the agents' bots' tokens, the websites' secrets, customers'
-  two-factor secrets — are encrypted with `APP_KEY`; short codes are kept as keyed hashes; passwords as bcrypt hashes.
-  Secrets are taken out of every log line and error.
+- Secrets at rest — the servers' panel credentials and their SOCKS5 proxies' passwords, the agents' bots' tokens, the
+  websites' secrets, customers' two-factor secrets — are encrypted with `APP_KEY`; short codes are kept as keyed
+  hashes; passwords as bcrypt hashes. Secrets are taken out of every log line and error — a proxy's login with any
+  address's. A kept panel secret goes only to the panel's own origin, a kept proxy password only to the same proxy
+  host and port: moved, either is typed again.
+- A server's proxy carries that panel's requests alone: Telegram, mail and every other outgoing call never go through
+  it.
 - A fresh upload's installer asks for a key only the host's files hold, and a lost panel login comes back through a key
   written to the host's files — never through the web alone.
 - Every file the app writes — `config.php`, the host keys, the pictures it keeps, the log, the sessions' folder — is its

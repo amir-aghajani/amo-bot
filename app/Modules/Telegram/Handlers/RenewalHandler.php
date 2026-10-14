@@ -55,7 +55,8 @@ use App\Support\Money;
  * A service's own plan wins over one named. Opened from the service's screen, the menu's list and a payment reminder.
  * A service that may not be renewed now — or not yet, its renewal window closed (CustomerRenewal::window()): the popup
  * says from when —, whose renewal is already under way, or without a plan and neither a plan on sale to pick nor the
- * builder, gets a popup saying so — a message, for an amount typed at the builder's step — and nothing is ordered.
+ * builder, gets a popup saying so — a message, for an amount typed at the builder's step — and nothing is ordered. An
+ * agent's shop whose selling is suspended says so in place of the screen, as everywhere it sells.
  */
 final class RenewalHandler implements Handler, RedrawableCheckout
 {
@@ -193,6 +194,7 @@ final class RenewalHandler implements Handler, RedrawableCheckout
             $ctx,
             $with instanceof Plan ? $this->screen->withNote($text, $with) : $text,
             OrderType::Renewal,
+            $quote->amount(),
             static fn(PaymentMethod $way): string => self::payOf($subscription, $from, $preview, $way),
             $back,
             $from > 0 ? $this->extras->buttons($subscription) : [],
@@ -327,14 +329,16 @@ final class RenewalHandler implements Handler, RedrawableCheckout
     /**
      * Why the service has no checkout (CustomerRenewal::refusal()), in the bot's words (refuse()): its window closed —
      * from when —, a renewal of it under way (its receipt with support, or paid and being delivered), or nothing it
-     * may be renewed with now. A service without a plan that names nothing it may pick gets the plans (and the builder)
-     * to pick instead.
+     * may be renewed with now; an agent's shop whose selling is suspended says so in place of the screen
+     * (CheckoutScreen::paused()). A service without a plan that names nothing it may pick gets the plans (and the
+     * builder) to pick instead.
      */
     private function refused(Context $ctx, Subscription $subscription, int $from, ?RenewalRefusal $why): void
     {
         match (true) {
             $why === RenewalRefusal::NotYet => $this->refuse($ctx, $subscription, $from, $this->texts->render(BotText::RenewNotYet, ['opens' => $this->renewals->window($subscription)->when()])),
             $why === RenewalRefusal::UnderWay => $this->refuse($ctx, $subscription, $from, $this->texts->get(BotText::RenewUnderWay)),
+            $why === RenewalRefusal::SellingSuspended => $this->screen->paused($ctx, $this->backFrom($subscription, $from)),
             $why?->picking() === true, $why === RenewalRefusal::PlanNotOffered, $why === RenewalRefusal::BuilderOff => $this->plans($ctx, $subscription, $from),
             $why === RenewalRefusal::NotRenewable => $this->refuse($ctx, $subscription, $from, $this->texts->get(CustomerRenewal::picksPlan($subscription) ? BotText::RenewNoPlans : BotText::RenewUnavailable)),
             // A package named for a service on its own plan (its first renewal made it so): its checkout on that plan.

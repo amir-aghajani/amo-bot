@@ -77,18 +77,18 @@ describe('the focus', () => {
 describe('a previous server that does not answer', () => {
   const down = 'پنل «آلمان»: پاسخ نداد.'
 
-  it('leaves its client for the owner to remove, in the main bot’s shop', async () => {
+  it('leaves its client there until it answers, then it goes by itself', async () => {
     server().on('POST', '/api/admin/subscriptions/1/move', refusal(502, down, { previous: [down] }))
     await move([service(1)])
 
-    expect(await screen.findByText(/کلاینت قبلی روی آن سرور می‌ماند و بعدا باید خودتان حذفش کنید/)).toBeTruthy()
+    expect(await screen.findByText(/کلاینت قبلی روی آن سرور می‌ماند تا سرور دوباره جواب بدهد، بعد خودکار حذف می‌شود/)).toBeTruthy()
   })
 
-  it('leaves it to support in an agent’s shop — the agent reaches no panel', async () => {
+  it('asks nobody to remove them by hand in an agent’s shop either — the agent reaches no panel', async () => {
     server().on('POST', '/api/admin/subscriptions/1/move', refusal(502, down, { previous: [down] }))
     await move([service(1), service(2)], AGENT_SHOP)
 
-    expect(await screen.findByText(/کلاینت‌های قبلی روی آن سرور می‌مانند و حذفشان از سرور با پشتیبانی است/)).toBeTruthy()
-    expect(screen.queryByText(/خودتان/)).toBeNull()
+    expect(await screen.findByText(/کلاینت‌های قبلی روی آن سرور می‌مانند تا سرور دوباره جواب بدهد، بعد خودکار حذف می‌شوند/)).toBeTruthy()
+    expect(screen.queryByText(/خودتان|پشتیبانی/)).toBeNull()
   })
 })

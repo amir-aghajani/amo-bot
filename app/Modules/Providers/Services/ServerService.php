@@ -28,6 +28,7 @@ use App\Modules\Providers\Models\ServerInbound;
 use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Providers\Support\PanelCredentials;
 use App\Modules\Subscriptions\Models\GrantPart;
+use App\Modules\Subscriptions\Models\ServerMigration;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Support\Input;
@@ -172,14 +173,22 @@ final class ServerService
     }
 
     /**
-     * Delete the server; refused while any bot's services are on it (move or delete them first, or switch the server off
-     * instead). Its grant parts go with it here: MySQL allows no cascading foreign key on a column a generated column is
-     * computed from (grant_parts.running_server_id).
+     * Delete the server; refused while a move of services from or to it is open (queued, running or paused: it would
+     * go with it), or while any bot's services are on it (move or delete them first, or switch the server off instead).
+     * Its grant parts and the moves of services from or to it go with it here: MySQL allows no cascading foreign key on a
+     * column a generated column is computed from (grant_parts.running_server_id, server_migrations.open_source_id).
      *
      * @throws ServerInUseException
      */
     public function delete(Server $server): void
     {
+        $move = ServerMigration::open()->whereAny(['source_server_id', 'target_server_id'], $server->id)->with(['source', 'target'])->first();
+        if ($move !== null) {
+            throw new ServerInUseException($move->source_server_id === $server->id
+                ? sprintf('سرویس‌های این سرور در حال انتقال به سرور «%s» است؛ صبر کنید تمام شود یا آن را لغو کنید.', $move->target->name ?? '')
+                : sprintf('سرویس‌های سرور «%s» در حال انتقال به این سرور است؛ صبر کنید تمام شود یا آن را لغو کنید.', $move->source->name ?? ''));
+        }
+
         $services = $server->subscriptions()->count();
         if ($services > 0) {
             throw new ServerInUseException(sprintf(
@@ -190,6 +199,9 @@ final class ServerService
 
         $server->getConnection()->transaction(static function () use ($server): void {
             GrantPart::query()->where('server_id', $server->id)->delete();
+            // Its moves' history, either way (no cascade: open_source_id); the clients they left on another panel stay
+            // listed there, those on its own go with it.
+            ServerMigration::query()->whereAny(['source_server_id', 'target_server_id'], $server->id)->delete();
             $server->delete();
         });
     }

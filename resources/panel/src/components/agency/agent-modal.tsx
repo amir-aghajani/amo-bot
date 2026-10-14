@@ -1,7 +1,9 @@
 import { Check } from 'lucide-react'
 import { toast } from 'sonner'
+import { StandingFacts } from '@/components/agency/agency-standing'
 import { AgencyTermsFields, termsBody, type AgencyTerms } from '@/components/agency/agency-terms-fields'
 import { AgentBotName } from '@/components/agency/agent-bot-name'
+import { sellingTermsChanges, sellingTermsDraft, SellingTermsFields, type SellingTermsDraft } from '@/components/agency/selling-terms-fields'
 import { TrafficLedger } from '@/components/agency/traffic-ledger'
 import { Balance } from '@/components/balance'
 import { BalanceAdjust } from '@/components/balance-adjust'
@@ -16,7 +18,10 @@ import { queryKeys } from '@/lib/query-keys'
 import { EMAILED, NOT_DELIVERED } from '@/lib/statuses'
 import { useForm } from '@/lib/use-form'
 
-/** An agent: their bot and what it sold, what they owe, and their level and credit to change — the agent is notified. */
+/**
+ * An agent: their bot and what it sold, what they owe, their terms of selling, and their level, credit, end and monthly
+ * minimum to change — the agent is notified.
+ */
 export function AgentModal({ agent, onClose, onSaved }: { agent: AgentRow | null; onClose: () => void; onSaved: (agent: AgentRow) => void }) {
   return (
     <Modal open={agent !== null} onClose={onClose} size="md" title={agent ? `نماینده ${userLabel(agent.user)}` : 'نماینده'}>
@@ -26,17 +31,21 @@ export function AgentModal({ agent, onClose, onSaved }: { agent: AgentRow | null
 }
 
 function AgentForm({ agent, onClose, onSaved }: { agent: AgentRow; onClose: () => void; onSaved: (agent: AgentRow) => void }) {
-  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<AgencyTerms>({
+  const kept = sellingTermsDraft(agent.standing?.expires_at ?? null, agent.standing?.monthly_minimum ?? null)
+  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<AgencyTerms & SellingTermsDraft>({
     level_id: String(agent.level.id),
     credit_limit: amountDraft(agent.credit_limit),
+    ...kept,
   })
 
-  // Another level moves the agent between the levels' counts.
+  // Another level moves the agent between the levels' counts. The terms of selling go only as changed — a shop without
+  // its row yet (no standing) keeps its own.
   const save = handleSubmit(async () => {
-    const data = await submit(() => api.put(`/agency/agents/${agent.id}`, termsBody(values)), { invalidates: [queryKeys.agencyLevels] })
+    const body = agent.standing ? { ...termsBody(values), ...sellingTermsChanges(values, kept) } : termsBody(values)
+    const data = await submit(() => api.put(`/agency/agents/${agent.id}`, body), { invalidates: [queryKeys.agencyLevels] })
     if (data) {
       // Saved as they were: nothing changed, so nobody was told.
-      if (data.delivery === null) toast.success('سطح و اعتبار تغییری نکرد')
+      if (data.delivery === null) toast.success('شرایط نماینده تغییری نکرد')
       else if (data.delivery === 'told') toast.success('نمایندگی به‌روز شد و به نماینده خبر داده شد')
       else if (data.delivery === 'emailed') toast.success(`نمایندگی به‌روز شد و خبرش به نماینده ${EMAILED}`)
       else toast.warning('نمایندگی به‌روز شد، ولی به نماینده خبر داده نشد', { description: NOT_DELIVERED[data.delivery]('نماینده', agent.user.telegram_id !== null) })
@@ -56,8 +65,10 @@ function AgentForm({ agent, onClose, onSaved }: { agent: AgentRow; onClose: () =
         <Fact label="موجودی کیف پول">
           <Balance balance={agent.balance} />
         </Fact>
+        {agent.standing && <StandingFacts standing={agent.standing} />}
       </FactList>
       <AgencyTermsFields values={values} set={set} error={error} />
+      {agent.standing && <SellingTermsFields values={values} onExpires={(expires) => set('expires', expires)} onMinimum={(minimum) => set('monthly_minimum', minimum)} error={error} />}
       <FormActions error={formError} onCancel={onClose} submitLabel="ذخیره تغییرات" busy={busy} dirty={dirty} onRevert={revert} icon={Check} />
     </form>
   )

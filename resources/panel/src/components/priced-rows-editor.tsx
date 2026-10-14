@@ -1,8 +1,8 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { Plus, X } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { X } from 'lucide-react'
+import { AddRow, nextKey, useRowFocus } from '@/components/add-row'
 import { FieldGroup } from '@/components/field'
 import { IconButton } from '@/components/icon-button'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -48,14 +48,10 @@ interface PricedRowsEditorProps<K extends string> {
   empty?: string
 }
 
-/** Where the focus goes once the rows have changed: a row's part — the new row's amount, the remove beside a removed row — or the add. */
-type FocusTarget = { row: number; part: 'amount' | 'remove' } | 'add'
-
 /**
  * A list of amounts and their prices as rows — the extras' amounts offered, the custom builder's price tiers —: each
- * row's amount, price and remove, then an add button that is held, not disabled, once the list is full. The focus never
- * falls to the document as rows come and go: a new row's amount takes it, a removed row hands it to the remove of the
- * row that takes its place (or the one before), the last one gone to the add.
+ * row's amount, price and remove, then an add button that is held, not disabled, once the list is full (AddRow). The
+ * focus never falls to the document as rows come and go (useRowFocus): a new row's amount takes it.
  */
 export function PricedRowsEditor<K extends string>({
   label,
@@ -73,29 +69,17 @@ export function PricedRowsEditor<K extends string>({
   most,
   empty,
 }: PricedRowsEditorProps<K>) {
-  const full = rows.length >= most
   const columns = cn('grid gap-2', wide ? 'grid-cols-[5.5rem_minmax(0,1fr)_2rem]' : 'grid-cols-[4.5rem_minmax(0,1fr)_2rem]')
-
-  const block = useRef<HTMLDivElement>(null)
-  const focus = useRef<FocusTarget | null>(null)
-  useLayoutEffect(() => {
-    const target = focus.current
-    if (target === null) return
-    focus.current = null
-    const selector = target === 'add' ? '[data-add]' : `[data-row="${target.row}"] [data-part="${target.part}"]`
-    block.current?.querySelector<HTMLElement>(selector)?.focus()
-  })
+  const { block, added, removed } = useRowFocus((row: PricedRowDraft<K>) => row.id)
 
   const add = () => {
-    if (full) return
-    const id = Math.max(-1, ...rows.map((row) => row.id)) + 1
-    focus.current = { row: id, part: 'amount' }
-    onChange([...rows, { id, price: '', [amount]: '' } as PricedRowDraft<K>])
+    const row = { id: nextKey(rows.map((each) => each.id)), price: '', [amount]: '' } as PricedRowDraft<K>
+    added(row, 'amount')
+    onChange([...rows, row])
   }
   const remove = (index: number) => {
     const next = rows.filter((_, i) => i !== index)
-    const neighbour = next[index] ?? next[index - 1]
-    focus.current = neighbour ? { row: neighbour.id, part: 'remove' } : 'add'
+    removed(next, index)
     onChange(next)
   }
   const edit = (index: number, field: K | 'price', value: string) => onChange(rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
@@ -143,14 +127,7 @@ export function PricedRowsEditor<K extends string>({
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {/* Held, not disabled, once the list is full: just pressed, it keeps the focus. */}
-          <Button data-add variant="secondary" size="sm" icon={Plus} aria-disabled={full} onClick={add}>
-            {`افزودن ${noun}`}
-          </Button>
-          {full && <span className="text-footnote text-muted-foreground">{`حداکثر ${formatNumber(most)} ${noun}؛ برای ${noun} تازه یکی را بردارید.`}</span>}
-          {rows.length === 0 && empty && <span className="text-footnote text-muted-foreground">{empty}</span>}
-        </div>
+        <AddRow noun={noun} count={rows.length} most={most} onAdd={add} empty={empty} />
       </FieldGroup>
     </div>
   )

@@ -16,6 +16,13 @@ final class Money
     public const UNIT = 'تومان';
 
     /**
+     * The most Toman a form takes where nothing of its own bounds the amount — a method's bounds and a card's daily cap,
+     * an agent's credit and monthly minimum, a discount code's amounts, a wallet adjustment —: a billion, well inside
+     * decimal(14,2). Each form words its own refusal; a price has a bound of its own (Catalog's Package::PRICE_MAX).
+     */
+    public const AMOUNT_MAX = 1_000_000_000;
+
+    /**
      * "12.5" → "12.50", the form for storage and bcmath. Persian digits allowed; a third decimal rounds half up. Text
      * that is no number is a programming error, not something to guess at.
      *
@@ -62,6 +69,16 @@ final class Money
     }
 
     /**
+     * The amount, or zero when it is below — what is left of a sum, never a debt.
+     *
+     * @return numeric-string
+     */
+    public static function atLeastZero(string|float|int $amount): string
+    {
+        return self::compare($amount, 0) < 0 ? self::normalize(0) : self::normalize($amount);
+    }
+
+    /**
      * `$percent` percent of an amount, in whole Toman rounded down — the shop never pays out a fraction.
      *
      * @return numeric-string
@@ -82,6 +99,17 @@ final class Money
         $share = bcdiv($scaled, (string) $whole, 0);
 
         return self::normalize(bccomp(bcmul($share, (string) $whole, self::SCALE), $scaled, self::SCALE) < 0 ? bcadd($share, '1', 0) : $share);
+    }
+
+    /**
+     * The amount as a banking app takes it typed: whole Toman in Latin digits, no separators — "120000" —, rounded as
+     * format() rounds it, so the digits copied are the amount the customer reads.
+     */
+    public static function digits(string|float|int $amount): string
+    {
+        $amount = self::normalize($amount);
+
+        return bcadd($amount, str_starts_with($amount, '-') ? '-0.5' : '0.5', 0);
     }
 
     /** Persian display form: "۱۲۰٬۰۰۰ تومان". Toman has no fraction, so none is shown. */

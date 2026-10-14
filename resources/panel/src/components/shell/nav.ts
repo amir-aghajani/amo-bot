@@ -222,6 +222,8 @@ export const BOT_SETTINGS_SECTIONS: NavSection<BotSettingsSection>[] = [
   { value: 'client_names', title: 'نام کاربری سرویس', to: '/bot-settings/client-names' },
   { value: 'channels', title: 'کانال‌ها', to: '/bot-settings/channels' },
   { value: 'wallet', title: 'کیف پول', to: '/bot-settings/wallet' },
+  { value: 'wallet_transfers', title: 'انتقال موجودی', to: '/bot-settings/wallet-transfers' },
+  { value: 'payments', title: 'پرداخت کارت به کارت', to: '/bot-settings/payments' },
   { value: 'renewal', title: 'تمدید سرویس', to: '/bot-settings/renewal' },
   { value: 'extras', title: 'خرید اضافه', to: '/bot-settings/extras' },
   { value: 'reminders', title: 'یادآوری', to: '/bot-settings/reminders' },

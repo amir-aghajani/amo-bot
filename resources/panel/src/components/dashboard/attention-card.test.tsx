@@ -1,9 +1,11 @@
 import type { ReactElement } from 'react'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { SellingNotice } from '@/components/agency/agency-standing'
 import { AttentionCard } from '@/components/dashboard/attention-card'
-import type { Session, TrafficShortage } from '@/lib/api-types'
+import type { AgencyStanding, Session, TrafficShortage } from '@/lib/api-types'
 import { AGENT_SHOP, OWNER, signedIn } from '@/test/render'
+import { agencyStanding } from '@/test/rows'
 
 /*
  * What needs a hand on the dashboard (components/dashboard/attention-card): an agent's bot whose traffic sells nothing
@@ -43,6 +45,37 @@ describe('an agent’s bot short of traffic', () => {
 
   it('is no news while it sells', async () => {
     await show(null)
+
+    expect(screen.getByText('همه‌چیز مرتب است')).toBeTruthy()
+  })
+})
+
+describe('an agent’s terms of selling', () => {
+  /** The card with no queue waiting, in an agent's shop whose terms are `standing`, said as the agent's panel says them. */
+  const terms = (standing: AgencyStanding) =>
+    draw(<AttentionCard attention={NONE_WAITING} trafficShortage={null} agencyStanding={standing} standingNotice={(shown) => <SellingNotice standing={shown} />} expiringDays={3} />, AGENT_SHOP)
+
+  it('say first that the bot sells nothing now, and why', async () => {
+    await terms(agencyStanding({ suspension: { reason: 'manual', since: '2026-10-14T10:00:00Z' } }))
+
+    expect(screen.getByRole('alert').textContent).toContain('فروش ربات شما متوقف است: فروشگاه اصلی فروش را متوقف کرده است.')
+    expect(screen.getByText('۱ مورد منتظر اقدام شماست')).toBeTruthy()
+  })
+
+  it('warn of an end within the warned days', async () => {
+    await terms(agencyStanding({ expires_at: new Date(Date.now() + 2 * 86_400_000).toISOString() }))
+
+    expect(screen.getByText(/نمایندگی شما .* به پایان می‌رسد \(۲ روز مانده\)/)).toBeTruthy()
+  })
+
+  it('are no news while all is well: an end far off, a month that reached its minimum', async () => {
+    await terms(
+      agencyStanding({
+        expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        monthly_minimum: '500000.00',
+        month: { name: 'مهر ۱۴۰۵', purchased: '600000.00', ends_at: new Date(Date.now() + 86_400_000).toISOString(), judged: true },
+      }),
+    )
 
     expect(screen.getByText('همه‌چیز مرتب است')).toBeTruthy()
   })

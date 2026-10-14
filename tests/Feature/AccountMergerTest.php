@@ -148,7 +148,7 @@ final class AccountMergerTest extends DatabaseTestCase
         $merge = AccountMerge::query()->latest('id')->firstOrFail();
         self::assertSame([$ali->id, AccountMerger::BY_CUSTOMER], [$merge->merged_user_id, $merge->actor]);
         self::assertSame(['telegram_id' => 7003, 'username' => 'ali', 'email' => null, 'google' => true, 'first_name' => 'Ali', 'last_name' => null, 'created_at' => '2026-09-10T10:00:00+00:00'], $merge->merged);
-        self::assertSame(['referrals' => 1, 'agency_requests' => 1, 'wallet_lines' => 2, 'groups' => 1, 'sessions' => 1, 'merges' => 1, 'notifications' => 1, 'subscriptions' => 1, 'test_accounts' => 1, 'orders' => 1, 'request_keys' => 0, 'commissions' => 0, 'tickets' => 1, 'reviews' => 1, 'broadcasts' => 2, 'pins' => 1, 'bots' => 1, 'gift_codes' => 1, 'wheel_spins' => 1, 'cashbacks' => 1, 'lottery_wins' => 1, 'referral_bonuses' => 0, 'referral_bonuses_given' => 0, 'referral_rewards' => 0, 'referral_alerts' => 0], $merge->moved);
+        self::assertSame(['referrals' => 1, 'agency_requests' => 1, 'wallet_lines' => 2, 'wallet_transfers_sent' => 0, 'wallet_transfers_received' => 0, 'groups' => 1, 'sessions' => 1, 'merges' => 1, 'notifications' => 1, 'subscriptions' => 1, 'test_accounts' => 1, 'orders' => 1, 'request_keys' => 0, 'commissions' => 0, 'tickets' => 1, 'reviews' => 1, 'broadcasts' => 2, 'pins' => 1, 'bots' => 1, 'gift_codes' => 1, 'wheel_spins' => 1, 'cashbacks' => 1, 'lottery_wins' => 1, 'referral_bonuses' => 0, 'referral_bonuses_given' => 0, 'referral_rewards' => 0, 'referral_alerts' => 0], $merge->moved);
         self::assertTrue($logs->hasInfoThatContains('was merged into customer'));
     }
 

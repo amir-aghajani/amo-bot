@@ -21,6 +21,8 @@ use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
+use App\Support\JalaliMonth;
+use App\Support\Money;
 use App\Support\Traffic;
 use Psr\Http\Message\ResponseInterface;
 use Tests\HttpTestCase;
@@ -126,7 +128,7 @@ final class AdminAgencyApiTest extends HttpTestCase
         // Their shop is open: their bot's row, waiting for its token, with a wallet of its own.
         $bot = Bot::query()->where('user_id', $customer->id)->sole();
         self::assertSame([BotStatus::Active, null, 0], [$bot->status(), $bot->token, $bot->trafficBalance()]);
-        self::assertSame(['wallet'], CurrentBot::run($bot, static fn(): array => PaymentMethod::query()->pluck('driver')->all()));
+        self::assertSame(['wallet', 'outside'], CurrentBot::run($bot, static fn(): array => PaymentMethod::query()->pluck('driver')->all()), 'the built-in methods: the wallet, and «خارج از فروشگاه» for orders support makes');
 
         $again = $this->postJson("/api/admin/agency/requests/{$request->id}/reject", []);
         self::assertSame(422, $again->getStatusCode());
@@ -172,14 +174,14 @@ final class AdminAgencyApiTest extends HttpTestCase
     public function testAnAgentsCreditIsHeldToTheDefaultCreditsOwnRule(): void
     {
         $request = $this->agencyRequest($this->customer());
-        $rules = ['enabled' => true, 'traffic_presets' => [50], 'traffic_min' => 10];
+        $rules = ['enabled' => true, 'traffic_presets' => [50], 'traffic_min' => 10, 'term_days' => 0, 'monthly_minimum' => '0', 'warn_days' => 3];
 
-        foreach (['-1', (string) (AgencySettings::CREDIT_MAX + 1)] as $credit) {
+        foreach (['-1', (string) (Money::AMOUNT_MAX + 1)] as $credit) {
             self::assertArrayHasKey('default_credit', $this->decode($this->putJson('/api/admin/agency/settings', $rules + ['default_credit' => $credit]))['errors'] ?? [], "{$credit} as the default credit");
             self::assertArrayHasKey('credit_limit', $this->decode($this->postJson("/api/admin/agency/requests/{$request->id}/approve", ['level_id' => $this->gold->id, 'credit_limit' => $credit]))['errors'] ?? [], "{$credit} as an agent's");
         }
 
-        $most = (string) AgencySettings::CREDIT_MAX;
+        $most = (string) Money::AMOUNT_MAX;
         self::assertSame(200, $this->putJson('/api/admin/agency/settings', $rules + ['default_credit' => $most])->getStatusCode());
         self::assertSame(200, $this->postJson("/api/admin/agency/requests/{$request->id}/approve", ['level_id' => $this->gold->id, 'credit_limit' => $most])->getStatusCode());
     }
@@ -219,6 +221,14 @@ final class AdminAgencyApiTest extends HttpTestCase
                 'connected_at' => $bot->connected_at?->toIso8601String(),
             ],
             'counts' => ['customers' => 2, 'sold' => 1, 'active' => 1],
+            'standing' => [
+                'expires_at' => null,
+                'monthly_minimum' => null,
+                'month' => ['name' => JalaliMonth::now()->name(), 'purchased' => '0.00', 'ends_at' => JalaliMonth::now()->end->toIso8601String(), 'judged' => false],
+                'suspension' => null,
+                'warn_days' => 3,
+            ],
+            'hidden' => ['servers' => 0, 'plans' => 0],
         ]], $rows, 'only agents; the sale drew its 30 GB from the 40');
         self::assertSame([], $this->decode($this->get('/api/admin/agency/agents?search=nobody'))['agents']);
         self::assertSame([$agent->id], array_column($this->decode($this->get("/api/admin/agency/agents?level={$this->gold->id}"))['agents'], 'id'));
@@ -352,7 +362,7 @@ final class AdminAgencyApiTest extends HttpTestCase
         $bot->refresh();
         self::assertSame([BotStatus::Active, null, Traffic::bytesOfGb(40)], [$bot->status(), $bot->problem, $bot->trafficBalance()], 'on again, what kept it from running forgotten, its traffic kept');
         self::assertSame(['پلن رضا'], CurrentBot::run($bot, static fn(): array => Plan::query()->pluck('name')->all()), 'its shop as they left it');
-        self::assertSame(['wallet'], CurrentBot::run($bot, static fn(): array => PaymentMethod::query()->pluck('driver')->all()), 'one wallet still');
+        self::assertSame(['wallet', 'outside'], CurrentBot::run($bot, static fn(): array => PaymentMethod::query()->pluck('driver')->all()), 'one of each built-in still');
         self::assertSame([[FakeTelegram::AGENT_TOKEN, 'deleteWebhook']], self::calledAs($this->telegram(), FakeTelegram::AGENT_TOKEN), "back in the shop's mode (polling: off any webhook)");
     }
 
@@ -392,24 +402,29 @@ final class AdminAgencyApiTest extends HttpTestCase
 
     public function testAFreshShopsProgramIsOffWithoutCreditOfferingTheUsualTraffic(): void
     {
-        foreach (['agency.enabled', 'agency.default_credit', 'agency.traffic_presets', 'agency.traffic_min'] as $key) {
+        foreach (['agency.enabled', 'agency.default_credit', 'agency.traffic_presets', 'agency.traffic_min', 'agency.term_days', 'agency.monthly_minimum', 'agency.warn_days'] as $key) {
             $this->service(Settings::class)->forget($key);
         }
 
-        self::assertSame(['enabled' => false, 'default_credit' => '0.00', 'traffic_presets' => [50, 100, 200, 500], 'traffic_min' => 10], $this->decode($this->get('/api/admin/agency/settings'))['settings']);
+        self::assertSame(
+            ['enabled' => false, 'default_credit' => '0.00', 'traffic_presets' => [50, 100, 200, 500], 'traffic_min' => 10, 'term_days' => 0, 'monthly_minimum' => '0.00', 'warn_days' => 3],
+            $this->decode($this->get('/api/admin/agency/settings'))['settings'],
+            'no end, no minimum, warned three days ahead',
+        );
     }
 
     public function testTheRulesAreTheSwitchTheStartingCreditAndTheTrafficOffered(): void
     {
-        self::assertSame(['enabled' => true, 'default_credit' => '100000.00', 'traffic_presets' => [50, 100], 'traffic_min' => 10], $this->decode($this->get('/api/admin/agency/settings'))['settings']);
+        $terms = ['term_days' => 0, 'monthly_minimum' => '0.00', 'warn_days' => 3];
+        self::assertSame(['enabled' => true, 'default_credit' => '100000.00', 'traffic_presets' => [50, 100], 'traffic_min' => 10] + $terms, $this->decode($this->get('/api/admin/agency/settings'))['settings']);
 
-        $saved = $this->putJson('/api/admin/agency/settings', ['enabled' => false, 'default_credit' => '۵۰۰٬۰۰۰', 'traffic_presets' => '۲۰۰، 50, 100', 'traffic_min' => '20']);
+        $saved = $this->putJson('/api/admin/agency/settings', ['enabled' => false, 'default_credit' => '۵۰۰٬۰۰۰', 'traffic_presets' => '۲۰۰، 50, 100', 'traffic_min' => '20', 'term_days' => '۳۰', 'monthly_minimum' => '۲٬۰۰۰٬۰۰۰', 'warn_days' => 5]);
         self::assertSame(200, $saved->getStatusCode(), (string) $saved->getBody());
-        self::assertSame(['enabled' => false, 'default_credit' => '500000.00', 'traffic_presets' => [50, 100, 200], 'traffic_min' => 20], $this->decode($saved)['settings']);
+        self::assertSame(['enabled' => false, 'default_credit' => '500000.00', 'traffic_presets' => [50, 100, 200], 'traffic_min' => 20, 'term_days' => 30, 'monthly_minimum' => '2000000.00', 'warn_days' => 5], $this->decode($saved)['settings']);
 
-        $refused = $this->unchecked()->putJson('/api/admin/agency/settings', ['enabled' => 'maybe', 'default_credit' => '-1', 'traffic_presets' => '5, 50', 'traffic_min' => 10]);
+        $refused = $this->unchecked()->putJson('/api/admin/agency/settings', ['enabled' => 'maybe', 'default_credit' => '-1', 'traffic_presets' => '5, 50', 'traffic_min' => 10, 'term_days' => AgencySettings::TERM_MAX_DAYS + 1, 'monthly_minimum' => '-5', 'warn_days' => 0]);
         self::assertSame(422, $refused->getStatusCode());
-        self::assertSame(['enabled', 'default_credit', 'traffic_presets'], array_keys($this->decode($refused)['errors']), 'a preset below the least one may type');
+        self::assertSame(['enabled', 'default_credit', 'term_days', 'monthly_minimum', 'warn_days', 'traffic_presets'], array_keys($this->decode($refused)['errors']), 'a term too long, a minimum below zero, no day to warn in; a preset below the least one may type');
         self::assertSame(20, $this->decode($this->get('/api/admin/agency/settings'))['settings']['traffic_min'], 'nothing stored from a refused save');
     }
 
@@ -417,7 +432,7 @@ final class AdminAgencyApiTest extends HttpTestCase
     {
         $this->openShop($this->agentBot());
 
-        self::assertSame(200, $this->putJson('/api/admin/agency/settings', ['enabled' => true, 'default_credit' => '0', 'traffic_presets' => [100], 'traffic_min' => 50])->getStatusCode());
+        self::assertSame(200, $this->putJson('/api/admin/agency/settings', ['enabled' => true, 'default_credit' => '0', 'traffic_presets' => [100], 'traffic_min' => 50, 'term_days' => 0, 'monthly_minimum' => '0', 'warn_days' => 3])->getStatusCode());
 
         self::assertSame(50, $this->service(AgencySettings::class)->trafficMin());
         self::assertSame(1, $this->decode($this->get('/api/admin/agency'))['summary']['agents'], "worked in the main bot's shop, whose customers the agents are");

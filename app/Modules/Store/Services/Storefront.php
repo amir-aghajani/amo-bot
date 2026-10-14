@@ -58,7 +58,8 @@ final class Storefront
             'shop' => [
                 'name' => $this->bots->name($bot),
                 'bot' => $username === '' ? null : ['username' => $username, 'url' => 'https://t.me/' . $username],
-                'taking_orders' => $this->botSettings->enabled(),
+                // Off while the bot is off — and while an agent's selling is suspended (Bot::sells()).
+                'taking_orders' => $this->botSettings->enabled() && $bot->sells(),
                 'service_claims' => $this->claims->offered(),
                 'service_transfers' => $this->transfers->offered(),
                 'custom_services' => $this->custom->offered(),

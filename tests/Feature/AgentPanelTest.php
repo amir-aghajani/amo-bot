@@ -59,7 +59,7 @@ final class AgentPanelTest extends HttpTestCase
         $this->loginAsAgent($this->bot);
 
         $session = $this->decode($this->get('/api/agent/auth/me'))['session'];
-        self::assertSame(['name' => '@agent_shop_bot', 'shop' => ['id' => $this->bot->id, 'name' => 'فروشگاه نماینده', 'username' => 'agent_shop_bot', 'status' => 'active']], $session);
+        self::assertSame(['name' => '@agent_shop_bot', 'shop' => ['id' => $this->bot->id, 'name' => 'فروشگاه نماینده', 'username' => 'agent_shop_bot', 'status' => 'active', 'selling_suspended' => null]], $session);
 
         self::assertSame(['agents_customer'], array_column($this->decode($this->get('/api/agent/users'))['users'], 'username'));
         self::assertSame(['پلن نماینده'], array_column($this->decode($this->get('/api/agent/plans'))['plans'], 'name'));
@@ -251,7 +251,7 @@ final class AgentPanelTest extends HttpTestCase
         self::assertSame([[Bot::MAIN, 'فروشگاه اصلی'], [$this->bot->id, 'فروشگاه نماینده']], array_map(static fn(array $shop): array => [$shop['id'], $shop['name']], $shops));
 
         $this->openShop($this->bot);
-        self::assertSame(['id' => $this->bot->id, 'name' => 'فروشگاه نماینده', 'username' => 'agent_shop_bot', 'status' => 'active'], $this->decode($this->get('/api/admin/auth/me'))['session']['shop']);
+        self::assertSame(['id' => $this->bot->id, 'name' => 'فروشگاه نماینده', 'username' => 'agent_shop_bot', 'status' => 'active', 'selling_suspended' => null], $this->decode($this->get('/api/admin/auth/me'))['session']['shop']);
         self::assertSame(['agents_customer'], array_column($this->decode($this->get('/api/admin/users'))['users'], 'username'));
         self::assertSame(1, $this->decode($this->get('/api/admin/agency'))['summary']['agents'], "the agency stays the main bot's whatever shop is open");
 

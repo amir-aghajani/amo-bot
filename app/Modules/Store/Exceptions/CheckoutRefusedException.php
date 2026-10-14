@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Store\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Payments\DTO\Shortfall;
 use App\Support\Money;
 
 /**
  * A website checkout that paid nothing: the wallet short (422 on `method_id`), the order paid or closed elsewhere a moment
  * ago (409), a repeated request whose order was cancelled since (409), the wallet's refusal as it was charged (422), or
- * the shop taking no orders while its bot is off (503).
+ * the shop taking no orders while its bot is off, or while an agent's selling is suspended (503).
  */
 final class CheckoutRefusedException extends DomainRuleException
 {
@@ -53,6 +54,12 @@ final class CheckoutRefusedException extends DomainRuleException
     public static function paused(): self
     {
         return new self(self::PAUSED, 503, null);
+    }
+
+    /** An agent's shop whose selling the main shop suspended (Bot::sells()): no new order, a 503 as paused(). */
+    public static function suspended(): self
+    {
+        return new self(SellingSuspendedException::MESSAGE, 503, null);
     }
 
     public function status(): int

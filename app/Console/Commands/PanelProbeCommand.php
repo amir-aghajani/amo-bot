@@ -19,8 +19,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * The add-server form's probe from a shell (ServerService::probeInput()): connects to a panel through its connector and
- * prints its status, inbounds and subscription server. Nothing is stored.
+ * The add-server form's probe from a shell (ServerService::probeInput()): connects to a panel through its connector —
+ * through a SOCKS5 proxy with `--proxy` — and prints its status, inbounds and subscription server. Nothing is stored.
  */
 #[AsCommand(name: 'panel:probe', description: 'Connect to a panel through its connector and print its status, inbounds and subscription server')]
 final class PanelProbeCommand extends Command
@@ -41,7 +41,8 @@ final class PanelProbeCommand extends Command
             ->addOption('username', 'u', InputOption::VALUE_REQUIRED, 'Admin username (instead of a token)')
             ->addOption('password', 'p', InputOption::VALUE_REQUIRED, 'Admin password')
             ->addOption('totp', null, InputOption::VALUE_REQUIRED, 'Base32 TOTP secret, for a 3x-ui panel with two-factor login on')
-            ->addOption('insecure', 'k', InputOption::VALUE_NONE, 'Do not verify the TLS certificate');
+            ->addOption('insecure', 'k', InputOption::VALUE_NONE, 'Do not verify the TLS certificate')
+            ->addOption('proxy', null, InputOption::VALUE_REQUIRED, 'Reach the panel through a SOCKS5 proxy: socks5h://[user:password@]host[:port] (port 1080 if left out)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -55,6 +56,12 @@ final class PanelProbeCommand extends Command
         }
 
         $token = (string) $input->getOption('token');
+        $proxy = self::proxy((string) $input->getOption('proxy'));
+        if ($proxy === null) {
+            $io->error('--proxy takes a SOCKS5 proxy\'s address: socks5h://[user:password@]host[:port].');
+
+            return Command::INVALID;
+        }
         try {
             // A server's form on the connector, as the add-server form sends it — the fields its connector has no use for
             // (3x-ui's two-factor secret elsewhere) left unread.
@@ -70,7 +77,7 @@ final class PanelProbeCommand extends Command
                 'verify_tls' => !$input->getOption('insecure'),
                 'timeout' => PanelConnection::DEFAULT_TIMEOUT,
                 'is_active' => true,
-            ]);
+            ] + $proxy);
         } catch (ValidationException $e) {
             $io->error(array_merge(...array_values($e->errors())));
 
@@ -118,5 +125,36 @@ final class PanelProbeCommand extends Command
         $io->success('Panel reachable and credentials accepted.');
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * The form's proxy fields from `--proxy` (socks5h://, socks5:// or no scheme; the port 1080 when left out, the login
+     * URL-decoded) — the proxy switched off when there is none; null for another kind of address. The form checks the
+     * rest as the add-server form's.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function proxy(string $option): ?array
+    {
+        if ($option === '') {
+            return [PanelConnection::PROXY => false];
+        }
+
+        $parts = parse_url(str_contains($option, '://') ? $option : 'socks5h://' . $option);
+        if (!is_array($parts) || !in_array(strtolower($parts['scheme'] ?? ''), ['socks5', 'socks5h'], true) || ($parts['host'] ?? '') === '') {
+            return null;
+        }
+        // Nothing after the port: a proxy has no path, query or fragment.
+        if (($parts['path'] ?? '/') !== '/' || isset($parts['query']) || isset($parts['fragment'])) {
+            return null;
+        }
+
+        return [
+            PanelConnection::PROXY => true,
+            'proxy_host' => $parts['host'],
+            'proxy_port' => $parts['port'] ?? PanelConnection::PROXY_PORT,
+            'proxy_username' => rawurldecode($parts['user'] ?? ''),
+            'proxy_password' => rawurldecode($parts['pass'] ?? ''),
+        ];
     }
 }

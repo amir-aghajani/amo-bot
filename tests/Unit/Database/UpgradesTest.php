@@ -10,6 +10,8 @@ use App\Core\Database\Schema;
 use App\Core\Database\UpgradeFailedException;
 use App\Core\Database\Upgrades;
 use App\Core\Installation;
+use App\Modules\Providers\Models\Server;
+use App\Modules\Providers\Support\PanelConnection;
 use Illuminate\Container\Container;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Connectors\ConnectionFactory;
@@ -180,6 +182,92 @@ final class UpgradesTest extends TestCase
         $kinds = $installed->table('cashback_rules')->orderBy('id')->pluck('order_types')->map(static fn(?string $kinds): ?array => $kinds === null ? null : json_decode($kinds, true))->all();
         $every = ['purchase', 'renewal', 'extra_traffic', 'extra_time', 'extra_devices'];
         self::assertSame([$every, $every, ['purchase', 'renewal'], null], $kinds, 'every kind 0.3.0 sold is every kind still; fewer, or none named (purchases and renewals), stay — once, however often it runs');
+    }
+
+    public function testACardMethodsCardBecomesItsFirstCardRowAndEveryPaymentOfItWasShownIt(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.4.0', static function (): void {});
+        $agent = $installed->table('bots')->insertGetId(['title' => 'agent']);
+        $method = static fn(int $bot, array $config): array => ['bot_id' => $bot, 'driver' => 'manual', 'label' => 'کارت', 'config' => json_encode($config), 'enabled' => true, 'sort' => 2];
+        $mellat = $installed->table('payment_methods')->insertGetId($method(1, ['card_number' => '6037997700001119', 'card_holder' => ' Sara ', 'instructions' => 'رسید را بفرستید.', 'auto_approve_after' => 30]));
+        // Kept as typed (its form read a kept number so): Persian digits, a dash and a space.
+        $theirs = $installed->table('payment_methods')->insertGetId($method($agent, ['card_number' => '۵۸۹۲-۱۰۱۰ ۱۲۳۴ ۵۶۷۰', 'card_holder' => 'Reza']));
+        $broken = $installed->table('payment_methods')->insertGetId($method(1, ['card_number' => '6037997700001111', 'card_holder' => 'AmoBot']));
+        $user = $installed->table('users')->insertGetId(['telegram_id' => 1]);
+        $order = $installed->table('orders')->insertGetId(['user_id' => $user, 'type' => 'topup', 'amount' => '100000']);
+        foreach ([$mellat, $mellat, $broken] as $paidWith) {
+            $installed->table('payments')->insert(['order_id' => $order, 'payment_method_id' => $paidWith, 'amount' => '100000']);
+        }
+
+        self::upgradeToCode($installed);
+        self::upgradeToCode($installed);
+
+        $cards = $installed->table('payment_cards')->orderBy('id')->get(['bot_id', 'payment_method_id', 'number', 'holder', 'bank', 'enabled', 'sort', 'daily_cap'])->map(static fn(object $card): array => (array) $card)->all();
+        self::assertEquals([
+            ['bot_id' => 1, 'payment_method_id' => $mellat, 'number' => '6037997700001119', 'holder' => 'Sara', 'bank' => null, 'enabled' => 1, 'sort' => 1, 'daily_cap' => null],
+            ['bot_id' => $agent, 'payment_method_id' => $theirs, 'number' => '5892101012345670', 'holder' => 'Reza', 'bank' => null, 'enabled' => 1, 'sort' => 1, 'daily_cap' => null],
+        ], $cards, "each method's card a row of its shop, its bare digits — once, however often it runs; a number its form would refuse makes none");
+        $card = $installed->table('payment_cards')->where('payment_method_id', $mellat)->value('id');
+        self::assertSame([$card, $card, null], $installed->table('payments')->orderBy('id')->pluck('card_id')->all(), 'its payments were shown it');
+        $configs = $installed->table('payment_methods')->whereIn('id', [$mellat, $theirs, $broken])->orderBy('id')->pluck('config')->map(static fn(string $config): array => json_decode($config, true))->all();
+        self::assertSame([['instructions' => 'رسید را بفرستید.', 'auto_approve_after' => 30], [], []], $configs, 'the card is no setting any more; the rest stays');
+    }
+
+    public function testAnUpgradeThatStopsBeforeItsEndLeavesTheCardWhereTheCodePutBackReadsIt(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.4.0', static function (): void {});
+        $card = ['card_number' => '6037997700001119', 'card_holder' => 'Sara'];
+        $method = $installed->table('payment_methods')->insertGetId(['bot_id' => 1, 'driver' => 'manual', 'label' => 'کارت', 'config' => json_encode($card), 'enabled' => true, 'sort' => 2]);
+        $config = static fn(): array => json_decode((string) $installed->table('payment_methods')->where('id', $method)->value('config'), true);
+        // A later step fails — the disk is full when the outside row is written.
+        $installed->statement("CREATE TRIGGER disk_full BEFORE INSERT ON payment_methods WHEN NEW.driver = 'outside' BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END");
+
+        try {
+            self::upgradeToCode($installed);
+            self::fail('The upgrade went through.');
+        } catch (UpgradeFailedException) {
+            // Stopped half-way: the update puts the code it came from back.
+        }
+        self::assertSame($card, $config(), 'the card 0.4.0 shows, still where it reads it');
+
+        $installed->statement('DROP TRIGGER disk_full');
+        self::upgradeToCode($installed);
+
+        self::assertSame([], $config(), 'gone once the run is through');
+        self::assertSame(1, $installed->table('payment_cards')->where('payment_method_id', $method)->count(), 'its one card row, however often it ran');
+    }
+
+    public function testEveryShopGetsTheOutsideRowAfterItsOtherMethods(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.4.0', static function (): void {});
+        $installed->table('bots')->insert(['id' => 2]);
+        $installed->table('payment_methods')->insert([
+            ['bot_id' => 2, 'driver' => 'wallet', 'label' => 'کیف پول', 'config' => '[]', 'enabled' => true, 'sort' => 1],
+            ['bot_id' => 2, 'driver' => 'manual', 'label' => 'کارت', 'config' => '[]', 'enabled' => true, 'sort' => 4],
+        ]);
+
+        self::upgradeToCode($installed);
+        self::upgradeToCode($installed);
+
+        $outside = $installed->table('payment_methods')->where('driver', 'outside')->orderBy('bot_id')->get(['bot_id', 'label', 'sort'])->map(static fn(object $row): array => [(int) $row->bot_id, $row->label, (int) $row->sort])->all();
+        self::assertSame([[1, 'خارج از فروشگاه', 2], [2, 'خارج از فروشگاه', 5]], $outside, 'one each, after the shop\'s other methods — once, however often it runs');
+    }
+
+    public function testAServerKeptBeforeTheProxyIsReachedStraightAsBefore(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.4.0', static function (): void {});
+        $installed->table('servers')->insert(['name' => 'Berlin', 'driver' => 'fake', 'base_url' => 'https://berlin.test:2053/base', 'meta' => '{"timeout":45}']);
+
+        self::upgradeToCode($installed);
+
+        $server = (new Server())->newFromBuilder((array) $installed->table('servers')->first());
+        self::assertSame([false, null, null, null, null], [$server->proxy_enabled, $server->proxy_host, $server->proxy_port, $server->proxy_username, $server->getRawOriginal('proxy_password')], 'no proxy');
+        $connection = PanelConnection::of($server);
+        self::assertSame(['https://berlin.test:2053/base', 45, null], [$connection->baseUrl, $connection->timeout, $connection->proxy], 'its panel reached straight, its options as they were');
     }
 
     public function testTheUpgradesBetweenTwoVersionsRunInVersionOrder(): void

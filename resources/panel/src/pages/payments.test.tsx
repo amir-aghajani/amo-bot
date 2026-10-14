@@ -1,24 +1,29 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
-import type { PaymentRow } from '@/lib/api-types'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { toast } from 'sonner'
+import { describe, expect, it, vi } from 'vitest'
+import type { DismissReceiptsResponse, PaymentRow } from '@/lib/api-types'
 import { PaymentsPage } from '@/pages/payments'
-import { signedIn } from '@/test/render'
+import { signedIn, until } from '@/test/render'
 import { paymentRow } from '@/test/rows'
-import { json, server } from '@/test/server'
+import { json, refusal, server } from '@/test/server'
 
 /*
  * The payments screen (pages/payments): what each payment paid for — the amount an order of a service's extra traffic or
- * time brings, else the plan, else the order's type — over the order's type and number.
+ * time brings, else the plan, else the order's type — over the order's type and number; and the receipts waiting for
+ * review dismissed at once — those ticked, or every one waiting, a hundred a request —, after a confirmation that says
+ * what it does, with a note for the customers.
  */
 
-/** The screen listing `payments`. */
-function open(payments: PaymentRow[]) {
+const DISMISS = '/api/admin/payments/dismiss'
+
+/** The screen listing `payments` (at `at`), `waiting` receipts in review in the shop. */
+function open(payments: PaymentRow[], { at = '/payments', waiting = 0 }: { at?: string; waiting?: number } = {}) {
   server().on(
     'GET',
     '/api/admin/payments',
-    json({ payments, meta: { page: 1, per_page: 25, total: payments.length, last_page: 1, sort: 'created', dir: 'desc', awaiting_review: 0, paid: 0, paid_amount: '0.00' } }),
+    json({ payments, meta: { page: 1, per_page: 25, total: payments.length, last_page: 1, sort: 'created', dir: 'desc', awaiting_review: waiting, paid: 0, paid_amount: '0.00' } }),
   )
-  render(<PaymentsPage />, { wrapper: signedIn({ at: '/payments' }).wrapper })
+  render(<PaymentsPage />, { wrapper: signedIn({ at }).wrapper })
 }
 
 /** What the row of the order numbered `order` says it paid for, its lines run together. */
@@ -38,5 +43,90 @@ describe('what a payment paid for', () => {
     expect(paidFor(32)).toBe('۷ روززمان اضافه · سفارش #32')
     expect(paidFor(33)).toBe('طلاییخرید · سفارش #33')
     expect(paidFor(34)).toBe('شارژ کیف پولسفارش #34')
+  })
+})
+
+/** Two receipts waiting for review, and a payment paid. */
+const rows = () => [paymentRow({ id: 7 }), paymentRow({ id: 8 }), paymentRow({ id: 9, status: 'paid' })]
+
+describe('dismissing receipts', () => {
+  it('ticks only the receipts waiting for review, and rejects those ticked with a note once confirmed', async () => {
+    vi.spyOn(toast, 'success')
+    server().on('POST', DISMISS, json({ dismissed: 1, skipped: 1, left: 0, until: null } satisfies DismissReceiptsResponse))
+    open(rows(), { waiting: 2 })
+    await screen.findByRole('checkbox', { name: 'انتخاب رسید پرداخت #7' })
+
+    expect(screen.queryByRole('checkbox', { name: 'انتخاب رسید پرداخت #9' })).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'انتخاب همه رسیدهای در انتظار این صفحه' }))
+    const toolbar = screen.getByRole('toolbar', { name: 'رسیدهای انتخاب‌شده' })
+    expect(within(toolbar).getByText('۲ رسید انتخاب شده')).toBeTruthy()
+
+    fireEvent.click(within(toolbar).getByRole('button', { name: 'رد رسیدهای انتخاب‌شده' }))
+    const dialog = await screen.findByRole('dialog', { name: 'رد ۲ رسید' })
+    expect(within(dialog).getByText(/پرداختش ناموفق می‌شود و سفارشش باز می‌ماند/)).toBeTruthy()
+    fireEvent.change(within(dialog).getByLabelText('دلیل رد برای مشتری (اختیاری)'), { target: { value: 'رسید تکراری بود' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'رد رسیدها' }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith('۱ رسید رد شد', { description: '۱ رسید پیش‌تر تعیین تکلیف شده بود.' }))
+    expect(
+      server()
+        .sent('POST', DISMISS)
+        .map((request) => request.body),
+    ).toEqual([{ ids: [7, 8], note: 'رسید تکراری بود' }])
+    await until(() => expect(screen.queryByRole('toolbar', { name: 'رسیدهای انتخاب‌شده' })).toBeNull())
+    expect(server().sent('GET', '/api/admin/payments').length).toBeGreaterThan(1)
+  })
+
+  it('takes every receipt waiting, a hundred a request until none is left of those that had come when it began', async () => {
+    vi.spyOn(toast, 'success')
+    const began = '2026-10-14T10:00:00+00:00'
+    const answers: DismissReceiptsResponse[] = [
+      { dismissed: 100, skipped: 0, left: 30, until: began },
+      { dismissed: 30, skipped: 0, left: 0, until: began },
+    ]
+    server().on('POST', DISMISS, () => json(answers.shift()))
+    open(rows(), { at: '/payments?status=awaiting_review', waiting: 130 })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'رد همه رسیدهای در انتظار' }))
+    const dialog = await screen.findByRole('dialog', { name: 'رد همه رسیدهای در انتظار' })
+    expect(within(dialog).getByText('همه ۱۳۰ رسیدی که در انتظار بررسی است رد می‌شود.')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'رد رسیدها' }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith('۱۳۰ رسید رد شد', { description: undefined }))
+    expect(
+      server()
+        .sent('POST', DISMISS)
+        .map((request) => request.body),
+    ).toEqual([
+      { all: true, note: '' },
+      { all: true, note: '', until: began },
+    ])
+  })
+
+  it('is offered for every receipt only on the waiting tab, while one waits', async () => {
+    open(rows(), { waiting: 2 })
+    await screen.findByRole('checkbox', { name: 'انتخاب رسید پرداخت #7' })
+
+    expect(screen.queryByRole('button', { name: 'رد همه رسیدهای در انتظار' })).toBeNull()
+  })
+
+  it('is not offered while a search or a filter shows fewer receipts than it would take', async () => {
+    open(rows(), { at: '/payments?status=awaiting_review&search=ali', waiting: 2 })
+    await screen.findByRole('checkbox', { name: 'انتخاب رسید پرداخت #7' })
+
+    expect(screen.queryByRole('button', { name: 'رد همه رسیدهای در انتظار' })).toBeNull()
+  })
+
+  it('says a refusal in the dialog', async () => {
+    const refused = 'هر بار حداکثر ۱۰۰ رسید یکجا رد می‌شود.'
+    server().on('POST', DISMISS, refusal(422, refused, { ids: [refused] }))
+    open(rows(), { waiting: 2 })
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'انتخاب رسید پرداخت #7' }))
+    fireEvent.click(screen.getByRole('button', { name: 'رد رسیدهای انتخاب‌شده' }))
+    const dialog = await screen.findByRole('dialog', { name: 'رد ۱ رسید' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'رد رسیدها' }))
+
+    expect(await within(dialog).findByText(refused)).toBeTruthy()
   })
 })

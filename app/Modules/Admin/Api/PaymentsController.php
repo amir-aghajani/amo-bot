@@ -10,6 +10,7 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentDirectory;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Payments\Services\ReceiptDismissals;
 use App\Modules\Payments\Services\Receipts;
 use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -18,7 +19,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 /**
  * The payments screen: the list, a receipt's picture, and the modal's operations — approve, reject, cancel, remind, retry
  * the delivery, refund — each PaymentActions', which tells the customer. An operation answers the payment's row as it
- * stands after it.
+ * stands after it. The list's selection dismisses receipts waiting for review in bulk (ReceiptDismissals).
  */
 final class PaymentsController extends ApiController
 {
@@ -26,6 +27,7 @@ final class PaymentsController extends ApiController
         private readonly PaymentDirectory $payments,
         private readonly PaymentActions $actions,
         private readonly Receipts $receipts,
+        private readonly ReceiptDismissals $dismissals,
     ) {}
 
     /** GET /payments?search=&status=&user=&from=&to=&sort=&dir=&page= */
@@ -77,6 +79,20 @@ final class PaymentsController extends ApiController
         $payment = $this->find($args);
 
         return $this->row($response, $this->actions->reject($payment, Principal::of($request)->actor(), $this->note($request)));
+    }
+
+    /**
+     * POST /payments/dismiss — {ids? | all? (until?), note?}: the receipts waiting for review that `ids` names, or (`all`)
+     * the shop's oldest ReceiptDismissals::MOST that had come by `until`, each refused as reject() refuses one and its
+     * uploaded picture deleted
+     */
+    public function dismiss(Request $request, Response $response): Response
+    {
+        $input = $this->input($request);
+        $which = $this->dismissals->selection($input);
+        $note = Input::note($input, 'note');
+
+        return $this->json($response, $this->dismissals->dismiss($which, Principal::of($request)->actor(), $note));
     }
 
     /**

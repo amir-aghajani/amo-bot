@@ -8,7 +8,8 @@ use App\Core\Exceptions\DomainRuleException;
 
 /**
  * The «تمدید خودکار» switch set while the service is not offered it (AutoRenewal::offeredFor()): it does not run, never
- * ends, has lost its plan, or the wallet is off. A 422 on `auto_renew`; nothing changed.
+ * ends, has lost its plan, or the wallet is off or does not take its renewal price. A 422 on `auto_renew`; nothing
+ * changed.
  */
 final class AutoRenewUnavailableException extends DomainRuleException
 {

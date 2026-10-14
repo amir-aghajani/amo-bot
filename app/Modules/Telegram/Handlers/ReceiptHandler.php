@@ -7,8 +7,10 @@ namespace App\Modules\Telegram\Handlers;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Exceptions\ReceiptInReviewException;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Payments\Services\ReceiptsInReview;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\MainMenu;
@@ -23,7 +25,8 @@ use App\Support\Persian;
  * picture sent as a file, judged by its bytes) — while the payment still awaits one (PaymentService::awaitsReceipt(),
  * the website's rule too). The picture is kept by its Telegram file id for support to review; the customer is told the
  * longest they may wait when the method approves on a timer. A reminder's «ارسال رسید» is the same callback, entering
- * the state again.
+ * the state again. While the shop takes one receipt at a time (ReceiptsInReview), a customer whose other receipt is in
+ * review is told so and the flow ends.
  */
 final class ReceiptHandler implements Handler
 {
@@ -31,6 +34,7 @@ final class ReceiptHandler implements Handler
 
     public function __construct(
         private readonly PaymentService $payments,
+        private readonly ReceiptsInReview $inReview,
         private readonly CustomerPictures $pictures,
         private readonly MainMenu $menu,
         private readonly BotTexts $texts,
@@ -67,6 +71,13 @@ final class ReceiptHandler implements Handler
 
             return;
         }
+        try {
+            $this->inReview->allowReceipt($ctx->user, $payment);
+        } catch (ReceiptInReviewException $e) {
+            $this->stillInReview($ctx, $e);
+
+            return;
+        }
         if ($update->isCallback()) {
             $ctx->session->enter(self::stateFor($payment));
             $ctx->reply($this->texts->get(BotText::ReceiptWaiting));
@@ -82,8 +93,15 @@ final class ReceiptHandler implements Handler
             return;
         }
 
-        // Every word about the verdict later replies to this message.
-        $taken = $this->payments->submitReceipt($payment, $picture['file_id'], $update->caption(), $picture['name'], $update->messageId());
+        // Every word about the verdict later replies to this message. One receipt at a time is asked again as it is taken:
+        // another of theirs may have come from the website meanwhile.
+        try {
+            $taken = $this->inReview->submit($ctx->user, $payment, fn(): bool => $this->payments->submitReceipt($payment, $picture['file_id'], $update->caption(), $picture['name'], $update->messageId()));
+        } catch (ReceiptInReviewException $e) {
+            $this->stillInReview($ctx, $e);
+
+            return;
+        }
         if (!$taken) {
             // An earlier picture (an album's) was taken first and answered, or the payment closed meanwhile.
             if ($payment->refresh()->status !== PaymentStatus::AwaitingReview) {
@@ -99,6 +117,13 @@ final class ReceiptHandler implements Handler
         $ctx->reply($window > 0
             ? $this->texts->render(BotText::ReceiptReceivedTimed, ['outcome' => $outcome, 'wait' => Persian::minutes($window)])
             : $this->texts->render(BotText::ReceiptReceived, ['outcome' => $outcome]));
+    }
+
+    /** One receipt at a time: the flow ends at the menu, their last receipt still with support. */
+    private function stillInReview(Context $ctx, ReceiptInReviewException $refused): void
+    {
+        $ctx->session->clear();
+        $this->menu->show($ctx, $this->texts->render(BotText::ReceiptInReview, ['order' => $refused->inReview->order_id]));
     }
 
     /** The payment no longer waits for a receipt (paid, cancelled, expired): the flow ends at the menu. */

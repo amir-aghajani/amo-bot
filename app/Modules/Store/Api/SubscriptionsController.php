@@ -11,6 +11,7 @@ use App\Modules\Accounts\Http\Customer;
 use App\Modules\Auth\Actor;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\Exceptions\PanelFailedException;
+use App\Modules\Store\Presenters\RecipientPresenter;
 use App\Modules\Store\Services\CustomerSubscriptions;
 use App\Modules\Subscriptions\Exceptions\AutoRenewUnavailableException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
@@ -18,7 +19,6 @@ use App\Modules\Subscriptions\Exceptions\ServiceClaimRefusedException;
 use App\Modules\Subscriptions\Exceptions\ServiceNotReadException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ServiceTransfers;
-use App\Modules\Users\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -130,7 +130,7 @@ final class SubscriptionsController extends ApiController
         $customer = Customer::of($request)->user;
         $recipient = $this->transfers->recipient($this->own($request, $args), $request->getQueryParams()['telegram_id'] ?? null, Actor::customer($customer));
 
-        return $this->json($response, ['recipient' => self::recipient($recipient)]);
+        return $this->json($response, ['recipient' => RecipientPresenter::present($recipient)]);
     }
 
     /**
@@ -147,7 +147,7 @@ final class SubscriptionsController extends ApiController
         $customer = Customer::of($request)->user;
         $recipient = $this->transfers->transferById($this->own($request, $args), $this->input($request)['telegram_id'] ?? null, Actor::customer($customer));
 
-        return $this->json($response, ['recipient' => self::recipient($recipient)]);
+        return $this->json($response, ['recipient' => RecipientPresenter::present($recipient)]);
     }
 
     /**
@@ -164,15 +164,5 @@ final class SubscriptionsController extends ApiController
     private function answer(Response $response, Subscription $subscription, ?ClientInfo $client = null): Response
     {
         return $this->json($response, ['subscription' => $this->subscriptions->present($subscription, $client)]);
-    }
-
-    /**
-     * Who a service goes to, as its customer can tell them: their Telegram name and handle — nothing else of their account.
-     *
-     * @return array{name: string|null, username: string|null}
-     */
-    private static function recipient(User $recipient): array
-    {
-        return ['name' => $recipient->name(), 'username' => $recipient->handle()];
     }
 }

@@ -87,6 +87,30 @@ final class AutoRenewalTest extends BotTestCase
         self::assertSame([], $this->calls());
     }
 
+    public function testAPriceOutsideTheWalletsBoundsIsNotRenewedFromItNorOfferedTheSwitch(): void
+    {
+        $subscription = $this->due('ali_1');
+        $this->wallet($this->ali, '300000');
+        $wallet = $this->walletMethod();
+        $wallet->forceFill(['max_amount' => '100000'])->save();
+
+        $this->renewNow();
+
+        self::assertSame([0, '300000.00'], [Order::query()->count(), $this->ali->balance()], 'the wallet pays no more than 100,000 Toman, as at checkout: nothing ordered, nothing charged');
+        self::assertSame([], $this->calls(), 'nor told the wallet is short: the reminder of its end tells the customer (ServiceReminders)');
+
+        $this->send($this->tap(SubscriptionHandler::serviceCallback($subscription->id)));
+        self::assertNotContains(SubscriptionHandler::serviceCallback($subscription->id, 'autorenew'), $this->callbacks(0), 'the switch is not offered: it would not renew it');
+        $this->send($this->tap(SubscriptionHandler::serviceCallback($subscription->id, 'autorenew')));
+        self::assertSame(self::text(BotText::AutoRenewUnavailable), $this->popup());
+
+        // Its most the price itself, both ends included: renewed by itself again.
+        $wallet->forceFill(['max_amount' => '120000'])->save();
+        $this->renewNow();
+
+        self::assertSame([OrderStatus::Fulfilled, '180000.00'], [Order::query()->sole()->status, $this->ali->balance()]);
+    }
+
     public function testItRenewsByTheAdminsDefaultMethodWhateverTheCustomersWindow(): void
     {
         // A reset of the traffic by default; the customer could not renew it by hand for days yet.

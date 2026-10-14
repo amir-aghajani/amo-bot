@@ -39,7 +39,9 @@ read in one place, `App\Support\Input`, never by hand:
   long" wording, `Validation::tooLong()`);
 - `integer()` / `integerOf()`, `wholeOf()` (a whole number an admin types: «10,000», «۱۰٬۰۰۰»), `numbersOf()` (a typed
   list — a comma between groups of three digits is a thousands separator, any other separates numbers), `amount()` /
-  `amountOf()` (whole Toman; a customer may add a unit word), `decimal()` (two decimals, GB of traffic);
+  `amountOf()` (whole Toman; a customer may add a unit word), `optionalAmountOf()` (one an admin may leave blank — a
+  bound, a cap —: null for none, false for the caller to refuse), `decimal()` (two decimals, GB of traffic);
+- a moment the panels send («2026-03-20T18:00» on the shop's clock): `LocalTime::moment()`, in UTC;
 - `isBoolean()` and `truthy()` for switches. A switch that is missing or not a boolean is refused
   (`ApiController::switch()`, the `Toggle` field), never read as "off".
 
@@ -53,7 +55,8 @@ under its field.
   Never floats, never `number_format` by hand.
 - **Traffic** is bytes (int); admins type gigabytes (`Support\Traffic::bytesOfGb()`).
 - **Time** is stored in UTC; `Support\LocalTime` applies the shop's zone only for display, and `Support\Persian::date()`
-  writes the bot's Jalali dates. A query gets `->utc()` moments.
+  writes the bot's Jalali dates. A query gets `->utc()` moments; "today" on the shop's clock (a cap a day) starts at
+  `LocalTime::midnight()`, a Jalali month is `Support\JalaliMonth`.
 - **Digits**: Persian digits for quantities, money and dates (`Persian::digits()`, `Persian::number()`); Latin digits
   for identifiers — ids (`#12`), ports, versions, addresses — and for the bounds in a form's hint («بین 5 تا 120»).
 
@@ -83,9 +86,21 @@ Two processes — a panel and the bot, a tap and the timer, two tabs — must ne
 - **A row worked through over time is leased.** A broadcast's run, a grant's part, a report being sent: whoever holds
   `Core\Database\Lease` (`lease_token` until `leased_until`) moves it on, step by step, each step a conditional write
   that also extends the hold; `renew()` before a long call; a holder that goes quiet loses it when the time runs out.
-  A pause or cancel from outside writes its state with `Lease::FREE`, and the holder stops at its next step.
+  A cancel from outside writes its state with `Lease::FREE`; a pause (or a server's move switched to a rescue) writes
+  its state alone, so the holder can still put its cursor back on an item it must come back to. Either way the holder
+  stops at its next step: the lease holds while the row is in the state it was taken in. A run past a cursor, one item
+  at a time (a grant's part, a server's move), is `Lease::work()`'s loop: next item, its step, the end, the lease let go
+  however it ended.
 - **A ledger line** is written under a lock on its owner's row, after a locking read of the last line
   (`Core\Database\Ledger`).
+- **A money write is tried again on a deadlock.** The ledger's locking read also locks the index gap after the owner's
+  last line, so two owners' lines at once can deadlock on MySQL, which aborts one transaction whole. The outermost
+  transaction of a money write passes `Ledger::ATTEMPTS` (`$db->transaction($callback, Ledger::ATTEMPTS)`: Laravel tries
+  again only on a concurrency error, and only the outermost transaction — a nested one's deadlock goes up to it). Its
+  callback does database work only — a message, a panel's call, a file deleted come after the commit; a report group's
+  line is a row, so it stays inside — and reads what it moves inside the callback, or moves it with `Transitions`, which
+  writes its whole move whatever the model in memory still holds from the try the rollback took back.
+  [Internals-Commerce](Internals-Commerce.md#ledgers) lists the transactions that are.
 - **A counter** that only goes up is `Core\Database\Sequence` (a locked read-and-increment; gaps are normal).
 - **A unique name** is the unique index's to decide; `Core\Database\UniqueName` turns its error into the form's.
 - **Every database the shop runs on reports the rows an `UPDATE` matched**, not only those it changed (MySQL is told

@@ -19,4 +19,16 @@ class ProviderException extends \RuntimeException
     {
         return false;
     }
+
+    /**
+     * Whether a write that failed so may have been done on the panel all the same, no answer having come: the connection
+     * timed out or was cut once the request was on its way (ConnectionException), or something in front of the panel
+     * answered for it with an HTTP 5xx page (UnexpectedResponseException) — a proxy that gave up waiting, the panel maybe
+     * still at it. Never a refusal in the panel's own words, nor a connection never made: such a write did not happen. A
+     * caller asks the panel before doing it again, or counts it as not to be done twice.
+     */
+    public function mayHaveBeenDone(): bool
+    {
+        return false;
+    }
 }

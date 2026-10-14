@@ -18,10 +18,6 @@ export const CustomerPage = lazyPage(
   () => import('@/pages/customer'),
   (module) => module.CustomerPage,
 )
-export const DashboardPage = lazyPage(
-  () => import('@/pages/dashboard'),
-  (module) => module.DashboardPage,
-)
 export const DiscountCodesPage = lazyPage(
   () => import('@/pages/discount-codes'),
   (module) => module.DiscountCodesPage,

@@ -13,6 +13,7 @@ use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\CustomerGroup;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Models\WalletTransaction;
+use App\Modules\Users\Models\WalletTransfer;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -58,14 +59,31 @@ final class UserDirectory
         ], 'joined'));
     }
 
-    /** @return list<array<string, mixed>> The customer's latest ledger lines, newest first. */
+    /**
+     * @return list<array<string, mixed>> The customer's latest ledger lines, newest first — a wallet transfer's with the
+     *                                    other customer (WalletTransfers), read for the page at once
+     */
     public function ledger(User $user): array
     {
-        return $this->wallet->lines($user, self::LEDGER_LINES)->map($this->presentTransaction(...))->values()->all();
+        $lines = $this->wallet->lines($user, self::LEDGER_LINES);
+        $others = [];
+        if ($lines->isNotEmpty()) {
+            $ids = $lines->modelKeys();
+            $transfers = WalletTransfer::query()->with(['sender', 'recipient'])->where(static fn(Builder $made) => $made->whereIn('debit_id', $ids)->orWhereIn('credit_id', $ids))->get();
+            foreach ($transfers as $transfer) {
+                $others[$transfer->debit_id] = $transfer->recipient;
+                $others[$transfer->credit_id] = $transfer->sender;
+            }
+        }
+
+        return $lines->map(fn(WalletTransaction $line): array => $this->presentTransaction($line, $others[$line->id] ?? null))->values()->all();
     }
 
-    /** @return array<string, mixed> */
-    public function presentTransaction(WalletTransaction $transaction): array
+    /**
+     * @param User|null $counterpart A wallet transfer's line: whom the money went to, or came from
+     * @return array<string, mixed>
+     */
+    public function presentTransaction(WalletTransaction $transaction, ?User $counterpart = null): array
     {
         return [
             'id' => $transaction->id,
@@ -74,6 +92,7 @@ final class UserDirectory
             'balance_after' => $transaction->balance_after,
             'description' => $transaction->description,
             'reviewer' => $this->reviewers->present($transaction->reviewer),
+            'counterpart' => $counterpart === null ? null : self::presentRef($counterpart),
             'created_at' => $transaction->created_at->toIso8601String(),
         ];
     }

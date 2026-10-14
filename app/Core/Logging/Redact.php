@@ -7,12 +7,15 @@ namespace App\Core\Logging;
 use App\Core\Http\Urls;
 
 /**
- * Takes secrets out of text bound for a log line or an error: bot tokens (Telegram's URLs carry them) and the secret
- * segment the machine addresses end with (Urls::SECRET_PATHS). Logs get pasted into issues; a token there is the bot.
+ * Takes secrets out of text bound for a log line or an error: bot tokens (Telegram's URLs carry them), the login of an
+ * address (a panel's SOCKS5 proxy: socks5h://user:password@host) and the secret segment the machine addresses end with
+ * (Urls::SECRET_PATHS). Logs get pasted into issues; a token there is the bot.
  */
 final class Redact
 {
     private const TOKENS = [
+        // An address's login: scheme://user:password@host.
+        '~\b([a-z][a-z0-9+.-]*://)[^\s/?#@\'"<>]+@~i' => '$1***@',
         // Telegram's URLs: …/bot<token>/<method> and …/file/bot<token>/<path>.
         '~bot\d+:[A-Za-z0-9_-]+~' => 'bot***',
         // A bare token (123456789:AA…, 35 characters after the colon).

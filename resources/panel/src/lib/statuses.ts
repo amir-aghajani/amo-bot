@@ -8,6 +8,7 @@ import type {
   DiscountType,
   GiftCodeKind,
   GiftCodeStatus,
+  ManualPayment,
   OrderPricing,
   OrderStatus,
   OrderType,
@@ -15,7 +16,10 @@ import type {
   PaymentStatus,
   RenewalMethod,
   ReviewStatus,
+  SellingSuspension,
   ServerGrantStatus,
+  ServerMigrationMode,
+  ServerMigrationStatus,
   ServerRow,
   SubscriptionStatus,
   TestAccountState,
@@ -81,6 +85,13 @@ export const ORDER_PRICING: Record<OrderPricing, string | null> = {
   gift: 'هدیه',
 }
 
+/** How an order support made by hand was paid (ManualPayment::label()): said beside its amount and in its dialog. */
+export const MANUAL_PAYMENT: Record<ManualPayment, string> = {
+  free: 'رایگان',
+  wallet: 'از کیف پول مشتری',
+  outside: 'پرداخت خارج از فروشگاه',
+}
+
 /** How a renewal adds its package to a service, as the bot and the website name each method (RenewalMethod::label()), in the bot's order. */
 export const RENEWAL_METHOD: Record<RenewalMethod, string> = {
   extend: 'تمدید پلن فعلی',
@@ -140,12 +151,31 @@ export const USER_STATUS: Record<UserStatus, Status> = {
   banned: { label: 'مسدود', tone: 'danger' },
 }
 
-/** A grant (a server's «افزودن زمان و حجم», a mass gift): cancelled is the admin's «توقف». */
+/**
+ * A grant (a server's «افزودن زمان و حجم», a mass gift): cancelled is the admin's «لغو». As for a move and a broadcast,
+ * «متوقف‌شده» is only ever a pause, «لغوشده» the owner's end.
+ */
 export const GRANT_STATUS: Record<ServerGrantStatus, Status> = {
   running: { label: 'در حال انجام', tone: 'info' },
   done: { label: 'انجام‌شده', tone: 'success' },
-  cancelled: { label: 'متوقف‌شده', tone: 'neutral' },
+  cancelled: { label: 'لغوشده', tone: 'neutral' },
 }
+
+/**
+ * A move of a server's services («انتقال سرویس‌ها»): paused by the owner, cancelled by the owner, or failed — left
+ * unfinished because the target could take no more (the report group says «ناتمام ماند» too).
+ */
+export const MIGRATION_STATUS: Record<ServerMigrationStatus, Status> = {
+  queued: { label: 'در صف', tone: 'info' },
+  running: { label: 'در حال انجام', tone: 'info' },
+  paused: { label: 'متوقف‌شده', tone: 'warning' },
+  done: { label: 'انجام‌شده', tone: 'success' },
+  cancelled: { label: 'لغوشده', tone: 'neutral' },
+  failed: { label: 'ناتمام', tone: 'danger' },
+}
+
+/** The two ways a server's services move, as the card and its dialog name them (MigrationMode::label() in the report). */
+export const MIGRATION_MODE: Record<ServerMigrationMode, string> = { migrate: 'مهاجرت', rescue: 'نجات' }
 
 export const BROADCAST_STATUS: Record<BroadcastStatus, Status> = {
   sending: { label: 'در حال ارسال', tone: 'info' },
@@ -258,6 +288,17 @@ export function serverStatus(server: Pick<ServerRow, 'is_active' | 'last_error' 
 export const BOT_STATUS: Record<AgentBot['status'], Status> = {
   active: { label: 'فعال', tone: 'success' },
   disabled: { label: 'غیرفعال', tone: 'neutral' },
+}
+
+/**
+ * Why an agent's shop sells nothing new (its bot and services run on): its agency's end passed, a month below its
+ * minimum purchase, or the main shop's owner stopped it. Word for word the server's App\Modules\Bots\Enums\
+ * SellingSuspension::words() — what the agent's bot and the owner's report group say —: change both together.
+ */
+export const SELLING_SUSPENSION: Record<SellingSuspension, Status> = {
+  expired: { label: 'تاریخ نمایندگی گذشته است', tone: 'danger' },
+  minimum: { label: 'خرید حجم ماه قبل به کف خرید ماهانه نرسید', tone: 'danger' },
+  manual: { label: 'فروشگاه اصلی فروش را متوقف کرده است', tone: 'danger' },
 }
 
 /** An agent's bot in a word: switched off (the agency ended), waiting for its token, kept from running, or running. */

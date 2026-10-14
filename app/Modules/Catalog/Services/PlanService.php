@@ -39,6 +39,10 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * server; what customers are not offered now says why (`unsellable_reason`, ServerSelector). Beside its price a plan may
  * have a first-purchase and an agent price (Orders\Services\Pricing decides who pays which), its own extras prices, a
  * checkout note and its button's look in the bot.
+ *
+ * In an agent's shop the owner may keep a plan from sale (`hidden_by_owner`) and servers from the shop: only the owner's
+ * agents screen sets them (AgentRestrictions) — nothing here does, and a copy of a plan stays kept —,
+ * and the form neither offers nor takes a server kept from the shop that the plan was not on already.
  */
 final class PlanService
 {
@@ -220,6 +224,7 @@ final class PlanService
             'servers' => $plan->servers->map($this->presentEntry(...))->values()->all(),
             'unsellable_reason' => $unsellable,
             'is_active' => $plan->is_active,
+            'hidden_by_owner' => (bool) $plan->hidden_by_owner,
             'sort' => $plan->sort,
             'counts' => $counts,
             'created_at' => $plan->created_at->toIso8601String(),
@@ -240,14 +245,14 @@ final class PlanService
     }
 
     /**
-     * What the form needs: every server with its inbounds and whether it can sell now, and the categories to file the
-     * plan under.
+     * What the form needs: every server with its inbounds and whether it can sell now — but the servers the owner keeps
+     * from this shop —, and the categories to file the plan under.
      *
      * @return array<string, mixed>
      */
     public function options(): array
     {
-        $servers = Server::query()->withCount(Server::activeServicesCount())->with(['inbounds' => static fn($q) => $q->oldest('id')])->oldest('sort')->oldest('id')->get();
+        $servers = Server::shown()->withCount(Server::activeServicesCount())->with(['inbounds' => static fn($q) => $q->oldest('id')])->oldest('sort')->oldest('id')->get();
 
         return [
             'categories' => PlanCategory::query()->oldest('sort')->oldest('id')->get()->map(static fn(PlanCategory $c): array => ['id' => $c->id, 'name' => $c->name, 'is_active' => $c->is_active])->values()->all(),
@@ -327,7 +332,7 @@ final class PlanService
             $errors['category_id'][] = 'دسته انتخاب‌شده وجود ندارد.';
         }
 
-        $entries = $this->validateServers($input['servers'] ?? [], $errors);
+        $entries = $this->validateServers($input['servers'] ?? [], $existing, $errors);
         // Left out, a plan keeps its own prices — a form made before them sends none —; a new one sells at the shop's.
         $extras = array_key_exists('extras', $input) ? self::validateExtras($input['extras'], $errors) : $existing?->extras;
         $firstPrice = self::otherPrice($input, 'first_purchase_price', $existing?->first_purchase_price, $price, $errors, 'قیمت خرید اول', 'برای خرید اول رایگان 0 بگذارید');
@@ -677,12 +682,13 @@ final class PlanService
 
     /**
      * `servers`: [{server_id, all_inbounds, inbound_ids: []}, …] — at least one, each server once, pinned inbounds of
-     * their own server and enabled.
+     * their own server and enabled. A server the owner keeps from this shop is not added; one the plan was on already
+     * stays (nothing is sold on it).
      *
      * @param array<string, list<string>> $errors
      * @return list<array{server_id: int, all_inbounds: bool, inbound_ids: list<int>}>
      */
-    private function validateServers(mixed $input, array &$errors): array
+    private function validateServers(mixed $input, ?Plan $existing, array &$errors): array
     {
         if (!is_array($input) || $input === []) {
             $errors['servers'][] = 'دست‌کم یک سرور برای این پلن انتخاب کنید.';
@@ -690,6 +696,8 @@ final class PlanService
             return [];
         }
 
+        $hidden = CurrentBot::get()->hiddenServerIds();
+        $had = $hidden === [] || $existing === null ? [] : $existing->servers()->pluck('server_id')->map(intval(...))->all();
         $entries = [];
         $seen = [];
         foreach (array_values($input) as $index => $item) {
@@ -697,6 +705,10 @@ final class PlanService
             $server = Server::query()->find(Input::integer($item, 'server_id') ?? 0);
             if ($server === null) {
                 $errors['servers'][] = sprintf('ردیف %s: سرور انتخاب‌شده وجود ندارد.', Persian::digits($index + 1));
+                continue;
+            }
+            if (in_array($server->id, $hidden, true) && !in_array($server->id, $had, true)) {
+                $errors['servers'][] = sprintf('«%s»: %s', $server->name, ServerSelector::HIDDEN_SERVER);
                 continue;
             }
             if (isset($seen[$server->id])) {

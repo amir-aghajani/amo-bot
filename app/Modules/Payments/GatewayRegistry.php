@@ -57,7 +57,10 @@ final class GatewayRegistry
         return $this->kind($method->driver) === GatewayKind::Manual;
     }
 
-    /** The driver's one line about the method — the card the customer pays to —; null for none, or no driver installed. */
+    /**
+     * The driver's one line about the method from its settings; null for none (the wallet; a card method, whose cards are
+     * rows of their own), or no driver installed.
+     */
     public function summary(PaymentMethod $method): ?string
     {
         $driver = $this->find($method->driver);

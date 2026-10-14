@@ -10,10 +10,8 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
-use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Handlers\ReceiptHandler;
 use App\Modules\Telegram\Texts\BotText;
-use App\Modules\Telegram\Update\CallbackData;
 use App\Support\Persian;
 use GuzzleHttp\Psr7\Response;
 use Tests\BotTestCase;
@@ -172,7 +170,7 @@ final class BotReceiptTest extends BotTestCase
     /** The customer picked the card at the plan's checkout: its order and payment are made, and the receipt awaited. */
     private function transferTo(PaymentMethod $card): Payment
     {
-        $this->send($this->tap(CallbackData::build(PurchaseHandler::serverCallback($this->plan->id, $this->server->id), $card->id)));
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $card)));
 
         return Payment::query()->sole();
     }

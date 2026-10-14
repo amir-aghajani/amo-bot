@@ -13,7 +13,7 @@ import { StatCard, StatGrid } from '@/components/stat-card'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/lib/api'
-import type { DashboardResponse, RangeDays } from '@/lib/api-types'
+import type { AgencyStanding, DashboardResponse, RangeDays } from '@/lib/api-types'
 import { useSession } from '@/lib/auth'
 import { formatAmount, formatNumber, MONEY_UNIT, percentChange, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
@@ -44,6 +44,8 @@ interface DashboardPageProps {
   aside?: ReactNode
   /** What to do about an agent's bot whose traffic sells nothing, the panel's own way (an agent buys in the main bot). */
   trafficHelp?: ReactNode
+  /** An agent's terms of selling, the panel's own way: to the agent, of their own bot; to the owner, of the agent's. */
+  standingNotice?: (standing: AgencyStanding) => ReactNode
 }
 
 /**
@@ -51,7 +53,7 @@ interface DashboardPageProps {
  * the latest arrivals. Switching range keeps the last figures dimmed until the new ones arrive; a failed read leaves
  * every card at «—», never a made-up zero.
  */
-export function DashboardPage({ aside, trafficHelp }: DashboardPageProps) {
+export function DashboardPage({ aside, trafficHelp, standingNotice }: DashboardPageProps) {
   const session = useSession()
   const [range, setRange] = useState<`${RangeDays}`>('30')
   const days = Number(range)
@@ -132,7 +134,15 @@ export function DashboardPage({ aside, trafficHelp }: DashboardPageProps) {
       </div>
 
       <div className={cn('grid gap-3', aside && 'lg:grid-cols-2')}>
-        <AttentionCard attention={data?.attention} trafficShortage={data?.traffic_shortage} trafficHelp={trafficHelp} expiringDays={data?.expiring_days} loading={isPending} />
+        <AttentionCard
+          attention={data?.attention}
+          trafficShortage={data?.traffic_shortage}
+          trafficHelp={trafficHelp}
+          agencyStanding={data?.agency_standing}
+          standingNotice={standingNotice}
+          expiringDays={data?.expiring_days}
+          loading={isPending}
+        />
         {aside}
       </div>
 

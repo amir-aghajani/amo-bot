@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Modules\Catalog\Models\Plan;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ServiceReminders;
+use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Subscriptions\Tasks\SendRemindersTask;
 use App\Modules\Telegram\Handlers\SubscriptionHandler;
 use App\Modules\Telegram\Messages;
@@ -22,7 +24,8 @@ use Tests\BotTestCase;
 /**
  * «یادآوری»: the customer is reminded a service ends soon or most of its traffic is used — as the admin set it, once while past
  * the threshold and again after coming back under it. A service with «تمدید خودکار» on hears about its deadline from the
- * renewal instead (not about its traffic); a banned customer hears nothing; a run sends a batch at most.
+ * renewal instead (not about its traffic) — unless the wallet does not take its price; a banned customer hears nothing; a
+ * run sends a batch at most.
  */
 final class ServiceRemindersTest extends BotTestCase
 {
@@ -92,6 +95,21 @@ final class ServiceRemindersTest extends BotTestCase
         $this->remind();
         self::assertSame([$this->endsSoon($renewing, hint: false)], $this->telegram()->sentTo(self::CHAT));
         self::assertSame(['sendMessage'], $this->calls());
+    }
+
+    public function testAServiceWhoseRenewalTheWalletDoesNotTakeIsRemindedWithoutTheSwitch(): void
+    {
+        $this->enable(expiry: true);
+        $switched = $this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['expires_at' => now()->addDays(2), 'auto_renew' => true]);
+        $off = $this->subscription($this->ali, $this->plan, $this->server, 'ali_2', ['expires_at' => now()->addDays(2)]);
+        $this->wallet($this->ali, '300000');
+        $this->walletMethod()->forceFill(['max_amount' => '100000'])->save();
+
+        $this->remind();
+        $this->service(AutoRenewTask::class)->run();
+
+        self::assertSame([$this->endsSoon($switched, hint: false), $this->endsSoon($off, hint: false)], $this->telegram()->sentTo(self::CHAT), 'the wallet takes 100,000 Toman at most: nothing renews them, so each is reminded — without the switch');
+        self::assertSame([0, '300000.00'], [Order::query()->count(), $this->ali->balance()], 'nothing ordered, nothing charged');
     }
 
     public function testAServiceThatRenewsItselfIsStillToldItsTrafficRunsLow(): void

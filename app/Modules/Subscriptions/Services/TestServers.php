@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Collection;
  * Each server's free test accounts: the owner's form for them (whether the server gives tests, and a test's traffic,
  * hours and "on hold" — counted from the first connection or from the moment it is made), and which servers give a
  * test now: switched on for tests, able to take a client (ServerSelector::wholeServer()), and — in an agent's shop —
- * with a test's traffic left in the agent's pool.
+ * not kept from it by the owner (Bot::hiddenServerIds()), with a test's traffic left in the agent's pool.
  */
 final class TestServers
 {
@@ -41,7 +41,7 @@ final class TestServers
      */
     public function choices(): array
     {
-        return $this->among(Server::query());
+        return $this->among(Server::shown());
     }
 
     /**
@@ -51,7 +51,7 @@ final class TestServers
      */
     public function choice(int $serverId): ?array
     {
-        return $this->among(Server::query()->whereKey($serverId))[0] ?? null;
+        return $this->among(Server::shown()->whereKey($serverId))[0] ?? null;
     }
 
     /**
@@ -84,7 +84,8 @@ final class TestServers
     }
 
     /**
-     * The `$servers` giving a test now, as choices() lists them: read in one go with their room and inbounds.
+     * The `$servers` giving a test now, as choices() lists them: read in one go with their room and inbounds. They are
+     * of Server::shown(): a server the owner keeps from the shop gives it no test.
      *
      * @param Builder<Server> $servers
      * @return list<array{server: Server, terms: TestTerms, inbounds: Collection<int, ServerInbound>}>

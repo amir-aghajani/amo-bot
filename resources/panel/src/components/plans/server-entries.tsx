@@ -111,7 +111,10 @@ export function ServerEntries({ entries, onChange, options, errors = [], addServ
                     </span>
                   </div>
                   {server?.unsellable_reason && <p className="text-footnote text-warning">{server.unsellable_reason} تا درست نشود، مشتری این سرور را نمی‌بیند.</p>}
-                  {inbounds.length > 0 ? (
+                  {/* Not among the choices: a server the main shop's owner keeps from this (an agent's) shop. */}
+                  {!server && options.data ? (
+                    <p className="text-footnote text-warning">مدیر فروشگاه اصلی این سرور را برای این فروشگاه پنهان کرده است؛ پلن روی آن فروخته نمی‌شود.</p>
+                  ) : inbounds.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {inbounds.map((inbound) => (
                         <Badge key={inbound.id} variant="outline" dir="ltr">

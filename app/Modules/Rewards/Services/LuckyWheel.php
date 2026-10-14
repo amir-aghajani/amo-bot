@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Rewards\Services;
 
+use App\Core\Database\Ledger;
 use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Providers\Exceptions\ProviderException;
@@ -117,7 +118,7 @@ final class LuckyWheel
             ]);
 
             return [$spin, $prize, $givable[$index]];
-        });
+        }, Ledger::ATTEMPTS);
         [$spin, $prize, $reward] = $drawn;
 
         $slices = array_map(static fn(WheelPrize $slice): string => $slice->label, $prizes);

@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Admin\Api;
 
 use App\Core\Http\ApiController;
-use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentMethods;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * The ways customers can pay: rows made from a driver, each with its settings, switched and ordered. The built-in wallet,
- * and a method payments were made with, are not deleted (409).
+ * and a method payments were made with, are not deleted (409). The outside row, support's alone, is neither listed nor
+ * found here (404).
  */
 final class PaymentMethodsController extends ApiController
 {
@@ -43,7 +43,7 @@ final class PaymentMethodsController extends ApiController
      */
     public function update(Request $request, Response $response, array $args): Response
     {
-        $method = $this->methods->update($this->load(PaymentMethod::class, $args), $this->input($request));
+        $method = $this->methods->update($this->methods->find($this->routeId($args)), $this->input($request));
 
         return $this->json($response, ['method' => $this->methods->presentOne($method)]);
     }
@@ -55,7 +55,7 @@ final class PaymentMethodsController extends ApiController
      */
     public function patch(Request $request, Response $response, array $args): Response
     {
-        $method = $this->methods->setEnabled($this->load(PaymentMethod::class, $args), $this->switch($request, 'enabled'));
+        $method = $this->methods->setEnabled($this->methods->find($this->routeId($args)), $this->switch($request, 'enabled'));
 
         return $this->json($response, ['method' => $this->methods->presentOne($method)]);
     }
@@ -75,7 +75,7 @@ final class PaymentMethodsController extends ApiController
      */
     public function destroy(Request $request, Response $response, array $args): Response
     {
-        $this->methods->delete($this->load(PaymentMethod::class, $args));
+        $this->methods->delete($this->methods->find($this->routeId($args)));
 
         return $this->noContent($response);
     }

@@ -8,6 +8,8 @@ use App\Core\Exceptions\DomainRuleException;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Security\RateLimiter;
+use App\Modules\Bots\CurrentBot;
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Catalog\DTO\CustomPrice;
 use App\Modules\Catalog\Enums\CustomQuantity;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
@@ -27,6 +29,7 @@ use App\Modules\Orders\Services\OrderService;
 use App\Modules\Orders\Services\Pricing;
 use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\Enums\CheckoutOutcome;
+use App\Modules\Payments\Exceptions\MethodUnavailableException;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentMethods;
@@ -48,6 +51,7 @@ use App\Modules\Telegram\BotSettings;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
 use App\Support\Money;
+use App\Support\Validation;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
@@ -137,20 +141,26 @@ final class CustomerCheckout
 
     /**
      * The ways to pay a kind of order (`for`), in checkout order: the bot's (PaymentMethods::forOrder()) — every enabled
-     * method, but never the wallet for a top-up.
+     * method, but never the wallet for a top-up —, and with `amount` (read as the bot reads one) only those that take it:
+     * within their bounds, a card method with a card that has room for it today (or the customer's own open payment of such
+     * an order, shown again).
      *
      * @param array<string, mixed> $query
-     * @return list<array{id: int, label: string, kind: string|null}>
-     * @throws ValidationException 422 on `for`
+     * @return list<array{id: int, label: string, kind: string|null, min_amount: string|null, max_amount: string|null}>
+     * @throws ValidationException 422 on `for` or `amount`
      */
-    public function methods(array $query): array
+    public function methods(User $customer, array $query): array
     {
         $kind = OrderType::tryFrom(is_string($query['for'] ?? null) ? $query['for'] : '');
         if ($kind === null || !in_array($kind, self::KINDS, true)) {
             throw ValidationException::on('for', sprintf(self::NO_KIND, OrderType::valuesInWords(self::KINDS)));
         }
+        $amount = null;
+        if (($query['amount'] ?? '') !== '') {
+            $amount = Input::amountOf($query['amount']) ?? throw ValidationException::on('amount', Validation::notWholeToman('مبلغ (amount)'));
+        }
 
-        return array_map($this->presenter->method(...), $this->methods->forOrder($kind));
+        return array_map($this->presenter->method(...), $this->methods->forOrder($kind, $amount === null ? null : Money::normalize($amount), $customer));
     }
 
     /**
@@ -162,6 +172,7 @@ final class CustomerCheckout
      * @throws ValidationException 422 on `plan_id`, `server_id`, `name_mode`, `client_name` or `method_id`
      * @throws NoServerAvailableException 422 on `server_id`: another server of the plan sells, not this one
      * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
      * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
@@ -183,10 +194,10 @@ final class CustomerCheckout
         }
         $server = $this->selector->resolve($plan, $serverId)['server'];
         $name = $this->clientName($customer, $key, $input, $server);
-        $method = $this->method($input, OrderType::Purchase);
+        $method = $this->method($customer, $input, OrderType::Purchase);
         $quote = $this->quote($customer, $key, $input, fn(?string $code): Quote => $this->pricing->purchase($customer, $plan, $server, $code));
 
-        return $this->checkout->pay($customer, $method, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openPurchase($customer, $plan, $server, $key, $quote, $name), $key);
+        return $this->checkout->pay($customer, $method, OrderType::Purchase, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openPurchase($customer, $plan, $server, $key, $quote, $name), $key);
     }
 
     /**
@@ -256,6 +267,7 @@ final class CustomerCheckout
      * @throws ValidationException 422 on `status` while the builder is not offered; on `gb`, `days`, `server_id`,
      *                             `name_mode`, `client_name` or `method_id`
      * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
      * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
@@ -276,10 +288,10 @@ final class CustomerCheckout
         $server = $this->custom->server($serverId);
         $price = $this->builtPrice($input, offered: true);
         $name = $this->clientName($customer, $key, $input, $server);
-        $method = $this->method($input, OrderType::Purchase);
+        $method = $this->method($customer, $input, OrderType::Purchase);
         $quote = $this->quote($customer, $key, $input, fn(?string $code): Quote => $this->pricing->custom($customer, $price, $server, $code));
 
-        return $this->checkout->pay($customer, $method, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openCustomPurchase($customer, $price->gb, $price->days, $server, $key, $quote, $name), $key);
+        return $this->checkout->pay($customer, $method, OrderType::Purchase, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openCustomPurchase($customer, $price->gb, $price->days, $server, $key, $quote, $name), $key);
     }
 
     /**
@@ -332,6 +344,7 @@ final class CustomerCheckout
      * @throws ValidationException 422 on `method`, `status`, `plan_id`, `gb`, `days` or `method_id`
      * @throws RenewalUnderWayException 422 on `status`
      * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
      * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
@@ -357,10 +370,10 @@ final class CustomerCheckout
         }
 
         $preview = $this->renewal($subscription, $input);
-        $method = $this->method($input, OrderType::Renewal);
+        $method = $this->method($customer, $input, OrderType::Renewal);
         $quote = $this->quote($customer, $key, $input, fn(?string $code): Quote => $this->renewals->priced($subscription, $preview, $code));
 
-        return $this->checkout->pay($customer, $method, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openPreviewed($customer, $subscription, $preview, $key, $quote), $key);
+        return $this->checkout->pay($customer, $method, OrderType::Renewal, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openPreviewed($customer, $subscription, $preview, $key, $quote), $key);
     }
 
     /**
@@ -382,6 +395,7 @@ final class CustomerCheckout
      * @throws ValidationException 422 on `status` while the service cannot take it; on `gb`/`days`/`devices` for an
      *                             amount that is no whole number or not on sale; on `method_id`
      * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
      * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
@@ -397,10 +411,10 @@ final class CustomerCheckout
 
         $quantity = $this->quantity($subscription, $kind, $input);
         $price = $this->extras->quote($subscription, $kind, $quantity);
-        $method = $this->method($input, $kind->orderType());
+        $method = $this->method($customer, $input, $kind->orderType());
         $quote = $this->quote($customer, $key, $input, fn(?string $code): Quote => $this->pricing->extra($customer, $subscription, $kind, $price, $code));
 
-        return $this->checkout->pay($customer, $method, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openExtra($customer, $subscription, $kind, $quantity, $price, $key, $quote), $key);
+        return $this->checkout->pay($customer, $method, $kind->orderType(), $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openExtra($customer, $subscription, $kind, $quantity, $price, $key, $quote), $key);
     }
 
     /**
@@ -410,6 +424,7 @@ final class CustomerCheckout
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `amount` or `method_id`
      * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
      * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
@@ -426,9 +441,9 @@ final class CustomerCheckout
         if ($amount === null || !$this->orders->topUpAllowed($amount)) {
             throw ValidationException::on('amount', $this->orders->topUpBounds());
         }
-        $method = $this->method($input, OrderType::WalletTopUp);
+        $method = $this->method($customer, $input, OrderType::WalletTopUp);
 
-        return $this->checkout->pay($customer, $method, Money::normalize($amount), fn(?OrderKey $key): Order => $this->orders->openTopUp($customer, $amount, $key), $key);
+        return $this->checkout->pay($customer, $method, OrderType::WalletTopUp, Money::normalize($amount), fn(?OrderKey $key): Order => $this->orders->openTopUp($customer, $amount, $key), $key);
     }
 
     /**
@@ -437,7 +452,7 @@ final class CustomerCheckout
      * it is still theirs — a repeated request after they handed it on gets none. A checkout that paid nothing is
      * refused instead.
      *
-     * @return array{outcome: string, order: array<string, mixed>, transfer: array{payment_id: int, amount: string, card: string, holder: string, instructions: string|null}|null, subscription: array<string, mixed>|null}
+     * @return array{outcome: string, order: array<string, mixed>, transfer: array{payment_id: int, amount: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null}|null, subscription: array<string, mixed>|null}
      * @throws CheckoutRefusedException 422 the wallet short, or its refusal; 409 paid or closed elsewhere a moment ago, or — made again — cancelled since
      */
     public function answer(User $customer, CheckoutResult $result): array
@@ -462,14 +477,31 @@ final class CustomerCheckout
         return [
             'outcome' => $result->outcome->value,
             'order' => $this->presenter->present($order),
-            'transfer' => $result->outcome !== CheckoutOutcome::Transfer ? null : [
-                'payment_id' => $result->payment()->id,
-                'amount' => $result->payment()->amount,
-                'card' => $result->card()->card,
-                'holder' => $result->card()->holder,
-                'instructions' => $result->card()->instructions !== '' ? $result->card()->instructions : null,
-            ],
+            'transfer' => $result->outcome !== CheckoutOutcome::Transfer ? null : $this->transfer($result),
             'subscription' => $service,
+        ];
+    }
+
+    /**
+     * A card transfer's details, as the bot shows them (CheckoutScreen): the payment the receipt is for, the amount, the
+     * card and the method's note — or, for a payment shown no card, taken in support's private chat (PaymentCards::
+     * toSupport()), the way to support instead (`contact`: as written in the bot's settings, and as a link when it is one).
+     *
+     * @return array{payment_id: int, amount: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null}
+     */
+    private function transfer(CheckoutResult $result): array
+    {
+        $card = $result->card();
+
+        return [
+            'payment_id' => $result->payment()->id,
+            'amount' => $result->payment()->amount,
+            'card' => $card->card,
+            'holder' => $card->holder,
+            // The owner's word for the card (its bank), when they gave one.
+            'bank' => $card->bank,
+            'instructions' => $card->instructions !== '' ? $card->instructions : null,
+            'contact' => $card->card === null ? ['text' => $this->bot->supportContact(), 'url' => $this->bot->supportUrl()] : null,
         ];
     }
 
@@ -570,13 +602,14 @@ final class CustomerCheckout
     }
 
     /**
-     * The plan while it is on sale: switched on, covered by an agent's traffic, and on a server that can deliver it now.
+     * The plan while it is on sale: switched on and not kept from sale by the owner, covered by an agent's traffic, and
+     * on a server that can deliver it now.
      *
      * @throws ValidationException 422 on `plan_id`
      */
     private function onSale(?Plan $plan): Plan
     {
-        if ($plan === null || !$plan->is_active || !$this->selector->covers($plan) || $this->selector->choices($plan) === []) {
+        if ($plan === null || !$plan->onSale() || !$this->selector->covers($plan) || $this->selector->choices($plan) === []) {
             throw ValidationException::on('plan_id', self::NOT_ON_SALE);
         }
 
@@ -646,6 +679,7 @@ final class CustomerCheckout
     {
         return match ($refusal) {
             RenewalRefusal::MethodNotOffered => ValidationException::on('method', self::METHOD_NOT_OFFERED),
+            RenewalRefusal::SellingSuspended => SellingSuspendedException::onStatus(),
             RenewalRefusal::RenewsOnItsPlan => ValidationException::on(CustomQuantity::Traffic->field(), self::RENEWS_ON_ITS_PLAN),
             RenewalRefusal::PlanNotOffered => ValidationException::on('plan_id', self::PLAN_NOT_OFFERED),
             RenewalRefusal::NotYet => ValidationException::on('status', sprintf(self::NOT_YET, $this->renewals->window($subscription)->when())),
@@ -727,15 +761,17 @@ final class CustomerCheckout
     }
 
     /**
-     * The way to pay `method_id` names, while it may pay that kind of order.
+     * The way to pay `method_id` names, while it may pay that kind of order — at some amount: whether it takes the price
+     * is asked by the checkout itself (Checkout::pay(), its bounds in the refusal). A card method `$customer`
+     * holds an open payment of is theirs to ask again, its card switched off since or not.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `method_id`
      */
-    private function method(array $input, OrderType $type): PaymentMethod
+    private function method(User $customer, array $input, OrderType $type): PaymentMethod
     {
         $id = Input::integerOf($input['method_id'] ?? null) ?? throw ValidationException::on('method_id', self::NO_METHOD);
-        $method = $this->methods->payable($id, $type);
+        $method = $this->methods->payable($id, $type, null, $customer);
         if ($method !== null) {
             return $method;
         }
@@ -745,7 +781,9 @@ final class CustomerCheckout
     }
 
     /**
-     * Start an ordering request: refused while the shop takes no orders, then counted against the customer's window.
+     * Start an ordering request: refused while the shop takes no orders — nor, an agent's shop whose selling is
+     * suspended (Bot::sells()), any order: a receipt for one made before is still taken —, then counted against
+     * the customer's window.
      *
      * @throws CheckoutRefusedException 503
      * @throws TooManyAttemptsException 429
@@ -753,6 +791,9 @@ final class CustomerCheckout
     private function ordering(User $customer): void
     {
         $this->takingOrders();
+        if (!CurrentBot::get()->sells()) {
+            throw CheckoutRefusedException::suspended();
+        }
         $this->limiter->enforce([['checkout|' . $customer->id, self::CHECKOUTS, self::CHECKOUT_WINDOW]], 'درخواست پرداخت زیادی فرستاده‌اید');
     }
 }

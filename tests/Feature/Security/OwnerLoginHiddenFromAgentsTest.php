@@ -17,6 +17,7 @@ use App\Modules\Telegram\Broadcasts\Audience;
 use App\Modules\Telegram\Broadcasts\BroadcastMode;
 use App\Modules\Telegram\Broadcasts\BroadcastService;
 use App\Modules\Telegram\Models\Broadcast;
+use App\Modules\Telegram\Models\ReportMessage;
 use Tests\HttpTestCase;
 
 /**
@@ -127,6 +128,37 @@ final class OwnerLoginHiddenFromAgentsTest extends HttpTestCase
             self::assertSame(200, $response->getStatusCode(), $path);
             self::assertStringNotContainsString(self::OWNER, (string) $response->getBody(), $path);
         }
+    }
+
+    /**
+     * A report group is read by its shop's admins: a line naming who of support did something — a service handed on,
+     * receipts dismissed at once — names the owner «پشتیبانی» in the agent's group, the agent as kept.
+     */
+    public function testNoReportGroupLineNamesTheOwnersLogin(): void
+    {
+        $this->withoutQr();
+        [$service, $byOwner, $byAgent] = CurrentBot::run($this->bot, function (): array {
+            $this->reportGroup();
+            $server = $this->sellingServer();
+            $ali = $this->customer(['telegram_id' => 31]);
+            $this->customer(['telegram_id' => 32]);
+            $card = $this->cardMethod();
+            $receipt = fn(string $amount): Payment => $this->receipt($this->cardPayment($this->topUpOrder($ali, $amount), $card));
+
+            return [$this->mirrored($this->subscription($ali, $this->plan([], $server), $server, 'ali_1')), $receipt('10000.00'), $receipt('20000.00')];
+        });
+
+        $this->loginAsAdmin();
+        $this->openShop($this->bot);
+        self::assertSame(200, $this->postJson("/api/admin/subscriptions/{$service->id}/transfer", ['telegram_id' => 32])->getStatusCode());
+        self::assertSame(200, $this->postJson('/api/admin/payments/dismiss', ['ids' => [$byOwner->id]])->getStatusCode());
+        $this->loginAsAgent($this->bot);
+        self::assertSame(200, $this->postJson('/api/agent/payments/dismiss', ['ids' => [$byAgent->id]])->getStatusCode());
+
+        $lines = CurrentBot::run($this->bot, static fn(): array => ReportMessage::query()->oldest('id')->pluck('text')->all());
+        $by = array_values(array_filter(array_merge(...array_map(static fn(string $text): array => explode("\n", $text), $lines)), static fn(string $line): bool => str_starts_with($line, '🎧')));
+        self::assertSame(['🎧 توسط پشتیبانی', '🎧 توسط پشتیبانی', '🎧 توسط پشتیبانی: @agent_shop_bot'], $by, 'the transfer, then each dismissal');
+        self::assertStringNotContainsString(self::OWNER, implode("\n", $lines));
     }
 
     /** By whoever reads it: the owner reads every name as kept; anyone else — an agent, the shop's admins, nobody's request — the owner's as «پشتیبانی». */

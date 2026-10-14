@@ -29,7 +29,7 @@ final class WalletGateway implements GatewayInterface
         return 'کیف پول';
     }
 
-    public function initiate(): PaymentInitiation
+    public function initiate(Payment $payment): PaymentInitiation
     {
         return PaymentInitiation::instant();
     }

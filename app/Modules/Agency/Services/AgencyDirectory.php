@@ -15,6 +15,7 @@ use App\Modules\Bots\Services\Bots;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
+use App\Support\JalaliMonth;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -29,6 +30,7 @@ final class AgencyDirectory
     public function __construct(
         private readonly TrafficPool $pool,
         private readonly Bots $bots,
+        private readonly AgencyStanding $standing,
     ) {}
 
     /**
@@ -105,7 +107,7 @@ final class AgencyDirectory
 
     /**
      * «حساب نمایندگی», the agent's own page of their panel: their bot, their level and its price per GB, their wallet and
-     * credit with the shop.
+     * credit with the shop, and their terms of selling — the end, the monthly minimum, a suspension (AgencyStanding).
      *
      * @return array<string, mixed>
      */
@@ -119,6 +121,7 @@ final class AgencyDirectory
             'level' => $agent->agencyLevel === null ? null : AgencyLevels::presentRef($agent->agencyLevel),
             'credit_limit' => $agent->credit_limit,
             'balance' => $agent->balance(),
+            'standing' => $this->standing->present($bot),
         ];
     }
 
@@ -160,6 +163,9 @@ final class AgencyDirectory
             'balance' => $agent->balance(),
             'bot' => $bot === null ? null : $this->presentBot($bot),
             'counts' => $bot?->stats() ?? ['customers' => 0, 'sold' => 0, 'active' => 0],
+            // Their terms of selling, this month's purchases read with the row (agentRows()); what the owner keeps from their shop.
+            'standing' => $bot === null ? null : $this->standing->present($bot, $agent->getAttribute(AgencyStanding::PURCHASED)),
+            'hidden' => $bot?->hiddenCounts() ?? ['servers' => 0, 'plans' => 0],
         ];
     }
 
@@ -183,8 +189,9 @@ final class AgencyDirectory
     }
 
     /**
-     * The agents, each read with what their row shows: their wallet, their level, and their bot with the traffic it may
-     * still sell and what its shop did — in the same queries, not a few a row.
+     * The agents, each read with what their row shows: their wallet and this month's traffic bought, their level, and
+     * their bot with the traffic it may still sell, what its shop did and what the owner keeps from it — in the same
+     * queries, not a few a row.
      *
      * @return Builder<User>
      */
@@ -193,7 +200,8 @@ final class AgencyDirectory
         return User::query()
             ->whereNotNull('agency_level_id')
             ->addSelect(User::balanceColumn())
-            ->with(['agencyLevel', 'ownBot' => static fn(Relation $bot) => $bot->addSelect(Bot::trafficBalanceColumn())->withCount(Bot::statCounts())]);
+            ->addSelect(AgencyStanding::purchasedColumn(JalaliMonth::now()))
+            ->with(['agencyLevel', 'ownBot' => static fn(Relation $bot) => $bot->addSelect(Bot::trafficBalanceColumn())->addSelect(Bot::hiddenCountColumns())->withCount(Bot::statCounts())]);
     }
 
     /**

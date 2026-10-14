@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Handlers;
 
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
@@ -16,12 +17,16 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\DTO\CardTransfer;
 use App\Modules\Payments\DTO\Shortfall;
 use App\Modules\Payments\Enums\CheckoutOutcome;
+use App\Modules\Payments\Exceptions\MethodUnavailableException;
+use App\Modules\Payments\Exceptions\ReceiptInReviewException;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentMethods;
+use App\Modules\Payments\Services\PaymentSettings;
 use App\Modules\Subscriptions\Enums\ClientNameMode;
 use App\Modules\Subscriptions\Services\ClientNameSettings;
+use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
@@ -73,6 +78,8 @@ final class CheckoutScreen
         private readonly ServiceCard $card,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
+        private readonly PaymentSettings $cardSettings,
+        private readonly BotSettings $bot,
         private readonly DiscountCodes $codes,
         private readonly ClientNameSettings $names,
     ) {}
@@ -176,11 +183,13 @@ final class CheckoutScreen
     }
 
     /**
-     * Draw the checkout in place of the tapped message: `$text`, a button per way to pay `$type` (`$pay` makes each
-     * callback), the row `$instead` (other things to buy) and «بازگشت» to `$back`. Something `$free` gets one «🎁 دریافت
-     * رایگان» button instead, through the first way to pay: the checkout settles a free order whichever is picked. With a
-     * `$quote` and its `$checkout` callback, «🏷 کد تخفیف دارم» — or «❌ حذف کد تخفیف» while a code is applied — is
-     * offered while the shop has codes and something is left to pay. A purchase's checkout says its service's name under
+     * Draw the checkout in place of the tapped message: `$text`, a button per way to pay `$type` at `$amount` (`$pay` makes
+     * each callback; PaymentMethods::forOrder() — a method whose bounds or cards cannot take the amount is left out, but
+     * not one the customer's own open payment of it waits on, and when none is left the customer is told so), the
+     * row `$instead` (other things to buy) and «بازگشت» to `$back`. Something `$free` gets one «🎁 دریافت رایگان» button
+     * instead, through the first way to pay: the checkout settles a free order whichever is picked. With a `$quote` and its
+     * `$checkout` callback, «🏷 کد تخفیف دارم» — or «❌ حذف کد تخفیف» while a code is applied — is offered while the shop
+     * has codes and something is left to pay. A purchase's checkout says its service's name under
      * the text, with a button per way the shop lets buyers name it (nameRow()). The row `$choices` (a renewal's methods,
      * each redrawing the checkout) comes above `$instead`. Showing it leaves whatever flow the chat was in.
      *
@@ -188,11 +197,11 @@ final class CheckoutScreen
      * @param list<array<string, mixed>> $instead
      * @param list<array<string, mixed>> $choices
      */
-    public function show(Context $ctx, string $text, OrderType $type, \Closure $pay, string $back, array $instead = [], bool $free = false, ?Quote $quote = null, ?string $checkout = null, array $choices = []): void
+    public function show(Context $ctx, string $text, OrderType $type, string $amount, \Closure $pay, string $back, array $instead = [], bool $free = false, ?Quote $quote = null, ?string $checkout = null, array $choices = []): void
     {
         $ctx->session->enter(self::STATE);
 
-        $methods = $this->methods->forOrder($type);
+        $methods = $this->methods->forOrder($type, $amount, $ctx->user);
         $keyboard = InlineKeyboard::make();
         if ($free && $methods !== []) {
             $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::CheckoutFree), $pay($methods[0])));
@@ -216,14 +225,19 @@ final class CheckoutScreen
         }
         $keyboard->row(...$methods === [] ? [] : $choices)->row(...$instead)->row($this->buttons->back($back));
 
-        $ctx->edit($methods === [] ? BotTexts::paragraphs($text, $this->texts->get(BotText::CheckoutNoGateway)) : $text, ['reply_markup' => $keyboard->build()]);
+        if ($methods === []) {
+            // None for this amount, while some take another: that is what the customer is told.
+            $text = BotTexts::paragraphs($text, $this->texts->get($this->methods->forOrder($type, null) !== [] ? BotText::CheckoutNoMethodForAmount : BotText::CheckoutNoGateway));
+        }
+        $ctx->edit($text, ['reply_markup' => $keyboard->build()]);
     }
 
     /**
      * A way to pay picked at a discountable checkout (`$checkout`, its callback data): the way `$methodId` while it still
      * pays `$type` — else the checkout drawn again by `$redraw`, with the ways that are left —, the price as it is paid
-     * with the code kept for it (priceToPay(); for `$codeFor` when kept for another, a renewal's whatever its method), and
-     * what `$open` orders at it paid (buy()).
+     * with the code kept for it (priceToPay(); for `$codeFor` when kept for another, a renewal's whatever its method),
+     * and what `$open` orders at it paid (buy()) — a way that no longer takes that price (its bounds, a card with room)
+     * drawn again too.
      *
      * @param \Closure(?string): Quote $price
      * @param \Closure(?OrderKey, Quote): Order $open
@@ -231,7 +245,7 @@ final class CheckoutScreen
      */
     public function pay(Context $ctx, int $methodId, OrderType $type, string $checkout, \Closure $price, \Closure $open, \Closure $redraw, ?string $codeFor = null): void
     {
-        $method = $this->methods->payable($methodId, $type);
+        $method = $this->methods->payable($methodId, $type, null, $ctx->user);
         if ($method === null) {
             // Switched off since the checkout was drawn.
             $redraw();
@@ -239,27 +253,46 @@ final class CheckoutScreen
             return;
         }
         $quote = $this->priceToPay($ctx, $codeFor ?? $checkout, $checkout, $price);
-        if ($quote !== null) {
-            $this->buy($ctx, $method, $quote->amount(), static fn(?OrderKey $key): Order => $open($key, $quote), $checkout);
+        if ($quote === null) {
+            return;
         }
+        $this->buy($ctx, $method, $type, $quote->amount(), static fn(?OrderKey $key): Order => $open($key, $quote), $checkout, $redraw);
     }
 
     /**
-     * Pay `$price` with `$method` for what `$open` orders (or finds open), and show what came of it in place of the
-     * checkout. `$checkout` is the checkout's callback data, where «بازگشت» leads from here.
+     * Pay `$price` with `$method` for the `$type` order `$open` makes (or finds open), and show what came of it in place
+     * of the checkout. `$checkout` is the checkout's callback data, where «بازگشت» leads from here. A way that does not
+     * take the price now (its bounds, or its cards' room for today: Checkout::pay()) orders nothing: the checkout is
+     * drawn again by `$redraw`, with the ways that are left.
      *
      * The wallet (and a free order) claims the checkout state first, so a second tap — or a tap on a checkout the chat
      * left — charges nothing. A card needs no such guard: the same card finds the same payment.
      *
      * @param \Closure(?OrderKey): Order $open
+     * @param \Closure(): void $redraw
      */
-    public function buy(Context $ctx, PaymentMethod $method, string $price, \Closure $open, string $checkout): void
+    public function buy(Context $ctx, PaymentMethod $method, OrderType $type, string $price, \Closure $open, string $checkout, \Closure $redraw): void
     {
         $claim = $method->isWallet() || !Money::isPositive($price) ? static fn(): bool => $ctx->session->claim(self::STATE) : null;
         try {
-            $result = $this->checkout->pay($ctx->user, $method, $price, $open, guard: $claim);
+            $result = $this->checkout->pay($ctx->user, $method, $type, $price, $open, guard: $claim);
         } catch (DiscountCodeRefusedException $e) {
             $this->codeLost($ctx, $checkout, $e->getMessage());
+
+            return;
+        } catch (ReceiptInReviewException $e) {
+            // One receipt at a time: nothing ordered while their last is with support.
+            $ctx->edit($this->texts->render(BotText::ReceiptInReview, ['order' => $e->inReview->order_id]), ['reply_markup' => $this->buttons->backOnly($checkout)]);
+
+            return;
+        } catch (MethodUnavailableException) {
+            // Its bounds, or its cards' room for today, changed since the checkout was drawn: nothing paid.
+            $redraw();
+
+            return;
+        } catch (SellingSuspendedException) {
+            // The main shop suspended this agent's selling since the checkout was drawn: nothing ordered.
+            $this->paused($ctx, $checkout);
 
             return;
         }
@@ -282,6 +315,17 @@ final class CheckoutScreen
             CheckoutOutcome::Refused => $this->failed($ctx, $result->payment()->note, $checkout),
             CheckoutOutcome::Processing => $this->paid($ctx, $result->order()),
         };
+    }
+
+    /**
+     * An agent's shop whose selling is suspended (Bot::sells()) sells nothing at this step: SellingPaused — a message's
+     * text, the agent's HTML in it, never a popup's — in place of the screen (a message of its own for something typed),
+     * with «بازگشت» to `$back`; the step is over.
+     */
+    public function paused(Context $ctx, string $back): void
+    {
+        $ctx->session->clear();
+        $ctx->edit($this->texts->get(BotText::SellingPaused), ['reply_markup' => $this->buttons->backOnly($back)]);
     }
 
     /**
@@ -383,18 +427,64 @@ final class CheckoutScreen
         ]));
     }
 
-    /** The card to transfer to; the chat now waits for the receipt (ReceiptHandler). */
-    private function transfer(Context $ctx, Payment $payment, CardTransfer $card, string $checkout): void
+    /**
+     * The card to transfer to — its number, holder and bank (when the owner named it) —, with buttons that copy its number
+     * and the amount (digits a banking app takes); the chat now waits for the receipt (ReceiptHandler). While the shop
+     * protects it (PaymentSettings::protectsCard()), it comes as a message of its own in place of the checkout — Telegram
+     * protects a message only as it is sent (Context::resend()) —, which cannot be forwarded or saved. A payment shown no
+     * card, taken in support's private chat (PaymentCards::toSupport()), gets the way there instead (toSupport()).
+     */
+    private function transfer(Context $ctx, Payment $payment, CardTransfer $transfer, string $checkout): void
     {
+        $number = $transfer->card;
+        if ($number === null) {
+            $this->toSupport($ctx, $payment, $transfer->instructions, $checkout);
+
+            return;
+        }
+
         $ctx->session->enter(ReceiptHandler::stateFor($payment));
+        $digits = Money::digits($payment->amount);
+        $bank = trim((string) $transfer->bank);
         $instructions = trim($this->texts->render(BotText::CardInstructions, [
             'amount' => Money::format($payment->amount),
-            'card' => $card->card,
-            'holder' => $card->holder,
-            'instructions' => $card->instructions,
+            'amount_digits' => $digits,
+            'card' => $number,
+            'holder' => (string) $transfer->holder,
+            'bank' => $bank === '' ? '' : $this->texts->part(BotText::CardBank, ['bank_name' => $bank]),
+            'instructions' => $transfer->instructions,
         ]));
+        // Reading order: the card's number first, on the right.
+        $keyboard = InlineKeyboard::make()
+            ->row(InlineKeyboard::copy($this->texts->get(BotText::CardCopyAmount), $digits), InlineKeyboard::copy($this->texts->get(BotText::CardCopyNumber), $number))
+            ->row($this->buttons->back($checkout));
+        $text = BotTexts::paragraphs($instructions, $this->texts->part(BotText::PayInstructionsSuffix));
 
-        $ctx->edit(BotTexts::paragraphs($instructions, $this->texts->part(BotText::PayInstructionsSuffix)), ['reply_markup' => $this->buttons->backOnly($checkout)]);
+        if ($this->cardSettings->protectsCard()) {
+            $ctx->resend($text, ['reply_markup' => $keyboard->build(), 'protect_content' => true]);
+        } else {
+            $ctx->edit($text, ['reply_markup' => $keyboard->build()]);
+        }
+    }
+
+    /**
+     * A card payment taken in support's private chat (PaymentCards::toSupport()): no card, but the order's number and the
+     * amount, the way to support, what comes once they approve it and the method's note (as the website's answer gives
+     * it), with a button to their chat (Buttons::supportChat()). No receipt is awaited here: the payment stays pending
+     * for support to approve in the panels.
+     */
+    private function toSupport(Context $ctx, Payment $payment, string $instructions, string $checkout): void
+    {
+        $ctx->session->clear();
+        $order = $payment->order;
+
+        $ctx->edit(trim($this->texts->render(BotText::CardToSupport, [
+            'order' => $order->id,
+            'amount' => Money::format($payment->amount),
+            'contact' => $this->bot->supportContact(),
+            'outcome' => $this->texts->part(ReceiptHandler::outcome($order->type)),
+            'instructions' => $instructions,
+        ])), ['reply_markup' => InlineKeyboard::make()->row(...$this->buttons->supportChat())->row($this->buttons->back($checkout))->build()]);
     }
 
     /** What the paid order delivered, as a fresh message, with the way on that fits what it was. */

@@ -25,6 +25,12 @@ enum NoticeType: string
     /** A wallet top-up was given back, its amount taken out of the wallet again. */
     case TopUpRefunded = 'topup_refunded';
 
+    /** «انتقال موجودی»: they sent money from their wallet to another customer. */
+    case WalletSent = 'wallet_sent';
+
+    /** «انتقال موجودی»: another customer sent money to their wallet. */
+    case WalletReceived = 'wallet_received';
+
     /** Support reminded them of a card payment they never finished. */
     case PaymentReminder = 'payment_reminder';
 
@@ -91,6 +97,18 @@ enum NoticeType: string
     /** Their bot could not deliver an order: its traffic does not cover it. */
     case AgencyTrafficShort = 'agency_traffic_short';
 
+    /** Their agency ends in a few days, and their bot's selling with it. */
+    case AgencyExpiring = 'agency_expiring';
+
+    /** A month nears its end with their traffic bought below their monthly minimum. */
+    case AgencyMinimumShort = 'agency_minimum_short';
+
+    /** Their bot's selling was suspended: their agency's end passed, a month below the minimum, or by the owner. */
+    case AgencySuspended = 'agency_suspended';
+
+    /** Their bot sells again. */
+    case AgencyResumed = 'agency_resumed';
+
     /** The two-factor sign-in of their account on the website was turned off — by support, or by them. */
     case TwoFactorDisabled = 'two_factor_disabled';
 
@@ -139,6 +157,8 @@ enum NoticeType: string
             self::OrderCancelled => 'سفارش شما لغو شد',
             self::PaymentRefunded => 'مبلغ پرداخت شما به کیف پول برگشت داده شد',
             self::TopUpRefunded => 'پرداخت شارژ کیف پول شما برگشت داده شد',
+            self::WalletSent => 'موجودی کیف پول شما به مشتری دیگری منتقل شد',
+            self::WalletReceived => 'موجودی به کیف پول شما منتقل شد',
             self::PaymentReminder => 'پرداخت سفارش شما هنوز کامل نشده است',
             self::ServiceDisabled => 'سرویس شما غیرفعال شد',
             self::ServiceEnabled => 'سرویس شما دوباره فعال شد',
@@ -161,6 +181,10 @@ enum NoticeType: string
             self::AgencyChanged => 'نمایندگی شما به‌روز شد',
             self::AgencyRevoked => 'نمایندگی شما لغو شد',
             self::AgencyTrafficShort => 'حجم ربات شما برای تحویل سفارش کافی نیست',
+            self::AgencyExpiring => 'نمایندگی شما به‌زودی به پایان می‌رسد',
+            self::AgencyMinimumShort => 'خرید حجم این ماه شما هنوز به کف خرید ماهانه نرسیده است',
+            self::AgencySuspended => 'فروش ربات شما متوقف شد',
+            self::AgencyResumed => 'فروش ربات شما دوباره باز شد',
             self::TwoFactorDisabled => 'ورود دو مرحله‌ای حساب شما خاموش شد',
             self::WayInAdded => 'روش ورود تازه‌ای به حساب شما اضافه شد',
             self::WayInRemoved => 'یکی از روش‌های ورود حساب شما برداشته شد',

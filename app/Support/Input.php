@@ -159,6 +159,23 @@ final class Input
     }
 
     /**
+     * Money an admin may leave blank (a bound, a cap, a price of its own): null or blank text is none (null); anything
+     * else is whole Toman from `$least` to `$most`, read as amountOf() reads it and kept as Money keeps it — false when it
+     * is not, so the caller refuses the field with its own message.
+     *
+     * @return numeric-string|false|null
+     */
+    public static function optionalAmountOf(mixed $value, int $least, int $most): string|false|null
+    {
+        if ($value === null || (is_string($value) && trim($value) === '')) {
+            return null;
+        }
+        $amount = self::amountOf($value);
+
+        return $amount !== null && $amount >= $least && $amount <= $most ? Money::normalize($amount) : false;
+    }
+
+    /**
      * A non-negative amount with up to two decimals, as a string (GB of traffic); thousands separators allowed; null
      * otherwise.
      *

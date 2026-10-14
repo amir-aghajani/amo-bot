@@ -29,7 +29,6 @@ use App\Modules\Telegram\Handlers\TopUpHandler;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
-use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
@@ -156,13 +155,8 @@ final class BotRenewalTest extends BotTestCase
         self::assertSame([$this->pay($this->wallet), $this->pay($card), SubscriptionHandler::serviceCallback($this->subscription->id)], $this->callbacks(0));
 
         $this->send($this->tap($this->pay($card)));
-        self::assertSame([BotTexts::paragraphs(trim(self::text(BotText::CardInstructions, [
-            'amount' => Money::format('120000'),
-            'card' => '6037997700001119',
-            'holder' => 'AmoBot',
-            'instructions' => '',
-        ])), self::text(BotText::PayInstructionsSuffix))], $this->said());
-        self::assertSame([$this->checkout()], $this->callbacks(0), 'back to the checkout to pick another way');
+        self::assertSame([$this->cardInstructions('120000')], $this->said());
+        self::assertSame([$this->checkout()], $this->callbacks(1), 'back to the checkout to pick another way');
         $order = Order::query()->sole();
         self::assertSame([OrderType::Renewal, OrderStatus::Pending], [$order->type, $order->status]);
 

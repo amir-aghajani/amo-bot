@@ -95,6 +95,7 @@ measured on MySQL and MariaDB:
 - **Traffic** is bytes in an integer column; admins type gigabytes (`Support\Traffic`).
 - **Balances** are ledgers: a wallet (`wallet_transactions`) and an agent's traffic (`traffic_transactions`) keep a line
   per change with `balance_after`, and the last line is the balance — nothing else stores it (`Core\Database\Ledger`).
+  A money write is tried again when MySQL aborts it for a deadlock ([Internals-Commerce](Internals-Commerce.md#ledgers)).
 - **States** (`orders.status`, `payments.status` …) are one column each, moved by compare-and-swap, and rows worked
   through over time carry a lease (`lease_token`, `leased_until`) — see [Conventions](Conventions.md#only-once).
 - **Shops**: every row of a shop carries `bot_id` and its model the `BelongsToBot` scope; servers, grants and the

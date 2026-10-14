@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Providers\DTO\ClientInfo;
+use App\Modules\Providers\DTO\Expiry;
+use App\Modules\Providers\Enums\ConnectionFailure;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\TestRefusal;
@@ -21,8 +24,8 @@ use Tests\Fakes\FakeProvider;
 /**
  * Free test accounts: what a test gets on its server (on hold or from the moment it is made), the quota — the switch,
  * newcomers only, a customer's tests for good or within a window, the shop's cap a day of its clock, the bot's admins
- * either way —, two taps taking one test, a panel failure giving the claim back, and an agent's shop drawing the test
- * from its pool.
+ * either way —, two taps taking one test, a panel failure giving the claim back (a client it made though it did not
+ * answer kept instead), and an agent's shop drawing the test from its pool.
  */
 final class TestAccountsTest extends DatabaseTestCase
 {
@@ -196,6 +199,23 @@ final class TestAccountsTest extends DatabaseTestCase
         $this->server->forceFill(['last_error' => null])->save();
         $this->tests()->issue($this->ali, $this->server->id);
         self::assertSame(1, TestAccount::query()->count(), 'the quota was given back');
+    }
+
+    public function testATestThePanelMadeThoughItsAnswerNeverCameIsGivenRatherThanMadeTwice(): void
+    {
+        // The panel makes the test's client, then its answer never comes.
+        FakeProvider::$onCall = function (int $server, string $call): void {
+            if ($call === 'createClient') {
+                FakeProvider::put($this->server, new ClientInfo(name: 'test_ali_1', enabled: true, totalBytes: 500 * Traffic::MEGABYTE, expiry: Expiry::afterFirstUse(24 * 3600), subscriptionUrl: 'https://fake.test/sub/made'));
+            }
+        };
+        FakeProvider::$failing = [$this->server->id => ['createClient' => ConnectionFailure::Timeout]];
+
+        $test = $this->tests()->issue($this->ali, $this->server->id);
+
+        self::assertSame(['test_ali_1', 'https://fake.test/sub/made'], [$test->remote_name, $test->subscription_url], 'the client it made, found by its name');
+        self::assertSame(['test_ali_1'], array_keys(FakeProvider::$clients[$this->server->id]), 'no second client under the next name');
+        self::assertSame(1, TestAccount::query()->count());
     }
 
     public function testAnAgentsShopDrawsTheTestFromItsPool(): void

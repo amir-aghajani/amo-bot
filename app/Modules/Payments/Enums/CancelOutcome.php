@@ -11,7 +11,7 @@ enum CancelOutcome
     case Lost;
     /**
      * Cancelled; its order stays as it is — paid another way, closed already, or (the payments screen's cancel) waiting on
-     * another payment's receipt in review.
+     * another payment whose money may be with support: a receipt in review, a card transfer taken in support's chat.
      */
     case Alone;
     /** Cancelled, and its open order with it — and the order's other open payments. */

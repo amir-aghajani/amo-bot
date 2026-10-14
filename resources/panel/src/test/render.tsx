@@ -57,10 +57,10 @@ export function providers({ client = testQueryClient(), at = '/' }: ProvidersOpt
 }
 
 /** The owner, in the main bot's shop. */
-export const OWNER: Session = { name: 'root', shop: { id: 1, name: 'فروشگاه اصلی', username: null, status: 'active' } }
+export const OWNER: Session = { name: 'root', shop: { id: 1, name: 'فروشگاه اصلی', username: null, status: 'active', selling_suspended: null } }
 
 /** The owner in an agent's shop (opened from the agents page): what depends on the shop shown is the agent's. */
-export const AGENT_SHOP: Session = { name: 'root', shop: { id: 2, name: 'فروشگاه رضا', username: 'reza_shop_bot', status: 'active' } }
+export const AGENT_SHOP: Session = { name: 'root', shop: { id: 2, name: 'فروشگاه رضا', username: 'reza_shop_bot', status: 'active', selling_suspended: null } }
 
 /**
  * What a page of a signed-in panel stands on, as the app mounts it: the providers, and behind RequireAuth the session

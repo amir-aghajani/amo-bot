@@ -49,6 +49,8 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
   ],
   // A grant under way moves its cursor every second: its cards alone.
   grants: [queryKeys.everyServerGrants, queryKeys.massGrants],
+  // A move of a server's services under way moves its cursor every second: its card, and one's failures.
+  migrations: [queryKeys.everyServerMigrations, queryKeys.everyServerMigration],
   // The catalogue — and an agent's smallest plan on sale, which their traffic is held against (account, dashboard).
   plans: [queryKeys.plans, queryKeys.planCategories, queryKeys.planOptions, queryKeys.account, queryKeys.dashboards],
   payment_methods: [queryKeys.paymentMethods],

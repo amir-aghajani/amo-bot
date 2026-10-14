@@ -9,9 +9,11 @@ use App\Core\Security\Totp;
 use App\Modules\Accounts\Enums\SignInMethod;
 use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Accounts\Services\TwoFactor;
+use App\Modules\Agency\DTO\SellingTerms;
 use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Agency\Services\AgencySettings;
+use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Agency\Services\TrafficPool;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Principal;
@@ -33,6 +35,7 @@ use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Payments\Models\PaymentCard;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentMethods;
@@ -69,6 +72,7 @@ use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
 use App\Support\Money;
 use App\Support\Traffic;
+use Illuminate\Support\Carbon;
 use Slim\Psr7\Factory\ServerRequestFactory;
 use Tests\Fakes\FakeProvider;
 
@@ -292,8 +296,9 @@ trait Fixtures
     }
 
     /**
-     * A card-to-card method, enabled, after the wallet in checkout order. `$overrides['config']` is merged
-     * into the card's config (number, holder, instructions, window), not swapped for it.
+     * A card-to-card method, enabled, after the wallet in checkout order, with one card. `$overrides['config']` is merged
+     * into its settings (instructions, window), not swapped for them; a `card_number` and `card_holder` there are its
+     * card's (a row of its own, as the method's form keeps it).
      *
      * @param int $autoApproveAfter Minutes before an unreviewed receipt is accepted; 0 = only by hand
      * @param array<string, mixed> $overrides
@@ -306,12 +311,32 @@ trait Fixtures
             'instructions' => '',
             'auto_approve_after' => $autoApproveAfter,
         ];
+        $card = ['number' => (string) $config['card_number'], 'holder' => (string) $config['card_holder']];
+        unset($config['card_number'], $config['card_holder']);
 
-        return PaymentMethod::query()->create(['config' => $config] + $overrides + [
+        $method = PaymentMethod::query()->create(['config' => $config] + $overrides + [
             'driver' => 'manual',
             'label' => $label,
             'enabled' => true,
             'sort' => Sorting::next(PaymentMethod::class),
+        ]);
+        $this->paymentCard($method, $card);
+
+        return $method;
+    }
+
+    /**
+     * Another card of a card method, enabled, after its others.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function paymentCard(PaymentMethod $method, array $overrides = []): PaymentCard
+    {
+        return $method->cards()->create($overrides + [
+            'number' => '5892101012345670',
+            'holder' => 'AmoBot',
+            'enabled' => true,
+            'sort' => $method->cards()->count() + 1,
         ]);
     }
 
@@ -363,6 +388,8 @@ trait Fixtures
         return Payment::query()->create($overrides + [
             'order_id' => $order->id,
             'payment_method_id' => $method->id,
+            // A card method's payment is shown its first card.
+            'card_id' => $method->cards()->value('id'),
             'status' => PaymentStatus::Pending,
             'amount' => $order->amount,
         ]);
@@ -570,7 +597,19 @@ trait Fixtures
     /** The agency program, switched on (or off) — agents start without credit; traffic offered as 50/100 GB, 10 GB at least. */
     protected function agencyProgram(bool $enabled = true, string $credit = '0'): void
     {
-        $this->service(AgencySettings::class)->save(['enabled' => $enabled, 'default_credit' => $credit, 'traffic_presets' => [50, 100], 'traffic_min' => 10]);
+        $settings = $this->service(AgencySettings::class);
+        $settings->save(['enabled' => $enabled, 'default_credit' => $credit, 'traffic_presets' => [50, 100], 'traffic_min' => 10] + $settings->present());
+    }
+
+    /**
+     * An agent's terms of selling, as the owner's agents page gives them (AgencyStanding::change()): `$expiresAt` (null:
+     * never) and `$minimum` Toman of traffic a Jalali month (null: none).
+     */
+    protected function sellingTerms(Bot $bot, ?Carbon $expiresAt, ?string $minimum = null): Bot
+    {
+        $this->service(AgencyStanding::class)->change($bot, new SellingTerms($expiresAt, $minimum));
+
+        return $bot->refresh();
     }
 
     /**
@@ -792,7 +831,7 @@ trait Fixtures
         $price = $this->service(CustomerExtras::class)->quote($subscription, $kind, $quantity);
         $orders = $this->service(OrderService::class);
 
-        return $this->service(Checkout::class)->pay($subscription->user, $method ?? $this->walletMethod(), $price, static fn(?OrderKey $key): Order => $orders->openExtra($subscription->user, $subscription, $kind, $quantity, $price, $key));
+        return $this->service(Checkout::class)->pay($subscription->user, $method ?? $this->walletMethod(), $kind->orderType(), $price, static fn(?OrderKey $key): Order => $orders->openExtra($subscription->user, $subscription, $kind, $quantity, $price, $key));
     }
 
     /**
@@ -868,6 +907,17 @@ trait Fixtures
     protected function transfersOn(bool $enabled = true): void
     {
         $this->botSettings('service_transfers', ['transfer_enabled' => $enabled]);
+    }
+
+    /**
+     * «انتقال موجودی» offered to the current shop's customers, as the bot settings save it: 10,000 to 5,000,000 Toman a
+     * transfer and 10,000,000 a day unless `$values` (the group's fields) say otherwise.
+     *
+     * @param array<string, mixed> $values
+     */
+    protected function walletTransfersOn(array $values = []): void
+    {
+        $this->botSettings('wallet_transfers', $values + ['wallet_transfer_enabled' => true]);
     }
 
     /** Gift codes switched on (or off) in the current shop, as the bot settings save the switch. */

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Rewards\Services;
 
+use App\Core\Database\Ledger;
 use App\Core\Database\Transitions;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Discounts\Services\Loyalty;
@@ -86,7 +87,7 @@ final class Cashback
                     $this->wallet->credit($order->user, $amount, sprintf(self::LINE, $order->id));
 
                     return $row;
-                });
+                }, Ledger::ATTEMPTS);
             } catch (UniqueConstraintViolationException) {
                 return null;
             }

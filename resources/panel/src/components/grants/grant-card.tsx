@@ -73,9 +73,9 @@ export function GrantCard<Row extends GrantRowBase>({ title, description, noun, 
       <ConfirmModal
         open={stopping !== null}
         onClose={() => setStopping(null)}
-        title={`توقف ${noun}`}
+        title={`لغو ${noun}`}
         description={stopping ? `${giftLabel(stopping)} به بقیه سرویس‌ها اضافه نمی‌شود.` : undefined}
-        confirmLabel="توقف"
+        confirmLabel="لغو"
         destructive
         pending={cancel.isPending}
         onConfirm={() => stopping && cancel.mutate(stopping, { onSettled: () => setStopping(null) })}
@@ -170,7 +170,7 @@ export function GrantItem({ grant, audience, detail, waiting, waitingNote, failu
         </span>
         {running && (
           <Button variant="danger" size="sm" onClick={onStop}>
-            توقف
+            لغو
           </Button>
         )}
       </div>

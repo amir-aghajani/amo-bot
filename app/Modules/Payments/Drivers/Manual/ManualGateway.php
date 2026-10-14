@@ -11,10 +11,13 @@ use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 
-/** A card-to-card method's gateway: shows the card; settling it is support's (or the review window's) approval. */
+/**
+ * A card-to-card method's gateway: shows a payment the card it was given (Services\PaymentCards) — or support's private
+ * chat, for one given none —, with the method's note; settling it is support's (or the review window's) approval.
+ */
 final class ManualGateway implements GatewayInterface
 {
-    public function __construct(private readonly CardTransfer $transfer) {}
+    public function __construct(private readonly string $instructions) {}
 
     /** The key a card method's row is stored under (payment_methods.driver): its driver's. */
     public static function key(): string
@@ -28,9 +31,12 @@ final class ManualGateway implements GatewayInterface
         return ReviewWindow::of($method->config);
     }
 
-    public function initiate(): PaymentInitiation
+    /** The card the payment was shown — or, shown none, support's private chat, where the shop took it — with the note. */
+    public function initiate(Payment $payment): PaymentInitiation
     {
-        return PaymentInitiation::transfer($this->transfer);
+        $card = $payment->card;
+
+        return PaymentInitiation::transfer($card === null ? CardTransfer::toSupport($this->instructions) : $card->transfer($this->instructions));
     }
 
     /**

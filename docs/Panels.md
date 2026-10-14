@@ -111,7 +111,9 @@ What the shop did over a range and what waits on someone, read again every minut
   رسیدگی», «تیکت‌های در انتظار پاسخ», «نظرات در انتظار بررسی», «سرورهای دارای خطا» (the main shop's dashboard alone),
   «اشتراک‌های رو به انقضا (۳ روز)» (free tests aside) and «سفارش‌های در انتظار پرداخت» — each a link to its list,
   filtered. With nothing waiting it says
-  «همه‌چیز مرتب است». An agent's bot whose traffic no longer covers its smallest plan is said first, with how to buy more.
+  «همه‌چیز مرتب است». An agent's selling suspended — or its end, or a month short of its minimum, near — and their
+  bot's traffic no longer covering its smallest plan are said first: to the agent, with what to do; to the owner in an
+  agent's shop, of the agent, with a link to «نمایندگان».
 - **«آخرین سفارش‌ها»** and **«مشتریان جدید»** — the latest eight of each; a number opens the order, a name the customer's
   page.
 - **«وضعیت سیستم»** (the owner's) — the version and PHP's, the open shop's bot — «راه‌اندازی نشده» without a token,
@@ -131,6 +133,13 @@ ledger («گردش حجم»: purchases, sales — each free test their bot made 
 traffic added to services, traffic given back, corrections by support, each with the balance after it); and «ورود به
 پنل», whose «خروج از مرورگرهای دیگر» signs every other browser out of their panel. Traffic is bought in the main bot
 («نمایندگی» › «💾 خرید حجم»), not here ([Agency](Agency.md)).
+
+«شرایط فروش» beside their bot: their agency's end, this month's traffic bought against their monthly minimum (and
+whether this month is held to it), and whether their bot sells. While the main shop has their bot's selling suspended —
+or its end, or a month short of its minimum, is near — the page and their dashboard's «نیازمند توجه» say so, why, and
+what lifts it, and a strip over every other page of their panel leads here ([Agency](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum)).
+A plan the main shop keeps from sale is marked «پنهان‌شده توسط مدیر» on «پلن‌ها», and a server it keeps from their shop
+is none of their plan form's choices.
 
 ## Lists
 

@@ -87,6 +87,20 @@ final class InputTest extends TestCase
         self::assertNull(Input::amount([], 'price'));
     }
 
+    public function testMoneyLeftBlankIsNoneAndAnythingElseIsWholeTomanWithinItsBounds(): void
+    {
+        foreach ([null, '', '   '] as $blank) {
+            self::assertNull(Input::optionalAmountOf($blank, 1, 1000), 'none: ' . var_export($blank, true));
+        }
+        self::assertSame('120.00', Input::optionalAmountOf('۱۲۰ تومان', 1, 1000));
+        self::assertSame('1000.00', Input::optionalAmountOf(1000, 1, 1000), 'the most itself');
+        self::assertSame('0.00', Input::optionalAmountOf('0', 0, 1000), 'zero, where the least allows it');
+
+        foreach (['0', '1001', '12.5', 'abc', '-5', ['120']] as $refused) {
+            self::assertFalse(Input::optionalAmountOf($refused, 1, 1000), 'refused: ' . var_export($refused, true));
+        }
+    }
+
     public function testIntegersAreNonNegativeWholeNumbersInAnyDigits(): void
     {
         self::assertSame(30, Input::integer(['days' => '30'], 'days'));

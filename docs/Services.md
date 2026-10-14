@@ -83,15 +83,20 @@ already, are left as they are.
 For each: the old panel is read, one client is made on the target — the same name unless the target has it, the traffic
 left as its quota, the same end (or the same term still waiting for its first connection) —, then the old client is
 deleted, and the customer gets the new link (a QR card, or text). If the target gives no link, or the old panel refuses
-the delete, the new client is taken back and the service stays where it was.
+the delete, the new client is taken back and the service stays where it was. A panel that stops answering half-way is
+asked again before anything is undone; a client it may still have — the old one, or one the target may have made — is
+listed on that server's page and removed by itself once the panel answers ([Servers](Servers.md#the-clients-a-rescue-left)),
+so the customer never keeps two working services.
 
 - **The old server does not answer**: the batch pauses on a question — «انتقال بدون حذف از سرور قبلی» moves this service
-  (and the rest from that server, without asking again) and leaves the old client on its panel for you to remove;
-  «لغو انتقال» stops there — what moved stays moved.
+  (and the rest from that server, without asking again) and leaves the old client on its panel until it answers again,
+  then it is removed by itself; «لغو انتقال» stops there — what moved stays moved.
 - **The target refuses or fails**: the batch stops, since the next ones would fail the same way.
 - **One service's own trouble** (it ended meanwhile, it is busy): the batch goes on; failed ones stay ticked.
 
-While it runs, the dialog's one button is «توقف بعد از این سرویس», and closing the tab asks first.
+While it runs, the dialog's one button is «توقف بعد از این سرویس», and closing the tab asks first. To move every service
+on a server — every shop's, with no tab to keep open, or rescued from a panel that is gone —, use «انتقال سرویس‌ها» on
+[the server's page](Servers.md#moving-its-services).
 
 ### Handing a service to another customer
 
@@ -207,7 +212,10 @@ service**, nor takes a customer's — another admin, or you, does.
   plan's: a renewal adds the plan's term, and a shorter one would leave the service due again at once —, and never for
   a service without a plan (added by its link, or built: [Custom services](Custom-Services.md#renewing-a-built-service))
   until a renewal on a plan gives it one. A service bought
-  at a first-purchase price renews at the plan's price, as any; an agent's or a colleague's at the plan's agent price.
+  at a first-purchase price renews at the plan's price, as any; an agent's or a colleague's at the plan's agent price —
+  and only a price within the wallet's least and most amount: one outside them is renewed by hand, its customer reminded
+  of its end ([Payment methods](Payment-Methods.md#the-least-and-most-amount)). The service's dialog shows the switch as
+  the customer left it, whether it renews then or not.
 - **The next period** — a running service renewed before its end goes on with the paid period: when it ends, the plan's
   device limit takes over and — with the traffic not carried — what is left of the old traffic goes and the new
   period's begins. The dialog's «دوره بعدی» shows the traffic part; «کاربر هم‌زمان» says from when the plan's device

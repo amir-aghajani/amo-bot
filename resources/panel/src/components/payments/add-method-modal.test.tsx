@@ -9,11 +9,11 @@ import { json, refusal, server } from '@/test/server'
 
 /*
  * Adding a payment method (components/payments/add-method-modal): the drivers the API describes to pick from — the
- * wallet listed, but the shop has it already —, then the driver's form drawn from its description and sent as a new
- * method of that driver, a refusal said under its field.
+ * wallet listed, but the shop has it already —, then the driver's form drawn from its description — a card method's with
+ * a blank card to fill in — and sent as a new method of that driver, a refusal said under its field.
  */
 
-const CARD_REFUSED = 'شماره کارت باید 16 رقم و معتبر باشد.'
+const CARD_REFUSED = 'کارت ۱: شماره کارت باید 16 رقم و معتبر باشد.'
 
 function field(name: string, overrides: Partial<FieldDescription>): FieldDescription {
   return {
@@ -51,12 +51,10 @@ const DRIVERS: DriverDescription[] = [
   {
     key: 'manual',
     label: 'کارت به کارت',
-    description: 'مشتری مبلغ را به کارت شما واریز می‌کند و رسید را می‌فرستد.',
+    description: 'مشتری مبلغ را به یکی از کارت‌های شما واریز می‌کند و رسید را می‌فرستد.',
     notes: ['بدون کارمزد و بدون نیاز به درگاه'],
     traits: { kind: 'manual', builtin: false },
     fields: [
-      field('card_number', { type: 'card', label: 'شماره کارت' }),
-      field('card_holder', { label: 'نام صاحب کارت' }),
       field('instructions', { type: 'textarea', label: 'توضیحات برای مشتری', required: false }),
       field('auto_approve_after', { type: 'number', label: 'تایید خودکار', unit: 'دقیقه', required: false, min: 0, max: 10080, default: 0 }),
     ],
@@ -73,7 +71,7 @@ function open() {
 const dialog = () => within(document.querySelector<HTMLElement>('dialog[open]') ?? document.body)
 const type = (label: string, value: string) => fireEvent.change(dialog().getByLabelText(label), { target: { value } })
 
-/** The card's form, filled in and sent. */
+/** The card method's form, its blank card filled in, sent. */
 async function addCard(card: string) {
   fireEvent.click(await dialog().findByRole('button', { name: /کارت به کارت/ }))
   type('شماره کارت', card)
@@ -97,7 +95,7 @@ describe('adding a payment method', () => {
     expect(within(card).getByText('تایید دستی')).toBeTruthy()
   })
 
-  it('draws the driver’s form from its description and sends it as a new method of that driver', async () => {
+  it('draws the driver’s form from its description, a card to fill in, and sends it as a new method of that driver', async () => {
     server().on('POST', '/api/admin/payment-methods', json({ method: cardMethodRow() } satisfies PaymentMethodResponse, 201))
     const onCreated = open()
 
@@ -110,21 +108,22 @@ describe('adding a payment method', () => {
       driver: 'manual',
       label: 'کارت به کارت',
       enabled: true,
-      card_number: '6037997700001119',
-      card_holder: 'امیر رضایی',
+      min_amount: '',
+      max_amount: '',
       instructions: '',
       auto_approve_after: '0',
+      cards: [{ number: '6037997700001119', holder: 'امیر رضایی', bank: '', enabled: true, daily_cap: '' }],
     })
   })
 
-  it('says a refusal under the field it is about', async () => {
-    server().on('POST', '/api/admin/payment-methods', refusal(422, CARD_REFUSED, { card_number: [CARD_REFUSED] }))
+  it('says a refusal of a card under the cards, naming the card', async () => {
+    server().on('POST', '/api/admin/payment-methods', refusal(422, CARD_REFUSED, { cards: [CARD_REFUSED] }))
     const onCreated = open()
 
     await addCard('6037 9977 0000 1111')
 
     expect(await dialog().findByText(CARD_REFUSED)).toBeTruthy()
-    expect(dialog().getByLabelText('شماره کارت').getAttribute('aria-invalid')).toBe('true')
+    expect(dialog().getByRole('group', { name: 'کارت‌ها' }).hasAttribute('data-invalid')).toBe(true)
     expect(onCreated).not.toHaveBeenCalled()
   })
 })

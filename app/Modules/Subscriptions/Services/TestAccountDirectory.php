@@ -71,7 +71,8 @@ final class TestAccountDirectory
     {
         $giving = array_map(static fn(array $choice): int => $choice['server']->id, $this->servers->choices());
 
-        return array_values(Server::query()->orderBy('sort')->orderBy('id')->get()->map(static fn(Server $server): array => [
+        // A server the owner keeps from the shop is none of its business.
+        return array_values(Server::shown()->orderBy('sort')->orderBy('id')->get()->map(static fn(Server $server): array => [
             'id' => $server->id,
             'name' => $server->name,
             ...TestServers::present($server),

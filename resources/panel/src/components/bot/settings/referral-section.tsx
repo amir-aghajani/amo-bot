@@ -3,6 +3,7 @@ import { MenuButtonNotice } from '@/components/bot/menu-button-notice'
 import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
 import { Callout } from '@/components/callout'
 import { Field, FieldGroup, FormPart } from '@/components/field'
+import { MoneyField } from '@/components/money-field'
 import { PageTabs, type PageTab } from '@/components/page-tabs'
 import { PrizeAmountField } from '@/components/rewards/prize-fields'
 import { SectionCard } from '@/components/section-card'
@@ -13,13 +14,16 @@ import { api } from '@/lib/api'
 import type { BotReferralSettingsRequest, BotSettingsData, ReferralStartTrigger } from '@/lib/api-types'
 import { amountDraft, digitsOnly, formatMoney, formatNumber, wholeNumberOf, wholeOf } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { trimmed } from '@/lib/use-form'
+import { asNumbers } from '@/lib/use-form'
 
 /** When the start gift is paid: on the first purchase (the default — a made-up newcomer buys nothing), or as they join. */
 const TRIGGERS: PageTab<ReferralStartTrigger>[] = [
   { value: 'purchase', label: 'با اولین خرید' },
   { value: 'join', label: 'با عضویت' },
 ]
+
+/** A start gift's line while no amount is typed. */
+const GIFT_HINT = 'مبلغ به تومان؛ 0 یعنی بدون هدیه'
 
 /** The group as its form holds it: the numbers as typed, the plan's number as text ('' none). */
 function draftOf(settings: BotSettingsData) {
@@ -48,7 +52,7 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
   // The referrals page shows the rules with its numbers. A number is what the server reads of it: «۲۰٬۰۰۰» is 20000.
   const group = useBotSettingsGroup(draftOf(settings), (values) => api.put('/bot/settings/referral', values), {
     invalidates: [queryKeys.referrals],
-    reads: (values) => trimmed(Object.fromEntries(Object.entries(values).map(([name, value]) => [name, typeof value === 'string' ? (wholeOf(value) ?? value) : value]))),
+    reads: asNumbers,
   })
   const { values, set, error } = group
   const rate = Number(digitsOnly(values.referral_rate))
@@ -106,12 +110,26 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
           about="به ازای هر زیرمجموعه یک بار، مبلغی به کیف پول معرف و مبلغی به کیف پول خود زیرمجموعه اضافه می‌شود و هر دو در ربات خبردار می‌شوند. 0 یعنی بدون هدیه."
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="referral_start_referrer" label="هدیه معرف (تومان)" error={error('referral_start_referrer')} hint={amountHint(values.referral_start_referrer)}>
-              <Input dir="ltr" inputMode="numeric" value={values.referral_start_referrer} onChange={(e) => set('referral_start_referrer', e.target.value)} disabled={off} />
-            </Field>
-            <Field id="referral_start_invitee" label="هدیه زیرمجموعه (تومان)" error={error('referral_start_invitee')} hint={amountHint(values.referral_start_invitee)}>
-              <Input dir="ltr" inputMode="numeric" value={values.referral_start_invitee} onChange={(e) => set('referral_start_invitee', e.target.value)} disabled={off} />
-            </Field>
+            <MoneyField
+              id="referral_start_referrer"
+              label="هدیه معرف (تومان)"
+              value={values.referral_start_referrer}
+              onChange={(amount) => set('referral_start_referrer', amount)}
+              error={error('referral_start_referrer')}
+              hint={GIFT_HINT}
+              zero="بدون هدیه"
+              disabled={off}
+            />
+            <MoneyField
+              id="referral_start_invitee"
+              label="هدیه زیرمجموعه (تومان)"
+              value={values.referral_start_invitee}
+              onChange={(amount) => set('referral_start_invitee', amount)}
+              error={error('referral_start_invitee')}
+              hint={GIFT_HINT}
+              zero="بدون هدیه"
+              disabled={off}
+            />
           </div>
           <FieldGroup
             label="زمان هدیه"
@@ -177,10 +195,4 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
       </SectionCard>
     </>
   )
-}
-
-/** What an amount typed comes to, or what 0 means. */
-function amountHint(typed: string): string {
-  const amount = wholeOf(typed)
-  return amount === null ? 'مبلغ به تومان؛ 0 یعنی بدون هدیه' : Number(amount) > 0 ? `= ${formatMoney(amount)}` : 'بدون هدیه'
 }

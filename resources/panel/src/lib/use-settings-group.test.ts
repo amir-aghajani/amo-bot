@@ -16,7 +16,7 @@ interface Screen {
   settings: Record<string, unknown>
 }
 
-const WALLET = { topup_min: '50000', topup_presets: '100000,200000' }
+const WALLET = { topup_min: '50000', topup_presets: '100000,200000', topup_random_count: '0', topup_random_min: '50000', topup_random_max: '500000', topup_random_round: '1000', topup_unique_max: '0' }
 
 function card() {
   const { client, wrapper } = providers()
@@ -54,7 +54,7 @@ describe('a settings card', () => {
 
     expect(saved).toBe(true)
     expect(server().sent('PUT', '/api/admin/bot/settings/wallet')[0]?.body).toEqual({ ...WALLET, topup_min: '60000' })
-    expect(client.getQueryData<Screen>(queryKeys.botSettings)?.settings).toEqual({ topup_min: '60000', topup_presets: '100000,200000', enabled: 'yes' })
+    expect(client.getQueryData<Screen>(queryKeys.botSettings)?.settings).toEqual({ ...WALLET, topup_min: '60000', enabled: 'yes' })
     expect(invalidated.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([queryKeys.dashboards])
     expect(toast.success).toHaveBeenCalledWith('تنظیمات کیف پول ذخیره شد')
     expect(result.current.dirty).toBe(false)

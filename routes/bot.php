@@ -29,6 +29,7 @@ use App\Modules\Telegram\Handlers\TestAccountHandler;
 use App\Modules\Telegram\Handlers\TicketHandler;
 use App\Modules\Telegram\Handlers\TicketMessageHandler;
 use App\Modules\Telegram\Handlers\TopUpHandler;
+use App\Modules\Telegram\Handlers\WalletTransferHandler;
 use App\Modules\Telegram\Handlers\WheelHandler;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Reports\AgencyReview;
@@ -82,6 +83,9 @@ return static function (Dispatcher $bot): void {
     $bot->callback(ReceiptHandler::PREFIX, ReceiptHandler::class);
     $bot->callback(TopUpHandler::CALLBACK, TopUpHandler::class);
     $bot->state(TopUpHandler::STATE, TopUpHandler::class);
+    // «💸 انتقال موجودی» on the wallet: the recipient's Telegram id and the amount typed, and the transfer confirmed.
+    $bot->callback(WalletTransferHandler::PREFIX, WalletTransferHandler::class);
+    $bot->state(WalletTransferHandler::STATE, WalletTransferHandler::class);
 
     // Support tickets: every tap is navigation (a message half written is left), and what the customer writes in one.
     $bot->callback(TicketHandler::PREFIX, TicketHandler::class, navigation: true);

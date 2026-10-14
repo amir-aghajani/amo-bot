@@ -8,6 +8,7 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Drivers\Manual\ManualGateway;
 use App\Modules\Payments\Drivers\Wallet\WalletGateway;
 use App\Modules\Payments\Enums\PaymentStatus;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $order_id
  * @property int $payment_method_id
+ * @property int|null $card_id The card a card transfer was shown (PaymentCard) — the same one every time it is shown; null for one taken in support's private chat (TO_SUPPORT)
  * @property PaymentStatus $status
  * @property string $amount
  * @property string|null $reference
@@ -39,16 +41,24 @@ use Illuminate\Support\Carbon;
  * @property Carbon $updated_at
  * @property-read Order $order
  * @property-read PaymentMethod $method
+ * @property-read PaymentCard|null $card
  */
 class Payment extends Model
 {
     use BelongsToBot;
+
+    /**
+     * Where a card transfer shown no card went, in the panels and the report group: the shop took it in support's private
+     * chat, where support gave the customer a card (Services\PaymentCards::toSupport()).
+     */
+    public const TO_SUPPORT = 'کارت در پیوی پشتیبانی داده شد';
 
     protected $table = 'payments';
 
     protected $fillable = [
         'order_id',
         'payment_method_id',
+        'card_id',
         'status',
         'amount',
         'reference',
@@ -96,9 +106,37 @@ class Payment extends Model
                 ->orWhere(new Expression('(' . $type->toSql() . ')'), '!=', OrderType::WalletTopUp->value));
     }
 
+    /**
+     * Payments whose money may be with support out of the shop's sight (isWithSupport()), as a condition on `$payments`.
+     *
+     * @param Builder<self> $payments
+     * @return Builder<self>
+     */
+    public static function whereWithSupport(Builder $payments): Builder
+    {
+        return $payments->where(static fn(Builder $query) => $query
+            ->where('status', PaymentStatus::AwaitingReview->value)
+            ->orWhere(static fn(Builder $chat) => $chat
+                ->where('status', PaymentStatus::Pending->value)
+                ->whereNull('card_id')
+                ->whereRelation('method', 'driver', ManualGateway::key())));
+    }
+
     public function isPaid(): bool
     {
         return $this->status === PaymentStatus::Paid;
+    }
+
+    /**
+     * Whether its money may be with support while the shop cannot see it: a receipt waiting for review, or a card transfer
+     * the shop took in support's private chat — shown no card (Services\PaymentCards::toSupport()), still pending — whose
+     * receipt went there, whether or not the shop still sends card payments there. Support decides it: it never expires
+     * (Services\PaymentService::expire()). Reads its method.
+     */
+    public function isWithSupport(): bool
+    {
+        return $this->status === PaymentStatus::AwaitingReview
+            || ($this->status === PaymentStatus::Pending && $this->card_id === null && $this->method->driver === ManualGateway::key());
     }
 
     /** Paid from the customer's wallet: money spent, not money that came in. */
@@ -123,5 +161,11 @@ class Payment extends Model
     public function method(): BelongsTo
     {
         return $this->belongsTo(PaymentMethod::class, 'payment_method_id');
+    }
+
+    /** @return BelongsTo<PaymentCard, $this> */
+    public function card(): BelongsTo
+    {
+        return $this->belongsTo(PaymentCard::class, 'card_id');
     }
 }

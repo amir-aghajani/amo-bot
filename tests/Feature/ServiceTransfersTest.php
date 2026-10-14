@@ -37,12 +37,12 @@ use App\Modules\Telegram\Reports\Topic;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Services\CustomerLookup;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Monolog\LogRecord;
 use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
-use Tests\Support\FakeTelegram;
 
 /**
  * «انتقال سرویس»: a service handed to another customer of its shop by their Telegram id — by the customer while the shop
@@ -205,7 +205,7 @@ final class ServiceTransfersTest extends DatabaseTestCase
         self::assertStringStartsWith('🎁 سرویس <code>ali_1</code> به حساب شما منتقل شد', $said[0]);
         self::assertStringEndsWith($linkChange, $said[0], 'the previous owner keeps the link: «تغییر لینک» cuts them off');
         self::assertStringContainsString('«تغییر لینک»', $linkChange);
-        self::assertSame([[['text' => self::text(BotText::ReminderOpenService), 'callback_data' => SubscriptionHandler::serviceCallback($this->service->id)]]], $this->buttonsSentTo(self::SARA));
+        self::assertSame([[['text' => self::text(BotText::ReminderOpenService), 'callback_data' => SubscriptionHandler::serviceCallback($this->service->id)]]], $this->telegram()->buttonsSentTo(self::SARA));
         self::assertSame([], $this->telegram()->sentTo(self::TELEGRAM_ID), 'the customer who gave it was answered where they did it');
 
         $notice = Notification::query()->sole();
@@ -248,7 +248,7 @@ final class ServiceTransfersTest extends DatabaseTestCase
                 '👤 به: <a href="tg://user?id=7070">Sara</a> · @sara · <code>7070</code>',
                 '🔖 سرویس: <code>ali_2</code>',
                 '📍 لوکیشن: آلمان',
-                '🎧 توسط پشتیبانی: root',
+                '🎧 توسط پشتیبانی',
             ]),
         ], ReportMessage::query()->where('topic', Topic::Purchases->value)->oldest('id')->pluck('text')->all());
         self::assertSame(2, ReportMessage::query()->count(), 'nothing else');
@@ -531,9 +531,9 @@ final class ServiceTransfersTest extends DatabaseTestCase
             self::assertSame($this->sara->id, $this->transfers()->recipient($this->service, $typed, Actor::customer($this->ali))->id);
         }
         foreach (['', 'sara', '@sara', '70 70', '-7070', '0', '7070.5', null, ['7070']] as $typed) {
-            self::assertSame(['telegram_id' => [ServiceTransfers::NOT_AN_ID]], $this->refusedWith(fn() => $this->transfers()->recipient($this->service, $typed, Actor::customer($this->ali))), (string) json_encode($typed));
+            self::assertSame(['telegram_id' => [CustomerLookup::NOT_AN_ID]], $this->refusedWith(fn() => $this->transfers()->recipient($this->service, $typed, Actor::customer($this->ali))), (string) json_encode($typed));
         }
-        self::assertSame(['telegram_id' => [ServiceTransfers::UNKNOWN]], $this->refusedWith(fn() => $this->transfers()->recipient($this->service, '9999', Actor::customer($this->ali))), 'nobody of that id');
+        self::assertSame(['telegram_id' => [CustomerLookup::UNKNOWN]], $this->refusedWith(fn() => $this->transfers()->recipient($this->service, '9999', Actor::customer($this->ali))), 'nobody of that id');
 
         $sara = $this->transfers()->transferById($this->service, ' ۷۰۷۰', $this->panelActor());
         self::assertSame([$this->sara->id, $this->sara->id], [$sara->id, $this->service->fresh()?->user_id]);
@@ -544,8 +544,8 @@ final class ServiceTransfersTest extends DatabaseTestCase
         $bot = $this->agentBot();
         $theirs = CurrentBot::run($bot, fn(): User => $this->customer(['telegram_id' => 8080, 'username' => 'reza']));
 
-        self::assertSame(['telegram_id' => [ServiceTransfers::UNKNOWN]], $this->refusedWith(fn() => $this->transfers()->recipient($this->service, '8080', $this->panelActor())));
-        self::assertSame(['telegram_id' => [ServiceTransfers::UNKNOWN]], $this->refusedWith(fn() => $this->transfers()->transfer($this->service, $theirs, $this->panelActor())));
+        self::assertSame(['telegram_id' => [CustomerLookup::UNKNOWN]], $this->refusedWith(fn() => $this->transfers()->recipient($this->service, '8080', $this->panelActor())));
+        self::assertSame(['telegram_id' => [CustomerLookup::UNKNOWN]], $this->refusedWith(fn() => $this->transfers()->transfer($this->service, $theirs, $this->panelActor())));
         self::assertSame($this->ali->id, $this->service->fresh()?->user_id);
     }
 
@@ -595,22 +595,22 @@ final class ServiceTransfersTest extends DatabaseTestCase
     public function testACustomerLooksUpTenRecipientsInTenMinutesAndSupportIsNotCounted(): void
     {
         $this->transfersOn();
-        for ($i = 0; $i < ServiceTransfers::LOOKUPS; $i++) {
+        for ($i = 0; $i < CustomerLookup::LOOKUPS; $i++) {
             $this->transfers()->recipient($this->service, (string) self::SARA, Actor::customer($this->ali));
         }
-        self::assertSame(['telegram_id' => [ServiceTransfers::NOT_AN_ID]], $this->refusedWith(fn() => $this->transfers()->recipient($this->service, 'sara', Actor::customer($this->ali))), 'what is no id is no lookup');
+        self::assertSame(['telegram_id' => [CustomerLookup::NOT_AN_ID]], $this->refusedWith(fn() => $this->transfers()->recipient($this->service, 'sara', Actor::customer($this->ali))), 'what is no id is no lookup');
 
         try {
             $this->transfers()->recipient($this->service, (string) self::SARA, Actor::customer($this->ali));
             self::fail('one too many');
         } catch (TooManyAttemptsException $e) {
-            self::assertSame([429, ServiceTransfers::LOOKUP_WINDOW], [$e->status(), $e->retryAfter]);
+            self::assertSame([429, CustomerLookup::LOOKUP_WINDOW], [$e->status(), $e->retryAfter]);
         }
 
-        for ($i = 0; $i <= ServiceTransfers::LOOKUPS; $i++) {
+        for ($i = 0; $i <= CustomerLookup::LOOKUPS; $i++) {
             $this->transfers()->recipient($this->service, (string) self::SARA, $this->panelActor());
         }
-        Carbon::setTestNow(now()->addSeconds(ServiceTransfers::LOOKUP_WINDOW + 1));
+        Carbon::setTestNow(now()->addSeconds(CustomerLookup::LOOKUP_WINDOW + 1));
         self::assertSame($this->sara->id, $this->transfers()->recipient($this->service, (string) self::SARA, Actor::customer($this->ali))->id, 'a new window');
     }
 
@@ -636,19 +636,6 @@ final class ServiceTransfersTest extends DatabaseTestCase
 
         $this->transfers()->transfer($next, $this->sara, $this->panelActor());
         self::assertSame($this->sara->id, $next->fresh()?->user_id, 'support is not counted');
-    }
-
-    /** @return list<list<array<string, mixed>>> The inline buttons under the last message sent to the chat. */
-    private function buttonsSentTo(int $chat): array
-    {
-        $buttons = [];
-        foreach ($this->telegram()->history as $call) {
-            if ($call['method'] === 'sendMessage' && ($call['params']['chat_id'] ?? null) === (string) $chat) {
-                $buttons = FakeTelegram::markupOf($call['params'])['inline_keyboard'] ?? [];
-            }
-        }
-
-        return $buttons;
     }
 
     private function transfers(): ServiceTransfers

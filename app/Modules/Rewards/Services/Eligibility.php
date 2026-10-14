@@ -13,9 +13,10 @@ use App\Modules\Users\Models\User;
 
 /**
  * Whether a reward can reach a customer now, asked before anything is spent on it (a wheel slice before the draw, a gift
- * code's plan before the code is taken). Traffic or days need a running service that takes them on a server not backing
- * off (and, for traffic in an agent's shop, enough in the pool); a plan needs a server that delivers it and, in an
- * agent's shop, traffic that covers it. Rewards::give() still has the last word.
+ * code's reward before the code is taken). In an agent's shop whose selling is suspended only Toman (or nothing) can:
+ * Rewards::give() gives nothing else there. Traffic or days need a running service that takes them on a server not
+ * backing off (and, for traffic in an agent's shop, enough in the pool); a plan needs a server that delivers it and, in
+ * an agent's shop, traffic that covers it. Rewards::give() still has the last word.
  */
 final class Eligibility
 {
@@ -34,10 +35,14 @@ final class Eligibility
      */
     public function givable(User $user, array $rewards): array
     {
+        $sells = $user->shop()->sells();
         /** @var array<string, Subscription|null> $services */
         $services = [];
         $givable = [];
         foreach ($rewards as $key => $reward) {
+            if ($reward->kind->isSold() && !$sells) {
+                continue;
+            }
             if ($reward->kind->onService() && !array_key_exists($reward->kind->value, $services)) {
                 $services[$reward->kind->value] = $this->rewards->serviceFor($user, $reward);
             }
@@ -55,7 +60,7 @@ final class Eligibility
     }
 
     /** Whether a server delivers the plan today, and — in an agent's shop — the agent's traffic covers it. */
-    public function delivers(Plan $plan): bool
+    private function delivers(Plan $plan): bool
     {
         return $this->selector->choices($plan) !== [] && $this->selector->covers($plan);
     }

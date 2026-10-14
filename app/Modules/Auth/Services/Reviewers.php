@@ -35,8 +35,14 @@ final class Reviewers
 
     public function present(?string $reviewer): ?string
     {
-        if ($reviewer === null || CurrentPrincipal::get()?->kind === PrincipalKind::Owner) {
-            return $reviewer;
+        return CurrentPrincipal::get()?->kind === PrincipalKind::Owner ? $reviewer : $this->shared($reviewer);
+    }
+
+    /** The reviewer as anyone but the owner reads it, whoever reads it now: the report group, an agent, a website's admin. */
+    public function shared(?string $reviewer): ?string
+    {
+        if ($reviewer === null) {
+            return null;
         }
 
         // The login now is the owner's even when it looks like one of the shop's own (it may start with "@").

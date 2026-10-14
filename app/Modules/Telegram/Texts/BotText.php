@@ -39,6 +39,8 @@ enum BotText: string
     case CategoryEmpty = 'category_empty';
     case PlansTitle = 'plans_title';
     case PlansEmpty = 'plans_empty';
+    // An agent's shop whose selling the main shop suspended: purchases, renewals, extras and tests refused (agents' bots only)
+    case SellingPaused = 'selling_paused';
     case CategoryPlans = 'category_plans';
     case PlanButton = 'plan_button';
     // «🛠 ساخت سرویس دلخواه»: a service the customer builds (the main bot only)
@@ -73,6 +75,7 @@ enum BotText: string
     case Checkout = 'checkout';
     case TopupCheckout = 'topup_checkout';
     case CheckoutNoGateway = 'checkout_no_gateway';
+    case CheckoutNoMethodForAmount = 'checkout_no_method_for_amount';
     case CheckoutFree = 'checkout_free';
     case CheckoutPlanNote = 'checkout_plan_note';
     case CheckoutDiscount = 'checkout_discount';
@@ -94,7 +97,13 @@ enum BotText: string
     case PayInsufficient = 'pay_insufficient';
     case PayFailed = 'pay_failed';
     case CardInstructions = 'card_instructions';
+    case CardBank = 'card_bank';
+    case CardCopyNumber = 'card_copy_number';
+    case CardCopyAmount = 'card_copy_amount';
+    case CardToSupport = 'card_to_support';
+    case CardToSupportButton = 'card_to_support_button';
     case PayInstructionsSuffix = 'pay_instructions_suffix';
+    case ReceiptInReview = 'receipt_in_review';
     case ReceiptWaiting = 'receipt_waiting';
     case ReceiptNotImage = 'receipt_not_image';
     case ReceiptReceived = 'receipt_received';
@@ -120,6 +129,7 @@ enum BotText: string
     case TopupRefundedUndelivered = 'topup_refunded_undelivered';
     case AdminNote = 'admin_note';
     case PaymentReminder = 'payment_reminder';
+    case PaymentReminderToSupport = 'payment_reminder_to_support';
     case PaymentReminderRejected = 'payment_reminder_rejected';
     case PayAgain = 'pay_again';
     case SendReceipt = 'send_receipt';
@@ -260,6 +270,18 @@ enum BotText: string
     case WalletHistoryDebit = 'wallet_history_debit';
     case WalletNoHistory = 'wallet_no_history';
     case WalletTopup = 'wallet_topup';
+    case WalletSend = 'wallet_send';
+    case WalletSendAsk = 'wallet_send_ask';
+    case WalletSendRecipientRefused = 'wallet_send_recipient_refused';
+    case WalletSendRefused = 'wallet_send_refused';
+    case WalletSendAmount = 'wallet_send_amount';
+    case WalletSendAmountInvalid = 'wallet_send_amount_invalid';
+    case WalletSendConfirm = 'wallet_send_confirm';
+    case WalletSendYes = 'wallet_send_yes';
+    case WalletSendExpired = 'wallet_send_expired';
+    case WalletSendDone = 'wallet_send_done';
+    case WalletSent = 'wallet_sent';
+    case WalletReceived = 'wallet_received';
     case WalletCharged = 'wallet_charged';
     case TopupPick = 'topup_pick';
     case TopupCustom = 'topup_custom';
@@ -311,6 +333,15 @@ enum BotText: string
     case AgencyTrafficAdded = 'agency_traffic_added';
     case AgencyTrafficFailed = 'agency_traffic_failed';
     case AgencyTrafficShort = 'agency_traffic_short';
+    // An agent's terms of selling: their agency's end, their monthly minimum, their bot's selling suspended and resumed
+    case AgencyExpiryLine = 'agency_expiry_line';
+    case AgencyMinimumLine = 'agency_minimum_line';
+    case AgencyMonthLine = 'agency_month_line';
+    case AgencySellingLine = 'agency_selling_line';
+    case AgencyExpiring = 'agency_expiring';
+    case AgencyMinimumShort = 'agency_minimum_short';
+    case AgencySuspended = 'agency_suspended';
+    case AgencyResumed = 'agency_resumed';
     case ReceiptOutcomeTraffic = 'receipt_outcome_traffic';
     case AgencyNoBot = 'agency_no_bot';
     case AgencyBotNone = 'agency_bot_none';

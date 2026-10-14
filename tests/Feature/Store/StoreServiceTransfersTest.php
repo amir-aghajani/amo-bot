@@ -15,6 +15,7 @@ use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\Topic;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Services\CustomerLookup;
 use Illuminate\Support\Carbon;
 use Psr\Http\Message\ResponseInterface;
 use Tests\HttpTestCase;
@@ -98,8 +99,8 @@ final class StoreServiceTransfersTest extends HttpTestCase
         $this->assertRefusedUnder('status', ServiceTransfers::OFF, $this->get($this->storeApi($this->website, "/subscriptions/{$this->service->id}/transfer?telegram_id=7070")));
 
         $this->transfersOn();
-        $this->assertRefusedUnder('telegram_id', ServiceTransfers::NOT_AN_ID, $this->transfer(['telegram_id' => '@sara']));
-        $this->assertRefusedUnder('telegram_id', ServiceTransfers::UNKNOWN, $this->transfer(['telegram_id' => '9999']));
+        $this->assertRefusedUnder('telegram_id', CustomerLookup::NOT_AN_ID, $this->transfer(['telegram_id' => '@sara']));
+        $this->assertRefusedUnder('telegram_id', CustomerLookup::UNKNOWN, $this->transfer(['telegram_id' => '9999']));
         $this->assertRefusedUnder('telegram_id', ServiceTransfers::SAME, $this->transfer(['telegram_id' => self::TELEGRAM_ID]));
 
         $this->service(OrderService::class)->createRenewal($this->ali, $this->service, $this->plan);
@@ -136,14 +137,14 @@ final class StoreServiceTransfersTest extends HttpTestCase
     public function testACustomerLooksUpTenIdsInTenMinutesAtMost(): void
     {
         $this->transfersOn();
-        for ($i = 0; $i < ServiceTransfers::LOOKUPS; $i++) {
+        for ($i = 0; $i < CustomerLookup::LOOKUPS; $i++) {
             self::assertSame(200, $this->get($this->storeApi($this->website, "/subscriptions/{$this->service->id}/transfer?telegram_id=7070"))->getStatusCode());
         }
 
         $response = $this->transfer(['telegram_id' => self::SARA]);
 
         self::assertSame(429, $response->getStatusCode(), (string) $response->getBody());
-        self::assertSame((string) ServiceTransfers::LOOKUP_WINDOW, $response->getHeaderLine('Retry-After'));
+        self::assertSame((string) CustomerLookup::LOOKUP_WINDOW, $response->getHeaderLine('Retry-After'));
         self::assertSame($this->ali->id, $this->service->fresh()?->user_id);
     }
 

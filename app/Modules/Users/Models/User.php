@@ -221,6 +221,21 @@ class User extends Model
     }
 
     /**
+     * Who they are as another customer can tell — whom a service or money goes to, or came from: «Sara Ahmadi (@sara)»,
+     * the name or the handle alone, else the Telegram id (else «#12», their number in the shop). Never their email.
+     */
+    public function shownAs(): string
+    {
+        $name = $this->name();
+        $handle = $this->handle() === null ? null : '@' . $this->handle();
+
+        return match (true) {
+            $name !== null && $handle !== null => "{$name} ({$handle})",
+            default => $name ?? $handle ?? ($this->telegram_id !== null ? (string) $this->telegram_id : "#{$this->id}"),
+        };
+    }
+
+    /**
      * Narrows `$query` to customers matching a search term (already normalised, Page::term()): name, handle (a leading
      * "@" allowed) and email by substring, a Telegram id exactly. Every list searches customers this way.
      *

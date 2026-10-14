@@ -269,7 +269,8 @@ function botTextsReference(): array
         $lines[] = '| `%' . $name . '%` | «' . cell($meaning) . '» | ' . cell(htmlspecialchars($sample, ENT_NOQUOTES)) . ' |';
     }
 
-    // An agent's shop neither lists nor rewords what only the main bot says (its agency's texts).
+    // An agent's shop neither lists nor rewords what only the main bot says (its agency's texts), nor the main shop what
+    // only an agent's bot says (its selling suspended).
     $agentShop = (new Bot())->forceFill(['id' => Bot::MAIN + 1]);
     foreach (TextCatalog::GROUPS as $group => $title) {
         $texts = array_values(array_filter(BotText::cases(), static fn(BotText $text): bool => TextCatalog::spec($text)->group === $group));
@@ -281,7 +282,8 @@ function botTextsReference(): array
                 $variables[] = '`%' . $name . '%`' . ($own === null ? '' : ' («' . $own . '»)') . (in_array($name, $spec->required, true) ? ' (required)' : '');
             }
             $mainOnly = !CurrentBot::run($agentShop, static fn(): bool => TextCatalog::says($text));
-            $lines[] = '| `' . $text->value . '` | «' . cell($spec->title) . '»' . ($mainOnly ? ' (main bot only)' : '') . ' | `' . $spec->kind->value . '` | «' . cell($spec->description) . '» | ' . ($variables === [] ? '—' : cell(implode(', ', $variables))) . ' |';
+            $agentOnly = !CurrentBot::run(Bot::MAIN, static fn(): bool => TextCatalog::says($text));
+            $lines[] = '| `' . $text->value . '` | «' . cell($spec->title) . '»' . ($mainOnly ? ' (main bot only)' : '') . ($agentOnly ? " (agents' bots only)" : '') . ' | `' . $spec->kind->value . '` | «' . cell($spec->description) . '» | ' . ($variables === [] ? '—' : cell(implode(', ', $variables))) . ' |';
         }
     }
 

@@ -27,6 +27,8 @@ const AGENT: AgentRow = {
   balance: '0.00',
   bot: { id: 2, username: 'agent_shop_bot', title: 'فروشگاه نماینده', status: 'active', connected: true, problem: null, traffic_balance: 10 * 1024 ** 3, connected_at: '2026-09-02T10:00:00Z' },
   counts: { customers: 0, sold: 0, active: 0 },
+  standing: null,
+  hidden: { servers: 0, plans: 0 },
 }
 
 /** A customer's wallet on their page, its ledger read. */

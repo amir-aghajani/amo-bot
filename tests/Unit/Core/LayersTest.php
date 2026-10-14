@@ -32,7 +32,9 @@ final class LayersTest extends TestCase
         'Agency' => ['Auth', 'Bots', 'Notifications', 'Orders', 'Payments', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
         // An actor may be a customer — one of the shop's admins —, named by who reads the decision (Users).
         'Auth' => ['Bots', 'Users'],
-        // A bot's agent, its traffic and what it sold (Bot::stats()); a token's bot id (Telegram's BotToken).
+        // A bot's agent, its traffic — and whether it pays for a sale, in Agency's TrafficShortException's words and the bot's
+        // for traffic (Bot::trafficRefusal(), Telegram's Messages) — and what it sold (Bot::stats()); a token's bot id
+        // (Telegram's BotToken).
         'Bots' => ['Agency', 'Orders', 'Subscriptions', 'Telegram', 'Users'],
         // A plan sold or in use is not deleted: its orders and services counted (Orders, Subscriptions); its button in the
         // bot's plan list is drawn in one of the bot's colours (Telegram's KeyboardLayout::STYLES); the custom builder's
@@ -52,7 +54,7 @@ final class LayersTest extends TestCase
         // A refund takes an agent's traffic back (Agency), and the cashback the order earned out of what it gives (Rewards);
         // money that came in earns a referrer (Referrals). A checkout may meet a code whose last use went to someone else in
         // the same moment (Discounts' refusal, which it lets through to its door).
-        'Payments' => ['Agency', 'Auth', 'Bots', 'Discounts', 'Notifications', 'Orders', 'Referrals', 'Rewards', 'Telegram', 'Users'],
+        'Payments' => ['Agency', 'Auth', 'Bots', 'Discounts', 'Notifications', 'Orders', 'Referrals', 'Rewards', 'Settings', 'Telegram', 'Users'],
         // A server with services is not deleted (Subscriptions); a panel down or up is the report group's news (Telegram).
         'Providers' => ['Bots', 'Subscriptions', 'Telegram'],
         // A renewal earns at a rate of its own and a referral's first purchase is one of their orders (Orders); the start

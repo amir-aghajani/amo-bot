@@ -147,6 +147,8 @@ final class StoreReceiptsTest extends HttpTestCase
 
     public function testACustomerUploadsTenReceiptsAnHourAtMost(): void
     {
+        // Several receipts in review at once: the shop takes them.
+        $this->botSettings('payments', ['receipt_single' => false]);
         $payments = [];
         foreach (range(1, CustomerPictures::UPLOADS + 1) as $n) {
             $payments[] = $this->cardPayment($this->topUpOrder($this->customer, ($n * 10000) . '.00'), $this->card);
@@ -302,6 +304,8 @@ final class StoreReceiptsTest extends HttpTestCase
     public function testAReceiptTelegramTurnsDownAsAPhotoOrOneGoneGoesToTheGroupAsText(): void
     {
         $this->reportGroup();
+        // Two receipts in review at once: the shop takes them.
+        $this->botSettings('payments', ['receipt_single' => false]);
         $first = $this->transfer('first');
         $this->sendReceipt($first, 'receipt.png');
         $this->telegram()->fail(400, 'Bad Request: PHOTO_INVALID_DIMENSIONS');
@@ -339,7 +343,7 @@ final class StoreReceiptsTest extends HttpTestCase
     /** The checkout of the plan by card, as the website makes it: the payment the receipt is for. */
     private function transfer(string $key = 'card-1'): Payment
     {
-        $response = $this->send('POST', $this->storeApi($this->website, '/orders'), ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'method_id' => $this->card->id], ['Idempotency-Key' => $key]);
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: $key);
         $id = $this->decode($response)['checkout']['transfer']['payment_id'] ?? self::fail((string) $response->getBody());
 
         return Payment::query()->findOrFail($id);

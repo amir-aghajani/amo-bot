@@ -9,6 +9,7 @@ use App\Modules\Catalog\DTO\Package;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Discounts\Enums\DiscountSource;
+use App\Modules\Orders\Enums\ManualPayment;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
@@ -19,6 +20,7 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Users\Models\User;
+use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Traffic;
 use Illuminate\Database\Eloquent\Builder;
@@ -81,6 +83,9 @@ use Illuminate\Support\Carbon;
  * @property int|null $discount_code_id The code it was made with: one of the code's uses while it is not cancelled
  * @property string|null $notes Why the delivery failed (safe for any reader of the shop) or why it was cancelled
  * @property string|null $diagnosis The owner-only detail of a panel that failed the delivery (OrderDirectory::notes())
+ * @property string|null $created_by Who made it by hand for its customer (Services\ManualOrders): the name a decision
+ *                                   keeps; null for an order the customer made
+ * @property string|null $support_note The note support wrote on an order it made
  * @property Carbon|null $fulfilled_at
  * @property Carbon|null $taken_back_at When a refund took back what the renewal or extra gave its service — once
  * @property Carbon $created_at
@@ -134,6 +139,8 @@ class Order extends Model
         'discount_code_id',
         'notes',
         'diagnosis',
+        'created_by',
+        'support_note',
         'fulfilled_at',
         'taken_back_at',
     ];
@@ -186,7 +193,7 @@ class Order extends Model
     private const EVER_PAID = [...self::KEPT, OrderStatus::Refunded->value];
 
     /** A built service in words (builtName()): its GB, then its days. */
-    private const BUILT = 'سرویس دلخواه · %s گیگ · %s روز';
+    private const BUILT = 'سرویس دلخواه · %s · %s';
 
     /**
      * Orders that count as a sale (SOLD).
@@ -283,6 +290,19 @@ class Order extends Model
             ->whereDoesntHave('payments', static fn(Builder $payment) => $payment->where('status', PaymentStatus::AwaitingReview->value));
     }
 
+    /**
+     * Unpaid orders an idle checkout's expiry may drop (Tasks\ExpireOrdersTask): pending, and none of their money with
+     * support — no receipt in review, nor a card transfer taken in support's private chat (Payment::isWithSupport()).
+     *
+     * @return Builder<static>
+     */
+    public static function expirable(): Builder
+    {
+        return static::query()
+            ->where('status', OrderStatus::Pending->value)
+            ->whereDoesntHave('payments', Payment::whereWithSupport(...));
+    }
+
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
@@ -357,10 +377,13 @@ class Order extends Model
         return $this->isBuilt() ? self::builtName(intdiv((int) $this->traffic_bytes, Traffic::GIGABYTE), (int) $this->days) : null;
     }
 
-    /** A package the customer built, in words: «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز» — an order's, or a checkout's before one. */
+    /**
+     * A package the customer built, in words: «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز» — an order's, or a checkout's before one.
+     * One support built may have no quota or no end (Services\ManualOrders): «حجم نامحدود», «بدون پایان» in their place.
+     */
     public static function builtName(int $gb, int $days): string
     {
-        return sprintf(self::BUILT, Persian::number($gb), Persian::number($days));
+        return sprintf(self::BUILT, $gb > 0 ? Persian::number($gb) . ' گیگ' : 'حجم نامحدود', $days > 0 ? Persian::number($days) . ' روز' : 'بدون پایان');
     }
 
     /**
@@ -395,6 +418,23 @@ class Order extends Model
     public function paidBy(): ?Payment
     {
         return $this->payments->first(static fn(Payment $payment): bool => $payment->isPaid());
+    }
+
+    /**
+     * How an order support made by hand for its customer (Services\ManualOrders) was paid: free when it has no price, else
+     * by its payment's method — the wallet, or the outside row. Null for an order the customer made. Its payments (and
+     * their methods) must be loaded.
+     */
+    public function manualPayment(): ?ManualPayment
+    {
+        if ($this->created_by === null) {
+            return null;
+        }
+        if (!Money::isPositive($this->amount)) {
+            return ManualPayment::Free;
+        }
+
+        return $this->payments->contains(static fn(Payment $payment): bool => $payment->method->isWallet()) ? ManualPayment::Wallet : ManualPayment::Outside;
     }
 
     /**

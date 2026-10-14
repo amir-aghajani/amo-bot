@@ -32,7 +32,7 @@ final class FakeTelegram
     /** An agent's bot's token (Fixtures::agentBot()): its calls carry it in their URL — see tokenOf(). */
     public const AGENT_TOKEN = '777000:AAagent-bot-token-for-the-tests-0123';
 
-    /** @var list<array{method: string, params: array<string, string>, files: array<string, string>, request: RequestInterface}> */
+    /** @var list<array{method: string, params: array<string, string>, files: array<string, string>, request: RequestInterface, options: array<string, mixed>}> */
     public array $history = [];
 
     /** @var list<Response> */
@@ -59,7 +59,7 @@ final class FakeTelegram
             parse_str((string) $request->getBody(), $params);
         }
         $method = basename($request->getUri()->getPath());
-        $this->history[] = ['method' => $method, 'params' => $params, 'files' => $files, 'request' => $request];
+        $this->history[] = ['method' => $method, 'params' => $params, 'files' => $files, 'request' => $request, 'options' => $options];
 
         if (isset($this->answers[$method])) {
             $answer = ($this->answers[$method])($params, self::tokenIn($request));
@@ -205,6 +205,19 @@ final class FakeTelegram
         }
 
         return $said;
+    }
+
+    /** @return list<list<array<string, mixed>>> The inline buttons under the last message sent to a chat, row by row. */
+    public function buttonsSentTo(int $chat): array
+    {
+        $buttons = [];
+        foreach ($this->history as $call) {
+            if ($call['method'] === 'sendMessage' && ($call['params']['chat_id'] ?? null) === (string) $chat) {
+                $buttons = self::markupOf($call['params'])['inline_keyboard'] ?? [];
+            }
+        }
+
+        return $buttons;
     }
 
     /** The message the n-th call replies to; null when it is no reply. */

@@ -1,9 +1,11 @@
 import type {
   AgencyLevelRow,
+  AgencyStanding,
   BotSettingsData,
   BotSettingsResponse,
   CustomerAccount,
   CustomerGroupRow,
+  DashboardResponse,
   DiscountCodeRow,
   DriverDescription,
   DriverValues,
@@ -12,12 +14,14 @@ import type {
   LoyaltyStanding,
   ManualMethodRow,
   OrderRow,
+  PaymentCardRow,
   PaymentRow,
   PlanCategoryRow,
   PlanRow,
   QrBackgroundInfo,
   ReviewRow,
   SaleRow,
+  ServerMigrationRow,
   ServerRow,
   SubscriptionRow,
   TestAccountRow,
@@ -49,6 +53,18 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     support_contact: '',
     topup_min: 10000,
     topup_presets: [50000, 100000],
+    topup_random_count: 0,
+    topup_random_min: 50000,
+    topup_random_max: 500000,
+    topup_random_round: 1000,
+    topup_unique_max: 0,
+    wallet_transfer_enabled: false,
+    wallet_transfer_min: 10000,
+    wallet_transfer_max: 5000000,
+    wallet_transfer_daily: 10000000,
+    card_protect: true,
+    card_to_support: false,
+    receipt_single: true,
     qr_enabled: true,
     carry_traffic: false,
     renew_window_days: 0,
@@ -261,6 +277,7 @@ export function orderRow(overrides: Partial<OrderRow> = {}): OrderRow {
     days: null,
     devices: null,
     notes: null,
+    manual: null,
     payments: [{ id: 7, status: 'awaiting_review', amount: '50000.00', gateway: 'manual', method: 'کارت به کارت (ملت)', paid_at: null, created_at: '2026-10-06T08:55:00Z' }],
     paid_at: null,
     fulfilled_at: null,
@@ -328,6 +345,11 @@ export function serverRow(overrides: Partial<ServerRow> = {}): ServerRow {
       verify_tls: true,
       timeout: 30,
       subscription_url: '',
+      proxy_enabled: false,
+      proxy_host: '',
+      proxy_port: 1080,
+      proxy_username: '',
+      proxy_password: { set: false, hint: '' },
       capacity: '',
       notes: '',
       is_active: true,
@@ -343,6 +365,33 @@ export function serverRow(overrides: Partial<ServerRow> = {}): ServerRow {
     counts: { inbounds: 2, selectable_inbounds: 1, active_subscriptions: 4, shop_active_subscriptions: 4 },
     created_at: '2026-09-01T10:00:00Z',
     updated_at: '2026-10-06T09:00:00Z',
+    ...overrides,
+  }
+}
+
+/** Move 5 of server 1's services to «هلند» (server 3), running: four services to go through, none yet. */
+export function serverMigrationRow(overrides: Partial<ServerMigrationRow> = {}): ServerMigrationRow {
+  return {
+    id: 5,
+    source: { id: 1, name: 'آلمان' },
+    target: { id: 3, name: 'هلند' },
+    mode: 'migrate',
+    include_disabled: false,
+    notify: true,
+    plans: null,
+    status: 'running',
+    total: 4,
+    moved: 0,
+    failed: 0,
+    skipped: 0,
+    left_behind: 0,
+    waiting_reason: null,
+    reason: null,
+    last_failure: null,
+    reviewer: 'root',
+    created_at: '2026-10-14T09:00:00Z',
+    started_at: '2026-10-14T09:00:01Z',
+    finished_at: null,
     ...overrides,
   }
 }
@@ -379,6 +428,17 @@ export function serverDriverRow(): DriverDescription {
       serverField('verify_tls', { type: 'toggle', label: 'بررسی گواهی TLS', required: true, advanced: true, default: true }),
       serverField('timeout', { type: 'number', label: 'تایم‌اوت اتصال', required: true, advanced: true, unit: 'ثانیه', min: 5, max: 120, default: 30 }),
       serverField('subscription_url', { type: 'url', label: 'آدرس اشتراک', advanced: true }),
+      serverField('proxy_enabled', { type: 'toggle', label: 'اتصال از طریق پراکسی SOCKS5', required: true, advanced: true, default: false }),
+      serverField('proxy_host', { label: 'آدرس پراکسی', required: true, advanced: true, when: { proxy_enabled: ['true'] }, ltr: true }),
+      serverField('proxy_port', { type: 'number', label: 'پورت پراکسی', required: true, advanced: true, when: { proxy_enabled: ['true'] }, min: 1, max: 65535, default: 1080 }),
+      serverField('proxy_username', { label: 'نام کاربری پراکسی', advanced: true, when: { proxy_enabled: ['true'] }, ltr: true }),
+      serverSecret('proxy_password', 'رمز پراکسی', {
+        required: false,
+        advanced: true,
+        when: { proxy_enabled: ['true'] },
+        bound_to: ['proxy_host', 'proxy_port'],
+        moved: 'آدرس یا پورت پراکسی عوض شده است؛ رمز پراکسی را دوباره وارد کنید.',
+      }),
       serverField('capacity', { type: 'number', label: 'ظرفیت', advanced: true, min: 0 }),
       serverField('notes', { type: 'textarea', label: 'یادداشت', advanced: true }),
       serverField('is_active', { type: 'toggle', label: 'فعال', required: true, advanced: true, default: true }),
@@ -442,6 +502,7 @@ export function planRow(overrides: Partial<PlanRow> = {}): PlanRow {
     servers: [{ server: { id: 1, name: 'آلمان', is_active: true, serves_subscriptions: true }, all_inbounds: true, inbounds: [], unsellable_reason: null }],
     unsellable_reason: null,
     is_active: true,
+    hidden_by_owner: false,
     sort: 1,
     counts: { active_subscriptions: 4, sales: 6, orders: 7, subscriptions: 5 },
     created_at: '2026-09-01T10:00:00Z',
@@ -465,7 +526,40 @@ export function levelRow(overrides: Partial<AgencyLevelRow> = {}): AgencyLevelRo
   return { id: 1, name: 'طلایی', price_per_gb: '3000.00', sort: 1, counts: { agents: 0 }, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-10-06T09:00:00Z', ...overrides }
 }
 
-/** Card-to-card method 5, the masked card and holder its summary, no payment made with it yet. */
+/** An agent's terms of selling: no end, no monthly minimum, selling — in Mehr 1405, nothing bought yet, warned three days ahead. */
+export function agencyStanding(overrides: Partial<AgencyStanding> = {}): AgencyStanding {
+  return {
+    expires_at: null,
+    monthly_minimum: null,
+    month: { name: 'مهر ۱۴۰۵', purchased: '0.00', ends_at: '2026-10-22T20:30:00Z', judged: false },
+    suspension: null,
+    warn_days: 3,
+    ...overrides,
+  }
+}
+
+/** A dashboard of the last 30 days with nothing in them: no sale, no customer, nothing waiting, no agent's concern. */
+export function dashboardResponse(overrides: Partial<DashboardResponse> = {}): DashboardResponse {
+  const none = { value: 0, previous: 0 }
+  return {
+    range: { days: 30, from: '2026-09-07', to: '2026-10-06' },
+    generated_at: '2026-10-06T09:00:00Z',
+    kpis: { revenue: { value: '0.00', previous: '0.00' }, orders: none, new_users: none, active_subscriptions: 0, users_total: 0 },
+    series: [],
+    attention: { payments_to_review: 0, stuck_orders: 0, open_tickets: 0, pending_reviews: 0, pending_orders: 0, servers_with_errors: 0, expiring_soon: 0 },
+    traffic_shortage: null,
+    agency_standing: null,
+    expiring_days: 3,
+    recent_orders: [],
+    recent_users: [],
+    ...overrides,
+  }
+}
+
+/**
+ * Card-to-card method 5 for any amount, its one card 11 (امیر رضایی's, no cap), no payment made with it yet; the shop
+ * shows its cards (not support's private chat).
+ */
 export function cardMethodRow(overrides: Partial<ManualMethodRow> = {}): ManualMethodRow {
   return {
     id: 5,
@@ -474,15 +568,28 @@ export function cardMethodRow(overrides: Partial<ManualMethodRow> = {}): ManualM
     kind: 'manual',
     builtin: false,
     label: 'کارت به کارت (ملت)',
-    summary: '6037 •••• •••• 1119 · امیر رضایی',
-    config: { card_number: '6037997700001119', card_holder: 'امیر رضایی', instructions: '', auto_approve_after: 0 },
+    summary: null,
+    config: { instructions: '', auto_approve_after: 0 },
+    min_amount: null,
+    max_amount: null,
     enabled: true,
     sort: 2,
     counts: { payments: 0 },
     created_at: '2026-09-01T10:00:00Z',
     updated_at: '2026-10-06T09:00:00Z',
+    cards: [paymentCardRow()],
+    to_support: false,
     ...overrides,
   }
+}
+
+/**
+ * Card 11 of a card method: امیر رضایی's, switched on, no bank, no cap, nothing taken today, no payment shown it — named
+ * in one line as the server names it (PaymentCard::summary()), of its number, holder and bank as overridden.
+ */
+export function paymentCardRow(overrides: Partial<PaymentCardRow> = {}): PaymentCardRow {
+  const card = { id: 11, number: '6037997700001119', holder: 'امیر رضایی', bank: null, enabled: true, daily_cap: null, today: '0.00', payments: 0, ...overrides }
+  return { summary: [`${card.number.slice(0, 4)} •••• •••• ${card.number.slice(-4)}`, card.holder, card.bank ?? ''].filter((part) => part !== '').join(' · '), ...card }
 }
 
 /**

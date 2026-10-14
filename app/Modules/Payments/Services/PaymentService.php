@@ -17,11 +17,14 @@ use App\Modules\Payments\Contracts\GatewayInterface;
 use App\Modules\Payments\DTO\PaymentInitiation;
 use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Enums\CancelOutcome;
+use App\Modules\Payments\Enums\GatewayKind;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Exceptions\MethodUnavailableException;
 use App\Modules\Payments\Exceptions\PaymentSettledException;
 use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Payments\Models\PaymentCard;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Referrals\Services\ReferralService;
 use App\Modules\Rewards\Services\Cashback;
@@ -38,7 +41,9 @@ use Psr\Log\LoggerInterface;
  * says whether this call made it, so of two decisions at once (support and the auto-approve timer, two refund clicks)
  * exactly one takes effect — and only that one tells anyone (PaymentActions). Settling a payment and claiming its order
  * (pending → paid) are one transaction; the delivery runs after the commit, since it talks to a panel. Receipts and
- * their verdicts are reported to the report group in the same transaction as the move.
+ * their verdicts are reported to the report group in the same transaction as the move. A settlement and a refund move
+ * money, and are tried again on a deadlock (Core\Database\Ledger::ATTEMPTS): nothing in them but database work — the
+ * gateway's part included (GatewayInterface::settle()) —, the customer told after the commit.
  */
 final class PaymentService
 {
@@ -56,6 +61,7 @@ final class PaymentService
 
     public function __construct(
         private readonly GatewayRegistry $gateways,
+        private readonly PaymentCards $cards,
         private readonly OrderService $orders,
         private readonly WalletService $wallet,
         private readonly TrafficPool $pool,
@@ -68,13 +74,17 @@ final class PaymentService
     ) {}
 
     /**
-     * Starts paying an open order. The wallet settles at once: the payment is made, charged and the order paid in one
-     * transaction, then delivered — losing the order to another payment at that moment leaves nothing behind. A card
-     * transfer waits for its receipt: the order's open payment with that card is reused, else a new one is made.
+     * Starts paying an open order, at an amount within the method's bounds. The wallet settles at once: the payment is
+     * made, charged and the order paid in one transaction, then delivered — losing the order to another payment at that
+     * moment leaves nothing behind. A card transfer waits for its receipt: the order's open payment with that method is
+     * reused — with the card it was shown —, else a new one is made with a card picked for it (PaymentCards::pick()), or
+     * none while the shop takes card payments in support's private chat (openPayment()).
      *
      * @return array{payment: Payment, initiation: PaymentInitiation}
      * @throws OrderNotPayableException the order is not open any more, or is for a service handed to another customer
      *                                  since (Order::serviceChangedHands()); nothing was written
+     * @throws MethodUnavailableException 422 on `method_id`: the amount is outside the method's bounds, or no card of it
+     *                                    has room for it today; nothing was written
      */
     public function createForOrder(Order $order, PaymentMethod $method): array
     {
@@ -86,11 +96,16 @@ final class PaymentService
         if ((!$method->enabled && !$free) || !PaymentMethods::pays($method, $order->type)) {
             throw new \InvalidArgumentException("Payment method #{$method->id} cannot pay order #{$order->id}.");
         }
+        if (!PaymentMethods::within($method, $order->amount)) {
+            throw MethodUnavailableException::outOfBounds($method);
+        }
         $gateway = $this->gateways->forMethod($method);
-        $initiation = $gateway->initiate();
 
-        if (!$initiation->isInstant()) {
-            return ['payment' => $this->openPayment($order, $method), 'initiation' => $initiation];
+        // Anything but an instant gateway waits for the customer: a card transfer for its receipt.
+        if ($this->gateways->kind($method->driver) !== GatewayKind::Instant) {
+            $payment = $this->openPayment($order, $method);
+
+            return ['payment' => $payment, 'initiation' => $gateway->initiate($payment)];
         }
 
         try {
@@ -98,7 +113,7 @@ final class PaymentService
                 $payment = $this->newPayment($order, $method);
 
                 return [$payment, $this->settle($payment, $gateway, null, PaymentStatus::open())];
-            });
+            }, Ledger::ATTEMPTS);
         } catch (OrderNotPayableException $e) {
             $this->logger->info('Order {order} closed before its {gateway} payment settled: rolled back', ['order' => $order->id, 'gateway' => $method->driver]);
 
@@ -108,7 +123,33 @@ final class PaymentService
             $this->settled($payment);
         }
 
-        return ['payment' => $payment->refresh(), 'initiation' => $initiation];
+        return ['payment' => $payment->refresh(), 'initiation' => $gateway->initiate($payment)];
+    }
+
+    /**
+     * Pays an order support made by hand for its customer (Orders\Services\ManualOrders) at once, under `$reviewer`'s
+     * name: from the customer's wallet (the caller asks whether it is switched on), by the outside row (money support took
+     * outside the shop), or for a free one by the wallet row taking nothing — whatever the method's least and most amount
+     * (PaymentMethods::within()), which hold a customer's own checkout, not support's deliberate order. Settled as the
+     * wallet's checkout is (createForOrder()): the payment, its charge and the order's claim in one transaction, then the
+     * referrer's commission and the delivery. A wallet spent meanwhile fails the payment with the gateway's words, the
+     * order left pending.
+     *
+     * @throws OrderNotPayableException the order is not open any more; nothing was written
+     */
+    public function payBySupport(Order $order, PaymentMethod $method, string $reviewer): Payment
+    {
+        $gateway = $this->gateways->forMethod($method);
+        [$payment, $result] = $this->db->transaction(function () use ($order, $method, $gateway, $reviewer): array {
+            $payment = $this->newPayment($order, $method);
+
+            return [$payment, $this->settle($payment, $gateway, $reviewer, PaymentStatus::open())];
+        }, Ledger::ATTEMPTS);
+        if ($result->success) {
+            $this->settled($payment);
+        }
+
+        return $payment->refresh();
     }
 
     /**
@@ -126,7 +167,7 @@ final class PaymentService
         }
 
         try {
-            $result = $this->db->transaction(fn(): PaymentResult => $this->settle($payment, $this->gateways->forPayment($payment), $reviewer, $from));
+            $result = $this->db->transaction(fn(): PaymentResult => $this->settle($payment, $this->gateways->forPayment($payment), $reviewer, $from), Ledger::ATTEMPTS);
         } catch (PaymentSettledException) {
             $this->logger->info('Payment {id} was decided by another process while being approved', ['id' => $payment->id]);
 
@@ -191,8 +232,8 @@ final class PaymentService
 
     /**
      * The payments screen's cancel: drops an unpaid payment and, with it, its open order and the order's other open
-     * payments — unless another payment of the order has a receipt in review, which may be the money: then this payment
-     * goes alone and the rest is left for support.
+     * payments — unless another payment of the order may be the money, a receipt in review or a card transfer taken in
+     * support's private chat (Payment::isWithSupport()): then this payment goes alone and the rest is left for support.
      */
     public function cancel(Payment $payment, string $reviewer, ?string $note): CancelOutcome
     {
@@ -210,10 +251,11 @@ final class PaymentService
 
     /**
      * Cancels, quietly, an order the customer walked away from — it and its payments untouched since `$idleSince` — with
-     * its unpaid payments (ExpireOrdersTask; a service's previous owner at once, ServiceTransfers); never while a receipt
-     * of it waits for support. Under locks on the order and its payments, so a receipt arriving at the same moment either
-     * comes first or finds it cancelled. Uploaded receipts of those payments are deleted after the commit. `$note` says
-     * why (an expired code hold, unpaid in time, the service handed on). True when this call cancelled it.
+     * its unpaid payments (ExpireOrdersTask; a service's previous owner at once, ServiceTransfers); never while money of it
+     * may be with support (Payment::isWithSupport(): a receipt in review, a card transfer taken in support's private chat).
+     * Under locks on the order and its payments, so a receipt arriving at the same moment either comes first or finds it
+     * cancelled. Uploaded receipts of those payments are deleted after the commit. `$note` says why (an expired code hold,
+     * unpaid in time, the service handed on). True when this call cancelled it.
      */
     public function expire(Order $order, \DateTimeInterface $idleSince, string $note = OrderService::NOTE_EXPIRED): bool
     {
@@ -223,8 +265,8 @@ final class PaymentService
             if ($row === null || $row->status !== OrderStatus::Pending || $row->updated_at > $idleSince) {
                 return false;
             }
-            $payments = $row->payments()->lockForUpdate()->get();
-            $kept = $payments->contains(static fn(Payment $payment): bool => $payment->status === PaymentStatus::AwaitingReview
+            $payments = $row->payments()->with('method')->lockForUpdate()->get();
+            $kept = $payments->contains(static fn(Payment $payment): bool => $payment->isWithSupport()
                 || ($payment->status->isOpen() && $payment->updated_at > $idleSince));
             if ($kept) {
                 return false;
@@ -321,12 +363,17 @@ final class PaymentService
             }
 
             return true;
-        });
+        }, Ledger::ATTEMPTS);
     }
 
     /**
-     * The order's open payment with that method (touched, so its expiry restarts) or a new one, under a lock on the order:
-     * two taps make one payment.
+     * The order's open card payment with that method (touched, so its expiry restarts) or a new one, under a lock on the
+     * order: two taps make one payment. A new one is shown a card picked for it — none while the shop takes card payments
+     * in support's private chat (PaymentCards::toSupport()) —, and a top-up's asks a few Toman more at random
+     * (PaymentCards::amountFor()). An open one keeps what it was shown; one shown no card gets a card once the shop shows
+     * cards again (as one made before cards does), at the sum it asks.
+     *
+     * @throws MethodUnavailableException no card of the method has room for the amount today
      */
     private function openPayment(Order $order, PaymentMethod $method): Payment
     {
@@ -336,12 +383,23 @@ final class PaymentService
             }
 
             $open = $order->payments()->where('payment_method_id', $method->id)->where('status', PaymentStatus::Pending->value)->first();
-            if ($open === null) {
-                return $this->newPayment($order, $method);
-            }
-            $open->touch();
+            $toSupport = $this->cards->toSupport();
+            if ($open !== null && ($open->card_id !== null || $toSupport)) {
+                $open->touch();
 
-            return $open;
+                return $open;
+            }
+            if ($toSupport) {
+                return $this->newPayment($order, $method, null, $this->cards->amountFor($method, null, $order->type, $order->amount));
+            }
+            $card = $this->cards->pick($method, $order->type, $order->amount) ?? throw MethodUnavailableException::noCard($method);
+            if ($open !== null) {
+                $open->forceFill(['card_id' => $card->id])->save();
+
+                return $open;
+            }
+
+            return $this->newPayment($order, $method, $card, $this->cards->amountFor($method, $card, $order->type, $order->amount));
         });
     }
 
@@ -369,7 +427,10 @@ final class PaymentService
         });
     }
 
-    /** Drops the payment and, unless `$sparingReceipts` finds another receipt in review, its order and other open payments. */
+    /**
+     * Drops the payment and, unless `$sparingReceipts` finds another payment of the order whose money may be with support
+     * (Payment::isWithSupport()), its order and other open payments.
+     */
     private function dropping(Payment $payment, string $reviewer, ?string $note, bool $sparingReceipts): CancelOutcome
     {
         return $this->db->transaction(function () use ($payment, $reviewer, $note, $sparingReceipts): CancelOutcome {
@@ -378,8 +439,8 @@ final class PaymentService
             }
             // Locked as they are read: a receipt sent for one of them in the same moment came first, or finds it cancelled.
             $open = array_map(static fn(PaymentStatus $status): string => $status->value, PaymentStatus::open());
-            $others = $payment->order->payments()->whereKeyNot($payment->id)->whereIn('status', $open)->lockForUpdate()->get();
-            if ($sparingReceipts && $others->contains(static fn(Payment $other): bool => $other->status === PaymentStatus::AwaitingReview)) {
+            $others = $payment->order->payments()->whereKeyNot($payment->id)->whereIn('status', $open)->with('method')->lockForUpdate()->get();
+            if ($sparingReceipts && $others->contains(static fn(Payment $other): bool => $other->isWithSupport())) {
                 return CancelOutcome::Alone;
             }
             if (!$this->orders->cancel($payment->order, $note ?? OrderService::NOTE_CANCELLED_BY_SUPPORT)) {
@@ -404,13 +465,15 @@ final class PaymentService
         return $dropped;
     }
 
-    private function newPayment(Order $order, PaymentMethod $method): Payment
+    /** A pending payment of the order: shown `$card` (a card transfer's), asking `$amount` — the order's own by default. */
+    private function newPayment(Order $order, PaymentMethod $method, ?PaymentCard $card = null, ?string $amount = null): Payment
     {
         return Payment::query()->create([
             'order_id' => $order->id,
             'payment_method_id' => $method->id,
+            'card_id' => $card?->id,
             'status' => PaymentStatus::Pending,
-            'amount' => $order->amount,
+            'amount' => $amount ?? $order->amount,
         ]);
     }
 

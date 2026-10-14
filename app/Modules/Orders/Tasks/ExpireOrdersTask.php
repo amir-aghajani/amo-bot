@@ -13,7 +13,8 @@ use App\Modules\Payments\Services\PaymentService;
 /**
  * Drops unpaid orders nobody touched for EXPIRE_HOURS, quietly (PaymentService::expire()); an order made with a discount
  * code goes sooner, once the code's hold is over (DiscountSettings::holdMinutes()), which frees its use. An order whose
- * receipt waits for review is never dropped. Also forgets request keys older than RequestKey::KEEP_DAYS. Runs every
+ * money may be with support — a receipt in review, a card transfer taken in support's private chat — is never dropped
+ * (Order::expirable()): support decides it. Also forgets request keys older than RequestKey::KEEP_DAYS. Runs every
  * INTERVAL_MINUTES in every shop.
  */
 final class ExpireOrdersTask implements Task
@@ -33,14 +34,14 @@ final class ExpireOrdersTask implements Task
     {
         $idleSince = now()->subHours(self::EXPIRE_HOURS);
 
-        foreach (Order::payable()->where('updated_at', '<=', $idleSince)->get() as $order) {
+        foreach (Order::expirable()->where('updated_at', '<=', $idleSince)->get() as $order) {
             $this->payments->expire($order, $idleSince);
         }
 
         $hold = $this->discounts->holdMinutes();
         if ($hold > 0) {
             $heldSince = now()->subMinutes($hold);
-            foreach (Order::payable()->whereNotNull('discount_code_id')->where('updated_at', '<=', $heldSince)->get() as $order) {
+            foreach (Order::expirable()->whereNotNull('discount_code_id')->where('updated_at', '<=', $heldSince)->get() as $order) {
                 $this->payments->expire($order, $heldSince, self::NOTE_CODE_HOLD);
             }
         }

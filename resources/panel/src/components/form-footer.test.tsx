@@ -46,6 +46,7 @@ function ServerForm({ folded = false }: { folded?: boolean }) {
     password: '',
     verify_tls: true,
     timeout: 30,
+    proxy_enabled: false,
     is_active: true,
   })
 

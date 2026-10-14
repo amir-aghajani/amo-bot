@@ -8,7 +8,9 @@ use App\Core\Database\Lease;
 use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Auth\Actor;
+use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Bots\Enums\SellingSuspension;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Orders\Enums\OrderPricing;
@@ -25,7 +27,10 @@ use App\Modules\Reviews\Models\Review;
 use App\Modules\Rewards\Models\LotteryDraw;
 use App\Modules\Rewards\Models\LotteryWinner;
 use App\Modules\Subscriptions\Enums\ExtraKind;
+use App\Modules\Subscriptions\Enums\MigrationMode;
+use App\Modules\Subscriptions\Enums\MigrationStatus;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
+use App\Modules\Subscriptions\Models\ServerMigration;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Support\Enums\TicketAuthor;
 use App\Modules\Support\Models\Ticket;
@@ -36,6 +41,7 @@ use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Modules\Users\Enums\PictureFolder;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Models\WalletTransfer;
 use App\Modules\Users\Services\CustomerPictures;
 use App\Support\Money;
 use App\Support\Persian;
@@ -46,9 +52,11 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Queues what the shop tells its admins' report group (report_messages, sent by ReportSender): sales, renewals,
- * top-ups, receipts and their verdicts, newcomers, agency requests, failed deliveries, panels down and up, ticket
- * conversations and reviews. Each goes to the group of the bot it happened in (servers and the agency to the main bot's),
- * only while a group is connected and the admin wants the topic. Nothing here talks to Telegram.
+ * top-ups and wallet transfers, receipts and their verdicts, newcomers, agency requests and agents' selling suspended
+ * or resumed, failed deliveries, panels down and up, servers' services moved, ticket conversations and reviews. Each
+ * goes to the group of the bot it happened in (servers and the agency to the main bot's), only while a group is
+ * connected and the admin wants the topic. Who of support did something is named as anyone but the owner reads it
+ * (bySupport()). Nothing here talks to Telegram.
  *
  * A report is written in a savepoint of the caller's transaction, so it stands or falls with what it reports. Words
  * that cannot be composed are logged and dropped; a database error goes up to the caller. The wording is fixed here (the
@@ -94,6 +102,7 @@ final class ShopReports
         private readonly ReportGroupState $group,
         private readonly ReportSettings $settings,
         private readonly GatewayRegistry $gateways,
+        private readonly Reviewers $reviewers,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
     ) {}
@@ -158,6 +167,34 @@ final class ShopReports
         });
     }
 
+    /** An agent's bot sells nothing new now (Agency\Services\AgencyStanding): who, which bot, why and what lifts it. */
+    public function agencySuspended(Bot $bot, SellingSuspension $reason): void
+    {
+        $this->report(Bot::MAIN, Topic::Agency, static fn(): array => ['text' => implode("\n", [
+            '⛔️ <b>فروش نماینده متوقف شد</b>',
+            ...self::agentLines($bot),
+            sprintf('📌 %s؛ %s.', $reason->words(), $reason->remedy()),
+            'ربات، پنل و سرویس‌های فعلی مشتری‌هایش کار می‌کنند.',
+        ])]);
+    }
+
+    /** An agent's bot sells again. */
+    public function agencyResumed(Bot $bot): void
+    {
+        $this->report(Bot::MAIN, Topic::Agency, static fn(): array => ['text' => implode("\n", ['✅ <b>فروش نماینده دوباره باز شد</b>', ...self::agentLines($bot)])]);
+    }
+
+    /** @return list<string> An agent's lines in an agency report: the agent as the group reads a customer, and their bot. */
+    private static function agentLines(Bot $bot): array
+    {
+        $agent = $bot->agent;
+
+        return [
+            '👤 ' . ($agent === null ? '—' : self::customer($agent)),
+            '🤖 ' . (($bot->username ?? '') !== '' ? '@' . htmlspecialchars((string) $bot->username) : 'ربات هنوز وصل نشده'),
+        ];
+    }
+
     /**
      * A card-to-card receipt: the customer's picture (copied from the bot, or the website's upload) captioned with what
      * it pays for, with «تایید» / «رد» (ReceiptReview); its verdict will reply to it.
@@ -172,6 +209,12 @@ final class ShopReports
                 '👤 ' . self::customer($customer),
                 self::purpose($payment->order),
                 sprintf('💳 مبلغ: %s · %s', Money::format($payment->amount), self::name($method->label)),
+                // Which of the method's cards it was shown, or support's private chat: where to look for the money.
+                ...match (true) {
+                    $payment->card !== null => ['🏦 کارت: ' . self::field($payment->card->summary())],
+                    $this->gateways->isManual($method) => ['🏦 ' . Payment::TO_SUPPORT],
+                    default => [],
+                },
                 ...self::note(self::CUSTOMER_NOTE, $payment->receipt_note),
             ];
             // Only a receipt sent in the bot is approved on a timer; a website upload always waits for support.
@@ -214,13 +257,26 @@ final class ShopReports
     }
 
     /**
+     * Support dismissed `$count` receipts waiting for review at once (Payments\Services\ReceiptDismissals), each
+     * refused under its own report already: one line saying how many and who, with their note.
+     */
+    public function receiptsDismissed(int $count, Actor $by, ?string $note): void
+    {
+        $this->report(CurrentBot::id(), Topic::Receipts, fn(): array => ['text' => implode("\n", [
+            sprintf('🗑 <b>%s رسید در انتظار بررسی یکجا رد شد</b>', Persian::number($count)),
+            $this->bySupport($by->reviewer),
+            ...self::note(self::SUPPORT_NOTE, $note),
+        ])]);
+    }
+
+    /**
      * An order was delivered: reported in its topic and, when its delivery had failed before, a word under the failure's
      * report, whose retry button goes.
      */
     public function orderDelivered(Order $order): void
     {
         match ($order->type) {
-            OrderType::Purchase => $this->report($order->shop(), Topic::Purchases, static fn(): array => ['text' => self::purchaseText($order)]),
+            OrderType::Purchase => $this->report($order->shop(), Topic::Purchases, fn(): array => ['text' => $this->purchaseText($order)]),
             OrderType::Renewal => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::renewalText($order)]),
             OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::extraText($order)]),
             OrderType::WalletTopUp => $this->report($order->shop(), Topic::Wallet, static fn(): array => ['text' => self::topUpText($order)]),
@@ -250,16 +306,31 @@ final class ShopReports
 
     /**
      * A service changed hands (ServiceTransfers): from whom to whom, which client and where, and who did it — its customer,
-     * or support by name — in «خریدها», the topic of who holds which service, so a transfer nobody expected is noticed.
+     * or support (bySupport()) — in «خریدها», the topic of who holds which service, so a transfer nobody expected is noticed.
      */
     public function serviceTransferred(Subscription $subscription, User $from, Actor $by): void
     {
-        $this->report($subscription->shop(), Topic::Purchases, static fn(): array => ['text' => implode("\n", [
+        $this->report($subscription->shop(), Topic::Purchases, fn(): array => ['text' => implode("\n", [
             sprintf('🔁 <b>سرویس به مشتری دیگری منتقل شد</b> · اشتراک #%d', $subscription->id),
             '👤 از: ' . self::customer($from),
             '👤 به: ' . self::customer($subscription->user),
             ...self::heldService($subscription),
-            $by->isCustomer() ? '✋ به درخواست خود مشتری' : '🎧 توسط پشتیبانی: ' . self::name($by->reviewer ?? 'پشتیبانی'),
+            $by->isCustomer() ? '✋ به درخواست خود مشتری' : $this->bySupport($by->reviewer),
+        ])]);
+    }
+
+    /**
+     * «انتقال موجودی» (Users\Services\WalletTransfers): who sent how much to whom, and both balances after it, in «شارژ کیف
+     * پول» beside the top-ups — money moved between customers is noticed where money comes in.
+     */
+    public function walletTransferred(WalletTransfer $transfer): void
+    {
+        $this->report($transfer->shop(), Topic::Wallet, static fn(): array => ['text' => implode("\n", [
+            sprintf('💸 <b>انتقال موجودی بین مشتری‌ها</b> · انتقال #%d', $transfer->id),
+            '👤 از: ' . self::customer($transfer->sender),
+            '👤 به: ' . self::customer($transfer->recipient),
+            '💳 مبلغ: ' . Money::format($transfer->amount),
+            sprintf('👛 موجودی فرستنده: %s · گیرنده: %s', Money::format($transfer->sender->balance()), Money::format($transfer->recipient->balance())),
         ])]);
     }
 
@@ -443,6 +514,44 @@ final class ShopReports
         ]);
     }
 
+    /**
+     * The owner began moving a server's services to another («انتقال سرویس‌ها», ServerMigrations): from where to where,
+     * how, how many, and by whom.
+     */
+    public function migrationStarted(ServerMigration $job): void
+    {
+        $this->report(Bot::MAIN, Topic::Errors, fn(): array => ['text' => implode("\n", [
+            sprintf('🚚 <b>انتقال سرویس‌های سرور «%s» به سرور «%s» شروع شد</b>', self::name($job->source->name ?? '—'), self::name($job->target->name ?? '—')),
+            '🧭 حالت: ' . $job->mode->label() . ($job->mode === MigrationMode::Rescue ? ' (بدون تماس با پنل سرور مبدا)' : ''),
+            '📦 سرویس‌ها: ' . Persian::number($job->total),
+            $this->bySupport($job->reviewer),
+        ])]);
+    }
+
+    /**
+     * …and it ended: through every service, left unfinished because the target could take no more (and why), or
+     * cancelled — with how many moved, failed and were passed by, and the clients it left on a panel still there (as
+     * the server's card counts them).
+     */
+    public function migrationEnded(ServerMigration $job): void
+    {
+        $this->report(Bot::MAIN, Topic::Errors, static function () use ($job): array {
+            $left = $job->leftovers()->count();
+            [$icon, $end] = match ($job->status) {
+                MigrationStatus::Done => ['✅', 'تمام شد'],
+                MigrationStatus::Failed => ['⛔️', 'ناتمام ماند'],
+                default => ['⏹', 'لغو شد'],
+            };
+
+            return ['text' => implode("\n", [
+                sprintf('%s <b>انتقال سرویس‌های سرور «%s» به سرور «%s» %s</b>', $icon, self::name($job->source->name ?? '—'), self::name($job->target->name ?? '—'), $end),
+                sprintf('📊 منتقل‌شده: %s · ناموفق: %s · ردشده: %s', Persian::number($job->moved), Persian::number($job->failed), Persian::number($job->skipped)),
+                ...($job->status === MigrationStatus::Failed ? ['❗️ علت: ' . self::field((string) $job->reason)] : []),
+                ...($left > 0 ? [sprintf('🧹 %s کلاینت روی پنل مانده است؛ وقتی پنل جواب بدهد، خودکار حذف می‌شوند.', Persian::number($left))] : []),
+            ])];
+        });
+    }
+
     /** A message of the group's own (a topic's introduction, the screen's test), queued whatever the topic's switch says. */
     public function notice(Topic $topic, string $text): void
     {
@@ -566,7 +675,7 @@ final class ShopReports
         return ReportMessage::waiting()->whereKey($last->id)->whereNull(Lease::TOKEN)->where('text', $last->text)->update(['text' => $text]) === 1;
     }
 
-    private static function purchaseText(Order $order): string
+    private function purchaseText(Order $order): string
     {
         $subscription = self::subscriptionOf($order);
         $lines = [
@@ -580,7 +689,35 @@ final class ShopReports
             $lines[] = self::service($subscription);
         }
 
-        return implode("\n", [...$lines, ...self::takings($order)]);
+        return implode("\n", [...$lines, ...self::takings($order), ...$this->madeBySupport($order)]);
+    }
+
+    /**
+     * @return list<string> Under an order support made by hand for its customer (Orders\Services\ManualOrders): who made it
+     *                      (bySupport()) and how it was paid, then their note; nothing for an order the customer made
+     */
+    private function madeBySupport(Order $order): array
+    {
+        $payment = $order->manualPayment();
+        if ($payment === null) {
+            return [];
+        }
+
+        return [
+            $this->bySupport($order->created_by, 'ثبت دستی توسط پشتیبانی') . ' · ' . $payment->label(),
+            ...self::note(self::SUPPORT_NOTE, $order->support_note),
+        ];
+    }
+
+    /**
+     * «🎧 توسط پشتیبانی» — what support did, and who of them: an admin or an agent by name, the owner (or nobody's name)
+     * as plain «پشتیبانی» (Reviewers::shared()), so the owner's panel login reaches no group.
+     */
+    private function bySupport(?string $reviewer, string $did = 'توسط پشتیبانی'): string
+    {
+        $by = $this->reviewers->shared($reviewer) ?? Reviewers::SUPPORT;
+
+        return '🎧 ' . $did . ($by === Reviewers::SUPPORT ? '' : ': ' . self::name($by));
     }
 
     /** A renewal: the service renewed, its new end — and its method, unless the usual «تمدید پلن فعلی». */

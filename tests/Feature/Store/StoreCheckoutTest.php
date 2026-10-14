@@ -23,7 +23,6 @@ use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletSettings;
 use App\Support\Money;
 use Illuminate\Support\Carbon;
-use Psr\Http\Message\ResponseInterface;
 use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
@@ -69,10 +68,11 @@ final class StoreCheckoutTest extends HttpTestCase
 
         $methods = fn(string $for): array => $this->decode($this->get($this->storeApi($this->website, "/payment-methods?for={$for}")))['methods'] ?? [];
 
-        $both = [['id' => $wallet->id, 'label' => 'کیف پول', 'kind' => 'instant'], ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual']];
+        $unbound = ['min_amount' => null, 'max_amount' => null];
+        $both = [['id' => $wallet->id, 'label' => 'کیف پول', 'kind' => 'instant'] + $unbound, ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual'] + $unbound];
         self::assertSame($both, $methods('purchase'), 'every way switched on whose driver is installed, in checkout order');
         self::assertSame($both, $methods('renewal'));
-        self::assertSame([['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual']], $methods('wallet_topup'), 'the wallet does not charge itself');
+        self::assertSame([['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual'] + $unbound], $methods('wallet_topup'), 'the wallet does not charge itself');
 
         foreach (['', '?for=traffic'] as $query) {
             $response = $this->unchecked()->get($this->storeApi($this->website, "/payment-methods{$query}"));
@@ -85,7 +85,7 @@ final class StoreCheckoutTest extends HttpTestCase
     {
         $this->wallet($this->customer, '500000');
 
-        $response = $this->purchase($this->walletMethod());
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod());
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         $checkout = $this->decode($response)['checkout'];
@@ -103,7 +103,7 @@ final class StoreCheckoutTest extends HttpTestCase
 
     public function testACardPurchaseAnswersWhereToTransferAndWaitsForTheReceipt(): void
     {
-        $response = $this->purchase($this->card);
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->card);
 
         $checkout = $this->decode($response)['checkout'];
         $payment = Payment::query()->sole();
@@ -113,7 +113,9 @@ final class StoreCheckoutTest extends HttpTestCase
             'amount' => '120000.00',
             'card' => '6037997700001119',
             'holder' => 'AmoBot',
+            'bank' => null,
             'instructions' => 'شماره پیگیری را نگه دارید.',
+            'contact' => null,
         ], $checkout['transfer']);
         self::assertSame(['pending', null], [$checkout['order']['status'], $checkout['subscription']]);
         self::assertSame([PaymentStatus::Pending, $this->card->id], [$payment->status, $payment->payment_method_id]);
@@ -124,7 +126,7 @@ final class StoreCheckoutTest extends HttpTestCase
     {
         $this->wallet($this->customer, '50000');
 
-        $response = $this->purchase($this->walletMethod());
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod());
 
         self::assertSame(422, $response->getStatusCode());
         self::assertSame(sprintf(CheckoutRefusedException::SHORT, Money::format(70000)), $this->decode($response)['errors']['method_id'][0] ?? null);
@@ -137,7 +139,7 @@ final class StoreCheckoutTest extends HttpTestCase
         $agent = $this->wallet($this->agent(credit: '100000', overrides: ['telegram_id' => 7171]), '30000');
         $this->bearer($this->customerSession($agent));
 
-        $response = $this->purchase($this->walletMethod());
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod());
 
         self::assertSame('settled', $this->decode($response)['checkout']['outcome'] ?? null, (string) $response->getBody());
         self::assertSame('-90000.00', $agent->balance(), 'into their credit');
@@ -180,7 +182,7 @@ final class StoreCheckoutTest extends HttpTestCase
         $this->bearer($token);
         $card = CurrentBot::run($bot, static fn(): PaymentMethod => PaymentMethod::query()->where('driver', 'manual')->firstOrFail());
 
-        $response = $this->send('POST', $this->storeApi($website, '/orders'), ['plan_id' => $big->id, 'server_id' => $this->server->id, 'method_id' => $card->id], ['Idempotency-Key' => 'agent-1']);
+        $response = $this->placeOrder($website, $big, $this->server, $card, key: 'agent-1');
 
         self::assertSame([422, [CustomerCheckout::NOT_ON_SALE]], [$response->getStatusCode(), $this->decode($response)['errors']['plan_id'] ?? null], 'their 20 GB do not cover its 50');
     }
@@ -192,7 +194,7 @@ final class StoreCheckoutTest extends HttpTestCase
         $gone = $this->cardMethod('درگاه قدیمی', overrides: ['driver' => 'paypal']);
 
         foreach (['switched off' => $off, 'its driver gone' => $gone] as $why => $method) {
-            $response = $this->purchase($method, "key-{$method->id}");
+            $response = $this->placeOrder($this->website, $this->plan, $this->server, $method, key: "key-{$method->id}");
 
             self::assertSame(422, $response->getStatusCode(), $why);
             self::assertArrayHasKey('method_id', $this->decode($response)['errors'], $why);
@@ -202,18 +204,18 @@ final class StoreCheckoutTest extends HttpTestCase
 
     public function testATopUpIsHeldToTheBotsBoundsAndPaidAnyWayButTheWallet(): void
     {
-        $response = $this->topUp('۵۰٬۰۰۰ تومان', $this->card);
+        $response = $this->placeTopUp($this->website, '۵۰٬۰۰۰ تومان', $this->card);
 
         $checkout = $this->decode($response)['checkout'];
         self::assertSame(['transfer', '50000.00', 'wallet_topup'], [$checkout['outcome'], $checkout['transfer']['amount'] ?? null, $checkout['order']['type']], 'typed as the bot reads a typed amount');
 
         $bounds = 'مبلغ شارژ باید بین ' . Money::format(10000) . ' و ' . Money::format(WalletSettings::TOPUP_MAX) . ' باشد.';
         foreach (['5000', (string) (WalletSettings::TOPUP_MAX + 1), 'پنج هزار', '1.5'] as $i => $amount) {
-            $response = $this->topUp($amount, $this->card, "bounds-{$i}");
+            $response = $this->placeTopUp($this->website, $amount, $this->card, "bounds-{$i}");
             self::assertSame([422, [$bounds]], [$response->getStatusCode(), $this->decode($response)['errors']['amount'] ?? null], $amount);
         }
 
-        $response = $this->topUp(50000, $this->walletMethod(), 'with-the-wallet');
+        $response = $this->placeTopUp($this->website, 50000, $this->walletMethod(), 'with-the-wallet');
         self::assertSame(422, $response->getStatusCode());
         self::assertSame(['کیف پول با خودش شارژ نمی‌شود؛ روش دیگری انتخاب کنید.'], $this->decode($response)['errors']['method_id'] ?? null);
         self::assertSame(1, Order::query()->count(), 'the first alone');
@@ -226,19 +228,19 @@ final class StoreCheckoutTest extends HttpTestCase
             $this->topUpOrder($this->customer, ($n * 10000) . '.00');
         }
 
-        $response = $this->purchase($this->card);
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->card);
 
         self::assertSame([422, TooManyUnpaidOrdersException::MESSAGE], [$response->getStatusCode(), $this->decode($response)['message']]);
         self::assertSame(OrderService::UNPAID_MAX, Order::query()->count(), 'nothing ordered');
 
         // One of them asked for again is found, not made: paid as ever.
-        $again = $this->topUp(10000, $this->card, 'the-first-top-up-again');
+        $again = $this->placeTopUp($this->website, 10000, $this->card, 'the-first-top-up-again');
         self::assertSame('transfer', $this->decode($again)['checkout']['outcome'] ?? null, (string) $again->getBody());
         self::assertSame(OrderService::UNPAID_MAX, Order::query()->count());
 
         // One that went makes room for another.
         Order::query()->where('amount', '50000.00')->update(['status' => OrderStatus::Cancelled->value]);
-        self::assertSame('transfer', $this->decode($this->purchase($this->card))['checkout']['outcome'] ?? null);
+        self::assertSame('transfer', $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card))['checkout']['outcome'] ?? null);
 
         // The bot's checkout is not held to it: a chat picks one way to pay at a time.
         $this->service(OrderService::class)->openTopUp($this->customer, 70000);
@@ -249,32 +251,32 @@ final class StoreCheckoutTest extends HttpTestCase
     {
         // A request made again counts: each asks the shop as much.
         foreach (range(1, CustomerCheckout::CHECKOUTS) as $n) {
-            self::assertSame(200, $this->purchase($this->card)->getStatusCode(), "request {$n}");
+            self::assertSame(200, $this->placeOrder($this->website, $this->plan, $this->server, $this->card)->getStatusCode(), "request {$n}");
         }
 
-        $refused = $this->topUp(50000, $this->card, 'one-more');
+        $refused = $this->placeTopUp($this->website, 50000, $this->card, 'one-more');
 
         self::assertSame([429, '600'], [$refused->getStatusCode(), $refused->getHeaderLine('Retry-After')]);
         self::assertSame('درخواست پرداخت زیادی فرستاده‌اید؛ ۱۰ دقیقه دیگر دوباره امتحان کنید.', $this->decode($refused)['message']);
         self::assertSame(1, Order::query()->count(), 'the top-up not made');
 
         Carbon::setTestNow(now()->addMinutes(10));
-        self::assertSame(200, $this->topUp(50000, $this->card, 'one-more')->getStatusCode(), 'the window over');
+        self::assertSame(200, $this->placeTopUp($this->website, 50000, $this->card, 'one-more')->getStatusCode(), 'the window over');
     }
 
     public function testWhileTheBotIsSwitchedOffTheShopTakesNoOrders(): void
     {
         $this->wallet($this->customer, '500000');
         $service = $this->subscription($this->customer, $this->plan, $this->server, 'ali_1');
-        $transfer = $this->decode($this->purchase($this->card))['checkout']['transfer'];
+        $transfer = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card))['checkout']['transfer'];
         $this->botSettings('general', ['enabled' => false, 'phone_required' => false, 'support_contact' => '']);
 
         foreach ([
-            'a purchase' => $this->purchase($this->walletMethod(), 'key-2'),
+            'a purchase' => $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'key-2'),
             'a renewal' => $this->send('POST', $this->storeApi($this->website, "/subscriptions/{$service->id}/renewal"), ['method_id' => $this->card->id], ['Idempotency-Key' => 'renew-1']),
             'extra traffic' => $this->send('POST', $this->storeApi($this->website, "/subscriptions/{$service->id}/extra-traffic"), ['gb' => 10, 'method_id' => $this->card->id], ['Idempotency-Key' => 'extra-1']),
             'extra time' => $this->send('POST', $this->storeApi($this->website, "/subscriptions/{$service->id}/extra-time"), ['days' => 7, 'method_id' => $this->card->id], ['Idempotency-Key' => 'extra-2']),
-            'a top-up' => $this->topUp(50000, $this->card),
+            'a top-up' => $this->placeTopUp($this->website, 50000, $this->card),
             'a receipt' => $this->upload($this->storeApi($this->website, "/payments/{$transfer['payment_id']}/receipt"), 'file', 'receipt.png', (string) base64_decode(self::PNG)),
         ] as $what => $response) {
             self::assertSame([503, CheckoutRefusedException::PAUSED], [$response->getStatusCode(), $this->decode($response)['message']], $what);
@@ -286,7 +288,7 @@ final class StoreCheckoutTest extends HttpTestCase
         self::assertSame(200, $this->get($this->storeApi($this->website, "/subscriptions/{$service->id}/extras"))->getStatusCode(), 'and what may be bought for a service');
 
         $this->botSettings('general', ['enabled' => true, 'phone_required' => false, 'support_contact' => '']);
-        self::assertSame(200, $this->purchase($this->walletMethod(), 'key-2')->getStatusCode(), 'switched on again');
+        self::assertSame(200, $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'key-2')->getStatusCode(), 'switched on again');
     }
 
     public function testACheckoutIsTheSignedInCustomersOwn(): void
@@ -297,15 +299,5 @@ final class StoreCheckoutTest extends HttpTestCase
 
         self::assertSame(401, $response->getStatusCode());
         self::assertSame(0, Order::query()->count());
-    }
-
-    private function purchase(PaymentMethod $method, string $key = 'key-1'): ResponseInterface
-    {
-        return $this->send('POST', $this->storeApi($this->website, '/orders'), ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'method_id' => $method->id], ['Idempotency-Key' => $key]);
-    }
-
-    private function topUp(int|string $amount, PaymentMethod $method, string $key = 'top-up-1'): ResponseInterface
-    {
-        return $this->send('POST', $this->storeApi($this->website, '/wallet/top-up'), ['amount' => $amount, 'method_id' => $method->id], ['Idempotency-Key' => $key]);
     }
 }

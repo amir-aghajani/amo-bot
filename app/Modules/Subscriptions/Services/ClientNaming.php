@@ -146,6 +146,18 @@ final class ClientNaming
     }
 
     /**
+     * The name support typed for a service it makes for a customer (Orders\Services\ManualOrders), whichever ways the
+     * shop offers its buyers: held to a buyer's typed name's rules — one, the server's panel takes it as typed, and no
+     * service on the server carries it.
+     *
+     * @throws ValidationException 422 on `client_name`
+     */
+    public function chosen(string $typed, Server $server): string
+    {
+        return $this->typed(trim($typed), $server);
+    }
+
+    /**
      * The name a service keeps on the server it moves to — its own, unless a service there carries it or that server's
      * panel would refuse it (a name its old panel took), then the customer's next (a test's by the test pattern). A
      * client made there by hand under it makes the panel refuse it: ProvisioningService::named() takes the next then.

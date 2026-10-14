@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Subscriptions\Services;
 
 use App\Core\Database\Transitions;
+use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Enums\OrderStatus;
@@ -13,6 +14,7 @@ use App\Modules\Orders\Exceptions\OrderNotPayableException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Orders\Services\Pricing;
+use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Exceptions\ProviderException;
@@ -37,7 +39,8 @@ use Psr\Log\LoggerInterface;
  *
  * Only a running service with a deadline qualifies — one waiting for its first connection has none yet, one that never
  * ends needs none, an ended one is renewed by hand — and only on a plan whose term is at least the window (renews()):
- * a shorter term would leave the service due again at once. By ResetTime, which starts the term afresh and throws away
+ * a shorter term would leave the service due again at once; and only at a renewal price within the wallet's least and
+ * most amount — one outside them is renewed by hand. By ResetTime, which starts the term afresh and throws away
  * what was left of it, the renewal waits for the last run before the deadline (LAST_RUN_MINUTES), so it loses no more
  * than that; a wallet that cannot pay is still told at the window's start. A deadline is renewed once, and two runs
  * never charge a service twice (claim()).
@@ -66,44 +69,71 @@ final class AutoRenewal
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** Whether the customer is offered the switch: the service could renew itself and the wallet, which pays, is on. */
+    /** Whether the customer is offered the switch: the wallet, which pays, is on and could renew the service (renews()). */
     public function offeredFor(Subscription $subscription): bool
     {
-        return $this->renews($subscription) && $this->walletOn();
+        return $this->offeredForAll([$subscription])[$subscription->id];
     }
 
     /**
      * offeredFor() for a page of services, by id, asking about the wallet once.
      *
-     * @param iterable<Subscription> $subscriptions
+     * @param iterable<Subscription> $subscriptions Read with their customer and plan
      * @return array<int, bool>
      */
     public function offeredForAll(iterable $subscriptions): array
     {
-        $walletOn = $this->walletOn();
-        $offered = [];
-        foreach ($subscriptions as $subscription) {
-            $offered[$subscription->id] = $walletOn && $this->renews($subscription);
-        }
-
-        return $offered;
+        return $this->renewing($subscriptions, $this->wallet());
     }
 
-    /** Whether the wallet, which pays every automatic renewal, is on; without it nothing is renewed. */
-    public function walletOn(): bool
+    /** The wallet while it is switched on: it pays every automatic renewal, and without it nothing is renewed. */
+    public function wallet(): ?PaymentMethod
     {
-        return $this->methods->enabledWallet() !== null;
+        return $this->methods->enabledWallet();
     }
 
     /**
-     * Whether the service could renew itself: it runs, ends some day, and still has a plan whose term is at least the
-     * renewal window (RenewalSettings::autoRenews()).
+     * Whether the service could renew itself, paid by `$wallet` (wallet(); none renews nothing): it runs, ends some day,
+     * still has a plan whose term is at least the renewal window (RenewalSettings::autoRenews()), and the wallet takes
+     * its renewal price (PaymentMethods::within()) — one it does not take is renewed by hand.
      */
-    public function renews(Subscription $subscription): bool
+    public function renews(Subscription $subscription, ?PaymentMethod $wallet): bool
     {
-        $plan = $subscription->plan;
+        return $this->renewing([$subscription], $wallet)[$subscription->id];
+    }
 
-        return $subscription->isActive() && $subscription->duration_hours > 0 && $plan !== null && $this->settings->autoRenews($plan);
+    /**
+     * renews() for a page of services, by id, each customer's prices read once — and only while the wallet has a bound
+     * at all: their renewal price on the plan, as renew() charges it (Pricing::renewalOffers(): an agent's at the agent
+     * price, less the automatic discount).
+     *
+     * @param iterable<Subscription> $subscriptions
+     * @return array<int, bool>
+     */
+    private function renewing(iterable $subscriptions, ?PaymentMethod $wallet): array
+    {
+        $renews = [];
+        $priced = [];
+        foreach ($subscriptions as $subscription) {
+            $renews[$subscription->id] = false;
+            $plan = $subscription->plan;
+            if ($subscription->isActive() && $subscription->duration_hours > 0 && $plan !== null && $this->settings->autoRenews($plan)) {
+                $priced[$subscription->user_id][] = [$subscription, $plan];
+            }
+        }
+        if ($wallet === null) {
+            return $renews;
+        }
+
+        $bounded = $wallet->min_amount !== null || $wallet->max_amount !== null;
+        foreach ($priced as $services) {
+            $prices = $bounded ? $this->pricing->renewalOffers($services[0][0]->user, ...array_column($services, 1)) : null;
+            foreach ($services as [$subscription, $plan]) {
+                $renews[$subscription->id] = $prices === null || PaymentMethods::within($wallet, $prices[$plan->id]->amount());
+            }
+        }
+
+        return $renews;
     }
 
     /**
@@ -121,12 +151,18 @@ final class AutoRenewal
 
     /**
      * The services to renew now, nearest deadline first: switch on, deadline within the admin's days, customer not
-     * banned, on a plan whose term is at least the window — by ResetTime, renew() lets them wait for the last run.
+     * banned, on a plan whose term is at least the window — by ResetTime, renew() lets them wait for the last run. None
+     * in an agent's shop whose selling is suspended (a renewal is a sale): they wait, and are renewed once it sells again
+     * if still within their days.
      *
      * @return list<Subscription>
      */
     public function due(): array
     {
+        if (!CurrentBot::get()->sells()) {
+            return [];
+        }
+
         return Subscription::expiringWithin($this->settings->autoRenewDays())
             ->where('auto_renew', true)
             ->whereHas('user', static fn(Builder $user) => $user->where('status', UserStatus::Active->value))
@@ -146,15 +182,20 @@ final class AutoRenewal
      */
     public function renew(Subscription $subscription): void
     {
-        $wallet = $this->methods->enabledWallet();
+        $wallet = $this->wallet();
         $plan = $subscription->plan;
         // A plan whose term was shortened below the window since is not renewed, whatever the switch says.
         if ($wallet === null || $plan === null || !$this->settings->autoRenews($plan) || $subscription->server->isBackingOff()) {
             return;
         }
 
-        // The customer's price (agent price where theirs, less the automatic discount), as createRenewal() orders it.
+        // The customer's price (agent price where theirs, less the automatic discount), as createRenewal() orders it — and
+        // never a price outside the wallet's bounds (PaymentMethods::within()), which the wallet would refuse at checkout:
+        // that service is not offered the switch (renews()), and its customer is reminded of its end (ServiceReminders).
         $price = $this->pricing->renewal($subscription->user, $subscription, $plan)->amount();
+        if (!PaymentMethods::within($wallet, $price)) {
+            return;
+        }
         $pays = Money::compare($subscription->user->refresh()->spendable(), $price) >= 0;
         $method = $this->settings->defaultMethod();
         // Not its method's time yet (ResetTime's last run): its panel is not asked — but a short wallet is told from now.

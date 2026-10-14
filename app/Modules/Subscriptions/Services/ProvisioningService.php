@@ -36,6 +36,8 @@ use App\Modules\Subscriptions\Exceptions\ExtraUnavailableException;
 use App\Modules\Subscriptions\Exceptions\MoveException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
 use App\Modules\Subscriptions\Exceptions\ServiceNotReadException;
+use App\Modules\Subscriptions\Models\MigrationLeftover;
+use App\Modules\Subscriptions\Models\ServerMigration;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Models\TestAccount;
 use App\Modules\Users\Models\User;
@@ -124,7 +126,7 @@ final class ProvisioningService
         $plan = $order->plan;
         $user = $order->user;
         ['server' => $server, 'inbounds' => $inbounds] = $plan !== null
-            ? $this->selector->resolve($plan, $order->server_id)
+            ? $this->selector->resolve($plan, $order->server_id, paid: true)
             : $this->selector->builtOn($order->server ?? throw new \LogicException("Built order #{$order->id} has no server."));
 
         // Its term starts at the first connection.
@@ -215,6 +217,39 @@ final class ProvisioningService
     public function findByLink(Server $server, ClientLink $link): ?ClientInfo
     {
         return $this->onPanel($server, static fn(ProviderInterface $panel): ?ClientInfo => $panel->findClientByLink($link));
+    }
+
+    /**
+     * Delete a client a move left behind on the server's panel (move()'s leave(), ServerMigrations) — unless a service of
+     * any shop is by that name on that server now (moved back there, or made under the name since): it is that service's
+     * then, and stays. The service the client was (`$of`, while it lasts) is held meanwhile, so a move of it back there
+     * cannot come between the look and the delete; while another change holds it, nothing is done (ServiceBusyException,
+     * at once: a client left behind can wait). True when the panel no longer has the client (gone already counts); false
+     * when a service keeps it.
+     *
+     * @throws ProviderException|ServiceBusyException
+     */
+    public function removeLeftover(Server $server, string $name, ?Subscription $of): bool
+    {
+        $lease = $of !== null ? Lease::take($of, self::holdSeconds($of->server, $server)) : null;
+        if ($of !== null && $lease === null) {
+            throw new ServiceBusyException();
+        }
+
+        try {
+            if (Subscription::acrossShops()->where('server_id', $server->id)->where('remote_name', $name)->where('status', '!=', SubscriptionStatus::Deleted->value)->exists()) {
+                return false;
+            }
+            try {
+                $this->onPanel($server, static fn(ProviderInterface $panel) => $panel->deleteClient($name));
+            } catch (NotFoundException) {
+                // Gone from the panel already.
+            }
+
+            return true;
+        } finally {
+            $lease?->release();
+        }
     }
 
     /**
@@ -845,19 +880,42 @@ final class ProvisioningService
      * same deadline, or the same pending term) — under the name ClientNaming::nameOn() gives it, or the customer's next
      * while the target's panel has a client by that name already (named()) —, then the old client deleted and the row
      * pointed at the new one. The old panel is read first so what is left is current. With `$leavePrevious` (that panel
-     * is out of reach) it is not contacted: the row's last numbers are carried over and the old client stays there for
-     * the admin to delete. A delete the old panel refuses takes the new client back — nothing moved.
+     * is out of reach) it is not contacted: the row's last numbers are carried over and the old client stays there. A
+     * delete the old panel refuses takes the new client back — nothing moved.
+     *
+     * A call that may have been done though no answer came (ProviderException::mayHaveBeenDone(): a timeout) is asked
+     * about on its panel, so a customer is never left with no service, nor a client made twice: the old client's delete —
+     * gone, the move stands; still there, the new client goes back; no answer, the move stands and the old client is left
+     * behind —, and the new client's making (makeOn()). Each client the move leaves on a panel — the old one it did not
+     * delete, in the transaction that points the row at the new one so its record stands or falls with the move; a new
+     * one a panel did not say it made, or would not take back — is written down (leave()), of the job that moved it
+     * (`$by`) or of none, to be removed once that panel answers (ServerMigrations): a client the customer still has the
+     * link of would be a second service.
+     *
+     * A failure to point the row at the new client takes it back only while it is nobody's (the service was deleted
+     * meanwhile) or the old one is still the customer's (`$leavePrevious`); once the old one is gone, or may be, the new
+     * one is all the customer has, and it is kept.
+     *
+     * Only an active service moves, and only while it has something left — or, with `$switchedOff`, one support switched
+     * off too: its new client is made switched off, and it stays so. With `$from`, only while it is still on that server
+     * (a batch chose it there; someone may have moved it since).
      *
      * @throws NoServerAvailableException when the target cannot take the service
      * @throws MoveException naming the step that failed
      * @throws ServiceBusyException
+     * @throws ModelNotFoundException when the service is gone
      */
-    public function move(Subscription $subscription, Server $target, bool $leavePrevious): void
+    public function move(Subscription $subscription, Server $target, bool $leavePrevious, bool $switchedOff = false, ?Server $from = null, ?ServerMigration $by = null): void
     {
-        $this->holding($subscription, function (Lease $lease) use ($subscription, $target, $leavePrevious): void {
+        $this->holding($subscription, function (Lease $lease) use ($subscription, $target, $leavePrevious, $switchedOff, $from, $by): void {
+            $left = static fn(Server $server, string $name) => self::leave($server, $name, $subscription, $by);
             $source = $subscription->server;
+            $previous = $subscription->remote_name;
             if ($source->id === $target->id) {
                 throw MoveException::service('این سرویس همین حالا روی این سرور است.');
+            }
+            if ($from !== null && $source->id !== $from->id) {
+                throw MoveException::service("سرویس {$previous} دیگر روی سرور «{$from->name}» نیست.");
             }
             $inbounds = $this->selector->moveTarget($subscription->plan, $target);
 
@@ -869,19 +927,21 @@ final class ProvisioningService
                     throw MoveException::previousServer($source, $e);
                 }
             }
-            if (!$subscription->isActive() || $subscription->isExpiredByTime() || $subscription->isExpiredByTraffic()) {
+            $movable = $subscription->isActive() || ($switchedOff && $subscription->status === SubscriptionStatus::Disabled);
+            if (!$movable || $subscription->isExpiredByTime() || $subscription->isExpiredByTraffic()) {
                 throw MoveException::service("سرویس {$subscription->remote_name} دیگر فعال نیست؛ چیزی برای انتقال نمانده.");
             }
 
             // The new client on the target: by the name ClientNaming::nameOn() gives it — or, while the target's panel has
             // a client by that name made by hand, the customer's next (named()).
             $keys = $inbounds->pluck('remote_key')->values()->all();
-            $spec = fn(string $name): ClientSpec => $this->spec($subscription->user, $name, $subscription->remainingBytes() ?? 0, ServiceTerms::expiryOf($subscription), $subscription->ip_limit);
+            $enabled = $subscription->isActive();
+            $spec = fn(string $name): ClientSpec => $this->spec($subscription->user, $name, $subscription->remainingBytes() ?? 0, ServiceTerms::expiryOf($subscription), $subscription->ip_limit, $enabled);
             $observed = now();
             try {
                 $client = $this->named(
                     $this->naming->nameOn($subscription, $target),
-                    fn(string $name): ClientInfo => $this->held($lease, $target, static fn(ProviderInterface $panel): ClientInfo => $panel->createClient($keys, $spec($name))),
+                    fn(string $name): ClientInfo => $this->makeOn($target, $keys, $spec($name), $lease, $left),
                     fn(string $name): bool => $this->held($lease, $target, static fn(ProviderInterface $panel): bool => $panel->findClient($name) !== null),
                     fn(): string => $this->naming->next($subscription->user, $target, $subscription->is_test),
                 );
@@ -889,29 +949,58 @@ final class ProvisioningService
                 throw MoveException::targetServer($target, $e);
             }
             if ($client->subscriptionUrl === null) {
-                $this->takeBack($target, $client->name);
+                $this->takeBack($target, $client->name, $left);
 
                 throw MoveException::targetServer($target, 'برای کلاینت لینک اشتراک نساخت؛ سرور اشتراک پنلش را بررسی کنید.');
             }
 
-            // The old client off its panel; if that fails, the new one goes again and nothing moved.
+            // The old client off its panel; if that panel refuses, the new one goes again and nothing moved. A delete
+            // that may have been done all the same is asked about there: gone, the move stands; still there, the new one
+            // goes again; no answer, the move stands and the old client is left behind (taking the new one back could
+            // leave the customer with neither).
+            $leftBehind = $leavePrevious;
             if (!$leavePrevious) {
                 try {
-                    $this->held($lease, $source, static fn(ProviderInterface $panel) => $panel->deleteClient($subscription->remote_name));
+                    $this->held($lease, $source, static fn(ProviderInterface $panel) => $panel->deleteClient($previous));
                 } catch (NotFoundException) {
                     // Gone from the old panel already.
                 } catch (ProviderException|ServiceBusyException $e) {
-                    $this->takeBack($target, $client->name);
+                    $still = $e instanceof ProviderException && $e->mayHaveBeenDone() ? $this->stillOn($source, $previous) : true;
+                    if ($still === true) {
+                        $this->takeBack($target, $client->name, $left);
 
-                    throw $e instanceof ProviderException ? MoveException::previousServer($source, $e) : $e;
+                        throw $e instanceof ProviderException ? MoveException::previousServer($source, $e) : $e;
+                    }
+                    $leftBehind = $still === null;
                 }
             }
 
             try {
-                $this->record($subscription, $client, $observed, $lease, ['server_id' => $target->id, 'remote_name' => $client->name]);
+                $this->db->transaction(function () use ($subscription, $client, $observed, $lease, $target, $leftBehind, $left, $source, $previous): void {
+                    $this->record($subscription, $client, $observed, $lease, ['server_id' => $target->id, 'remote_name' => $client->name]);
+                    if ($leftBehind) {
+                        $left($source, $previous);
+                    }
+                });
             } catch (ModelNotFoundException $e) {
                 // The service was deleted while it moved: its new client is nobody's.
-                $this->takeBack($target, $client->name);
+                $this->takeBack($target, $client->name, static fn(Server $server, string $name) => self::leave($server, $name, null, $by));
+
+                throw $e;
+            } catch (\Throwable $e) {
+                if ($leavePrevious) {
+                    // The old client is where it was, and the row still names it: nothing moved.
+                    $this->takeBack($target, $client->name, $left);
+                } else {
+                    // The old client is gone, or may be: the new one is the only service the customer has.
+                    $this->logger->error('Subscription {id} was moved to {to} as client {name}, but the shop could not point it there: {message}; its client on {from} is gone or may be, so the new one is kept', [
+                        'id' => $subscription->id,
+                        'to' => $target->name,
+                        'name' => $client->name,
+                        'message' => $e->getMessage(),
+                        'from' => $source->name,
+                    ]);
+                }
 
                 throw $e;
             }
@@ -923,7 +1012,79 @@ final class ProvisioningService
                 'to' => $target->name,
                 'left' => $leavePrevious ? ' (the old client was left on the previous server)' : '',
             ]);
+            if ($leftBehind && !$leavePrevious) {
+                $this->logger->warning('{server} did not say whether it deleted client {name} of moved subscription {id}; it is removed once that panel answers', [
+                    'server' => $source->name,
+                    'name' => $previous,
+                    'id' => $subscription->id,
+                ]);
+            }
         }, $target);
+    }
+
+    /**
+     * Write down a client a move left on the server's panel (`migration_leftovers`), to be removed once that panel
+     * answers (ServerMigrations::clean()): of the service `$of` — none when it is gone —, by the job `$by` when a job
+     * moved it.
+     */
+    private static function leave(Server $server, string $name, ?Subscription $of, ?ServerMigration $by): void
+    {
+        MigrationLeftover::query()->create([
+            'migration_id' => $by?->id,
+            'server_id' => $server->id,
+            'subscription_id' => $of?->id,
+            'remote_name' => $name,
+        ]);
+    }
+
+    /**
+     * Make a client on the server's panel: a purchase's or a free test's (create()), or a moved service's on its target,
+     * under the move's `$lease`. A failure that may have come after the panel made it
+     * (ProviderException::mayHaveBeenDone()) has the panel asked: a client there by that name as it was asked — its
+     * quota, nothing used — is the one made, and kept, so no second is made under another name (a delivery's retry draws
+     * the next). One the panel cannot be asked about is left behind (`$left`, else logged for the admin).
+     *
+     * @param list<string> $keys
+     * @param (\Closure(Server, string): void)|null $left
+     * @throws ProviderException|ServiceBusyException
+     */
+    private function makeOn(Server $server, array $keys, ClientSpec $spec, ?Lease $lease = null, ?\Closure $left = null): ClientInfo
+    {
+        $create = static fn(ProviderInterface $panel): ClientInfo => $panel->createClient($keys, $spec);
+        try {
+            return $lease !== null ? $this->held($lease, $server, $create) : $this->onPanel($server, $create);
+        } catch (ProviderException $e) {
+            if (!$e->mayHaveBeenDone()) {
+                throw $e;
+            }
+            try {
+                $made = $this->onPanel($server, static fn(ProviderInterface $panel): ?ClientInfo => $panel->findClient($spec->name));
+            } catch (ProviderException) {
+                if ($left !== null) {
+                    $left($server, $spec->name);
+                } else {
+                    $this->logger->warning('{server} did not say whether it made client {name}; delete it there by hand if it is there and unused', ['server' => $server->name, 'name' => $spec->name]);
+                }
+
+                throw $e;
+            }
+            if ($made === null || $made->totalBytes !== $spec->totalBytes || $made->uploadBytes + $made->downloadBytes > 0) {
+                throw $e;
+            }
+            $this->logger->info('{server} made client {name} though it did not answer; it is kept', ['server' => $server->name, 'name' => $spec->name]);
+
+            return $made;
+        }
+    }
+
+    /** Whether the server's panel still has a client by that name; null when it cannot say (the contact recorded on the server). */
+    private function stillOn(Server $server, string $name): ?bool
+    {
+        try {
+            return $this->hasClient($server)($name);
+        } catch (ProviderException) {
+            return null;
+        }
     }
 
     /**
@@ -1260,10 +1421,11 @@ final class ProvisioningService
     }
 
     /**
-     * Make the client on the server's `$inbounds` and its service row — `$row`'s own columns, the rest as the panel
-     * answered —, `$complete` in the transaction that writes it. The customer gets one subscription link and nothing
-     * else: a panel that stopped serving links since its last check gets no client, and one that answers without a link,
-     * or a transaction that fails, has the client taken back.
+     * Make the client on the server's `$inbounds` (makeOn(): one the panel made though no answer came is found and kept)
+     * and its service row — `$row`'s own columns, the rest as the panel answered —, `$complete` in the transaction that
+     * writes it. The customer gets one subscription link and nothing else: a panel that stopped serving links since its
+     * last check gets no client, and one that answers without a link, or a transaction that fails, has the client taken
+     * back.
      *
      * @param Collection<int, ServerInbound> $inbounds
      * @param array<string, mixed> $row
@@ -1277,7 +1439,7 @@ final class ProvisioningService
         }
 
         $observed = now();
-        $client = $this->onPanel($server, static fn(ProviderInterface $panel): ClientInfo => $panel->createClient($inbounds->pluck('remote_key')->values()->all(), $spec));
+        $client = $this->makeOn($server, $inbounds->pluck('remote_key')->values()->all(), $spec);
         if ($client->subscriptionUrl === null) {
             $this->takeBack($server, $spec->name);
 
@@ -1304,13 +1466,26 @@ final class ProvisioningService
         }
     }
 
-    /** Delete a client just made for something that fell through; a failure is logged, never thrown over the reason. */
-    private function takeBack(Server $server, string $name): void
+    /**
+     * Delete a client just made for something that fell through; a failure is never thrown over the reason — a move's
+     * client is written down to be removed once that panel answers (`$left`), any other logged for the admin.
+     *
+     * @param (\Closure(Server, string): void)|null $left
+     */
+    private function takeBack(Server $server, string $name, ?\Closure $left = null): void
     {
         try {
             $this->providers->forServer($server)->deleteClient($name);
+        } catch (NotFoundException) {
+            // Gone from the panel already.
         } catch (ProviderException $e) {
-            $this->logger->error('Could not take back client {name} on {server}; delete it by hand: {message}', ['name' => $name, 'server' => $server->name, 'message' => $e->getMessage()]);
+            if ($left === null) {
+                $this->logger->error('Could not take back client {name} on {server}; delete it by hand: {message}', ['name' => $name, 'server' => $server->name, 'message' => $e->getMessage()]);
+
+                return;
+            }
+            $left($server, $name);
+            $this->logger->warning('Could not take back client {name} on {server}; it is removed once that panel answers: {message}', ['name' => $name, 'server' => $server->name, 'message' => $e->getMessage()]);
         }
     }
 

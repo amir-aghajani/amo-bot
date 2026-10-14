@@ -36,7 +36,16 @@ describe('a request held to the API description', () => {
     expect(contractProblem(request('GET', '/api/admin/servers/drivers'))).toBeNull()
     expect(
       contractProblem(
-        request('PUT', '/api/admin/servers/abc', { driver: '3x-ui', name: 'آلمان', base_url: 'https://de.example.com', auth_mode: 'token', verify_tls: true, timeout: 30, is_active: true }),
+        request('PUT', '/api/admin/servers/abc', {
+          driver: '3x-ui',
+          name: 'آلمان',
+          base_url: 'https://de.example.com',
+          auth_mode: 'token',
+          verify_tls: true,
+          timeout: 30,
+          proxy_enabled: false,
+          is_active: true,
+        }),
       ),
     ).toBe('PUT /api/admin/servers/abc: {id}: "abc", where it takes a whole number')
     expect(contractProblem(request('GET', '/api/owner/plans'))).toBe('GET /api/owner/plans: {panel}: "owner", none of "admin", "agent"')

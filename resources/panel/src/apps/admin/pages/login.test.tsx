@@ -15,7 +15,7 @@ import { json, refusal, server, withHeaders } from '@/test/server'
  * and the throttle's wait counts down there, the form held meanwhile.
  */
 
-const OWNER: Session = { name: 'owner', shop: { id: 1, name: 'AmoBot', username: 'amobot', status: 'active' } }
+const OWNER: Session = { name: 'owner', shop: { id: 1, name: 'AmoBot', username: 'amobot', status: 'active', selling_suspended: null } }
 
 function Address() {
   const { pathname, search } = useLocation()

@@ -66,9 +66,9 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
     public function testTheSameKeyIsAnsweredByItsOrderAndChargesOnce(): void
     {
-        $first = $this->decode($this->purchase($this->walletMethod()));
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod()));
 
-        $again = $this->purchase($this->walletMethod());
+        $again = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod());
 
         self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
         self::assertSame($first, $this->decode($again), 'the same answer');
@@ -79,13 +79,13 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
     public function testAKeyMadeAgainIsAnsweredByItsOrderWhateverChangedSince(): void
     {
-        $first = $this->decode($this->purchase($this->walletMethod()))['checkout'];
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod()))['checkout'];
         // Since: the plan taken off sale, the wallet spent, the wallet switched off.
         $this->plan->forceFill(['is_active' => false])->save();
         $this->wallet($this->customer, '0');
         $this->walletMethod()->forceFill(['enabled' => false])->save();
 
-        $again = $this->purchase($this->walletMethod());
+        $again = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod());
 
         self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
         self::assertSame(['settled', $first['order']['id']], [$this->decode($again)['checkout']['outcome'], $this->decode($again)['checkout']['order']['id']]);
@@ -93,12 +93,12 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
     public function testAKeyMadeAgainOnceItsServiceWasHandedOnIsAnsweredByItsOrderWithoutTheService(): void
     {
-        $first = $this->decode($this->purchase($this->walletMethod()))['checkout'];
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod()))['checkout'];
         $this->transfersOn();
         $sara = $this->customer(['telegram_id' => 7070, 'username' => 'sara']);
         $this->service(ServiceTransfers::class)->transfer(Subscription::query()->findOrFail($first['subscription']['id']), $sara, Actor::customer($this->customer));
 
-        $again = $this->purchase($this->walletMethod());
+        $again = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod());
 
         self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
         $checkout = $this->decode($again)['checkout'];
@@ -107,9 +107,9 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
     public function testACardTransferMadeAgainIsTheSamePaymentToTheSameCard(): void
     {
-        $first = $this->decode($this->purchase($this->card))['checkout'];
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card))['checkout'];
 
-        $again = $this->decode($this->purchase($this->card))['checkout'];
+        $again = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card))['checkout'];
 
         self::assertSame(['transfer', $first['transfer']], [$again['outcome'], $again['transfer']]);
         self::assertSame(1, Payment::query()->count(), 'one payment awaiting its receipt');
@@ -119,19 +119,19 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
     {
         // A card's checkout with one key, not paid; then the wallet with another: the open order of the same thing is the
         // one the wallet pays — and the second key is kept for it, as the first is.
-        $card = $this->decode($this->purchase($this->card, 'k1'))['checkout'];
-        $paid = $this->decode($this->purchase($this->walletMethod(), 'k2'))['checkout'];
+        $card = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'k1'))['checkout'];
+        $paid = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'k2'))['checkout'];
         self::assertSame(['transfer', 'settled', $card['order']['id']], [$card['outcome'], $paid['outcome'], $paid['order']['id']]);
 
         // The wallet's request sent again — a network's retry —: that order, as it stands.
-        $again = $this->purchase($this->walletMethod(), 'k2');
+        $again = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'k2');
 
         self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
         self::assertSame(['settled', $card['order']['id']], [$this->decode($again)['checkout']['outcome'], $this->decode($again)['checkout']['order']['id']]);
         self::assertSame(1, Order::query()->count(), 'one order');
         self::assertSame('380000.00', $this->customer->balance(), 'one charge');
         self::assertCount(1, FakeProvider::$created, 'one client on its panel');
-        $cardAgain = $this->decode($this->purchase($this->card, 'k1'))['checkout'];
+        $cardAgain = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'k1'))['checkout'];
         self::assertSame(['settled', $card['order']['id']], [$cardAgain['outcome'], $cardAgain['order']['id']], "the card's request sent again finds it paid, too");
         self::assertSame([$card['order']['id'], $card['order']['id']], RequestKey::query()->whereIn('key', ['k1', 'k2'])->orderBy('key')->pluck('order_id')->all(), 'both keys name it');
     }
@@ -141,25 +141,25 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
         // The customer picked the card in the bot a moment ago: the open order of the same thing is the one the site pays.
         $open = $this->service(OrderService::class)->openPurchase($this->customer, $this->plan, $this->server);
 
-        $checkout = $this->decode($this->purchase($this->walletMethod(), 'from-the-site'))['checkout'];
+        $checkout = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'from-the-site'))['checkout'];
 
         self::assertSame(['settled', $open->id], [$checkout['outcome'], $checkout['order']['id']]);
         self::assertSame($open->id, $this->service(OrderService::class)->keyed($this->customer, 'from-the-site')?->id, 'the key kept for the order it came to');
-        $again = $this->decode($this->purchase($this->walletMethod(), 'from-the-site'))['checkout'];
+        $again = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'from-the-site'))['checkout'];
         self::assertSame(['settled', $open->id], [$again['outcome'], $again['order']['id']], 'made again: the order it paid');
         self::assertSame('380000.00', $this->customer->balance(), 'one charge');
     }
 
     public function testAKeyThatCameToAnOrderOfSomethingElseIsRefused(): void
     {
-        $this->purchase($this->card, 'one-attempt');
+        $this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'one-attempt');
 
         $responses = [
-            'another plan' => $this->send('POST', $this->storeApi($this->website, '/orders'), ['plan_id' => $this->plan(['name' => 'دوماهه', 'price' => '200000.00'], $this->server)->id, 'server_id' => $this->server->id, 'method_id' => $this->card->id], ['Idempotency-Key' => 'one-attempt']),
-            'a top-up' => $this->send('POST', $this->storeApi($this->website, '/wallet/top-up'), ['amount' => 120000, 'method_id' => $this->card->id], ['Idempotency-Key' => 'one-attempt']),
+            'another plan' => $this->placeOrder($this->website, $this->plan(['name' => 'دوماهه', 'price' => '200000.00'], $this->server), $this->server, $this->card, key: 'one-attempt'),
+            'a top-up' => $this->placeTopUp($this->website, 120000, $this->card, 'one-attempt'),
         ];
-        $this->topUp(50000, 'a-top-up');
-        $responses['a top-up of another amount'] = $this->topUp(60000, 'a-top-up');
+        $this->placeTopUp($this->website, 50000, $this->card, 'a-top-up');
+        $responses['a top-up of another amount'] = $this->placeTopUp($this->website, 60000, $this->card, 'a-top-up');
 
         foreach ($responses as $why => $response) {
             self::assertSame([422, [RequestKeyReusedException::MESSAGE]], [$response->getStatusCode(), $this->decode($response)['errors']['idempotency_key'] ?? null], $why);
@@ -169,13 +169,13 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
     public function testAPriceChangedSinceIsNoOtherThingItsOwnOrderAnswersAtItsOwnPrice(): void
     {
-        $first = $this->decode($this->purchase($this->card, 'before-the-change'))['checkout'];
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'before-the-change'))['checkout'];
         // The wallet's request for the same thing too, its process gone between its order and its payment.
         $wallet = $this->walletMethod();
         $this->service(OrderService::class)->openPurchase($this->customer, $this->plan, $this->server, new OrderKey('the-wallets', $wallet->id));
         $this->plan->forceFill(['price' => '150000.00'])->save();
 
-        $again = $this->purchase($this->card, 'before-the-change');
+        $again = $this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'before-the-change');
 
         self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
         $checkout = $this->decode($again)['checkout'];
@@ -183,7 +183,7 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
         // The wallet's made again: what it is short of is judged by the order's own amount.
         $this->wallet($this->customer, '130000');
-        $paid = $this->decode($this->purchase($wallet, 'the-wallets'))['checkout'];
+        $paid = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $wallet, key: 'the-wallets'))['checkout'];
         self::assertSame(['settled', $first['order']['id']], [$paid['outcome'], $paid['order']['id']]);
         self::assertSame('10000.00', $this->customer->balance());
         self::assertSame(1, Order::query()->count());
@@ -191,29 +191,29 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
     public function testAKeyMadeAgainWithAnotherWayToPayIsRefusedNeverPaidSo(): void
     {
-        $first = $this->decode($this->purchase($this->card, 'one-attempt'))['checkout'];
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'one-attempt'))['checkout'];
 
         // The card's request, its key sent again with the wallet: the order would be paid another way than it was asked.
-        $wallet = $this->purchase($this->walletMethod(), 'one-attempt');
+        $wallet = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'one-attempt');
 
         self::assertSame([422, [RequestKeyReusedException::OTHER_METHOD]], [$wallet->getStatusCode(), $this->decode($wallet)['errors']['idempotency_key'] ?? null]);
         self::assertSame('500000.00', $this->customer->balance(), 'nothing charged');
         self::assertSame([$this->card->id], RequestKey::query()->pluck('payment_method_id')->all(), 'the key keeps the way it was sent with');
-        $again = $this->decode($this->purchase($this->card, 'one-attempt'))['checkout'];
+        $again = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'one-attempt'))['checkout'];
         self::assertSame(['transfer', $first['order']['id']], [$again['outcome'], $again['order']['id']], 'made again as it was: its own order');
 
         // Another way to pay is another checkout attempt — a key of its own: the open order of the same thing, paid.
-        $paid = $this->decode($this->purchase($this->walletMethod(), 'another-attempt'))['checkout'];
+        $paid = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'another-attempt'))['checkout'];
         self::assertSame(['settled', $first['order']['id']], [$paid['outcome'], $paid['order']['id']]);
     }
 
     public function testAKeyKeptBeforeKeysKeptTheirWayToPayIsAnsweredWhateverWayIsSent(): void
     {
-        $first = $this->decode($this->purchase($this->card, 'from-before'))['checkout'];
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'from-before'))['checkout'];
         // What db:rebuild carries over of a key kept before keys kept their way to pay: none.
         RequestKey::query()->update(['payment_method_id' => null]);
 
-        $again = $this->purchase($this->walletMethod(), 'from-before');
+        $again = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'from-before');
 
         self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
         self::assertSame(['settled', $first['order']['id']], [$this->decode($again)['checkout']['outcome'], $this->decode($again)['checkout']['order']['id']], 'its order, as it was answered then');
@@ -222,11 +222,11 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
     public function testAKeyWhoseOrderWasCancelledSinceIsSaidSoInWordsOfItsOwn(): void
     {
-        $this->purchase($this->card, 'left-unpaid');
+        $this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'left-unpaid');
         Carbon::setTestNow(now()->addHours(49));
         $this->service(ExpireOrdersTask::class)->run();
 
-        $again = $this->purchase($this->card, 'left-unpaid');
+        $again = $this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'left-unpaid');
 
         self::assertSame([409, CheckoutRefusedException::CANCELLED], [$again->getStatusCode(), $this->decode($again)['message']], 'not «a moment ago»: it went unpaid two days back');
         self::assertSame(1, Order::query()->count(), 'nothing ordered again');
@@ -257,7 +257,7 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
             static function (object $query) use (&$looked): bool {
                 return $query instanceof QueryExecuted && str_starts_with($query->sql, self::KEYED) && ++$looked === 3;
             },
-            fn(): ResponseInterface => $this->purchase($this->walletMethod()),
+            fn(): ResponseInterface => $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod()),
         );
 
         self::assertSame(200, $twin['this']->getStatusCode(), (string) $twin['this']->getBody());
@@ -274,7 +274,7 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
         $twin = $this->withATwin(
             TransactionCommitted::class,
             static fn(): bool => Order::query()->exists(),
-            fn(): ResponseInterface => $this->purchase($this->walletMethod()),
+            fn(): ResponseInterface => $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod()),
         );
 
         self::assertSame(200, $twin['this']->getStatusCode(), (string) $twin['this']->getBody());
@@ -287,12 +287,12 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
     public function testTwoAccountsMergedKeepTheSurvivorsKey(): void
     {
         $older = $this->customer;
-        $theirs = $this->decode($this->purchase($this->card, 'shared-key'))['checkout']['order']['id'];
+        $theirs = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'shared-key'))['checkout']['order']['id'];
         Carbon::setTestNow(now()->addMinute());
         $newer = $this->webCustomer();
         $this->bearer($this->customerSession($newer));
-        $this->purchase($this->card, 'shared-key');
-        $own = $this->decode($this->topUp(50000, 'newer-key'))['checkout']['order']['id'];
+        $this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'shared-key');
+        $own = $this->decode($this->placeTopUp($this->website, 50000, $this->card, 'newer-key'))['checkout']['order']['id'];
 
         $survivor = $this->service(AccountMerger::class)->merge($older, $newer, AccountMerger::BY_CUSTOMER);
 
@@ -305,7 +305,7 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
     public function testAKeyIsForgottenAWeekOn(): void
     {
-        $first = $this->decode($this->purchase($this->walletMethod(), 'kept-a-week'))['checkout']['order']['id'];
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'kept-a-week'))['checkout']['order']['id'];
 
         Carbon::setTestNow(now()->addDays(RequestKey::KEEP_DAYS)->subMinute());
         $this->service(ExpireOrdersTask::class)->run();
@@ -314,18 +314,8 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
         Carbon::setTestNow(now()->addMinutes(2));
         $this->service(ExpireOrdersTask::class)->run();
         self::assertSame(0, RequestKey::query()->count());
-        $again = $this->decode($this->purchase($this->walletMethod(), 'kept-a-week'))['checkout']['order']['id'];
+        $again = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'kept-a-week'))['checkout']['order']['id'];
         self::assertNotSame($first, $again, 'made again after a week: a new request');
-    }
-
-    private function purchase(PaymentMethod $method, string $key = 'key-1'): ResponseInterface
-    {
-        return $this->send('POST', $this->storeApi($this->website, '/orders'), ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'method_id' => $method->id], ['Idempotency-Key' => $key]);
-    }
-
-    private function topUp(int $amount, string $key): ResponseInterface
-    {
-        return $this->send('POST', $this->storeApi($this->website, '/wallet/top-up'), ['amount' => $amount, 'method_id' => $this->card->id], ['Idempotency-Key' => $key]);
     }
 
     /**

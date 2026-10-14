@@ -17,6 +17,7 @@ use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Services\CustomerLookup;
 use Illuminate\Support\Carbon;
 use Psr\Http\Message\ResponseInterface;
 use Tests\Fakes\FakeProvider;
@@ -67,7 +68,7 @@ final class AdminSubscriptionTransferApiTest extends HttpTestCase
         self::assertSame($row, $this->row($service), 'as the list shows it');
         self::assertSame([self::text(BotText::ServiceTransferredBySupport, ['client' => 'ali_r_1', 'cancelled' => ''])], $this->telegram()->sentTo(1001), 'the previous customer told');
         self::assertCount(1, $this->telegram()->sentTo(self::SARA), 'the new one told');
-        self::assertStringContainsString('🎧 توسط پشتیبانی: root', (string) ReportMessage::query()->value('text'));
+        self::assertStringEndsWith("\n🎧 توسط پشتیبانی", (string) ReportMessage::query()->value('text'), "the owner's login reaches no group");
         self::assertSame(self::SARA, FakeProvider::lastUpdate('ali_r_1')->telegramId, 'its client on the panel follows');
         self::assertFalse($this->service(ServiceTransferSettings::class)->enabled(), 'whatever the customers\' switch says');
     }
@@ -80,8 +81,8 @@ final class AdminSubscriptionTransferApiTest extends HttpTestCase
         self::assertFalse($this->row($test)['actions']['transfer'], 'a free test stays its customer\'s');
 
         $this->assertRefusedUnder('status', ServiceTransfers::TEST, $this->transfer($test, (string) self::SARA));
-        $this->assertRefusedUnder('telegram_id', ServiceTransfers::NOT_AN_ID, $this->transfer($service, 'sara'));
-        $this->assertRefusedUnder('telegram_id', ServiceTransfers::UNKNOWN, $this->transfer($service, '9999'));
+        $this->assertRefusedUnder('telegram_id', CustomerLookup::NOT_AN_ID, $this->transfer($service, 'sara'));
+        $this->assertRefusedUnder('telegram_id', CustomerLookup::UNKNOWN, $this->transfer($service, '9999'));
         $this->assertRefusedUnder('telegram_id', ServiceTransfers::SAME, $this->transfer($service, 1001));
         self::assertSame(404, $this->postJson('/api/admin/subscriptions/999999/transfer', ['telegram_id' => self::SARA])->getStatusCode());
         self::assertSame($this->ali->id, $service->fresh()?->user_id);
@@ -99,7 +100,7 @@ final class AdminSubscriptionTransferApiTest extends HttpTestCase
         self::assertSame($this->ali->id, $service->fresh()?->user_id, 'nothing changed');
 
         $this->assertRefusedUnder('telegram_id', ServiceTransfers::SAME, $lookUp('1001'));
-        $this->assertRefusedUnder('telegram_id', ServiceTransfers::UNKNOWN, $lookUp('9999'));
+        $this->assertRefusedUnder('telegram_id', CustomerLookup::UNKNOWN, $lookUp('9999'));
         $this->sara->forceFill(['status' => UserStatus::Banned])->save();
         $this->assertRefusedUnder('telegram_id', ServiceTransfers::BANNED, $lookUp((string) self::SARA));
         self::assertSame([], $this->telegram()->sentTo(self::SARA), 'nobody told');
@@ -116,7 +117,7 @@ final class AdminSubscriptionTransferApiTest extends HttpTestCase
         });
         $this->loginAsAgent($bot);
 
-        $this->assertRefusedUnder('telegram_id', ServiceTransfers::UNKNOWN, $this->postJson("/api/agent/subscriptions/{$theirs->id}/transfer", ['telegram_id' => (string) self::SARA]));
+        $this->assertRefusedUnder('telegram_id', CustomerLookup::UNKNOWN, $this->postJson("/api/agent/subscriptions/{$theirs->id}/transfer", ['telegram_id' => (string) self::SARA]));
 
         $response = $this->postJson("/api/agent/subscriptions/{$theirs->id}/transfer", ['telegram_id' => '8080']);
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());

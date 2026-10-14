@@ -172,7 +172,7 @@ describe('stopping a grant', () => {
 
     act(() => result.current.cancel.mutate(grant()))
 
-    await until(() => expect(toast.success).toHaveBeenCalledWith('افزودن زمان و حجم متوقف شد'))
+    await until(() => expect(toast.success).toHaveBeenCalledWith('افزودن زمان و حجم لغو شد'))
     expect(client.getQueryData<ServerGrantsResponse>(queryKeys.serverGrants(4))?.grants[0]?.status).toBe('cancelled')
     expect(result.current.running).toBeNull()
     // What it gave so far is read again — by the stop; the run the card left reads nothing.

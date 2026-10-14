@@ -25,9 +25,9 @@ final class PanelHttp
     ) {}
 
     /**
-     * One request to the panel at `$connection`: its address plus `$path`, its TLS rule and timeouts. The answer comes
-     * back whatever its status (the connector reads it) and a redirect is never followed (the connector reports it: a
-     * wrong address).
+     * One request to the panel at `$connection`: its address plus `$path`, its TLS rule, timeouts and proxy. The answer
+     * comes back whatever its status (the connector reads it) and a redirect is never followed (the connector reports it:
+     * a wrong address).
      *
      * @param array<string, mixed> $options Guzzle request options (headers, body)
      * @throws ConnectionException on a transport failure
@@ -40,7 +40,7 @@ final class PanelHttp
                 'allow_redirects' => false,
             ]);
         } catch (GuzzleException $e) {
-            throw ConnectionException::fromTransport($e);
+            throw ConnectionException::fromTransport($e, proxied: $connection->proxy !== null);
         }
     }
 

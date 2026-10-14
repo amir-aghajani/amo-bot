@@ -57,7 +57,7 @@ final class OrderPresenter
     /**
      * One attempt to pay an order: its way to pay, how it stands, whether a receipt was sent, and its verdict's note.
      *
-     * @return array{id: int, method: array{id: int, label: string, kind: string|null}, status: string, amount: string, created_at: string, paid_at: string|null, receipt: array{sent_at: string}|null, note: string|null}
+     * @return array{id: int, method: array{id: int, label: string, kind: string|null, min_amount: string|null, max_amount: string|null}, status: string, amount: string, created_at: string, paid_at: string|null, receipt: array{sent_at: string}|null, note: string|null}
      */
     public function payment(Payment $payment): array
     {
@@ -74,13 +74,19 @@ final class OrderPresenter
     }
 
     /**
-     * A way to pay: its label and how its driver settles — instant (the wallet), manual (a card transfer), null for a
-     * driver no longer installed.
+     * A way to pay: its label, how its driver settles — instant (the wallet), manual (a card transfer), null for a
+     * driver no longer installed — and the amounts it is offered for (null: no bound).
      *
-     * @return array{id: int, label: string, kind: string|null}
+     * @return array{id: int, label: string, kind: string|null, min_amount: string|null, max_amount: string|null}
      */
     public function method(PaymentMethod $method): array
     {
-        return ['id' => $method->id, 'label' => $method->label, 'kind' => $this->gateways->kind($method->driver)?->value];
+        return [
+            'id' => $method->id,
+            'label' => $method->label,
+            'kind' => $this->gateways->kind($method->driver)?->value,
+            'min_amount' => $method->min_amount,
+            'max_amount' => $method->max_amount,
+        ];
     }
 }

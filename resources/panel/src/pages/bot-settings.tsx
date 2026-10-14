@@ -5,6 +5,7 @@ import { ClientNamesSection } from '@/components/bot/settings/client-names-secti
 import { ExpiredServicesSection } from '@/components/bot/settings/expired-services-section'
 import { ExtrasSection } from '@/components/bot/settings/extras-section'
 import { GeneralSection } from '@/components/bot/settings/general-section'
+import { PaymentsSection } from '@/components/bot/settings/payments-section'
 import { QrSection } from '@/components/bot/settings/qr-section'
 import { ReferralSection } from '@/components/bot/settings/referral-section'
 import { RemindersSection } from '@/components/bot/settings/reminders-section'
@@ -13,6 +14,7 @@ import { ReportsSection } from '@/components/bot/settings/reports-section'
 import { ServiceClaimsSection } from '@/components/bot/settings/service-claims-section'
 import { ServiceTransfersSection } from '@/components/bot/settings/service-transfers-section'
 import { WalletSection } from '@/components/bot/settings/wallet-section'
+import { WalletTransfersSection } from '@/components/bot/settings/wallet-transfers-section'
 import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
 import { SectionedPage } from '@/components/sectioned-page'
@@ -58,6 +60,8 @@ const EMPTY = {
   general: null,
   channels: null,
   wallet: null,
+  wallet_transfers: null,
+  payments: null,
   renewal: null,
   extras: null,
   reminders: null,
@@ -76,6 +80,8 @@ function sectionsOf(data: BotSettingsResponse) {
     general: <GeneralSection settings={settings} />,
     channels: <ChannelsSection settings={settings} />,
     wallet: <WalletSection settings={settings} />,
+    wallet_transfers: <WalletTransfersSection settings={settings} />,
+    payments: <PaymentsSection settings={settings} />,
     renewal: <RenewalSection settings={settings} />,
     extras: <ExtrasSection settings={settings} />,
     reminders: <RemindersSection settings={settings} />,

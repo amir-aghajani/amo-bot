@@ -79,6 +79,8 @@ export function onUnauthorized(listener: Listener): () => void {
 interface RequestOptions {
   /** A sign-in (the owner's password, an agent's link): its 401 refuses the attempt only, and leaves an open session alone. */
   signIn?: boolean
+  /** An order's `Idempotency-Key` (support's order by hand): the same key again is answered by the order it made, never a second one. */
+  idempotencyKey?: string
 }
 
 /** Whether a body carries a file (an upload): it then goes as multipart. */
@@ -98,7 +100,14 @@ function formOf(body: Record<string, unknown>): FormData {
 /** What a request reads of a success: JSON, the bytes (a file the panel handles itself), or nothing (is the file there?). */
 type Reading = 'json' | 'blob' | 'none'
 
-async function request<T>(url: string, method: string, headers: Record<string, string>, body?: unknown, { signIn = false }: RequestOptions = {}, reading: Reading = 'json'): Promise<T> {
+async function request<T>(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body?: unknown,
+  { signIn = false, idempotencyKey }: RequestOptions = {},
+  reading: Reading = 'json',
+): Promise<T> {
   const content = body === undefined ? undefined : holdsFile(body) ? formOf(body) : JSON.stringify(body)
   const endpoint = `${method} ${new URL(url, document.baseURI).pathname}`
   const controller = new AbortController()
@@ -120,6 +129,7 @@ async function request<T>(url: string, method: string, headers: Record<string, s
         // The session API's CSRF guard: a browser cannot send a custom header cross-site.
         'X-Requested-With': 'XMLHttpRequest',
         ...(typeof content === 'string' ? { 'Content-Type': 'application/json' } : {}),
+        ...(idempotencyKey === undefined ? {} : { 'Idempotency-Key': idempotencyKey }),
         ...headers,
       },
       body: content,

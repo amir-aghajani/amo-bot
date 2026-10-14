@@ -18,6 +18,15 @@ final class Validation
         return "{$label} حداکثر {$max} کاراکتر است.";
     }
 
+    /**
+     * «سقف روزانه را به تومان و بدون اعشار بنویسید؛ خالی یعنی بدون سقف.» — money typed that is no whole Toman; `$blank`
+     * says what leaving it blank means, where it may be.
+     */
+    public static function notWholeToman(string $label, ?string $blank = null): string
+    {
+        return "{$label} را به تومان و بدون اعشار بنویسید" . ($blank === null ? '.' : "؛ خالی یعنی {$blank}.");
+    }
+
     /** Why PHP did not take an uploaded file whole (past php.ini's limit, or cut short); null when it did. */
     public static function uploadFailure(UploadedFileInterface $file): ?string
     {

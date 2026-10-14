@@ -12,7 +12,8 @@ import { formatDate, formatNumber, timeAgo } from '@/lib/format'
 
 /**
  * The connection facts the card shows, read from the server's form by the fields every connector shares (PanelConnection
- * and PanelCredentials on the PHP side): the way in, a kept two-factor secret, the links' prefix, TLS and the timeout.
+ * and PanelCredentials on the PHP side): the way in, a kept two-factor secret, the links' prefix, TLS, the timeout, and
+ * the SOCKS5 proxy the panel is reached through — its address and username, never its password.
  */
 function connectionOf(form: DriverValues) {
   const text = (name: string) => {
@@ -20,6 +21,7 @@ function connectionOf(form: DriverValues) {
     return typeof value === 'string' ? value : ''
   }
   const secret = form.totp_secret
+  const proxyHost = text('proxy_host')
 
   return {
     token: form.auth_mode === 'token',
@@ -28,6 +30,14 @@ function connectionOf(form: DriverValues) {
     subscriptionUrl: text('subscription_url'),
     verifyTls: form.verify_tls === true,
     timeout: typeof form.timeout === 'number' ? form.timeout : null,
+    proxy:
+      form.proxy_enabled === true && proxyHost !== ''
+        ? {
+            // An IPv6 address in brackets, as its port follows it.
+            address: `${proxyHost.includes(':') ? `[${proxyHost}]` : proxyHost}:${typeof form.proxy_port === 'number' ? form.proxy_port : ''}`,
+            username: text('proxy_username'),
+          }
+        : null,
   }
 }
 
@@ -105,6 +115,19 @@ export function StatusCard({ server, probe, driver }: { server: ServerRow; probe
           <Fact label="اشتراک‌های فعال">
             <ActiveServices server={server} />
           </Fact>
+          {connection?.proxy && (
+            <Fact label="پراکسی SOCKS5">
+              <bdi dir="ltr" className="break-all">
+                {connection.proxy.address}
+              </bdi>
+              {connection.proxy.username && (
+                <>
+                  {' · نام کاربری '}
+                  <bdi dir="ltr">{connection.proxy.username}</bdi>
+                </>
+              )}
+            </Fact>
+          )}
           {connection && <Fact label="گواهی TLS">{connection.verifyTls ? 'بررسی می‌شود' : 'بررسی نمی‌شود'}</Fact>}
           {connection?.timeout != null && (
             <Fact label="تایم‌اوت">

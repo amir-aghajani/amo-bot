@@ -45,6 +45,27 @@ final class ProviderRegistryTest extends TestCase
         }
     }
 
+    public function testAnotherProxyIsAnotherConnection(): void
+    {
+        $registry = $this->registry();
+        $proxy = ['api_token' => 'tok', 'proxy_enabled' => true, 'proxy_host' => 'proxy.example.com', 'proxy_port' => 1080, 'proxy_username' => 'shop', 'proxy_password' => 'pw'];
+        $direct = $registry->forServer(self::stored(['api_token' => 'tok']));
+        $proxied = $registry->forServer(self::stored($proxy));
+        self::assertNotSame($direct, $proxied, 'through a proxy now');
+        self::assertSame($proxied, $registry->forServer(self::stored($proxy)), 'the same proxy: the same client');
+
+        foreach ([
+            'another host' => ['proxy_host' => 'proxy2.example.com'],
+            'another port' => ['proxy_port' => 1081],
+            'another username' => ['proxy_username' => 'other'],
+            'another password' => ['proxy_password' => 'rotated'],
+            'switched off' => ['proxy_enabled' => false],
+        ] as $case => $change) {
+            $kept = $registry->forServer(self::stored($proxy));
+            self::assertNotSame($kept, $registry->forServer(self::stored($change + $proxy)), $case);
+        }
+    }
+
     public function testADriverIsBuiltAfreshAfterAWhileAndOnRequest(): void
     {
         $registry = $this->registry();
@@ -112,7 +133,7 @@ final class ProviderRegistryTest extends TestCase
      */
     private static function stored(array $attributes): Server
     {
-        $server = new Server($attributes + ['name' => 'DE-1', 'driver' => '3x-ui', 'base_url' => 'https://de1.example.com:2053/AbCdEf', 'api_token' => null, 'username' => null, 'password' => null, 'totp_secret' => null, 'meta' => null]);
+        $server = new Server($attributes + ['name' => 'DE-1', 'driver' => '3x-ui', 'base_url' => 'https://de1.example.com:2053/AbCdEf', 'api_token' => null, 'username' => null, 'password' => null, 'totp_secret' => null, 'meta' => null, 'proxy_enabled' => false, 'proxy_host' => null, 'proxy_port' => null, 'proxy_username' => null, 'proxy_password' => null]);
         $server->forceFill(['id' => 5]);
         $server->exists = true;
 

@@ -13,6 +13,9 @@ enum RenewalRefusal
     /** The renewal method named is not one the shop offers. */
     case MethodNotOffered;
 
+    /** An agent's shop whose selling is suspended renews nothing (Bot::sells()). */
+    case SellingSuspended;
+
     /** A service renewed on its own plan was named a package to build. */
     case RenewsOnItsPlan;
 

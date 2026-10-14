@@ -2,7 +2,7 @@ import { useCallback, useState, type FormEvent } from 'react'
 import { useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { ApiError, type FieldErrors } from '@/lib/api'
 import { messageOf } from '@/lib/failure'
-import { toLatinDigits } from '@/lib/format'
+import { toLatinDigits, wholeOf } from '@/lib/format'
 import { runMutation } from '@/lib/query-client'
 import { sameData } from '@/lib/utils'
 
@@ -32,6 +32,14 @@ export function trimmed(value: unknown): unknown {
   if (typeof value === 'string') return value.trim()
   if (Array.isArray(value)) return value.map(trimmed)
   return isRecord(value) ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, trimmed(item)])) : value
+}
+
+/**
+ * A form of amounts and counts as the server reads it: each text that writes a whole number as its digits («۲۰٬۰۰۰» and
+ * "20,000" are "20000", as Input::wholeOf() reads them), every other text trimmed (`trimmed`) — a settings group's.
+ */
+export function asNumbers(values: object): unknown {
+  return trimmed(Object.fromEntries(Object.entries(values).map(([name, value]: [string, unknown]) => [name, typeof value === 'string' ? (wholeOf(value) ?? value) : value])))
 }
 
 /** A list read as a set (each item once, in no order), for a field the server keeps as one: a customer's groups. */

@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Core\Scheduling\Scheduler;
 use App\Modules\Accounts\Tasks\PruneAccountsTask;
+use App\Modules\Agency\Tasks\AgencyStandingTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
@@ -13,6 +14,7 @@ use App\Modules\Rewards\Tasks\NightlyDrawTask;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Subscriptions\Tasks\CleanupServicesTask;
 use App\Modules\Subscriptions\Tasks\GrantsTask;
+use App\Modules\Subscriptions\Tasks\MigrationsTask;
 use App\Modules\Subscriptions\Tasks\NextPeriodTask;
 use App\Modules\Subscriptions\Tasks\SendRemindersTask;
 use App\Modules\Subscriptions\Tasks\SyncSubscriptionsTask;
@@ -43,9 +45,11 @@ final class ShopScheduleTest extends DatabaseTestCase
             AutoRenewTask::class => [30, 'each shop'],
             NextPeriodTask::class => [10, 'each shop'],
             GrantsTask::class => [1, 'across shops'],
+            MigrationsTask::class => [1, 'across shops'],
             SyncSubscriptionsTask::class => [15, 'across shops'],
             SendRemindersTask::class => [15, 'each shop'],
             CleanupServicesTask::class => [15, 'across shops'],
+            AgencyStandingTask::class => [60, 'across shops'],
             PruneUpdatesTask::class => [60, 'across shops'],
             PruneAccountsTask::class => [60, 'across shops'],
             PruneTicketsTask::class => [60, 'each shop'],

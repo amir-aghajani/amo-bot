@@ -8,6 +8,7 @@ use App\Core\Database\Page;
 use App\Core\Database\PageRequest;
 use App\Modules\Auth\CurrentPrincipal;
 use App\Modules\Auth\PrincipalKind;
+use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Orders\Enums\OrderStatus;
@@ -31,7 +32,10 @@ final class OrderDirectory
     /** The tab that is not a status: orders paid and not delivered — the queue that waits on support (Order::stuck()). */
     public const STUCK = 'stuck';
 
-    public function __construct(private readonly OrderActions $actions) {}
+    public function __construct(
+        private readonly OrderActions $actions,
+        private readonly Reviewers $reviewers,
+    ) {}
 
     /** A page of orders, newest first or by amount, with the stuck count and the list's sales count and total. */
     public function search(PageRequest $list): Page
@@ -87,6 +91,8 @@ final class OrderDirectory
             'devices' => $order->devices,
             // Why it failed, or why it was cancelled — as whoever reads the screen may read it.
             'notes' => self::notes($order),
+            // One support made by hand for its customer: who, how it was paid, and their note.
+            'manual' => $this->manual($order),
             'payments' => $order->payments->map(static fn(Payment $payment): array => [
                 'id' => $payment->id,
                 'status' => $payment->status->value,
@@ -118,6 +124,19 @@ final class OrderDirectory
             'discounts' => DiscountLine::presentAll($order->discountLines()),
             'discount_code' => $code?->code === null ? null : ['id' => $order->discount_code_id, 'code' => $code->code],
         ];
+    }
+
+    /**
+     * An order support made by hand (ManualOrders): who made it, as whoever reads the screen may see them (Reviewers), how
+     * it was paid (Order::manualPayment()) and their note; null for an order the customer made.
+     *
+     * @return array{by: string|null, payment: string, note: string|null}|null
+     */
+    private function manual(Order $order): ?array
+    {
+        $payment = $order->manualPayment();
+
+        return $payment === null ? null : ['by' => $this->reviewers->present($order->created_by), 'payment' => $payment->value, 'note' => $order->support_note];
     }
 
     /**

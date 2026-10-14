@@ -9,13 +9,14 @@ import { windowEnd, windowRequest, type WindowEnd } from '@/components/discounts
 import { WindowField } from '@/components/discounts/window-field'
 import { Field } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
+import { MoneyField } from '@/components/money-field'
 import { PageTabs, type PageTab } from '@/components/page-tabs'
 import { SwitchRow } from '@/components/switch-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { DiscountCodeRequest, DiscountCodeRow, DiscountType, OwnOrderType } from '@/lib/api-types'
-import { formatMoney, formatNumber, wholeOf } from '@/lib/format'
+import { formatNumber } from '@/lib/format'
 import { planOptionsQuery } from '@/lib/queries'
 import { DISCOUNT_TYPE } from '@/lib/statuses'
 import { useForm } from '@/lib/use-form'
@@ -108,8 +109,6 @@ export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps
     },
     { reads: requestOf },
   )
-  const value = wholeOf(values.value)
-  const cap = wholeOf(values.max_discount)
 
   const save = handleSubmit(async () => {
     const body = requestOf(values)
@@ -149,26 +148,29 @@ export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps
             <Field id="code_value" label="درصد تخفیف" error={error('value')} hint="بین 1 تا 100">
               <Input dir="ltr" inputMode="numeric" autoComplete="off" placeholder="20" value={values.value} onChange={(e) => set('value', e.target.value)} />
             </Field>
-            <Field
+            <MoneyField
               id="code_cap"
               label="سقف تخفیف (تومان)"
               optional
+              value={values.max_discount}
+              onChange={(cap) => set('max_discount', cap)}
               error={error('max_discount')}
-              hint={cap !== null && Number(cap) > 0 ? `بیشتر از ${formatMoney(cap)} کم نمی‌کند.` : 'خالی یعنی بدون سقف.'}
-            >
-              <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values.max_discount} onChange={(e) => set('max_discount', e.target.value)} />
-            </Field>
+              says={(money) => `بیشتر از ${money} کم نمی‌کند.`}
+              hint="خالی یعنی بدون سقف."
+            />
           </div>
         )}
         {values.type === 'fixed' && (
-          <Field
+          <MoneyField
             id="code_value"
             label="مبلغ تخفیف (تومان)"
+            placeholder="20000"
+            value={values.value}
+            onChange={(value) => set('value', value)}
             error={error('value')}
-            hint={value !== null && Number(value) > 0 ? `${formatMoney(value)} از مبلغ سفارش کم می‌شود، نه بیشتر از خود مبلغ.` : undefined}
-          >
-            <Input dir="ltr" inputMode="numeric" autoComplete="off" placeholder="20000" value={values.value} onChange={(e) => set('value', e.target.value)} className="sm:max-w-48" />
-          </Field>
+            says={(money) => `${money} از مبلغ سفارش کم می‌شود، نه بیشتر از خود مبلغ.`}
+            inputClassName="sm:max-w-48"
+          />
         )}
         {values.type === 'free' && <p className="text-footnote text-muted-foreground">کل مبلغ سفارش را کم می‌کند و سفارش رایگان تحویل می‌شود.</p>}
       </div>
@@ -202,9 +204,17 @@ export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps
             error={error('server_ids')}
             {...optionsRead(options, 'سرورها')}
           />
-          <Field id="code_min" label="حداقل مبلغ سفارش (تومان)" optional error={error('min_amount')} hint="مبلغ سفارش بعد از تخفیف خودکار؛ خالی یعنی هر مبلغی.">
-            <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values.min_amount} onChange={(e) => set('min_amount', e.target.value)} className="sm:max-w-48" />
-          </Field>
+          <MoneyField
+            id="code_min"
+            label="حداقل مبلغ سفارش (تومان)"
+            optional
+            value={values.min_amount}
+            onChange={(least) => set('min_amount', least)}
+            error={error('min_amount')}
+            says={(money) => `دست‌کم ${money}، مبلغ سفارش بعد از تخفیف خودکار.`}
+            hint="مبلغ سفارش بعد از تخفیف خودکار؛ خالی یعنی هر مبلغی."
+            inputClassName="sm:max-w-48"
+          />
           <SwitchRow
             label="فقط برای خرید اول"
             hint="فقط مشتری‌ای که هنوز سرویسی نخریده از این کد استفاده می‌کند."

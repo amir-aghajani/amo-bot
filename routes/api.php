@@ -47,6 +47,7 @@ use App\Modules\Admin\Api\ReportGroupController;
 use App\Modules\Admin\Api\ReviewsController;
 use App\Modules\Admin\Api\SalesController;
 use App\Modules\Admin\Api\ServerGrantsController;
+use App\Modules\Admin\Api\ServerMigrationsController;
 use App\Modules\Admin\Api\ServersController;
 use App\Modules\Admin\Api\SubscriptionsController;
 use App\Modules\Admin\Api\SystemController;
@@ -142,6 +143,7 @@ return static function (App $app): void {
         $shop->patch('/users/{id:[0-9]+}', [UsersController::class, 'patch']);
         $shop->get('/users/{id:[0-9]+}/wallet', [UsersController::class, 'wallet']);
         $shop->post('/users/{id:[0-9]+}/wallet', [UsersController::class, 'adjustWallet'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Wallet->value);
+        $shop->post('/users/{id:[0-9]+}/orders', [OrdersController::class, 'store'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::ManualOrders->value);
         $shop->put('/users/{id:[0-9]+}/groups', [UsersController::class, 'groups']);
         $shop->post('/users/{id:[0-9]+}/two-factor/disable', [UsersController::class, 'disableTwoFactor'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::AccountSecurity->value);
         $shop->post('/users/{id:[0-9]+}/sessions/end', [UsersController::class, 'endSessions'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::AccountSecurity->value);
@@ -158,6 +160,7 @@ return static function (App $app): void {
         $shop->post('/orders/{id:[0-9]+}/cancel', [OrdersController::class, 'cancel']);
 
         $shop->get('/payments', [PaymentsController::class, 'index']);
+        $shop->post('/payments/dismiss', [PaymentsController::class, 'dismiss'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Payments->value);
         $shop->get('/payments/{id:[0-9]+}', [PaymentsController::class, 'show']);
         $shop->get('/payments/{id:[0-9]+}/receipt', [PaymentsController::class, 'receipt']);
         $shop->post('/payments/{id:[0-9]+}/approve', [PaymentsController::class, 'approve'])->setArgument(StaffMiddleware::RECENT_SIGN_IN, 'true');
@@ -318,8 +321,8 @@ return static function (App $app): void {
             $panel->post('/system/update/cancel', [UpdateController::class, 'cancel']);
             $panel->post('/system/update/rollback', [UpdateController::class, 'rollback']);
 
-            // The sections that are the shop's as a whole: its servers, their grants and the mass gifts, across every
-            // bot's services…
+            // The sections that are the shop's as a whole: its servers, their grants, the moves of their services and the
+            // mass gifts, across every bot's services…
             $panel->group('', function (RouteCollectorProxy $owner): void {
                 $owner->get('/servers/drivers', [ServersController::class, 'drivers']);
                 $owner->get('/servers', [ServersController::class, 'index']);
@@ -337,6 +340,17 @@ return static function (App $app): void {
                 $owner->post('/servers/{id:[0-9]+}/grants', [ServerGrantsController::class, 'store']);
                 $owner->post('/servers/{id:[0-9]+}/grants/{grant:[0-9]+}/run', [ServerGrantsController::class, 'run']);
                 $owner->post('/servers/{id:[0-9]+}/grants/{grant:[0-9]+}/cancel', [ServerGrantsController::class, 'cancel']);
+                $owner->get('/servers/{id:[0-9]+}/migrations', [ServerMigrationsController::class, 'index']);
+                $owner->post('/servers/{id:[0-9]+}/migrations/preview', [ServerMigrationsController::class, 'preview']);
+                $owner->post('/servers/{id:[0-9]+}/migrations', [ServerMigrationsController::class, 'store']);
+                $owner->get('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}', [ServerMigrationsController::class, 'show']);
+                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/run', [ServerMigrationsController::class, 'run']);
+                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/pause', [ServerMigrationsController::class, 'pause']);
+                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/resume', [ServerMigrationsController::class, 'resume']);
+                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/cancel', [ServerMigrationsController::class, 'cancel']);
+                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/rescue', [ServerMigrationsController::class, 'rescue']);
+                $owner->post('/servers/{id:[0-9]+}/leftovers/clean', [ServerMigrationsController::class, 'clean']);
+                $owner->delete('/servers/{id:[0-9]+}/leftovers', [ServerMigrationsController::class, 'forget']);
 
                 $owner->get('/mass-grants', [MassGrantsController::class, 'index']);
                 $owner->post('/mass-grants', [MassGrantsController::class, 'store']);
@@ -357,6 +371,10 @@ return static function (App $app): void {
                 $owner->post('/agency/agents/{id:[0-9]+}/revoke', [AgencyController::class, 'revoke']);
                 $owner->get('/agency/agents/{id:[0-9]+}/traffic', [AgencyController::class, 'traffic']);
                 $owner->post('/agency/agents/{id:[0-9]+}/traffic', [AgencyController::class, 'adjustTraffic']);
+                $owner->post('/agency/agents/{id:[0-9]+}/suspend', [AgencyController::class, 'suspend']);
+                $owner->post('/agency/agents/{id:[0-9]+}/resume', [AgencyController::class, 'resume']);
+                $owner->get('/agency/agents/{id:[0-9]+}/hidden', [AgencyController::class, 'hidden']);
+                $owner->put('/agency/agents/{id:[0-9]+}/hidden', [AgencyController::class, 'hide']);
                 $owner->get('/agency/levels', [AgencyLevelsController::class, 'index']);
                 $owner->post('/agency/levels', [AgencyLevelsController::class, 'store']);
                 $owner->post('/agency/levels/reorder', [AgencyLevelsController::class, 'reorder']);
@@ -464,6 +482,9 @@ return static function (App $app): void {
             $customer->post('/payments/{id:[0-9]+}/receipt', [CheckoutController::class, 'receipt'])->setArgument(JsonBodiesMiddleware::UPLOAD, 'picture');
             $customer->get('/wallet', [WalletController::class, 'show']);
             $customer->post('/wallet/top-up', [CheckoutController::class, 'topUp']);
+            $customer->get('/wallet/transfer', [WalletController::class, 'transferRecipient']);
+            // Sending money to someone else asks a recent sign-in too: a bearer token alone gives no money away.
+            $customer->post('/wallet/transfer', [WalletController::class, 'transfer'])->add(RecentSignInMiddleware::class);
             $customer->get('/wallet/transactions', [WalletController::class, 'transactions']);
             $customer->post('/gift-codes/redeem', [StoreGiftCodesController::class, 'redeem']);
             $customer->get('/referral', [ReferralController::class, 'show']);

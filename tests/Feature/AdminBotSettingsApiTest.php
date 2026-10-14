@@ -31,6 +31,7 @@ use Tests\HttpTestCase;
 final class AdminBotSettingsApiTest extends HttpTestCase
 {
     /** The renewal group's rules besides `carry_traffic`, as a fresh shop has them. */
+    private const WALLET_RANDOM = ['topup_random_count' => 0, 'topup_random_min' => 50000, 'topup_random_max' => 500000, 'topup_random_round' => 1000, 'topup_unique_max' => 0];
     private const RENEWAL_RULES = ['renew_window_days' => 0, 'renew_window_percent' => 0, 'renew_extend' => true, 'renew_reset_traffic' => false, 'renew_reset_time' => false, 'renew_default_method' => 'extend'];
 
     protected function setUp(): void
@@ -53,6 +54,18 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'qr_enabled' => true,
             'topup_min' => 10000,
             'topup_presets' => [50000, 100000, 200000, 500000],
+            'topup_random_count' => 0,
+            'topup_random_min' => 50000,
+            'topup_random_max' => 500000,
+            'topup_random_round' => 1000,
+            'topup_unique_max' => 0,
+            'wallet_transfer_enabled' => false,
+            'wallet_transfer_min' => 10000,
+            'wallet_transfer_max' => 5000000,
+            'wallet_transfer_daily' => 10000000,
+            'card_protect' => true,
+            'card_to_support' => false,
+            'receipt_single' => true,
             'carry_traffic' => false,
             'renew_window_days' => 0,
             'renew_window_percent' => 0,
@@ -226,7 +239,7 @@ final class AdminBotSettingsApiTest extends HttpTestCase
 
     public function testTheWalletGroupTakesAMinimumAndPresetsInAnyReasonableForm(): void
     {
-        $response = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => '۲۰٬۰۰۰', 'topup_presets' => '100000، 20000 , 50000, 50000']);
+        $response = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => '۲۰٬۰۰۰', 'topup_presets' => '100000، 20000 , 50000, 50000'] + self::WALLET_RANDOM);
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         $settings = $this->decode($response)['settings'];
@@ -235,23 +248,23 @@ final class AdminBotSettingsApiTest extends HttpTestCase
         self::assertTrue($settings['enabled'], 'the other group is untouched');
 
         // Thousands set apart, as the screen's hint reads them: a comma between groups of three splits no amount.
-        $grouped = $this->decode($this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => '10,000', 'topup_presets' => '50,000, 100,000']))['settings'];
+        $grouped = $this->decode($this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => '10,000', 'topup_presets' => '50,000, 100,000'] + self::WALLET_RANDOM))['settings'];
         self::assertSame([10000, [50000, 100000]], [$grouped['topup_min'], $grouped['topup_presets']]);
 
-        $asList = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => 20000, 'topup_presets' => [30000, '40000']]);
+        $asList = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => 20000, 'topup_presets' => [30000, '40000']] + self::WALLET_RANDOM);
         self::assertSame([30000, 40000], $this->decode($asList)['settings']['topup_presets']);
 
-        $bad = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => '500', 'topup_presets' => 'abc']);
+        $bad = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => '500', 'topup_presets' => 'abc'] + self::WALLET_RANDOM);
         self::assertSame(422, $bad->getStatusCode());
         $errors = $this->decode($bad)['errors'];
         self::assertArrayHasKey('topup_min', $errors);
         self::assertArrayHasKey('topup_presets', $errors);
 
-        $below = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => 50000, 'topup_presets' => '20000']);
+        $below = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => 50000, 'topup_presets' => '20000'] + self::WALLET_RANDOM);
         self::assertSame(422, $below->getStatusCode());
         self::assertSame(['هیچ‌کدام از مبلغ‌های پیشنهادی نمی‌تواند از حداقل شارژ کمتر باشد.'], $this->decode($below)['errors']['topup_presets']);
 
-        $many = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => 10000, 'topup_presets' => implode(' ', range(10000, 90000, 10000))]);
+        $many = $this->putJson('/api/admin/bot/settings/wallet', ['topup_min' => 10000, 'topup_presets' => implode(' ', range(10000, 90000, 10000))] + self::WALLET_RANDOM);
         self::assertSame(['مبلغ‌های پیشنهادی حداکثر 8 عدد است.'], $this->decode($many)['errors']['topup_presets']);
         self::assertSame([30000, 40000], $this->service(WalletSettings::class)->topUpPresets(), 'nothing stored from a refused save');
 

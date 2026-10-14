@@ -147,8 +147,8 @@ final class AdminApiAuthTest extends HttpTestCase
     {
         $login = $this->postJson('/api/admin/auth/login', ['username' => ' ' . self::ADMIN_USERNAME . ' ', 'password' => self::ADMIN_PASSWORD]);
         self::assertSame(200, $login->getStatusCode(), (string) $login->getBody());
-        self::assertSame(['name' => self::ADMIN_USERNAME, 'shop' => ['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active']], $this->decode($login)['session']);
-        self::assertSame([['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active']], $this->decode($this->get('/api/admin/shops'))['shops'], 'the shops the owner may open: the main one, no agents yet');
+        self::assertSame(['name' => self::ADMIN_USERNAME, 'shop' => ['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active', 'selling_suspended' => null]], $this->decode($login)['session']);
+        self::assertSame([['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active', 'selling_suspended' => null]], $this->decode($this->get('/api/admin/shops'))['shops'], 'the shops the owner may open: the main one, no agents yet');
 
         $me = $this->get('/api/admin/auth/me');
         self::assertSame(200, $me->getStatusCode());

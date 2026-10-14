@@ -47,7 +47,7 @@ approve it in the panel.
 | Reviews to publish | «نظرات», the «در انتظار بررسی» tab ([Reviews](Reviews.md)) |
 | One customer | Their page: their name anywhere in the panel leads there ([Customers](Customers.md)) |
 | One service | «فروش › اشتراک‌ها»: its link, usage, days and traffic added, switched off, moved, deleted ([Services](Services.md)) |
-| A server down | Its page says why; its services' days can be made good afterwards ([Servers](Servers.md)) |
+| A server down | Its page says why; its services' days can be made good afterwards, or its services rescued to another server ([Servers](Servers.md#moving-its-services)) |
 | News for everyone | `/broadcast` in the bot ([Broadcasts](Broadcasts.md)) |
 
 The menu counts what waits beside its entries — «پشتیبانی», «نظرات», «سفارش‌ها», «پرداخت‌ها» —, and every list follows the shop
@@ -58,7 +58,7 @@ live: there is no need to reload.
 | Page | What it covers |
 |---|---|
 | [The panels](Panels.md) | Signing in, the shop on screen, the menu, the dashboard, lists, live updates, failures |
-| [Servers](Servers.md) | The VPN panels the shop sells on: adding one, its inbounds, its health, days and traffic for its services |
+| [Servers](Servers.md) | The VPN panels the shop sells on: adding one, its inbounds, its health, days and traffic for its services, moving them all to another server |
 | [Plans](Plans.md) | Plans, the servers they are sold on, and their categories |
 | [Payment methods](Payment-Methods.md) | The wallet, card-to-card, and the automatic approval of receipts |
 | [Customers](Customers.md) | The customers, a customer's page, bans and the bot's admins, groups, the wallet |

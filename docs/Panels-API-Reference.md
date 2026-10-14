@@ -58,6 +58,7 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`PUT /api/{panel}/users/{id}/discount`](#put-apipanelusersiddiscount) | Set a customer's personal discount («تخفیف اختصاصی») |
 | [`GET /api/{panel}/users/{id}/wallet`](#get-apipanelusersidwallet) | A customer's wallet balance and ledger |
 | [`POST /api/{panel}/users/{id}/wallet`](#post-apipanelusersidwallet) | Credit or debit a customer's wallet |
+| [`POST /api/{panel}/users/{id}/orders`](#post-apipanelusersidorders) | Make an order for a customer by hand («افزودن سفارش»), paid and delivered at once |
 | [`PUT /api/{panel}/users/{id}/groups`](#put-apipanelusersidgroups) | Set a customer's groups |
 | [`POST /api/{panel}/users/{id}/two-factor/disable`](#post-apipanelusersidtwo-factordisable) | Turn off a customer's two-factor sign-in on the website |
 | [`POST /api/{panel}/users/{id}/sessions/end`](#post-apipanelusersidsessionsend) | Sign a customer out of the website on every device |
@@ -71,6 +72,7 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`POST /api/{panel}/orders/{id}/retry`](#post-apipanelordersidretry) | Retry delivering a paid order whose delivery failed or stalled |
 | [`POST /api/{panel}/orders/{id}/cancel`](#post-apipanelordersidcancel) | Cancel an unpaid order |
 | [`GET /api/{panel}/payments`](#get-apipanelpayments) | All payments |
+| [`POST /api/{panel}/payments/dismiss`](#post-apipanelpaymentsdismiss) | Reject receipts waiting for review in bulk |
 | [`GET /api/{panel}/payments/{id}`](#get-apipanelpaymentsid) | One payment, as the list shows it |
 | [`GET /api/{panel}/payments/{id}/receipt`](#get-apipanelpaymentsidreceipt) | The payment's receipt picture |
 | [`POST /api/{panel}/payments/{id}/approve`](#post-apipanelpaymentsidapprove) | Approve a payment and deliver what it paid for |
@@ -915,6 +917,43 @@ A manual credit or debit, with the line the customer sees in their ledger. A deb
 | `201` | Written | [WalletAdjustmentResponse](API-Schemas.md#walletadjustmentresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /api/{panel}/users/{id}/orders
+
+Make an order for a customer by hand («افزودن سفارش»), paid and delivered at once.
+
+- **On the website:** the website's admins can also use it, as [`POST /users/{id}/orders`](Store-Admin-API-Reference.md#post-usersidorders), when the website grants `manual_orders` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the panel makes for each order support makes by hand (a UUID), and a new one after a refusal: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key (a network retry) returns the order the key made, as it is now: never a second order or charge, and never refused for what changed since (the wallet it charged, the name it took). Two identical requests at the same moment get one order. A key already used for another order of the customer's, or for another way to pay, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week. |
+
+**Body**, as JSON:
+
+An order support makes for a customer by hand: a plan (`plan_id`), or — without one — a service of support's own numbers (`traffic_gb`, `days`, `devices`, each required then), on `server_id`, paid as `payment` says.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `plan_id` | integer or null | no | A plan of the shop, switched on or off; left out or null for support's own numbers. |
+| `traffic_gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole gigabytes, 0 (unlimited) to 10000. Not in an agent's shop: 0, or more than the agent has left. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days from the first connection, 0 (never ends) to 365. |
+| `devices` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Devices at once, 0 (unlimited) to 100. |
+| `server_id` | integer | yes | The server: one of the plan's that can deliver it now, or for support's own numbers any that can take a client now. |
+| `client_name` | string | no | The service's name on its panel («نام کاربری سرویس»): 3 to 32 Latin letters, digits, `_` and `-`, one the server's panel takes and no service there has. Blank for the shop's pattern. |
+| `payment` | [ManualPayment](API-Schemas.md#manualpayment) | yes |  |
+| `amount` | [AmountInput](API-Schemas.md#amountinput) | no | Whole Toman above zero, at most 100,000,000, for `wallet` and `outside`; ignored for `free`. |
+| `note` | string | no | Support's note, kept on the order and said in the report group; at most 300 characters. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The order the key made before, as it is now | [ManualOrderResponse](API-Schemas.md#manualorderresponse) |
+| `201` | Made, paid and delivered — or paid with its delivery failed | [ManualOrderResponse](API-Schemas.md#manualorderresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### PUT /api/{panel}/users/{id}/groups
 
 Set a customer's groups. Replaces their groups with the ones listed.
@@ -1205,6 +1244,30 @@ All payments. Newest first, or sorted by `sort` and `dir`; with the count of rec
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [PaymentsResponse](API-Schemas.md#paymentsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/payments/dismiss
+
+Reject receipts waiting for review in bulk: the payments `ids` names, or `all` of them (the oldest 100 a request).
+
+- **On the website:** the website's admins can also use it, as [`POST /payments/dismiss`](Store-Admin-API-Reference.md#post-paymentsdismiss), when the website grants `payments` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+
+**Body**, as JSON:
+
+Which receipts waiting for review to reject: the payments `ids` names, or `all` of them. One of the two; with `note`, support's note to each customer (at most 300 characters; blank for none).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `ids` | list of integer, at most 100 | no | Payment ids, at most 100. Those no longer waiting for review are skipped. |
+| `all` | boolean | no | True for every receipt waiting for review that had come by `until`, the oldest first — at most 100 a request (`left` says how many of them still wait). |
+| `until` | string (date-time) | no | With `all`: the previous answer's `until`, so the next round takes no receipt sent since the first began. Left out, now; never later than now. |
+| `note` | string | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Rejected | [DismissReceiptsResponse](API-Schemas.md#dismissreceiptsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/payments/{id}
@@ -1548,7 +1611,7 @@ Move a service to another server. It keeps its remaining days and traffic.
 
 **Body**, as JSON:
 
-Move an active service to another server, keeping its remaining days and traffic. `leave_previous` moves it without contacting the previous panel (when it is unreachable); the old client stays there for the owner to remove. In an agent's shop this is allowed only while that panel is unreachable.
+Move an active service to another server, keeping its remaining days and traffic. `leave_previous` moves it without contacting the previous panel (when it is unreachable); the old client stays there until that panel answers again, then it is removed by itself (the owner's server page lists it meanwhile). In an agent's shop this is allowed only while that panel is unreachable.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1861,7 +1924,7 @@ Delete a review, whatever its status. A 403 for an admin's own review.
 
 ### GET /api/{panel}/payment-methods
 
-All payment methods, in checkout order.
+All payment methods, in checkout order: every one but «خارج از فروشگاه», the built-in row support records money taken outside the shop with (`POST /users/{id}/orders`), which this screen neither lists nor finds.
 
 **Answers**
 
@@ -1887,10 +1950,11 @@ One of:
 | `driver` | string: `manual` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
 | `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
 | `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
-| `card_number` | string | yes | 16 digits; Persian digits, and spaces or dashes between them, are accepted. |
-| `card_holder` | string | yes |  |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
 | `instructions` | string | no | Shown to the customer with the card; blank for none. |
 | `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. |
+| `cards` | list of [PaymentCardInput](#paymentcardinput) | yes | Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»). |
 
 **Answers**
 
@@ -1931,7 +1995,7 @@ The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 ### PUT /api/{panel}/payment-methods/{id}
 
-Update a payment method. Sends its driver's form again.
+Update a payment method. Sends its driver's form again: a card method's with its cards, the wallet's its label, bounds and switch. A 404 for «خارج از فروشگاه», as for no row.
 
 **Parameters**
 
@@ -1945,23 +2009,26 @@ A payment method's form, as its driver takes it. One closed shape per driver, ch
 
 One of:
 
-**`ManualMethodRequest`** — A card-to-card method's form: the label customers pick it by, its switch, and the manual driver's form (the card number and holder the bot shows, the note under them, and how long a receipt may wait for review).
+**`ManualMethodRequest`** — A card-to-card method's form: the label customers pick it by, its switch, the amounts it is offered for, the manual driver's form (the note under the card, and how long a receipt may wait for review) and its cards.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
 | `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
-| `card_number` | string | yes | 16 digits; Persian digits, and spaces or dashes between them, are accepted. |
-| `card_holder` | string | yes |  |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
 | `instructions` | string | no | Shown to the customer with the card; blank for none. |
 | `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. |
+| `cards` | list of [PaymentCardInput](#paymentcardinput) | yes | Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»). |
 
-**`WalletMethodRequest`** — The wallet, the built-in method: only its label and switch can be set.
+**`WalletMethodRequest`** — The wallet, the built-in method: its label, its switch and the amounts it is offered for.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `label` | string | no |  |
 | `enabled` | boolean | no |  |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
 
 **Answers**
 
@@ -1972,7 +2039,7 @@ One of:
 
 ### PATCH /api/{panel}/payment-methods/{id}
 
-Switch a payment method on or off.
+Switch a payment method on or off. A 404 for «خارج از فروشگاه».
 
 **Parameters**
 
@@ -1997,7 +2064,7 @@ A payment method's on/off switch. A JSON boolean only.
 
 ### DELETE /api/{panel}/payment-methods/{id}
 
-Delete a payment method. The wallet cannot be deleted.
+Delete a payment method. The wallet cannot be deleted; «خارج از فروشگاه» is not found (404).
 
 **Parameters**
 
@@ -2059,6 +2126,28 @@ One of:
 |---|---|---|---|
 | `topup_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman. Thousands separators are accepted only between groups of three digits ("10,000"). |
 | `topup_presets` | [NumbersInput](#numbersinput) | no | Toman, none below `topup_min`, at most 8. |
+| `topup_random_count` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 8. |
+| `topup_random_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman, not below `topup_min`. |
+| `topup_random_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman, not below `topup_random_min`. |
+| `topup_random_round` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman, 1 to 1,000,000. |
+| `topup_unique_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman, 0 to 9999. |
+
+**`BotWalletTransfersSettingsRequest`** — «انتقال موجودی» (`BotSettingsData.wallet_transfer_*`).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `wallet_transfer_enabled` | boolean | yes |  |
+| `wallet_transfer_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman, 1,000 to 500,000,000. |
+| `wallet_transfer_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman, not below `wallet_transfer_min`. |
+| `wallet_transfer_daily` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman; 0: no daily cap. |
+
+**`BotPaymentsSettingsRequest`** — How card-to-card payments are taken (`BotSettingsData.card_protect`, `card_to_support`, `receipt_single`).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `card_protect` | boolean | yes |  |
+| `card_to_support` | boolean | yes |  |
+| `receipt_single` | boolean | yes |  |
 
 **`BotRenewalSettingsRequest`**
 
@@ -3546,6 +3635,17 @@ Operations only the owner's panel has.
 | [`POST /api/admin/servers/{id}/grants`](#post-apiadminserversidgrants) | Give days and traffic to the services on a server |
 | [`POST /api/admin/servers/{id}/grants/{grant}/run`](#post-apiadminserversidgrantsgrantrun) | Apply a grant to the next few services |
 | [`POST /api/admin/servers/{id}/grants/{grant}/cancel`](#post-apiadminserversidgrantsgrantcancel) | Stop a grant |
+| [`GET /api/admin/servers/{id}/migrations`](#get-apiadminserversidmigrations) | The latest moves of a server's services to another server («انتقال سرویس‌ها»), newest first |
+| [`POST /api/admin/servers/{id}/migrations`](#post-apiadminserversidmigrations) | Start moving the server's services, every shop's, to another server |
+| [`POST /api/admin/servers/{id}/migrations/preview`](#post-apiadminserversidmigrationspreview) | What a move of the server's services would cover with these filters |
+| [`GET /api/admin/servers/{id}/migrations/{migration}`](#get-apiadminserversidmigrationsmigration) | A move of the server's services, with each service it could not move and why |
+| [`POST /api/admin/servers/{id}/migrations/{migration}/run`](#post-apiadminserversidmigrationsmigrationrun) | Move the next few services |
+| [`POST /api/admin/servers/{id}/migrations/{migration}/pause`](#post-apiadminserversidmigrationsmigrationpause) | Pause a queued or running move where it is |
+| [`POST /api/admin/servers/{id}/migrations/{migration}/resume`](#post-apiadminserversidmigrationsmigrationresume) | Go on with a paused move from where it stopped |
+| [`POST /api/admin/servers/{id}/migrations/{migration}/cancel`](#post-apiadminserversidmigrationsmigrationcancel) | End a move |
+| [`POST /api/admin/servers/{id}/migrations/{migration}/rescue`](#post-apiadminserversidmigrationsmigrationrescue) | Go on with a migration as a rescue («نجات») |
+| [`POST /api/admin/servers/{id}/leftovers/clean`](#post-apiadminserversidleftoversclean) | Remove the clients moves of services left on the server's panel now, for a few seconds |
+| [`DELETE /api/admin/servers/{id}/leftovers`](#delete-apiadminserversidleftovers) | Forget the clients moves of services left on the server's panel, for a panel that is gone for good |
 | [`GET /api/admin/mass-grants`](#get-apiadminmass-grants) | The latest mass gifts |
 | [`POST /api/admin/mass-grants`](#post-apiadminmass-grants) | Give days and traffic to running services |
 | [`POST /api/admin/mass-grants/{id}/run`](#post-apiadminmass-grantsidrun) | Apply a mass gift for a few seconds |
@@ -3557,10 +3657,14 @@ Operations only the owner's panel has.
 | [`POST /api/admin/agency/requests/{id}/approve`](#post-apiadminagencyrequestsidapprove) | Approve an agency request |
 | [`POST /api/admin/agency/requests/{id}/reject`](#post-apiadminagencyrequestsidreject) | Reject an agency request |
 | [`GET /api/admin/agency/agents`](#get-apiadminagencyagents) | The agents |
-| [`PUT /api/admin/agency/agents/{id}`](#put-apiadminagencyagentsid) | Change an agent's level and credit |
+| [`PUT /api/admin/agency/agents/{id}`](#put-apiadminagencyagentsid) | Change an agent's level and credit, and their terms of selling |
 | [`POST /api/admin/agency/agents/{id}/revoke`](#post-apiadminagencyagentsidrevoke) | End an agency |
 | [`GET /api/admin/agency/agents/{id}/traffic`](#get-apiadminagencyagentsidtraffic) | An agent's traffic ledger |
 | [`POST /api/admin/agency/agents/{id}/traffic`](#post-apiadminagencyagentsidtraffic) | Adjust an agent's traffic |
+| [`POST /api/admin/agency/agents/{id}/suspend`](#post-apiadminagencyagentsidsuspend) | Suspend an agent's selling by hand |
+| [`POST /api/admin/agency/agents/{id}/resume`](#post-apiadminagencyagentsidresume) | Resume an agent's selling, whatever suspended it |
+| [`GET /api/admin/agency/agents/{id}/hidden`](#get-apiadminagencyagentsidhidden) | What the owner keeps from an agent's shop |
+| [`PUT /api/admin/agency/agents/{id}/hidden`](#put-apiadminagencyagentsidhidden) | Keep exactly these servers and plans from an agent's shop |
 | [`GET /api/admin/agency/levels`](#get-apiadminagencylevels) | The agency levels, in their order |
 | [`POST /api/admin/agency/levels`](#post-apiadminagencylevels) | Add an agency level |
 | [`POST /api/admin/agency/levels/reorder`](#post-apiadminagencylevelsreorder) | Reorder the agency levels |
@@ -3804,7 +3908,7 @@ Add a server. Its panel is checked right away.
 
 **Body**, as JSON:
 
-A server's whole form, to add or update it: its connector (`driver`; a saved server keeps its connector) and the fields the connector lists (ServerDriversResponse), by name, as typed. That is: the name; the panel's address and one way in, an API token or an admin's username and password (the other way's credentials are cleared); the connection options; and the server's own fields. A secret left blank or out keeps the stored one while the panel's address stays on the same host (after a host change it must be typed again); `clear_<name>: true` empties it. One closed shape per connector, checked against the connector's form by tests/Unit/Drivers/DriverFormsTest.
+A server's whole form, to add or update it: its connector (`driver`; a saved server keeps its connector) and the fields the connector lists (ServerDriversResponse), by name, as typed. That is: the name; the panel's address and one way in, an API token or an admin's username and password (the other way's credentials are cleared); the connection options, a SOCKS5 proxy among them; and the server's own fields. A secret left blank or out keeps the stored one while the panel's address stays on the same host (after a host change it must be typed again); `clear_<name>: true` empties it. One closed shape per connector, checked against the connector's form by tests/Unit/Drivers/DriverFormsTest.
 
 One of:
 
@@ -3824,6 +3928,12 @@ One of:
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
 | `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
 | `notes` | string | no | The owner's notes, at most 1000 characters. |
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
@@ -3848,6 +3958,12 @@ One of:
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
 | `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
 | `notes` | string | no | The owner's notes, at most 1000 characters. |
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
@@ -3888,6 +4004,12 @@ One of:
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
 | `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
 | `notes` | string | no | The owner's notes, at most 1000 characters. |
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
@@ -3913,6 +4035,12 @@ One of:
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
 | `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
 | `notes` | string | no | The owner's notes, at most 1000 characters. |
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
@@ -3955,7 +4083,7 @@ Update a server.
 
 **Body**, as JSON:
 
-A server's whole form, to add or update it: its connector (`driver`; a saved server keeps its connector) and the fields the connector lists (ServerDriversResponse), by name, as typed. That is: the name; the panel's address and one way in, an API token or an admin's username and password (the other way's credentials are cleared); the connection options; and the server's own fields. A secret left blank or out keeps the stored one while the panel's address stays on the same host (after a host change it must be typed again); `clear_<name>: true` empties it. One closed shape per connector, checked against the connector's form by tests/Unit/Drivers/DriverFormsTest.
+A server's whole form, to add or update it: its connector (`driver`; a saved server keeps its connector) and the fields the connector lists (ServerDriversResponse), by name, as typed. That is: the name; the panel's address and one way in, an API token or an admin's username and password (the other way's credentials are cleared); the connection options, a SOCKS5 proxy among them; and the server's own fields. A secret left blank or out keeps the stored one while the panel's address stays on the same host (after a host change it must be typed again); `clear_<name>: true` empties it. One closed shape per connector, checked against the connector's form by tests/Unit/Drivers/DriverFormsTest.
 
 One of:
 
@@ -3975,6 +4103,12 @@ One of:
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
 | `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
 | `notes` | string | no | The owner's notes, at most 1000 characters. |
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
@@ -3999,6 +4133,12 @@ One of:
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
 | `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
 | `notes` | string | no | The owner's notes, at most 1000 characters. |
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
@@ -4014,7 +4154,7 @@ One of:
 
 ### DELETE /api/admin/servers/{id}
 
-Delete a server. Only a server nothing was sold on.
+Delete a server. Only a server with no service on it, nor a move of services from or to it under way (409).
 
 **Parameters**
 
@@ -4224,6 +4364,233 @@ Stop a grant. Services already given it keep it.
 | `200` | Stopped | [ServerGrantResponse](#servergrantresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /api/admin/servers/{id}/migrations
+
+The latest moves of a server's services to another server («انتقال سرویس‌ها»), newest first. Also the clients moves left on its panel.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ServerMigrationsResponse](#servermigrationsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/servers/{id}/migrations
+
+Start moving the server's services, every shop's, to another server. It is queued; the page works it while open, the scheduler every minute. The report group hears when it starts and ends.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+A move of the server's services, every shop's: the active ones (and those support switched off, with `include_disabled`), only some plans' with `plan_ids`. Ended services stay. Each customer is sent the new link unless `notify` is false.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `target_server_id` | integer | yes | Another server that can take services now, not being emptied itself. |
+| `mode` | [ServerMigrationMode](#servermigrationmode) | yes |  |
+| `notify` | boolean | no | Default true. |
+| `include_disabled` | boolean | no | Default false. |
+| `plan_ids` | list of integer, at most 1000 or null | no | Only these plans' services; null or empty for every service. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Started | [ServerMigrationResponse](#servermigrationresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/servers/{id}/migrations/preview
+
+What a move of the server's services would cover with these filters: how many, of which shops, the plans to choose from, and whether the target can take them now.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+What a move would cover, and the target to check.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `target_server_id` | integer or null | no |  |
+| `include_disabled` | boolean | no | Default false. |
+| `plan_ids` | list of integer, at most 1000 or null | no | Only these plans' services; null or empty for every service. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ServerMigrationPreview](#servermigrationpreview) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/admin/servers/{id}/migrations/{migration}
+
+A move of the server's services, with each service it could not move and why.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ServerMigrationDetailResponse](#servermigrationdetailresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/servers/{id}/migrations/{migration}/run
+
+Move the next few services. The page keeps calling this while it is open.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The current state | [ServerMigrationResponse](#servermigrationresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/servers/{id}/migrations/{migration}/pause
+
+Pause a queued or running move where it is. A 422 on `status` when it is not.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Paused | [ServerMigrationResponse](#servermigrationresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/servers/{id}/migrations/{migration}/resume
+
+Go on with a paused move from where it stopped. A 422 on `status` when it is not paused.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Resumed | [ServerMigrationResponse](#servermigrationresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/servers/{id}/migrations/{migration}/cancel
+
+End a move. The services moved stay moved; the rest stay where they are. A 422 on `status` when it is over.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Cancelled | [ServerMigrationResponse](#servermigrationresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/servers/{id}/migrations/{migration}/rescue
+
+Go on with a migration as a rescue («نجات»): the source is no longer asked, and each old client is left on its panel for removal once it answers. A 422 on `status` when it is a rescue already, or over.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Switched | [ServerMigrationResponse](#servermigrationresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/servers/{id}/leftovers/clean
+
+Remove the clients moves of services left on the server's panel now, for a few seconds. The panel is asked even while it is in backoff; once it cannot be reached, it stops.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | What is left to remove | [ServerMigrationLeftoversResponse](#servermigrationleftoversresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/admin/servers/{id}/leftovers
+
+Forget the clients moves of services left on the server's panel, for a panel that is gone for good. None is removed from it.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Forgotten | [ServerMigrationLeftoversResponse](#servermigrationleftoversresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /api/admin/mass-grants
 
 The latest mass gifts. Each has a part per server; also how many services a new gift would reach.
@@ -4335,6 +4702,9 @@ The agency settings, saved whole, with the fields named as in AgencySettings. Th
 | `default_credit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman. |
 | `traffic_presets` | [NumbersInput](#numbersinput) | no | Gigabytes, none below `traffic_min`, at most 8. |
 | `traffic_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Gigabytes. |
+| `term_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Days, 0 to 3650; 0 for no end. |
+| `monthly_minimum` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for none. |
+| `warn_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Days, 1 to 30. |
 
 **Answers**
 
@@ -4366,7 +4736,7 @@ Requests to become an agent. Newest first (`dir=asc` for oldest first); one stat
 
 ### POST /api/admin/agency/requests/{id}/approve
 
-Approve an agency request. Sets the level and the starting credit; the customer is notified.
+Approve an agency request. Sets the level and the starting credit, and the terms of selling — `expires_at` and `monthly_minimum`, the program's (`term_days`, `monthly_minimum`) while left out; the customer is notified.
 
 **Parameters**
 
@@ -4376,12 +4746,14 @@ Approve an agency request. Sets the level and the starting credit; the customer 
 
 **Body**, as JSON:
 
-An agent's terms, when approving a request or changing an agent: their level, and how far below zero their wallet may go.
+An agent's terms, when approving a request or changing an agent: their level, how far below zero their wallet may go, and their terms of selling — each of these two left out is the program's on an approval, kept on a change.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `level_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | A level id (`AgencyLevelRow.id`). |
 | `credit_limit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for none. |
+| `expires_at` | string or null | no | When their agency ends — their selling stops then —, as a day and an hour on the shop's clock ("2026-10-12T18:00", whatever the browser's zone); blank or null for never. |
+| `monthly_minimum` | [AmountInput](API-Schemas.md#amountinput) | no | The Toman of traffic they buy each Jalali month at least: whole Toman, 0 for none — the program's own field (AgencySettings `monthly_minimum`), refused in its words. |
 
 **Answers**
 
@@ -4438,7 +4810,7 @@ The agents. Newest first, or sorted by `sort` and `dir`; on one level or all.
 
 ### PUT /api/admin/agency/agents/{id}
 
-Change an agent's level and credit. The id is the agent's customer id. The agent is notified of a change, and the answer says whether the notice reached them.
+Change an agent's level and credit, and their terms of selling — `expires_at` and `monthly_minimum`, each kept while left out. The id is the agent's customer id. An end that lies ahead (or none) lifts a suspension for an end passed; no minimum lifts one for the minimum; an end passed suspends at once. The agent is notified of a change, and the answer says whether the notice reached them.
 
 **Parameters**
 
@@ -4448,12 +4820,14 @@ Change an agent's level and credit. The id is the agent's customer id. The agent
 
 **Body**, as JSON:
 
-An agent's terms, when approving a request or changing an agent: their level, and how far below zero their wallet may go.
+An agent's terms, when approving a request or changing an agent: their level, how far below zero their wallet may go, and their terms of selling — each of these two left out is the program's on an approval, kept on a change.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `level_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | A level id (`AgencyLevelRow.id`). |
 | `credit_limit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for none. |
+| `expires_at` | string or null | no | When their agency ends — their selling stops then —, as a day and an hour on the shop's clock ("2026-10-12T18:00", whatever the browser's zone); blank or null for never. |
+| `monthly_minimum` | [AmountInput](API-Schemas.md#amountinput) | no | The Toman of traffic they buy each Jalali month at least: whole Toman, 0 for none — the program's own field (AgencySettings `monthly_minimum`), refused in its words. |
 
 **Answers**
 
@@ -4529,6 +4903,93 @@ A manual adjustment of an agent's traffic (never below zero), with the note for 
 | Status | What it is | Body |
 |---|---|---|
 | `200` | Saved | [AgentResponse](#agentresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/agency/agents/{id}/suspend
+
+Suspend an agent's selling by hand: their shop takes no purchase, renewal, extra traffic, time or devices, wallet top-up or free test until it is resumed (`/resume`), while their bot, panel and existing services keep working. Over a suspension for another reason. The agent is notified, with the note. A 422 on `status` while it is suspended by hand already, or for a customer who is no agent.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+Support's note to the customer with a decision (a cancellation, a rejection, a service switched off, an agency refused or ended). It is a separate line of the message they get. At most 300 characters; blank for none.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `note` | string | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Suspended | [AgentResponse](#agentresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/agency/agents/{id}/resume
+
+Resume an agent's selling, whatever suspended it. The agent is notified. A 422 on `status` while their agency's end has passed (extend it with `PUT /agency/agents/{id}` instead), while it is not suspended, or for a customer who is no agent.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Resumed | [AgentResponse](#agentresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/admin/agency/agents/{id}/hidden
+
+What the owner keeps from an agent's shop: every server of the installation and every plan of the shop, each with `hidden`.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [AgentHiddenResponse](#agenthiddenresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/admin/agency/agents/{id}/hidden
+
+Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط مدیر» in their panel), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+Exactly the servers and plans to keep from the agent's shop; an empty list for none.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `server_ids` | list of integer, at most 1000 | yes | Server ids. |
+| `plan_ids` | list of integer, at most 1000 | yes | The agent's own plan ids. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [AgentHiddenSavedResponse](#agenthiddensavedresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/admin/agency/levels
@@ -5092,6 +5553,7 @@ The shop's name and whether it is installed. The panels ask this first.
 | `account.level` | [AgencyLevelRef](API-Schemas.md#agencylevelref) or null | yes | Their level; null once the agency ended. |
 | `account.credit_limit` | string | yes | How far below zero their main-bot wallet may go, in Toman. |
 | `account.balance` | string | yes | Their wallet balance in the main bot, in Toman. |
+| `account.standing` | [AgencyStanding](API-Schemas.md#agencystanding) | yes |  |
 
 ### AgencyLevelResponse
 
@@ -5180,6 +5642,9 @@ The agency program's settings (stored with the main bot's settings), set on the 
 | `default_credit` | string | yes | The credit a newly approved agent gets, in Toman. |
 | `traffic_presets` | list of integer | yes | The GB amounts an agent can buy with one tap, smallest first. |
 | `traffic_min` | integer | yes | The smallest GB amount an agent can type. |
+| `term_days` | integer | yes | The days a newly approved agent's agency lasts (their selling stops then); 0 for no end. |
+| `monthly_minimum` | string | yes | The Toman of traffic a newly approved agent buys each Jalali month at least (else their selling stops); 0 for none. |
+| `warn_days` | integer | yes | How many days before their agency's end, or before a month ends with their minimum unmet, an agent is warned. |
 
 ### AgencySettingsResponse
 
@@ -5210,6 +5675,39 @@ The agency program's numbers, shown above the lists (its settings are AgencySett
 |---|---|---|---|
 | `agent` | [AgentRow](API-Schemas.md#agentrow) | yes |  |
 | `delivery` | [Delivery](API-Schemas.md#delivery) or null | yes | Whether the agent was notified of their new terms; null when the terms did not change (no notice was sent). |
+
+### AgentHidden
+
+What the owner keeps from an agent's shop: every server of the installation and every plan of the shop, each with `hidden`.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `servers` | list of [AgentHiddenItem](#agenthiddenitem) | yes |  |
+| `plans` | list of [AgentHiddenItem](#agenthiddenitem) | yes |  |
+
+### AgentHiddenItem
+
+A server of the installation or a plan of the agent's shop, and whether the owner keeps it from that shop.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes |  |
+| `is_active` | boolean | yes | The server's switch; a plan's, the agent's own. |
+| `hidden` | boolean | yes |  |
+
+### AgentHiddenResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `hidden` | [AgentHidden](#agenthidden) | yes |  |
+
+### AgentHiddenSavedResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `hidden` | [AgentHidden](#agenthidden) | yes |  |
+| `agent` | [AgentRow](API-Schemas.md#agentrow) | yes |  |
 
 ### AgentResponse
 
@@ -5317,6 +5815,18 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `support_contact` | string | yes | The Telegram id or link the bot's «پشتیبانی» screen shows; may be empty. |
 | `topup_min` | integer | yes | The smallest top-up, in Toman. |
 | `topup_presets` | list of integer | yes | The amounts offered as buttons, ascending. |
+| `topup_random_count` | integer | yes | How many buttons of amounts drawn at random the top-up screen offers beside the presets, 0 to 8; 0: none. |
+| `topup_random_min` | integer | yes | The least a random-amount button offers, in Toman; never below `topup_min`. |
+| `topup_random_max` | integer | yes | The most a random-amount button offers, in Toman; never below `topup_random_min`. |
+| `topup_random_round` | integer | yes | What a random amount is rounded to, in Toman (1000: whole thousands). |
+| `topup_unique_max` | integer | yes | The most added at random to a card-to-card top-up (1 to this many Toman), so every transfer is a different sum and its receipt is told apart; 0 to 9999, 0: nothing added. |
+| `wallet_transfer_enabled` | boolean | yes | «انتقال موجودی»: customers may send money from their wallet to another customer of the shop by their Telegram id. Off by default. |
+| `wallet_transfer_min` | integer | yes | The least one wallet transfer moves, in Toman. |
+| `wallet_transfer_max` | integer | yes | The most one wallet transfer moves, in Toman; never below `wallet_transfer_min`. |
+| `wallet_transfer_daily` | integer | yes | The most a customer sends in a day, in Toman; 0: no daily cap. |
+| `card_protect` | boolean | yes | The bot's message with the card number is sent protected: it cannot be forwarded or saved. On by default. |
+| `card_to_support` | boolean | yes | A card-to-card payment sends the customer to support's private chat (`support_contact`) instead of showing a card: no card is picked for it (its `summary` on the payments screen says so), none of the cards' switches or daily caps holds a method back, and no receipt is awaited in the bot. Only while `support_contact` is set: emptied since, the cards are shown again. Off by default. |
+| `receipt_single` | boolean | yes | A customer waits for their receipt's review before sending another. On by default. |
 | `qr_enabled` | boolean | yes | Whether a delivered service comes with a QR code of its link. |
 | `carry_traffic` | boolean | yes | «تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends) — by the renewal method `extend` («تمدید پلن فعلی»). |
 | `renew_window_days` | integer | yes | «تمدید سرویس»: a customer may renew a running service only within this many days of its deadline (or with at most `renew_window_percent` of its traffic left, or once it ended); 0 — no such rule, and with `renew_window_percent` 0 too, any time. A service with no deadline yet (waiting for its first connection) or none at all is let in by its traffic alone. Automatic renewal goes by its own days. |
@@ -5411,7 +5921,7 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 
 ### BotSettingsGroup
 
-String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`.
+String: `general`, `channels`, `wallet`, `wallet_transfers`, `payments`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`.
 
 ### BotSettingsResponse
 
@@ -6014,18 +6524,16 @@ String: `none`, `smtp`, `native`, `resend`.
 
 ### ManualGatewayConfig
 
-A card-to-card method's settings (`ManualMethodRow.config`): the manual driver's form values as stored. A field added after the method was saved shows its default.
+A card-to-card method's settings (`ManualMethodRow.config`): the manual driver's form values as stored. A field added after the method was saved shows its default. Its cards are rows of their own (`ManualMethodRow.cards`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `card_number` | string | yes | 16 digits, no separators. |
-| `card_holder` | string | yes |  |
 | `instructions` | string | yes |  |
 | `auto_approve_after` | integer | yes | Minutes a receipt sent in the bot may wait for review before it is approved automatically; 0 for manual approval only. |
 
 ### ManualMethodRow
 
-A card-to-card method.
+A card-to-card method, with its cards: each payment is shown one of them at random, among those switched on whose daily cap leaves room for its amount, and always that one after — none while `to_support`.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -6035,14 +6543,18 @@ A card-to-card method.
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). |
 | `config` | [ManualGatewayConfig](#manualgatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
 | `enabled` | boolean | yes |  |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
 | `created_at` | string (date-time) | yes |  |
 | `updated_at` | string (date-time) | yes |  |
+| `cards` | list of [PaymentCardRow](#paymentcardrow) | yes | In their order. None switched on with room left: the method is not offered — unless `to_support`. |
+| `to_support` | boolean | yes | The shop takes card payments in support's private chat now (`BotSettingsData.card_to_support`, with a support contact): no card is shown nor picked, so the cards' switches and daily caps do not hold the method back. |
 
 ### MassGrantAudience
 
@@ -6142,6 +6654,35 @@ One of:
 | `uptime_seconds` | integer | yes |  |
 | `connections` | integer | yes |  |
 
+### PaymentCardInput
+
+A card in a card-to-card method's form: a card of the method kept by its `id`, a new one without.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer or null | no | A card of this method, kept; left out or null for a new one. |
+| `number` | string | yes | 16 digits passing the check digit; Persian digits, and spaces or dashes between them, are accepted. A card with payments keeps its number. |
+| `holder` | string | yes | Whose card it is, as the bank shows it; at most 100 characters. |
+| `bank` | string or null | no | Its bank, or any word for it; at most 60 characters, blank or null for none. |
+| `enabled` | boolean | no | Left out: on. |
+| `daily_cap` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman a day on the shop's clock; blank or null for no cap. |
+
+### PaymentCardRow
+
+A card of a card-to-card method.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `number` | string | yes | 16 digits, no separators. |
+| `holder` | string | yes |  |
+| `bank` | string or null | yes | The owner's word for it, such as its bank; null for none. |
+| `summary` | string | yes | Which card, in one line as lists and reports name it: its first and last four digits, its holder and its bank, apart with « · », such as "6037 •••• •••• 1119 · امیر رضایی · ملت". |
+| `enabled` | boolean | yes | Off: no new payment is shown it; a payment shown it before still is. |
+| `daily_cap` | string or null | yes | The most it takes in a day on the shop's clock, in Toman; null for no cap. |
+| `today` | string | yes | What came to it today on the shop's clock: its payments made today that are paid, refunded or still open. |
+| `payments` | integer | yes | The payments shown it. A card with payments keeps its number and is never deleted (switch it off). |
+
 ### PaymentDriversResponse
 
 The gateway drivers a payment method can use, in registration order. Each has its form (the method's settings) and its traits: `kind`, how it settles (a GatewayKind), and `builtin`, part of every shop (the wallet: one row per shop, never added or deleted, with no settings).
@@ -6158,7 +6699,7 @@ The gateway drivers a payment method can use, in registration order. Each has it
 
 ### PaymentMethodRow
 
-A payment method, in checkout order, as its driver describes it. `config` holds the driver's form values as stored (one closed shape per driver).
+A payment method, in checkout order, as its driver describes it. `config` holds the driver's form values as stored (one closed shape per driver). Never «خارج از فروشگاه», support's alone.
 
 One of:
 - [ManualMethodRow](#manualmethodrow)
@@ -6460,6 +7001,115 @@ A server's grants card: its latest grants, and how many services a new grant wou
 | `is_selectable` | boolean | yes |  |
 | `synced_at` | string (date-time) or null | yes |  |
 
+### ServerMigrationDetailResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `migration` | [ServerMigrationRow](#servermigrationrow) | yes |  |
+| `failures` | list of [ServerMigrationFailure](#servermigrationfailure) | yes | The latest 200, the latest first. |
+
+### ServerMigrationFailure
+
+A service a move could not carry, and why.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `subscription_id` | integer or null | yes | The service; null once it is deleted. |
+| `client` | string | yes | Its client's name when it failed. |
+| `shop` | [ShopRef](#shopref) or null | yes | Its shop; null once it is deleted. |
+| `reason` | string | yes |  |
+| `created_at` | string (date-time) | yes |  |
+
+### ServerMigrationLeftovers
+
+The clients moves of services left on the server's panel (a rescue's old ones, mostly), still to remove: they would work again once it answers. The scheduler removes them once the panel answers again.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `pending` | integer | yes |  |
+| `last_error` | string or null | yes | Why the last try to remove one failed. |
+
+### ServerMigrationLeftoversResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `leftovers` | [ServerMigrationLeftovers](#servermigrationleftovers) | yes |  |
+
+### ServerMigrationMode
+
+How the services move. `migrate` («مهاجرت»), while the source's panel answers: each client is read there, made on the target with what it has left, and deleted there. `rescue` («نجات»), when it does not: each is made on the target from the shop's own last copy (its last sync), the source is never asked, and the old client is kept on a list to remove once that panel answers again.
+
+String: `migrate`, `rescue`.
+
+### ServerMigrationPreview
+
+What a move of the server's services would cover, from the stored data.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `services` | integer | yes | The services it would move with these filters. |
+| `shops` | list of object | yes | Of which shops, the main bot's first. |
+| `shops[].shop` | [ShopRef](#shopref) | yes |  |
+| `shops[].services` | integer | yes |  |
+| `plans` | list of object | yes | The plans the services on the server are of, counted without the plan filter: its choices. |
+| `plans[].id` | integer | yes |  |
+| `plans[].name` | string | yes |  |
+| `plans[].shop` | string | yes | The plan's shop's name. |
+| `plans[].services` | integer | yes |  |
+| `unplanned` | integer | yes | Services with no plan (a free test, one added by its link): moved only when no plan is chosen. |
+| `target` | object or null | yes | The target named, as it stands now; null when none was. |
+| `target.problem` | string or null | yes | Why it cannot take services now; null when it can. |
+| `target.room` | integer or null | yes | How many more active services its capacity allows; null when no capacity is set. |
+
+### ServerMigrationResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `migration` | [ServerMigrationRow](#servermigrationrow) | yes |  |
+
+### ServerMigrationRow
+
+A move of a server's services, every shop's, to another server («انتقال سرویس‌ها»). It covers the services on the server when it started and goes one service at a time: the page works it while open, the scheduler every minute. Each customer gets the new link in their shop's bot, as for a single move.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes | As used in `/servers/{id}/migrations/{migration}`. |
+| `source` | [NamedRef](API-Schemas.md#namedref) | yes |  |
+| `target` | [NamedRef](API-Schemas.md#namedref) | yes |  |
+| `mode` | [ServerMigrationMode](#servermigrationmode) | yes |  |
+| `include_disabled` | boolean | yes | Services support switched off move too, and stay switched off. |
+| `notify` | boolean | yes | Each customer is sent the new link. |
+| `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | Only these plans' services; null for every service. |
+| `status` | [ServerMigrationStatus](#servermigrationstatus) | yes |  |
+| `total` | integer | yes | The services it covers, counted when it started. moved + failed + skipped is the progress. |
+| `moved` | integer | yes |  |
+| `failed` | integer | yes | Services it could not move; its details list each with why. |
+| `skipped` | integer | yes | Services it had nothing to carry for when their turn came: ended by time or traffic, gone from their panel, moved or deleted meanwhile. |
+| `left_behind` | integer | yes | The clients it left on a panel still there to be removed — the old ones a rescue left on the source's, any a panel did not say it deleted or made. Those removed since no longer count. |
+| `waiting_reason` | string or null | yes | Why it is held at its current service: a panel out of reach (the target's, or the source's in a migration). It tries again by itself. Null while it moves. |
+| `reason` | string or null | yes | Why it failed: what keeps the target from taking more. |
+| `last_failure` | string or null | yes | The latest service it could not move, and why. |
+| `reviewer` | string or null | yes | Who started it. |
+| `created_at` | string (date-time) | yes |  |
+| `started_at` | string (date-time) or null | yes | When its first turn began. |
+| `finished_at` | string (date-time) or null | yes |  |
+
+### ServerMigrationStatus
+
+`queued` until its first turn, `running`, and `paused` by the owner are the open ones: a server is the source of one at a time. Then `done`, `cancelled` by the owner, or `failed`: the target could take no more (full, switched off, no subscription links; see `reason`).
+
+String: `queued`, `running`, `paused`, `done`, `cancelled`, `failed`.
+
+### ServerMigrationsResponse
+
+A server's «انتقال سرویس‌ها» card: its latest moves (from it), newest first, and the clients moves left on its panel.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `migrations` | list of [ServerMigrationRow](#servermigrationrow) | yes |  |
+| `leftovers` | [ServerMigrationLeftovers](#servermigrationleftovers) | yes |  |
+
 ### ServerResponse
 
 | Field | Type | Required | What it is |
@@ -6540,6 +7190,7 @@ A bot's shop: the main bot's, or an agent's.
 | `name` | string | yes | «فروشگاه اصلی» for the main bot; an agent's bot's title, or «نماینده: » and the agent's name while the agent has not connected a bot yet. |
 | `username` | string or null | yes | The bot's username, without the @. |
 | `status` | string: `active`, `disabled` | yes | `disabled`: an agent whose agency ended. The shop is kept, but its bot does not run. |
+| `selling_suspended` | [SellingSuspension](API-Schemas.md#sellingsuspension) or null | yes | Why an agent's shop sells nothing new now (its bot, panel and services working on); null while it sells — always for the main shop. |
 
 ### ShopsResponse
 
@@ -6667,8 +7318,10 @@ A method whose driver is no longer installed. No checkout offers it, even when s
 | `kind` | string: `null` or null | yes | Unknown without the driver. |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). |
 | `config` | object | yes | Not shown, since without the driver it is unknown which settings are secrets. |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
 | `enabled` | boolean | yes |  |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
@@ -6726,8 +7379,10 @@ The wallet, the built-in method.
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method (the masked card number and holder), as the payments screen shows it; null when it has none. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). |
 | `config` | object | yes | Nothing to configure. |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
 | `enabled` | boolean | yes |  |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |

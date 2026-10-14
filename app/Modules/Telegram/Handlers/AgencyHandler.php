@@ -10,6 +10,7 @@ use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Agency\Services\AgencyLevels;
 use App\Modules\Agency\Services\AgencySettings;
+use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Agency\Services\AgentBots;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\Enums\OrderType;
@@ -24,11 +25,13 @@ use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
+use App\Modules\Telegram\Notifications\AgencyTermLines;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
+use App\Support\JalaliMonth;
 use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Traffic;
@@ -62,6 +65,8 @@ final class AgencyHandler implements Handler
         private readonly AgencyActions $agency,
         private readonly AgentBots $bots,
         private readonly AgencySettings $settings,
+        private readonly AgencyStanding $standing,
+        private readonly AgencyTermLines $terms,
         private readonly AgencyLevels $levels,
         private readonly OrderService $orders,
         private readonly PaymentMethods $methods,
@@ -140,10 +145,13 @@ final class AgencyHandler implements Handler
         $this->screen->show($ctx, $this->texts->render(BotText::AgencyTrafficCheckout, [
             'traffic' => Messages::bytes(Traffic::bytesOfGb($gb)),
             'amount' => Money::format(self::level($agent)->priceOf($gb)),
-        ]), OrderType::Traffic, static fn(PaymentMethod $method): string => CallbackData::build(self::CALLBACK, self::TRAFFIC_CHECKOUT, $gb, $method->id), self::TRAFFIC);
+        ]), OrderType::Traffic, self::level($agent)->priceOf($gb), static fn(PaymentMethod $method): string => CallbackData::build(self::CALLBACK, self::TRAFFIC_CHECKOUT, $gb, $method->id), self::TRAFFIC);
     }
 
-    /** The agent's account: level and price per GB, traffic left, wallet and credit, their bot and what it sold. */
+    /**
+     * The agent's account: level and price per GB, traffic left, wallet and credit, their bot and what it sold — and its
+     * terms of selling (AgencyTermLines::standing()).
+     */
     private function account(Context $ctx, User $agent): void
     {
         $level = self::level($agent);
@@ -164,6 +172,10 @@ final class AgencyHandler implements Handler
         ]);
         if ($bot?->problem !== null) {
             $text = BotTexts::paragraphs($text, $this->texts->part(BotText::AgencyBotProblem, ['reason' => $bot->problem]));
+        }
+        if ($bot !== null) {
+            $month = JalaliMonth::now();
+            $text = BotTexts::paragraphs($text, $this->terms->standing($bot, $month, $this->standing->purchased($bot, $month)));
         }
 
         $keyboard = InlineKeyboard::make()
@@ -246,15 +258,16 @@ final class AgencyHandler implements Handler
         if ($agent === null) {
             return;
         }
-        $method = $this->methods->payable($methodId, OrderType::Traffic);
+        $method = $this->methods->payable($methodId, OrderType::Traffic, null, $agent);
         if ($method === null || !$this->orders->trafficAllowed($gb)) {
-            // Switched off since the checkout was shown, or the bounds moved: the checkout as it stands now.
+            // Switched off since the checkout was shown, or the bounds moved: the checkout as it stands now — as when the
+            // way no longer takes the price (CheckoutScreen::buy()).
             $this->checkout($ctx, $gb);
 
             return;
         }
 
-        $this->screen->buy($ctx, $method, self::level($agent)->priceOf($gb), fn(): Order => $this->orders->openTraffic($agent, $gb), self::checkoutCallback($gb));
+        $this->screen->buy($ctx, $method, OrderType::Traffic, self::level($agent)->priceOf($gb), fn(): Order => $this->orders->openTraffic($agent, $gb), self::checkoutCallback($gb), fn() => $this->checkout($ctx, $gb));
     }
 
     /** «ربات من»: the bot the agent handed over — or how to make one — and its token taken here. */

@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/page-header'
 import { DeleteCard } from '@/components/servers/delete-card'
 import { GrantsCard } from '@/components/servers/grants-card'
 import { InboundsCard } from '@/components/servers/inbounds-card'
+import { MigrationsCard } from '@/components/servers/migrations-card'
 import { serverDriversQuery } from '@/components/servers/queries'
 import { ServerForm } from '@/components/servers/server-form'
 import { StatusCard } from '@/components/servers/status-card'
@@ -28,7 +29,7 @@ function createdProbe(state: unknown): Probe | null {
 
 /**
  * One server: its inbounds (what is sold), its free test accounts, its connection, its state and checks, the gifts to its
- * services, and deleting it.
+ * services, moving its services to another server, and deleting it.
  */
 export function ServerDetailPage() {
   const id = Number(useParams().id)
@@ -108,6 +109,7 @@ export function ServerDetailPage() {
         <div className="grid min-w-0 content-start gap-4">
           <StatusCard server={server} probe={page.probe} driver={driver} />
           <GrantsCard server={server} />
+          <MigrationsCard server={server} />
           <DeleteCard page={page} server={server} />
         </div>
       </div>

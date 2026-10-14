@@ -14,7 +14,7 @@ import { json, refusal, server } from '@/test/server'
 const PROBE: Probe = { ok: true, error: null, error_detail: null, status: null, inbounds: [], serves_subscriptions: true, subscription_probed: true }
 
 /** A server's connection tried as its form stands. */
-const draft = (base_url: string): ServerTestRequest => ({ driver: '3x-ui', name: 'آلمان', base_url, auth_mode: 'token', verify_tls: true, timeout: 30, is_active: true })
+const draft = (base_url: string): ServerTestRequest => ({ driver: '3x-ui', name: 'آلمان', base_url, auth_mode: 'token', verify_tls: true, timeout: 30, proxy_enabled: false, is_active: true })
 
 const probing = (body: ServerTestRequest) => () => api.post('/servers/test', body)
 

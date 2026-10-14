@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Core\Scheduling\Scheduler;
 use App\Modules\Accounts\Tasks\PruneAccountsTask;
+use App\Modules\Agency\Tasks\AgencyStandingTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
@@ -11,6 +12,7 @@ use App\Modules\Rewards\Tasks\NightlyDrawTask;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Subscriptions\Tasks\CleanupServicesTask;
 use App\Modules\Subscriptions\Tasks\GrantsTask;
+use App\Modules\Subscriptions\Tasks\MigrationsTask;
 use App\Modules\Subscriptions\Tasks\NextPeriodTask;
 use App\Modules\Subscriptions\Tasks\SendRemindersTask;
 use App\Modules\Subscriptions\Tasks\SyncSubscriptionsTask;
@@ -42,6 +44,9 @@ return static function (Scheduler $schedule): void {
     $schedule->everyMinutes(10, NextPeriodTask::class, eachBot: true);
     // «افزودن زمان و حجم» and «هدیه همگانی» no screen is working on: a batch per minute, and a panel that was out of reach tried again.
     $schedule->everyMinutes(1, GrantsTask::class);
+    // «انتقال سرویس‌ها» no page is working on: a batch per minute, a panel that was out of reach tried again; then the
+    // clients a rescue left on a panel that answers again, removed.
+    $schedule->everyMinutes(1, MigrationsTask::class);
     // Every running service read from its panel — one call per server — and then «یادآوری»: services near their
     // end or low on traffic are reminded. In this order, so the reminders read what the sync just brought.
     $schedule->everyMinutes(15, SyncSubscriptionsTask::class);
@@ -50,6 +55,9 @@ return static function (Scheduler $schedule): void {
     // after they ended (off until it switches it on), its free tests that ended or never connected — in every shop that
     // has some, a stopped agent's too; after the sync, so it reads what the sync just brought.
     $schedule->everyMinutes(15, CleanupServicesTask::class);
+    // The agents' terms of selling, every agent's shop at once (a stopped bot's too): an agency's end and a month's minimum
+    // purchase warned of days ahead, then the shop's selling suspended (never its bot); a month's minimum met lifts that.
+    $schedule->everyMinutes(60, AgencyStandingTask::class);
     // The updates the bots took, remembered so one Telegram sends again is served once: forgotten once it cannot come again.
     $schedule->everyMinutes(60, PruneUpdatesTask::class);
     // The websites' sessions that ended, the sign-in challenges that expired and the notices half a year old, every shop's.

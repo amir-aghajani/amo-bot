@@ -16,6 +16,7 @@ use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\DTO\Capabilities;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\DTO\Expiry;
+use App\Modules\Providers\Enums\ConnectionFailure;
 use App\Modules\Providers\Exceptions\PanelApiException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Models\ServerInbound;
@@ -26,6 +27,7 @@ use App\Modules\Subscriptions\Services\ClientNaming;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
+use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
@@ -97,7 +99,7 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
         self::assertTrue($subscription->awaitsFirstUse());
         self::assertSame($this->berlin->id, $subscription->server_id);
         self::assertSame('50000.00', $this->customer->balance());
-        self::assertTrue($result['initiation']->isInstant(), 'the wallet settles at once');
+        self::assertNull($result['initiation']->transfer, 'the wallet settles at once: no card to pay to');
     }
 
     public function testAPanelWithoutInboundsSellsTheWholeServer(): void
@@ -468,6 +470,38 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
         self::assertSame(OrderStatus::Failed, $order->status);
         self::assertStringContainsString('لینک اشتراک نساخت', (string) $order->notes, 'the order says why it failed, not why the clean-up did');
         self::assertTrue($logs->hasErrorThatContains('Could not take back client customer_1 on Berlin; delete it by hand'));
+    }
+
+    public function testAClientThePanelMadeThoughItsAnswerNeverCameIsDeliveredRatherThanMadeTwice(): void
+    {
+        // Berlin makes the client with the plan's 20 GB, then its answer never comes.
+        FakeProvider::$onCall = function (int $server, string $call): void {
+            if ($call === 'createClient' && $server === $this->berlin->id) {
+                FakeProvider::put($this->berlin, new ClientInfo(name: 'customer_1', enabled: true, totalBytes: 20 * Traffic::GIGABYTE, expiry: Expiry::afterFirstUse(30 * 86_400), subscriptionUrl: 'https://fake.test/sub/made'));
+            }
+        };
+        FakeProvider::$failing = [$this->berlin->id => ['createClient' => ConnectionFailure::Timeout]];
+
+        $order = $this->checkout($this->customer, $this->plan, $this->berlin);
+
+        self::assertSame(OrderStatus::Fulfilled, $order->status, (string) $order->notes);
+        self::assertSame(['customer_1', 'https://fake.test/sub/made'], [$order->subscription?->remote_name, $order->subscription?->subscription_url], 'the client it made, found by its name');
+        self::assertSame(['customer_1'], array_keys(FakeProvider::$clients[$this->berlin->id]), 'no second client under the next name, nor one left behind');
+    }
+
+    public function testAClientByTheNameThatIsNotTheOneAskedForIsNeverDeliveredForIt(): void
+    {
+        $logs = $this->logs();
+        // Made on the panel by hand, and used: the create's timeout hid the panel's refusal of the name.
+        FakeProvider::put($this->berlin, new ClientInfo(name: 'customer_1', enabled: true, downloadBytes: Traffic::GIGABYTE, totalBytes: 20 * Traffic::GIGABYTE, subscriptionUrl: 'https://fake.test/sub/by-hand'));
+        FakeProvider::$failing = [$this->berlin->id => ['createClient' => ConnectionFailure::Timeout]];
+
+        $order = $this->checkout($this->customer, $this->plan, $this->berlin);
+
+        self::assertSame(OrderStatus::Failed, $order->status, 'the timeout stands');
+        self::assertNull($order->subscription);
+        self::assertSame([], FakeProvider::$deleted, 'nor is a client the shop did not make taken back');
+        self::assertFalse($logs->hasInfoThatContains('though it did not answer'));
     }
 
     public function testFullServersAreNotOffered(): void

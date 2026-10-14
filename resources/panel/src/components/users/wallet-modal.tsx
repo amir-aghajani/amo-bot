@@ -7,11 +7,13 @@ import { EmptyState } from '@/components/empty-state'
 import { LedgerList } from '@/components/ledger-list'
 import { ListView } from '@/components/list-view'
 import { Modal } from '@/components/modal'
+import { amountHint } from '@/components/money-field'
 import { Reviewer } from '@/components/reviewer'
-import { userLabel } from '@/components/user-identity'
+import { TextLink } from '@/components/text-link'
+import { UserLabel, userLabel, userPage } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { UserRow, UserWalletResponse } from '@/lib/api-types'
-import { formatAmount, formatBalance, formatDate, formatMoney } from '@/lib/format'
+import { formatAmount, formatBalance, formatDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 
 interface WalletModalProps {
@@ -55,7 +57,7 @@ export function WalletPanel({ user, onChanged, invalidates, onCancel }: WalletPa
         amountLabel="مبلغ (تومان)"
         amountPlaceholder="50000"
         whole
-        amountHint={(amount) => `= ${formatMoney(amount)}`}
+        amountHint={amountHint}
         noteHint="مشتری این متن را در تاریخچه کیف پولش می‌بیند."
         notePlaceholders={{ add: 'مثلا: هدیه، جبران قطعی', remove: 'مثلا: اصلاح اشتباه' }}
         submitLabels={{ add: 'افزایش موجودی', remove: 'کاهش موجودی' }}
@@ -85,6 +87,15 @@ export function WalletPanel({ user, onChanged, invalidates, onCancel }: WalletPa
               detail: (
                 <>
                   {formatDate(row.created_at)} · مانده {formatBalance(row.balance_after)}
+                  {/* «انتقال موجودی»: whom the money went to, or came from — their page a tap away. */}
+                  {row.counterpart && (
+                    <>
+                      {row.type === 'credit' ? ' · از ' : ' · به '}
+                      <TextLink to={userPage(row.counterpart.id)} inline>
+                        <UserLabel user={row.counterpart} />
+                      </TextLink>
+                    </>
+                  )}
                   {row.reviewer && (
                     <>
                       {' · '}

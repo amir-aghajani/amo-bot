@@ -311,9 +311,11 @@ beside a bot-settings card for the program's switch and rules. A program that is
 
 The owner's servers (`apps/admin/pages/servers.tsx` and `server-detail.tsx`, `components/servers`) are added through a
 `PickerModal` of the connectors; `ServerForm` draws the connector's form from its description and tests it with
-`useProbe`. A grant (a server's «افزودن زمان و حجم») and the mass gift share `components/grants`: while a grant runs and
-its card is on screen, `useGrants` works it a request at a time so it finishes without waiting for the scheduler, which
-carries on otherwise.
+`useProbe`. A grant (a server's «افزودن زمان و حجم») and the mass gift share `components/grants`, and a server's
+«انتقال سرویس‌ها» is `components/servers/migrations-card`: while a grant or a move is under way and its card is on screen,
+`useJobRunner` (`lib/use-job-runner`, through `useGrants` and `useMigrations`) works it a request at a time so it
+finishes without waiting for the scheduler, which carries on otherwise — the next a second after, half a minute while it
+waits for a panel, ten seconds after a request that got no answer.
 
 The owner's agency page (`/agents`) has requests, agents, levels and rules; «باز کردن فروشگاه» is a real link
 (`useOpenShop().link()`), so it opens the agent's shop in a new tab like any link. An agent's own account page

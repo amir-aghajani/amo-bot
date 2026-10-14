@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { EllipsisVertical } from 'lucide-react'
+import { EllipsisVertical, PackagePlus } from 'lucide-react'
 import { useParams } from 'react-router'
 import { BackLink } from '@/components/back-link'
 import { DiscountCard } from '@/components/customer/discount-card'
 import { LoyaltyCard } from '@/components/customer/loyalty-card'
+import { ManualOrderDialog } from '@/components/customer/manual-order-dialog'
 import { OrdersCard } from '@/components/customer/orders-card'
 import { PaymentsCard } from '@/components/customer/payments-card'
 import { AgencyCard, GroupsCard, ReferralCard, WalletCard } from '@/components/customer/profile-cards'
@@ -18,7 +20,7 @@ import { StatusBadge } from '@/components/status-badge'
 import { shopServerChoices, type ServerChoices } from '@/components/subscriptions/server-choices'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TelegramChatLink, userLabel } from '@/components/user-identity'
 import { AccountChangeConfirm, AccountMenuItems, AdminMark, useAccountChange } from '@/components/users/account-actions'
@@ -41,7 +43,8 @@ export interface CustomerPageProps {
 }
 
 /**
- * One customer (`/users/:id`, both panels), where support answers them from: identity, account actions, their latest
+ * One customer (`/users/:id`, both panels), where support answers them from: identity, account actions and an order made
+ * for them by hand (ManualOrderDialog), their latest
  * services, payments, orders and tickets, wallet, referral facts, groups, website account and agency. The page is keyed
  * on the customer, so nothing of one (a draft, an open dialog) is left on another.
  */
@@ -63,6 +66,8 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
   // payment's operation reads this page again itself — its dialog names the customer's page among what it changes.)
   const elsewhere = [queryKeys.users]
   const account = useAccountChange(changed, elsewhere)
+  // «افزودن سفارش»: support's order for the customer, in its dialog.
+  const [ordering, setOrdering] = useState(false)
 
   if (detail.isPending) {
     return (
@@ -119,6 +124,11 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
                   <Button variant="secondary" size="icon" icon={EllipsisVertical} aria-label="حساب مشتری" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setOrdering(true)}>
+                    <PackagePlus aria-hidden />
+                    افزودن سفارش
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <AccountMenuItems user={user} account={account} />
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -152,6 +162,7 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
       </div>
 
       <AccountChangeConfirm account={account} />
+      <ManualOrderDialog customer={ordering ? user : null} traffic={traffic} onClose={() => setOrdering(false)} />
     </Page>
   )
 }

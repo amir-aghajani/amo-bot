@@ -50,7 +50,7 @@ final class SchemaTest extends TestCase
         $named = $schema->tables();
         sort($named);
         self::assertSame($named, $made);
-        self::assertSame(['wallet'], $this->db->table('payment_methods')->pluck('driver')->all(), 'a new shop starts with its wallet');
+        self::assertSame(['wallet', 'outside'], $this->db->table('payment_methods')->pluck('driver')->all(), 'a new shop starts with its wallet and its outside row');
     }
 
     public function testEveryForeignKeyPointsAtATableMadeBeforeIt(): void
@@ -146,7 +146,7 @@ final class SchemaTest extends TestCase
 
         self::assertSame(['custom_emojis'], $schema->missing());
         self::assertSame(['custom_emojis'], $schema->create());
-        self::assertSame(1, $this->db->table('payment_methods')->count(), 'a table that was there gets no starting rows');
+        self::assertSame(2, $this->db->table('payment_methods')->count(), 'a table that was there gets no starting rows');
     }
 
     public function testARebuildCarriesTheRowsOverToTheNewShape(): void
@@ -236,8 +236,8 @@ final class SchemaTest extends TestCase
 
         self::assertSame($schema->tables(), array_column($report, 'table'));
         self::assertSame([], array_merge(...array_column($report, 'added'), ...array_column($report, 'dropped')), 'the same shape');
-        foreach (['users', 'wallet_transactions', 'settings', 'payment_methods'] as $table) {
-            self::assertSame(1, $this->db->table($table)->count(), "{$table} — the wallet carried over, not made a second time");
+        foreach (['users' => 1, 'wallet_transactions' => 1, 'settings' => 1, 'payment_methods' => 2] as $table => $rows) {
+            self::assertSame($rows, $this->db->table($table)->count(), "{$table} — the wallet and the outside row carried over, not made a second time");
         }
         $named = $schema->tables();
         sort($named);

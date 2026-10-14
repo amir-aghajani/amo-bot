@@ -42,13 +42,13 @@ final class CheckoutController extends ApiController
 
     /**
      * GET /payment-methods — ?for=purchase|renewal|wallet_topup|extra_traffic|extra_time|extra_devices: the ways to pay
-     * that kind of order.
+     * that kind of order; with ?amount=, those that take it.
      *
-     * @throws ValidationException 422 on `for`
+     * @throws ValidationException 422 on `for` or `amount`
      */
     public function methods(Request $request, Response $response): Response
     {
-        return $this->json($response, ['methods' => $this->checkout->methods($request->getQueryParams())]);
+        return $this->json($response, ['methods' => $this->checkout->methods(Customer::of($request)->user, $request->getQueryParams())]);
     }
 
     /**

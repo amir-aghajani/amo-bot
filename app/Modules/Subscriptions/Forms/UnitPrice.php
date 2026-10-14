@@ -12,8 +12,8 @@ use App\Support\Money;
 
 /**
  * The price of one unit of an extra (a GB of traffic, a day of time), or none: blank sells only the amounts with their
- * own price, and nothing typed. Whole Toman as an admin types it (Input::amountOf()), from 1 to `$max` — free extras are
- * support's extension, not a sale.
+ * own price, and nothing typed. Whole Toman as an admin types it (Input::optionalAmountOf()), from 1 to `$max` — free
+ * extras are support's extension, not a sale.
  *
  * @extends Field<string|null>
  */
@@ -36,24 +36,19 @@ final class UnitPrice extends Field
 
     public function read(array $input, mixed $kept): ?string
     {
-        $typed = $input[$this->name] ?? null;
-        if ($typed === null || (is_string($typed) && trim($typed) === '')) {
-            return null;
-        }
-
-        $price = Input::amountOf($typed);
-        if ($price === null || $price < 1 || $price > $this->max) {
+        $price = Input::optionalAmountOf($input[$this->name] ?? null, 1, $this->max);
+        if ($price === false) {
             throw new FieldRefused(sprintf('%s باید مبلغی بین %s تا %s باشد، یا خالی بماند.', $this->label, Money::format(1), Money::format($this->max)));
         }
 
-        return Money::normalize($price);
+        return $price;
     }
 
     public function cast(mixed $kept): ?string
     {
-        $price = $kept === null ? null : Input::amountOf($kept);
+        $price = Input::optionalAmountOf($kept, 1, $this->max);
 
-        return $price !== null && $price >= 1 && $price <= $this->max ? Money::normalize($price) : null;
+        return $price === false ? null : $price;
     }
 
     protected function bounds(): array

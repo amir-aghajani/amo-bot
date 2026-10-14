@@ -386,6 +386,21 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertSame('50000.00', $this->ali->balance(), 'the receipt approved, the order delivered');
     }
 
+    /** So with a card transfer taken in support's private chat (shown no card): the customer may have paid it there. */
+    public function testCancellingAPaymentWhileAnotherOfItsOrderWasTakenInSupportsChatDropsItAlone(): void
+    {
+        $order = $this->topUpOrder($this->ali, '50000.00');
+        $stale = $this->cardPayment($order, $this->cardMethod('کارت اول'));
+        $inChat = $this->cardPayment($order, $this->card, ['card_id' => null]);
+
+        $response = $this->postJson("/api/admin/payments/{$stale->id}/cancel", ['note' => 'پرداخت ناتمام']);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['payment'];
+        self::assertSame(['cancelled', 'pending'], [$row['status'], $row['order']['status']]);
+        self::assertSame(PaymentStatus::Pending, $inChat->refresh()->status, "the one in support's chat stays support's");
+    }
+
     public function testAPaymentLeftBehindByAnOrderPaidAnotherWayGoesQuietly(): void
     {
         $rejected = $this->topUpAwaitingReview('50000.00');

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Models;
 
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
+use App\Modules\Payments\Drivers\Outside\OutsideGateway;
 use App\Modules\Payments\Drivers\Wallet\WalletGateway;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -12,13 +13,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
- * A way to pay offered at checkout: a gateway driver with its settings (`config`) and the admin's label («کارت به کارت
- * (ملت)»). Several rows may share a driver (one per card); the wallet is the built-in row every shop has.
+ * A way to pay offered at checkout: a gateway driver with its settings (`config`), the admin's label («کارت به کارت
+ * (ملت)») and the amounts it is offered for (`min_amount`, `max_amount`; null: no bound). Several rows may share a
+ * driver; a card-to-card row shows one of its cards (PaymentCard) per payment; the wallet is the built-in row every shop
+ * has.
  *
  * @property int $id
  * @property string $driver
  * @property string $label
  * @property array<string, mixed> $config
+ * @property string|null $min_amount
+ * @property string|null $max_amount
  * @property bool $enabled
  * @property int $sort
  * @property Carbon $created_at
@@ -30,11 +35,13 @@ class PaymentMethod extends Model
 
     protected $table = 'payment_methods';
 
-    protected $fillable = ['driver', 'label', 'config', 'enabled', 'sort'];
+    protected $fillable = ['driver', 'label', 'config', 'min_amount', 'max_amount', 'enabled', 'sort'];
 
     /** @var array<string, string> */
     protected $casts = [
         'config' => 'array',
+        'min_amount' => 'decimal:2',
+        'max_amount' => 'decimal:2',
         'enabled' => 'boolean',
         'sort' => 'integer',
     ];
@@ -55,9 +62,21 @@ class PaymentMethod extends Model
         return $this->driver === WalletGateway::key();
     }
 
+    /** The built-in outside row: money support took outside the shop for an order it made — support's alone, never offered. */
+    public function isOutside(): bool
+    {
+        return $this->driver === OutsideGateway::key();
+    }
+
     /** @return HasMany<Payment, $this> */
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /** @return HasMany<PaymentCard, $this> A card method's cards, in their order. */
+    public function cards(): HasMany
+    {
+        return $this->hasMany(PaymentCard::class)->orderBy('sort')->orderBy('id');
     }
 }

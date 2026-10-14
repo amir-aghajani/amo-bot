@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Handlers;
 
+use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Catalog\Services\PlanCategoryService;
@@ -63,6 +64,7 @@ final class MenuHandler implements Handler
         private readonly WheelHandler $wheelScreens,
         private readonly TestAccountHandler $testScreens,
         private readonly CustomServiceHandler $customScreens,
+        private readonly WalletTransferHandler $walletSends,
         private readonly Loyalty $loyalty,
         private readonly ServiceClaims $claims,
     ) {}
@@ -127,10 +129,18 @@ final class MenuHandler implements Handler
 
     /**
      * «خرید اشتراک»: the categories when the shop has any, otherwise straight to the plans — and under them, while the
-     * custom builder is offered, «🛠 ساخت سرویس دلخواه» (CustomServiceHandler), even with no plan on sale.
+     * custom builder is offered, «🛠 ساخت سرویس دلخواه» (CustomServiceHandler), even with no plan on sale. An agent's shop
+     * whose selling is suspended offers no plan, whatever its categories: it says so, politely (the builder is the main
+     * shop's alone).
      */
     private function plans(Context $ctx): void
     {
+        if (!CurrentBot::get()->sells()) {
+            $this->menu->screen($ctx, $this->texts->get(BotText::SellingPaused));
+
+            return;
+        }
+
         $groups = $this->categories->groups();
         $custom = $this->customScreens->button();
         if (!self::isGrouped($groups)) {
@@ -152,9 +162,18 @@ final class MenuHandler implements Handler
         $this->menu->screen($ctx, $this->texts->get(BotText::CategoriesTitle), InlineKeyboard::make()->grid($buttons, 1)->row(...$custom));
     }
 
-    /** `cat:{id}` — the plans of one category (0 = the uncategorised ones), with a way back to the categories. */
+    /**
+     * `cat:{id}` — the plans of one category (0 = the uncategorised ones), with a way back to the categories; a category
+     * of an old message in a shop whose selling is suspended says so (plans()), not that it is empty.
+     */
     private function category(Context $ctx, int $categoryId): void
     {
+        if (!CurrentBot::get()->sells()) {
+            $this->plans($ctx);
+
+            return;
+        }
+
         $groups = $this->categories->groups();
         foreach ($groups as $group) {
             if (($group['category']->id ?? 0) !== $categoryId) {
@@ -297,7 +316,10 @@ final class MenuHandler implements Handler
         $this->menu->screen($ctx, $text, $keyboard, backStyle: 'danger');
     }
 
-    /** «کیف پول»: the balance (or debt), an agent's credit, the loyalty tier, the last ledger lines and the top-up. */
+    /**
+     * «کیف پول»: the balance (or debt), an agent's credit, the loyalty tier, the last ledger lines, the top-up (not in an
+     * agent's shop whose selling is suspended) and — while the shop offers it — «انتقال موجودی».
+     */
     private function wallet(Context $ctx): void
     {
         $text = $this->texts->render(BotText::WalletBalance, ['balance' => Messages::balance($ctx->user->balance())]);
@@ -320,7 +342,8 @@ final class MenuHandler implements Handler
             ->all();
         $text .= $lines === [] ? $this->texts->part(BotText::WalletNoHistory) : $this->texts->part(BotText::WalletHistory, ['history' => Html::lines(...$lines)]);
 
-        $this->menu->screen($ctx, $text, InlineKeyboard::make()->row($this->buttons->topUp()));
+        $topUp = CurrentBot::get()->sells() ? [$this->buttons->topUp()] : [];
+        $this->menu->screen($ctx, $text, InlineKeyboard::make()->row(...$topUp, ...$this->walletSends->button()));
     }
 
     /**

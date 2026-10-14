@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import { CheckCircle2, ChevronLeft, Clock, CreditCard, MessageSquare, ServerCrash, Star, TimerOff, XCircle, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
+import { standingConcern } from '@/components/agency/agency-standing'
 import { TrafficShortageNotice } from '@/components/agency/traffic-shortage'
 import { EmptyState } from '@/components/empty-state'
 import { Dash } from '@/components/list-view'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { DashboardResponse, TrafficShortage } from '@/lib/api-types'
+import type { AgencyStanding, DashboardResponse, TrafficShortage } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
 import { formatNumber } from '@/lib/format'
 import { ORDER_STATUS, ORDER_STUCK, PAYMENT_STATUS, REVIEW_STATUS, TICKET_STATUS, type Tone } from '@/lib/statuses'
@@ -35,6 +36,10 @@ interface AttentionCardProps {
   trafficShortage: TrafficShortage | null | undefined
   /** What to do about it, the panel's own way. */
   trafficHelp?: ReactNode
+  /** An agent's terms of selling: a suspension, or an end or a short month near, said first; null in the main shop. */
+  agencyStanding?: AgencyStanding | null
+  /** How the panel says them: to the agent, of their own bot; to the owner, of the agent's. */
+  standingNotice?: (standing: AgencyStanding) => ReactNode
   /** The shop's "ending soon" window, in days. */
   expiringDays: number | undefined
   /** The counts' read has not answered yet. */
@@ -42,14 +47,17 @@ interface AttentionCardProps {
 }
 
 /**
- * The queues that need a human, each linking to its filtered list, with an agent's traffic shortage above them. Counts
- * that could not be read show «—»: "all clear" is only said of counts that arrived.
+ * The queues that need a human, each linking to its filtered list, with an agent's terms of selling (a suspension, an end
+ * or a short month near) and traffic shortage above them. Counts that could not be read show «—»: "all clear" is only
+ * said of counts that arrived.
  */
-export function AttentionCard({ attention, trafficShortage, trafficHelp, expiringDays, loading }: AttentionCardProps) {
+export function AttentionCard({ attention, trafficShortage, trafficHelp, agencyStanding, standingNotice, expiringDays, loading }: AttentionCardProps) {
   const mainShop = useMainShop()
   const items = ITEMS.filter((item) => (attention?.[item.key] ?? 0) > 0)
   const labelOf = (item: (typeof ITEMS)[number]) => (item.key === 'expiring_soon' && expiringDays !== undefined ? `${item.label} (${formatNumber(expiringDays)} روز)` : item.label)
-  const total = items.reduce((sum, item) => sum + (attention?.[item.key] ?? 0), trafficShortage ? 1 : 0)
+  // The terms needing an eye, in the panel's words: one more thing waiting.
+  const selling = agencyStanding && standingNotice && standingConcern(agencyStanding) !== null ? standingNotice(agencyStanding) : null
+  const total = items.reduce((sum, item) => sum + (attention?.[item.key] ?? 0), (trafficShortage ? 1 : 0) + (selling ? 1 : 0))
   const unknown = !loading && attention === undefined
 
   return (
@@ -76,6 +84,7 @@ export function AttentionCard({ attention, trafficShortage, trafficHelp, expirin
           />
         ) : (
           <ul className="grid gap-px">
+            {selling && <li className="pb-2">{selling}</li>}
             {trafficShortage && (
               <li className="pb-2">
                 <TrafficShortageNotice shortage={trafficShortage} help={trafficHelp} />

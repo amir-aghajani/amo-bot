@@ -8,6 +8,7 @@ use App\Core\Database\Ledger;
 use App\Core\Database\Transitions;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Agency\DTO\AgencyTerms;
+use App\Modules\Agency\DTO\SellingTerms;
 use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
@@ -47,6 +48,7 @@ final class AgencyActions
 
     public function __construct(
         private readonly AgencySettings $settings,
+        private readonly AgencyStanding $standing,
         private readonly AgentBots $bots,
         private readonly PaymentMethods $methods,
         private readonly TrafficPool $pool,
@@ -93,18 +95,18 @@ final class AgencyActions
     }
 
     /**
-     * Approves a request on a level with `$credit` (the program's default when null). Their shop opens and they are notified.
-     * Nobody approves their own request.
+     * Approves a request on a level with `$credit` and `$selling` terms (the program's defaults when null). Their shop
+     * opens and they are notified. Nobody approves their own request.
      *
      * @throws ActorRefusedException 403 their own request
      * @throws ValidationException 422 on `status`: decided meanwhile (decided())
      */
-    public function approve(AgencyRequest $request, Actor $actor, AgencyLevel $level, ?string $credit): AgencyRequest
+    public function approve(AgencyRequest $request, Actor $actor, AgencyLevel $level, ?string $credit, ?SellingTerms $selling = null): AgencyRequest
     {
         if ($actor->is($request->user_id)) {
             throw ActorRefusedException::ownRequest();
         }
-        $terms = new AgencyTerms($level, $credit ?? $this->settings->defaultCredit());
+        $terms = new AgencyTerms($level, $credit ?? $this->settings->defaultCredit(), $selling ?? $this->standing->defaults());
         $returning = $this->db->transaction(function () use ($request, $terms, $actor): ?Bot {
             if (!Transitions::move($request, 'status', [AgencyRequestStatus::Pending], AgencyRequestStatus::Approved, ['level_id' => $terms->level->id, 'reviewer' => $actor->name(), 'decided_at' => now()])) {
                 throw ValidationException::on('status', self::decided($request));
@@ -143,7 +145,8 @@ final class AgencyActions
 
     /**
      * Changes an agent's level or credit, by a conditional write that only lands while they are an agent (so an agency
-     * ended at the same moment is not given back). Returns whether they were told; null when nothing changed.
+     * ended at the same moment is not given back), and their terms of selling when given (AgencyStanding::change()).
+     * Returns whether they were told; null when nothing changed.
      *
      * @throws ValidationException 422 on `status`: not an agent
      */
@@ -152,6 +155,10 @@ final class AgencyActions
         $changed = $agent->agency_level_id !== $terms->level->id || Money::compare($agent->credit_limit, $terms->credit) !== 0;
         if (!self::whileAgent($agent, ['agency_level_id' => $terms->level->id, 'credit_limit' => $terms->credit]) || $agent->refresh()->agencyLevel === null) {
             throw ValidationException::on('status', self::notAgent($agent));
+        }
+        $bot = $agent->ownBot;
+        if ($terms->selling !== null && $bot !== null && $this->standing->change($bot, $terms->selling)) {
+            $changed = true;
         }
 
         return $changed ? $this->notifier->agencyChanged($agent) : null;
@@ -207,8 +214,9 @@ final class AgencyActions
     }
 
     /**
-     * Writes the agent's terms and opens their shop (bot row and wallet the first time), in the caller's transaction.
-     * Returns their existing bot when it must be resumed after the commit (AgentBots::resume()).
+     * Writes the agent's terms and opens their shop (bot row and wallet the first time), its terms of selling begun afresh
+     * (AgencyStanding::begin()), in the caller's transaction. Returns their existing bot when it must be resumed after the
+     * commit (AgentBots::resume()).
      */
     private function assign(User $agent, AgencyTerms $terms): ?Bot
     {
@@ -218,11 +226,14 @@ final class AgencyActions
 
         $bot = $agent->ownBot;
         if ($bot !== null) {
+            $this->standing->begin($bot, $terms->selling ?? $this->standing->defaults());
+
             return $returning ? $bot : null;
         }
 
         $bot = $agent->ownBot()->create();
         $agent->setRelation('ownBot', $bot);
+        $this->standing->begin($bot, $terms->selling ?? $this->standing->defaults());
         CurrentBot::run($bot, fn() => $this->methods->createBuiltins());
 
         return null;

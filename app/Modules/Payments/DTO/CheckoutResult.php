@@ -76,7 +76,7 @@ final class CheckoutResult
         return $this->payment ?? throw new \LogicException("A {$this->outcome->value} checkout carries no payment.");
     }
 
-    /** A transfer's card: its number, its holder, the method's note. */
+    /** A transfer's card: its number, its holder, the method's note — no card for one taken in support's private chat. */
     public function card(): CardTransfer
     {
         return $this->card ?? throw new \LogicException("A {$this->outcome->value} checkout carries no card.");

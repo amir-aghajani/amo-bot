@@ -31,6 +31,13 @@ export const queryKeys = {
   everyServer: ['server'] as const,
   serverGrants: (id: number) => ['server-grants', id] as const,
   everyServerGrants: ['server-grants'] as const,
+  /** The moves of a server's services (its page's «انتقال سرویس‌ها» card, the owner's), and one with its failures. */
+  serverMigrations: (id: number) => ['server-migrations', id] as const,
+  everyServerMigrations: ['server-migrations'] as const,
+  serverMigration: (id: number) => ['server-migration', id] as const,
+  everyServerMigration: ['server-migration'] as const,
+  /** What a new move from the server would cover, with the dialog's filters (as the server counts them). */
+  migrationPreview: (id: number, filters: object) => ['migration-preview', id, filters] as const,
   /** A server's free test accounts (its page's «اکانت تست» card, the owner's). */
   serverTestAccount: (id: number) => ['server-test-account', id] as const,
   everyServerTestAccount: ['server-test-account'] as const,
@@ -68,6 +75,8 @@ export const queryKeys = {
   agents: ['agents'] as const,
   /** An agent's traffic, line by line (the agents page's agent modal). */
   agentTraffic: (id: number) => ['agent-traffic', id] as const,
+  /** What the owner keeps from an agent's shop: servers and plans (`GET /agency/agents/{id}/hidden`). */
+  agentHidden: (id: number) => ['agent-hidden', id] as const,
   everyAgentTraffic: ['agent-traffic'] as const,
   /** «حساب نمایندگی» (the agent's panel): their bot and its traffic, their level and wallet, and the traffic's lines. */
   account: ['account'] as const,

@@ -6,8 +6,16 @@ namespace Tests;
 
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
+use App\Modules\Catalog\Models\Plan;
+use App\Modules\Payments\Models\PaymentMethod;
+use App\Modules\Providers\Models\Server;
+use App\Modules\Telegram\Handlers\PurchaseHandler;
+use App\Modules\Telegram\Texts\BotText;
+use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Telegram\Update\Dispatcher;
 use App\Modules\Telegram\Update\Update;
+use App\Support\Money;
 use Tests\Support\FakeTelegram;
 
 /**
@@ -115,6 +123,22 @@ abstract class BotTestCase extends DatabaseTestCase
         return array_values(array_filter($said, static fn(?string $text): bool => $text !== null));
     }
 
+    /**
+     * What the bot says of a card transfer of `$amount` Toman, in place of the checkout: the card's instructions — the
+     * card of the fixtures' cardMethod() unless told otherwise —, then the line asking for the receipt.
+     */
+    protected function cardInstructions(string $amount, string $card = '6037997700001119', string $holder = 'AmoBot', string $instructions = ''): string
+    {
+        return BotTexts::paragraphs(trim(self::text(BotText::CardInstructions, [
+            'amount' => Money::format($amount),
+            'amount_digits' => $amount,
+            'card' => $card,
+            'holder' => $holder,
+            'bank' => '',
+            'instructions' => $instructions,
+        ])), self::text(BotText::PayInstructionsSuffix));
+    }
+
     /** What the bot's answer to the tap said — a popup or a toast — since the last send(); null when it said nothing. */
     protected function popup(): ?string
     {
@@ -179,6 +203,18 @@ abstract class BotTestCase extends DatabaseTestCase
                 'message' => $message + ['message_id' => 77, 'chat' => ['id' => $chat, 'type' => 'private']],
             ],
         ]);
+    }
+
+    /** The checkout of `$plan` on `$server`: the tap on the server that asks how to pay. */
+    protected function checkoutOf(Plan $plan, Server $server): string
+    {
+        return PurchaseHandler::serverCallback($plan->id, $server->id);
+    }
+
+    /** That checkout's button that pays `$plan` on `$server` with `$method`. */
+    protected function payButton(Plan $plan, Server $server, PaymentMethod $method): string
+    {
+        return CallbackData::build($this->checkoutOf($plan, $server), $method->id);
     }
 
     /** A shared contact card; `$userId` is whose number it is (the sender's own, or someone else's). */

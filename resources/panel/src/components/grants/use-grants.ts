@@ -1,10 +1,9 @@
-import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryKey, type UseQueryOptions } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { giftLabel } from '@/components/grants/grant-format'
-import { ApiError } from '@/lib/api'
 import type { ServerGrantStatus } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
+import { useJobRunner } from '@/lib/use-job-runner'
 
 /** What every grant row has — a server's grant, a mass gift. */
 export interface GrantRowBase {
@@ -13,30 +12,6 @@ export interface GrantRowBase {
   days: number
   traffic_bytes: number
   granted: number
-}
-
-/** The runner's pause before asking again: after a batch, while a panel is out of reach, after a request that failed. */
-const NEXT_MS = 1_000
-const WAIT_MS = 30_000
-const RETRY_MS = 10_000
-
-/** `ms` of the runner's pause: true once it went by, false at once when the run is left (the card went, another grant runs). */
-function pause(ms: number, left: AbortSignal): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (left.aborted) {
-      resolve(false)
-      return
-    }
-    const leave = () => {
-      window.clearTimeout(timer)
-      resolve(false)
-    }
-    const timer = window.setTimeout(() => {
-      left.removeEventListener('abort', leave)
-      resolve(true)
-    }, ms)
-    left.addEventListener('abort', leave, { once: true })
-  })
 }
 
 interface UseGrantsOptions<Row extends GrantRowBase, Data extends { grants: Row[] }, Q extends QueryKey> {
@@ -55,9 +30,9 @@ interface UseGrantsOptions<Row extends GrantRowBase, Data extends { grants: Row[
 
 /**
  * A grants card's data: the latest grants, and stopping one. While a grant is under way and the card is on screen, it is
- * worked a request at a time (a few seconds of server work each) so it finishes without waiting for the scheduler; one
- * waiting on its panel is retried every half minute. Running and stopping are mutations, so `invalidates` and the card's
- * own read are refreshed once they end.
+ * worked a request at a time (useJobRunner) so it finishes without waiting for the scheduler; one waiting on its panel is
+ * retried every half minute. Running and stopping are mutations, so `invalidates` and the card's own read are refreshed
+ * once they end.
  */
 export function useGrants<Row extends GrantRowBase, Data extends { grants: Row[] }, Q extends QueryKey>({ query, run, cancel: stop, waiting, invalidates, noun }: UseGrantsOptions<Row, Data, Q>) {
   const queryClient = useQueryClient()
@@ -78,55 +53,23 @@ export function useGrants<Row extends GrantRowBase, Data extends { grants: Row[]
     meta: { invalidates: changes },
     onSuccess: ({ grant }) => {
       put(grant)
-      toast.success(`${noun} متوقف شد`)
+      toast.success(`${noun} لغو شد`)
     },
     // Refused (it ended meanwhile), the list is read again; the toast says why.
     onError: () => void queryClient.invalidateQueries({ queryKey: query.queryKey }),
   })
 
-  // The runner reads the latest of these when it wakes; it restarts only for another grant.
-  const latest = useRef({ put, run, waiting, noun })
-  useEffect(() => {
-    latest.current = { put, run, waiting, noun }
-  })
-
-  // The grant worked on until it is over — done or stopped, or refused (4xx: gone, the session ended); no answer at all is
-  // asked again in a while. Its answer is whether it is over: what the grant changed is read again then, not when the
-  // card left it unfinished — the scheduler carries on, and the live updates follow.
-  const { mutate: work } = useMutation({
-    mutationFn: async ({ id, left }: { id: number; left: AbortSignal }): Promise<boolean> => {
-      for (;;) {
-        let grant: Row | null = null
-        try {
-          grant = (await latest.current.run(id)).grant
-        } catch (error) {
-          if (error instanceof ApiError && error.status >= 400 && error.status < 500) return !left.aborted
-        }
-        if (left.aborted) return false
-
-        const current = latest.current
-        if (grant !== null) {
-          current.put(grant)
-          if (grant.status !== 'running') {
-            if (grant.status === 'done') {
-              toast.success(grant.granted > 0 ? `${giftLabel(grant)} به ${formatNumber(grant.granted)} سرویس اضافه شد` : `${current.noun} تمام شد؛ سرویسی شامل نشد`)
-            }
-            return true
-          }
-        }
-        if (!(await pause(grant === null ? RETRY_MS : current.waiting(grant) ? WAIT_MS : NEXT_MS, left))) return false
-      }
+  useJobRunner({
+    id: running?.id ?? null,
+    run: async (id) => (await run(id)).grant,
+    workable: (grant) => grant.status === 'running',
+    waiting,
+    put,
+    ended: (grant) => {
+      if (grant.status === 'done') toast.success(grant.granted > 0 ? `${giftLabel(grant)} به ${formatNumber(grant.granted)} سرویس اضافه شد` : `${noun} تمام شد؛ سرویسی شامل نشد`)
     },
-    meta: { invalidates: (over) => (over === true ? changes : []) },
+    invalidates: changes,
   })
-  const runningId = running?.id ?? null
-
-  useEffect(() => {
-    if (runningId === null) return
-    const left = new AbortController()
-    work({ id: runningId, left: left.signal })
-    return () => left.abort()
-  }, [runningId, work])
 
   return { read, running, put, cancel }
 }

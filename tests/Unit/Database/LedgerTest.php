@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Tests\Unit\Database;
 
 use App\Core\Database\Ledger;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\SQLiteConnection;
 use Tests\DatabaseTestCase;
 use Tests\Fakes\LedgerAccount;
 
@@ -88,6 +91,72 @@ final class LedgerTest extends DatabaseTestCase
         self::assertSame([], $this->balances($other));
         self::assertSame([9], $this->balances($third), "another owner's ledger as it was");
         self::assertSame(['350', '360'], $this->append($this->account, 10), 'the next line is written from the two balances together');
+    }
+
+    /**
+     * On its own — no caller's transaction — a line the database aborted for a deadlock is written on the next try, from
+     * the balance as the rollback left it; one aborted on every try is given up after ATTEMPTS, nothing written. (On a
+     * connection of its own: in the test's transaction every transaction is a savepoint, which is never tried again.)
+     */
+    public function testOnItsOwnALineAbortedForADeadlockIsTriedAgainUpToTheAttempts(): void
+    {
+        [$ledger, $db, $account] = $this->ownConnection();
+        $tries = 0;
+        $write = static function (string $balance, int $deadlocks) use ($db, $account, &$tries): string {
+            $db->table(LedgerAccount::LINES)->insert(['account_id' => $account->id, 'amount' => 10, 'balance_after' => (int) $balance + 10]);
+            if (++$tries <= $deadlocks) {
+                throw self::deadlock();
+            }
+
+            return $balance;
+        };
+
+        self::assertSame('0', $ledger->append($account, LedgerAccount::LINES, 'account_id', static fn(string $balance): string => $write($balance, 1)));
+        self::assertSame(2, $tries, 'tried again once');
+        self::assertSame(['10'], $db->table(LedgerAccount::LINES)->pluck('balance_after')->map(strval(...))->all(), "the first try's line went with it");
+
+        $tries = 0;
+        $given = $this->thrown(fn() => $ledger->append($account, LedgerAccount::LINES, 'account_id', static fn(string $balance): string => $write($balance, Ledger::ATTEMPTS)));
+        self::assertInstanceOf(QueryException::class, $given);
+        self::assertSame(Ledger::ATTEMPTS, $tries);
+        self::assertSame(1, $db->table(LedgerAccount::LINES)->count(), 'nothing written');
+    }
+
+    /** Inside a caller's transaction the deadlock goes up to it, which — a money write's — tries the whole of it again. */
+    public function testInsideACallersTransactionTheCallerTriesTheWholeAgain(): void
+    {
+        [$ledger, $db, $account] = $this->ownConnection();
+        $outer = 0;
+        $inner = 0;
+
+        $db->transaction(static function () use ($ledger, $db, $account, &$outer, &$inner): void {
+            $outer++;
+            $ledger->append($account, LedgerAccount::LINES, 'account_id', static function (string $balance) use ($db, $account, &$inner): void {
+                $db->table(LedgerAccount::LINES)->insert(['account_id' => $account->id, 'amount' => 10, 'balance_after' => (int) $balance + 10]);
+                if (++$inner === 1) {
+                    throw self::deadlock();
+                }
+            });
+        }, Ledger::ATTEMPTS);
+
+        self::assertSame([2, 2], [$outer, $inner], 'the line is not tried alone: the whole transaction is');
+        self::assertSame(1, $db->table(LedgerAccount::LINES)->count());
+    }
+
+    /** @return array{Ledger, Connection, LedgerAccount} A ledger on an in-memory database of its own, with one owner */
+    private function ownConnection(): array
+    {
+        $db = new SQLiteConnection(new \PDO('sqlite::memory:'));
+        LedgerAccount::makeTables($db);
+        $db->table('ledger_accounts')->insert(['id' => 1, 'name' => 'ali']);
+
+        return [new Ledger($db), $db, (new LedgerAccount())->forceFill(['id' => 1])];
+    }
+
+    /** What MySQL throws at the transaction it aborts, whole, to break a deadlock. */
+    private static function deadlock(): QueryException
+    {
+        return new QueryException('mysql', 'insert into `ledger_lines` …', [], new \PDOException('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction'));
     }
 
     /** What `$call` threw; failing the test when it threw nothing. */

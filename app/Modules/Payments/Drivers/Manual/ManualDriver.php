@@ -11,17 +11,16 @@ use App\Core\Forms\FieldType;
 use App\Core\Forms\Form;
 use App\Modules\Payments\Contracts\GatewayDriver;
 use App\Modules\Payments\Contracts\GatewayInterface;
-use App\Modules\Payments\DTO\CardTransfer;
 use App\Modules\Payments\Enums\GatewayKind;
-use App\Support\BankCard;
 
 /**
- * Card-to-card: the customer pays to the shop's card and sends a receipt, which support accepts — or the method's review
- * window, for a receipt sent in the bot. One method row per card: number, holder, a note for the customer, the window.
+ * Card-to-card: the customer pays to one of the shop's cards and sends a receipt, which support accepts — or the method's
+ * review window, for a receipt sent in the bot. The cards are rows of their own (PaymentCard, kept by the method's form
+ * as `cards`, Services\PaymentCards): each payment is shown one at random among those switched on with room left today.
+ * Its settings: a note for the customer and the window.
  */
 final class ManualDriver implements GatewayDriver
 {
-    private const HOLDER_MAX = 100;
     private const INSTRUCTIONS_MAX = 1000;
 
     public function key(): string
@@ -34,23 +33,8 @@ final class ManualDriver implements GatewayDriver
         return new Descriptor(
             key: $this->key(),
             label: 'کارت به کارت',
-            description: 'مشتری مبلغ را به کارت شما واریز می‌کند و رسید را در ربات یا وب‌سایت می‌فرستد؛ شما رسید را بررسی و تایید می‌کنید. برای هر کارت یک روش بسازید.',
+            description: 'مشتری مبلغ را به یکی از کارت‌های شما واریز می‌کند و رسید را در ربات یا وب‌سایت می‌فرستد؛ شما رسید را بررسی و تایید می‌کنید. به هر پرداخت یکی از کارت‌های روشن این روش به تصادف نشان داده می‌شود.',
             form: new Form($this->key(), [
-                new CardNumber(
-                    'card_number',
-                    'card_number',
-                    label: 'شماره کارت',
-                    spec: new FieldSpec('شماره کارت', hint: '16 رقم؛ فاصله یا خط تیره مهم نیست.', placeholder: '6037 9977 0000 1119', ltr: true),
-                ),
-                new Text(
-                    'card_holder',
-                    'card_holder',
-                    '',
-                    label: 'نام صاحب کارت',
-                    max: self::HOLDER_MAX,
-                    required: true,
-                    spec: new FieldSpec('نام صاحب کارت', hint: 'همان‌طور که بانک نشان می‌دهد، تا مشتری بداند به چه کسی واریز می‌کند.', placeholder: 'نام و نام خانوادگی'),
-                ),
                 new Text(
                     'instructions',
                     'instructions',
@@ -58,7 +42,7 @@ final class ManualDriver implements GatewayDriver
                     label: 'توضیحات',
                     max: self::INSTRUCTIONS_MAX,
                     type: FieldType::Textarea,
-                    spec: new FieldSpec('توضیحات برای مشتری', hint: 'زیر شماره کارت در ربات نمایش داده می‌شود؛ مثلا «بعد از واریز، عکس رسید را همین‌جا بفرستید.»'),
+                    spec: new FieldSpec('توضیحات برای مشتری', hint: 'در ربات و سایت زیر شماره کارت نمایش داده می‌شود، و وقتی پرداخت کارت به کارت به پیوی پشتیبانی می‌رود زیر پیام آن؛ مثلا «لطفا فقط از کارت به نام خودتان واریز کنید.»'),
                 ),
                 new ReviewWindow(new FieldSpec(
                     'تایید خودکار',
@@ -66,31 +50,23 @@ final class ManualDriver implements GatewayDriver
                     placeholder: '0',
                 )),
             ]),
-            notes: ['بدون کارمزد و بدون نیاز به درگاه', 'هر رسید باید تایید شود تا سفارش تحویل داده شود؛ با دست، یا رسیدی که در ربات فرستاده شود خودکار بعد از مهلتی که تعیین می‌کنید'],
+            notes: [
+                'بدون کارمزد و بدون نیاز به درگاه',
+                'هر رسید باید تایید شود تا سفارش تحویل داده شود؛ با دست، یا رسیدی که در ربات فرستاده شود خودکار بعد از مهلتی که تعیین می‌کنید',
+                'چند کارت در یک روش، هر کدام با سقف روزانه دلخواه؛ هر پرداخت یکی را به تصادف نشان می‌دهد',
+            ],
             traits: [self::KIND => GatewayKind::Manual->value, self::BUILTIN => false],
         );
     }
 
-    /** "6037 •••• •••• 1119 · AmoBot" — the card the customer is told to pay to, and whose it is. */
+    /** None: its cards are rows of their own — the method's row lists them, and each payment names the one it was shown. */
     public function summary(array $settings): ?string
     {
-        $card = self::text($settings, 'card_number');
-        if ($card === '') {
-            return null;
-        }
-        $holder = self::text($settings, 'card_holder');
-
-        return $holder === '' ? BankCard::mask($card) : BankCard::mask($card) . ' · ' . $holder;
+        return null;
     }
 
     public function gateway(array $settings): GatewayInterface
     {
-        return new ManualGateway(new CardTransfer(self::text($settings, 'card_number'), self::text($settings, 'card_holder'), self::text($settings, 'instructions')));
-    }
-
-    /** @param array<string, mixed> $settings */
-    private static function text(array $settings, string $name): string
-    {
-        return is_string($settings[$name] ?? null) ? $settings[$name] : '';
+        return new ManualGateway(is_string($settings['instructions'] ?? null) ? $settings['instructions'] : '');
     }
 }

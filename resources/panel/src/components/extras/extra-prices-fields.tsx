@@ -2,6 +2,7 @@ import { useId } from 'react'
 import { BatteryPlus, ClockPlus, PencilLine, UserPlus, type LucideIcon } from 'lucide-react'
 import { extraOffer, extraPricesIn, type ExtraField, type ExtraKind, type ExtraOfferPreview, type ExtraPricesAs, type ExtraPricesDraft } from '@/components/extras/draft'
 import { Field, FieldGroup, FormPart } from '@/components/field'
+import { MoneyField } from '@/components/money-field'
 import { PricedRowsEditor } from '@/components/priced-rows-editor'
 import { Input } from '@/components/ui/input'
 import { useMainShop } from '@/lib/auth'
@@ -141,14 +142,14 @@ function ExtraBlock({ kind, prices, change, error }: ExtraBlockProps) {
 
   return (
     <FormPart icon={words.icon} title={words.title} about={agentShop && words.agent ? `${words.about} ${words.agent}` : words.about}>
-      <Field
+      <MoneyField
         id={`${id}-price`}
         label={`${words.unitPrice} (تومان)`}
+        value={prices[field.price]}
+        onChange={(price) => change(field.price, price)}
         error={error(field.price)}
-        hint={priced ? `= ${formatMoney(unit)}` : `خالی: فقط ${words.options} با قیمت خودشان فروخته می‌شوند و مشتری ${words.typed} نمی‌نویسد.`}
-      >
-        <Input dir="ltr" inputMode="numeric" autoComplete="off" value={prices[field.price]} onChange={(e) => change(field.price, e.target.value)} />
-      </Field>
+        hint={`خالی: فقط ${words.options} با قیمت خودشان فروخته می‌شوند و مشتری ${words.typed} نمی‌نویسد.`}
+      />
 
       <PricedRowsEditor
         label={words.options}

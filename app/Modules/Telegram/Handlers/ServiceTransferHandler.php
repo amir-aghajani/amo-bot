@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Handlers;
 
-use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Auth\Actor;
 use App\Modules\Subscriptions\Models\Subscription;
@@ -38,6 +37,7 @@ final class ServiceTransferHandler implements Handler
 
     public function __construct(
         private readonly ServiceTransfers $transfers,
+        private readonly TypedRecipients $recipients,
         private readonly CustomerServices $services,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
@@ -106,25 +106,19 @@ final class ServiceTransferHandler implements Handler
             return;
         }
 
-        try {
-            $recipient = $this->transfers->recipient($service, (string) $ctx->update->text(), Actor::customer($ctx->user));
-        } catch (ValidationException $e) {
-            if (array_key_exists('telegram_id', $e->errors())) {
-                $ctx->reply($this->texts->render(BotText::TransferRecipientRefused, ['reason' => $e->getMessage()]), $this->backToService($service));
-
-                return;
-            }
-            $this->stop($ctx, $service, $e->getMessage());
-
-            return;
-        } catch (TooManyAttemptsException $e) {
-            $this->stop($ctx, $service, $e->getMessage());
-
+        $recipient = $this->recipients->read(
+            $ctx,
+            fn(string $typed): User => $this->transfers->recipient($service, $typed, Actor::customer($ctx->user)),
+            BotText::TransferRecipientRefused,
+            BotText::TransferRefused,
+            $this->backToService($service),
+        );
+        if ($recipient === null) {
             return;
         }
 
         $ctx->session->enter(self::confirmation($service, $recipient->id), [self::SERVICE => $service->id]);
-        $ctx->reply($this->texts->render(BotText::TransferConfirm, ['client' => $service->remote_name, 'name' => self::who($recipient)]), [
+        $ctx->reply($this->texts->render(BotText::TransferConfirm, ['client' => $service->remote_name, 'name' => $recipient->shownAs()]), [
             'reply_markup' => $this->buttons->confirmChange($service->id, BotText::TransferYes, CallbackData::build(self::PREFIX, $service->id, $recipient->id)),
         ]);
     }
@@ -135,32 +129,13 @@ final class ServiceTransferHandler implements Handler
      */
     private function confirm(Context $ctx, Subscription $service, int $recipientId): void
     {
-        if (!$ctx->session->claim(self::confirmation($service, $recipientId))) {
-            $ctx->answer($this->texts->get(BotText::TransferExpired), alert: true);
-
-            return;
-        }
-
-        try {
-            $recipient = User::query()->find($recipientId) ?? throw ValidationException::on('telegram_id', ServiceTransfers::UNKNOWN);
+        $this->recipients->confirm($ctx, self::confirmation($service, $recipientId), $recipientId, function (User $recipient) use ($ctx, $service): void {
             $this->transfers->transfer($service, $recipient, Actor::customer($ctx->user));
-        } catch (ValidationException|TooManyAttemptsException $e) {
-            $ctx->edit($this->texts->render(BotText::TransferRefused, ['reason' => $e->getMessage()]), $this->backToService($service));
-
-            return;
-        }
-
-        $ctx->edit(
-            $this->texts->render(BotText::TransferDone, ['client' => $service->remote_name, 'name' => self::who($recipient)]),
-            ['reply_markup' => $this->buttons->backOnly(MenuHandler::subscriptionsCallback(1))],
-        );
-    }
-
-    /** A service that may not go now (or a customer who tried too often): why, the step over, «بازگشت» to its screen. */
-    private function stop(Context $ctx, Subscription $service, string $reason): void
-    {
-        $ctx->session->clear();
-        $ctx->reply($this->texts->render(BotText::TransferRefused, ['reason' => $reason]), $this->backToService($service));
+            $ctx->edit(
+                $this->texts->render(BotText::TransferDone, ['client' => $service->remote_name, 'name' => $recipient->shownAs()]),
+                ['reply_markup' => $this->buttons->backOnly(MenuHandler::subscriptionsCallback(1))],
+            );
+        }, BotText::TransferExpired, BotText::TransferRefused, $this->backToService($service));
     }
 
     /** @return array{reply_markup: array<string, mixed>} «بازگشت» to the service's screen. */
@@ -173,17 +148,5 @@ final class ServiceTransferHandler implements Handler
     private static function confirmation(Subscription $service, int $recipientId): string
     {
         return self::STATE . '.' . $service->id . '.' . $recipientId;
-    }
-
-    /** Who the recipient is, as the customer can tell: the name with the handle, either alone, or the Telegram id. */
-    private static function who(User $recipient): string
-    {
-        $name = $recipient->name();
-        $handle = $recipient->handle() === null ? null : '@' . $recipient->handle();
-
-        return match (true) {
-            $name !== null && $handle !== null => "{$name} ({$handle})",
-            default => $name ?? $handle ?? (string) $recipient->telegram_id,
-        };
     }
 }

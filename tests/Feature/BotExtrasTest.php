@@ -26,7 +26,6 @@ use App\Modules\Telegram\Handlers\RenewalHandler;
 use App\Modules\Telegram\Handlers\SubscriptionHandler;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
-use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
@@ -321,12 +320,7 @@ final class BotExtrasTest extends BotTestCase
         self::assertSame([$this->pay(ExtraKind::Time, 30, $this->wallet), $this->pay(ExtraKind::Time, 30, $card), $this->screen(ExtraKind::Time)], $this->callbacks(0));
 
         $this->send($this->tap($this->pay(ExtraKind::Time, 30, $card)));
-        self::assertSame([BotTexts::paragraphs(trim(self::text(BotText::CardInstructions, [
-            'amount' => Money::format('25000'),
-            'card' => '6037997700001119',
-            'holder' => 'AmoBot',
-            'instructions' => '',
-        ])), self::text(BotText::PayInstructionsSuffix))], $this->said());
+        self::assertSame([$this->cardInstructions('25000')], $this->said());
         $order = Order::query()->sole();
         self::assertSame([OrderType::ExtraTime, OrderStatus::Pending, 30], [$order->type, $order->status, $order->days]);
 

@@ -15,7 +15,6 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
-use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
 use Tests\BotTestCase;
@@ -116,7 +115,7 @@ final class BotPlanButtonsTest extends BotTestCase
 
         $this->send($this->tap(PurchaseHandler::serverCallback($this->plan->id, $this->berlin->id)));
         self::assertSame([$this->checkoutText('100000')], $this->said());
-        $this->send($this->tap(CallbackData::build(PurchaseHandler::serverCallback($this->plan->id, $this->berlin->id), $this->wallet->id)));
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
 
         $order = Order::query()->sole();
         self::assertSame(['100000.00', OrderPricing::Agent], [$order->amount, $order->pricing]);

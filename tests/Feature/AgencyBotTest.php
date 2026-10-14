@@ -143,7 +143,7 @@ final class AgencyBotTest extends BotTestCase
         self::assertStringContainsString(Messages::MENU_AGENCY, (string) json_encode($menu->markup($agent), JSON_UNESCAPED_UNICODE));
 
         $this->send($this->tap(PurchaseHandler::serverCallback($this->plan->id, $this->server->id)));
-        $this->send($this->tap(CallbackData::build(PurchaseHandler::serverCallback($this->plan->id, $this->server->id), $card->id)));
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $card)));
         self::assertSame('120000.00', Order::query()->sole()->amount, "an agent buys their own services at the plan's price, no name asked");
     }
 

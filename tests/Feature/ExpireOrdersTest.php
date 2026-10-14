@@ -9,6 +9,7 @@ use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
+use App\Modules\Payments\Enums\CancelOutcome;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentActions;
@@ -19,8 +20,8 @@ use Tests\DatabaseTestCase;
 
 /**
  * Expiring unpaid orders: an order untouched (with its payments) for EXPIRE_HOURS is cancelled quietly with its unpaid
- * payments, in every shop; a receipt waiting for support, a payment that moved within the window, or a receipt that
- * arrived after the task read the order keeps it.
+ * payments, in every shop; a receipt waiting for support, a card transfer taken in support's private chat, a payment
+ * that moved within the window, or a receipt that arrived after the task read the order keeps it.
  */
 final class ExpireOrdersTest extends DatabaseTestCase
 {
@@ -73,6 +74,30 @@ final class ExpireOrdersTest extends DatabaseTestCase
         $this->runAfter(30 * 24 * 60);
 
         self::assertSame(OrderStatus::Pending, $order->refresh()->status);
+    }
+
+    public function testACardTransferTakenInSupportsChatKeepsItsOrderWhateverItsAgeTillSupportDecidesIt(): void
+    {
+        $this->botSettings('general', ['support_contact' => '@amo_support']);
+        $this->botSettings('payments', ['card_to_support' => true]);
+        $payments = $this->service(PaymentService::class);
+        $order = $this->topUpOrder($this->ali, '50000.00');
+        $coded = $this->topUpOrder($this->ali, '60000.00', ['discount_code_id' => $this->discountCode('ONCE', 10)->id]);
+        $paid = $payments->createForOrder($order, $this->card)['payment'];
+        $unpaid = $payments->createForOrder($coded, $this->card)['payment'];
+        self::assertSame([null, null], [$paid->card_id, $unpaid->card_id], 'no card shown: the customer was sent to support\'s chat');
+        // The shop shows its cards again since: what was sent to support's chat stays there.
+        $this->botSettings('payments', ['card_to_support' => false]);
+
+        $this->runAfter(30 * 24 * 60);
+
+        self::assertSame([OrderStatus::Pending, OrderStatus::Pending], [$order->refresh()->status, $coded->refresh()->status], 'neither the two days nor the code\'s hold drop it: the money may be in support\'s chat');
+        self::assertSame([PaymentStatus::Pending, PaymentStatus::Pending], [$paid->refresh()->status, $unpaid->refresh()->status]);
+
+        self::assertTrue($payments->approve($paid, 'admin'), 'support approves it once they see the money');
+        self::assertSame([OrderStatus::Fulfilled, '50000.00'], [$order->refresh()->status, $this->ali->balance()]);
+        self::assertSame(CancelOutcome::WithOrder, $payments->cancel($unpaid, 'admin', null), '«لغو پرداخت» drops one never paid');
+        self::assertSame(OrderStatus::Cancelled, $coded->refresh()->status);
     }
 
     public function testAPaymentThatMovedWithinTheWindowKeepsItsOrder(): void

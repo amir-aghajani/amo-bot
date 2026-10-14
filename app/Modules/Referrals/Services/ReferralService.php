@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Referrals\Services;
 
+use App\Core\Database\Ledger;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Payments\Models\Payment;
@@ -144,7 +145,7 @@ final class ReferralService
                 $this->wallet->credit($referrer, $commission, WalletService::describeReferral($payment));
 
                 return $row;
-            });
+            }, Ledger::ATTEMPTS);
         } catch (UniqueConstraintViolationException) {
             return null; // the payment's commission is there already
         }

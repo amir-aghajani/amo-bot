@@ -1,4 +1,6 @@
+import { TriangleAlert } from 'lucide-react'
 import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
+import { Callout } from '@/components/callout'
 import { Field } from '@/components/field'
 import { SectionCard } from '@/components/section-card'
 import { SwitchRow } from '@/components/switch-row'
@@ -6,12 +8,16 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotGeneralSettingsRequest, BotSettingsData } from '@/lib/api-types'
 
-/** The master switch, the phone rule, and the way to support. */
+/**
+ * The master switch, the phone rule, and the way to support — which card payments in support's private chat need: with
+ * that switch on («پرداخت کارت به کارت»), an emptied contact is warned of, since the bot then shows the card again.
+ */
 export function GeneralSection({ settings }: { settings: BotSettingsData }) {
   const group = useBotSettingsGroup({ enabled: settings.enabled, phone_required: settings.phone_required, support_contact: settings.support_contact } satisfies BotGeneralSettingsRequest, (values) =>
     api.put('/bot/settings/general', values),
   )
   const { values, set, error } = group
+  const cardsBack = settings.card_to_support && values.support_contact.trim() === ''
 
   return (
     <SectionCard form={group} title="عمومی" description="روشن و خاموش کردن ربات، تایید شماره مشتری و راه تماس با پشتیبانی.">
@@ -40,6 +46,11 @@ export function GeneralSection({ settings }: { settings: BotSettingsData }) {
           className="sm:max-w-sm"
         />
       </Field>
+      {cardsBack && (
+        <Callout tone="warning" icon={TriangleAlert}>
+          «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» روشن است و بدون راه ارتباط با پشتیبانی کار نمی‌کند: تا این خانه خالی است، ربات و سایت شماره کارت را مثل قبل نشان می‌دهند.
+        </Callout>
+      )}
     </SectionCard>
   )
 }

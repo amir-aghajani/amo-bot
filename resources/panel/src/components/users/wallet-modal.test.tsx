@@ -9,14 +9,14 @@ import { json, server } from '@/test/server'
 /*
  * A customer's wallet (components/users/wallet-modal): its ledger names who set a line right by hand — a panel's login,
  * one of the shop's admins on its website, as the server words them for this reader —, set apart left to right, and
- * nobody on a line the shop wrote itself.
+ * nobody on a line the shop wrote itself; a wallet transfer's line links the other customer.
  */
 
 const CUSTOMER = userRow()
 
 /** A ledger line: a credit by hand unless `overrides` say otherwise. */
 function line(overrides: Partial<WalletTransactionRow>): WalletTransactionRow {
-  return { id: 1, type: 'credit', amount: '50000.00', balance_after: '50000.00', description: 'شارژ دستی', reviewer: null, created_at: '2026-09-01T10:00:00Z', ...overrides }
+  return { id: 1, type: 'credit', amount: '50000.00', balance_after: '50000.00', description: 'شارژ دستی', reviewer: null, counterpart: null, created_at: '2026-09-01T10:00:00Z', ...overrides }
 }
 
 describe('a wallet’s ledger', () => {
@@ -29,5 +29,25 @@ describe('a wallet’s ledger', () => {
     expect(staff.getAttribute('dir')).toBe('ltr')
     expect(screen.getByText('root').getAttribute('dir')).toBe('ltr')
     expect(screen.getByText('خرید سرویس').closest('li')?.querySelector('bdi')).toBeNull()
+  })
+
+  it('links a wallet transfer’s line to the other customer: whom it went to, or came from', async () => {
+    const sara = { id: 12, name: 'Sara Ahmadi', username: 'sara', telegram_id: 7070, email: null }
+    const reza = { id: 13, name: null, username: 'reza', telegram_id: 7272, email: null }
+    const transactions = [
+      line({ id: 3, type: 'debit', description: 'انتقال موجودی به Sara Ahmadi (@sara)', counterpart: sara }),
+      line({ id: 2, description: 'دریافت موجودی از @reza', counterpart: reza }),
+      line({ id: 1, description: 'شارژ کیف پول (سفارش #4)' }),
+    ]
+    server().on('GET', '/api/admin/users/10/wallet', json({ user: CUSTOMER, transactions } satisfies UserWalletResponse))
+    render(<WalletPanel user={CUSTOMER} onChanged={() => undefined} />, { wrapper: providers().wrapper })
+
+    const to = await screen.findByRole('link', { name: 'Sara Ahmadi' })
+    expect(to.getAttribute('href')).toBe('/users/12')
+    expect(to.closest('div')?.textContent).toContain(' · به Sara Ahmadi')
+    const from = screen.getByRole('link', { name: '@reza' })
+    expect(from.getAttribute('href')).toBe('/users/13')
+    expect(from.closest('div')?.textContent).toContain(' · از @reza')
+    expect(screen.getByText('شارژ کیف پول (سفارش #4)').closest('li')?.querySelector('a')).toBeNull()
   })
 })

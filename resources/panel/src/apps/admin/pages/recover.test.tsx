@@ -15,7 +15,7 @@ import { json, refusal, server, withHeaders } from '@/test/server'
  * said under its field, and the throttle's wait holds the form.
  */
 
-const OWNER: Session = { name: 'boss', shop: { id: 1, name: 'AmoBot', username: 'amobot', status: 'active' } }
+const OWNER: Session = { name: 'boss', shop: { id: 1, name: 'AmoBot', username: 'amobot', status: 'active', selling_suspended: null } }
 
 const WRONG_KEY = 'کلید بازیابی درست نیست یا وقتش گذشته است؛ متن فایل storage/recovery-key.txt را دوباره کپی کنید، یا کلید تازه بسازید.'
 

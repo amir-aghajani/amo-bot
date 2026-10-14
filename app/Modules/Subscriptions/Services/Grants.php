@@ -6,12 +6,12 @@ namespace App\Modules\Subscriptions\Services;
 
 use App\Core\Database\Lease;
 use App\Core\Exceptions\ValidationException;
+use App\Core\Scheduling\Budget;
 use App\Modules\Auth\Actor;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Providers\DTO\ClientInfo;
-use App\Modules\Providers\Exceptions\ConnectionException;
 use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Models\Server;
@@ -25,6 +25,7 @@ use App\Modules\Subscriptions\Models\GrantPart;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Users\Models\CustomerGroup;
 use App\Support\Input;
+use App\Support\Text;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -54,8 +55,6 @@ final class Grants
     private const NOBODY = ['running' => 0, 'unstarted' => 0];
     /** What the text columns hold. */
     private const TEXT_MAX = 500;
-    /** The seconds one request of an open screen works on a grant; the screen asks again while it stays open. */
-    private const SCREEN_SECONDS = 3;
     /** A cancel that found nothing running: the grant is done, or was stopped already. */
     private const NOT_RUNNING = 'این مورد دیگر در حال انجام نیست.';
 
@@ -122,7 +121,7 @@ final class Grants
             // A part already runs on one of its servers: the database keeps one per server.
             $busy = GrantPart::running()->whereIn('server_id', $serverIds)->with('server')->first();
 
-            throw ValidationException::on('grant', sprintf('روی سرور «%s» افزودن زمان و حجم دیگری در حال انجام است؛ صبر کنید تمام شود یا آن را متوقف کنید.', $busy->server->name ?? ''));
+            throw ValidationException::on('grant', sprintf('روی سرور «%s» افزودن زمان و حجم دیگری در حال انجام است؛ صبر کنید تمام شود یا آن را لغو کنید.', $busy->server->name ?? ''));
         }
     }
 
@@ -140,21 +139,21 @@ final class Grants
         return $grant->parts()->where('server_id', $server->id)->sole()->setRelation('grant', $grant);
     }
 
-    /** An open screen's turn on the grant: SCREEN_SECONDS of work on its running parts, one server after another. */
+    /** An open screen's turn on the grant (Budget::screen()): its running parts, one server after another. */
     public function run(Grant $grant): void
     {
         $parts = $grant->parts()->where('status', GrantStatus::Running->value)->with('server')->get();
-        $this->work($parts->each(static fn(GrantPart $part) => $part->setRelation('grant', $grant)), microtime(true) + self::SCREEN_SECONDS);
+        $this->work($parts->each(static fn(GrantPart $part) => $part->setRelation('grant', $grant)), Budget::screen());
     }
 
     /**
-     * An open screen's turn on one part (its server's page): SCREEN_SECONDS of work, unless it stopped or someone else
-     * holds it.
+     * An open screen's turn on one part (its server's page, Budget::screen()), unless it stopped or someone else holds
+     * it.
      */
     public function runPart(GrantPart $part): void
     {
         if ($part->isRunning()) {
-            $this->process($part, microtime(true) + self::SCREEN_SECONDS);
+            $this->process($part, Budget::screen());
         }
     }
 
@@ -173,29 +172,13 @@ final class Grants
     {
         $server = $part->server ?? throw new \LogicException("Grant part #{$part->id} has no server.");
         $lease = Lease::take($part, ProvisioningService::holdSeconds($server), static fn(Builder $q) => $q->where('status', GrantStatus::Running->value));
-        if ($lease === null) {
-            return false;
-        }
 
-        try {
-            while (microtime(true) < $until) {
-                $subscription = self::candidates($part->grant, $part->server_id)
-                    ->where('id', '>', $part->last_subscription_id)
-                    ->with('server')
-                    ->oldest('id')
-                    ->first();
-                if ($subscription === null) {
-                    return $this->finish($part, $lease);
-                }
-                if (!$this->give($part, $subscription, $lease)) {
-                    return false;
-                }
-            }
-
-            return false;
-        } finally {
-            $lease->release();
-        }
+        return $lease !== null && $lease->work(
+            $until,
+            next: fn(): ?Subscription => self::candidates($part->grant, $part->server_id)->where('id', '>', $part->last_subscription_id)->with('server')->oldest('id')->first(),
+            step: fn(Subscription $subscription): bool => $this->give($part, $subscription, $lease),
+            finish: fn(): bool => $this->finish($part, $lease),
+        );
     }
 
     /**
@@ -395,9 +378,10 @@ final class Grants
 
             return true;
         } catch (ProviderException $e) {
-            // A failure that may have come after the panel took the update (a timeout, a connection cut mid-way) is
-            // counted, not retried: the service must not be given twice.
-            if (!($e instanceof ConnectionException ? $e->failure->beforeRequest() : $e->unavailable())) {
+            // A failure that may have come after the panel took the update (ProviderException::mayHaveBeenDone(): a
+            // timeout, a connection cut mid-way, a proxy's 5xx page) is counted, not retried: the service must not be
+            // given twice. So is a refusal: asking again would not change it.
+            if ($e->mayHaveBeenDone() || !$e->unavailable()) {
                 GrantPart::query()->whereKey($part->id)->increment('failed', 1, ['last_failure' => $this->failure($part, $subscription, $e)]);
 
                 return true;
@@ -555,7 +539,7 @@ final class Grants
         if ($part->waiting_reason === null) {
             $this->logger->warning('Grant {id} waits for the panel of server {server}: {reason}', ['id' => $part->grant_id, 'server' => $part->server_id, 'reason' => $reason]);
         }
-        $lease->write(['waiting_reason' => mb_substr($reason, 0, self::TEXT_MAX)]);
+        $lease->write(['waiting_reason' => Text::fit($reason, self::TEXT_MAX)]);
 
         return false;
     }
@@ -593,7 +577,7 @@ final class Grants
     {
         $this->logger->warning('Grant {id} could not give to subscription {subscription}: {message}', ['id' => $part->grant_id, 'subscription' => $subscription->id, 'message' => $e->getMessage()]);
 
-        return mb_substr("سرویس {$subscription->remote_name}: " . ProviderErrorPresenter::describe($e), 0, self::TEXT_MAX);
+        return Text::fit("سرویس {$subscription->remote_name}: " . ProviderErrorPresenter::describe($e), self::TEXT_MAX);
     }
 
     /**

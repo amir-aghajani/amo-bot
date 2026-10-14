@@ -2,8 +2,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 import { AccountPage } from '@/apps/agent/pages/account'
-import type { AccountResponse, AgentBot, TrafficLinesResponse } from '@/lib/api-types'
+import type { AccountResponse, AgencyStanding, AgentBot, TrafficLinesResponse } from '@/lib/api-types'
 import { providers, until } from '@/test/render'
+import { agencyStanding } from '@/test/rows'
 import { json, noContent, refusal, server } from '@/test/server'
 
 // An agent's panel: lib/config reads the panel off the page's base, which the agent's index.html sets to /agent/.
@@ -22,7 +23,7 @@ const GB = 1024 ** 3
 const BOT: AgentBot = { id: 2, username: 'agent_shop_bot', title: 'فروشگاه نماینده', status: 'active', connected: true, problem: null, traffic_balance: 50 * GB, connected_at: '2026-10-03T09:00:00Z' }
 
 /** The account as the server answers it, its bot as `bot` says. */
-function account(bot: Partial<AgentBot> = {}, shortage: AccountResponse['traffic_shortage'] = null): AccountResponse {
+function account(bot: Partial<AgentBot> = {}, shortage: AccountResponse['traffic_shortage'] = null, standing: AgencyStanding = agencyStanding()): AccountResponse {
   return {
     traffic_shortage: shortage,
     account: {
@@ -31,6 +32,7 @@ function account(bot: Partial<AgentBot> = {}, shortage: AccountResponse['traffic
       level: { id: 1, name: 'طلایی', price_per_gb: '3000.00' },
       credit_limit: '0.00',
       balance: '25000.00',
+      standing,
     },
   }
 }
@@ -48,8 +50,8 @@ describe('an account that could not be read', () => {
     open()
 
     expect(await screen.findByText('حساب نمایندگی بارگذاری نشد.')).toBeTruthy()
-    // Three figures and the bot's card.
-    expect(screen.getAllByText('—')).toHaveLength(4)
+    // Three figures, the bot's card and the terms of selling's.
+    expect(screen.getAllByText('—')).toHaveLength(5)
     expect(screen.queryByText('نمایندگی فعال نیست')).toBeNull()
     await until(() => expect(skeletons()).toHaveLength(0))
   })
@@ -98,6 +100,43 @@ describe('where traffic is bought', () => {
 
     expect(await screen.findByText('حجم ربات تمام شده است.')).toBeTruthy()
     expect(screen.getAllByText(/خرید حجم: ربات اصلی/)).toHaveLength(1)
+  })
+})
+
+describe('the terms of selling', () => {
+  it('show the end, this month’s traffic bought against the minimum, and that the bot sells', async () => {
+    server().on(
+      'GET',
+      '/api/agent/account',
+      json(
+        account(
+          {},
+          null,
+          agencyStanding({ expires_at: '2027-01-01T10:00:00Z', monthly_minimum: '500000.00', month: { name: 'مهر ۱۴۰۵', purchased: '150000.00', ends_at: '2026-10-22T20:30:00Z', judged: true } }),
+        ),
+      ),
+    )
+    open()
+
+    expect(await screen.findByText('پایان نمایندگی')).toBeTruthy()
+    expect(screen.getByText('۱۵۰٬۰۰۰ تومان از ۵۰۰٬۰۰۰ تومان')).toBeTruthy()
+    expect(screen.getByText('باز')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('say why the bot sells nothing, and what lifts it', async () => {
+    const standing = agencyStanding({
+      monthly_minimum: '500000.00',
+      month: { name: 'مهر ۱۴۰۵', purchased: '100000.00', ends_at: '2026-10-22T20:30:00Z', judged: true },
+      suspension: { reason: 'minimum', since: '2026-09-23T00:00:00Z' },
+    })
+    server().on('GET', '/api/agent/account', json(account({}, null, standing)))
+    open()
+
+    const notice = await screen.findByRole('alert')
+    expect(notice.textContent).toContain('فروش ربات شما متوقف است: خرید حجم ماه قبل به کف خرید ماهانه نرسید.')
+    expect(notice.textContent).toContain('با خرید حجم در ربات اصلی تا رسیدن خرید مهر ۱۴۰۵ به کف (۱۰۰٬۰۰۰ تومان از ۵۰۰٬۰۰۰ تومان)، فروش خودکار باز می‌شود.')
+    expect(screen.getByText('متوقف: خرید حجم ماه قبل به کف خرید ماهانه نرسید')).toBeTruthy()
   })
 })
 

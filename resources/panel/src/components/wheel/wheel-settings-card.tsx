@@ -1,11 +1,12 @@
 import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
 import { Field } from '@/components/field'
+import { MoneyField } from '@/components/money-field'
 import { SectionCard } from '@/components/section-card'
 import { SwitchRow } from '@/components/switch-row'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotSettingsData, BotWheelSettingsRequest } from '@/lib/api-types'
-import { formatDuration, formatMoney, wholeOf } from '@/lib/format'
+import { formatDuration, wholeNumberOf, wholeOf } from '@/lib/format'
 import { WHEEL_SETTINGS } from '@/lib/limits'
 
 /** The `wheel` bot-settings group: the switch, the wait between spins, buyers only, and a spin's cost. */
@@ -21,7 +22,6 @@ export function WheelSettingsCard({ settings }: { settings: BotSettingsData }) {
   )
   const { values, set, error } = group
   const hours = wholeOf(values.wheel_cooldown_hours)
-  const cost = wholeOf(values.wheel_cost)
 
   return (
     <SectionCard form={group} title="قوانین گردونه" description="مشتری هر چند ساعت یک بار گردونه را می‌چرخاند و یکی از جایزه‌ها را می‌برد؛ چرخشی که جایزه‌اش داده نشود حساب نمی‌شود.">
@@ -41,14 +41,16 @@ export function WheelSettingsCard({ settings }: { settings: BotSettingsData }) {
         >
           <Input dir="ltr" inputMode="numeric" value={values.wheel_cooldown_hours} onChange={(e) => set('wheel_cooldown_hours', e.target.value)} />
         </Field>
-        <Field
+        <MoneyField
           id="wheel_cost"
           label="هزینه هر چرخش (تومان)"
+          value={values.wheel_cost}
+          onChange={(cost) => set('wheel_cost', cost)}
+          reads={wholeNumberOf}
           error={error('wheel_cost')}
-          hint={cost !== null && Number(cost) > 0 ? `${formatMoney(cost)} از کیف پول مشتری کم می‌شود.` : 'صفر یعنی چرخش رایگان است.'}
-        >
-          <Input dir="ltr" inputMode="numeric" value={values.wheel_cost} onChange={(e) => set('wheel_cost', e.target.value)} />
-        </Field>
+          says={(money) => `${money} از کیف پول مشتری کم می‌شود.`}
+          hint="صفر یعنی چرخش رایگان است."
+        />
       </div>
       <SwitchRow
         label="فقط مشتری‌هایی که خرید کرده‌اند"

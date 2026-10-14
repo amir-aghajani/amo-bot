@@ -24,7 +24,6 @@ use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
-use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
 use App\Support\Traffic;
@@ -83,7 +82,7 @@ final class AgentBotsTest extends BotTestCase
         self::assertNotContains(PurchaseHandler::planCallback($mainPlan->id), $this->callbacks(0), "the main bot's plans are not its");
 
         $this->sendTo($this->bot, $this->tap(PurchaseHandler::serverCallback($plan->id, $this->server->id)));
-        $this->sendTo($this->bot, $this->tap(CallbackData::build(PurchaseHandler::serverCallback($plan->id, $this->server->id), $wallet->id)));
+        $this->sendTo($this->bot, $this->tap($this->payButton($plan, $this->server, $wallet)));
 
         $order = CurrentBot::run($this->bot, static fn(): Order => Order::query()->sole());
         self::assertSame(OrderStatus::Fulfilled, $order->status);

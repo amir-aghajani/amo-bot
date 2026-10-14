@@ -133,6 +133,7 @@ final class TestAccountHandler implements Handler
                 : $this->texts->render(BotText::TestUsedUntil, ['next_test' => Persian::date($e->nextAt, withTime: true)]),
             TestRefusal::DailyLimit => $this->texts->get(BotText::TestDailyLimit),
             TestRefusal::NoServer => $this->texts->get(BotText::TestNoServer),
+            TestRefusal::Suspended => $this->texts->get(BotText::SellingPaused),
         };
         $buy = in_array($e->reason, [TestRefusal::NewcomersOnly, TestRefusal::Used, TestRefusal::DailyLimit], true)
             ? InlineKeyboard::make()->row(InlineKeyboard::callback($this->texts->get(BotText::TestBuyButton), MainMenu::PLANS, 'success'))

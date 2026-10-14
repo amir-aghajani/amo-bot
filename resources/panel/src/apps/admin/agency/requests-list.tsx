@@ -138,6 +138,8 @@ export function RequestsList() {
       <ApproveModal
         request={approving}
         defaultCredit={rules?.default_credit ?? '0'}
+        defaultTermDays={rules?.term_days ?? 0}
+        defaultMinimum={rules?.monthly_minimum ?? '0'}
         defaultLevel={levels.data?.levels[0]?.id ?? null}
         onClose={() => setApproving(null)}
         onDone={(request) => {

@@ -61,7 +61,7 @@ From the panel, «ادامه» leaves the next batch to the scheduler. An agent'
 deciding at each one's turn, exactly as a server's «افزودن زمان و حجم»: a panel out of reach holds its own server's part
 only, and the rest go on. It reaches the services of every shop that existed as you gave it — never a free test —, and
 each customer is told by their own shop's bot. The card works it while open, the scheduler every minute otherwise;
-«توقف» stops every part still going — what was given stays given.
+«لغو» stops every part still going («لغوشده») — what was given stays given.
 
 «هدیه جدید» waits while a gift on the list is running, and a server already running one refuses a new gift that would
 reach it. The list shows the latest ten gifts — a server's own among them —, each server's part on that server's page

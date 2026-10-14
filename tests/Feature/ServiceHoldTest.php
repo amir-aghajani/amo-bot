@@ -14,11 +14,13 @@ use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\GrantStatus;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
+use App\Modules\Subscriptions\Models\MigrationLeftover;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\Grants;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
@@ -26,7 +28,8 @@ use Tests\Fakes\FakeProvider;
 /**
  * A change of a service on its panel holds the service with a lease renewed before every panel call, so a slow panel
  * never loses it. A change that lost the lease after the panel took it is still recorded by the row's key, and nothing is
- * given, renewed or moved twice; one that lost it before touching the panel did nothing (busy, retried).
+ * given, renewed or moved twice; one that lost it before touching the panel did nothing (busy, retried). A move the
+ * database could not record never leaves the customer without the client they still have.
  */
 final class ServiceHoldTest extends DatabaseTestCase
 {
@@ -92,6 +95,32 @@ final class ServiceHoldTest extends DatabaseTestCase
         self::assertSame([$target->id, 'ali_1'], [$this->subscription->server_id, $this->subscription->remote_name], 'never the client deleted on the old panel');
         self::assertSame([['server' => $this->server->id, 'name' => 'ali_1']], FakeProvider::$deleted);
         self::assertSame([$target->id], array_column(FakeProvider::$created, 'server'));
+    }
+
+    public function testAMoveTheDatabaseCouldNotPointAtItsNewClientOnceTheOldOneWentKeepsTheNewOne(): void
+    {
+        $logs = $this->logs();
+        $target = $this->sellingServer('هلند');
+        $this->planEntry($this->plan, $target);
+        $this->refusingMoves();
+
+        $this->refusedByTheDatabase(fn() => $this->service(ProvisioningService::class)->move($this->subscription, $target, false));
+
+        self::assertSame([['server' => $this->server->id, 'name' => 'ali_1']], FakeProvider::$deleted, 'the old client gone; the new one never taken back');
+        self::assertArrayHasKey('ali_1', FakeProvider::$clients[$target->id], 'the only service the customer has');
+        self::assertTrue($logs->hasErrorThatContains('so the new one is kept'));
+    }
+
+    public function testAMoveTheDatabaseCouldNotPointAtItsNewClientWhileTheOldOneStaysTakesTheNewOneBack(): void
+    {
+        $target = $this->sellingServer('هلند');
+        $this->planEntry($this->plan, $target);
+        $this->refusingMoves();
+
+        $this->refusedByTheDatabase(fn() => $this->service(ProvisioningService::class)->move($this->subscription, $target, true));
+
+        self::assertSame([['server' => $target->id, 'name' => 'ali_1']], FakeProvider::$deleted, 'the old client still his: nothing moved');
+        self::assertSame([$this->server->id, 0], [$this->subscription->refresh()->server_id, MigrationLeftover::query()->count()], 'nor is the old one written down');
     }
 
     public function testARotationWhoseHoldRanOutAfterThePanelTookItKeepsTheNewLink(): void
@@ -172,6 +201,23 @@ final class ServiceHoldTest extends DatabaseTestCase
     private function letGo(): void
     {
         Subscription::query()->whereKey($this->subscription->id)->update(Lease::FREE);
+    }
+
+    /** The database refuses to point a service at another server — its disk failed, say. */
+    private function refusingMoves(): void
+    {
+        $this->db()->statement("CREATE TRIGGER refusing_moves BEFORE UPDATE OF server_id ON subscriptions BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END");
+    }
+
+    /** @param \Closure(): mixed $work */
+    private function refusedByTheDatabase(\Closure $work): void
+    {
+        try {
+            $work();
+            self::fail("the database's refusal went untold");
+        } catch (QueryException) {
+            // Refused as the database refused it.
+        }
     }
 
     /** Ali renews the service on its plan from his wallet: the order, delivered — or not — as it stands. */

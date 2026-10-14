@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Handshake, HardDrive, Pencil, Search, Store, UserX } from 'lucide-react'
+import { Ban, EyeOff, Handshake, HardDrive, Pencil, Play, Search, Store, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { useOpenShop } from '@/apps/admin/owner'
+import { StandingBadge, SUSPENDED_SALES } from '@/components/agency/agency-standing'
 import { AgentBotName } from '@/components/agency/agent-bot-name'
 import { AgentModal, TrafficModal } from '@/components/agency/agent-modal'
+import { HiddenModal } from '@/components/agency/hidden-modal'
 import { agencyLevelsQuery } from '@/components/agency/queries'
 import { CUSTOMER_NOTE } from '@/components/agency/reject-modal'
 import { Balance } from '@/components/balance'
@@ -28,8 +30,9 @@ import { usePagedList } from '@/lib/use-paged-list'
 const SORTS: AgentSort[] = ['joined', 'balance', 'traffic', 'sold']
 
 /**
- * The agents, filterable by level: their bot, its traffic and sales, and their balance. The row menu changes their
- * terms, adjusts their traffic, opens their shop or ends their agency.
+ * The agents, filterable by level: their bot, its traffic, its selling (stopped, or an end near) and sales, and their
+ * balance. The row menu changes their terms (an end and a monthly minimum among them), adjusts their traffic, keeps
+ * servers and plans from their shop, stops or lets go their selling, opens their shop or ends their agency.
  */
 export function AgentsList() {
   const list = usePagedList({
@@ -44,6 +47,8 @@ export function AgentsList() {
   const [editing, setEditing] = useState<AgentRow | null>(null)
   const [traffic, setTraffic] = useState<AgentRow | null>(null)
   const [revoking, setRevoking] = useState<AgentRow | null>(null)
+  const [hiding, setHiding] = useState<AgentRow | null>(null)
+  const [suspending, setSuspending] = useState<AgentRow | null>(null)
   // An agent's shop, at its address: opened here (every unsaved draft dropped — the program's settings on this page's
   // other section too —, asked first), or in a new tab as any link.
   const { link: shopLink } = useOpenShop()
@@ -60,6 +65,24 @@ export function AgentsList() {
       setRevoking(null)
     },
     meta: { quiet: true, invalidates: [queryKeys.agency, queryKeys.agencyLevels] },
+  })
+
+  // The agent's selling stopped by hand (their bot and services run on), and let go again — each told to the agent.
+  const suspend = useMutation({
+    mutationFn: ({ agent, note }: { agent: AgentRow; note: string }) => api.post(`/agency/agents/${agent.id}/suspend`, { note }),
+    onSuccess: (result) => {
+      toast.success('فروش نماینده متوقف شد')
+      list.replace(result.agent)
+      setSuspending(null)
+    },
+    meta: { quiet: true },
+  })
+  const resume = useMutation({
+    mutationFn: (agent: AgentRow) => api.post(`/agency/agents/${agent.id}/resume`),
+    onSuccess: (result) => {
+      toast.success('فروش نماینده دوباره باز شد')
+      list.replace(result.agent)
+    },
   })
 
   return (
@@ -109,6 +132,12 @@ export function AgentsList() {
                   {agent.bot ? (
                     <div className="grid">
                       <AgentBotName bot={agent.bot} /> <span className="text-footnote text-muted-foreground">حجم: {formatBytes(agent.bot.traffic_balance)}</span>
+                      {(agent.hidden.servers > 0 || agent.hidden.plans > 0) && (
+                        <span className="text-footnote text-muted-foreground">
+                          پنهان: {formatNumber(agent.hidden.servers)} سرور، {formatNumber(agent.hidden.plans)} پلن
+                        </span>
+                      )}
+                      {agent.standing && <StandingBadge standing={agent.standing} />}
                     </div>
                   ) : (
                     <Dash />
@@ -136,12 +165,35 @@ export function AgentsList() {
                   <RowMenu label={distinctUserLabel(agent.user)}>
                     <DropdownMenuItem onSelect={() => setEditing(agent)}>
                       <Pencil aria-hidden />
-                      سطح و اعتبار
+                      سطح، اعتبار و شرایط فروش
                     </DropdownMenuItem>
                     {agent.bot && (
                       <DropdownMenuItem onSelect={() => setTraffic(agent)}>
                         <HardDrive aria-hidden />
                         حجم
+                      </DropdownMenuItem>
+                    )}
+                    {agent.bot && (
+                      <DropdownMenuItem onSelect={() => setHiding(agent)}>
+                        <EyeOff aria-hidden />
+                        سرورها و پلن‌های پنهان
+                      </DropdownMenuItem>
+                    )}
+                    {agent.standing && agent.standing.suspension?.reason !== 'manual' && (
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          suspend.reset()
+                          setSuspending(agent)
+                        }}
+                      >
+                        <Ban aria-hidden />
+                        توقف فروش
+                      </DropdownMenuItem>
+                    )}
+                    {agent.standing?.suspension && agent.standing.suspension.reason !== 'expired' && (
+                      <DropdownMenuItem disabled={resume.isPending} onSelect={() => resume.mutate(agent)}>
+                        <Play aria-hidden />
+                        ادامه فروش
                       </DropdownMenuItem>
                     )}
                     {agent.bot && (
@@ -180,6 +232,33 @@ export function AgentsList() {
           list.replace(agent)
           setTraffic(agent)
         }}
+      />
+      <HiddenModal
+        agent={hiding}
+        onClose={() => setHiding(null)}
+        onSaved={(agent) => {
+          list.replace(agent)
+          setHiding(null)
+        }}
+      />
+      <ConfirmModal
+        open={suspending !== null}
+        onClose={() => {
+          suspend.reset()
+          setSuspending(null)
+        }}
+        title="توقف فروش"
+        description={
+          suspending
+            ? `در ربات ${userLabel(suspending.user)} تا وقتی خودتان «ادامه فروش» را بزنید ${SUSPENDED_SALES} تازه انجام نمی‌شود؛ ربات، پنل و سرویس‌های فعلی مشتری‌هایش کار می‌کنند و خودش هم حجم می‌خرد. به او خبر داده می‌شود.`
+            : undefined
+        }
+        confirmLabel="توقف فروش"
+        destructive
+        pending={suspend.isPending}
+        note={CUSTOMER_NOTE}
+        error={suspend.error && messageOf(suspend.error, 'note', 'status')}
+        onConfirm={(note) => suspending && suspend.mutate({ agent: suspending, note })}
       />
       <ConfirmModal
         open={revoking !== null}

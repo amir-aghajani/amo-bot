@@ -9,7 +9,7 @@ import { AddMethodModal } from '@/components/payments/add-method-modal'
 import { gatewayIcon, MethodNote } from '@/components/payments/gateways'
 import { MethodForm } from '@/components/payments/gateways/method-form'
 import { kindLabel } from '@/components/payments/kinds'
-import { MethodSummary } from '@/components/payments/method-summary'
+import { boundsLine, CardLines, MethodSummary } from '@/components/payments/method-summary'
 import { EditorModal, useEditor } from '@/components/row-editor'
 import { ActionsHead, EditMenu, OrderCell, OrderHead, RemoveConfirm } from '@/components/sortable-list'
 import { Switch } from '@/components/switch'
@@ -46,7 +46,7 @@ export function PaymentMethodsPage() {
         title="روش‌های پرداخت"
         // Counted once the list was read — never a zero it does not know.
         count={list.isPending || list.error ? undefined : methods.length}
-        description="راه‌هایی که مشتری با آن‌ها پرداخت می‌کند؛ هر کارت یک روش است و ترتیب همین لیست، ترتیب دکمه‌ها هنگام پرداخت."
+        description="راه‌هایی که مشتری با آن‌ها پرداخت می‌کند؛ هر روش برای مبلغ‌های میان کمترین و بیشترین مبلغش پیشنهاد می‌شود، یک روش کارت به کارت چند کارت دارد، و ترتیب همین لیست ترتیب دکمه‌ها هنگام پرداخت است."
         actions={
           <Button icon={Plus} onClick={() => setAdding(true)}>
             افزودن روش پرداخت
@@ -73,19 +73,24 @@ export function PaymentMethodsPage() {
               const Icon = gatewayIcon(method.driver)
               // Two short lines rather than one long one, so the table never scrolls sideways. A method whose driver is no
               // longer installed cannot take payments, switched on or not, and says so here.
+              const bounds = boundsLine(method)
+              const manual = method.driver === 'manual' && 'cards' in method ? method : null
               const summary =
                 method.kind === null ? (
                   <span className="text-warning">به مشتری پیشنهاد نمی‌شود؛ درایورش نصب نیست.</span>
                 ) : (
-                  method.summary && (
+                  (method.summary || manual || bounds) && (
                     <span className="grid gap-0.5">
-                      <MethodSummary summary={method.summary} />
+                      {method.summary && <MethodSummary summary={method.summary} />}
+                      {manual && <CardLines cards={manual.cards} toSupport={manual.to_support} />}
                       <MethodNote method={method} />
+                      {bounds && <span className="text-muted-foreground">{bounds}</span>}
                     </span>
                   )
                 )
-              // A method of a driver the API describes has a form; the wallet has nothing to set, a driver gone nothing to read.
-              const editable = !method.builtin && method.kind !== null
+              // A method of a driver the API describes has a form — the wallet its label, bounds and switch —; a driver
+              // gone nothing to read.
+              const editable = method.kind !== null
 
               return (
                 <TableRow key={method.id} className={cn(!method.enabled && 'text-muted-foreground')}>
@@ -111,7 +116,7 @@ export function PaymentMethodsPage() {
                     <Switch checked={method.enabled} onCheckedChange={(enabled) => list.patch.mutate({ row: method, changes: { enabled } })} aria-label={`فعال بودن ${method.label}`} />
                   </TableCell>
                   <TableCell>
-                    {/* The wallet is built in: never edited, never deleted. A row whose driver is gone can still go. */}
+                    {/* The wallet is built in: never deleted — its name opens its form. A row whose driver is gone can still go. */}
                     {!method.builtin && <EditMenu label={method.label} onEdit={editable ? () => editor.edit(method) : undefined} onRemove={() => setRemoving(method)} />}
                   </TableCell>
                 </TableRow>
@@ -121,7 +126,9 @@ export function PaymentMethodsPage() {
         </Table>
       </ListView>
 
-      <p className="text-footnote text-muted-foreground">کیف پول همیشه هست و فقط خاموش و روشن می‌شود؛ درگاه‌های آنلاین و پرداخت رمزارزی در نسخه‌های بعدی اضافه می‌شوند.</p>
+      <p className="text-footnote text-muted-foreground">
+        کیف پول همیشه هست و حذف نمی‌شود؛ فقط نامش، کمترین و بیشترین مبلغش و روشن و خاموش بودنش عوض می‌شود. درگاه‌های آنلاین و پرداخت رمزارزی در نسخه‌های بعدی اضافه می‌شوند.
+      </p>
 
       <AddMethodModal
         open={adding}
@@ -136,8 +143,12 @@ export function PaymentMethodsPage() {
         editor={editor}
         size="md"
         title={(method) => (method ? `ویرایش «${method.label}»` : '')}
-        // A payment reads its card through its method: an edit shows on the ones made before it too.
-        description={() => 'تغییرات روی پرداخت‌های قبلی این روش هم دیده می‌شود. اگر کارت عوض شده، به‌جای ویرایش روش تازه‌ای بسازید و این یکی را خاموش کنید.'}
+        // A payment keeps the card it was shown: a card paid to keeps its number, and is switched off rather than removed.
+        description={(method) =>
+          method?.driver === 'manual'
+            ? 'هر پرداخت کارتی را که به آن نشان داده شده نگه می‌دارد. شماره کارتی که با آن پرداخت شده عوض نمی‌شود؛ اگر کارت عوض شده، کارت تازه‌ای اضافه و قبلی را خاموش کنید.'
+            : 'کمترین و بیشترین مبلغ، مبلغ‌هایی است که این روش برای آن‌ها به مشتری پیشنهاد می‌شود.'
+        }
       >
         {(method) => {
           const driver = method && drivers.data?.find((d) => d.key === method.driver)

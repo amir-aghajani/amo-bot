@@ -37,6 +37,18 @@ export const TEST_SERVERS = { TRAFFIC_MAX_MB: 102_400, HOURS_MAX: 720 } as const
 /** Discount codes' rules (Discounts\Services\DiscountSettings::HOLD_MAX): the longest an unpaid order with a code is held, in minutes. */
 export const DISCOUNT_SETTINGS = { HOLD_MAX: 1440 } as const
 
+/** The wallet's top-ups (Users\Services\WalletSettings): the random amounts' buttons, and the most of the random sum added to a card top-up. */
+export const WALLET_SETTINGS = { RANDOM_BUTTONS_MOST: 8, UNIQUE_MAX: 9_999 } as const
+
+/** «انتقال موجودی» (Users\Services\WalletTransfers): the transfers a customer may send in an hour (TRANSFER_WINDOW). */
+export const WALLET_TRANSFERS = { TRANSFERS: 10 } as const
+
+/** A card method's cards (Payments\Services\PaymentCards): how many it keeps. */
+export const PAYMENT_CARDS = { MOST: 20 } as const
+
+/** Receipts rejected at once (Payments\Services\ReceiptDismissals): how many a request names, and how many a round of «همه» takes. */
+export const RECEIPT_DISMISSALS = { MOST: 100 } as const
+
 /** Gift codes made at once (Rewards\Services\GiftCodes): how many, and their prefix's length. */
 export const GIFT_CODES = { COUNT_MAX: 500, PREFIX_MAX: 12 } as const
 

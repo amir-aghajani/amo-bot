@@ -111,12 +111,21 @@ export function PlansPage({ addServers }: { addServers?: string }) {
                     {plan.category && (
                       <span className="text-footnote text-muted-foreground xl:hidden">{plan.category.is_active ? plan.category.name : <InactiveCategory name={plan.category.name} />}</span>
                     )}
-                    {plan.unsellable_reason && (
+                    {/* Kept from sale by the main shop's owner (an agent's plan): no switch here shows it again. */}
+                    {plan.hidden_by_owner ? (
                       <span className="mt-1 flex">
-                        <InfoBadge variant="warning" info={plan.unsellable_reason}>
-                          در ربات دیده نمی‌شود
+                        <InfoBadge variant="danger" info={plan.unsellable_reason ?? 'مدیر فروشگاه اصلی این پلن را پنهان کرده است.'}>
+                          پنهان‌شده توسط مدیر
                         </InfoBadge>
                       </span>
+                    ) : (
+                      plan.unsellable_reason && (
+                        <span className="mt-1 flex">
+                          <InfoBadge variant="warning" info={plan.unsellable_reason}>
+                            در ربات دیده نمی‌شود
+                          </InfoBadge>
+                        </span>
+                      )
                     )}
                     <Placement plan={plan} problems className="mt-1 lg:hidden" />
                   </div>

@@ -4,25 +4,59 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
+use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Principal;
+use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Services\ManualOrders;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\OrderDirectory;
+use App\Modules\Store\Http\IdempotencyKey;
+use App\Modules\Subscriptions\Services\SubscriptionDirectory;
+use App\Modules\Users\Models\User;
 use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * The orders screen: the list, and the modal's operations — retry a failed delivery, cancel an unpaid order — each
- * OrderActions', which tells the customer. An operation answers the order's row as it stands after it.
+ * OrderActions', which tells the customer. An operation answers the order's row as it stands after it. And «افزودن
+ * سفارش» on a customer's page: an order support makes for them by hand, paid and delivered at once (ManualOrders).
  */
 final class OrdersController extends ApiController
 {
     public function __construct(
         private readonly OrderDirectory $orders,
         private readonly OrderActions $actions,
+        private readonly ManualOrders $manual,
+        private readonly SubscriptionDirectory $subscriptions,
     ) {}
+
+    /**
+     * POST /users/{id}/orders — {plan_id? | traffic_gb + days + devices, server_id, client_name?, payment, amount?, note?}
+     * with an Idempotency-Key: an order support makes for the customer, paid and delivered at once — the order's row and
+     * the service it made (null while its delivery failed); 201 when made now, 200 for the key's order made before.
+     *
+     * @param array<string, string> $args
+     * @throws ActorRefusedException 403 a shop admin's own account
+     * @throws ValidationException 422 under the field refused
+     * @throws RequestKeyReusedException 422 on `idempotency_key`
+     */
+    public function store(Request $request, Response $response, array $args): Response
+    {
+        $customer = $this->load(User::class, $args);
+        $order = $this->manual->make($customer, Principal::of($request)->actor(), $this->input($request), IdempotencyKey::of($request));
+        $made = $order->wasRecentlyCreated;
+        $order->load(OrderDirectory::RELATIONS);
+        $service = $order->subscription?->load(['user', 'plan', 'server']);
+
+        return $this->json($response, [
+            'order' => $this->orders->present($order),
+            'subscription' => $service === null ? null : $this->subscriptions->present($service),
+        ], $made ? 201 : 200);
+    }
 
     /** GET /orders?search=&status=&type=&user=&from=&to=&sort=&dir=&page= */
     public function index(Request $request, Response $response): Response

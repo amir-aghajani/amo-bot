@@ -83,9 +83,10 @@ nothing is ordered for them.
 An order nobody pays gives its use back: cancelled by support, or dropped as unpaid. An order made with a code is dropped
 sooner than any other unpaid order — after the hold set on «کدهای تخفیف» › «تنظیمات»:
 
-- «مهلت (دقیقه)» — 0 to 1440, 60 by default. An unpaid order made with a code that nothing happened to for that long, and
-  whose receipt is not with support, is cancelled with the note «مهلت استفاده از کد تخفیف تمام شد», and the code's use is
-  free for someone else. 0 — such an order waits as long as any unpaid one (48 hours).
+- «مهلت (دقیقه)» — 0 to 1440, 60 by default. An unpaid order made with a code that nothing happened to for that long,
+  and whose money is not with support — its receipt in review, or its card payment sent to support's private chat —, is
+  cancelled with the note «مهلت استفاده از کد تخفیف تمام شد», and the code's use is free for someone else. 0 — such an
+  order waits as long as any unpaid one (48 hours).
 
 The check runs every ten minutes, so an order may wait up to ten minutes past its hold.
 

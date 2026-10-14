@@ -127,6 +127,31 @@ final class Context
         return $this->reply($text, $options);
     }
 
+    /**
+     * `$text` sent anew in place of the tapped message — for a message that must be sent, never edited in (one protected
+     * from forwarding: Telegram protects a message only as it is sent). The tapped message is deleted or, past Telegram's
+     * 48 hours for deleting, left without its buttons, so nothing on it is tapped again.
+     *
+     * @param array<string, mixed> $options sendMessage options (reply_markup, protect_content etc.)
+     * @return array<string, mixed>
+     */
+    public function resend(string $text, array $options = []): array
+    {
+        $messageId = $this->update->messageId();
+        if ($this->update->isCallback() && $messageId !== null && !$this->api->deleteMessage($this->chatId(), $messageId)) {
+            try {
+                $this->api->editMessageReplyMarkup($this->chatId(), $messageId, ['inline_keyboard' => []]);
+            } catch (TelegramApiException $e) {
+                // Gone already: nothing left to tap. Anything else (Telegram out of reach) would fail the message too.
+                if (!$e->is(Refusal::BadRequest)) {
+                    throw $e;
+                }
+            }
+        }
+
+        return $this->reply($text, $options);
+    }
+
     /** Delete the tapped message (best effort). */
     public function delete(): void
     {

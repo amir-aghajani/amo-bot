@@ -8,7 +8,7 @@ import { idLabel } from '@/lib/direction'
 import { queryKeys } from '@/lib/query-keys'
 import { CustomerPage, type CustomerPageProps } from '@/pages/customer'
 import { OWNER, testQueryClient, until } from '@/test/render'
-import { customerAccount, loyaltyStanding, orderRow, paymentRow, subscriptionRow, ticketRow, userRow } from '@/test/rows'
+import { customerAccount, loyaltyStanding, orderRow, paymentRow, planRow, subscriptionRow, ticketRow, userRow } from '@/test/rows'
 import { json, refusal, server, type Answer } from '@/test/server'
 
 /*
@@ -261,6 +261,31 @@ describe('a customer’s page', () => {
     expect(server().sent('PATCH', '/api/admin/users/10')).toEqual([])
   })
 
+  it('makes the customer an order from its menu, and reads their services and orders again', async () => {
+    answers()
+    server()
+      .on('GET', '/api/admin/plans', json({ plans: [planRow()] }))
+      .on('GET', '/api/admin/plans/options', json({ categories: [], servers: [] }))
+      .on(
+        'POST',
+        '/api/admin/users/10/orders',
+        json({ order: orderRow({ type: 'purchase', status: 'fulfilled', manual: { by: 'root', payment: 'free', note: null } }), subscription: subscriptionRow() }, 201),
+      )
+    open()
+    await until(() => expect([reads('subscriptions'), reads('orders')]).toEqual([1, 1]))
+
+    const account = await screen.findByRole('button', { name: 'حساب مشتری' })
+    fireEvent.pointerDown(account, { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'افزودن سفارش' }))
+    const dialog = await screen.findByRole('dialog', { name: 'افزودن سفارش' })
+    fireEvent.keyDown(await within(dialog).findByRole('combobox', { name: 'پلن' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('option', { name: /طلایی/ }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'ثبت و تحویل سفارش' }))
+
+    await until(() => expect([reads('subscriptions') > 1, reads('orders') > 1]).toEqual([true, true]))
+    expect(server().sent('POST', '/api/admin/users/10/orders')[0]?.body).toMatchObject({ plan_id: 3, server_id: 1, payment: 'free' })
+  })
+
   it('shows an agent’s agency, and where the panel manages them', async () => {
     const agency: AgentRow = {
       id: 10,
@@ -271,6 +296,8 @@ describe('a customer’s page', () => {
       balance: '25000.00',
       bot: { id: 2, username: 'agent_shop_bot', title: 'فروشگاه نماینده', status: 'active', connected: true, problem: null, traffic_balance: 50 * 1024 ** 3, connected_at: '2026-09-02T10:00:00Z' },
       counts: { customers: 4, sold: 3, active: 2 },
+      standing: null,
+      hidden: { servers: 0, plans: 0 },
     }
     answers({ detail: json({ ...DETAIL, agency } satisfies UserDetailResponse) })
     open('/users/10', { agentPage: (agent) => `/agents/list?search=${agent.user.telegram_id}` })

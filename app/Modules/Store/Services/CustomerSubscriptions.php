@@ -43,8 +43,8 @@ use Psr\Log\LoggerInterface;
  */
 final class CustomerSubscriptions
 {
-    /** What a service shows of its own, loaded with it. */
-    private const RELATIONS = ['plan', 'server'];
+    /** What a service shows of its own, and its customer (whose renewal prices AutoRenewal judges), loaded with it. */
+    private const RELATIONS = ['plan', 'server', 'user'];
 
     /** The refusal of a new link the panel did not give, followed by what happened in a word. */
     public const NOT_ROTATED = 'لینک این سرویس عوض نشد: ';

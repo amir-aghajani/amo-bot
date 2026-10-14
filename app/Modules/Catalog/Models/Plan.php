@@ -40,6 +40,8 @@ use Illuminate\Support\Carbon;
  *                                     (KeyboardLayout::STYLES); null — the client's own
  * @property int $button_row How many buttons share its button's row there: 1 — a row of its own, 2 or 3
  * @property bool $is_active
+ * @property bool $hidden_by_owner An agent's plan the owner keeps from sale («پنهان‌شده توسط مدیر»): never offered,
+ *                                 whatever its own switch says; only the owner's agents screen changes it
  * @property int $sort
  * @property Carbon $created_at
  * @property Carbon $updated_at
@@ -82,6 +84,7 @@ class Plan extends Model
         'extras' => 'array',
         'button_row' => 'integer',
         'is_active' => 'boolean',
+        'hidden_by_owner' => 'boolean',
         'sort' => 'integer',
     ];
 
@@ -122,13 +125,19 @@ class Plan extends Model
     }
 
     /**
-     * Plans customers can currently buy, in display order.
+     * Plans customers can currently buy, in display order: switched on, and not kept from sale by the owner.
      *
      * @return Builder<static>
      */
     public static function active(): Builder
     {
-        return static::query()->where('is_active', true)->oldest('sort')->oldest('id');
+        return static::query()->where('is_active', true)->where('hidden_by_owner', false)->oldest('sort')->oldest('id');
+    }
+
+    /** Whether customers may buy it as far as the plan itself goes: active()'s rule for one plan. */
+    public function onSale(): bool
+    {
+        return $this->is_active && !$this->hidden_by_owner;
     }
 
     /**

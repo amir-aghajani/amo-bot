@@ -374,6 +374,22 @@ final class StoreSubscriptionsTest extends HttpTestCase
         }
     }
 
+    public function testAutoRenewIsNotOfferedAtAPriceTheWalletDoesNotTake(): void
+    {
+        $switched = $this->subscription($this->customer, $this->plan, $this->server, 'ali_1', ['auto_renew' => true]);
+        $this->subscription($this->customer, $this->plan, $this->server, 'ali_2');
+        $offered = fn(): array => array_column(array_column($this->decode($this->get($this->storeApi($this->website, '/subscriptions')))['subscriptions'], 'auto_renew'), 'offered');
+        $wallet = $this->walletMethod();
+        $wallet->forceFill(['min_amount' => '150000'])->save();
+
+        self::assertSame([false, false], $offered(), 'the wallet takes 150,000 Toman at least: a renewal of 120,000 is made by hand');
+        $this->assertRefusedUnder('auto_renew', (new AutoRenewUnavailableException())->getMessage(), $this->patchJson($this->storeApi($this->website, "/subscriptions/{$switched->id}"), ['auto_renew' => false]));
+        self::assertTrue($switched->refresh()->auto_renew);
+
+        $wallet->forceFill(['min_amount' => '120000'])->save();
+        self::assertSame([true, true], $offered(), 'its least the price itself, both ends included');
+    }
+
     public function testANewLinkReplacesTheOldAndTheBotSaysNothing(): void
     {
         $subscription = $this->subscription($this->customer, $this->plan, $this->server, 'ali_1');

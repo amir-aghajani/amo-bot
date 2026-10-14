@@ -18,7 +18,6 @@ use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Handlers\RenewalHandler;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
-use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
 use Tests\BotTestCase;
@@ -53,7 +52,7 @@ final class BotClientNamesTest extends BotTestCase
 
     public function testNothingIsAskedWhileTheShopNamesByItsPatternAlone(): void
     {
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
 
         self::assertSame([$this->checkoutText()], $this->said());
         self::assertSame([], array_filter($this->callbacks(0), static fn(string $data): bool => str_starts_with($data, ClientNameHandler::PREFIX)));
@@ -62,7 +61,7 @@ final class BotClientNamesTest extends BotTestCase
     public function testTheWaysOfferedAreButtonsUnderALineSayingTheName(): void
     {
         $this->botSettings('client_names', ['name_random' => true]);
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
 
         self::assertSame([BotTexts::paragraphs($this->checkoutText(), self::text(BotText::CheckoutNamePattern))], $this->said());
         self::assertSame([
@@ -71,20 +70,20 @@ final class BotClientNamesTest extends BotTestCase
         ], $this->inlineKeyboard(0)[1], 'under the ways to pay');
 
         $this->botSettings('client_names', ['name_custom' => true]);
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
         self::assertContains($this->mode(ClientNameMode::Custom), $this->callbacks(0));
     }
 
     public function testARandomNameIsDrawnShownAndGivenToTheService(): void
     {
         $this->botSettings('client_names', ['name_random' => true]);
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
 
         $this->send($this->tap($this->mode(ClientNameMode::Random)));
         $name = $this->shownName();
         self::assertMatchesRegularExpression('/^[23456789a-z]{6}$/', $name);
 
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
 
         $order = Order::query()->sole();
         self::assertSame([OrderStatus::Fulfilled, $name, $name], [$order->status, $order->client_name, $order->subscription?->remote_name]);
@@ -95,11 +94,11 @@ final class BotClientNamesTest extends BotTestCase
     {
         $this->botSettings('client_names', ['name_custom' => true]);
         $this->subscription($this->ali, $this->plan, $this->berlin, 'taken');
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
 
         $this->send($this->tap($this->mode(ClientNameMode::Custom)));
         self::assertSame([self::text(BotText::CheckoutNameAsk)], $this->said());
-        self::assertSame([$this->checkout()], $this->callbacks(0), '«بازگشت» to the checkout');
+        self::assertSame([$this->checkoutOf($this->plan, $this->berlin)], $this->callbacks(0), '«بازگشت» to the checkout');
 
         $this->send($this->message('ab'));
         self::assertSame([self::text(BotText::CheckoutNameRefused, ['reason' => ClientNaming::NOT_A_NAME])], $this->said());
@@ -109,7 +108,7 @@ final class BotClientNamesTest extends BotTestCase
         $this->send($this->message('my-vpn'));
         self::assertSame([$this->namedText('my-vpn')], $this->said(), 'the checkout drawn again as a new message, with the name');
 
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
         self::assertSame('my-vpn', Order::query()->sole()->subscription?->remote_name);
     }
 
@@ -118,20 +117,20 @@ final class BotClientNamesTest extends BotTestCase
         $this->botSettings('client_names', ['name_custom' => true]);
         $this->discountCode('NOWRUZ', 20);
         $card = $this->cardMethod();
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
         $this->send($this->tap($this->mode(ClientNameMode::Custom)));
         $this->send($this->message('my-vpn'));
 
-        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkout())));
+        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkoutOf($this->plan, $this->berlin))));
         $this->send($this->message('NOWRUZ'));
         self::assertStringContainsString(self::text(BotText::CheckoutName, ['client' => 'my-vpn']), $this->said()[0], 'drawn again with the code');
         self::assertStringContainsString(self::text(BotText::CheckoutDiscount, ['discount' => 'کد NOWRUZ', 'amount' => Money::format('20000')]), $this->said()[0]);
 
         $card->forceFill(['enabled' => false])->save();
-        $this->send($this->tap($this->pay($card)));
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $card)));
         self::assertStringContainsString(self::text(BotText::CheckoutName, ['client' => 'my-vpn']), $this->said()[0], 'the ways that are left, the name still there');
 
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
         $order = Order::query()->sole();
         self::assertSame(['my-vpn', '80000.00'], [$order->client_name, $order->amount]);
     }
@@ -139,18 +138,18 @@ final class BotClientNamesTest extends BotTestCase
     public function testThePatternTakesItBackAndANameIsKeptForItsCheckoutAlone(): void
     {
         $this->botSettings('client_names', ['name_random' => true]);
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
         $this->send($this->tap($this->mode(ClientNameMode::Random)));
 
-        $paris = PurchaseHandler::serverCallback($this->plan->id, $this->paris->id);
+        $paris = $this->checkoutOf($this->plan, $this->paris);
         $this->send($this->tap($paris));
         self::assertStringContainsString(self::text(BotText::CheckoutNamePattern), $this->said()[0], 'another checkout: the pattern');
 
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
         $this->send($this->tap($this->mode(ClientNameMode::Sequential)));
         self::assertStringContainsString(self::text(BotText::CheckoutNamePattern), $this->said()[0]);
 
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
         $order = Order::query()->sole();
         self::assertSame([null, 'USER_1'], [$order->client_name, $order->subscription?->remote_name], "the shop's pattern");
         self::assertSame('USER_1', FakeProvider::$created[0]['spec']->name);
@@ -159,11 +158,11 @@ final class BotClientNamesTest extends BotTestCase
     public function testANameOfAWaySwitchedOffSinceIsNotOrdered(): void
     {
         $this->botSettings('client_names', ['name_random' => true]);
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
         $this->send($this->tap($this->mode(ClientNameMode::Random)));
 
         $this->botSettings('client_names', ['name_random' => false]);
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
 
         self::assertSame([null, 'USER_1'], [Order::query()->sole()->client_name, Order::query()->sole()->subscription?->remote_name]);
     }
@@ -171,7 +170,7 @@ final class BotClientNamesTest extends BotTestCase
     public function testAWaySwitchedOffSinceTheCheckoutWasDrawnDrawsItAgain(): void
     {
         $this->botSettings('client_names', ['name_random' => true, 'name_custom' => true]);
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
 
         $this->botSettings('client_names', ['name_custom' => false]);
         $this->send($this->tap($this->mode(ClientNameMode::Custom)));
@@ -189,9 +188,9 @@ final class BotClientNamesTest extends BotTestCase
     {
         $this->botSettings('client_names', ['name_custom' => true]);
         $this->subscription($this->customer(['telegram_id' => 7001]), $this->plan, $this->paris, 'taken');
-        $paris = PurchaseHandler::serverCallback($this->plan->id, $this->paris->id);
+        $paris = $this->checkoutOf($this->plan, $this->paris);
 
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
         $this->send($this->tap($this->mode(ClientNameMode::Custom)));
         $this->send($this->message('taken'));
         self::assertSame([$this->namedText('taken')], $this->said(), 'free on Berlin');
@@ -214,7 +213,7 @@ final class BotClientNamesTest extends BotTestCase
         $this->send($this->tap(PurchaseHandler::reopenCallback($order->id)));
         self::assertSame([$this->namedText('my-vpn')], $this->said(), "the name it asked for, not the shop's pattern");
 
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
         self::assertSame([OrderStatus::Fulfilled, 'my-vpn'], [$order->refresh()->status, $order->subscription?->remote_name], 'paying it found that very order');
         self::assertSame(1, Order::query()->count());
     }
@@ -239,18 +238,8 @@ final class BotClientNamesTest extends BotTestCase
         return $match[1];
     }
 
-    private function checkout(): string
-    {
-        return PurchaseHandler::serverCallback($this->plan->id, $this->berlin->id);
-    }
-
     private function mode(ClientNameMode $mode): string
     {
-        return ClientNameHandler::modeCallback($mode, $this->checkout());
-    }
-
-    private function pay(PaymentMethod $method): string
-    {
-        return CallbackData::build($this->checkout(), $method->id);
+        return ClientNameHandler::modeCallback($mode, $this->checkoutOf($this->plan, $this->berlin));
     }
 }

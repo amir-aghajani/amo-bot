@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
@@ -11,6 +12,7 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Rewards\Enums\RewardKind;
 use App\Modules\Rewards\Enums\WheelRefusal;
 use App\Modules\Rewards\Exceptions\WheelRefusedException;
+use App\Modules\Rewards\Models\WheelPrize;
 use App\Modules\Rewards\Models\WheelSpin;
 use App\Modules\Rewards\Services\LuckyWheel;
 use App\Modules\Subscriptions\Models\Subscription;
@@ -23,7 +25,8 @@ use Tests\Fakes\FakeProvider;
 
 /**
  * The lucky wheel: the switch and the buyers-only rule, one spin per cooldown (two taps, one spin), the cost refunded when
- * the prize cannot be given, a weighted draw among the slices that can reach the customer, and each kind of prize.
+ * the prize cannot be given, a weighted draw among the slices that can reach the customer (Toman or nothing alone in an
+ * agent's shop whose selling is suspended), and each kind of prize.
  */
 final class LuckyWheelTest extends DatabaseTestCase
 {
@@ -227,6 +230,36 @@ final class LuckyWheelTest extends DatabaseTestCase
             $this->wheelPrize('۲۰ هزار تومان', ['amount' => '20000']);
             $this->wheel()->spin($reza);
             self::assertSame('20000.00', $reza->balance(), 'its own slices');
+        });
+    }
+
+    public function testAnAgentsShopWhoseSellingIsSuspendedDrawsOnlyTomanOrNothing(): void
+    {
+        $bot = $this->agentBot();
+        $reza = CurrentBot::run($bot, function (): User {
+            $reza = $this->wallet($this->customer(['telegram_id' => 7003]), '5000');
+            $plan = $this->plan(['name' => 'هدیه'], $this->server);
+            $this->subscription($reza, $plan, $this->server, 'reza_1', ['expires_at' => now()->addDays(20)]);
+            $this->wheelOn(['wheel_cost' => 1000]);
+            $this->wheelPrize('۵ گیگ', ['kind' => RewardKind::Traffic, 'amount' => '5', 'weight' => 10_000]);
+            $this->wheelPrize('۷ روز', ['kind' => RewardKind::Days, 'amount' => '7', 'weight' => 10_000]);
+            $this->wheelPrize('سرویس هدیه', ['kind' => RewardKind::Plan, 'amount' => null, 'plan_id' => $plan->id, 'weight' => 10_000]);
+            $this->wheelPrize('۲ هزار تومان', ['amount' => '2000']);
+
+            return $reza;
+        });
+        $this->service(AgencyStanding::class)->suspendByHand($bot, null);
+
+        CurrentBot::run($bot->refresh(), function () use ($reza): void {
+            $spun = $this->wheel()->spin($reza);
+            self::assertSame('۲ هزار تومان', $spun->spin->label, 'a service, traffic or days the shop gives none of now is never drawn');
+            self::assertNotNull($spun->given);
+            self::assertSame('6000.00', $reza->balance(), 'a spin of 1,000 won 2,000: none drawn to be refunded');
+
+            WheelPrize::query()->where('kind', RewardKind::Wallet)->update(['enabled' => false]);
+            Carbon::setTestNow(now()->addDay()->addMinute());
+            self::assertSame(WheelRefusal::Empty, $this->refused(fn() => $this->wheel()->spin($reza))->reason, 'nothing left it gives');
+            self::assertSame(['6000.00', 1], [$reza->balance(), WheelSpin::query()->count()], 'nothing spent');
         });
     }
 

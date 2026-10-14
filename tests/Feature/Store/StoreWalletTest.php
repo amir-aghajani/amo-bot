@@ -32,11 +32,22 @@ final class StoreWalletTest extends HttpTestCase
             'balance' => '75000.00',
             'credit' => '0.00',
             'spendable' => '75000.00',
-            'top_up' => ['min' => '10000.00', 'max' => '500000000.00', 'presets' => ['50000.00', '100000.00', '200000.00', '500000.00']],
+            'top_up' => ['min' => '10000.00', 'max' => '500000000.00', 'presets' => ['50000.00', '100000.00', '200000.00', '500000.00'], 'random' => []],
+            // «انتقال موجودی», off by default (StoreWalletTransfersTest).
+            'transfer' => null,
         ], $this->decode($this->get($this->storeApi($this->website, '/wallet'))));
 
         $this->botSettings('wallet', ['topup_min' => 20000, 'topup_presets' => [20000, 80000]]);
-        self::assertSame(['min' => '20000.00', 'max' => '500000000.00', 'presets' => ['20000.00', '80000.00']], $this->decode($this->get($this->storeApi($this->website, '/wallet')))['top_up'], "the shop's own bounds, as the bot offers them");
+        self::assertSame(['min' => '20000.00', 'max' => '500000000.00', 'presets' => ['20000.00', '80000.00'], 'random' => []], $this->decode($this->get($this->storeApi($this->website, '/wallet')))['top_up'], "the shop's own bounds, as the bot offers them");
+    }
+
+    public function testTheRandomAmountsAreDrawnAsTheBotDrawsThemEachAnswerAnew(): void
+    {
+        $this->bearer($this->customerSession($this->customer()));
+        // Two drawn among 60,000, 61,000 and 62,000 — never 61,000, a preset.
+        $this->botSettings('wallet', ['topup_presets' => [61000], 'topup_random_count' => 2, 'topup_random_min' => 59500, 'topup_random_max' => 62999, 'topup_random_round' => 1000]);
+
+        self::assertSame(['60000.00', '62000.00'], $this->decode($this->get($this->storeApi($this->website, '/wallet')))['top_up']['random'], 'rounded within the range, none a preset, ascending');
     }
 
     public function testATopUpTakesTheAmountsAsTheWalletWritesThem(): void
@@ -46,7 +57,7 @@ final class StoreWalletTest extends HttpTestCase
         $topUp = $this->decode($this->get($this->storeApi($this->website, '/wallet')))['top_up'];
 
         foreach ([$topUp['min'], $topUp['presets'][0], $topUp['max']] as $i => $amount) {
-            $response = $this->send('POST', $this->storeApi($this->website, '/wallet/top-up'), ['amount' => $amount, 'method_id' => $card->id], ['Idempotency-Key' => "as-written-{$i}"]);
+            $response = $this->placeTopUp($this->website, $amount, $card, "as-written-{$i}");
 
             self::assertSame(200, $response->getStatusCode(), "{$amount}: " . $response->getBody());
             self::assertSame($amount, $this->decode($response)['checkout']['transfer']['amount'] ?? null, $amount);

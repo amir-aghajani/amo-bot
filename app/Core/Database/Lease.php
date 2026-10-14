@@ -12,14 +12,15 @@ use Illuminate\Database\Eloquent\Model;
  * A row taken for a while by the one process working through it — a broadcast's run, a grant's part, a service a change
  * is made to on its panel: whoever holds the lease (its token in `lease_token`, until `leased_until`) is the only one
  * that moves the row's work on, and a holder that goes quiet loses it once the time runs out, so the work is neither
- * stuck with a dead worker nor done twice.
+ * stuck with a dead worker nor done twice. A run past a cursor (a grant's part, a server's move) is worked by work():
+ * item by item until its time is up, the row let go at the end.
  *
  * Every write is one conditional UPDATE. Moving the work on — write(), increment(), finish(), and renew() before a long
- * step — needs the token and the row still in the state the lease was taken in (`$while`: a status), and holds it
- * `$seconds` longer: a pause, a cancel or a takeover stops the holder at its next step instead of letting it act.
- * Undoing its own last step (move()) and letting go (release()) need the token alone: a pause that came between a step
- * and its undo must not skip the item, and a paused row is let go at once, so a resume does not wait for the time to run
- * out.
+ * step — needs the token and the row still in the state the lease was taken in (`$while`: a status, a job's mode), and
+ * holds it `$seconds` longer: a pause, a cancel or a takeover stops the holder at its next step instead of letting it
+ * act. Undoing its own last step (move()) and letting go (release()) need the token alone: a pause that came between a
+ * step and its undo must not skip the item, and a paused row is let go at once, so a resume does not wait for the time
+ * to run out.
  *
  * A leased table carries the two columns: `lease_token` (string, 32) and `leased_until` (nullable timestamp). After a
  * write that went through, the model holds the values written.
@@ -29,7 +30,11 @@ final class Lease
     public const TOKEN = 'lease_token';
     public const UNTIL = 'leased_until';
 
-    /** A lease cleared: what a stop from outside (a cancel) writes with its state, so whoever held the row stops. */
+    /**
+     * A lease cleared: what a stop from outside that ends the work (a cancel) writes with its state, so whoever held the
+     * row stops. A pause writes its state alone: its holder stops at its next step all the same (`$while`), and can still
+     * undo the step it was on (move()).
+     */
     public const FREE = [self::TOKEN => null, self::UNTIL => null];
 
     /** @param (\Closure(Builder<Model>): mixed)|null $while */
@@ -127,6 +132,41 @@ final class Lease
     public function release(): bool
     {
         return $this->apply($this->row()->where(self::TOKEN, $this->token), self::FREE);
+    }
+
+    /**
+     * Work through the row's items one at a time until `$until` passes, then let the row go however that ended: `$next`
+     * reads the item past the cursor — none left, `$finish` ends the work —, and `$step` works on it, false when this
+     * call must stop (the work waits at that item, or the row is no longer this lease's). `$start`, when given, goes
+     * first — a job's first turn marks it begun —, false stopping the call as a step's does. True when this call
+     * finished the work.
+     *
+     * @template TItem of object
+     * @param \Closure(): (TItem|null) $next
+     * @param \Closure(TItem): bool $step
+     * @param \Closure(): bool $finish
+     * @param (\Closure(): bool)|null $start
+     */
+    public function work(float $until, \Closure $next, \Closure $step, \Closure $finish, ?\Closure $start = null): bool
+    {
+        try {
+            if ($start !== null && !$start()) {
+                return false;
+            }
+            while (microtime(true) < $until) {
+                $item = $next();
+                if ($item === null) {
+                    return $finish();
+                }
+                if (!$step($item)) {
+                    return false;
+                }
+            }
+
+            return false;
+        } finally {
+            $this->release();
+        }
     }
 
     /** @return Builder<Model> */

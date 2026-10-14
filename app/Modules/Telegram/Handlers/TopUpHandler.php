@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Handlers;
 
+use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
@@ -17,15 +18,18 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
+use App\Modules\Users\Services\TopUpAmounts;
 use App\Modules\Users\Services\WalletSettings;
 use App\Support\Money;
 
 /**
  * «افزایش موجودی», charging the wallet:
- *   topup:start                → the preset amounts and «مبلغ دلخواه»; an amount typed right away is taken too
+ *   topup:start                → the preset amounts, amounts drawn at random and «مبلغ دلخواه»; an amount typed right
+ *                                away is taken too
  *   topup:custom               → an amount awaited (state `topup.amount`; «۱۵۰٬۰۰۰ تومان» is fine)
  *   topup:amt:{toman}[:{method}] → the checkout (every way to pay but the wallet itself), then pay
- * The bounds are the bot settings' (WalletSettings, OrderService::topUpAllowed()).
+ * The bounds are the bot settings' (WalletSettings, OrderService::topUpAllowed()). An agent's shop whose selling is
+ * suspended takes none: every step, tapped or typed, says so with «بازگشت» to the wallet (paused()).
  */
 final class TopUpHandler implements Handler
 {
@@ -40,6 +44,7 @@ final class TopUpHandler implements Handler
 
     public function __construct(
         private readonly WalletSettings $settings,
+        private readonly TopUpAmounts $random,
         private readonly OrderService $orders,
         private readonly PaymentMethods $methods,
         private readonly CheckoutScreen $screen,
@@ -56,6 +61,9 @@ final class TopUpHandler implements Handler
 
     public function handle(Context $ctx): void
     {
+        if ($this->paused($ctx)) {
+            return;
+        }
         $args = $ctx->update->callbackArgs(self::CALLBACK);
 
         match (true) {
@@ -68,9 +76,15 @@ final class TopUpHandler implements Handler
         };
     }
 
-    /** The checkout of a top-up of `$amount` Toman; the presets instead when the amount is out of bounds now. */
+    /**
+     * The checkout of a top-up of `$amount` Toman — also «پرداخت دوباره»'s, of one ordered before; the presets instead
+     * when the amount is out of bounds now.
+     */
     public function checkout(Context $ctx, int $amount): void
     {
+        if ($this->paused($ctx)) {
+            return;
+        }
         if (!$this->orders->topUpAllowed($amount)) {
             $this->start($ctx);
 
@@ -81,17 +95,22 @@ final class TopUpHandler implements Handler
             $ctx,
             $this->texts->render(BotText::TopupCheckout, ['amount' => Money::format($amount)]),
             OrderType::WalletTopUp,
+            Money::normalize($amount),
             static fn(PaymentMethod $method): string => CallbackData::build(self::CALLBACK, self::AMOUNT, $amount, $method->id),
             self::START,
         );
     }
 
-    /** The preset amounts and «مبلغ دلخواه»; as the screen invites, an amount typed right away is awaited too. */
+    /**
+     * The preset amounts, the amounts drawn at random for this screen (TopUpAmounts) and «مبلغ دلخواه»; as the screen
+     * invites, an amount typed right away is awaited too.
+     */
     private function start(Context $ctx): void
     {
-        $presets = array_map(static fn(int $amount): array => InlineKeyboard::callback(Money::format($amount), self::checkoutCallback($amount)), $this->settings->topUpPresets());
+        $button = static fn(int $amount): array => InlineKeyboard::callback(Money::format($amount), self::checkoutCallback($amount));
         $keyboard = InlineKeyboard::make()
-            ->grid($presets, 2)
+            ->grid(array_map($button, $this->settings->topUpPresets()), 2)
+            ->grid(array_map($button, $this->random->random()), 2)
             ->row(InlineKeyboard::callback($this->texts->get(BotText::TopupCustom), CallbackData::build(self::CALLBACK, self::CUSTOM)))
             ->row($this->buttons->back(MainMenu::WALLET));
 
@@ -114,18 +133,34 @@ final class TopUpHandler implements Handler
         }
     }
 
-    /** A way to pay picked: the top-up ordered — or the open one of that amount found — and paid. */
+    /**
+     * A way to pay picked: the top-up ordered — or the open one of that amount found — and paid; the checkout as it
+     * stands now once the way was switched off, the wallet's bounds moved, or the way no longer takes the amount.
+     */
     private function buy(Context $ctx, int $amount, int $methodId): void
     {
-        $method = $this->methods->payable($methodId, OrderType::WalletTopUp);
+        $method = $this->methods->payable($methodId, OrderType::WalletTopUp, null, $ctx->user);
         if ($method === null || !$this->orders->topUpAllowed($amount)) {
-            // The way to pay was switched off, or the bounds moved: the checkout as it stands now.
             $this->checkout($ctx, $amount);
 
             return;
         }
 
-        $this->screen->buy($ctx, $method, Money::normalize($amount), fn(): Order => $this->orders->openTopUp($ctx->user, $amount), self::checkoutCallback($amount));
+        $this->screen->buy($ctx, $method, OrderType::WalletTopUp, Money::normalize($amount), fn(): Order => $this->orders->openTopUp($ctx->user, $amount), self::checkoutCallback($amount), fn() => $this->checkout($ctx, $amount));
+    }
+
+    /**
+     * Whether the shop takes no top-up now — an agent's whose selling is suspended (Bot::sells()), whatever screen was
+     * tapped or amount typed —, after saying so with «بازگشت» to the wallet (CheckoutScreen::paused()).
+     */
+    private function paused(Context $ctx): bool
+    {
+        if (CurrentBot::get()->sells()) {
+            return false;
+        }
+        $this->screen->paused($ctx, MainMenu::WALLET);
+
+        return true;
     }
 
     /** @return array{min: string} The smallest charge the bot takes, for the texts that mention it. */

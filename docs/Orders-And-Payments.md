@@ -41,7 +41,7 @@ with it now:
 | «تایید و تحویل» («… شارژ کیف پول», «… افزودن حجم», «… افزودن زمان», «… افزودن کاربر») | A card payment not paid yet, its order still open — with a receipt, or without one («تایید دستی و …») | **At one press.** The order is paid and delivered at once — the service made or renewed, its extra traffic, time or devices added, the wallet charged, the agent's traffic added —, the order's other attempts to pay are cancelled (but a receipt waiting for review, which stays yours to reject), a referrer's commission is paid, and the customer gets their service or word of it |
 | «رد کردن» | A receipt waiting for review | Asks for a reason the customer reads («دلیل رد کردن»). The payment fails; the order stays open for them to pay again |
 | «لغو پرداخت» | Any payment not paid | Asks for an optional note. Cancels this payment, and — while nothing else paid it — its order with every other attempt to pay it; the customer is told when it cancelled the order. **But while another payment of the order has a receipt waiting for review**, this payment is cancelled alone: that receipt may be the money, so the order and the receipt stay for you to decide, and the customer is told nothing |
-| «یادآوری به مشتری» | A card payment waiting for its receipt, or rejected, its order open | At one press: a reminder with «ارسال رسید» and «پرداخت دوباره» (a rejected one, «پرداخت دوباره» alone). Nothing changes; the toast says whether it reached them |
+| «یادآوری به مشتری» | A card payment waiting for its receipt, or rejected, its order open | At one press: a reminder with «ارسال رسید» and «پرداخت دوباره» (a rejected one, «پرداخت دوباره» alone; one taken in [support's private chat](Bot-Settings.md#card-to-card-payments) — shown no card —, the way there instead of «ارسال رسید»). Nothing changes; the toast says whether it reached them |
 | «تلاش دوباره برای تحویل» | A paid payment whose order's delivery failed, or stalled for ten minutes | At one press: the delivery again ([Orders](#orders)) |
 | «بازپرداخت به کیف پول» («بازپرداخت شارژ» for a top-up) | A paid payment whose order is not being delivered right now | Asks first, with an optional note: [refunds](#refunds) |
 
@@ -73,6 +73,32 @@ whose receipt waits for review, and refund only when the website grants it. **An
 own payment**, in the group or on the website: another admin, or you, does. A card's review window approves a receipt
 sent in the bot that nobody decided in time ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)).
 
+### Receipts
+
+A card transfer's receipt is a picture the customer sends in the bot after the card's message — or uploads on the shop's
+website —, and it waits for you under «در انتظار بررسی». The payment's row, its review and the report group's line name
+the card it was shown — one of its method's cards, picked at random ([Payment
+methods](Payment-Methods.md#its-cards-and-their-rotation)) —, so you know which account to look in. How the card is
+shown and receipts are taken is the bot
+settings' «پرداخت کارت به کارت» ([Bot settings](Bot-Settings.md#card-to-card-payments)): the card's message protected
+from forwarding and screenshots, with buttons that copy the card number and the amount; **one receipt at a time** — while
+one of a customer's is with you, they send no other and start no other card payment, told that the receipt of that order
+is being reviewed —; or **no card at all**, the customer sent to support's private chat for it — then no receipt comes
+here, only the payment, waiting for you to approve it by hand («تایید دستی و …») once you see the money — it never
+expires, so cancel one never paid («لغو پرداخت»); it names no card but «کارت در پیوی پشتیبانی داده شد», since none of
+the method's cards was picked for it.
+
+**Rejecting receipts in bulk.** Tick the receipts waiting for review — a row's box, or the header's for the page's — and
+press «رد رسیدهای انتخاب‌شده» on the bar that appears; on the «در انتظار بررسی» tab, with no search or filter, «رد همه
+رسیدهای در انتظار» takes every one waiting, the oldest first — those that had come when you confirmed: one sent while it
+runs is left for you to see. After you confirm, with an optional reason the customers read, each receipt is
+rejected as «رد کردن» rejects one: the payment fails, its order stays open for the customer to pay again (or to expire on
+its own), the customer is told with your reason, and the receipt's report in the group loses its buttons. A picture
+uploaded from the website is deleted too (one sent in the bot stays Telegram's), and the group's «رسیدها» gets one line
+for each hundred, the most one request rejects — how many, and who. A receipt decided by someone else meanwhile is skipped; the toast says how many were
+rejected and how many were not. The shop's website admins may do it only while the website grants «رد یکجای رسیدها»
+([Website](Website.md#the-shops-admins)).
+
 ## Orders
 
 «سفارش‌ها»: every order. The tabs are «همه», **«نیازمند رسیدگی»** — paid and not delivered: the delivery failed, or
@@ -103,6 +129,52 @@ a renewal or an extra of a service [handed to another customer](Services.md#hand
 it was ordered: nothing is added to the new customer's service, and the note asks you to refund it), or «تحویل با خطای
 داخلی برنامه متوقف شد؛ …» for a fault of the shop's own, whose details are in the log. The report group's «خطاها» says
 it the same way: the diagnosis in the main bot's group, the short word in an agent's.
+
+## Orders support makes
+
+**«افزودن سفارش»**, in the menu at the top of a customer's page ([Customers](Customers.md)), makes them a service by hand
+— one they paid you for in cash, a gift, a replacement — and delivers it at once. Its dialog asks:
+
+- **what**: «پلن» — one of the shop's plans, switched on or off — or «سرویس دلخواه»: your own «حجم (گیگابایت)», «مدت
+  (روز)» and «تعداد کاربر», each 0 for no limit (an unlimited, never-ending service is 0, 0, 0);
+- **«سرور»**: for a plan, one of its servers that can deliver it now (picked for you when there is one); for your own
+  numbers, any server that can take a service now. One that cannot says why beside it;
+- **«نام کاربری سرویس»** (optional): the name its client gets on the panel, held to the rules a buyer's own name is — 3 to
+  32 Latin letters, digits, `_` and `-`, one the server's panel takes and no service there has. Blank, the shop's
+  pattern names it;
+- **«پرداخت»**: «رایگان», «از کیف پول مشتری» — the amount you set comes out of their wallet, refused while it holds less
+  (an agent's credit counting), and while the shop's wallet is switched off ([Payment methods](Payment-Methods.md#the-wallet)),
+  but never for the wallet's «کمترین مبلغ» or «بیشترین مبلغ», which hold the customers' own checkouts
+  ([Payment methods](Payment-Methods.md#the-least-and-most-amount)) —, or «پرداخت خارج از فروشگاه» — the amount they paid you outside the shop (cash, another card), recorded as paid;
+- **«یادداشت»** (optional), kept on the order and said in the report group; the customer does not see it.
+
+A box under the form says what it will deliver before you press **«ثبت و تحویل سفارش»**. The service is made there and
+then: the customer gets it as any purchase («✅ سرویس با موفقیت ایجاد شد» with its link), it shows on their page, and the
+report group's «خریدها» reports the purchase with «🎧 ثبت دستی توسط پشتیبانی» — an admin or an agent by name, you without
+your login — and how it was paid. A delivery that fails (the panel refused) leaves the order paid and «ناموفق» under
+«نیازمند رسیدگی»; its «تلاش دوباره برای تحویل» tells the customer once it works. Pressing again after the browser got no
+answer never makes a second order.
+
+What each way of paying counts as:
+
+| | «رایگان» | «از کیف پول مشتری» | «پرداخت خارج از فروشگاه» |
+|---|---|---|---|
+| The order | «هدیه», no price | Its amount, from the wallet | Its amount, by the built-in «خارج از فروشگاه» method |
+| A purchase of the customer's (first-purchase prices, a newcomers' code, a referral's first-purchase gift) | No | Yes | Yes |
+| The shop's revenue, the referrer's commission | No | No — the wallet's money counted when it was topped up | Yes |
+| Cashback, loyalty tiers, the nightly draw | No | Yes | Yes |
+
+The order's row in «سفارش‌ها» and its dialog say «سفارش دستی» with how it was paid, who made it («ثبت دستی») and your note.
+Refunding it is [as any order's](#refunds): its service is removed and what was paid goes to the customer's wallet. The
+«خارج از فروشگاه» method is built into every shop and never offered to customers; it is not listed under «روش‌های پرداخت».
+
+**In an agent's shop** the agent makes one the same way, and the service's traffic comes out of their bot's traffic like
+any sale: a service with no traffic quota cannot be made there, nor one with more than is left, nor one on a server or of
+a plan you keep from that shop ([Agency](Agency.md#servers-and-plans-kept-from-an-agents-shop)). While its selling is
+suspended none is made there — by you neither, from its page in the shop switcher: open its selling again first. **On
+the shop's website** its admins make one only while the website grants «افزودن سفارش برای مشتری»
+([Website](Website.md#the-shops-admins)), with a recent sign-in. **Nobody makes an order for themselves**: another
+admin, or you, does.
 
 ## Refunds
 
@@ -169,15 +241,17 @@ A referrer's commission stays paid.
 - **Unpaid orders expire** — an order nobody paid, with nothing done to it or its payments for **48 hours**, is
   cancelled within ten minutes after (an order made with a discount code sooner —
   [Discounts](Discounts.md#uses-and-giving-them-back)): quietly, its rows kept, a rejected receipt's reason kept, the
-  receipts uploaded for it on the website deleted. **An order whose receipt is with you never expires.**
+  receipts uploaded for it on the website deleted. **An order whose receipt is with you never expires** — nor one whose
+  card payment went to support's private chat ([Bot settings](Bot-Settings.md#card-to-card-payments)).
 - **Receipts approved by themselves** — a card's review window ([Payment methods](Payment-Methods.md)).
 
 ## Watch out for
 
 - **«تایید», «یادآوری» and «تلاش دوباره» run at one press**: no second look.
 - **Cancelling a payment of an unpaid order cancels the order** — and every other attempt to pay it —, unless another of
-  its payments has a receipt waiting for review: then that payment alone goes, and the receipt is still yours to approve
-  or reject. «لغو سفارش» drops everything, receipts in review included.
+  its payments may be the money — a receipt waiting for review, or a card payment that went to support's private chat —:
+  then that payment alone goes, and the other is still yours to approve or cancel. «لغو سفارش» drops everything,
+  receipts in review included.
 - **A failed delivery of a paid order is yours**: nothing retries it by itself. The dashboard's «نیازمند توجه» and the
   menu's count say when one waits; the report group's «خطاها» hears each, with «🔁 تلاش دوباره برای تحویل».
 - **Working an agent's shop**, their orders and payments are theirs to read too: they see your decisions as

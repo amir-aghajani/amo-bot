@@ -25,6 +25,7 @@ const SAVED = {
   verify_tls: true,
   timeout: '30',
   subscription_url: '',
+  proxy_enabled: false,
   capacity: '',
   notes: '',
   is_active: true,
@@ -58,6 +59,51 @@ describe('a saved server’s form', () => {
 
     await until(() => expect(server().sent('POST', '/api/admin/servers/test')).toHaveLength(1))
     expect(server().sent('POST', '/api/admin/servers/test')[0]?.body).toEqual({ ...SAVED, id: 1 })
+  })
+
+  it('reaches its panel through a SOCKS5 proxy once it is switched on: its fields shown and sent', async () => {
+    server().on('PUT', '/api/admin/servers/1', json({ server: serverRow() } satisfies ServerResponse))
+    const onSaved = form()
+    fireEvent.click(screen.getByRole('button', { name: 'تنظیمات پیشرفته' }))
+    expect(screen.queryByLabelText('آدرس پراکسی')).toBeNull()
+
+    fireEvent.click(screen.getByRole('switch', { name: /اتصال از طریق پراکسی SOCKS5/ }))
+    type('آدرس پراکسی', 'proxy.example.com')
+    type(/^نام کاربری پراکسی/, 'shop')
+    type(/^رمز پراکسی/, 'p@ss')
+    expect((screen.getByLabelText('پورت پراکسی') as HTMLInputElement).value).toBe('1080')
+    expect(screen.getByLabelText('آدرس پراکسی').getAttribute('dir')).toBe('ltr')
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(onSaved).toHaveBeenCalled())
+    expect(server().sent('PUT', '/api/admin/servers/1')[0]?.body).toEqual({
+      ...SAVED,
+      proxy_enabled: true,
+      proxy_host: 'proxy.example.com',
+      proxy_port: '1080',
+      proxy_username: 'shop',
+      proxy_password: 'p@ss',
+      clear_proxy_password: false,
+    })
+  })
+
+  it('says a kept proxy password is typed again once the proxy moves, before it is asked', () => {
+    const kept = serverRow().form ?? {}
+    render(
+      <ServerForm
+        driver={serverDriverRow()}
+        server={serverRow({ form: { ...kept, proxy_enabled: true, proxy_host: 'proxy.example.com', proxy_port: 1080, proxy_username: 'shop', proxy_password: { set: true, hint: '••••••••' } } })}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { wrapper: providers().wrapper },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'تنظیمات پیشرفته' }))
+    const moved = 'آدرس یا پورت پراکسی عوض شده است؛ رمز پراکسی را دوباره وارد کنید.'
+    expect(screen.queryByText(moved)).toBeNull()
+
+    type('پورت پراکسی', '1081')
+    expect(screen.getByText(moved)).toBeTruthy()
   })
 
   it('says a kept token is typed again once the address moves to another host, before it is asked', () => {
@@ -99,6 +145,7 @@ describe('a new server’s form', () => {
       verify_tls: true,
       timeout: '30',
       subscription_url: '',
+      proxy_enabled: false,
       capacity: '',
       notes: '',
       is_active: true,

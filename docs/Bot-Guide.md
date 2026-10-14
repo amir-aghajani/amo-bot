@@ -28,23 +28,26 @@ not understand — a word typed, a button of a screen long gone — is answered 
 | «🧪 اکانت تست» | While the shop gives tests: the servers giving one now, each with its traffic and term; a tap makes one ([a free test](#a-free-test)) |
 | «🛍️ سرویس‌های من» | The running services (and those waiting for their first connection), newest first, five a page; each opens [its screen](#a-services-screen). While the shop takes services by their link, «➕ افزودن سرویس» under them ([adding a service by its link](#adding-a-service-by-its-link)) |
 | «♻️ تمدید سرویس» | The services that may be renewed — running or ended, on a plan still there, or without a plan (added by their link, or built) to pick what to renew them on —, five a page; each opens its renewal ([renewing](#renewing)) |
-| «💰 کیف پول + شارژ» | The balance («… تومان بدهی» for a debt; an agent's credit), the latest five lines, and «➕ افزایش موجودی» ([the wallet](#the-wallet)) |
+| «💰 کیف پول + شارژ» | The balance («… تومان بدهی» for a debt; an agent's credit), the latest five lines, «➕ افزایش موجودی» ([the wallet](#the-wallet)) and, while the shop offers it, «💸 انتقال موجودی» ([sending money](#sending-money-to-another-customer)) |
 | «👥 زیرمجموعه‌گیری» | The invite link (a tap copies it), the terms (the start gift and the plan reward while they are on), what it brought, «📤 ارسال لینک برای دوستان» — while the program runs ([Referrals](Referrals.md)) |
 | «📚 آموزش» | A short guide to connecting — the shop's, which you may reword |
 | «☎️ پشتیبانی» | Your contact, and the tickets ([support](#support)) |
-| «🤝 نمایندگی» | The main bot only, while the program runs: the agency's terms and «📝 درخواست نمایندگی»; an agent's account ([Agency](Agency.md)) |
+| «🤝 نمایندگی» | The main bot only, while the program runs: the agency's terms and «📝 درخواست نمایندگی»; an agent's account — with their agency's end, this month's traffic bought against their monthly minimum, and why their bot sells nothing when it does not ([Agency](Agency.md)) |
 | «🎁 کد هدیه» | While gift codes are on: a code typed is redeemed — Toman into the wallet, or a plan's service ([Gift codes](Gift-Codes-And-Lucky-Wheel.md#how-a-customer-uses-a-code)) |
 | «🎡 گردونه شانس» | While the wheel is on: its prizes, what a spin costs, and «🎡 بچرخان» — or when the next spin is ([The lucky wheel](Gift-Codes-And-Lucky-Wheel.md#a-spin)) |
 
 ### Buying
 
 1. **The categories** — when the shop has an active one; then «سایر پلن‌ها» for the rest. Otherwise the plans at once.
-2. **The plans** that can be delivered today — in an agent's bot, those their traffic covers —, each «name — traffic /
-   term — price», in the colour and the row width its plan's form gives it.
+2. **The plans** that can be delivered today — in an agent's bot, those their traffic covers, on the servers and of the
+   plans the main shop leaves to it —, each «name — traffic / term — price», in the colour and the row width its plan's
+   form gives it.
 3. **A plan's details** and its locations («🌍 …»): the servers that can sell it now, each in its server's colour and
    row width.
-4. **The checkout** — what is bought and its price, and a button per way to pay — a free plan's (price `0`), one
-   «🎁 دریافت رایگان» instead, which delivers it at once, nothing taken —, and under it the plan's note when it has one
+4. **The checkout** — what is bought and its price, and a button per way to pay that takes that price (its least and most
+   amount, a card method's cards with room left today, [Payment methods](Payment-Methods.md#the-least-and-most-amount);
+   none left, «برای این مبلغ روش پرداختی نیست…» under it) — a free plan's (price `0`), one «🎁 دریافت رایگان» instead,
+   which delivers it at once, nothing taken —, and under it the plan's note when it has one
    («📌 …», [Plans](Plans.md#a-plan)). **Nothing is ordered until one is picked**; there is no cancel — a checkout left
    alone orders nothing. While the shop lets buyers name their service ([Bot settings](Bot-Settings.md#service-usernames)),
    a line says what it will be called — «ترتیبی», the shop's pattern, until they choose — over a button per way:
@@ -54,12 +57,35 @@ not understand — a word typed, a button of a screen long gone — is answered 
    pattern's, should a service on that server have taken it meanwhile.
 5. - **The wallet** pays at once: the checkout gives way to the service — a QR card of its subscription link, or the link
      as text. A wallet short of the price says how much is missing, with «➕ افزایش موجودی».
-   - **A card** shows the amount, the card's number (a tap copies it), its holder and your words: the customer transfers
-     the money and **sends a picture of the receipt** — a photo, or a picture sent as a file (10 MB at most); its caption
-     is their note. The bot says it is with support — «حداکثر تا … دقیقه دیگر» with a review window —, and the verdict
-     comes later as a reply to it ([Orders and payments](Orders-And-Payments.md#payments)).
+   - **A card** shows the amount, the card's number — one of the method's cards picked at random, and always that one for
+     this payment ([Payment methods](Payment-Methods.md#its-cards-and-their-rotation)) —, its holder, its bank when you
+     named one, and your words, with «📋 کپی شماره کارت» and «📋 کپی مبلغ» under them (a tap on either number in the
+     text copies it too; the amount goes in Latin digits without separators, as a banking app takes it). By default the
+     message is protected — it cannot be forwarded, saved or screenshotted — and comes as a message of its own in place
+     of the checkout, which is deleted (one older than Telegram's 48 hours for deleting loses its buttons instead) ([Bot
+     settings](Bot-Settings.md#card-to-card-payments)). The customer transfers the money and **sends a picture of the
+     receipt** — a photo, or a picture sent as a file (10 MB at most); its caption is their note. The bot says it is
+     with support — «حداکثر تا … دقیقه دیگر» with a review window —, and the verdict comes later as a reply to it
+     ([Orders and payments](Orders-And-Payments.md#receipts)). While a receipt of theirs waits for review, another
+     receipt or another card payment is refused with «⏳ رسید سفارش #… هنوز در حال بررسی پشتیبانی است» — the wallet still
+     pays.
+   - **In support's private chat**, while the shop takes card payments there, a card shows no card: the order's number
+     and amount, «به پیوی پشتیبانی پیام بدهید: …» with «💬 پیام به پشتیبانی» (when the contact is a handle or a link),
+     what comes once support approves it, and the method's note under it all. The bot waits for no receipt; support
+     approves the payment in the panel.
+     A payment reminder of such a payment sends them there too, in place of «ارسال رسید» — and of one shown a card,
+     asks for its receipt here, whatever the shop does now.
 
-An order left unpaid expires after 48 hours of nothing — but one whose receipt is with support.
+An order left unpaid expires after 48 hours of nothing — but one whose receipt is with support, or whose card payment
+went to support's private chat.
+
+**An agent's bot whose selling the main shop suspended** ([Agency](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum))
+sells nothing new: «خرید اشتراک» says «🛑 فعلا خرید، تمدید و اکانت تست در این ربات ممکن نیست…» (a text the agent may
+reword, a message's) in place of the plans, and so do a renewal, extra traffic, time or devices, a wallet top-up — whose
+«➕ افزایش موجودی» leaves «کیف پول» meanwhile —, a free test and a checkout drawn before, each in place of the screen with
+«بازگشت». The lucky wheel draws only its Toman and «پوچ» slices, and a gift code worth a service says it waits. Its
+customers' services keep working, a receipt sent for an order made before is still reviewed, and what was paid is
+delivered.
 
 **A service the customer builds** — in the main bot, while «سرویس دلخواه» is on ([Custom services](Custom-Services.md)),
 «🛠 ساخت سرویس دلخواه» stands under the plans (or the categories), even when no plan is on sale:
@@ -184,9 +210,9 @@ The service goes as it is — its link, end and traffic —, its «تمدید خ
 owner's devices stay connected until the recipient taps «⚙️ تغییر لینک»: where its server can change a link, the
 recipient's message says so («🔐 صاحب قبلی این سرویس هنوز لینک آن را دارد؛ …»). A service with an order the customer
 made still open — a renewal or an extra waiting for its payment or receipt, or being delivered — waits for it («⚠️ این
-سرویس الان منتقل نمی‌شود: …»; an unpaid one is dropped by itself after 48 hours; one whose delivery failed sends the
-customer to support, who retries it or gives the money back), and a customer who looked up 10 ids in 10 minutes, or
-handed on 5 services in an hour, waits a while. Support transfers a service from the panel whatever the switch says
+سرویس الان منتقل نمی‌شود: …»; an unpaid one is dropped by itself after 48 hours, unless its card transfer went to
+support's private chat; one whose delivery failed sends the customer to support, who retries it or gives the money
+back), and a customer who looked up 10 ids in 10 minutes, or handed on 5 services in an hour, waits a while. Support transfers a service from the panel whatever the switch says
 ([Services](Services.md#handing-a-service-to-another-customer)).
 
 ### Renewing
@@ -244,9 +270,36 @@ answered in a popup and orders nothing.
 
 ### The wallet
 
-«➕ افزایش موجودی» offers your amounts as buttons and «✏️ مبلغ دلخواه»; the customer picks one, or types any amount
-within your bounds right there (Persian digits, separators and «تومان» are fine); then the checkout, every way to pay
-but the wallet itself.
+«➕ افزایش موجودی» offers your amounts as buttons — then, when you ask for them, amounts drawn at random within your
+range, new ones each time the screen opens ([Bot settings](Bot-Settings.md#wallet)) — and «✏️ مبلغ دلخواه»; the
+customer picks one, or types any amount within your bounds right there (Persian digits, separators and «تومان» are
+fine); then the checkout, every way to pay but the wallet itself that takes that amount. Paid by card, the top-up may
+ask a few Toman more — the whole of it credited — while the shop adds a random sum to card-to-card top-ups ([Payment
+methods](Payment-Methods.md#a-random-sum-on-card-to-card-top-ups)).
+
+### Sending money to another customer
+
+While the shop lets customers ([Bot settings](Bot-Settings.md#wallet-transfers)), the wallet's screen shows «💸 انتقال
+موجودی» beside «➕ افزایش موجودی»:
+
+1. The bot asks for the recipient's numeric Telegram id (they get it from a bot such as @userinfobot; Persian digits are
+   fine) and says how much may go now: from your least to the most the customer may send — their own balance, never an
+   agent's credit, no more than your most per transfer and what the daily cap leaves today. One who may send nothing (a
+   balance below the least, the day's cap reached) is told so at once.
+2. An id is answered with who it is and the amount asked for; one refused — not a number, nobody of this shop (they
+   must have started the bot once), the customer themselves, a banned account — says why and waits for another.
+3. The amount typed («۵۰٬۰۰۰ تومان» is fine) brings the question: «💸 ۵۰٬۰۰۰ تومان به این مشتری منتقل شود؟» with the
+   recipient's name and the balance left after it, under it «❌ انصراف» (back to the wallet) and «✅ تایید انتقال». One
+   out of range says the range again and waits; another amount typed at the question asks about that one instead. Once
+   nothing may go (the balance spent, the cap reached or the shop switching it off meanwhile), an amount typed is told
+   why and the step ends.
+4. Confirmed, the money moves at once — every rule asked again: a balance spent meanwhile, the cap reached, the shop
+   switching it off each say why —, and the answer replaces the question: «✅ ۵۰٬۰۰۰ تومان به … منتقل شد.» with the
+   balance now. A second tap, or one after the chat moved on, sends nothing.
+
+The recipient is told («💰 ۵۰٬۰۰۰ تومان از طرف … به کیف پول شما منتقل شد.») and both wallets' histories have a line
+naming the other. A customer looks up at most 10 ids in 10 minutes (with service transfers' lookups) and sends at most 10
+transfers an hour.
 
 ### Support
 
@@ -271,11 +324,12 @@ but the wallet itself.
 | A payment reminder from the panel | A nudge, with «📎 ارسال رسید» and «🔄 پرداخت دوباره» |
 | A service switched off or on, deleted (while running), moved, given days or traffic | A word — a moved one with its new link |
 | A service handed to them, by its previous customer or support — or handed on by support | A word — theirs now with «📊 مشاهده سرویس» |
+| Money another customer sent to their wallet («انتقال موجودی») | A word, with the balance now (the sender's own notice is kept on the website, in Telegram only when they sent it from there) |
 | A service near its end or its traffic's end (when the shop turned reminders on) | A reminder, «📊 مشاهده سرویس» |
 | An automatic renewal — done, short of money (once a window), failed | A word; short, «➕ افزایش موجودی» |
 | A newcomer their link brought, a commission earned | A word |
 | Support's answer to a ticket, its closing | The answer; the closing with «⭐ امتیاز» |
-| An agent's request decided, their terms changed, their agency ended, their traffic short for a delivery | A word in the main bot |
+| An agent's request decided, their terms changed, their agency ended, their traffic short for a delivery; their agency's end or a month short of their minimum near, their bot's selling suspended or resumed | A word in the main bot — a short month and a suspension for the minimum with «💾 خرید حجم» |
 | A change of how their website account is signed in to, or wrong codes tried on it | A word — in Telegram **and** by email |
 
 Every notice is kept for the customer's website too, and one Telegram cannot bring — no Telegram account, or the bot

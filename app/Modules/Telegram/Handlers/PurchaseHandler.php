@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Handlers;
 
+use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Services\PlanCategoryService;
@@ -157,7 +158,7 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
         }
         $choices = $this->selector->covers($plan) ? $this->selector->choices($plan) : [];
         if ($choices === []) {
-            $ctx->edit(BotTexts::paragraphs($text, $this->texts->get(BotText::PlanNoServer)), ['reply_markup' => $this->buttons->backOnly($this->listOf($plan))]);
+            $ctx->edit(BotTexts::paragraphs($text, $this->texts->get(self::noServer())), ['reply_markup' => $this->buttons->backOnly($this->listOf($plan))]);
 
             return;
         }
@@ -197,6 +198,7 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
             $ctx,
             $this->screen->withNote($this->screen->priced($text, $quote, $dropped), $plan),
             OrderType::Purchase,
+            $quote->amount(),
             static fn(PaymentMethod $method): string => CallbackData::build(self::PLAN, $plan->id, self::SERVER, $server->id, $method->id),
             self::planCallback($plan->id),
             free: !Money::isPositive($quote->amount()),
@@ -304,12 +306,18 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
         }
         if ($server === null) {
             $ctx->session->clear();
-            $ctx->edit($this->texts->get(BotText::PlanNoServer), ['reply_markup' => $this->buttons->backOnly($this->listOf($plan))]);
+            $ctx->edit($this->texts->get(self::noServer()), ['reply_markup' => $this->buttons->backOnly($this->listOf($plan))]);
 
             return null;
         }
 
         return [$plan, $server];
+    }
+
+    /** Why a plan sells nowhere now: no server can — or, an agent's shop whose selling is suspended, nothing is sold. */
+    private static function noServer(): BotText
+    {
+        return !CurrentBot::get()->sells() ? BotText::SellingPaused : BotText::PlanNoServer;
     }
 
     /** The list the plan came from: its category (or «سایر پلن‌ها») when the shop has categories, else the plan list. */

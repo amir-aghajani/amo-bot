@@ -140,8 +140,7 @@ final class ServiceClaimHandler implements Handler
     {
         $urls = [];
         foreach (Server::query()->get(['base_url', 'meta']) as $server) {
-            $connection = PanelConnection::of($server);
-            array_push($urls, $connection->baseUrl, (string) $connection->subscriptionUrl);
+            array_push($urls, ...PanelConnection::addresses($server));
         }
         $newest = Subscription::acrossShops()->selectRaw('MAX(id)')->groupBy('server_id');
         array_push($urls, ...Subscription::acrossShops()->whereIn('id', $newest)->pluck('subscription_url')->all());

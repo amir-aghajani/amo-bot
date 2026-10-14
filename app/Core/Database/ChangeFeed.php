@@ -22,8 +22,8 @@ use Psr\Log\LoggerInterface;
 final class ChangeFeed
 {
     /**
-     * The tables the panels show, by area; any other table moves nothing. Grants are an area of their own because a
-     * running grant moves its cursor every second.
+     * The tables the panels show, by area; any other table moves nothing. Grants and the moves of a server's services
+     * are areas of their own because one under way moves its cursor every second.
      */
     public const AREAS = [
         'users' => 'users',
@@ -35,11 +35,16 @@ final class ChangeFeed
         'server_inbounds' => 'servers',
         'grants' => 'grants',
         'grant_parts' => 'grants',
+        'server_migrations' => 'migrations',
+        'migration_failures' => 'migrations',
+        'migration_leftovers' => 'migrations',
         'plan_categories' => 'plans',
         'plans' => 'plans',
         'plan_servers' => 'plans',
         'plan_server_inbounds' => 'plans',
+        'bot_hidden_servers' => 'plans',
         'payment_methods' => 'payment_methods',
+        'payment_cards' => 'payment_methods',
         'orders' => 'orders',
         'payments' => 'payments',
         'referral_commissions' => 'referrals',

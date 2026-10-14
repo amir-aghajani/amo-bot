@@ -20,6 +20,7 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Services\CustomerLookup;
 use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 
@@ -107,7 +108,7 @@ final class BotServiceTransferTest extends BotTestCase
         $this->customer(['telegram_id' => 7171, 'status' => UserStatus::Banned]);
         $this->send($this->tap(ServiceTransferHandler::askCallback($this->service->id)));
 
-        foreach (['sara' => ServiceTransfers::NOT_AN_ID, '9999' => ServiceTransfers::UNKNOWN, (string) self::CHAT => ServiceTransfers::SAME, '7171' => ServiceTransfers::BANNED] as $typed => $reason) {
+        foreach (['sara' => CustomerLookup::NOT_AN_ID, '9999' => CustomerLookup::UNKNOWN, (string) self::CHAT => ServiceTransfers::SAME, '7171' => ServiceTransfers::BANNED] as $typed => $reason) {
             $this->send($this->message((string) $typed));
             self::assertSame([self::text(BotText::TransferRecipientRefused, ['reason' => $reason])], $this->said(), (string) $typed);
             self::assertSame([SubscriptionHandler::serviceCallback($this->service->id)], $this->callbacks(0));
@@ -192,7 +193,7 @@ final class BotServiceTransferTest extends BotTestCase
     {
         $this->transfersOn();
         $this->send($this->tap(ServiceTransferHandler::askCallback($this->service->id)));
-        for ($i = 0; $i < ServiceTransfers::LOOKUPS; $i++) {
+        for ($i = 0; $i < CustomerLookup::LOOKUPS; $i++) {
             $this->send($this->message('9999'));
         }
 

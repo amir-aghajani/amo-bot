@@ -73,6 +73,24 @@ An agency level, as other lists reference it.
 | `name` | string | yes |  |
 | `price_per_gb` | string | yes | What agents on this level pay per GB of traffic for their bots, in Toman. |
 
+### AgencyStanding
+
+An agent's terms of selling. Their agency ends at `expires_at`; a Jalali month on the shop's clock in which they buy less traffic than `monthly_minimum` (delivered traffic orders, refunds aside) — the month it was set or changed in aside — suspends their selling once it is over. Both are warned of `warn_days` ahead. While suspended their shop takes no purchase, renewal, extra traffic, time or devices, wallet top-up or free test, its bot, panel and existing services working on; they still buy traffic, and buying this month's minimum lifts a suspension for it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `expires_at` | string (date-time) or null | yes | When their agency ends; null for never. |
+| `monthly_minimum` | string or null | yes | Toman; null for none. |
+| `month` | object | yes | The Jalali month now. |
+| `month.name` | string | yes | «مهر ۱۴۰۵» |
+| `month.purchased` | string | yes | The Toman of traffic they bought in it so far. |
+| `month.ends_at` | string (date-time) | yes | When it ends (the next month begins). |
+| `month.judged` | boolean | yes | Whether its purchases are held to the minimum when it ends: false without a minimum, and in the month it was set or changed. |
+| `suspension` | object or null | yes | Set while their selling is suspended; null while it sells. |
+| `suspension.reason` | [SellingSuspension](#sellingsuspension) | yes |  |
+| `suspension.since` | string (date-time) or null | yes |  |
+| `warn_days` | integer | yes | How many days ahead the end and a short month are warned of. |
+
 ### AgentBot
 
 An agent's bot: its identity, whether it runs and why not, and the traffic it can still sell.
@@ -105,6 +123,10 @@ An agent (a main-bot customer on an agency level), with their bot.
 | `counts.customers` | integer | yes | Their bot's customers. |
 | `counts.sold` | integer | yes | Services their bot sold (delivered purchases). |
 | `counts.active` | integer | yes | Their bot's active services. |
+| `standing` | [AgencyStanding](#agencystanding) or null | yes | Their terms of selling; null without a shop. |
+| `hidden` | object | yes | How many servers and plans the owner keeps from their shop (`GET /agency/agents/{id}/hidden`). |
+| `hidden.servers` | integer | yes |  |
+| `hidden.plans` | integer | yes |  |
 
 ### AmountInput
 
@@ -194,6 +216,7 @@ Each area's version number from the change feed. An area nothing was written to 
 | `versions.users` | integer | no | Customers, their wallets and their groups. |
 | `versions.servers` | integer | no | The servers and their inbounds. |
 | `versions.grants` | integer | no | Grants and their per-server parts. A running grant's cursor moves every second. |
+| `versions.migrations` | integer | no | Moves of a server's services to another server, their failures, and the old clients rescues left behind. One under way moves its cursor every second. |
 | `versions.plans` | integer | no | The plans, their categories and their server entries. |
 | `versions.payment_methods` | integer | no |  |
 | `versions.orders` | integer | no |  |
@@ -324,6 +347,7 @@ A customer's referral details: who referred them, how many customers they referr
 | `attention.servers_with_errors` | integer | yes | Servers whose panel failed its last check. Always 0 in an agent's shop. |
 | `attention.expiring_soon` | integer | yes | Active services ending within `expiring_days`, free test accounts aside. |
 | `traffic_shortage` | [TrafficShortage](#trafficshortage) or null | yes | Set when an agent's shop has too little traffic to sell anything; null otherwise, and always null in the main shop. |
+| `agency_standing` | [AgencyStanding](#agencystanding) or null | yes | An agent's shop's terms of selling with the main shop (its end, its monthly minimum, a suspension), for the owner's panel and the agent's; always null in the main shop, and for the shop's admins on its website (`/admin/dashboard`). |
 | `expiring_days` | integer | yes | The "ending soon" window in days, the same as on the subscriptions screen. |
 | `recent_orders` | list of [RecentOrder](#recentorder) | yes |  |
 | `recent_users` | list of [RecentUser](#recentuser) | yes |  |
@@ -350,6 +374,15 @@ One discount applied to a price, labelled for the customer («فروش ویژه 
 Where a discount came from: a timed `sale` («فروش ویژه»), the customer's `personal` percent («تخفیف اختصاصی») or their loyalty `tier` (only the largest of these three applies, never two together), or the `code` they typed, applied to the remaining amount.
 
 String: `sale`, `personal`, `tier`, `code`.
+
+### DismissReceiptsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `dismissed` | integer | yes | How many receipts were rejected. |
+| `skipped` | integer | yes | How many named were not: no longer waiting for review (decided meanwhile), or not found. |
+| `left` | integer | yes | How many receipts still wait for review in the shop — with `all`, of those that had come by `until`. |
+| `until` | string (date-time) or null | yes | With `all`: the moment the run is held to — send it back with the next round. Null for `ids`. |
 
 ### ErrorResponse
 
@@ -482,6 +515,19 @@ A customer's loyalty standing: their tier, what they spent, and the next tier.
 | `next.min_spent` | string | yes | Toman. |
 | `next.missing` | string | yes | Toman still to spend to reach it. |
 
+### ManualOrderResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `order` | [OrderRow](#orderrow) | yes |  |
+| `subscription` | [SubscriptionRow](#subscriptionrow) or null | yes | The service it made; null while its delivery failed. |
+
+### ManualPayment
+
+How an order support makes by hand is paid: `free` (a gift: no price, no purchase of the customer's), `wallet` (support's amount charged to the customer's wallet) or `outside` (support's amount taken outside the shop, cash or another card: the shop's takings).
+
+String: `free`, `wallet`, `outside`.
+
 ### NamedRef
 
 A reference by id and name (a plan, a server).
@@ -509,6 +555,16 @@ The discount code used for an order.
 | `id` | integer or null | yes | Null once the code is deleted. |
 | `code` | string | yes |  |
 
+### OrderManual
+
+An order support made by hand for its customer.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `by` | string or null | yes | Who made it: the panel login, or an admin's @username / tg:&lt;id&gt; (the owner's login reads «پشتیبانی» to anyone but the owner). |
+| `payment` | [ManualPayment](#manualpayment) | yes |  |
+| `note` | string or null | yes | Support's note on it; null for none. |
+
 ### OrderPackageName
 
 What a purchase or a renewal buys, in words — the one wording the bot and the report group use too: its plan's name, or a service the customer built («سرویس دلخواه») as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز». Extra traffic, time or devices: its service's plan's name (null for a service without a plan). Null for any other order (a wallet top-up, an agent's traffic).
@@ -522,7 +578,7 @@ String or null.
 | `id` | integer | yes |  |
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
-| `gateway` | string | yes | Driver key ("manual", "wallet"). |
+| `gateway` | string | yes | Driver key ("manual", "wallet", or "outside": money support took outside the shop for an order it made). |
 | `method` | string | yes | The payment method's label. A method with payments is never deleted. |
 | `paid_at` | string (date-time) or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
@@ -566,6 +622,7 @@ An order, as a row of the orders screen: what the customer asked for, and how fa
 | `days` | integer or null | yes | The days it adds to a service (extra time), or a built service's term; null otherwise. |
 | `devices` | integer or null | yes | The devices it adds to a service's IP limit (extra devices), or a built service's limit; null otherwise. |
 | `notes` | string or null | yes | Why it failed or was cancelled. For a failed delivery, the owner sees the panel's full diagnosis; anyone else (an agent, a website admin) a short summary. |
+| `manual` | [OrderManual](#ordermanual) or null | yes | An order support made by hand for the customer (`POST /users/{id}/orders`): who, how it was paid and their note. Null for an order the customer made. |
 | `payments` | list of [OrderPayment](#orderpayment) | yes | The payment attempts, newest first. |
 | `paid_at` | string (date-time) or null | yes |  |
 | `fulfilled_at` | string (date-time) or null | yes |  |
@@ -638,10 +695,10 @@ A payment, as a row of the payments screen.
 | `id` | integer | yes |  |
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
-| `gateway` | string | yes | Driver key ("manual", "wallet"). |
+| `gateway` | string | yes | Driver key ("manual", "wallet", or "outside": money support took outside the shop for an order it made). |
 | `kind` | [GatewayKind](#gatewaykind) or null | yes | How the driver settles; null when the driver is no longer installed. |
 | `method` | string | yes | The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. |
-| `summary` | string or null | yes | What the customer was told to pay to, from the driver (the masked card number and holder); null for a driver without one (the wallet). |
+| `summary` | string or null | yes | What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); null for a method without one (the wallet). |
 | `reference` | string or null | yes | The gateway's own id for the payment (the wallet's ledger line); null when it has none (a card transfer). |
 | `description` | string or null | yes | The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), or a refund's note (also in `refund_note`). |
 | `user` | [UserRef](#userref) | yes |  |
@@ -816,8 +873,9 @@ A plan, as the list shows it.
 | `ip_limit` | integer | yes | Devices at once; 0 for unlimited |
 | `extras` | [ExtraPrices](#extraprices) or null | yes | The plan's own prices for extra traffic, time and devices; null to use the shop's (the bot settings' `extra_…`). |
 | `servers` | list of [PlanServerEntry](#planserverentry) | yes |  |
-| `unsellable_reason` | string or null | yes | Why the bot does not offer the plan now, apart from its switch: it has no server, none of its servers can sell (each entry says why), or an agent's traffic does not cover it. Null when it is offered. |
+| `unsellable_reason` | string or null | yes | Why the bot does not offer the plan now, apart from its switch: it has no server, the owner keeps it from an agent's shop, an agent's selling is suspended, none of its servers can sell (each entry says why — a server the owner keeps from the shop among them), or an agent's traffic does not cover it. Null when it is offered. |
 | `is_active` | boolean | yes |  |
+| `hidden_by_owner` | boolean | yes | An agent's plan the owner keeps from sale («پنهان‌شده توسط مدیر»), whatever its switch: only the owner's agents page (`PUT /agency/agents/{id}/hidden`) changes it; a copy keeps it. Always false in the main shop. |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.active_subscriptions` | integer | yes | Its active services. |
@@ -1101,6 +1159,12 @@ String: `pending`, `approved`, `rejected`.
 | `meta.last_page` | integer | yes |  |
 | `meta.pending` | integer | yes | Reviews waiting for support, regardless of the filters. |
 
+### SellingSuspension
+
+Why an agent's selling is suspended: `expired` — their agency's end passed (extending it lifts it); `minimum` — a month ended below their monthly minimum (this month's purchases reaching it lift it); `manual` — the owner suspended it (only the owner resumes it).
+
+String: `expired`, `minimum`, `manual`.
+
 ### SeriesPoint
 
 | Field | Type | Required | What it is |
@@ -1118,9 +1182,9 @@ String: `asc`, `desc`.
 
 ### StaffGrant
 
-What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
+What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `payments` (reject receipts waiting for review in bulk), `extend` (add days and traffic to a service), `manual_orders` (make an order for a customer by hand, free, from their wallet or paid outside the shop, delivered at once), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
 
-String: `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`.
+String: `catalog`, `wallet`, `refunds`, `payments`, `extend`, `manual_orders`, `delete`, `account_security`.
 
 ### SubscriptionKind
 
@@ -1421,6 +1485,7 @@ One line of a customer's wallet ledger.
 | `amount` | string | yes |  |
 | `balance_after` | string | yes |  |
 | `description` | string or null | yes |  |
+| `counterpart` | [UserRef](#userref) or null | yes | A wallet transfer's line («انتقال موجودی»): the other customer — whom the money went to (a debit) or came from (a credit). Null for every other line. |
 | `reviewer` | string or null | yes | Who added the line by hand: a panel user or a website admin. Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically. |
 | `created_at` | string (date-time) | yes |  |
 

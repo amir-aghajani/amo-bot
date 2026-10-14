@@ -54,12 +54,28 @@ final class Persian
     /** "۲۶ شهریور ۱۴۰۵" — Jalali date in the shop's zone (LocalTime), computed here so no PHP extension is required. */
     public static function date(\DateTimeInterface $date, bool $withTime = false): string
     {
+        [$year, $month, $day] = self::jalali($date);
+        $text = self::digits($day) . ' ' . self::jalaliMonth($year, $month);
+
+        return $withTime ? $text . '، ' . self::digits(LocalTime::of($date)->format('H:i')) : $text;
+    }
+
+    /**
+     * The Jalali date of a moment in the shop's zone (LocalTime), as numbers.
+     *
+     * @return array{0: int, 1: int, 2: int} [year, month, day]
+     */
+    public static function jalali(\DateTimeInterface $date): array
+    {
         $date = LocalTime::of($date);
-        [$year, $month, $day] = self::toJalali((int) $date->format('Y'), (int) $date->format('n'), (int) $date->format('j'));
 
-        $text = sprintf('%s %s %s', self::digits($day), self::JALALI_MONTHS[$month - 1], self::digits($year));
+        return self::toJalali((int) $date->format('Y'), (int) $date->format('n'), (int) $date->format('j'));
+    }
 
-        return $withTime ? $text . '، ' . self::digits($date->format('H:i')) : $text;
+    /** "مهر ۱۴۰۵" — a Jalali month (1–12) of a year. */
+    public static function jalaliMonth(int $year, int $month): string
+    {
+        return self::JALALI_MONTHS[$month - 1] . ' ' . self::digits($year);
     }
 
     /**

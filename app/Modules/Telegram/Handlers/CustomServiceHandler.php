@@ -299,6 +299,7 @@ final class CustomServiceHandler implements Handler, RedrawableCheckout
             $ctx,
             $this->screen->priced($text, $quote, $dropped),
             OrderType::Purchase,
+            $quote->amount(),
             static fn(PaymentMethod $method): string => CallbackData::build(self::PREFIX, $gb, $days, $server->id, $method->id),
             $several ? self::serverCallback($gb, $days) : self::daysCallback($gb),
             free: !Money::isPositive($quote->amount()),

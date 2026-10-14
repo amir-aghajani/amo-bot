@@ -88,15 +88,17 @@ final class StoreCatalog
     }
 
     /**
-     * The servers of the plans switched on, in the servers' order: whether each takes a new customer now (ServerReadiness)
-     * and when the shop last reached its panel. Their room is counted in the same query.
+     * The servers of the plans switched on — but those the owner keeps from an agent's shop —, in the servers' order:
+     * whether each takes a new customer now (ServerReadiness) and when the shop last reached its panel. Their room is
+     * counted in the same query.
      *
      * @return list<array{id: int, name: string, available: bool, checked_at: string|null}>
      */
     public function status(): array
     {
         $plans = PlanServer::query()->select('server_id')->whereIn('plan_id', Plan::active()->reorder()->select('id'));
-        $servers = Server::query()->whereIn('id', $plans)->withCount(Server::activeServicesCount())->oldest('sort')->oldest('id')->get();
+        // A server the owner keeps from an agent's shop sells none of its plans.
+        $servers = Server::shown()->whereIn('id', $plans)->withCount(Server::activeServicesCount())->oldest('sort')->oldest('id')->get();
 
         return array_values($servers->map(fn(Server $server): array => ServerPresenter::status($server, $this->readiness->problem($server) === null))->all());
     }

@@ -17,8 +17,10 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
+use App\Modules\Subscriptions\Models\MigrationLeftover;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\SubscriptionActions;
+use App\Modules\Subscriptions\Tasks\MigrationsTask;
 use App\Modules\Subscriptions\Tasks\SyncSubscriptionsTask;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
@@ -754,10 +756,10 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         self::assertSame($this->server->id, $subscription->refresh()->server_id);
     }
 
-    public function testLeavingThePreviousServerOutMovesWhatTheShopLastSaw(): void
+    public function testLeavingThePreviousServerOutMovesWhatTheShopLastSawAndRemovesTheOldClientOnceItAnswers(): void
     {
         $target = $this->movingTarget();
-        $subscription = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1', ['download_bytes' => 2 * Traffic::GIGABYTE]);
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1', ['download_bytes' => 2 * Traffic::GIGABYTE]));
         FakeProvider::$down = [$this->server->id];
 
         $row = $this->decode($this->postJson("/api/admin/subscriptions/{$subscription->id}/move", ['server_id' => $target->id, 'leave_previous' => true]))['subscription'];
@@ -765,6 +767,13 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         self::assertSame($target->id, $row['server']['id']);
         self::assertSame(28 * Traffic::GIGABYTE, FakeProvider::$created[0]['spec']->totalBytes, 'the row\'s last numbers: 2 of 30 GB used');
         self::assertSame([], FakeProvider::$deleted, 'the previous server was not contacted');
+        self::assertSame([[$this->server->id, 'ali_r_1', $subscription->id, null]], $this->leftovers(), 'its old client written down, of no job');
+
+        // Back: the old client would be a second working service — it goes.
+        FakeProvider::$down = [];
+        $this->service(MigrationsTask::class)->run();
+        self::assertSame([['server' => $this->server->id, 'name' => 'ali_r_1']], FakeProvider::$deleted);
+        self::assertSame(['ali_r_1'], array_keys(FakeProvider::$clients[$target->id]), 'the one it moved to untouched');
     }
 
     public function testADeleteThePreviousServerRefusesTakesTheNewClientBack(): void
@@ -780,6 +789,143 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         self::assertSame([['server' => $target->id, 'name' => 'ali_r_1']], FakeProvider::$deleted, 'the new client was taken back');
         self::assertSame($this->server->id, $subscription->refresh()->server_id, 'nothing moved');
         self::assertSame([], $this->telegram()->calls(), 'nor was the customer told');
+    }
+
+    public function testADeleteThatTimedOutIsAskedAboutBeforeTheNewClientIsTakenBack(): void
+    {
+        $target = $this->movingTarget();
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        // The previous panel deletes the client, then the answer never comes.
+        FakeProvider::$onCall = function (int $server, string $call): void {
+            if ($call === 'deleteClient' && $server === $this->server->id) {
+                unset(FakeProvider::$clients[$server]['ali_r_1']);
+            }
+        };
+        FakeProvider::$failing = [$this->server->id => ['deleteClient' => ConnectionFailure::Timeout]];
+
+        $row = $this->decode($this->move($subscription, $target))['subscription'];
+
+        self::assertSame($target->id, $row['server']['id'], 'gone from the previous panel: moved');
+        self::assertArrayHasKey('ali_r_1', FakeProvider::$clients[$target->id], 'the new client kept — taking it back would leave the customer with neither');
+        self::assertCount(1, $this->telegram()->sentTo(1001), 'and the customer told');
+    }
+
+    public function testADeleteThatTimedOutWithTheOldClientStillThereTakesTheNewOneBack(): void
+    {
+        $target = $this->movingTarget();
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        FakeProvider::$failing = [$this->server->id => ['deleteClient' => ConnectionFailure::Timeout]];
+
+        $response = $this->move($subscription, $target);
+
+        self::assertSame(502, $response->getStatusCode());
+        self::assertArrayHasKey('previous', $this->decode($response)['errors']);
+        self::assertSame([['server' => $target->id, 'name' => 'ali_r_1']], FakeProvider::$deleted, 'still on the previous panel: the new client taken back');
+        self::assertSame($this->server->id, $subscription->refresh()->server_id);
+    }
+
+    public function testADeleteThePreviousPanelNeverAnsweredAboutKeepsTheMoveAndTheOldClientGoesOnceItAnswers(): void
+    {
+        $logs = $this->logs();
+        $target = $this->movingTarget();
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        // The previous panel stops answering at the delete: neither it nor the look after it gets an answer.
+        FakeProvider::$onCall = function (int $server, string $call): void {
+            if ($call === 'deleteClient' && $server === $this->server->id) {
+                FakeProvider::$down = [$server];
+            }
+        };
+
+        $row = $this->decode($this->move($subscription, $target))['subscription'];
+
+        self::assertSame($target->id, $row['server']['id'], 'the move stands: the customer keeps a service either way');
+        self::assertSame([], FakeProvider::$deleted, 'nothing taken back');
+        self::assertTrue($logs->hasWarningThatContains('did not say whether it deleted client ali_r_1 of moved subscription'));
+        self::assertSame([[$this->server->id, 'ali_r_1', $subscription->id, null]], $this->leftovers(), 'the old client it may still have, written down');
+
+        FakeProvider::$onCall = null;
+        FakeProvider::$down = [];
+        Carbon::setTestNow(now()->addMinutes(Server::BACKOFF_MINUTES));
+        $this->service(MigrationsTask::class)->run();
+        self::assertSame([['server' => $this->server->id, 'name' => 'ali_r_1']], FakeProvider::$deleted, 'removed once its panel answers: never two working services');
+    }
+
+    public function testAClientTheTargetMayHaveMadeUnansweredIsWrittenDownAndGoesOnceTheRetryMadeAnother(): void
+    {
+        $target = $this->movingTarget();
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        // The target makes the client, then stops answering: neither the create nor the look after it gets an answer.
+        $made = false;
+        FakeProvider::$onCall = static function (int $server, string $call) use ($target, &$made): void {
+            if ($call === 'createClient' && $server === $target->id && !$made) {
+                $made = true;
+                FakeProvider::put($target, new ClientInfo(name: 'ali_r_1', enabled: true, totalBytes: 30 * Traffic::GIGABYTE, subscriptionUrl: 'https://fake.test/sub/lost'));
+                FakeProvider::$down = [$server];
+            }
+        };
+
+        self::assertSame(502, $this->move($subscription, $target)->getStatusCode());
+        self::assertSame($this->server->id, $subscription->refresh()->server_id, 'nothing moved: the old client is still his');
+        self::assertSame([[$target->id, 'ali_r_1', $subscription->id, null]], $this->leftovers());
+
+        // Back: the retry finds the name taken and makes the next; the client the first try made is removed after it.
+        FakeProvider::$down = [];
+        Carbon::setTestNow(now()->addMinutes(Server::BACKOFF_MINUTES));
+        self::assertSame('ali_r_2', $this->decode($this->move($subscription, $target))['subscription']['name']);
+        $this->service(MigrationsTask::class)->run();
+        self::assertSame(['ali_r_2'], array_keys(FakeProvider::$clients[$target->id]), 'no stray client left on the target');
+    }
+
+    public function testAClientTheTargetMadeThoughItTimedOutIsKeptRatherThanMadeTwice(): void
+    {
+        $target = $this->movingTarget();
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        // The target makes the client with all 30 GB left, then the answer never comes.
+        FakeProvider::$onCall = function (int $server, string $call) use ($target): void {
+            if ($call === 'createClient' && $server === $target->id) {
+                FakeProvider::put($target, new ClientInfo(name: 'ali_r_1', enabled: true, totalBytes: 30 * Traffic::GIGABYTE, expiry: Expiry::at(now()->addDays(30)->toDateTimeImmutable()), subscriptionUrl: 'https://fake.test/sub/made'));
+            }
+        };
+        FakeProvider::$failing = [$target->id => ['createClient' => ConnectionFailure::Timeout]];
+
+        $row = $this->decode($this->move($subscription, $target))['subscription'];
+
+        self::assertSame([$target->id, 'ali_r_1', 'https://fake.test/sub/made'], [$row['server']['id'], $row['name'], $row['link']], 'the client it made, found by its name');
+        self::assertSame(['ali_r_1'], array_keys(FakeProvider::$clients[$target->id]), 'no second client under the next name');
+        self::assertSame([['server' => $this->server->id, 'name' => 'ali_r_1']], FakeProvider::$deleted, 'and the previous one deleted');
+    }
+
+    public function testACreateThatTimedOutBeforeThePanelMadeItLeavesNothingAndTheNextTryKeepsTheName(): void
+    {
+        $target = $this->movingTarget();
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        FakeProvider::$failing = [$target->id => ['createClient' => ConnectionFailure::Timeout]];
+
+        $response = $this->move($subscription, $target);
+
+        self::assertSame(502, $response->getStatusCode());
+        self::assertArrayHasKey('target', $this->decode($response)['errors']);
+        self::assertSame([], FakeProvider::$clients[$target->id] ?? [], 'nothing made, nothing to take back');
+        self::assertSame($this->server->id, $subscription->refresh()->server_id);
+
+        FakeProvider::$failing = [];
+        Carbon::setTestNow(now()->addMinutes(Server::BACKOFF_MINUTES));
+        $row = $this->decode($this->move($subscription, $target))['subscription'];
+        self::assertSame('ali_r_1', $row['name'], 'its own name, free there');
+    }
+
+    public function testAClientByTheNameThatIsNotTheOneAskedForIsNeverTakenForIt(): void
+    {
+        $target = $this->movingTarget();
+        // Made on the target by hand, and used: the create's timeout hid the panel's refusal of the name.
+        FakeProvider::put($target, new ClientInfo(name: 'ali_r_1', enabled: true, downloadBytes: Traffic::GIGABYTE, totalBytes: 30 * Traffic::GIGABYTE, subscriptionUrl: 'https://fake.test/sub/by-hand'));
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        FakeProvider::$failing = [$target->id => ['createClient' => ConnectionFailure::Timeout]];
+
+        self::assertSame(502, $this->move($subscription, $target)->getStatusCode());
+
+        self::assertSame($this->server->id, $subscription->refresh()->server_id, 'not moved onto a client of someone else');
+        self::assertSame([], FakeProvider::$deleted, 'nor is that client touched');
     }
 
     public function testTheTargetMustBeAnotherServerThatCanTakeIt(): void
@@ -821,6 +967,12 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
     private function move(Subscription $subscription, Server $target): ResponseInterface
     {
         return $this->postJson("/api/admin/subscriptions/{$subscription->id}/move", ['server_id' => $target->id]);
+    }
+
+    /** @return list<array{int, string, int|null, int|null}> The clients moves left on panels: server, name, service, job. */
+    private function leftovers(): array
+    {
+        return MigrationLeftover::query()->orderBy('id')->get()->map(static fn(MigrationLeftover $left): array => [$left->server_id, $left->remote_name, $left->subscription_id, $left->migration_id])->all();
     }
 
     /** What the fake panel says when it refuses a call (FakeProvider::$refusing). */

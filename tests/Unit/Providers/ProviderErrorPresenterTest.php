@@ -42,6 +42,7 @@ final class ProviderErrorPresenterTest extends TestCase
         yield 'refused' => [new ConnectionException(ConnectionFailure::Refused, 'Connection refused'), ['پورت', 'فایروال']];
         yield 'timeout' => [new ConnectionException(ConnectionFailure::Timeout, 'cURL error 28'), ['تایم‌اوت اتصال']];
         yield 'tls' => [new ConnectionException(ConnectionFailure::Tls, 'cURL error 60'), ['گواهی TLS']];
+        yield 'proxy' => [new ConnectionException(ConnectionFailure::Proxy, 'cURL error 97: User was rejected by the SOCKS5 server (1 1).'), ['پراکسی SOCKS5', 'نام کاربری و رمز', '(cURL error 97: User was rejected']];
         yield 'panel refusal' => [new ThreeXuiApiException('POST', '/panel/api/clients/add', 400, 'Duplicate email: amir_1'), ['پنل درخواست را رد کرد', 'Duplicate email: amir_1']];
         yield 'not found' => [new NotFoundException('3x-ui has no client "amir_1".'), ['روی پنل پیدا نشد', '(3x-ui has no client "amir_1".)']];
         yield 'unsupported' => [new UnsupportedOperationException('No host statistics.'), ['چنین امکانی ندارد', '(No host statistics.)']];
@@ -83,6 +84,18 @@ final class ProviderErrorPresenterTest extends TestCase
         self::assertSame('سرور در دسترس نبود.', ProviderErrorPresenter::summary($e));
         self::assertSame('این سرویس روی سرور پیدا نشد.', ProviderErrorPresenter::summary(new NotFoundException('3x-ui has no client "amir_1".')));
         self::assertSame('سرور درخواست را نپذیرفت.', ProviderErrorPresenter::summary(new ThreeXuiApiException('POST', '/panel/api/clients/add', 400, 'Duplicate email')));
+    }
+
+    public function testAFailureAtTheProxyBlamesTheProxyNotThePanel(): void
+    {
+        $text = ProviderErrorPresenter::describe(new ConnectionException(ConnectionFailure::Proxy, "cURL error 7: Failed to connect to proxy.example.com port 1080 after 3 ms: Couldn't connect to server"));
+
+        self::assertStringStartsWith('اتصال از طریق پراکسی SOCKS5 سرور برقرار نشد', $text);
+        self::assertStringContainsString('آدرس و پورت پراکسی', $text);
+        self::assertStringNotContainsString('نام دامنه پنل', $text, 'not the panel\'s name');
+        self::assertStringNotContainsString('فایروال', $text, 'nor its port');
+        self::assertDoesNotMatchRegularExpression('/[\x{064B}-\x{0655}]/u', $text, 'no diacritics');
+        self::assertSame('سرور در دسترس نبود.', ProviderErrorPresenter::summary(new ConnectionException(ConnectionFailure::Proxy, '')), 'anyone else: out of reach, nothing of the proxy');
     }
 
     public function testIdentifiersKeepLatinDigitsAndTheSentenceHasNoDiacritics(): void

@@ -39,7 +39,7 @@ final class AdminCredentialsApiTest extends HttpTestCase
         $changed = $this->putJson(self::URL, $this->change(['password' => self::NEW_PASSWORD, 'password_confirmation' => self::NEW_PASSWORD]));
 
         self::assertSame(200, $changed->getStatusCode(), (string) $changed->getBody());
-        self::assertSame(['name' => self::ADMIN_USERNAME, 'shop' => ['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active']], $this->decode($changed)['session']);
+        self::assertSame(['name' => self::ADMIN_USERNAME, 'shop' => ['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active', 'selling_suspended' => null]], $this->decode($changed)['session']);
         self::assertSame(200, $this->get('/api/admin/auth/me')->getStatusCode(), 'this browser stays signed in');
         self::assertSame(self::ADMIN_USERNAME, $this->file()->get('ADMIN_USERNAME'));
         self::assertTrue(password_verify(self::NEW_PASSWORD, (string) $this->file()->get('ADMIN_PASSWORD_HASH')), 'written hashed, as typed');
@@ -154,7 +154,7 @@ final class AdminCredentialsApiTest extends HttpTestCase
         self::assertSame(422, $refused->getStatusCode());
         self::assertSame([ConfigFile::UNWRITABLE], $this->decode($refused)['errors']['file'], 'what to fix, in the owner\'s words');
         self::assertTrue($logs->hasErrorThatContains('could not be written'));
-        self::assertSame(['name' => self::ADMIN_USERNAME, 'shop' => ['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active']], $this->decode($this->get('/api/admin/auth/me'))['session']);
+        self::assertSame(['name' => self::ADMIN_USERNAME, 'shop' => ['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active', 'selling_suspended' => null]], $this->decode($this->get('/api/admin/auth/me'))['session']);
         self::assertTrue($this->service(AdminAccount::class)->verify(self::ADMIN_USERNAME, self::ADMIN_PASSWORD), 'the login in use is still the one the file holds');
     }
 

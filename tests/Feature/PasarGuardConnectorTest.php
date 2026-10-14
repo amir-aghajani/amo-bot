@@ -42,7 +42,7 @@ final class PasarGuardConnectorTest extends HttpTestCase
         self::assertSame(201, $response->getStatusCode());
         self::assertSame('PasarGuard', $data['server']['driver_label']);
         self::assertSame(
-            ['auth_mode' => 'token', 'api_token' => true, 'username' => '', 'password' => false, 'verify_tls' => true, 'timeout' => 30, 'subscription_url' => ''],
+            ['auth_mode' => 'token', 'api_token' => true, 'username' => '', 'password' => false, 'verify_tls' => true, 'timeout' => 30, 'subscription_url' => '', 'proxy_enabled' => false, 'proxy_host' => '', 'proxy_port' => 1080, 'proxy_username' => '', 'proxy_password' => false],
             array_map(static fn(mixed $value): mixed => is_array($value) ? $value['set'] : $value, array_diff_key($data['server']['form'], array_flip(['name', 'base_url', 'capacity', 'notes', 'is_active', 'button_style', 'button_row']))),
             'its connection as kept: its key, never shown, and no two-factor secret of its own',
         );
@@ -134,7 +134,7 @@ final class PasarGuardConnectorTest extends HttpTestCase
      */
     private static function form(array $overrides = []): array
     {
-        return $overrides + ['driver' => 'pasarguard', 'name' => 'PG', 'base_url' => 'https://pg.example:8000', 'auth_mode' => 'token', 'api_token' => self::KEY, 'verify_tls' => true, 'timeout' => 30, 'is_active' => true];
+        return $overrides + ['driver' => 'pasarguard', 'name' => 'PG', 'base_url' => 'https://pg.example:8000', 'auth_mode' => 'token', 'api_token' => self::KEY, 'verify_tls' => true, 'timeout' => 30, 'proxy_enabled' => false, 'is_active' => true];
     }
 
     /** What the fake panel answers: JSON, as every PasarGuard API answer is. */

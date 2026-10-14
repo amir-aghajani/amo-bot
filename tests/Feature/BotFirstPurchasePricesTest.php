@@ -17,7 +17,6 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
-use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
 use Tests\BotTestCase;
@@ -76,22 +75,22 @@ final class BotFirstPurchasePricesTest extends BotTestCase
 
     public function testANewcomerPaysTheFirstPurchasePriceAtItsCheckout(): void
     {
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
         self::assertSame([$this->checkoutText('50000')], $this->said());
 
-        $this->send($this->tap($this->pay($this->wallet)));
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $this->wallet)));
 
         $order = Order::query()->sole();
         self::assertSame([OrderStatus::Fulfilled, '50000.00', OrderPricing::FirstPurchase], [$order->status, $order->amount, $order->pricing]);
         self::assertSame('450000.00', $this->ali->balance());
 
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
         self::assertSame([$this->checkoutText('150000')], $this->said(), 'the next one at the plan\'s price');
     }
 
     public function testAPurchaseOfTheirsPaidElsewhereInTheSameMomentLeavesThisOneAtThePrice(): void
     {
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
 
         // As the way to pay is read, another purchase of theirs is paid elsewhere — on the website, a moment ago.
         $paid = false;
@@ -100,7 +99,7 @@ final class BotFirstPurchasePricesTest extends BotTestCase
                 $paid = true;
                 $this->purchaseOrder($this->ali, $this->plain, $this->server, ['status' => OrderStatus::Fulfilled]);
             }
-        }, fn() => $this->send($this->tap($this->pay($this->wallet))));
+        }, fn() => $this->send($this->tap($this->payButton($this->plan, $this->server, $this->wallet))));
 
         self::assertTrue($paid);
         $order = Order::query()->where('plan_id', $this->plan->id)->sole();
@@ -112,7 +111,7 @@ final class BotFirstPurchasePricesTest extends BotTestCase
     {
         $this->plan->forceFill(['first_purchase_price' => '0.00'])->save();
 
-        $this->send($this->tap($this->checkout()));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
         self::assertSame([$this->checkoutText('0')], $this->said());
         self::assertSame(self::text(BotText::CheckoutFree), $this->inlineKeyboard(0)[0][0]['text'], 'one button instead of the ways to pay');
 
@@ -173,17 +172,5 @@ final class BotFirstPurchasePricesTest extends BotTestCase
     private function checkoutText(string $price): string
     {
         return self::text(BotText::Checkout, ['plan' => $this->plan->name, 'server' => $this->server->name, 'amount' => Money::format($price)]);
-    }
-
-    /** The checkout of the plan on the server. */
-    private function checkout(): string
-    {
-        return PurchaseHandler::serverCallback($this->plan->id, $this->server->id);
-    }
-
-    /** The checkout's button that pays the plan with that method. */
-    private function pay(PaymentMethod $method): string
-    {
-        return CallbackData::build($this->checkout(), $method->id);
     }
 }

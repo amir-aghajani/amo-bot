@@ -14,9 +14,9 @@ import { json, refusal, server, silent, type Answer } from '@/test/server'
  * the tab shows stays on the picker whatever the list of them does: while it is read, when it could not be.
  */
 
-const MAIN: ShopRef = { id: 1, name: 'فروشگاه اصلی', username: null, status: 'active' }
-const REZA: ShopRef = { id: 2, name: 'فروشگاه رضا', username: 'reza_shop_bot', status: 'active' }
-const HSN: ShopRef = { id: 3, name: 'نماینده: Hsn', username: null, status: 'disabled' }
+const MAIN: ShopRef = { id: 1, name: 'فروشگاه اصلی', username: null, status: 'active', selling_suspended: null }
+const REZA: ShopRef = { id: 2, name: 'فروشگاه رضا', username: 'reza_shop_bot', status: 'active', selling_suspended: null }
+const HSN: ShopRef = { id: 3, name: 'نماینده: Hsn', username: null, status: 'disabled', selling_suspended: null }
 
 const session = (shop: ShopRef): Session => ({ name: 'root', shop })
 

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Field } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
 import { Modal } from '@/components/modal'
+import { MoneyField } from '@/components/money-field'
 import { PageTabs, type PageTab } from '@/components/page-tabs'
 import { PlanSelect } from '@/components/rewards/prize-fields'
 import { Button } from '@/components/ui/button'
@@ -12,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import type { GiftCodeBatchRequest, GiftCodeBatchResponse, GiftCodeKind } from '@/lib/api-types'
 import { copyText } from '@/lib/clipboard'
-import { digitsOnly, formatDay, formatMoney, formatNumber, wholeOf } from '@/lib/format'
+import { digitsOnly, formatDay, formatNumber } from '@/lib/format'
 import { addDays, today } from '@/lib/jalali'
 import { GIFT_CODES } from '@/lib/limits'
 import { queryKeys } from '@/lib/query-keys'
@@ -82,7 +83,6 @@ export function MakeCodesModal({ open, onClose }: { open: boolean; onClose: () =
 
 function MakeCodesForm({ onMade, onCancel }: { onMade: (made: GiftCodeBatchResponse) => void; onCancel: () => void }) {
   const { values, set, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(BLANK, { reads: requestOf })
-  const amount = wholeOf(values.amount)
   const expires = lastDay(values.days)
 
   const save = handleSubmit(async () => {
@@ -98,14 +98,17 @@ function MakeCodesForm({ onMade, onCancel }: { onMade: (made: GiftCodeBatchRespo
       <PageTabs as="choice" value={values.kind} onChange={(kind) => set('kind', kind)} tabs={KINDS} aria-label="ارزش هر کد" size="sm" className="w-fit" />
 
       {values.kind === 'wallet' ? (
-        <Field
+        <MoneyField
           id="gift_amount"
           label="مبلغ هر کد (تومان)"
+          placeholder="50000"
+          value={values.amount}
+          onChange={(amount) => set('amount', amount)}
           error={error('amount')}
-          hint={amount !== null ? `${formatMoney(amount)} به کیف پول مشتری اضافه می‌شود.` : 'مبلغی که هر کد به کیف پول مشتری اضافه می‌کند.'}
-        >
-          <Input dir="ltr" inputMode="numeric" autoComplete="off" placeholder="50000" value={values.amount} onChange={(e) => set('amount', e.target.value)} autoFocus />
-        </Field>
+          says={(money) => `${money} به کیف پول مشتری اضافه می‌شود.`}
+          hint="مبلغی که هر کد به کیف پول مشتری اضافه می‌کند."
+          autoFocus
+        />
       ) : (
         <Field id="gift_plan" label="پلن" error={error('plan_id')} hint="هر کد یک سرویس رایگان از این پلن می‌دهد؛ روی اولین سروری که همان لحظه تحویل بدهد. پلن غیرفعال هم می‌شود — مخصوص هدیه.">
           {(control) => <PlanSelect control={control} value={values.plan_id} onChange={(value) => set('plan_id', value)} />}

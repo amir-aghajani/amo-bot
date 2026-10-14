@@ -108,6 +108,15 @@ describe('its amount', () => {
 
     expect(fact('مبلغ')).toBe('۵۰٬۰۰۰ تومان')
   })
+
+  it('of one support made by hand says how it was paid, who made it and their note', () => {
+    const manual = orderRow({ type: 'purchase', status: 'fulfilled', amount: '100000.00', manual: { by: 'root', payment: 'outside', note: 'نقدی در دفتر' } })
+    render(<OrderModal order={manual} {...props} />, { wrapper: providers().wrapper })
+
+    expect(fact('مبلغ')).toBe('۱۰۰٬۰۰۰ تومان پرداخت خارج از فروشگاه')
+    expect(fact('ثبت دستی')).toBe('توسط root')
+    expect(fact('یادداشت پشتیبانی')).toBe('نقدی در دفتر')
+  })
 })
 
 /** «لغو سفارش», its strip open. */

@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Admin\Services;
 
 use App\Core\Database\DatabaseManager;
+use App\Modules\Agency\Services\AgencyStanding;
+use App\Modules\Auth\CurrentPrincipal;
+use App\Modules\Auth\PrincipalKind;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Services\ServerSelector;
 use App\Modules\Orders\Enums\OrderStatus;
@@ -22,10 +25,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * The numbers behind the dashboard (both panels): the period's figures against the one before (one query each), a point
- * per day for the chart, what needs a human (Queues, plus services ending within SubscriptionDirectory::EXPIRING_DAYS and,
- * in an agent's shop, traffic too short to sell anything), and the latest orders and customers. Revenue is money that came
- * in (Payment::moneyIn()), never wallet spending. Days are the shop's (LocalTime); the database is asked in UTC.
+ * The numbers behind the dashboard (both panels, and the website's admin API): the period's figures against the one
+ * before (one query each), a point per day for the chart, what needs a human (Queues, plus services ending within
+ * SubscriptionDirectory::EXPIRING_DAYS and, in an agent's shop, traffic too short to sell anything and its terms of
+ * selling), and the latest orders and customers. Revenue is money that came in (Payment::moneyIn()), never wallet
+ * spending. Days are the shop's (LocalTime); the database is asked in UTC.
  */
 final class DashboardStats
 {
@@ -37,6 +41,7 @@ final class DashboardStats
     public function __construct(
         private readonly DatabaseManager $database,
         private readonly ServerSelector $selector,
+        private readonly AgencyStanding $standing,
     ) {}
 
     /**
@@ -60,6 +65,7 @@ final class DashboardStats
             'series' => $this->series($from, $now),
             'attention' => $this->attention(),
             'traffic_shortage' => $this->selector->shortage(),
+            'agency_standing' => $this->standing(),
             'expiring_days' => SubscriptionDirectory::EXPIRING_DAYS,
             'recent_orders' => $this->recentOrders(),
             'recent_users' => $this->recentUsers(),
@@ -155,6 +161,22 @@ final class DashboardStats
         }
 
         return $result;
+    }
+
+    /**
+     * An agent's terms of selling with the main shop (its end, its monthly minimum and what it bought this month, a
+     * suspension): what the card warns the owner and the agent of. Null in the main shop, and for the shop's admins on its
+     * website, who are no party to those terms.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function standing(): ?array
+    {
+        if (CurrentBot::isMain() || CurrentPrincipal::get()?->kind === PrincipalKind::Staff) {
+            return null;
+        }
+
+        return $this->standing->present(CurrentBot::get());
     }
 
     /** @return array<string, int> The shop's queues (Queues), then unpaid orders, failing servers and services ending soon. */

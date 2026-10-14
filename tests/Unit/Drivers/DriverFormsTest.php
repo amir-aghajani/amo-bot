@@ -9,6 +9,8 @@ use App\Core\Drivers\Registry;
 use App\Core\Forms\Fields\Field;
 use App\Core\Forms\FieldType;
 use App\Modules\Payments\Contracts\GatewayDriver;
+use App\Modules\Payments\Drivers\Outside\OutsideGateway;
+use App\Modules\Payments\Enums\GatewayKind;
 use cebe\openapi\spec\Schema;
 use Tests\HttpTestCase;
 use Tests\TestCase;
@@ -41,8 +43,11 @@ final class DriverFormsTest extends TestCase
         'ServerTestRequest' => ['entry' => 'panel.drivers', 'names' => 'driver', 'beside' => ['id', ...self::SERVER], 'none' => []],
     ];
 
-    /** What a payment method's form has beside its driver's: the label the customer picks it by, and its switch. */
-    private const METHOD = ['label', 'enabled'];
+    /** What a payment method's form has beside its driver's: the label the customer picks it by, its switch and its bounds. */
+    private const METHOD = ['label', 'enabled', 'min_amount', 'max_amount'];
+
+    /** What a card method's form (GatewayKind::Manual) has beside those, and cannot leave out: its cards (PaymentCards). */
+    private const CARDS = ['cards'];
 
     public function testEveryDriversRequestTakesItsFormsFieldsAndNothingElse(): void
     {
@@ -100,7 +105,8 @@ final class DriverFormsTest extends TestCase
      */
     public function testAPaymentMethodsRequestsAndRowAreItsDriversForm(): void
     {
-        $drivers = $this->drivers('payment.drivers');
+        // The outside row is support's alone: the payment methods screen neither lists nor answers for it.
+        $drivers = array_values(array_filter($this->drivers('payment.drivers'), static fn(Driver $driver): bool => $driver->key() !== OutsideGateway::key()));
         $added = self::shapes('PaymentMethodCreateRequest', 'driver');
         $changed = [];
         foreach (HttpTestCase::apiDescription()->components->schemas['PaymentMethodUpdateRequest']->oneOf ?? [] as $shape) {
@@ -120,6 +126,10 @@ final class DriverFormsTest extends TestCase
         $addable = [];
         foreach ($drivers as $driver) {
             [$fields, $required] = self::form($driver);
+            if (($driver->describe()->traits[GatewayDriver::KIND] ?? null) === GatewayKind::Manual->value) {
+                $fields = [...$fields, ...self::CARDS];
+                $required = [...$required, ...self::CARDS];
+            }
             $key = $driver->key();
             if (($driver->describe()->traits[GatewayDriver::BUILTIN] ?? false) !== true) {
                 $addable[] = $key;
@@ -133,12 +143,16 @@ final class DriverFormsTest extends TestCase
             self::assertEqualsCanonicalizing($required, $own[0]->required ?? [], "PaymentMethodUpdateRequest: what {$key}'s form cannot leave out");
 
             $row = $rows[$key] ?? self::fail("PaymentMethodRow has no shape for the driver {$key}.");
+            // The row's settings are the form's alone: a card method lists its cards beside them.
             $names = array_map(static fn(Field $field): string => $field->name, $driver->describe()->form->fields);
             self::assertEqualsCanonicalizing($names, array_keys($row->properties['config']->properties ?? []), "PaymentMethodRow: {$key}'s settings are its form's fields");
+            self::assertSame(in_array('cards', $fields, true), in_array('cards', $row->required ?? [], true), "PaymentMethodRow: {$key}'s cards are listed when it has them");
         }
 
         self::assertEqualsCanonicalizing($addable, array_keys($added), 'PaymentMethodCreateRequest: a shape per driver a method is added of, and nothing else');
-        self::assertCount(count($drivers), $changed, 'PaymentMethodUpdateRequest: a shape per driver, and nothing else');
+        // Drivers whose forms are alike (nothing to set, as the wallet's) would share one shape.
+        $forms = array_unique(array_map(static fn(Driver $driver): string => (string) json_encode(self::form($driver)), $drivers));
+        self::assertCount(count($forms), $changed, 'PaymentMethodUpdateRequest: a shape per driver\'s form, and nothing else');
         self::assertEqualsCanonicalizing(array_map(static fn(Driver $driver): string => $driver->key(), $drivers), array_keys($rows), 'PaymentMethodRow: a shape per driver, beside the one of a driver gone');
     }
 

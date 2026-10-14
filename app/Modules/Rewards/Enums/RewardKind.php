@@ -33,4 +33,13 @@ enum RewardKind: string
     {
         return $this === self::Traffic || $this === self::Days;
     }
+
+    /**
+     * Whether it is something the shop sells — a service, or traffic or days on one —, which an agent's shop whose selling
+     * is suspended (Bot::sells()) gives none of; Toman and nothing are not.
+     */
+    public function isSold(): bool
+    {
+        return $this !== self::Nothing && $this !== self::Wallet;
+    }
 }

@@ -10,6 +10,9 @@ use App\Modules\Agency\Services\AgentBots;
 use App\Modules\Auth\NamedShop;
 use App\Modules\Auth\Services\OwnerAuth;
 use App\Modules\Bots\Models\Bot;
+use App\Modules\Catalog\Models\Plan;
+use App\Modules\Payments\Models\PaymentMethod;
+use App\Modules\Providers\Models\Server;
 use App\Modules\Store\Models\Website;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
@@ -142,6 +145,26 @@ abstract class HttpTestCase extends DatabaseTestCase
     protected function storeApi(Website $website, string $path = ''): string
     {
         return "/api/store/v1/{$website->key}{$path}";
+    }
+
+    /**
+     * The website's customer buys `$plan` on `$server` with `$method` (`POST /orders`), the request's other fields
+     * `$fields` beside them (a discount code, a service's name), under the Idempotency-Key `$key`.
+     *
+     * @param array<string, mixed> $fields
+     */
+    protected function placeOrder(Website $website, Plan $plan, Server $server, PaymentMethod $method, array $fields = [], string $key = 'key-1'): ResponseInterface
+    {
+        return $this->send('POST', $this->storeApi($website, '/orders'), ['plan_id' => $plan->id, 'server_id' => $server->id, 'method_id' => $method->id] + $fields, ['Idempotency-Key' => $key]);
+    }
+
+    /**
+     * The website's customer tops their wallet up by `$amount` with `$method` (`POST /wallet/top-up`), under the
+     * Idempotency-Key `$key`.
+     */
+    protected function placeTopUp(Website $website, int|string $amount, PaymentMethod $method, string $key = 'top-up-1'): ResponseInterface
+    {
+        return $this->send('POST', $this->storeApi($website, '/wallet/top-up'), ['amount' => $amount, 'method_id' => $method->id], ['Idempotency-Key' => $key]);
     }
 
     /**

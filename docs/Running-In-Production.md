@@ -45,6 +45,7 @@ agents' bots. The dashboard's system card says when it last ran. What runs, and 
 | minute | paid orders a process that died left undelivered, delivered (a failed delivery waits for support) |
 | minute | broadcasts, a batch at a time |
 | minute | «افزودن زمان و حجم» and «هدیه همگانی» no open screen is working on |
+| minute | «انتقال سرویس‌ها» no open page is working on, then the clients moves left on a panel that answers again, removed ([Servers](Servers.md#moving-its-services)) |
 | minute | the report groups' messages, at Telegram's pace |
 | 10 minutes | a renewed service's next period, where the paid one ended |
 | 15 minutes | every running service read from its panel, then «یادآوری», then the services that are done with removed — the ended ones so many hours after their end while the shop removes them ([Bot settings](Bot-Settings.md#ended-services)), the free tests that ended or never connected ([Test accounts](Test-Accounts.md#the-clean-up)) — and the test claims a dead process left given back, in every shop that has some, a stopped agent's too, by its own rules |

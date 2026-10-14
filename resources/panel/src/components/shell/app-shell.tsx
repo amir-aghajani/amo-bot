@@ -17,7 +17,8 @@ import { useLiveUpdates } from '@/lib/use-live-updates'
  * The signed-in layout: the sidebar at the inline start and the page beside it under the topbar, which stays at the top;
  * the page owns the scroll and sets its own width (components/page). On a phone the sidebar is a drawer the topbar's menu
  * button opens. Each panel passes its own navigation and extras (`panel`); the navigation is drawn as the shop on screen
- * has it (navOfShop()). Also runs the live updates, and a strip over the page while they cannot reach the server.
+ * has it (navOfShop()). Also runs the live updates, and a strip over the page while they cannot reach the server — and
+ * the panel's own strip (`banner`), when it has one.
  */
 export function AppShell({ panel }: { panel: PanelShell }) {
   const live = useLiveUpdates()
@@ -40,6 +41,7 @@ export function AppShell({ panel }: { panel: PanelShell }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
           <ConnectionBanner unreachable={live.unreachable} />
+          {shell.banner && <shell.banner />}
           <main id="main" tabIndex={-1} className="flex flex-1 flex-col outline-none">
             {/* A page that throws shows what happened in its place; the sidebar still works. Another page starts afresh;
                 another section of the same page draws again and keeps its sections' drafts. */}

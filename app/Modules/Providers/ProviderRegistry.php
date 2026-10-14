@@ -127,6 +127,11 @@ final class ProviderRegistry
             $server->password,
             $server->totp_secret,
             $server->meta,
+            $server->proxy_enabled,
+            $server->proxy_host,
+            $server->proxy_port,
+            $server->proxy_username,
+            $server->proxy_password,
         ]));
     }
 }

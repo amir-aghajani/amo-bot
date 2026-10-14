@@ -11,7 +11,7 @@ Everything lives in `app/Modules/Telegram`, the routes in `routes/bot.php`.
 |---|---|
 | `Update/` | `Dispatcher` (the router), `Update` (a raw update, read), `CallbackData`, `ReceivedUpdates`, `AgentWebhookBudget` |
 | `Session/`, `Context.php` | A chat's conversation state, and what a handler gets for one update |
-| `Handlers/` | One handler per feature, and the shared pieces: `CheckoutScreen`, `Checkouts`, `CustomerServices`, `TypedAmounts` |
+| `Handlers/` | One handler per feature, and the shared pieces: `CheckoutScreen`, `Checkouts`, `CustomerServices`, `TypedAmounts`, `TypedRecipients` |
 | `Keyboard/` | The admin's main menu (`MainMenu`, `KeyboardLayout(s)`), the shared `Buttons`, the keyboard builders |
 | `Texts/` | `BotText` and `TextCatalog` (every reworded text), `BotTexts` (the admin's wording, rendered), `TelegramHtml`, `WebText` |
 | `Gates/`, `Channels/` | The checks before any handler: master switch, phone, required channels |
@@ -106,8 +106,16 @@ handler: the bot only renders.
   handler implementing `RedrawableCheckout`, which also says the server a purchase's checkout names) for the steps
   under it — a discount code, a name — and runs their one "typed for a checkout" step: what was typed taken and the
   checkout redrawn, or the refusal said with «بازگشت» to it.
-- **`TypedAmounts`** reads a number typed at a step that awaits one (GB, days, devices, Toman) and refuses one its
-  step does not take, saying what may be typed.
+- **`TypedAmounts`** reads a number typed at a step that awaits one (GB, days, devices, Toman — a wallet transfer's
+  amount among them, `WalletTransferHandler`) and refuses one its step does not take, saying what may be typed.
+- **`TypedRecipients`** is the one recipient step of handing something to another customer by numeric Telegram id
+  (`ServiceTransferHandler`, `WalletTransferHandler`): a recipient refused (a refusal on `telegram_id`) is said and
+  another id awaited; any other refusal, or too many lookups, ends the step; its `confirm()` claims the confirmation
+  once and hands over, or says why in place of the question.
+- **A last step that must run once** — a link changed, a service handed on, money sent — waits on a state that names
+  what it confirms (`transfer.{id}.{recipient}`, `wsend.{recipient}.{amount}`) and is claimed before anything is done
+  (`ChatSession::claim()`): a second tap, or one after the chat moved on, does nothing. Its «انصراف» | red «تایید» row
+  is `Buttons::confirm()`.
 - **`CustomerServices`** is the one rule for which service a customer's button may open: their own, not gone from its
   panel.
 - **Tickets**: `TicketHandler` draws the screens, `TicketMessageHandler` takes what the customer writes. After a message

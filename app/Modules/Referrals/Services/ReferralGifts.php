@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Referrals\Services;
 
+use App\Core\Database\Ledger;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Models\Order;
@@ -120,7 +121,7 @@ final class ReferralGifts
                 if (Money::isPositive($forInvitee)) {
                     $this->rewards->give($invitee, Reward::wallet($forInvitee), self::LINE_INVITEE);
                 }
-            });
+            }, Ledger::ATTEMPTS);
         } catch (UniqueConstraintViolationException) {
             return; // the newcomer's start gift was decided already
         }

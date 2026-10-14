@@ -67,7 +67,7 @@ final class StoreDiscountsTest extends HttpTestCase
         $this->discountCode('NOWRUZ', 20);
         $this->wallet($this->customer, '500000');
 
-        $response = $this->purchase($this->walletMethod(), ['discount_code' => 'nowruz']);
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), ['discount_code' => 'nowruz']);
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         $order = $this->decode($response)['checkout']['order'];
@@ -87,7 +87,7 @@ final class StoreDiscountsTest extends HttpTestCase
     {
         $this->discountCode('RENEW', 20, ['order_types' => ['renewal']]);
 
-        $response = $this->purchase($this->card, ['discount_code' => 'RENEW']);
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->card, ['discount_code' => 'RENEW']);
 
         self::assertSame(422, $response->getStatusCode());
         self::assertSame(['discount_code' => ['این کد تخفیف برای خرید نیست.']], $this->decode($response)['errors']);
@@ -97,10 +97,10 @@ final class StoreDiscountsTest extends HttpTestCase
     public function testARequestMadeAgainIsAnsweredByItsOrderWhateverItsCodeSaysNow(): void
     {
         $code = $this->discountCode('ONCE', 50, ['max_uses' => 1]);
-        $first = $this->decode($this->purchase($this->card, ['discount_code' => 'ONCE'], 'k-1'))['checkout']['order'];
+        $first = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, ['discount_code' => 'ONCE'], 'k-1'))['checkout']['order'];
 
         $code->forceFill(['enabled' => false])->save();
-        $again = $this->purchase($this->card, ['discount_code' => 'ONCE'], 'k-1');
+        $again = $this->placeOrder($this->website, $this->plan, $this->server, $this->card, ['discount_code' => 'ONCE'], 'k-1');
 
         self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
         self::assertSame([$first['id'], '50000.00'], [$this->decode($again)['checkout']['order']['id'], $this->decode($again)['checkout']['order']['amount']]);
@@ -157,14 +157,8 @@ final class StoreDiscountsTest extends HttpTestCase
         self::assertSame(429, $held->getStatusCode());
         self::assertSame('3600', $held->getHeaderLine('Retry-After'));
 
-        $purchase = $this->purchase($this->card, ['discount_code' => 'ANOTHER']);
+        $purchase = $this->placeOrder($this->website, $this->plan, $this->server, $this->card, ['discount_code' => 'ANOTHER']);
         self::assertSame(429, $purchase->getStatusCode(), "the checkout's code too");
-    }
-
-    /** @param array<string, mixed> $extra */
-    private function purchase(PaymentMethod $method, array $extra = [], string $key = 'key-1'): ResponseInterface
-    {
-        return $this->send('POST', $this->storeApi($this->website, '/orders'), ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'method_id' => $method->id] + $extra, ['Idempotency-Key' => $key]);
     }
 
     /** @param array<string, mixed> $body */

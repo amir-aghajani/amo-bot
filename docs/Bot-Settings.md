@@ -96,9 +96,70 @@ minutes once confirmed. A channel the bot can no longer see into lets everyone t
 - **«مبلغ‌های پیشنهادی (تومان)»** — the amounts offered as buttons, apart by spaces, «،» or commas: 50000، 100000،
   200000، 500000 by default; 8 at most, none below the least; empty, «✏️ مبلغ دلخواه» alone. An amount may set its
   thousands apart (`50,000, 100,000` is two amounts); a comma between digits that are not a group of three splits them.
+- **«دکمه‌های مبلغ تصادفی»** — buttons of amounts drawn at random, after the presets: **«تعداد دکمه‌ها»** (0 to 8, 0 by
+  default: none), drawn between **«کمترین مبلغ تصادفی»** (50,000 by default, never below the least top-up) and
+  **«بیشترین مبلغ تصادفی»** (500,000), each rounded to **«گرد کردن»** (1,000: whole thousands). The amounts are drawn
+  anew each time the screen opens — the website's wallet gets its own draw too —, none twice and none a preset; a range
+  holding no rounded amount offers none.
+- **«مبلغ تصادفی افزوده به شارژ کارت به کارت (تومان)»** — 0 to 9,999, 0 (off) by default: a card-to-card top-up gets a
+  small sum from 1 to this many Toman added at random, so every transfer is a different amount and its receipt is told
+  apart at a glance; the customer transfers the whole sum and the whole sum goes to their wallet.
 
 A customer picks an amount, or types any other from the least to 500,000,000 (Persian digits, separators and «تومان»
 are fine). A top-up is paid by any way to pay but the wallet.
+
+## Wallet transfers
+
+«انتقال موجودی», in every shop — whether a customer may send money from their wallet to another customer of the shop,
+with no fee:
+
+- **«مشتری‌ها بتوانند موجودی کیف پولشان را به مشتری دیگری منتقل کنند»** (off) — on, the wallet's screen in the bot
+  shows «💸 انتقال موجودی» beside «➕ افزایش موجودی»: the customer sends the recipient's numeric Telegram id, sees their
+  name, types the amount, and confirms whom and how much ([Bot guide](Bot-Guide.md#sending-money-to-another-customer));
+  the website may offer it too. Off, nobody sends any.
+- **«کمترین مبلغ انتقال (تومان)»** — 10,000 by default — and **«بیشترین مبلغ هر انتقال (تومان)»** — 5,000,000 by
+  default, never below the least: one transfer moves no less and no more (1,000 to 500,000,000 each).
+- **«سقف روزانه هر مشتری (تومان)»** — 10,000,000 by default; 0 is no cap: the most a customer sends in a day, counted
+  from midnight on the shop's clock (`APP_TIMEZONE`). Any other cap is at least the least transfer — one below it
+  would leave no transfer to make, and is refused (as is raising the least past the cap).
+
+Only the wallet's own balance goes, never an agent's credit: an agent in debt sends nothing. The recipient must be a
+customer of the same shop who started the bot once, not banned. The money moves at once, in one piece: each wallet's
+history gets a line naming the other customer («انتقال موجودی به Sara (@sara)», «دریافت موجودی از Ali (@ali)»), the
+recipient is told in the bot, the sender keeps a notice on the website, and every transfer is reported in the report
+group's «شارژ کیف پول» with both balances after it. A transfer is not taken back: to set one right, debit and credit the
+two wallets by hand from their wallet dialogs ([Customers](Customers.md)), where a transfer's line links the other
+customer. A customer looks up at most 10 ids in 10 minutes — service transfers' lookups counted with them — and sends at
+most 10 transfers an hour.
+
+## Card-to-card payments
+
+«پرداخت کارت به کارت», in every shop — how a card-to-card payment is taken ([Orders and
+payments](Orders-And-Payments.md#receipts)):
+
+- **«جلوگیری از اسکرین‌شات و فوروارد»** (on) — the bot's message with the card number is sent protected: Telegram lets
+  nobody forward or save it, or copy its text, and its mobile apps take no screenshot of it. It comes as a message of
+  its own in place of the checkout (Telegram protects a message only as it is sent). Off, it is drawn in place of the
+  checkout as any screen. Either way, buttons under it copy the card number and the amount — the amount in Latin digits
+  without separators, as a banking app takes it.
+- **«هدایت پرداخت کارت به کارت به پیوی پشتیبانی»** (off) — on, no card is shown at all: the customer reads the order's
+  number and amount and is sent to support's private chat — «راه ارتباط با پشتیبانی» of [General](#general), with a
+  button to it when it is a handle or a link — to get the card and send the receipt there; a payment reminder of such a
+  payment sends them there too (one shown a card before you switched this on still asks for its receipt in the bot). The method's note («توضیحات برای مشتری») comes under it, as under a card. The bot waits for no receipt;
+  the payment stays waiting for you to approve it on «پرداخت‌ها» once you see the money, and never expires — not after
+  48 hours, nor at a discount code's hold: cancel one never paid with «لغو پرداخت». No card of the method is picked for
+  it: none's daily cap fills, a method is offered whatever its cards' switches and caps («روش‌های پرداخت» says so), and
+  «پرداخت‌ها» and the group's «رسیدها» say «کارت در پیوی پشتیبانی داده شد» where a card would be. A card-to-card top-up
+  still asks its few Toman more (`topup_unique_max`), a sum no other open payment in support's chat asks — so a receipt
+  sent there is told apart by its amount. Refused while «راه ارتباط با پشتیبانی» is empty — and should it be emptied
+  later, the card is shown again (both [General](#general) and this section warn of it). A payment begun before the
+  switch keeps the card it was shown; one begun in support's chat stays waiting for you after you switch it off, and
+  gets a card only when the customer pays it again. The website's checkout gives no card either, but the same way to
+  support and the same note.
+- **«هر مشتری فقط یک رسید در انتظار بررسی»** (on) — while a receipt of a customer's waits for review, they send no
+  other receipt and start no other card-to-card payment — in the bot or on the website, two receipts sent at the same
+  moment included —; they are told the receipt of that order is with support. The wallet still pays. Off, a customer
+  may send several receipts at once.
 
 ## Renewal
 
@@ -138,7 +199,8 @@ are fine). A top-up is paid by any way to pay but the wallet.
   (off) starts services bought from then on with it on. The switch is offered on a service that is active, ends some
   day and still has its plan — a plan whose term is those days at least (an hourly plan's never is: a renewal adds its
   term, and a shorter one would leave the service due again at once) — **and only while the wallet is switched on**
-  («روش‌های پرداخت»). A wallet short of it is
+  («روش‌های پرداخت») and takes its renewal price, within its «کمترین مبلغ» and «بیشترین مبلغ»
+  ([Payment methods](Payment-Methods.md#the-least-and-most-amount)). A wallet short of it is
   told once, and tried every half hour until it can pay; the panel's word on the end is asked first, so nothing is
   charged while a panel does not answer. Each end date is renewed once: a renewal since its days began — automatic or
   the customer's own, refunded since or not — that left the end where it was is not followed by another. By
@@ -197,8 +259,10 @@ agent's shop the extra traffic its customers buy comes out of the agent's traffi
 renewal or more traffic:
 
 - **«یادآوری نزدیک شدن تاریخ پایان»** — «چند روز پیش از پایان سرویس», 1 to 30, 3 by default. A service whose «تمدید
-  خودکار» is on hears from the renewal instead, and one whose term is no longer than those days (an hourly plan's) is
-  not reminded at all: it would be the moment its clock started.
+  خودکار» is on hears from the renewal instead — but in an agent's bot whose selling is suspended, where nothing renews
+  ([Agency](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum)), or at a renewal price the wallet does not
+  take ([Payment methods](Payment-Methods.md#the-least-and-most-amount)) —, and one whose term is no longer than those
+  days (an hourly plan's) is not reminded at all: it would be the moment its clock started.
 - **«یادآوری تمام شدن حجم»** — «بعد از مصرف چند درصد حجم», 50 to 99, 80 by default. Unlimited services never.
 
 Each comes with «📊 مشاهده سرویس». The services are read from their panels every 15 minutes, and the reminders follow.

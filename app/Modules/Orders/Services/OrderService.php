@@ -4,20 +4,25 @@ declare(strict_types=1);
 
 namespace App\Modules\Orders\Services;
 
+use App\Core\Database\Ledger;
 use App\Core\Database\Transitions;
 use App\Core\Exceptions\DomainRuleException;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Services\AgencySettings;
+use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Agency\Services\TrafficPool;
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Catalog\DTO\CustomPrice;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Services\CustomServices;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
 use App\Modules\Discounts\Services\DiscountCodes;
 use App\Modules\Notifications\Services\CustomerNotifier;
+use App\Modules\Orders\DTO\ManualOrder;
 use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\DTO\Quote;
+use App\Modules\Orders\Enums\ManualPayment;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
@@ -61,7 +66,8 @@ use Psr\Log\LoggerInterface;
  * deliver twice; a delivery whose process died is resumed (resume()). Delivery makes or renews a service, adds extra
  * traffic, time or devices, credits the wallet or adds an agent's traffic; in an agent's shop it first draws the
  * traffic from the agent's pool and gives it back if the delivery fails. Outcomes go to the report group in the same
- * transaction.
+ * transaction. An agent's shop whose selling is suspended (Bot::sells()) orders nothing new — the agent's own
+ * traffic is the main shop's —, while what was paid is still delivered.
  */
 final class OrderService
 {
@@ -93,6 +99,7 @@ final class OrderService
         private readonly TrafficPool $pool,
         private readonly WalletSettings $walletSettings,
         private readonly AgencySettings $agencySettings,
+        private readonly AgencyStanding $standing,
         private readonly ShopReports $reports,
         private readonly CustomerNotifier $notifier,
         private readonly Pricing $pricing,
@@ -138,9 +145,13 @@ final class OrderService
     /**
      * A free service of the plan as a prize or gift (Rewards\Services\Rewards): always a new order at no price, `pricing`
      * gift (so it is no purchase of the customer's), settled by the wallet row and delivered as any purchase.
+     *
+     * @throws SellingSuspendedException in an agent's shop whose selling is suspended
      */
     public function openGift(User $user, Plan $plan, Server $server): Order
     {
+        SellingSuspendedException::unlessSelling($user->shop());
+
         return Order::query()->create([
             'user_id' => $user->id,
             'type' => OrderType::Purchase,
@@ -150,6 +161,46 @@ final class OrderService
             'amount' => '0.00',
             'pricing' => OrderPricing::Gift,
         ]);
+    }
+
+    /**
+     * A purchase support makes by hand for the customer (ManualOrders): `$manual`'s plan, or support's own numbers carried
+     * on the order as a built one's are (Order::package()), on its server, at its amount — a free one at no price and
+     * `pricing` gift, as openGift() makes one (no purchase of the customer's) —, with who made it and their note. Never an
+     * open order of the same thing found, as open() finds one: each is made anew, its key kept with it in the same
+     * transaction — or, made again with its key, the order that key came to, whatever became of it.
+     *
+     * @throws RequestKeyReusedException the key came to an order of something else, or was first sent with another way to pay
+     */
+    public function openManual(User $user, ManualOrder $manual, OrderKey $key): Order
+    {
+        $shape = $manual->shape();
+        $keyed = $this->keyed($user, $key->key);
+        if ($keyed !== null) {
+            return self::same($user, $keyed, $key, OrderType::Purchase, $shape);
+        }
+
+        try {
+            return $this->db->transaction(function () use ($user, $manual, $key, $shape): Order {
+                $order = Order::query()->create([
+                    'user_id' => $user->id,
+                    'type' => OrderType::Purchase,
+                    'status' => OrderStatus::Pending,
+                    'amount' => Money::normalize($manual->amount),
+                    'pricing' => $manual->payment === ManualPayment::Free ? OrderPricing::Gift : OrderPricing::Regular,
+                    'created_by' => $manual->by,
+                    'support_note' => $manual->note,
+                ] + $shape);
+                RequestKey::query()->create(['user_id' => $user->id, 'key' => $key->key, 'order_id' => $order->id, 'payment_method_id' => $key->method]);
+
+                return $order;
+            }, Ledger::ATTEMPTS);
+        } catch (UniqueConstraintViolationException $e) {
+            // The same request made at the same moment kept its key first: its order is the answer.
+            $keyed = $this->keyed($user, $key->key) ?? throw $e;
+
+            return self::same($user, $keyed, $key, OrderType::Purchase, $shape);
+        }
     }
 
     /** Whether a top-up of `$amount` Toman is within the wallet settings' bounds. */
@@ -301,9 +352,13 @@ final class OrderService
     /**
      * An automatic renewal's order (AutoRenewal::claim()) by `$method` — the shop's default for automatic renewal
      * (RenewalSettings::defaultMethod()) —, at Pricing::renewal() without a code.
+     *
+     * @throws SellingSuspendedException in an agent's shop whose selling is suspended (AutoRenewal::due() lists none there)
      */
     public function createRenewal(User $user, Subscription $subscription, Plan $plan, RenewalMethod $method = RenewalMethod::Extend): Order
     {
+        SellingSuspendedException::unlessSelling($user->shop());
+
         return Order::query()->create([
             'user_id' => $user->id,
             'type' => OrderType::Renewal,
@@ -459,6 +514,10 @@ final class OrderService
      */
     private function open(User $user, OrderType $type, \Closure $price, array $shape = [], ?\Closure $first = null, ?OrderKey $key = null, array $attributes = []): Order
     {
+        // An agent's shop whose selling is suspended orders nothing — but its agent's traffic, which the main shop sells.
+        if ($type !== OrderType::Traffic) {
+            SellingSuspendedException::unlessSelling($user->shop());
+        }
         $keyed = $key === null ? null : $this->keyed($user, $key->key);
         if ($keyed !== null) {
             return self::same($user, $keyed, $key, $type, $shape);
@@ -564,14 +623,16 @@ final class OrderService
                 // Days and devices cost an agent's pool nothing (as support's extension of a service does not).
                 OrderType::ExtraTime, OrderType::ExtraDevices => $this->provisioning->addExtra($order, fn() => $this->fulfilled($order)),
                 OrderType::WalletTopUp => $this->db->transaction(function () use ($order): void {
-                    $this->wallet->credit($order->user, $order->amount, WalletService::describeTopUp($order));
+                    // The whole sum paid: a card transfer's asks a few Toman more than the order (Payments\Services\PaymentCards).
+                    $paid = $order->payments()->where('status', PaymentStatus::Paid->value)->value('amount');
+                    $this->wallet->credit($order->user, is_numeric($paid) ? Money::normalize($paid) : $order->amount, WalletService::describeTopUp($order));
                     $this->fulfilled($order);
-                }),
+                }, Ledger::ATTEMPTS),
                 OrderType::Traffic => $this->db->transaction(function () use ($order): void {
                     $bot = $order->user->ownBot ?? throw new \LogicException("The agent of traffic order #{$order->id} has no bot.");
                     $this->pool->add($bot, (int) $order->traffic_bytes, $order);
                     $this->fulfilled($order);
-                }),
+                }, Ledger::ATTEMPTS),
             };
         } catch (ProviderException $e) {
             $this->logger->warning('Delivery of order {id} failed: {message}', ['id' => $order->id, 'message' => $e->getMessage()]);
@@ -589,9 +650,11 @@ final class OrderService
 
             throw $e;
         }
-        // Cashback and loyalty after the delivery's commit; they never affect it.
+        // Cashback and loyalty after the delivery's commit; they never affect it. An agent's traffic that meets their monthly
+        // minimum lets a shop suspended for it sell again at once.
         if ($order->status === OrderStatus::Fulfilled) {
             $this->rewards->delivered($order);
+            $this->standing->bought($order);
         }
 
         return true;

@@ -24,7 +24,7 @@ use Illuminate\Database\Eloquent\Builder;
 final class PaymentDirectory
 {
     /** What a row shows, loaded with it. */
-    public const RELATIONS = ['order.user', 'order.plan', 'order.server', 'method'];
+    public const RELATIONS = ['order.user', 'order.plan', 'order.server', 'method', 'card'];
 
     public function __construct(
         private readonly PaymentActions $actions,
@@ -72,7 +72,9 @@ final class PaymentDirectory
             'gateway' => $method->driver,
             'kind' => $this->gateways->kind($method->driver)?->value,
             'method' => $method->label,
-            'summary' => $this->gateways->summary($method),
+            // A card transfer's card — the one it was shown, among its method's — or, shown none, support's private chat;
+            // else its driver's line.
+            'summary' => $payment->card?->summary() ?? ($this->gateways->isManual($method) ? Payment::TO_SUPPORT : $this->gateways->summary($method)),
             'reference' => $payment->reference,
             'description' => $payment->note,
             'user' => UserDirectory::presentRef($order->user),

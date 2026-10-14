@@ -42,12 +42,12 @@ final class AdminServersApiTest extends HttpTestCase
         self::assertSame(['mark' => '3X', 'vendor' => 'MHSanaei', 'docs_url' => 'https://github.com/MHSanaei/3x-ui', 'inbounds' => true, 'link_rotation' => true], $driver['traits'], 'what the picker draws it by, and what its panels can do');
         self::assertNotEmpty(array_filter($driver['notes'], static fn(string $note): bool => str_contains($note, 'نسخه 3')), 'the versions it needs');
         self::assertSame(
-            ['name', 'base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'],
+            ['name', 'base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'],
             array_column($driver['fields'], 'name'),
             'the server\'s name, the connector\'s connection, the server\'s own columns, its button in the bot',
         );
         self::assertSame(
-            ['verify_tls', 'timeout', 'subscription_url', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'],
+            ['verify_tls', 'timeout', 'subscription_url', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'],
             array_column(array_filter($driver['fields'], static fn(array $field): bool => $field['advanced']), 'name'),
             'under «تنظیمات پیشرفته»',
         );
@@ -154,6 +154,11 @@ final class AdminServersApiTest extends HttpTestCase
             'verify_tls' => false,
             'timeout' => 30,
             'subscription_url' => '',
+            'proxy_enabled' => false,
+            'proxy_host' => '',
+            'proxy_port' => 1080,
+            'proxy_username' => '',
+            'proxy_password' => ['set' => false, 'hint' => ''],
             'capacity' => 250,
             'notes' => 'Hetzner',
             'is_active' => true,
@@ -477,6 +482,6 @@ final class AdminServersApiTest extends HttpTestCase
     /** @return array<string, mixed> A 3X-UI server's form with an API token, as the screen sends it */
     private static function tokenForm(): array
     {
-        return ['driver' => '3x-ui', 'name' => 'DE-1', 'base_url' => 'https://panel.example:2053/base/', 'auth_mode' => 'token', 'api_token' => 'tok-1', 'verify_tls' => true, 'timeout' => 30, 'is_active' => true];
+        return ['driver' => '3x-ui', 'name' => 'DE-1', 'base_url' => 'https://panel.example:2053/base/', 'auth_mode' => 'token', 'api_token' => 'tok-1', 'verify_tls' => true, 'timeout' => 30, 'proxy_enabled' => false, 'is_active' => true];
     }
 }

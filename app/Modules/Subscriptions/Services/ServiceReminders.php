@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Subscriptions\Services;
 
 use App\Core\Database\Transitions;
+use App\Modules\Bots\CurrentBot;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
@@ -19,8 +20,9 @@ use Illuminate\Database\Eloquent\Builder;
  * Each reminder goes once while the service stays past its threshold: a mark on the row (`expiry_reminded_at`,
  * `traffic_reminded_at`) is claimed before it goes, and cleared (rearm()) once the service is back under the threshold —
  * renewed, given traffic, counters reset, or no longer running — so it is reminded again next time. The rows are read
- * as the last sync left them. A service with «تمدید خودکار» on hears about its deadline from the renewal instead; a
- * banned customer and a free test hear nothing.
+ * as the last sync left them. A service with «تمدید خودکار» on hears about its deadline from the renewal instead — but
+ * in an agent's shop whose selling is suspended, which renews nothing, or at a renewal price the wallet does not take
+ * (AutoRenewal::renews()); a banned customer and a free test hear nothing.
  */
 final class ServiceReminders
 {
@@ -54,14 +56,15 @@ final class ServiceReminders
         $window = now()->addDays($days);
         self::rearm('expiry_reminded_at', static fn(Builder $q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', $window));
 
-        $walletOn = $this->autoRenewal->walletOn();
+        // An agent's shop whose selling is suspended renews nothing by itself (AutoRenewal::due()): every service is told.
+        $wallet = CurrentBot::get()->sells() ? $this->autoRenewal->wallet() : null;
         $sent = 0;
         $ending = Subscription::expiringWithin($days)->where('duration_hours', '>', $days * ServiceTerms::HOURS_A_DAY);
         foreach (self::due($ending, 'expiry_reminded_at')->lazyById(self::BATCH) as $subscription) {
             if ($sent >= $limit) {
                 break;
             }
-            $renewable = $walletOn && $this->autoRenewal->renews($subscription);
+            $renewable = $this->autoRenewal->renews($subscription, $wallet);
             // «تمدید خودکار» speaks for itself: it renews the service, or says the wallet is short.
             if ($renewable && $subscription->auto_renew) {
                 continue;

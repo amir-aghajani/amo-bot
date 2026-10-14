@@ -18,7 +18,7 @@ import { json, noContent, offline, refusal, server } from '@/test/server'
  * Once signed in, the panel goes by the name of the shop it shows.
  */
 
-const OWNER: Session = { name: 'owner', shop: { id: 1, name: 'AmoBot', username: 'amobot', status: 'active' } }
+const OWNER: Session = { name: 'owner', shop: { id: 1, name: 'AmoBot', username: 'amobot', status: 'active', selling_suspended: null } }
 
 type Auth = ReturnType<typeof useAuth>
 
@@ -118,7 +118,7 @@ describe('opening the panel', () => {
   })
 
   it('goes by the name of the shop it shows once signed in — an agent’s by its own —, and knows whether it is the main one', async () => {
-    const AGENT_SHOP: Session = { name: 'root', shop: { id: 2, name: 'فروشگاه رضا', username: 'reza_shop_bot', status: 'active' } }
+    const AGENT_SHOP: Session = { name: 'root', shop: { id: 2, name: 'فروشگاه رضا', username: 'reza_shop_bot', status: 'active', selling_suspended: null } }
     server()
       .on('GET', '/api/admin/auth/me', json({ session: AGENT_SHOP } satisfies SessionResponse))
       .on('GET', '/api/app', json({ name: 'فروشگاه امو', installed: true, timezone: 'UTC' }))
@@ -128,7 +128,7 @@ describe('opening the panel', () => {
   })
 
   it('goes by the shop’s own name in the main shop — «فروشگاه اصلی» is what tells it apart in the picker, not its name', async () => {
-    const MAIN: Session = { name: 'root', shop: { id: 1, name: 'فروشگاه اصلی', username: 'amobot', status: 'active' } }
+    const MAIN: Session = { name: 'root', shop: { id: 1, name: 'فروشگاه اصلی', username: 'amobot', status: 'active', selling_suspended: null } }
     server()
       .on('GET', '/api/admin/auth/me', json({ session: MAIN } satisfies SessionResponse))
       .on('GET', '/api/app', json({ name: 'فروشگاه امو', installed: true, timezone: 'UTC' }))
@@ -180,7 +180,7 @@ describe('entering', () => {
     client.setQueryData(queryKeys.app, { name: 'AmoBot', installed: true })
     client.setQueryData(queryKeys.plans, { plans: [] })
 
-    const AGENT_SHOP: Session = { name: '@agent_shop_bot', shop: { id: 2, name: 'Agent', username: 'agent_shop_bot', status: 'active' } }
+    const AGENT_SHOP: Session = { name: '@agent_shop_bot', shop: { id: 2, name: 'Agent', username: 'agent_shop_bot', status: 'active', selling_suspended: null } }
     await act(() => auth().enter(() => Promise.resolve({ session: AGENT_SHOP })))
 
     expect(auth().session).toEqual(AGENT_SHOP)

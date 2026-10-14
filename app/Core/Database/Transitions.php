@@ -83,9 +83,10 @@ final class Transitions
         $model->forceFill($attributes);
         $model->updateTimestamps();
 
-        // Nothing to write (a reclaim inside the second of the claim) cannot have moved the row either.
-        $changes = $model->getDirty();
-        $written = $changes !== [] && $query->whereKey($model->getKey())->toBase()->update($changes) === 1;
+        // Every attribute given is written, not only those the model holds otherwise: in a transaction tried again after
+        // a deadlock (Ledger::ATTEMPTS) the model still holds the first try's move, which the rollback took back.
+        $changes = array_intersect_key($model->getAttributes(), $attributes) + $model->getDirty();
+        $written = $query->whereKey($model->getKey())->toBase()->update($changes) === 1;
 
         if ($written) {
             $model->syncOriginal();

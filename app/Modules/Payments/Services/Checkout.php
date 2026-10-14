@@ -4,18 +4,23 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Services;
 
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
 use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Enums\OrderStatus;
+use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Exceptions\OrderNotPayableException;
 use App\Modules\Orders\Exceptions\RenewalUnderWayException;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Orders\Exceptions\TooManyUnpaidOrdersException;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Models\RequestKey;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\DTO\Shortfall;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Exceptions\MethodUnavailableException;
+use App\Modules\Payments\Exceptions\ReceiptInReviewException;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
@@ -38,6 +43,7 @@ final class Checkout
         private readonly OrderService $orders,
         private readonly GatewayRegistry $gateways,
         private readonly PaymentMethods $methods,
+        private readonly ReceiptsInReview $inReview,
     ) {}
 
     /** What the wallet lacks to pay `$price` (an agent's credit counting); null when it can, and for any other method. */
@@ -57,9 +63,13 @@ final class Checkout
     }
 
     /**
-     * Pays `$price` with `$method` for what `$open` orders (OrderService::open*()), in this order:
+     * Pays `$price` with `$method` for the `$type` order `$open` makes (OrderService::open*()), in this order:
      * - with `$key`, a request made again is answered by its order as it stands once it may no longer be paid, and pays
      *   that order (at its own amount) while it still may;
+     * - a method that does not take the amount now — its bounds, or no card of it with room today (PaymentMethods::
+     *   allow(), with the customer's own open payment shown again) —: refused, nothing ordered; and should the payment
+     *   find no card after all, the order this request made is cancelled at once and its key forgotten (withdraw());
+     * - a card payment while another receipt of the customer's is in review (ReceiptsInReview): refused, nothing ordered;
      * - a short wallet: nothing is ordered;
      * - `$guard`, the caller's own hold (the bot: a checkout's wallet pays once), may close the checkout;
      * - an order paid or closed elsewhere at the same moment is `closed` — or, with a key, the other request's result.
@@ -69,10 +79,14 @@ final class Checkout
      * @throws RequestKeyReusedException 422: the key came to an order of something else, or was first sent with another way to pay
      * @throws TooManyUnpaidOrdersException 422: the website's request would leave its customer too many unpaid orders
      * @throws RenewalUnderWayException a renewal of the service is under way already (none made with this key)
+     * @throws SellingSuspendedException 422: an agent's shop whose selling the main shop suspended orders nothing
      * @throws DiscountCodeRefusedException 422: the discount code the price was quoted with had its last use taken
      *                                      meanwhile — nothing ordered, nothing charged
+     * @throws ReceiptInReviewException 422: one receipt at a time, and the customer's last is still in review
+     * @throws MethodUnavailableException 422 on `method_id`: the amount is outside the method's bounds, or no card of it
+     *                                    has room for it today — nothing left ordered, nothing paid
      */
-    public function pay(User $user, PaymentMethod $method, string $price, \Closure $open, ?string $key = null, ?\Closure $guard = null): CheckoutResult
+    public function pay(User $user, PaymentMethod $method, OrderType $type, string $price, \Closure $open, ?string $key = null, ?\Closure $guard = null): CheckoutResult
     {
         $request = $key === null ? null : new OrderKey($key, $method->id);
         $order = $request === null ? null : $this->keyedOrder($user, $request, $open);
@@ -85,6 +99,9 @@ final class Checkout
         if (!Money::isPositive($amount)) {
             $method = $this->methods->wallet();
         }
+        $this->methods->allow($method, $type, $amount, $user);
+        // One receipt at a time: no card payment waiting for a receipt while another of theirs is in review.
+        $this->inReview->allowCard($user, $method, $amount, $order);
         $shortfall = $this->shortfall($user, $method, $amount);
         if ($shortfall !== null) {
             return CheckoutResult::short($shortfall);
@@ -93,9 +110,18 @@ final class Checkout
             return CheckoutResult::closed();
         }
 
+        $opening = $order === null;
         try {
             $order ??= $open($request);
             ['payment' => $payment, 'initiation' => $initiation] = $this->payments->createForOrder($order, $method);
+        } catch (MethodUnavailableException $e) {
+            // No card took it after all — the last room went in the same moment, or the open payment that let the method
+            // in was another order's: what this request opened goes with the refusal.
+            if ($opening && $order !== null) {
+                $this->withdraw($order, $request, $e->getMessage());
+            }
+
+            throw $e;
         } catch (OrderNotPayableException|RenewalUnderWayException $e) {
             // Made with a key, the same request in the same moment may be what paid it — or opened the renewal under way.
             $keyed = $request === null ? null : $this->orders->keyed($user, $request->key);
@@ -146,6 +172,21 @@ final class Checkout
         return $this->orders->keyed($user, $key->key) === null ? null : $open($key);
     }
 
+    /**
+     * Takes back what a request opened for a payment its method then refused: the order, when the request made it,
+     * cancelled with the refusal as its notes (a code's use given back), and the key it kept forgotten — made again, the
+     * request is a new one, with this way to pay or another.
+     */
+    private function withdraw(Order $order, ?OrderKey $request, string $refusal): void
+    {
+        if ($order->wasRecentlyCreated) {
+            $this->orders->cancel($order, $refusal);
+        }
+        if ($request !== null) {
+            RequestKey::query()->where('user_id', $order->user_id)->where('key', $request->key)->where('order_id', $order->id)->delete();
+        }
+    }
+
     /** Whether the customer may still pay the order (Order::payable()). */
     private static function payable(Order $order): bool
     {
@@ -168,12 +209,15 @@ final class Checkout
         };
     }
 
-    /** An open order's card payment (the one with a receipt in review, else a pending one) and its card. */
+    /**
+     * An open order's card payment (the one with a receipt in review, else a pending one) and the card it was shown — the
+     * same card every time —, or support's private chat for one shown none.
+     */
     private function awaiting(Order $order): CheckoutResult
     {
         $open = $order->payments()->whereIn('status', [PaymentStatus::AwaitingReview->value, PaymentStatus::Pending->value])->get();
         $payment = $open->first(static fn(Payment $payment): bool => $payment->status === PaymentStatus::AwaitingReview) ?? $open->first();
-        $transfer = $payment === null ? null : $this->gateways->forPayment($payment)->initiate()->transfer;
+        $transfer = $payment === null ? null : $this->gateways->forPayment($payment)->initiate($payment)->transfer;
 
         return $payment !== null && $transfer !== null ? CheckoutResult::transfer($order, $payment, $transfer) : CheckoutResult::closed();
     }

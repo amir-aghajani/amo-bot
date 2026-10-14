@@ -53,8 +53,10 @@ use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Installer\Services\InstallKey;
 use App\Modules\Payments\Contracts\RefundedOrders;
 use App\Modules\Payments\Drivers\Manual\ManualDriver;
+use App\Modules\Payments\Drivers\Outside\OutsideDriver;
 use App\Modules\Payments\Drivers\Wallet\WalletDriver;
 use App\Modules\Payments\GatewayRegistry;
+use App\Modules\Payments\Services\PaymentSettings;
 use App\Modules\Providers\Drivers\PasarGuard\PasarGuardDriver;
 use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
 use App\Modules\Providers\ProviderRegistry;
@@ -94,6 +96,7 @@ use App\Modules\Updates\Workspace;
 use App\Modules\Users\Enums\PictureFolder;
 use App\Modules\Users\Services\CustomerPictures;
 use App\Modules\Users\Services\WalletSettings;
+use App\Modules\Users\Services\WalletTransferSettings;
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Handler\CurlMultiHandler;
@@ -266,7 +269,7 @@ return [
     }),
 
     // The ways the shop takes money, by what payment_methods.driver holds (Payments\Drivers).
-    'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(ManualDriver::class)])),
+    'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(OutsideDriver::class), $c->get(ManualDriver::class)])),
     GatewayRegistry::class => autowire()->constructorParameter('drivers', get('payment.drivers')),
     // The pictures the shop is sent, each kind in a folder of its own (Users\Enums\PictureFolder): the receipts customers
     // upload from the shops' websites, the support tickets' — one sent in the bot stays Telegram's file.
@@ -281,6 +284,8 @@ return [
     BotSettingsScreen::class => factory(fn(Settings $settings, ContainerInterface $c) => new BotSettingsScreen($settings, [
         $c->get(BotSettings::class),
         $c->get(WalletSettings::class),
+        $c->get(WalletTransferSettings::class),
+        $c->get(PaymentSettings::class),
         $c->get(RenewalSettings::class),
         $c->get(ExtrasSettings::class),
         $c->get(ReminderSettings::class),

@@ -13,6 +13,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Orders\Services\Pricing;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Subscriptions\Services\AutoRenewal;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Telegram\Models\ReportMessage;
@@ -143,8 +144,11 @@ final class AgentPricesTest extends DatabaseTestCase
         self::assertSame('100000.00', $this->service(CustomerRenewal::class)->preview($service)?->quote->amount(), 'renewed by its customer at the agent price');
 
         $this->wallet($this->colleague, '500000.00');
+        // The wallet takes 100,000 Toman at most: the agent price, not the plan's.
+        $this->walletMethod()->forceFill(['max_amount' => '100000'])->save();
         $service->forceFill(['starts_at' => now()->subDays(29), 'expires_at' => now()->addDay()])->save();
         FakeProvider::mirror($service);
+        self::assertTrue($this->service(AutoRenewal::class)->offeredFor($service), 'the switch judged at the price the renewal charges');
         $this->service(AutoRenewTask::class)->run();
 
         $renewal = Order::query()->where('type', OrderType::Renewal->value)->sole();
@@ -153,6 +157,7 @@ final class AgentPricesTest extends DatabaseTestCase
 
         $this->colleague->groups()->detach();
         self::assertSame('150000.00', $this->service(CustomerRenewal::class)->preview($service->refresh())?->quote->amount(), 'out of the group: the plan\'s price');
+        self::assertFalse($this->service(AutoRenewal::class)->offeredFor($service), 'more than the wallet takes: renewed by hand');
     }
 
     public function testAnAgentsShopMarksItsOwnColleagues(): void

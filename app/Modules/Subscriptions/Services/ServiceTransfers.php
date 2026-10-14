@@ -19,7 +19,7 @@ use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Reports\ShopReports;
 use App\Modules\Users\Models\User;
-use App\Support\Input;
+use App\Modules\Users\Services\CustomerLookup;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Log\LoggerInterface;
@@ -32,8 +32,8 @@ use Psr\Log\LoggerInterface;
  * - the recipient is a customer of the service's shop, not its owner, not banned — and not the acting admin;
  * - a customer gives only their own service, never while an order of it they made is open (Order::OPEN: waiting for
  *   its payment or its receipt's review, being delivered, or failed and waiting for support: refuseOpenOrder()), and is
- *   rate-limited: LOOKUPS recipients looked up per LOOKUP_WINDOW, TRANSFERS services given per TRANSFER_WINDOW. Support
- *   is refused only its own service (as every service operation).
+ *   rate-limited: their lookups of recipients with every other (CustomerLookup, money's too), TRANSFERS services given
+ *   per TRANSFER_WINDOW. Support is refused only its own service (as every service operation).
  * Refusals are 422s worded for the reader: the service under `status`, the recipient under `telegram_id`.
  *
  * It changes owner as a service claimed by its link does (ProvisioningService::newOwner(), then relabel()): holding the
@@ -48,10 +48,6 @@ use Psr\Log\LoggerInterface;
  */
 final class ServiceTransfers
 {
-    /** Recipients a customer may look up per LOOKUP_WINDOW seconds: a typo or two, never a scan of the shop's customers. */
-    public const LOOKUPS = 10;
-    public const LOOKUP_WINDOW = 600;
-
     /** Services a customer may give per TRANSFER_WINDOW seconds. */
     public const TRANSFERS = 5;
     public const TRANSFER_WINDOW = 3600;
@@ -62,14 +58,12 @@ final class ServiceTransfers
     public const OFF = 'انتقال سرویس در این فروشگاه فعال نیست.';
     public const TEST = 'اکانت تست به حساب دیگری منتقل نمی‌شود.';
     public const GONE = 'کلاینت این سرویس دیگر روی سرور نیست؛ این سرویس منتقل نمی‌شود.';
-    public const OPEN_ORDER = 'سفارشی از این سرویس هنوز باز است (در انتظار پرداخت یا تحویل)؛ پس از تحویل آن، یا وقتی سفارش پرداخت‌نشده خودبه‌خود لغو شد، دوباره امتحان کنید.';
+    public const OPEN_ORDER = 'سفارشی از این سرویس هنوز باز است (در انتظار پرداخت یا تحویل)؛ پس از تحویل آن، یا وقتی سفارش پرداخت‌نشده لغو شد، دوباره امتحان کنید.';
     /** An order of it whose delivery failed: it waits for support's retry or refund, never for time. */
     public const FAILED_ORDER = 'تحویل سفارشی از این سرویس ناموفق بوده و منتظر پشتیبانی است؛ برای رسیدگی به آن با پشتیبانی تماس بگیرید و بعد دوباره امتحان کنید.';
     public const MOVED_ON = 'این سرویس همین حالا به حساب دیگری منتقل شد.';
     /** A change of it under way on its panel (a delivery, a grant, a move): it hands on once that is through. */
     public const BUSY = 'این سرویس همین حالا روی سرور در حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید.';
-    public const NOT_AN_ID = 'شناسه عددی تلگرام را وارد کنید: فقط رقم، بدون @ یا نام کاربری.';
-    public const UNKNOWN = 'مشتری‌ای با این شناسه تلگرام در این فروشگاه نیست؛ صاحب این شناسه باید یک بار ربات را استارت کند.';
     public const SAME = 'این سرویس همین حالا مال همین حساب است.';
     public const BANNED = 'این حساب مسدود است و سرویسی به آن منتقل نمی‌شود.';
     public const TO_THEMSELVES = 'سرویس را به حساب خودتان نمی‌توانید منتقل کنید؛ این کار با مدیر دیگری است.';
@@ -77,8 +71,7 @@ final class ServiceTransfers
     /** `orders.notes` of an unpaid order of the previous owner's, cancelled as the service changed hands. */
     public const NOTE_CANCELLED = 'سرویس این سفارش به حساب دیگری منتقل شد';
 
-    /** The refusals past the limits; TooManyAttemptsException::wait() adds the wait. */
-    private const TOO_MANY_LOOKUPS = 'شناسه‌های زیادی را بررسی کرده‌اید';
+    /** The refusal past the limit; TooManyAttemptsException::wait() adds the wait. */
     private const TOO_MANY_TRANSFERS = 'سرویس‌های زیادی را منتقل کرده‌اید';
 
     public function __construct(
@@ -87,6 +80,7 @@ final class ServiceTransfers
         private readonly CustomerNotifier $notifier,
         private readonly ShopReports $reports,
         private readonly PaymentService $payments,
+        private readonly CustomerLookup $lookup,
         private readonly RateLimiter $limiter,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
@@ -140,22 +134,16 @@ final class ServiceTransfers
 
     /**
      * The customer of the service's shop with Telegram id `$telegramId` (as typed: Persian digits are fine) who may receive
-     * it from `$by` — what the bot and the website show to confirm. A customer's lookups are counted (LOOKUPS).
+     * it from `$by` — what the bot and the website show to confirm. A customer's lookups are counted (CustomerLookup).
      *
      * @throws ValidationException 422 on `status` (the service) or `telegram_id` (the recipient)
      * @throws ActorRefusedException 403 a shop admin's own service
-     * @throws TooManyAttemptsException 429 a customer looked up LOOKUPS in the window
+     * @throws TooManyAttemptsException 429 a customer looked up CustomerLookup::LOOKUPS in the window
      */
     public function recipient(Subscription $service, mixed $telegramId, Actor $by): User
     {
         $this->check($service, $by);
-        $id = Input::telegramIdOf($telegramId) ?? throw ValidationException::on('telegram_id', self::NOT_AN_ID);
-        if ($by->isCustomer()) {
-            $this->limiter->enforce([['transfer|lookup|' . $by->userId, self::LOOKUPS, self::LOOKUP_WINDOW]], self::TOO_MANY_LOOKUPS);
-        }
-
-        $recipient = CurrentBot::run($service->shop(), static fn(): ?User => User::query()->where('telegram_id', $id)->first())
-            ?? throw ValidationException::on('telegram_id', self::UNKNOWN);
+        $recipient = $this->lookup->find($service->shop(), $telegramId, $by->isCustomer() ? $by->userId : null);
         self::receives($service, $recipient, $by);
 
         return $recipient;
@@ -248,7 +236,7 @@ final class ServiceTransfers
     private static function receives(Subscription $service, User $to, Actor $by): void
     {
         $refusal = match (true) {
-            (int) $to->bot_id !== (int) $service->bot_id => self::UNKNOWN,
+            (int) $to->bot_id !== (int) $service->bot_id => CustomerLookup::UNKNOWN,
             (int) $to->id === (int) $service->user_id => self::SAME,
             $to->isBanned() => self::BANNED,
             !$by->isCustomer() && $by->is($to->id) => self::TO_THEMSELVES,
@@ -262,10 +250,11 @@ final class ServiceTransfers
     /**
      * Cancel, quietly, what the previous owner left unpaid of the service — a renewal or an extra that can no longer be
      * paid or delivered (Order::serviceChangedHands()), and whose renewal would hold back the new owner's automatic
-     * renewal — as an order unpaid in time is (PaymentService::expire(), with NOTE_CANCELLED), at once. One whose receipt
-     * waits for support may be the money: it is left to fail at its delivery for support to give it back. Only support's
-     * transfer leaves any (a customer's waits for their open orders), and after its commit, as expire() discards uploaded
-     * receipts after its own: the previous owner orders nothing more for a service no longer theirs (OrderService).
+     * renewal — as an order unpaid in time is (PaymentService::expire(), with NOTE_CANCELLED), at once. One whose money may
+     * be with support — its receipt in review, or its card transfer taken in support's private chat — is left to fail at
+     * its delivery for support to give it back. Only support's transfer leaves any (a customer's waits for their open
+     * orders), and after its commit, as expire() discards uploaded receipts after its own: the previous owner orders
+     * nothing more for a service no longer theirs (OrderService).
      *
      * @return list<int> the ids of the orders cancelled
      */

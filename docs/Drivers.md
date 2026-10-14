@@ -76,9 +76,10 @@ folder but its registration and its request shape.
      an admin's username and password), then fields of its own — one for the password way only takes
      `when: PanelCredentials::WITH_PASSWORD`, a secret `boundTo: PanelConnection::bound()` —, then
      `...PanelConnection::options(subscriptionHint, subscriptionPlaceholder)` (TLS, the timeout, another address for
-     subscription links, under «تنظیمات پیشرفته»). A field is kept under its key: a column of `servers` (`api_token`,
-     `username`, `password`, `totp_secret` …), or `meta.<name>` for one that has none — a connector needs no column of
-     its own. The server's own fields (its name, capacity, notes and switch) are `ServerService`'s, around yours;
+     subscription links, and the SOCKS5 proxy the panel may be reached through, under «تنظیمات پیشرفته»). A field is kept
+     under its key: a column of `servers` (`api_token`, `username`, `password`, `totp_secret`, `proxy_*` …), or
+     `meta.<name>` for one that has none — a connector needs no column of its own. The server's own fields (its name,
+     capacity, notes and switch) are `ServerService`'s, around yours;
    - `capabilities()` — a `DTO\Capabilities`: `inbounds` (clients sit on inbounds the owner picks; without, a server is
      sold whole), `linkRotation` (a client's credentials, and so its link, can be renewed — else no «تغییر لینک») and
      `ipLimit` (the panel holds a client to `ClientSpec::$ipLimit` — else no «کاربر اضافه» is sold on it), and `names`
@@ -102,14 +103,15 @@ folder but its registration and its request shape.
    route); inbounds are `InboundInfo` with an opaque `key` your connector understands. What a
    panel cannot answer is a `null` on the DTO, or an `UnsupportedOperationException` (`status()`, `listClients()` —
    the sync then asks client by client —, `rotateClientCredentials()`). Talk to the panel through `Support\PanelHttp`,
-   the shop's one outgoing client with the connection's TLS rule and timeouts, no redirects followed; it also reads an
-   answer that is not the API (`PanelHttp::redirected()`, `notTheApi()`), and `Support\Raw` reads the panel's loosely
-   typed JSON.
+   the shop's one outgoing client with the connection's TLS rule, timeouts and SOCKS5 proxy, no redirects followed —
+   never another client, which would pass the server's proxy by; it also reads an answer that is not the API
+   (`PanelHttp::redirected()`, `notTheApi()`), and `Support\Raw` reads the panel's loosely typed JSON.
 3. **Its failures** are the typed exceptions of `Providers\Exceptions`: `ConnectionException` (built with
-   `fromTransport()`: dns, refused, timeout, TLS — never repeating the panel's address), `AuthenticationException` (its
-   named constructors: a missing or refused token, a missing scope, a refused login, a two-factor code, a session, a CSRF
-   token), `UnexpectedResponseException` (a wrong base path, a redirect, HTML instead of the API), `NotFoundException` (a
-   client the panel does not have — never a route it does not have), `UnsupportedOperationException`, and a
+   `fromTransport()`: dns, refused, timeout, TLS, the proxy — never repeating the panel's address or the proxy's login),
+   `AuthenticationException` (its named constructors: a missing or refused token, a missing scope, a refused login, a
+   two-factor code, a session, a CSRF token), `UnexpectedResponseException` (a wrong base path, a redirect, HTML instead
+   of the API), `NotFoundException` (a client the panel does not have — never a route it does not have),
+   `UnsupportedOperationException`, and a
    `PanelApiException` subclass of your own for "the panel said no, because …". Give the ones that describe a fixable
    setup a `hint` in your panel's own words (its menus, its pages): `ProviderErrorPresenter` words every failure for the
    owner, who runs the servers, and in one plain word for anyone else.
@@ -158,11 +160,13 @@ driver, the label the checkout's button shows, and the driver's settings in the 
      traits: `GatewayDriver::KIND` — a `Enums\GatewayKind`: `instant` (it settles the moment the customer confirms, as
      the wallet does) or `manual` (the customer pays outside the shop and a receipt is accepted, as a card transfer is)
      — and `GatewayDriver::BUILTIN` (`true` only for a driver that is part of every shop: never added, never deleted);
-   - `summary(settings)` — the one line the methods list and each payment show about it (a masked card and its holder),
-     or `null`;
-   - `gateway(settings)` — the gateway of one method row, implementing `GatewayInterface`: `initiate()` says what the
-     customer does next once they pick it (`PaymentInitiation::instant()`, or `transfer()` with the card to pay to), and
-     `settle()` is its part of a payment's settlement, inside the settlement's transaction — database work only.
+   - `summary(settings)` — the one line the methods list shows about it from its settings, or `null` (the wallet; card
+     to card, whose cards are rows of their own — the list shows them, and each payment the card it was shown);
+   - `gateway(settings)` — the gateway of one method row, implementing `GatewayInterface`: `initiate($payment)` says what
+     the customer does next to pay that payment (`PaymentInitiation::instant()`, or `transfer()` with the card it was
+     shown), and `settle()` is its part of a payment's settlement, inside the settlement's transaction — database work
+     only: that transaction is tried again when MySQL aborts it for a deadlock, so `settle()` may run more than once for
+     one payment. A method's bounds (`min_amount`, `max_amount`) are the shop's, not the driver's: every method has them.
 2. **Register it** in `bootstrap/container.php`: add `$c->get(<Name>Driver::class)` to `payment.drivers`.
 3. **Describe it** in `resources/api/openapi.yaml`: a `<Name>MethodRow` (with its `<Name>GatewayConfig`) in
    `PaymentMethodRow`'s `oneOf`, a `<Name>MethodRequest` in `PaymentMethodUpdateRequest`'s, and — unless it is built

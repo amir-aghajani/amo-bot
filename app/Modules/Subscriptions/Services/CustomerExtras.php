@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Subscriptions\Services;
 
 use App\Core\Exceptions\ValidationException;
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
@@ -33,7 +34,8 @@ use Illuminate\Support\Carbon;
  * in use, which a renewal of a service ended on either count replaces at once —, and a panel that holds a client to its
  * IP limit (Capabilities::$ipLimit); their prices are for 30 days, charged for the days left of the period in use
  * (deviceDays()). In an agent's shop, traffic is held to what the agent's pool still has, since the delivery draws it;
- * time and devices draw nothing.
+ * time and devices draw nothing — and none is sold while its selling is suspended (Bot::sells()), though one
+ * paid before is still delivered.
  */
 final class CustomerExtras
 {
@@ -82,7 +84,8 @@ final class CustomerExtras
         $offers = [];
         foreach ($subscriptions as $subscription) {
             $offers[$subscription->id] = ['traffic' => null, 'time' => null, 'devices' => null];
-            if (!$enabled) {
+            // An agent's shop whose selling is suspended sells no extra (its delivery of one paid before asks refusal()).
+            if (!$enabled || !$subscription->shop()->sells()) {
                 continue;
             }
 
@@ -173,12 +176,15 @@ final class CustomerExtras
     /**
      * What `$quantity` of `$kind` costs for the service, as offered now (offer()).
      *
-     * @throws ValidationException 422 on `status` while the service cannot take it (refusal()); on the kind's field
-     *                             (`gb`, `days`, `devices`) while the shop sells none of it for the service, or not
-     *                             that much
+     * @throws ValidationException 422 on `status` while the service cannot take it (refusal()) or its shop sells nothing
+     *                             (an agent's whose selling is suspended); on the kind's field (`gb`, `days`, `devices`)
+     *                             while the shop sells none of it for the service, or not that much
      */
     public function quote(Subscription $subscription, ExtraKind $kind, int $quantity): string
     {
+        if (!$subscription->shop()->sells()) {
+            throw SellingSuspendedException::onStatus();
+        }
         $problem = $this->refusal($subscription, $kind);
         if ($problem !== null) {
             throw ValidationException::on('status', $problem);

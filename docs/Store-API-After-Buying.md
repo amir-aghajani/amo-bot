@@ -85,7 +85,9 @@ counted too, then `429` (`اطلاعات سرویس را زیاد به‌روز 
 
 `PATCH /subscriptions/{id}` `{ "auto_renew": true }` or `false` (a JSON boolean) answers `{ "subscription": … }`. Offered
 (`auto_renew.offered`) while the service runs, ends some day, still has its plan — one whose term is at least the
-`days_before` it is renewed in: a plan of a few hours is not —, and the shop takes the wallet. A service without a plan
+`days_before` it is renewed in: a plan of a few hours is not —, and the shop takes the wallet, at the customer's renewal
+price: within the wallet's least and most amount (a service whose renewal it does not take is renewed by hand, and
+reminded of its end). A service without a plan
 — added by its link, or built and renewed with packages built — is never renewed by itself until a renewal on a plan
 gives it one;
 otherwise — turning it off too — `422` on `auto_renew` (`تمدید خودکار برای این سرویس در دسترس نیست.`), and anything but
@@ -134,8 +136,8 @@ Every refusal is a `422`, in words to show as they are:
 | `errors.status` | the shop does not offer it now (`انتقال سرویس در این فروشگاه فعال نیست.`); a free test; a service gone from its server; one with an order the customer made still open — a renewal or an extra waiting for its payment or receipt, or being delivered (`سفارشی از این سرویس هنوز باز است …`; an unpaid one is dropped by itself after 48 hours); one whose delivery failed, which support settles — a retry or the money back (`تحویل سفارشی از این سرویس ناموفق بوده و منتظر پشتیبانی است؛ …`) |
 | `errors.telegram_id` | no number (`شناسه عددی تلگرام را وارد کنید: …`); no customer of this shop has it (`مشتری‌ای با این شناسه تلگرام در این فروشگاه نیست؛ …`); the customer themselves; a banned account |
 
-Each `GET` — and each `POST`, which looks the recipient up again — counts: at most 10 in 10 minutes per customer; and at
-most 5 services handed on an hour. Past either, a `429` with `Retry-After`. Another customer's service is a `404`, as
+Each `GET` — and each `POST`, which looks the recipient up again — counts: at most 10 in 10 minutes per customer,
+together with [sending money's](#sending-money-to-another-customer); and at most 5 services handed on an hour. Past either, a `429` with `Retry-After`. Another customer's service is a `404`, as
 everywhere.
 
 ## Adding a service by its link
@@ -220,14 +222,18 @@ the API.
   "balance": "380000.00",
   "credit": "0.00",
   "spendable": "380000.00",
-  "top_up": { "min": "10000.00", "max": "500000000.00", "presets": ["50000.00", "100000.00", "200000.00", "500000.00"] }
+  "top_up": { "min": "10000.00", "max": "500000000.00", "presets": ["50000.00", "100000.00", "200000.00", "500000.00"], "random": ["73000.00", "128000.00"] },
+  "transfer": { "min": "10000.00", "max": "5000000.00", "daily_cap": "10000000.00", "left_today": "9950000.00", "most": "380000.00" }
 }
 ```
 
 `balance` is the ledger's last line; `credit` is how far below zero an agent's wallet may go (`"0.00"` for anyone else);
 `spendable` is what the wallet can pay now. `top_up` is what the bot's «افزایش موجودی» offers: the smallest and the
-largest top-up, and the amounts shown as buttons, ascending — send any of them back as it is
-([a wallet top-up](Store-API-Buying.md#a-wallet-top-up)).
+largest top-up, the amounts shown as buttons, ascending, and — while the shop asks for them (none by default) — amounts
+drawn at random within its range, shown after the presets, ascending, none a preset; each answer draws them anew. Send
+any of them back as it is ([a wallet top-up](Store-API-Buying.md#a-wallet-top-up)). `transfer` is what the customer may
+send another customer ([sending money to another customer](#sending-money-to-another-customer)); `null` while the shop
+offers none.
 
 `GET /wallet/transactions?page=` → `200`
 ```json
@@ -241,6 +247,52 @@ largest top-up, and the amounts shown as buttons, ascending — send any of them
 ```
 
 Newest line first, the lines the bot's «کیف پول» shows; `description` is Persian, ready to show.
+
+## Sending money to another customer
+
+«انتقال موجودی»: a customer sends money from their wallet to another customer of the shop, found by their numeric
+Telegram id, with no fee — as in the bot ([Bot settings](Bot-Settings.md#wallet-transfers)). Offer it while `transfer`
+of `GET /wallet` is not `null`: off until the shop's admin switches it on, in any shop. Its numbers bound the amount:
+from `min` to `most` — the least of the shop's `max`, the wallet's own balance (never an agent's credit) and what the
+daily cap leaves today (`left_today`; with `daily_cap`, `null` when the shop sets none, counted from midnight on the
+shop's clock). With `most` below `min` the customer can send nothing now: say so instead of the form — nor is anyone
+looked up for them then: `GET /wallet/transfer` answers a `422` under `errors.amount` that says why.
+
+1. **Who it goes to** — `GET /wallet/transfer?telegram_id=7070` → `200`
+   `{ "recipient": { "name": "Sara", "username": "sara" } }` (either may be `null`): show it, then ask the amount and
+   for a confirmation of both. Nothing changes.
+2. **Send it** — `POST /wallet/transfer` `{ "telegram_id": "7070", "amount": "50000" }` with an `Idempotency-Key` header
+   (a new UUID for each transfer the customer confirms) and a recent sign-in
+   ([a recent sign-in](Store-API-Account.md#a-recent-sign-in): a token that leaked gives no money away; a `403` asks for
+   `POST /me/reauthenticate` first) → `200`
+   ```json
+   {
+     "transfer": { "id": 9, "amount": "50000.00", "recipient": { "name": "Sara", "username": "sara" }, "created_at": "2026-10-14T12:00:00+00:00" },
+     "wallet": { "balance": "330000.00", "credit": "0.00", "spendable": "330000.00", "top_up": { … }, "transfer": { … } }
+   }
+   ```
+   `telegram_id` and `amount` as a customer types them (numbers, or text with Persian digits, separators and «تومان»),
+   or `amount` in the API's format (`"50000.00"`). The money moves at once; `wallet` is the customer's wallet as it is
+   now. Each wallet's history gets a line naming the other customer (`انتقال موجودی به Sara (@sara)`, `دریافت موجودی از
+   Ali (@ali)`); the recipient is told in the bot and among their notices (`wallet_received`), the customer among their
+   notices and in Telegram (`wallet_sent`). The report group hears of every one.
+
+Sent again with the same `Idempotency-Key` — a network retry —, the answer is the transfer that key made and the wallet
+as it is now: never a second transfer, even for two at the same moment. The same key with another `telegram_id` or
+`amount` is a `422` under `errors.idempotency_key` (`این Idempotency-Key پیش‌تر برای انتقال دیگری به کار رفته است.`), as
+is a missing or malformed one.
+
+Every refusal is a `422`, in words to show as they are:
+
+| Under | When |
+|---|---|
+| `errors.status` | the shop does not offer it now (`انتقال موجودی در این فروشگاه فعال نیست.`) |
+| `errors.telegram_id` | no number (`شناسه عددی تلگرام را وارد کنید: …`); no customer of this shop has it (`مشتری‌ای با این شناسه تلگرام در این فروشگاه نیست؛ …`); the customer themselves; a banned account |
+| `errors.amount` | the customer can send nothing now, `GET` too: less than the least in the wallet (`برای انتقال، دست‌کم ۱۰٬۰۰۰ تومان موجودی در کیف پول لازم است.`) or the daily cap used up (`… امروز پر شده است؛ …`); no whole number of Toman (`مبلغ را به تومان و بدون اعشار بنویسید.`); below the least (`کمترین مبلغ انتقال ۱۰٬۰۰۰ تومان است.`) or above the most (`بیشترین مبلغ هر انتقال … است.`); more than the balance (`موجودی کیف پول شما (…) برای این انتقال کافی نیست.`, with `اعتبار نمایندگی منتقل نمی‌شود.` for an agent); past the daily cap (`سقف انتقال روزانه … است و امروز تا … دیگر می‌توانید منتقل کنید.`, or `… امروز پر شده است؛ …`) |
+
+Each `GET` — and each `POST`, which looks the recipient up again — counts: at most 10 in 10 minutes per customer,
+together with [service transfers'](#handing-a-service-to-another-customer); and at most 10 transfers an hour. Past
+either, a `429` with `Retry-After`.
 
 ## The referral program
 

@@ -27,6 +27,11 @@ use Illuminate\Support\Carbon;
  * @property string|null $password Stored encrypted, transparently decrypted
  * @property string|null $api_token Panel API token, encrypted — preferred over username/password
  * @property string|null $totp_secret Base32 2FA secret for session logins on panels with 2FA, encrypted
+ * @property bool $proxy_enabled whether the panel is reached through a SOCKS5 proxy (Support\PanelConnection::$proxy)
+ * @property string|null $proxy_host the proxy's host name or IP address
+ * @property int|null $proxy_port
+ * @property string|null $proxy_username optional
+ * @property string|null $proxy_password optional, only with a username; encrypted
  * @property bool $is_active
  * @property int|null $capacity Max active subscriptions, null = unlimited
  * @property int $sort
@@ -59,6 +64,11 @@ class Server extends Model
         'password',
         'api_token',
         'totp_secret',
+        'proxy_enabled',
+        'proxy_host',
+        'proxy_port',
+        'proxy_username',
+        'proxy_password',
         'is_active',
         'capacity',
         'sort',
@@ -73,13 +83,16 @@ class Server extends Model
         'test_on_hold',
     ];
 
-    protected $hidden = ['password', 'api_token', 'totp_secret'];
+    protected $hidden = ['password', 'api_token', 'totp_secret', 'proxy_password'];
 
     /** @var array<string, string> */
     protected $casts = [
         'password' => Encrypted::class,
         'api_token' => Encrypted::class,
         'totp_secret' => Encrypted::class,
+        'proxy_enabled' => 'boolean',
+        'proxy_port' => 'integer',
+        'proxy_password' => Encrypted::class,
         'is_active' => 'boolean',
         'capacity' => 'integer',
         'sort' => 'integer',
@@ -150,6 +163,17 @@ class Server extends Model
     public function isBackingOff(): bool
     {
         return $this->last_error !== null && $this->last_checked_at !== null && $this->last_checked_at->isAfter(now()->subMinutes(self::BACKOFF_MINUTES));
+    }
+
+    /**
+     * The servers the current shop deals in: every one, but those the owner keeps from an agent's shop
+     * (Bot::hiddenServerIds()) — none of its plan form's, discount codes', website's or free tests' choices.
+     *
+     * @return Builder<static>
+     */
+    public static function shown(): Builder
+    {
+        return static::query()->whereKeyNot(CurrentBot::get()->hiddenServerIds());
     }
 
     /** @return HasMany<ServerInbound, $this> */

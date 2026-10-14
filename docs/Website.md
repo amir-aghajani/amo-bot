@@ -87,9 +87,12 @@ methods, the bot, the report group, the website and who is an admin change from 
 - **«ورود امن مدیران»** (on) — an admin's work is taken only from a sign-in with Telegram, Google, or a password with
   its two-factor code; off, a password alone is enough. Keep it on: a leaked password would otherwise open the shop.
 - **«کارهای بیشتر»** — what they may do beyond the daily work, a switch each, all off: «پلن‌ها و دسته‌بندی‌ها», «کیف پول
-  مشتری», «بازپرداخت», «افزایش زمان و حجم سرویس», «حذف یا انتقال سرویس» (to another customer, as from a service's
-  dialog), «امنیت حساب مشتری» (two-factor sign-in turned off, every device signed out). Each asks the admin to have
-  signed in — or proven it again — in the last 15 minutes.
+  مشتری», «بازپرداخت», «رد یکجای رسیدها» (receipts waiting for review rejected in bulk —
+  [Orders and payments](Orders-And-Payments.md#receipts)), «افزایش زمان و حجم سرویس», «افزودن سفارش برای مشتری» (a
+  service made for a customer by hand and delivered at once —
+  [Orders and payments](Orders-And-Payments.md#orders-support-makes)), «حذف یا انتقال سرویس» (to another customer, as
+  from a service's dialog), «امنیت حساب مشتری» (two-factor sign-in turned off, every device signed out). Each asks the
+  admin to have signed in — or proven it again — in the last 15 minutes.
 
 An admin's sign-in works the shop for **12 hours**; after that they prove it again — a token that leaked does not work
 for long. **Approving a payment** delivers a service on their word alone, so it asks a sign-in of the last 15 minutes,

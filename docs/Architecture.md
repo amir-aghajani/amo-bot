@@ -132,7 +132,9 @@ puts it on the request (`Principal::of()`), runs the request in its shop, and ma
 Every operation that records a decision takes an **actor** (`Auth\Actor`): a principal, an admin pressing a button in
 the report group, or the shop itself (a timer). The actor's name is kept as the decision's `reviewer` and appears on
 the request's log lines, and an admin acting as themselves is refused decisions about their own account
-(`ActorRefusedException`).
+(`ActorRefusedException`). Anywhere else the name is read through `Auth\Services\Reviewers`: the owner's panel shows it
+as kept, everyone else — an agent, a website's admins, a report group (`ShopReports::bySupport()`, «🎧 توسط پشتیبانی») —
+reads the owner's login as «پشتیبانی».
 
 ## The bots at work
 

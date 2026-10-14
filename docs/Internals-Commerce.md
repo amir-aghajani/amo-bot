@@ -34,9 +34,9 @@ catalogue ── PlanCategoryService::catalogue() → ServerSelector::offers()  
 price ────── Pricing::purchase() → Quote                                    base, automatic discount, code
 checkout ─── Checkout::pay()                                                one for the bot and the website
   order ──── OrderService::openPurchase() → open()                          find or make, under the user's row lock
-  payment ── PaymentService::createForOrder()
+  payment ── PaymentService::createForOrder()                               within the method's bounds
                wallet: settle() in one transaction (debit, payment → paid, order → paid), then settled()
-               card:   a pending payment; the receipt later → approve() → the same settle()
+               card:   a pending payment shown a card (PaymentCards::pick()); the receipt later → approve() → settle()
 settled() ── ReferralService::reward() · OrderService::deliver() · ReferralService::purchased()
 deliver() ── claim (paid → processing) → ProvisioningService → fulfilled() in the same transaction
                then OrderRewards::delivered(): cashback and loyalty, after the commit
@@ -133,25 +133,101 @@ ones (each may hold a receipt picture on the host).
 
 Statuses (`OrderStatus`): pending → paid → processing → fulfilled | failed, or cancelled unpaid, or refunded. The
 reading lists live on `Order`: `SOLD` (a sale), `KEPT` (paid and not given back — a sale or a failed delivery), and the
-scopes `bought()`, `spending()` (what loyalty and the draw count), `payable()`, `stale()`, `stuck()` (support's queue).
+scopes `bought()`, `spending()` (what loyalty and the draw count), `payable()`, `expirable()`, `stale()`, `stuck()`
+(support's queue).
 
 **Every move is a compare-and-swap** (`Core\Database\Transitions`): one payment pays an order; only the process that
 claims it (paid → processing) delivers it, so support's approval racing the auto-approve timer, or two retries, never
 deliver twice. The order is marked fulfilled in the same transaction that writes what it delivered, and outcomes are
 reported to the group in that transaction. A claim untouched for `STALE_PROCESSING_MINUTES` belongs to a dead process:
 `ResumeDeliveriesTask` finishes it as a retry would — never a failed delivery, which waits for support. Unpaid orders
-expire after `ExpireOrdersTask::EXPIRE_HOURS`, never while a receipt waits for review.
+expire after `ExpireOrdersTask::EXPIRE_HOURS` (`Order::expirable()`), never while their money may be with support
+(`Payment::isWithSupport()`): a receipt in review, or a card transfer taken in support's private chat — shown no card,
+it stays support's to approve or cancel, whatever the setting says since.
 
 A delivery that a panel or a rule refuses fails the order with two notes: `notes`, safe for anyone reading the shop (an
 agent, the website's admins), and `diagnosis`, the owner's detail of the panel (its address, its answer).
 `OrderDirectory::notes()` picks by who reads.
 
+### Orders support makes
+
+`Orders\Services\ManualOrders::make()` is «افزودن سفارش» (`POST /users/{id}/orders`, both panels and — with the
+`manual_orders` grant — the website's admins): a purchase for a customer of a plan, or of support's own numbers carried
+on the order as a built one's are (`traffic_bytes`, `days`, `devices`, each 0 for no limit — `Order::isBuilt()`,
+`Order::package()`), on a server checked up front (`ServerSelector::resolve()` / `builtOn()`), in an agent's shop against
+their pool (`Bot::trafficRefusal()`: no unlimited quota, nor more than is left) and never on a server or of a plan
+the owner keeps from it (`Bot::hidesServer()`, `Plan::$hidden_by_owner`), named by `ClientNaming::chosen()` (a buyer's
+typed-name rules, whichever ways the shop offers), refused for the actor's own account (`ActorRefusedException::ownOrder()`), for an
+agent's shop whose selling is suspended (`Bot::sells()`, on `status`, whoever asks — the owner too, who opens it
+again first: `SellingSuspendedException::OWNER`) and for a wallet short of the amount (`Checkout::shortfall()`).
+`OrderService::openManual()` makes it anew — never an open order of the same shape found — with `created_by` (the
+actor's name) and `support_note`, its `Idempotency-Key` kept in `request_keys` as a website's is; a key that came to an
+order answers with it before anything stateful is asked (a suspension since, the wallet it emptied, the name it took).
+`PaymentService::payBySupport()` then
+settles it at once under the actor's name, as the wallet's checkout does — the wallet row (charging the customer —
+refused up front while the wallet is switched off —; taking nothing for a free one) or the built-in **outside** row
+(`Drivers\Outside`, money taken outside the shop) — and delivers it; a wallet spent in the same moment cancels the order
+and refuses. The customer is told once it is fulfilled (`CustomerNotifier::paymentSettled()`); `ShopReports::purchaseText()`
+adds who made it — the owner's login as «پشتیبانی» (`Reviewers::shared()`) — and how it was paid.
+
+How it counts falls out of the existing rules, by `pricing` and the payment's method: a free one is `pricing` gift at no
+price — no purchase (`Order::bought()`), nothing earned; a wallet one is `regular` at support's amount — a purchase,
+spending (cashback, loyalty, the draw, a referral's first-purchase gift), but no commission and no `moneyIn()` (a wallet
+payment); an outside one is the same purchase and `moneyIn()` too, earning the referrer's commission. `Order::manualPayment()`
+reads which it was (free by its price, else the payment's method) for `OrderDirectory`'s `manual` and the report. The
+outside row is never offered at checkout (`PaymentMethods::offers()`) nor listed among the methods or drivers
+(`PaymentMethods::all()`, `drivers()`); every shop has one (database/schema.php's rows, `createBuiltins()`, the 0.5.0
+upgrade).
+
 ## Payments
 
 A payment method is a row: a gateway driver (`Payments\Drivers\*`, registered in `payment.drivers`) with its settings
-and a label. Two drivers ship: the wallet (built in, one row per shop, settles at once) and card-to-card (a manual
-gateway: shows a card, waits for a receipt). Adding a gateway is a driver class, its registration and its request shapes —
+and a label. Three drivers ship: the wallet (built in, one row per shop, settles at once), the outside row (built in too,
+support's alone, above) and card-to-card (a manual gateway: shows a card, waits for a receipt). Adding a gateway is a driver class, its registration and its request shapes —
 see [Drivers](Drivers.md#a-payment-gateway).
+
+Every method has bounds (`min_amount`, `max_amount`): `PaymentMethods::forOrder($type, $amount, $customer)` and
+`payable()` offer only a method that takes the amount (`takes()`: within `within()`, and a card method with a card that
+has room — `PaymentCards::offers()`, or the customer holds a pending payment of it on an open order of that type and
+amount, which asking again reuses whatever its card's room or switch), a null amount meaning any (the website's list without
+`amount`, the order's type checked before its price is known);
+`allow()` throws the refusal (`MethodUnavailableException`, 422 on `method_id`, in the method's words). It is asked in
+one place: `Checkout::pay($user, $method, $type, …)`, the bot's and the website's one checkout, before anything is
+ordered (next to `ReceiptsInReview::allowCard()`), at the price — or a keyed order's own amount; `PaymentService::
+createForOrder()` holds every payment to the bounds again, for its other callers — a free order is within any. A
+payment that finds no card after all (the last room taken meanwhile, or the open payment `offers()` counted another
+order's of the same type and amount) leaves nothing to pay: `Checkout::withdraw()` cancels the order the request made
+(`OrderService::cancel()`, the refusal its notes) and forgets the key it kept. The
+bot's `CheckoutScreen::show()` takes the amount from each caller, and `buy()` draws the checkout again on the refusal,
+with the ways that are left; the callers ask `payable()` with no amount first (switched off, or not one for this kind
+of order), as `CustomerCheckout` checks the method's type before the quote is known. `AutoRenewal` renews from the
+wallet only a price within its bounds, and `AutoRenewal::renews()` asks the same of the customer's renewal price
+(`Pricing::renewalOffers()`, each customer's read once for a page): a service it does not take is not offered the
+switch, and `ServiceReminders` reminds it of its end. `PaymentService::payBySupport()` asks no bounds: an order support
+makes by hand is deliberate.
+
+A card method's cards are rows of their own (`Models\PaymentCard`, `payment_cards`), kept by the method's form as one
+list (`cards`: `PaymentCards::read()` checks it whole, `keep()` saves it in the method's transaction); the driver's
+form has only the note and the review window. `PaymentService::openPayment()` reuses the order's open payment of the
+method — with its card, `payments.card_id`, so a payment always shows the same card — or makes one with a card
+`PaymentCards::pick()` draws at random among the enabled cards whose `daily_cap` leaves room (for a top-up, room for the
+most `amountFor()` may ask), under a lock on the method's cards and reading what they took with a locking read — of two
+payments at once the second waits and sees the first; none: `MethodUnavailableException::noCard()`. What came to a card
+today (`takenToday()`) is its payments made since the shop's midnight (`LocalTime::midnight()`) that are pending, in
+review, paid or refunded — summed, as a card's payments are counted, from `payments(card_id, created_at, status,
+amount)` alone, without the shop's `bot_id` filter (a card's payments are its shop's). `PaymentMethods::update()` locks the method's cards before `read()` judges the form, so a card a payment is
+being shown at that moment keeps its number and stays. The gateway shows a
+payment its card: `GatewayInterface::initiate(Payment)` — `ManualGateway` makes the `CardTransfer` from `$payment->card`
+and the method's note, `Checkout::awaiting()` (a request made again) the same. A card a payment was shown keeps its
+number and is never deleted (`payments.card_id` restricts it). The upgrade to 0.5.0 made each method's card of its
+settings its first row and gave every payment of the method that card; a number its form would have read as none made
+no row, and that method is offered to nobody until a card is added (its payments keep no card).
+
+A card-to-card top-up asks more than its order (`PaymentCards::amountFor()`): 1 to `WalletSettings::uniqueMax()` Toman,
+a sum no other open payment to the card asks — held within the method's `max_amount` (`extra()`: nothing more for an
+amount at its most), and a card's room judged on that held sum. The order keeps the amount asked (`OrderService::open()` finds an order by
+its amount); the payment's `amount` is what is paid, credited (`OrderService::carryOut()` credits the paid payment's
+amount), counted (`Payment::moneyIn()`, referral commissions) and refunded.
 
 `PaymentService` moves payments by compare-and-swap and reports each move in the same transaction. Settling (`settle()`)
 is the gateway's part (the wallet's debit), the payment's move and the order's claim in one transaction — losing either
@@ -180,6 +256,35 @@ moves the orders with the services). A refusal, or a panel that fails, leaves th
 API, the report group's buttons, the timer). Each checks its rule (`allowed()`), who decides (an `Auth\Actor`: nobody
 approves or refunds their own payment; the website's admins approve only a receipt in review), and tells the customer
 only when this call decided — the loser of two decisions at once is refused with `DECIDED_MEANWHILE`.
+`ReceiptDismissals` rejects receipts in bulk by looping `PaymentActions::reject()`, then deletes each upload
+(`Receipts::discard()`) and reports one line a request (`ShopReports::receiptsDismissed()`). Its «all» takes the
+shop's oldest 100 a request, each round held to `receipt_at` up to the first round's moment (`until`, sent back by the
+panel), so a receipt sent while it runs is never rejected unseen.
+
+How card-to-card payments are taken is `PaymentSettings` (the bot settings' `payments` group). One receipt at a time is
+`ReceiptsInReview`: `Checkout::pay()` asks `allowCard()` before anything is ordered (both doors; a website request made
+again with its key, whose own receipt is in review, passes), the bot's `ReceiptHandler` and the website's
+`CustomerReceipts` ask `allowReceipt()` before looking at the picture, and take it through `submit()` — asked again
+under a lock on the customer's row, with a locking read, so of two receipts sent at once to two payments the second
+finds the first in review. Each refusal is a `ReceiptInReviewException` (422 on `status`, the bot's «رسید قبلی در حال
+بررسی»). `allowCard()` takes no lock: what a race with a receipt could leave — a card payment waiting for its transfer
+while a receipt is in review — a customer reaches without one, by starting two card payments before the first receipt;
+the rule itself is `submit()`'s.
+
+Card payments in support's private chat (`sendsToSupport()`: the switch on and the bot's support contact set, read by
+the payment engine as `PaymentCards::toSupport()`) are payments shown **no card**: `PaymentService::openPayment()` picks
+none (`payments.card_id` null), so no card's daily cap is taken, and `PaymentCards::offers()` offers the method whatever
+its cards (the methods screen's `to_support`). A top-up still asks its few Toman more (`PaymentCards::amountFor()`),
+unique among the method's open payments shown no card — the method's row locked first, as `pick()` locks the cards. An
+open payment keeps what it was shown: a card from before the switch, or none — given a card by `openPayment()` once the
+shop shows cards again, as a payment from before cards is. The display follows the payment: `ManualGateway::initiate()`
+answers `CardTransfer::toSupport()` (no card, the method's note) for one shown none, `CheckoutScreen::transfer()` then
+draws the order, the way to support and the note and awaits no receipt, `CustomerCheckout::answer()` gives `contact`
+instead of `card`, and `PaymentDirectory` and `ShopReports::receiptSubmitted()` say `Payment::TO_SUPPORT` where the card
+would be. `CustomerNotifier::paymentReminder()` follows the payment too: one shown no card gets the way there
+(`Buttons::supportChat()`, as `CheckoutScreen` draws it) instead of «ارسال رسید», whatever the switch says now. A protected
+card message is sent, never edited in (`Context::resend()` with `protect_content`: the checkout deleted or, past
+Telegram's 48 hours, stripped of its buttons).
 
 ## Ledgers
 
@@ -188,6 +293,48 @@ The wallet (`WalletService`) and an agent's traffic (`TrafficPool`) are append-o
 after it — the last line *is* the balance (`User::balance()`, `Bot::trafficBalance()`), with no copy to drift. A debit
 may go below zero only as far as the caller allows (an agent's credit). Lists read balances with their rows
 (`User::balanceColumn()`), never a query per row.
+
+The locking read of the last line also locks the index gap after it, so two owners' lines at the same moment — two
+newcomers' top-ups, two customers' transfers — can deadlock on MySQL, which aborts one transaction whole: no money moves
+twice, but the request would fail. So every money write is tried again, `Ledger::ATTEMPTS` times, by the rule in
+[Conventions](Conventions.md#only-once): `Ledger::append()` on its own, a wallet transfer, the delivery of a top-up and
+of an agent's traffic, the order a manual order makes (`OrderService::openManual()`), a payment's settlement (the
+wallet's checkout, `payBySupport()`, `approve()`), a refund, cashback earned, a referrer's commission and the start
+gifts, a gift code's Toman and a spin of the wheel. Not tried again: what moves no money (a receipt's verdict, a cancel,
+an expiry, which gathers the pictures to delete inside it) and an account merge. Laravel counts a lock wait timeout as a
+concurrency error too, so a write that waited out `innodb_lock_wait_timeout` for a lock waits again.
+
+## Wallet transfers
+
+«انتقال موجودی» is `Users\Services\WalletTransfers`, one rule for both doors — the bot
+(`Telegram\Handlers\WalletTransferHandler`, `wsend:` and the state `wsend[.{recipient}[.{amount}]]`) and the website
+(`Store\Api\WalletController`: `GET /wallet/transfer` the recipient, `POST` the transfer; `Store\Services\
+CustomerWalletTransfers` what `GET /wallet` says of it). Its settings are `WalletTransferSettings` (`wallet_transfers`,
+off by default).
+
+- **The recipient** — `recipient()` asks `check()` first (both doors: a customer with nothing to send learns no other
+  customer's name), then finds them through `CustomerLookup::find()`, the lookup service transfers share: the id as
+  typed, a customer of the sender's shop, a customer's lookups counted together (`LOOKUPS` per `LOOKUP_WINDOW`); then
+  not the sender, not banned. Refusals under `telegram_id`.
+- **The amount** — whole Toman (`Input::amountOf()`) within the shop's bounds, at most the sender's own balance: the debit
+  goes through `WalletService::debit()` with no credit, so an agent's credit never moves; and with what the sender sent
+  since midnight on the shop's clock (`LocalTime::midnight()`) within the daily cap, when one is set. `most()` is the least of the
+  three, what the bot asks for and `GET /wallet`'s `transfer.most`; `check()` refuses at the bot's first step, and before
+  any lookup, one who may send less than the least. Refusals under `amount`; the shop offering none under `status`, as
+  the other things a shop may switch off (`ServiceTransfers`, `CustomServices`). `TRANSFERS` per `TRANSFER_WINDOW` a customer. The daily cap
+  is 0 (none) or at least the least transfer (`WalletTransferSettings`): a cap below it would leave no transfer to make.
+- **The move** — `transfer()`: one transaction that locks both customers' rows in id order (as `Ledger::merge()` does,
+  so two customers sending each other money at once wait in turn), sums the day's transfers with a locking read, debits
+  the sender and credits the recipient (`InsufficientBalanceException` worded as `SHORT`), each line naming the other
+  (`LINE_SENT`, `LINE_RECEIVED`, `User::shownAs()`), writes the `wallet_transfers` row — the two lines' ids, what the cap
+  sums and the panels show a line's other customer by (`UserDirectory::ledger()`, `WalletTransactionRow.counterpart`) —
+  and `ShopReports::walletTransferred()` («شارژ کیف پول»). After the commit `CustomerNotifier::walletReceived()` tells the
+  recipient, and `walletSent()` keeps the sender's notice — sent to their chat only from the website, the bot having
+  answered in place.
+- **The website's key** — `transferById()` answers an `Idempotency-Key` it saw (`wallet_transfers.request_key`, unique
+  per sender) with the transfer it made, read again under the locks for two at the same moment; the key with another
+  recipient or amount is `KEY_REUSED`. A merge of two accounts carries every row (`AccountMerger::REFERENCES`, `unkey`):
+  what both sent counts against one daily cap, and a key both used is the survivor's — the other transfer kept, keyless.
 
 ## Rewards
 
@@ -227,8 +374,57 @@ An agent is a main-shop customer with a level (`users.agency_level_id`) and thei
 request is approved or rejected by compare-and-swap; approval opens the shop (bot row and wallet), ending the agency
 switches the bot off and keeps its shop for a return. The agent buys traffic at their level's price per GB; every delivery
 of their bot draws from that pool first, once per order, and gives it back if the delivery fails (`OrderService`'s
-`withTraffic()`). A plan that the pool cannot cover is not offered (`ServerSelector::covers()`), and an unlimited plan
-cannot be sold there at all. The program's settings live in the main bot's rows whichever shop reads them.
+`withTraffic()`). Whether the pool pays for a sale is one judgement, `Bot::trafficRefusal()` — an unlimited quota, or
+too little left, in `TrafficShortException`'s words —: the delivery draws by it, a plan it refuses is not offered
+(`ServerSelector::covers()`), and `ManualOrders` asks it before anything is made. The program's settings live in the
+main bot's rows whichever shop reads them.
+
+**What the owner keeps from an agent's shop** lives on the `Bot` model, which every module may name:
+`bot_hidden_servers` (`Bot::hiddenServerIds()`, `hidesServer()`, read once per row) and `plans.hidden_by_owner`. There
+is no global scope on `Server` — existing services, the sync, deliveries and grants need every server. The filters are
+where something new is sold: `ServerSelector::choicesAmong()` skips an entry on a hidden server (a plan left without one
+is `NO_CHOICE`, the entry `HIDDEN_SERVER`) — but not for a paid order's delivery (`resolve(paid: true)`,
+`ProvisioningService::provision()`) —; `SubscriptionActions::move()` (anyone's but the owner's), `ManualOrders` and
+`PlanService::validateServers()` (a server the plan was not on already) refuse one, all in `HIDDEN_SERVER`'s words —
+`moveTarget()` does not, so the owner's `ServerMigrations` and single moves carry an agent's services too —; and the
+lists of choices read `Server::shown()`, the current shop's servers but its hidden ones: `TestServers::choices()`,
+`TestAccountDirectory::servers()`, `StoreCatalog::status()`, `PlanService::options()` and `DiscountCodes`' servers.
+`Plan::active()` (and `Plan::onSale()`) leave hidden plans out, and `Rewards` gives no prize of one; nothing in
+`PlanService` writes the column — only `Catalog\Services\AgentRestrictions` (the owner's
+`PUT /agency/agents/{id}/hidden`) — and `duplicate()` copies it. Renewals and extras of a service already on a hidden
+server, or of a hidden plan, go on: they make nothing new.
+
+**An agent's terms of selling** (`Agency\Services\AgencyStanding`): `bots.agency_expires_at` and `monthly_minimum`, with
+`selling_suspended_at` and `suspension_reason` (`Bots\Enums\SellingSuspension`: expired, minimum, manual) and markers
+that keep each warning to once (`expiry_warned_at`, `minimum_warned_month`) and each month judged once
+(`minimum_checked_month`, a Jalali `YYYY-MM` that compares as its month — `Support\JalaliMonth`, on the shop's clock).
+Each reason is worded once, `SellingSuspension::words()`: the agent's notice and account line in the main bot, the
+main group's report (then `remedy()`, the owner's way back) and, copied word for word, the panels' `SELLING_SUSPENSION`.
+The program's minimum and an agent's own are one field (`AgencySettings::minimumOf()`): whole Toman, 0 for none —
+`monthly_minimum` null.
+`Bot::sells()` is the one question every door asks — true for the main bot; an end passed counts at once, before
+the hourly `Agency\Tasks\AgencyStandingTask` writes it down. It is never `Bot::status()`, which would stop the bot, its
+webhook, panel, website and tasks. The doors: `OrderService::open()` (every purchase, built purchase, renewal, extra and
+top-up — never `OrderType::Traffic`, bought in the main shop), `openGift()`, `createRenewal()` and `AutoRenewal::due()`,
+`CustomerRenewal`'s `RenewalRefusal::SellingSuspended`, `CustomerExtras::offersFor()`/`quote()` (not `refusal()`, which the
+delivery of an extra paid before asks), `TestAccounts`' `TestRefusal::Suspended`, `ServerSelector::covered()` and
+`weigh()` (no plan offered), `Rewards::give()` (Toman still given — `RewardKind::isSold()`) and
+`Rewards\Services\Eligibility::givable()` before it (a wheel slice is drawn among Toman and «پوچ» alone, a gift code
+worth a plan is refused in `RewardUnavailableException::SUSPENDED`'s words), `SubscriptionActions::extend()` (the owner
+still may) — the shop's staff read one wording, `SellingSuspendedException::STAFF` —, the website's
+`CustomerCheckout::ordering()` (503, `taking_orders` false — receipts still taken; what only prices an order, a
+renewal's preview and an extra's quote, says it as a 422 on `status`: `SellingSuspendedException::onStatus()`) and the
+bot's `CheckoutScreen::buy()` (`SellingSuspendedException`). The bot says `BotText::SellingPaused` — a message's text,
+never a popup's, so the agent's HTML shows as written — in place of the screen (`CheckoutScreen::paused()`): at a
+renewal, an extra and every step of a top-up (`TopUpHandler`, whose button leaves «کیف پول»), as at the plans and a
+free test.
+Delivery asks nothing: what was paid is delivered. With automatic renewal waiting, `ServiceReminders` reminds a service
+with «تمدید خودکار» on of its end too. Every suspension and lifting is a conditional UPDATE, so two runs, or a run and the owner, tell the
+agent (`CustomerNotifier::agencySuspended()`, `agencyResumed()`) and the main group (`ShopReports::agencySuspended()`)
+once. A minimum suspension is lifted by the month in progress reaching the minimum — at the traffic order's delivery
+(`AgencyStanding::bought()`, after the commit, never failing it) or by the next run —, and a short month is not
+suspended for at all when the month in progress reached it before the run judged it. One reason stands at a time
+(manual over expired over minimum): lifting the stronger lifts all, a short month's included.
 
 ## Customers
 

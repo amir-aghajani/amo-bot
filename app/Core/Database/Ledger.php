@@ -13,17 +13,32 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * carries `balance_after`, so the last line is the balance and nothing else stores it. A line is written under a lock
  * on the owner's row, after reading the last line with a locking read — under MySQL's repeatable read a plain read
  * could see a snapshot older than the previous writer's line.
+ *
+ * That locking read locks the gap after the owner's last line too, so two owners' first lines at once (two newcomers'
+ * top-ups) can deadlock: MySQL aborts one of the two transactions, whole — no money moves twice, but the request would
+ * fail. A money transaction is therefore tried again, up to ATTEMPTS times, on a deadlock (Laravel's
+ * `transaction($callback, $attempts)` retries only on a concurrency error, and only at the outermost transaction).
  */
 final class Ledger
 {
     /** The longest note an admin may give a line by hand; the `description` column has room to spare. */
     public const NOTE_MAX = 190;
 
+    /**
+     * How many times a money transaction is tried (append()'s own, and the outermost one of every money write around it)
+     * when the database aborts it for a deadlock. Only a transaction whose callback does nothing but database work is
+     * tried again — a message sent, a panel called or a file moved inside it would happen twice —, and only one that
+     * reads what it moves inside the callback, or moves it by Transitions, which writes its move whatever the model
+     * in memory holds.
+     */
+    public const ATTEMPTS = 3;
+
     public function __construct(private readonly ConnectionInterface $db) {}
 
     /**
      * Write the owner's next line: `$write` gets the balance now ("0" before the first line) and writes the line, or
-     * throws to refuse. Runs in one transaction (the caller's, if any). An owner whose row is gone is a
+     * throws to refuse — database work only: on its own (no caller's transaction) it is tried again on a deadlock
+     * (ATTEMPTS). Runs in one transaction (the caller's, if any). An owner whose row is gone is a
      * ModelNotFoundException.
      *
      * @template T
@@ -43,7 +58,7 @@ final class Ledger
             $last = $this->db->table($lines)->where($ownerColumn, $owner->getKey())->orderByDesc('id')->limit(1)->lockForUpdate()->value('balance_after');
 
             return $write(is_numeric($last) ? (string) $last : '0');
-        });
+        }, self::ATTEMPTS);
     }
 
     /**

@@ -30,7 +30,7 @@ final class AdminBotTextsApiTest extends HttpTestCase
         self::assertSame(200, $response->getStatusCode());
         $groups = $this->decode($response)['groups'];
         self::assertSame(array_keys(TextCatalog::GROUPS), array_column($groups, 'key'), 'in the screen\'s order');
-        self::assertSame(count(BotText::cases()), array_sum(array_map(static fn(array $group): int => count($group['texts']), $groups)));
+        self::assertSame(count(BotText::cases()) - 1, array_sum(array_map(static fn(array $group): int => count($group['texts']), $groups)), 'every text but the one only an agent\'s bot says (its selling suspended)');
 
         $welcome = $groups[0]['texts'][0];
         $spec = BotText::Welcome->spec();
@@ -114,6 +114,7 @@ final class AdminBotTextsApiTest extends HttpTestCase
         self::assertNotContains(BotText::WalletCredit->value, $keys, "an agent's credit is on their wallet with the main bot: no customer of an agent's bot has one");
         self::assertContains(BotText::WalletCharged->value, $keys, 'the rest of the wallet is its own');
         self::assertContains(BotText::Welcome->value, $keys);
+        self::assertContains(BotText::SellingPaused->value, $keys, 'what its customers read while the main shop suspends its selling');
 
         self::assertSame(404, $this->putJson('/api/agent/bot/texts/' . BotText::AgencyTerms->value, ['value' => 'x'])->getStatusCode(), 'nothing there to reword');
         self::assertSame(404, $this->postJson('/api/agent/bot/texts/' . BotText::AgencyTerms->value . '/reset')->getStatusCode());
@@ -124,5 +125,6 @@ final class AdminBotTextsApiTest extends HttpTestCase
         $main = $this->decode($this->get('/api/admin/bot/texts'))['groups'];
         self::assertContains('agency', array_column($main, 'key'), "the main bot's agency speaks them");
         self::assertContains(BotText::WalletCredit->value, array_merge(...array_map(static fn(array $group): array => array_column($group['texts'], 'key'), $main)));
+        self::assertNotContains(BotText::SellingPaused->value, array_merge(...array_map(static fn(array $group): array => array_column($group['texts'], 'key'), $main)), 'the main shop never stops selling');
     }
 }

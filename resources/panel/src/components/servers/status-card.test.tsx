@@ -79,6 +79,30 @@ describe('a server’s connection', () => {
     expect(await fact('تایم‌اوت')).toBe('۴۵ ثانیه')
   })
 
+  it('says the SOCKS5 proxy the panel is reached through: its address and username, nothing of its password', async () => {
+    const fact = facts(
+      serverRow({
+        form: { ...form, proxy_enabled: true, proxy_host: 'proxy.example.com', proxy_port: 1080, proxy_username: 'shop', proxy_password: { set: true, hint: '••••••••' } },
+      }),
+    )
+
+    expect(await fact('پراکسی SOCKS5')).toBe('proxy.example.com:1080 · نام کاربری shop')
+    expect(screen.queryByText(/••••/)).toBeNull()
+  })
+
+  it('puts an IPv6 proxy in brackets, and says no username it has not', async () => {
+    const fact = facts(serverRow({ form: { ...form, proxy_enabled: true, proxy_host: '2001:db8::1', proxy_port: 9050, proxy_username: '' } }))
+
+    expect(await fact('پراکسی SOCKS5')).toBe('[2001:db8::1]:9050')
+  })
+
+  it('says nothing of a proxy while the panel is reached directly', async () => {
+    facts(serverRow())
+
+    expect(await screen.findByText('گواهی TLS')).toBeTruthy()
+    expect(screen.queryByText('پراکسی SOCKS5')).toBeNull()
+  })
+
   it('names the token sign-in with its connector’s label, once that is read', async () => {
     const fact = facts(serverRow(), keyedConnector())
     expect(await fact('احراز هویت')).toBe('کلید API')

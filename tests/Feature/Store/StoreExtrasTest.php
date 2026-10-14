@@ -229,7 +229,7 @@ final class StoreExtrasTest extends HttpTestCase
 
         $payment = Payment::query()->sole();
         self::assertSame(['transfer', 'pending', Traffic::bytesOfGb(25), null], [$checkout['outcome'], $checkout['order']['status'], $checkout['order']['traffic_bytes'], $checkout['subscription']]);
-        self::assertSame(['payment_id' => $payment->id, 'amount' => '50000.00', 'card' => '6037997700001119', 'holder' => 'AmoBot', 'instructions' => null], $checkout['transfer']);
+        self::assertSame(['payment_id' => $payment->id, 'amount' => '50000.00', 'card' => '6037997700001119', 'holder' => 'AmoBot', 'bank' => null, 'instructions' => null, 'contact' => null], $checkout['transfer']);
         self::assertSame([], FakeProvider::$updated, 'nothing added before the money is in');
 
         $this->service(PaymentService::class)->approve($this->receipt($payment), 'admin');
@@ -322,7 +322,8 @@ final class StoreExtrasTest extends HttpTestCase
 
     public function testTheWaysToPayExtrasAreTheCheckoutsWalletAmongThem(): void
     {
-        $both = [['id' => $this->walletMethod()->id, 'label' => 'کیف پول', 'kind' => 'instant'], ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual']];
+        $unbound = ['min_amount' => null, 'max_amount' => null];
+        $both = [['id' => $this->walletMethod()->id, 'label' => 'کیف پول', 'kind' => 'instant'] + $unbound, ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual'] + $unbound];
 
         foreach (['extra_traffic', 'extra_time', 'extra_devices'] as $for) {
             self::assertSame($both, $this->decode($this->get($this->storeApi($this->website, "/payment-methods?for={$for}")))['methods'], $for);

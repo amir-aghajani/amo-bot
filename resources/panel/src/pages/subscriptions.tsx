@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { ArrowLeftRight, Radio, Search, X } from 'lucide-react'
+import { ArrowLeftRight, Radio, Search } from 'lucide-react'
 import { CustomerFilter } from '@/components/customer-filter'
 import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
@@ -8,6 +8,7 @@ import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
 import { SearchBox } from '@/components/search-box'
+import { SelectionBar } from '@/components/selection-bar'
 import { StatusBadge, statusTabs } from '@/components/status-badge'
 import { MoveDialog } from '@/components/subscriptions/move-dialog'
 import { shopServerChoices, useServerChoices, type ServerChoices } from '@/components/subscriptions/server-choices'
@@ -26,6 +27,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { SUBSCRIPTION_STATUS, type Status } from '@/lib/statuses'
 import { useOpenRow } from '@/lib/use-open-row'
 import { usePagedList } from '@/lib/use-paged-list'
+import { useSelection, type Selection } from '@/lib/use-selection'
 import { cn } from '@/lib/utils'
 
 /** A status, or the one tab that is not: active services ending within the shop's window (the dashboard links here). */
@@ -149,20 +151,11 @@ export function SubscriptionsPage({ servers: readServers = shopServerChoices, se
         </ListView>
       </div>
 
-      {/* Pinned to the bottom of the screen while the list scrolls under it, so ticking a row never moves the rows. */}
-      {selection.size > 0 && (
-        <div
-          role="toolbar"
-          aria-label="سرویس‌های انتخاب‌شده"
-          className="sticky bottom-5 z-10 flex w-fit max-w-full flex-wrap items-center justify-center gap-2 self-center rounded-xl border border-border bg-popover py-1.5 ps-4 pe-1.5 shadow-popover"
-        >
-          <span className="text-body tabular">{formatNumber(selection.size)} سرویس انتخاب شده</span>
-          <Button size="sm" icon={ArrowLeftRight} onClick={() => setMoving(selection.rows())}>
-            انتقال به سرور دیگر
-          </Button>
-          <Button size="icon-sm" variant="ghost" icon={X} onClick={selection.clear} aria-label="لغو انتخاب" />
-        </div>
-      )}
+      <SelectionBar selection={selection} noun="سرویس" label="سرویس‌های انتخاب‌شده">
+        <Button size="sm" icon={ArrowLeftRight} onClick={() => setMoving(selection.rows())}>
+          انتقال به سرور دیگر
+        </Button>
+      </SelectionBar>
 
       <SubscriptionModal
         subscription={opened.row}
@@ -183,33 +176,6 @@ export function SubscriptionsPage({ servers: readServers = shopServerChoices, se
   )
 }
 
-/** The rows ticked, kept across pages and cleared by another `scope` (tab, filter, search); `refresh` swaps in a returned row. */
-function useSelection<Row extends { id: number }>(scope: string) {
-  const [selected, setSelected] = useState<{ scope: string; rows: ReadonlyMap<number, Row> }>({ scope, rows: new Map() })
-  const rows = selected.scope === scope ? selected.rows : new Map<number, Row>()
-  const change = (next: (current: ReadonlyMap<number, Row>) => ReadonlyMap<number, Row>) => setSelected((current) => ({ scope, rows: next(current.scope === scope ? current.rows : new Map()) }))
-
-  return {
-    size: rows.size,
-    has: (id: number) => rows.has(id),
-    rows: () => [...rows.values()],
-    /** Tick or untick rows; the header's box does the whole page. */
-    set: (some: Row[], on: boolean) =>
-      change((current) => {
-        const next = new Map(current)
-        for (const row of some) {
-          if (on) next.set(row.id, row)
-          else next.delete(row.id)
-        }
-        return next
-      }),
-    refresh: (row: Row) => change((current) => (current.has(row.id) ? new Map(current).set(row.id, row) : current)),
-    clear: () => change(() => new Map()),
-  }
-}
-
-type Selection = ReturnType<typeof useSelection<SubscriptionRow>>
-
 function SubscriptionsTable({
   subscriptions,
   sorting,
@@ -218,18 +184,15 @@ function SubscriptionsTable({
 }: {
   subscriptions: SubscriptionRow[]
   sorting: SortedList<SubscriptionSort>
-  selection: Selection
+  selection: Selection<SubscriptionRow>
   onOpen: (subscription: SubscriptionRow) => void
 }) {
-  const ticked = subscriptions.filter((s) => selection.has(s.id)).length
-  const pageTicked = ticked === 0 ? false : ticked === subscriptions.length ? true : 'indeterminate'
-
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>
-            <Checkbox checked={pageTicked} onCheckedChange={(value) => selection.set(subscriptions, value === true)} aria-label="انتخاب همه سرویس‌های این صفحه" />
+            <Checkbox {...selection.page(subscriptions)} aria-label="انتخاب همه سرویس‌های این صفحه" />
           </TableHead>
           <TableHead>سرویس</TableHead>
           <TableHead>مشتری</TableHead>

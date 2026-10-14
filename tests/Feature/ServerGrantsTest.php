@@ -11,6 +11,7 @@ use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Enums\ConnectionFailure;
 use App\Modules\Providers\Exceptions\ConnectionException;
 use App\Modules\Providers\Exceptions\PanelApiException;
+use App\Modules\Providers\Exceptions\UnexpectedResponseException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Subscriptions\Enums\GrantStatus;
@@ -306,6 +307,22 @@ final class ServerGrantsTest extends HttpTestCase
         self::assertSame('سرویس ali_1: ' . ProviderErrorPresenter::describe(new ConnectionException(ConnectionFailure::Timeout, 'Connection failed')), $grant['last_failure']);
         self::assertNull($grant['waiting_reason']);
         self::assertSame(30 * 24, $subscription->refresh()->duration_hours);
+    }
+
+    public function testAnUpdateAProxyInFrontOfThePanelGaveUpOnIsNotTriedAgain(): void
+    {
+        $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
+        // The panel was read a moment ago; at the update, the proxy in front of it stops waiting and answers for it.
+        FakeProvider::$onCall = static function (int $server, string $call): void {
+            if ($call === 'updateClient') {
+                throw new UnexpectedResponseException(504, 'Gateway Time-out');
+            }
+        };
+
+        $grant = $this->work($this->decode($this->start(['days' => 3]))['grant']['id']);
+
+        self::assertSame(['done', 0, 1], [$grant['status'], $grant['granted'], $grant['failed']], 'the panel may have taken it: never twice');
+        self::assertNull($grant['waiting_reason'], 'not waited at as a panel out of reach');
     }
 
     public function testAServiceThePanelRefusesDoesNotStopTheRest(): void

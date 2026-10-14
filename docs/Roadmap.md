@@ -39,6 +39,11 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Services added by their link, custom services built by the customer (tiered prices), extra devices
   («کاربر اضافه»), a service given to another customer, the renewal window and the renewal methods (extend, reset
   traffic + add days, reset time + carry traffic)
+- ✅ Wallet transfers («انتقال موجودی»): money sent from the wallet to another customer of the shop by their Telegram
+  id, in the bot and on the website — no fee, never an agent's credit, within the owner's least, most and daily cap
+- ✅ Card-to-card payments: buttons that copy the card and the amount, the card's message protected from forwarding and
+  saving, one receipt waiting at a time, a card drawn at random among the method's cards with room today, support's
+  private chat in place of a card; top-up buttons of random amounts, and a sum of its own for every card top-up
 - [ ] Subscription link endpoint `/sub/{uuid}` of our own (today the panel's native subscription URL is handed out)
 
 ## The shop's website
@@ -60,15 +65,23 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Lists: paged on the server, sorted by a column, filtered (status, customer, server, a range of days in the Jalali calendar), searched (`#12` is that row), the view kept in the address; the stuck-orders queue («نیازمند رسیدگی»), the receipts to review and the tickets waiting on an answer counted in the menu
 - ✅ A customer's page: their services, payments, orders and tickets, wallet, referrals, groups, agency, website account
 - ✅ Extend one service: days and traffic on top of what it has (an agent's GB from their traffic)
-- ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked, live preview), settings (master switch, phone, required channels, wallet, renewal, extras, reminders, the removal of ended services, client usernames, services added by their link, transfers, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
+- ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked, live preview), settings (master switch, phone, required channels, wallet, wallet transfers («انتقال موجودی»), card-to-card payments («پرداخت کارت به کارت»), renewal, extras, reminders, the removal of ended services, client usernames, services added by their link, service transfers, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
 - ✅ Settings: the panel's own configuration in `config.php` (application, database, Telegram, email, advanced), the bots' webhooks set or removed, the owner's login changed and recovered without a shell; the website's settings in both panels
 - ✅ Failures drawn one way (what failed, why, what to do, the request's id), offline and stale-build handling
 - ✅ «تخفیف و جوایز»: discount codes, sales, loyalty tiers, cashback, gift codes, the lucky wheel and the nightly draw;
   a customer's own discount on their page; several plans' prices changed at once
+- ✅ Servers: a SOCKS5 proxy per server, for a panel the shop's host cannot reach directly; «انتقال سرویس‌ها», every
+  shop's services on a server moved to another in the background — by migration, or by rescue when its panel is down
+- ✅ Payments: each method's least and most amount (the wallet's too), several cards per card-to-card method with a
+  daily cap each, and the receipts waiting for review rejected in bulk — those ticked, or every one waiting
+- ✅ «افزودن سفارش» on a customer's page: an order support makes by hand — free, from the wallet or paid outside the
+  shop —, delivered at once
+- ✅ Agents: servers and plans hidden from an agent's shop, an end date and a monthly minimum purchase of traffic, warned
+  of ahead, then the shop's selling suspended — never its bot —; the owner's «توقف فروش» and «ادامه فروش» too
 - [ ] Activity log
 
 ## Scheduled tasks
-- ✅ Auto-approval of unreviewed receipts, paid orders a dying process left undelivered resumed, walked-away checkouts dropped, broadcasts in batches, automatic renewal, the next renewed period, grants, the periodic sync of every running service, reminders, the removal of ended services and free tests, the report groups' queue, the housekeeping — one run's time shared over them
+- ✅ Auto-approval of unreviewed receipts, paid orders a dying process left undelivered resumed, walked-away checkouts dropped, broadcasts in batches, automatic renewal, the next renewed period, grants, the periodic sync of every running service, reminders, the removal of ended services and free tests, the moves of servers' services and the clients they left on panels that answer again, the agents' terms of selling checked every hour, the report groups' queue, the housekeeping — one run's time shared over them
 
 ## More connectors and gateways
 - [ ] Panels: Marzban, Hiddify, WireGuard-based panels

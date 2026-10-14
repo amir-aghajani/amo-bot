@@ -28,8 +28,6 @@ use Psr\Log\LoggerInterface;
  */
 final class UserActions
 {
-    private const ADJUST_MAX = 1_000_000_000;
-
     public function __construct(
         private readonly WalletService $wallet,
         private readonly TwoFactor $twoFactor,
@@ -89,7 +87,7 @@ final class UserActions
         }
 
         $amount = Input::amount($input, 'amount');
-        if ($amount === null || $amount <= 0 || $amount > self::ADJUST_MAX) {
+        if ($amount === null || $amount <= 0 || $amount > Money::AMOUNT_MAX) {
             $errors['amount'][] = 'مبلغ باید عددی مثبت به تومان و بدون اعشار باشد.';
         }
 

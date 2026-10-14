@@ -47,6 +47,10 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.testServers, // every server's test terms, and whether it gives a test now
   ],
   grants: [queryKeys.everyServerGrants, queryKeys.massGrants],
+  migrations: [
+    queryKeys.everyServerMigrations, // a server's moves of its services, and the clients its rescues left
+    queryKeys.everyServerMigration, // one move's failures
+  ],
   plans: [
     queryKeys.plans,
     queryKeys.planCategories,

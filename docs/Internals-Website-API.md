@@ -117,13 +117,20 @@ website's shape and limits.
 - **Checkout** (`CustomerCheckout`) is the bot's checkout (`Payments\Services\Checkout`) under the bot's rules. Every
   ordering request carries an `Idempotency-Key`; a repeat is answered by that key's order as it stands, before any rule
   is asked again — the rules may say otherwise a moment later, and a retry must never order or charge twice. While the
-  bot's master switch is off the website takes no orders (`takingOrders()`). A renewal names what it is with as the
+  bot's master switch is off the website takes no orders (`takingOrders()`), nor while an agent's selling is suspended
+  (`ordering()`: both a 503 — a renewal's preview and an extra's quote, which order nothing, say the suspension as a
+  422 on `status`). A renewal names what it is with as the
   bot's buttons do — a plan picked (`plan_id`) or a package built (`gb`, `days`: `renewsWith()`) — and goes through
   `CustomerRenewal::preview()`; `refused()` turns its `refusal()` into the field and words the site shows.
 - **Services** (`CustomerSubscriptions`): what each may do is judged for a whole page at once; reading a panel and new
   links are rate-limited per customer, and a panel failure is told as its summary, never the owner's diagnosis.
 - **Receipts** (`CustomerReceipts`) are taken as the bot takes them, but an uploaded receipt never auto-approves: the
   account behind it may be an email made a minute ago.
+- **Wallet transfers** («انتقال موجودی», `WalletController`, `CustomerWalletTransfers`) are the bot's
+  `Users\Services\WalletTransfers`; the `POST` asks a recent sign-in (as a service handed away does) and an
+  `Idempotency-Key`, answered by the transfer it made (`transferById()`), never a second
+  ([Internals: commerce](Internals-Commerce.md#wallet-transfers)). The recipient of money or of a service is shown by
+  `Presenters\RecipientPresenter` alone: their Telegram name and handle, nothing else of their account.
 - **Notices, tickets, reviews, gift codes, referrals**: thin layers over Notifications, Support, Reviews, Rewards and
   Referrals (see [Internals: services](Internals-Services.md) and [Internals: commerce](Internals-Commerce.md)).
 

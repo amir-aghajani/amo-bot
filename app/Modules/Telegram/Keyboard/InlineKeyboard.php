@@ -41,6 +41,16 @@ final class InlineKeyboard
         return ['text' => $text, 'url' => $url];
     }
 
+    /**
+     * A button that copies `$copied` (at most 256 characters) to the customer's clipboard, in a private chat.
+     *
+     * @return array<string, mixed>
+     */
+    public static function copy(string $text, string $copied): array
+    {
+        return ['text' => $text, 'copy_text' => ['text' => $copied]];
+    }
+
     /** @param array<string, mixed> ...$buttons */
     public function row(array ...$buttons): self
     {

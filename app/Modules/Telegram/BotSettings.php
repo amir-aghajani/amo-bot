@@ -85,6 +85,14 @@ final class BotSettings implements DeclaresSettings
         };
     }
 
+    /** The support contact as a link a bot's button opens — a web or Telegram address (supportUrl()); null for a phone number. */
+    public function supportChatUrl(): ?string
+    {
+        $url = $this->supportUrl();
+
+        return $url !== null && preg_match('~^https?://~i', $url) === 1 ? $url : null;
+    }
+
     /** Whether a delivered service comes with a QR code of its subscription link. */
     public function qrEnabled(): bool
     {

@@ -19,7 +19,7 @@ final class PasarGuardDriverTest extends TestCase
     private const KEY = 'pg_key_6f1c2a3b-4d5e-4f60-8a1b-2c3d4e5f6a7b';
 
     /** The connection's options, which every save sends. */
-    private const OPTIONS = ['verify_tls' => true, 'timeout' => 30, 'subscription_url' => ''];
+    private const OPTIONS = ['verify_tls' => true, 'timeout' => 30, 'subscription_url' => '', 'proxy_enabled' => false];
 
     public function testItsCardSaysWhatThePanelNeeds(): void
     {
@@ -29,7 +29,7 @@ final class PasarGuardDriverTest extends TestCase
         self::assertNotEmpty(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, 'API Keys')));
         self::assertNotEmpty(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, '3.1')), 'the versions it needs');
         self::assertEquals((object) ['mark' => 'PG', 'vendor' => 'PasarGuard', 'docs_url' => 'https://github.com/PasarGuard/panel', 'inbounds' => true, 'link_rotation' => true], $card['traits']);
-        self::assertSame(['base_url', 'auth_mode', 'api_token', 'username', 'password', 'verify_tls', 'timeout', 'subscription_url'], array_column($card['fields'], 'name'), 'no two-factor secret of its own');
+        self::assertSame(['base_url', 'auth_mode', 'api_token', 'username', 'password', 'verify_tls', 'timeout', 'subscription_url', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'], array_column($card['fields'], 'name'), 'no two-factor secret of its own');
         self::assertSame(['token' => 'کلید API', 'password' => 'نام کاربری و رمز'], array_column(array_column($card['fields'], null, 'name')['auth_mode']['options'], 'label', 'value'));
     }
 
@@ -44,7 +44,7 @@ final class PasarGuardDriverTest extends TestCase
 
     public function testAnApiKeyConnectionIsKeptWithTheOptions(): void
     {
-        $values = self::check(['base_url' => ' https://panel.example.com:8000/ ', 'auth_mode' => 'token', 'api_token' => self::KEY, 'verify_tls' => false, 'timeout' => '۴۵', 'subscription_url' => 'https://sub.example.com/sub/']);
+        $values = self::check(['base_url' => ' https://panel.example.com:8000/ ', 'auth_mode' => 'token', 'api_token' => self::KEY, 'verify_tls' => false, 'timeout' => '۴۵', 'subscription_url' => 'https://sub.example.com/sub/', 'proxy_enabled' => false]);
 
         self::assertSame([
             'base_url' => 'https://panel.example.com:8000',
@@ -53,12 +53,13 @@ final class PasarGuardDriverTest extends TestCase
             'meta.verify_tls' => false,
             'meta.timeout' => 45,
             'meta.subscription_url' => 'https://sub.example.com/sub',
+            'proxy_enabled' => false,
         ], $values);
     }
 
     public function testEveryRefusedFieldIsReportedAtOnce(): void
     {
-        $errors = self::errors(['base_url' => 'panel.example.com', 'auth_mode' => 'token', 'api_token' => 'pg_key_6f1c…6a7b', 'verify_tls' => true, 'timeout' => 1, 'subscription_url' => 'sub.example.com']);
+        $errors = self::errors(['base_url' => 'panel.example.com', 'auth_mode' => 'token', 'api_token' => 'pg_key_6f1c…6a7b', 'verify_tls' => true, 'timeout' => 1, 'subscription_url' => 'sub.example.com', 'proxy_enabled' => false]);
 
         self::assertEqualsCanonicalizing(['base_url', 'api_token', 'timeout', 'subscription_url'], array_keys($errors));
         self::assertStringContainsString('pg_key_', $errors['api_token'][0], 'the cut-short key the list shows is not the key');

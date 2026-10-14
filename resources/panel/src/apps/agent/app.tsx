@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import type { RouteObject } from 'react-router'
-import { BUY_TRAFFIC } from '@/apps/agent/buy-traffic'
 import { AGENT_NAV } from '@/apps/agent/nav'
 import { accountQuery } from '@/apps/agent/queries'
+import { SellingBanner } from '@/apps/agent/selling-banner'
 import { AppReady, Installation } from '@/components/app-status'
 import { ErrorState } from '@/components/error-state'
 import { NotFoundPage } from '@/components/not-found'
@@ -15,7 +15,6 @@ import {
   BotTextsPage,
   CashbackPage,
   CustomerPage,
-  DashboardPage,
   DiscountCodesPage,
   GiftCodesPage,
   KeyboardsPage,
@@ -52,6 +51,10 @@ const BroadcastsPage = lazyPage(
   () => import('@/pages/broadcasts'),
   (module) => module.BroadcastsPage,
 )
+const DashboardPage = lazyPage(
+  () => import('@/apps/agent/pages/dashboard'),
+  (module) => module.AgentDashboardPage,
+)
 const LoginPage = lazyPage(
   () => import('@/apps/agent/pages/login'),
   (module) => module.LoginPage,
@@ -61,7 +64,7 @@ const SettingsPage = lazyPage(
   (module) => module.SettingsPage,
 )
 
-const AGENT_SHELL: PanelShell = { nav: AGENT_NAV, role: 'نماینده' }
+const AGENT_SHELL: PanelShell = { nav: AGENT_NAV, role: 'نماینده', banner: SellingBanner }
 
 /**
  * An agent's routes, under the panels' root (root.tsx): before the shop is installed there is no agent, and nothing to
@@ -86,7 +89,7 @@ export const AGENT_ROUTES: RouteObject[] = [
               {
                 element: <AppShell panel={AGENT_SHELL} />,
                 children: [
-                  { index: true, element: <DashboardPage trafficHelp={BUY_TRAFFIC} /> },
+                  { index: true, element: <DashboardPage /> },
                   { path: 'tickets', element: <TicketsPage /> },
                   { path: 'tickets/:id', element: <TicketPage /> },
                   { path: 'reviews', element: <ReviewsPage /> },

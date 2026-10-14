@@ -13,7 +13,6 @@ use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Texts\BotText;
-use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\WalletTransaction;
 use Tests\BotTestCase;
 use Tests\Fakes\FakeProvider;
@@ -72,7 +71,7 @@ final class FreePlansTest extends BotTestCase
         $card = $this->cardMethod();
 
         $take = $this->checkout($this->test);
-        self::assertSame(CallbackData::build(PurchaseHandler::serverCallback($this->test->id, $this->server->id), $card->id), $take, 'through the one way to pay there is');
+        self::assertSame($this->payButton($this->test, $this->server, $card), $take, 'through the one way to pay there is');
         $this->send($this->tap($take));
 
         self::assertSame(OrderStatus::Fulfilled, Order::query()->sole()->status, 'no card transfer of nothing');

@@ -10,19 +10,20 @@ use App\Modules\Bots\Services\Bots;
 
 /**
  * A panel's session as `GET /auth/me` and the sign-ins answer it: who is signed in and the shop shown. A shop is named
- * «فروشگاه اصلی», an agent's by its bot's title, else (no bot handed over yet) by its agent.
+ * «فروشگاه اصلی», an agent's by its bot's title, else (no bot handed over yet) by its agent; an agent's whose selling the
+ * main shop suspended says why (Bot::sellingSuspension()).
  */
 final class SessionPresenter
 {
     public function __construct(private readonly Bots $bots) {}
 
-    /** @return array{name: string, shop: array{id: int, name: string, username: string|null, status: string}} */
+    /** @return array{name: string, shop: array{id: int, name: string, username: string|null, status: string, selling_suspended: string|null}} */
     public function present(Principal $principal): array
     {
         return ['name' => $principal->name, 'shop' => $this->shop($principal->shop)];
     }
 
-    /** @return array{id: int, name: string, username: string|null, status: string} */
+    /** @return array{id: int, name: string, username: string|null, status: string, selling_suspended: string|null} */
     public function shop(Bot $bot): array
     {
         $username = $this->bots->username($bot);
@@ -32,6 +33,12 @@ final class SessionPresenter
             default => 'نماینده: ' . ($bot->agent?->name() ?? '#' . $bot->id),
         };
 
-        return ['id' => $bot->id, 'name' => $name, 'username' => $username !== '' ? $username : null, 'status' => $bot->status()->value];
+        return [
+            'id' => $bot->id,
+            'name' => $name,
+            'username' => $username !== '' ? $username : null,
+            'status' => $bot->status()->value,
+            'selling_suspended' => $bot->sellingSuspension()?->value,
+        ];
     }
 }

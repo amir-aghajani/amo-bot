@@ -57,7 +57,7 @@ final class StoreAgentPricesTest extends HttpTestCase
     {
         $this->bearer($this->customerSession($this->sara));
 
-        $response = $this->send('POST', $this->storeApi($this->website, '/orders'), ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'method_id' => $this->walletMethod()->id], ['Idempotency-Key' => 'agent-1']);
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod(), key: 'agent-1');
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         $order = $this->decode($response)['checkout']['order'];

@@ -47,8 +47,6 @@ final class DiscountCodes
     public const CODE_MIN = 3;
     public const CODE_MAX = 32;
     public const NOTE_MAX = 191;
-    /** The most Toman a code takes off, or an order may be asked to reach. */
-    public const AMOUNT_MAX = 1_000_000_000;
     public const USES_MAX = 1_000_000;
 
     public const NOT_FOUND = 'این کد تخفیف پیدا نشد.';
@@ -395,7 +393,8 @@ final class DiscountCodes
 
         $orderTypes = DiscountForm::kinds($input['order_types'] ?? null, $errors);
         $planIds = DiscountForm::ids($input['plan_ids'] ?? null, 'plan_ids', Plan::query(), 'پلن', $errors);
-        $serverIds = DiscountForm::ids($input['server_ids'] ?? null, 'server_ids', Server::query(), 'سرور', $errors);
+        // A server the owner keeps from an agent's shop is none of its choices.
+        $serverIds = DiscountForm::ids($input['server_ids'] ?? null, 'server_ids', Server::shown(), 'سرور', $errors);
         if (!Input::isBoolean($input['first_purchase_only'] ?? null)) {
             $errors['first_purchase_only'][] = Validation::NOT_A_SWITCH;
         }
@@ -438,25 +437,22 @@ final class DiscountCodes
     }
 
     /**
-     * Whole Toman from `$least` up, or null when blank or left out; refused under `$field` in `$label`'s words.
+     * Whole Toman from `$least` up, or null when blank or left out (Input::optionalAmountOf()); refused under `$field` in
+     * `$label`'s words.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
      */
     private static function amountOrNull(array $input, string $field, string $label, array &$errors, int $least): ?string
     {
-        $value = $input[$field] ?? null;
-        if ($value === null || (is_string($value) && trim($value) === '')) {
-            return null;
-        }
-        $amount = Input::amountOf($value);
-        if ($amount === null || $amount < $least || $amount > self::AMOUNT_MAX) {
-            $errors[$field][] = "{$label} را به تومان و بدون اعشار بنویسید.";
+        $amount = Input::optionalAmountOf($input[$field] ?? null, $least, Money::AMOUNT_MAX);
+        if ($amount === false) {
+            $errors[$field][] = Validation::notWholeToman($label);
 
             return null;
         }
 
-        return Money::normalize($amount);
+        return $amount;
     }
 
     /**

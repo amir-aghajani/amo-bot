@@ -19,8 +19,8 @@ import { json, refusal, server } from '@/test/server'
 
 const SERVICE = subscriptionRow()
 const URL = `/api/admin/subscriptions/${SERVICE.id}/extend`
-const OWNER: Session = { name: 'root', shop: { id: 1, name: 'فروشگاه اصلی', username: null, status: 'active' } }
-const AGENTS_SHOP: Session = { name: '@reza_shop_bot', shop: { id: 2, name: 'فروشگاه رضا', username: 'reza_shop_bot', status: 'active' } }
+const OWNER: Session = { name: 'root', shop: { id: 1, name: 'فروشگاه اصلی', username: null, status: 'active', selling_suspended: null } }
+const AGENTS_SHOP: Session = { name: '@reza_shop_bot', shop: { id: 2, name: 'فروشگاه رضا', username: 'reza_shop_bot', status: 'active', selling_suspended: null } }
 const GB = 1024 ** 3
 
 interface Options {

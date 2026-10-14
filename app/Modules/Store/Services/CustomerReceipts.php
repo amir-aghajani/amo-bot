@@ -8,10 +8,12 @@ use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Security\RateLimiter;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Exceptions\ReceiptInReviewException;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Payments\Services\Receipts;
+use App\Modules\Payments\Services\ReceiptsInReview;
 use App\Modules\Store\Exceptions\CheckoutRefusedException;
 use App\Modules\Users\Exceptions\StorageFullException;
 use App\Modules\Users\Models\User;
@@ -24,13 +26,15 @@ use Psr\Http\Message\UploadedFileInterface;
  * A card transfer's receipt uploaded from the website, taken as the bot takes one: for the customer's own payment while
  * it awaits a receipt, judged as a picture by its bytes, kept among the shop's uploads, then the bot's compare-and-swap
  * and report (PaymentService::submitUpload()). Unlike the bot's, an uploaded receipt never auto-approves: it always waits
- * for support. Uploads share the customer's one picture budget with their tickets (CustomerPictures::budget()).
+ * for support. Uploads share the customer's one picture budget with their tickets (CustomerPictures::budget()). While
+ * the shop takes one receipt at a time, none is taken while another of theirs is in review (ReceiptsInReview).
  */
 final class CustomerReceipts
 {
     public function __construct(
         private readonly PaymentService $payments,
         private readonly PaymentActions $actions,
+        private readonly ReceiptsInReview $inReview,
         private readonly Receipts $receipts,
         private readonly CustomerOrders $orders,
         private readonly CustomerCheckout $checkout,
@@ -45,6 +49,7 @@ final class CustomerReceipts
      * @param array<string, mixed> $input The form's other fields
      * @throws ModelNotFoundException 404: no payment of theirs
      * @throws ValidationException 422 on `status` (it awaits no receipt), `note` or `file`
+     * @throws ReceiptInReviewException 422 on `status`: one receipt at a time, and another of theirs is in review
      * @throws TooManyAttemptsException 429: the customer's picture budget is spent
      * @throws StorageFullException 503: the host's disk has no room for it
      * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
@@ -56,6 +61,7 @@ final class CustomerReceipts
         if (!$this->payments->awaitsReceipt($payment)) {
             throw ValidationException::on('status', $this->actions->refusal($payment, 'receipt'));
         }
+        $this->inReview->allowReceipt($customer, $payment);
 
         // The note and the picture are refused together, before anything is kept.
         $noteRefused = null;
@@ -77,9 +83,10 @@ final class CustomerReceipts
 
         $path = $this->receipts->keep($payment, $picture['bytes'], $picture['extension']);
         try {
-            $submitted = $this->payments->submitUpload($payment, $path, $note, $file?->getClientFilename());
+            // One receipt at a time is asked again as it is taken: another of theirs may have come from the bot meanwhile.
+            $submitted = $this->inReview->submit($customer, $payment, fn(): bool => $this->payments->submitUpload($payment, $path, $note, $file?->getClientFilename()));
         } catch (\Throwable $e) {
-            // The save failed (its report refused by the database, say): no receipt, so no file either.
+            // Refused so, or the save failed (its report refused by the database, say): no receipt, so no file either.
             $this->receipts->discard($path);
 
             throw $e;

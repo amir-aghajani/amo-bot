@@ -11,6 +11,143 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.5.0
+
+### Added
+
+- **A SOCKS5 proxy per server** («اتصال از طریق پراکسی SOCKS5» under the server's «تنظیمات پیشرفته») — for a panel the
+  shop's host cannot reach directly. Only that panel's requests go through it, and the proxy looks the panel's name up;
+  Telegram, mail and everything else go straight as before. Its password is kept encrypted, and a failure at the proxy —
+  its name not found, down, refusing the login or unable to reach the panel — is reported as the proxy's, the panel left
+  alone for ten minutes. `panel:probe --proxy` tries one from a shell.
+- **Moving a server's services** («انتقال سرویس‌ها» on a server's page) — every shop's services on a server go to another
+  server in the background: by **migration** while its panel answers (each client read, made on the target with what it
+  has left, deleted from the old one), or by **rescue** when it is down (each rebuilt from the shop's last copy, the old
+  clients removed by themselves once that panel answers again). A preview says how many services and which shops; a
+  filter by plan and the switched-off services are yours to choose; it pauses, resumes and cancels, and a migration
+  waiting on a panel that no longer answers goes on as a rescue with «ادامه با حالت نجات». Each customer gets the new
+  link in their own shop's bot; the report group hears the start and the end. A service keeps its plan, end, device
+  limit, queued renewal and orders; its link changes and its traffic is counted afresh on what was left.
+- **Wallet transfers** («انتقال موجودی») — a customer sends money from their wallet to another customer of the shop by
+  their numeric Telegram id: «💸 انتقال موجودی» beside «➕ افزایش موجودی», the id, the amount, then a confirmation of
+  whom and how much; on the website too. No fee; only the wallet's own money, never an agent's credit; your least, most
+  and daily cap. Both are told, each wallet's history names the other, and the report group's «شارژ کیف پول» hears of
+  it. Off until switched on in «تنظیمات ربات › انتقال موجودی».
+- **Payment methods' bounds and cards** — each way to pay, the wallet too, can have a least and a most amount: a
+  checkout offers only those that take its price, and says so when none does. The wallet's row opens a form of its own
+  now — its label, its bounds and its switch —, so what customers see it called is yours to change too. A service whose
+  renewal price the wallet does not take is not offered «تمدید خودکار»: it is reminded and renewed by hand. The orders
+  support makes from a customer's wallet are not held to its bounds — they are for the customers' own checkouts. A
+  card-to-card method holds several cards, each with its bank and an optional daily cap: every payment is shown one at
+  random among those with room today, and always that one; the receipts, the payments screen and the report group name
+  it, and the customer's message shows its bank.
+- **Card-to-card payments** («تنظیمات ربات › پرداخت کارت به کارت»):
+  - buttons that copy the card number and the amount, in the digits a banking app takes;
+  - the card's message protected from forwarding and saving (on by default);
+  - one receipt at a time (on by default): while a customer's receipt waits for review, no other receipt or card
+    payment is taken from them, in the bot or on the website;
+  - «پرداخت‌ها» rejects waiting receipts in bulk — those ticked, or every one that had come when you confirmed —, each
+    customer told, the report group's «رسیدها» hearing one line for each hundred;
+  - support's private chat instead of a card: the customer is sent to support's chat with the order's number and
+    amount, and support approves the payment in the panel; such a payment never expires by itself — not even after the
+    option is switched off —, support approves it or cancels it with «لغو پرداخت».
+- **Top-up amounts** — beside the buttons you set, buttons of amounts drawn at random within a range; and a few Toman
+  added at random to each card-to-card top-up, so every transfer is a different sum and its receipt is found at a glance
+  — the whole sum is paid and credited.
+- **Orders support makes** («افزودن سفارش» on a customer's page) — support makes a customer a service by hand, on a plan
+  or of its own traffic, days and devices, on the server it picks, with an optional name: free, charged to the
+  customer's wallet, or paid outside the shop (counted in the revenue). It is delivered at once and the customer told;
+  the report group says support made it. An agent makes them in their own shop from their traffic; a website's admins
+  with the new «افزودن سفارش برای مشتری» grant.
+- **What an agent may sell, and for how long** — on «نمایندگان» you hide servers and plans from an agent's shop (their
+  existing services on them keep working), and set an end date and a monthly minimum purchase of traffic (by the
+  Persian calendar month) — on «تنظیمات نمایندگی», the ones every agent approved from then on starts with. The agent is
+  warned days ahead; then their shop's selling — never their bot — is suspended: new purchases, renewals, extras,
+  top-ups and free tests are refused politely, and so are gifts of a service, traffic or days (the wheel, gift codes,
+  the draw, referral rewards; Toman still reaches the wallet), a service extended by the agent or their website's
+  admins (yours still is), and every order made by hand, yours too; automatic renewals wait until it sells again. Their
+  customers' services keep working, and their panel says why. It opens again when you extend it or resume it, or as
+  soon as the month's purchases reach the minimum; you can also suspend a shop yourself.
+
+### Changed
+
+- **The report group never shows your panel login**: who of support did something reads «🎧 توسط پشتیبانی», naming an
+  admin or an agent and you as plain «پشتیبانی».
+- **A grant is ended with «لغو»** («لغوشده»), so «متوقف» always means a pause.
+- **A move, a purchase or a free test whose panel stops answering half-way** is asked again before anything is undone or
+  made twice: an old client it deleted without saying so leaves the service moved, a client it made without saying so is
+  the one delivered — a customer is never left without a service nor given two. A client a move leaves on a panel — the
+  old one it could not delete, or one the new panel may have made — is listed on that server's page and removed by
+  itself once that panel answers; and when a move cannot be written down after the old client is gone, the new client is
+  kept. A grant whose update met an error page from something in front of the panel is counted failed, never given
+  twice. A server is not deleted while a move from or to it is under way.
+- **Money is written once even when MySQL aborts a write for a deadlock**: wallet transfers, top-ups, checkouts,
+  approvals, refunds, orders by support, cashback, referral money, gift codes and the wheel are tried again.
+- **You can move one service of an agent's shop onto a server hidden from that shop**; the agent cannot.
+- **«انتقال بدون حذف از سرور قبلی»** no longer leaves the old client for you to remove: it is listed on that server's
+  page and removed by itself once its panel answers again.
+
+### For website developers
+
+- Wallet transfers: `GET /wallet/transfer?telegram_id=` (who an id is) and `POST /wallet/transfer` (after a recent
+  sign-in, with an `Idempotency-Key`); `GET /wallet` gains `transfer` (null while off) and `top_up.random`; the notices
+  `wallet_sent` and `wallet_received`. The recipient of a service or a wallet transfer is one `StoreRecipient` shape.
+  Looking a recipient up — each `GET` or `POST` of `/wallet/transfer` and of `/subscriptions/{id}/transfer` — draws on
+  one budget a customer has, 10 in 10 minutes, wallet and service transfers together. While the customer can send
+  nothing — less than the least in their wallet, or the day's cap used up —, `GET /wallet/transfer` is a 422 on `amount`
+  before any id is looked up.
+- `GET /payment-methods?amount=` lists the ways that take that amount, each with its `min_amount` and `max_amount`; an
+  order whose price a method does not take is a 422 on `method_id`, and so is a card payment that finds no card with
+  room after all — the order just made is cancelled at once and the `Idempotency-Key` left free to send again.
+- A service's `auto_renew.offered` is also false while the wallet does not take its renewal price; a `PATCH` of
+  `auto_renew` then is a 422.
+- A card payment's `transfer` names the card's `bank`; while the shop sends card payments to support's chat its `card`
+  and `holder` are null and `contact` says where to send the receipt. A card top-up's `transfer.amount` may be a few
+  Toman more than its order's `amount` (the shop's random sum): show the customer `transfer.amount`. An order paid in
+  support's chat never expires; it counts among the customer's unpaid orders until support approves or cancels it.
+- While a customer's receipt waits for review — on by default after the update —, another receipt or card payment is a
+  422 on `status`.
+- An agent's shop whose selling is suspended answers ordering with a 503 (`shop.taking_orders` false), a renewal
+  preview, or a discount-code check for a renewal or an extra, with a 422 on `status`, and a discount-code check for a
+  purchase with a 422 on `plan_id`; a gift code worth a service is a 422 on `code` in the suspension's words; the
+  receipt of an order made before is still taken. The main shop's notices to an agent may now be `agency_expiring`,
+  `agency_minimum_short`, `agency_suspended` and `agency_resumed`.
+- A card method whose cards are all switched off, or have no room left today, is not listed.
+- The missing-`Idempotency-Key` message is worded for any request that needs one.
+- For a shop's admins on the website: `POST /admin/payments/dismiss` under the new `payments` grant, and `POST
+  /admin/users/{id}/orders` (with an `Idempotency-Key`), an order made for a customer, under the new `manual_orders`
+  grant (both after a recent sign-in); in an agent's shop, extending a service while its selling is suspended is a 422
+  on `status`, and a plan or a move onto a server hidden from the shop a 422. Rows gain `manual` (orders), `counterpart`
+  (wallet lines), `hidden_by_owner` (plans) and the dashboard `agency_standing` (the agent's panel only). A payment's
+  `gateway` may be `outside` (money support took outside the shop for an order it made), and its `summary` names the
+  card it was shown — or says «کارت در پیوی پشتیبانی داده شد» for one paid in support's chat. A move with
+  `leave_previous` (`POST /admin/subscriptions/{id}/move`) has the old client removed by itself once that panel answers.
+
+### Upgrading
+
+- The database gains each server's proxy, the moves of a server's services and the clients they left behind, wallet
+  transfers, each payment method's bounds, the card-to-card cards and the card each payment was shown, who made an order
+  by hand and their note, the servers and plans hidden from an agent's shop, and each agent's end date, monthly minimum
+  and suspension. The panel's update runs this upgrade by itself; a shop updated by hand runs it from «تنظیمات پنل ›
+  به‌روزرسانی».
+- Each card-to-card method's card moves into its list of cards, and the payments made with it keep it. A method whose
+  card number was not a valid card has no card after the upgrade and is offered to nobody until you add one; the
+  methods screen says «کارتی ندارد».
+- Every shop gets a built-in way to pay «خارج از فروشگاه», used only by the orders support makes — never offered to a
+  customer, never listed among the ways to pay.
+- Agents start with no end date and no monthly minimum, until you set them.
+- Every shop takes one receipt at a time and sends the card's message protected from the update on — both on by
+  default; «تنظیمات ربات › پرداخت کارت به کارت» switches them off.
+- A payment gateway driver of your own receives the payment in `initiate()`, and its `settle()` may run more than once
+  for one payment — the settlement's transaction is tried again when MySQL aborts it for a deadlock —, so it does
+  nothing but database work; a panel connector of your own reaches its panel through `PanelHttp` to go through the
+  server's proxy ([Drivers](Drivers.md)).
+- Tools of your own that write through the panels' API send the new fields: `proxy_enabled` on a server
+  (`POST`/`PUT /servers`, `POST /servers/test`), a card method's `cards` list in place of its `card_number` and
+  `card_holder`, the wallet settings' `topup_random_count`, `topup_random_min`, `topup_random_max`,
+  `topup_random_round` and `topup_unique_max`, and the agency settings' `term_days`, `monthly_minimum` and `warn_days`;
+  the «خارج از فروشگاه» method is never listed and cannot be changed.
+
 ## Version 0.4.0
 
 ### Added

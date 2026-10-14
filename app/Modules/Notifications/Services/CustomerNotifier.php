@@ -6,6 +6,7 @@ namespace App\Modules\Notifications\Services;
 
 use App\Core\Database\Transitions;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Bots\Enums\SellingSuspension;
 use App\Modules\Discounts\Models\LoyaltyTier;
 use App\Modules\Notifications\Enums\Delivery;
 use App\Modules\Notifications\Enums\NoticeType;
@@ -23,6 +24,7 @@ use App\Modules\Support\Models\TicketMessage;
 use App\Modules\Support\Services\TicketAttachments;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\Limits;
+use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Handlers\ReceiptHandler;
 use App\Modules\Telegram\Handlers\TicketHandler;
@@ -30,19 +32,22 @@ use App\Modules\Telegram\Handlers\TicketMessageHandler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
 use App\Modules\Telegram\Messages;
+use App\Modules\Telegram\Notifications\AgencyTermLines;
 use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
 use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Models\WalletTransfer;
+use App\Support\JalaliMonth;
 use App\Support\Money;
 use App\Support\Persian;
 
 /**
  * Everything the shop tells a customer on its own, once something was decided — a method per notice: payments (settled,
- * rejected, cancelled, refunded, reminded), services (switched off or on, moved, deleted, given days and traffic, handed
- * to another customer),
+ * rejected, cancelled, refunded, reminded), money sent from one wallet to another, services (switched off or on, moved,
+ * deleted, given days and traffic, handed to another customer),
  * renewals («تمدید خودکار» done or short), reminders («یادآوری»), referrals, the agency, tickets, cashback and loyalty,
  * the nightly draw, and every change of how their website account is signed in to.
  *
@@ -62,9 +67,11 @@ final class CustomerNotifier
     public function __construct(
         private readonly BotApi $api,
         private readonly ServiceCard $card,
+        private readonly AgencyTermLines $termLines,
         private readonly Notices $notices,
         private readonly BotTexts $texts,
         private readonly Buttons $buttons,
+        private readonly BotSettings $bot,
         private readonly TicketAttachments $attachments,
         private readonly GatewayRegistry $gateways,
     ) {}
@@ -146,22 +153,29 @@ final class CustomerNotifier
 
     /**
      * Support nudges a customer whose payment never completed: one still waiting for its receipt gets "send receipt" and
-     * "pay again", a rejected one only "pay again". Returns the delivery, which the panel reports.
+     * "pay again" — one shown no card, taken in support's private chat (Payment::TO_SUPPORT), the way there instead of
+     * "send receipt", as the payment's own message said, whatever the shop does now —, a rejected one only "pay again".
+     * Returns the delivery, which the panel reports.
      */
     public function paymentReminder(Payment $payment): Delivery
     {
         return $this->tell($payment, NoticeType::PaymentReminder, function () use ($payment): array {
-            $awaitingReceipt = $payment->status === PaymentStatus::Pending && $this->gateways->isManual($payment->method);
+            $values = ['order' => $payment->order_id, 'amount' => Money::format($payment->amount)];
             $keyboard = InlineKeyboard::make();
-            if ($awaitingReceipt) {
-                $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::SendReceipt), ReceiptHandler::stateFor($payment)));
+            $text = BotText::PaymentReminderRejected;
+            if ($payment->status === PaymentStatus::Pending && $this->gateways->isManual($payment->method)) {
+                if ($payment->card_id === null) {
+                    $text = BotText::PaymentReminderToSupport;
+                    $values['contact'] = $this->bot->supportContact();
+                    $keyboard->row(...$this->buttons->supportChat());
+                } else {
+                    $text = BotText::PaymentReminder;
+                    $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::SendReceipt), ReceiptHandler::stateFor($payment)));
+                }
             }
             $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::PayAgain), PurchaseHandler::reopenCallback($payment->order_id)));
 
-            return $this->message($this->texts->render($awaitingReceipt ? BotText::PaymentReminder : BotText::PaymentReminderRejected, [
-                'order' => $payment->order_id,
-                'amount' => Money::format($payment->amount),
-            ]), ['reply_markup' => $keyboard->build()]);
+            return $this->message($this->texts->render($text, $values), ['reply_markup' => $keyboard->build()]);
         });
     }
 
@@ -339,6 +353,43 @@ final class CustomerNotifier
         $this->tell($user, NoticeType::AgencyRevoked, fn(): array => $this->message($this->texts->render(BotText::AgencyRevoked, ['note' => $this->adminNote($note)])));
     }
 
+    /** An agent's agency ends soon (Agency\Services\AgencyStanding): when, and that their bot's selling stops then. */
+    public function agencyExpiring(User $agent, \DateTimeInterface $expiresAt): void
+    {
+        $this->tell($agent, NoticeType::AgencyExpiring, fn(): array => $this->message($this->texts->render(BotText::AgencyExpiring, [
+            'date' => Persian::date($expiresAt, withTime: true),
+        ])));
+    }
+
+    /** A Jalali month nears its end with the agent's traffic bought below their monthly minimum, with «💾 خرید حجم». */
+    public function agencyMinimumShort(User $agent, JalaliMonth $month, string $purchased, string $minimum, int $days): void
+    {
+        $this->tell($agent, NoticeType::AgencyMinimumShort, fn(): array => $this->message($this->texts->render(BotText::AgencyMinimumShort, [
+            'month' => $month->name(),
+            'days' => Persian::number($days),
+            'purchased' => Money::format($purchased),
+            'minimum' => Money::format($minimum),
+        ]), $this->buyTrafficKeyboard()));
+    }
+
+    /**
+     * The agent's bot sells nothing new now: why, the owner's note when they suspended it by hand — and «💾 خرید حجم» when
+     * buying is the way back.
+     */
+    public function agencySuspended(User $agent, SellingSuspension $reason, ?string $note): void
+    {
+        $this->tell($agent, NoticeType::AgencySuspended, fn(): array => $this->message(
+            $this->texts->render(BotText::AgencySuspended, ['reason' => $reason->words(), 'note' => $this->adminNote($note)]),
+            $reason === SellingSuspension::Minimum ? $this->buyTrafficKeyboard() : [],
+        ));
+    }
+
+    /** The agent's bot sells again. */
+    public function agencyResumed(User $agent): void
+    {
+        $this->tell($agent, NoticeType::AgencyResumed, fn(): array => $this->message($this->texts->get(BotText::AgencyResumed)));
+    }
+
     /** Support turned off the two-factor sign-in of the customer's website account. */
     public function twoFactorDisabled(User $user): void
     {
@@ -423,6 +474,34 @@ final class CustomerNotifier
         });
     }
 
+    /** «انتقال موجودی»: another customer sent money to the customer's wallet — how much, from whom, and their balance now. */
+    public function walletReceived(WalletTransfer $transfer): void
+    {
+        $this->tell($transfer->recipient, NoticeType::WalletReceived, fn(): array => $this->message($this->texts->render(BotText::WalletReceived, [
+            'amount' => Money::format($transfer->amount),
+            'name' => $transfer->sender->shownAs(),
+            'balance' => Messages::balance($transfer->recipient->balance()),
+        ])));
+    }
+
+    /**
+     * «انتقال موجودی»: the money the customer sent went — how much, to whom, and their balance now. Kept among their
+     * website's notices whichever door they used; sent to their chat only when they were not `$answered` there (they
+     * sent it from the website): the bot said it in place of its question.
+     */
+    public function walletSent(WalletTransfer $transfer, bool $answered): void
+    {
+        $this->tell($transfer->sender, NoticeType::WalletSent, function () use ($transfer, $answered): array {
+            [$text, $send] = $this->message($this->texts->render(BotText::WalletSent, [
+                'amount' => Money::format($transfer->amount),
+                'name' => $transfer->recipient->shownAs(),
+                'balance' => Messages::balance($transfer->sender->balance()),
+            ]));
+
+            return [$text, $answered ? static fn(int $chat): null => null : $send];
+        });
+    }
+
     /** A delivered order earned the customer cashback («کش‌بک»): how much, and their balance now. */
     public function cashbackEarned(Cashback $cashback, Order $order): void
     {
@@ -489,7 +568,7 @@ final class CustomerNotifier
         $this->tell($agent, NoticeType::AgencyTrafficShort, fn(): array => $this->message($this->texts->render(BotText::AgencyTrafficShort, [
             'order' => $order->id,
             'traffic' => Messages::bytes(max(0, $bot->trafficBalance())),
-        ]), ['reply_markup' => InlineKeyboard::make()->row($this->buttons->buyTraffic())->build()]));
+        ]), $this->buyTrafficKeyboard()));
     }
 
     /**
@@ -519,16 +598,22 @@ final class CustomerNotifier
         return $cashback === null ? '' : (string) $this->texts->part(BotText::CashbackTakenBack, ['cashback_amount' => Money::format($cashback->amount)]);
     }
 
-    /** Tell an agent their terms in `$text`: level, price per GB, credit. */
+    /** Tell an agent their terms in `$text`: level, price per GB, credit — and under them their bot's end and monthly minimum. */
     private function agencyTerms(User $agent, BotText $text, NoticeType $type): Delivery
     {
         $level = $agent->agencyLevel ?? throw new \LogicException("User #{$agent->id} is not an agent.");
 
-        return $this->tell($agent, $type, fn(): array => $this->message($this->texts->render($text, [
+        return $this->tell($agent, $type, fn(): array => $this->message(BotTexts::paragraphs($this->texts->render($text, [
             'level' => $level->name,
             'price' => Money::format($level->price_per_gb),
             'credit' => Messages::credit($agent->credit_limit),
-        ])));
+        ]), $this->termLines->terms($agent->ownBot))));
+    }
+
+    /** @return array<string, mixed> An agent's notice with «💾 خرید حجم» under it, where buying traffic is the way on. */
+    private function buyTrafficKeyboard(): array
+    {
+        return ['reply_markup' => InlineKeyboard::make()->row($this->buttons->buyTraffic())->build()];
     }
 
     /**

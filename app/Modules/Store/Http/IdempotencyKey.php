@@ -8,15 +8,16 @@ use App\Core\Exceptions\ValidationException;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * The `Idempotency-Key` header every ordering request carries: a key the website makes per checkout attempt (a UUID). The
- * same key from the same customer with the same way to pay is answered by the order it came to, never a second one
- * (`request_keys`, Payments\Services\Checkout). 1 to 64 Latin letters, digits, `-` and `_`.
+ * The `Idempotency-Key` header every request that moves money carries — a checkout, a wallet transfer, an order support
+ * makes by hand: a key the caller makes per attempt (a UUID), so the same request again is answered by what the key did,
+ * never done twice (`request_keys` for orders, Payments\Services\Checkout; `wallet_transfers.request_key`). 1 to 64
+ * Latin letters, digits, `-` and `_`.
  */
 final class IdempotencyKey
 {
     public const HEADER = 'Idempotency-Key';
 
-    public const MISSING = 'این درخواست باید هدر Idempotency-Key داشته باشد؛ برای هر بار پرداخت یک کلید تازه بسازید.';
+    public const MISSING = 'این درخواست باید هدر Idempotency-Key داشته باشد؛ برای هر بار انجام آن یک کلید تازه بسازید.';
     public const MALFORMED = 'Idempotency-Key باید 1 تا 64 کاراکتر از حروف و ارقام لاتین، «-» یا «_» باشد.';
 
     private const PATTERN = '/^[A-Za-z0-9_-]{1,64}$/D';

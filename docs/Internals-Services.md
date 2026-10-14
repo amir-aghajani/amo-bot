@@ -43,6 +43,20 @@ limit the panel enforces).
   timeouts, redirects never followed — and the readings of an answer that is not the API), `Raw` (defensive readers
   for loosely typed panel JSON).
 
+**A server's SOCKS5 proxy** (`servers.proxy_*`, its password encrypted) is a request option of its panel's requests
+alone: `PanelConnection::requestOptions()` adds `proxy => socks5h://[user:password@]host:port` (the login URL-encoded,
+the panel's name looked up by the proxy) and `PanelHttp::send()` merges it into each request — never into the shop's
+Guzzle client or its transport, which Telegram, mail, the captchas, OIDC and the update check share. A transport
+failure of a proxied request is classified with that in mind (`ConnectionFailure::of($message, proxied: true)`):
+cURL's 5 and 97, a name not found (6: cURL looks a SOCKS proxy's name up as its host) or a connection that could not be
+made (7, a timeout while connecting) — cURL connects to nothing but the proxy —, are `ConnectionFailure::Proxy`, said
+as the proxy's and counted as a panel out of reach (`ProviderException::unavailable()`, the backoff); a timeout once
+connected, or the panel's certificate, stay the panel's. `ConnectionException::tidy()` takes every address out of
+cURL's words, a proxy's with its login, and `Core\Logging\Redact` takes any address's login out of a log line. The proxy
+is part of the server's connection fingerprint, so a changed proxy gets a fresh client. `PanelConnection::of()` takes a
+whole row — a row without the proxy's columns would reach the panel straight —; what needs only the panel's address and
+its links' prefix reads them with `addresses()` from `base_url` and `meta` alone.
+
 `ProviderRegistry::forServer()` reuses a server's client for five minutes while its connection is unchanged, so one
 sign-in serves many calls; a 3x-ui session or a PasarGuard token is not renewed per call (PasarGuard notifies its admins
 of every sign-in). A server not stored yet — a probe of the add-server form — gets a client of its own.
@@ -115,7 +129,11 @@ a relabel leave it as the panel had it — no change but `setEnabled()` ever und
 
 `provision()` makes **one client on every inbound** of the plan entry, so the customer has one link for all of them,
 named by `ClientNaming` (below). A panel that answers without a link, or a transaction that fails after the panel call,
-takes the client back off the panel.
+takes the client back off the panel. A create that may have been done though no answer came
+(`ProviderException::mayHaveBeenDone()`, below) has the panel asked at once (`makeOn()`, as a move's is): a client by
+that name with the quota asked and nothing used is the one made, and the service is delivered on it — a retry would draw
+the pattern's next name and leave that one behind; a panel that cannot say leaves the delivery failed and a warning in
+the log to look for it.
 
 ### Client names
 
@@ -171,14 +189,31 @@ anyway, worded by the state found. Who asks matters:
 - a panel failure is worded for the reader (the owner the diagnosis, anyone else the summary);
 - **leaving a client on its panel** (a delete or move that does not contact an unreachable panel) is the owner's call
   in the main shop; anyone else may do it only while that panel is in backoff — a client left on a working panel would
-  be a second service nobody paid for;
+  be a second service nobody paid for (a move's is written down and removed once that panel answers, below);
 - panel work from an agent's shop or the website's admins is rate-limited per shop (60 a minute); the owner in the main
   shop is not, so a batch never floods a panel every shop depends on;
 - traffic added to an agent's customer's service comes out of the agent's pool (`TrafficPool::extending()`);
 - a shop admin never changes their own service.
 
 A move creates the new client first and deletes the old one second, so a failure at any step leaves the service where
-it was (`MoveException` names the step; `errors.previous` is the screen's cue to offer leaving the old panel out).
+it was (`MoveException` names the step; `errors.previous` is the screen's cue to offer leaving the old panel out). A
+call that may have been done though no answer came (`ProviderException::mayHaveBeenDone()`: a timeout or a cut
+connection once the request was on its way — `ConnectionFailure::beforeRequest()` false —, or an HTTP 5xx page something
+in front of the panel answered for it, `UnexpectedResponseException`; never the panel's own refusal) is asked about on
+its panel before anything is undone: the old client's delete — gone, the move stands; still there, the new client is
+taken back; no answer, the move stands and the old client is left behind (taking the new one back could leave the
+customer with neither) —, and the new client's create (`makeOn()`: a client by that name with the quota asked and
+nothing used is the one made, and kept, so the next name never makes a second; no answer, it is left behind).
+Every client a move leaves on a panel — the old one it did not delete (the previous panel left out, or silent), a new
+one the target did not say it made or would not take back — is written to `migration_leftovers` (`leave()`; the old one
+in the transaction that points the row at the new client, so its record stands or falls with the move) and removed once
+that panel answers ([below](#moving-a-servers-services)): the customer still has the old one's link. A failure to point
+the row at the new client takes it back only while it is nobody's (the service was deleted meanwhile) or the old one is
+still the customer's (`leavePrevious`); once the old one is gone, or may be, the new one is kept and the error logged.
+`ProvisioningService::move()` takes three more arguments for a server's bulk move ([below](#moving-a-servers-services)),
+each off for a single move: `switchedOff` (a service support switched off moves too, its new client made switched off),
+`from` (only while the service is still on that server, asked under its hold) and `by` (the job its leftovers are
+written down as).
 
 ## Service transfers
 
@@ -191,11 +226,13 @@ recipient), the panels and the website's admins (`Admin\Api\SubscriptionsControl
   order of it they made is open (`Order::OPEN`, `refuseOpenOrder()`: a failed one is support's to settle —
   `FAILED_ORDER` sends the customer there —, since once the service changed hands it could never be delivered and a
   failed renewal would hold the new owner's renewals; a previous owner's left from support's transfer holds nobody), and
-  is rate-limited: `LOOKUPS` recipients per `LOOKUP_WINDOW`, `TRANSFERS` per `TRANSFER_WINDOW`. Support is refused only
+  is rate-limited: `Users\Services\CustomerLookup::LOOKUPS` recipients per `LOOKUP_WINDOW` (counted with the money they
+  send, [wallet transfers](Internals-Commerce.md#wallet-transfers)), `TRANSFERS` per `TRANSFER_WINDOW`. Support is refused only
   its own service (`ActorRefusedException::ownService()`) and taking one itself.
 - **What may go** — `transferable()`: no free test, its client still on its panel; the panels' `actions.transfer`.
-- **The recipient** — `recipient()` reads the id as typed (Persian digits too, up to 16 digits) and finds the customer
-  of that Telegram id in the service's shop (`CurrentBot::run()`): not its owner, not banned. Refusals are
+- **The recipient** — `recipient()` finds the customer of that Telegram id in the service's shop through
+  `Users\Services\CustomerLookup::find()`, the one lookup wallet transfers share (the id as typed — Persian digits too, up
+  to 16 digits —, `CurrentBot::run()`, a customer's lookups counted): not its owner, not banned. Refusals are
   `ValidationException`s — the service under `status`, the recipient under `telegram_id` —, which the bot shows in its
   own texts (`%reason%`).
 - **The change** — `transfer()`: holding the service's lease as a change on its panel does (`Lease::take()`, for
@@ -208,8 +245,9 @@ recipient), the panels and the website's admins (`Admin\Api\SubscriptionsControl
   the commit `cancelLeftOrders()` cancels the previous owner's unpaid orders of it at once, as an idle one expires
   (`PaymentService::expire()`, its locks and receipts discarded; `NOTE_CANCELLED`): they could no longer be paid or
   delivered (`Order::serviceChangedHands()`), and a renewal of them would hold the new owner's `AutoRenewal` back. One
-  whose receipt waits for support stays — it may be the money — and fails at its delivery for support to give it back.
-  Only support's transfer leaves any. Then `CustomerNotifier::serviceReceived()` tells the new owner (with «📊 مشاهده
+  whose money may be with support (`Payment::isWithSupport()`: its receipt in review, or its card transfer taken in
+  support's private chat) stays — it may be the money — and fails at its delivery for support to give it back. Only
+  support's transfer leaves any. Then `CustomerNotifier::serviceReceived()` tells the new owner (with «📊 مشاهده
   سرویس» and, where the panel can change the link — `ProvisioningService::rotates()` —, that the previous owner keeps it
   until «تغییر لینک») and, when support did it, `serviceTransferred()` the previous one, with the orders cancelled
   (`%cancelled%`) — a customer's own change is answered at its door, as a new link is.
@@ -354,13 +392,55 @@ recipient), the panels and the website's admins (`Admin\Api\SubscriptionsControl
 
 `Grants` gives days and traffic to many services: a server's «افزودن زمان و حجم» or the [mass gift](Broadcasts.md#the-mass-gift).
 A grant is split into one `GrantPart` per server, each worked through **one service at a time past a cursor** by
-whoever holds the part's lease — the open screen a few seconds a request (`run()`, `runPart()`), or `GrantsTask` every
-minute — so it finishes however many services there are, and an unreachable panel holds up only its own server
-(`waiting_reason`). Each service is claimed (the cursor moved) before its panel is touched, so none is given twice; a
-failure that may have reached the panel (a timeout) is counted failed, not retried. The database allows one running part per server (`running_server_id`, a
-generated unique column); MySQL cannot cascade on such a column, so `ServerService::delete()` removes a server's parts
-itself. Who gets it is decided per service at its turn, by the panel's word: running, not switched off, and — unless
+whoever holds the part's lease — the open screen a few seconds a request (`run()`, `runPart()`, until
+`Core\Scheduling\Budget::screen()`), or `GrantsTask` every minute — so it finishes however many services there are, and an
+unreachable panel holds up only its own server (`waiting_reason`). The loop is `Core\Database\Lease::work()`: the service
+past the cursor (`next`), its turn (`step`, false when the part must wait or is no longer this call's), the end
+(`finish`), the lease let go however it ended. Each service is claimed (the cursor moved) before its panel is touched, so none is given twice; a
+failure that may have reached the panel (`ProviderException::mayHaveBeenDone()`: a timeout, a cut connection, a proxy's
+5xx page) is counted failed, not retried, as a refusal is — only a panel out of reach before the request went waits.
+The database allows one running part per server (`running_server_id`, a generated unique column); MySQL cannot cascade
+on such a column, so `ServerService::delete()` removes a server's parts itself. Who gets it is decided per service at its turn, by the panel's word: running, not switched off, and — unless
 ticked — not still waiting for the first connection.
+
+## Moving a server's services
+
+`ServerMigrations` is a server's «انتقال سرویس‌ها»: every shop's services on it (`Subscription::acrossShops()`) moved to
+another server, each by `ProvisioningService::move()`. A job (`ServerMigration`) covers the services on the source when it
+was started (`upto_subscription_id`) — active ones, those switched off with `include_disabled`, of `plan_ids` when given —
+and is worked through like a grant's part (`Lease::work()`, its `start` turning a queued job running): one service at a
+time past a cursor, by whoever holds the job's lease (the page's `run()` a few seconds a request, `MigrationsTask` every
+minute), each service claimed before any panel is touched.
+Its status is queued (until its first turn), running, paused, then done, cancelled or failed; the database allows one open
+job (queued, running, paused) per source (`open_source_id`, a generated unique column — `ServerService::delete()` removes
+a server's jobs itself, as for grant parts, and refuses a server an open job is from or to). The lease holds while the
+job is workable in the mode it was taken in: `pause()` and `toRescue()` write the status or mode alone — the holder stops
+at its next step yet still puts the cursor back on a service it must come back to —, `cancel()` frees the lease too.
+
+- **migrate** reads each client on the source (`move(leavePrevious: false)`): a source in backoff holds the job at that
+  service (`waiting_reason`), as a target in backoff does in either mode. `toRescue()` switches an open migration to a
+  rescue.
+- **rescue** never asks the source (`move(leavePrevious: true)`): the row's last synced numbers are carried, and each old
+  client is written to `migration_leftovers` in the transaction that moves the row (`move()`'s `leave()`, the job's
+  `migration_id`) — as, in either mode, a client a panel did not say it deleted or made.
+  `runAll()` then removes the leftovers of every server not in backoff — a single move's (no `migration_id`) too —
+  (`ProvisioningService::removeLeftover()`, which holds the leftover's service meanwhile — a busy one waits for the next
+  try — so a move of it back there cannot slip between the look and the delete), one gone already counting as removed
+  and one by a name a service of any shop has there again only forgotten; `cleanNow()` is the owner's button, asking
+  even a panel in backoff until it cannot be reached. A leftover outlives its job (`migration_id` set null when a deleted
+  server takes the job).
+
+The owner's job moves an agent's services onto a server kept from that agent's shop too: `Bot::hidesServer()` binds the
+single moves of anyone but the owner (`SubscriptionActions::move()`), not `ServerSelector::moveTarget()`. Per service: a target that can take no
+more by `ServerReadiness` (asked afresh before each service, and again when `moveTarget()` refuses) fails the job with the
+reason; another `NoServerAvailableException` (the plan's inbounds there) fails the service alone. `MoveException`: the
+service's own state passes it by (`skipped`); a panel that could not be worked with (`unavailable()`) puts the cursor back
+and holds the job — a move takes back what it made and writes down what it could not be sure of, so trying again is
+safe —; anything else is a failure, kept with why in `migration_failures`.
+`ServiceBusyException` puts the cursor back for the next turn. A moved service's customer gets
+`CustomerNotifier::serviceMoved()` in their shop's bot at the bulk pace (`Telegram\Api\Pacer`); `ShopReports` tells the
+main bot's «خطاها» when a job starts and ends. The report and the card count a job's clients left on a panel alike:
+`ServerMigration::leftovers()`, those not removed yet. The panels follow it in the change feed's own `migrations` area.
 
 ## Test accounts
 

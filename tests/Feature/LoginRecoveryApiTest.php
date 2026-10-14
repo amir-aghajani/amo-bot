@@ -60,7 +60,7 @@ final class LoginRecoveryApiTest extends HttpTestCase
         $response = $this->postJson(self::URL, $this->login(' ' . strtolower($this->key()) . ' ', ['username' => 'boss']));
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
-        self::assertSame(['name' => 'boss', 'shop' => ['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active']], $this->decode($response)['session'], 'the key as typed: case and spaces do not matter');
+        self::assertSame(['name' => 'boss', 'shop' => ['id' => 1, 'name' => 'فروشگاه اصلی', 'username' => null, 'status' => 'active', 'selling_suspended' => null]], $this->decode($response)['session'], 'the key as typed: case and spaces do not matter');
         self::assertSame(200, $this->get('/api/admin/auth/me')->getStatusCode(), 'this browser is signed in under the new login');
         self::assertSame('boss', $this->file()->get('ADMIN_USERNAME'));
         self::assertTrue(password_verify(self::NEW_PASSWORD, (string) $this->file()->get('ADMIN_PASSWORD_HASH')), 'kept in config.php, hashed');

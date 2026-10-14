@@ -31,7 +31,8 @@ use Illuminate\Support\Carbon;
  * A test is judged under a lock — the shop's bot row while there is a cap a day, else the customer's row — and claimed
  * with a `test_accounts` row before the panel is asked, so two taps at once never take more than the quota; one that
  * fails gives its claim back. What a test gets is its server's terms (TestServers), and in an agent's shop its traffic
- * comes out of the agent's pool as it is made.
+ * comes out of the agent's pool as it is made. An agent's shop whose selling is suspended (Bot::sells()) gives
+ * none.
  */
 final class TestAccounts
 {
@@ -123,6 +124,10 @@ final class TestAccounts
         if (!$this->settings->enabled()) {
             throw TestAccountRefusedException::because(TestRefusal::Off);
         }
+        // An agent's shop whose selling is suspended gives no test either — not even to its admins.
+        if (!CurrentBot::get()->sells()) {
+            throw TestAccountRefusedException::because(TestRefusal::Suspended);
+        }
         if ($user->isAdmin()) {
             return;
         }
@@ -143,14 +148,8 @@ final class TestAccounts
         }
 
         $cap = $this->settings->dailyLimit();
-        if ($cap > 0 && TestAccount::query()->where('created_at', '>=', self::today())->count() >= $cap) {
+        if ($cap > 0 && TestAccount::query()->where('created_at', '>=', LocalTime::midnight())->count() >= $cap) {
             throw TestAccountRefusedException::because(TestRefusal::DailyLimit);
         }
-    }
-
-    /** When today began on the shop's clock, in UTC. */
-    private static function today(): Carbon
-    {
-        return Carbon::instance(LocalTime::of(now())->setTime(0, 0))->utc();
     }
 }

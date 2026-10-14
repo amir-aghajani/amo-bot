@@ -79,7 +79,7 @@ final class StoreOrdersTest extends HttpTestCase
             'devices' => null,
             'payments' => [[
                 'id' => $paid->id,
-                'method' => ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual'],
+                'method' => ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual', 'min_amount' => null, 'max_amount' => null],
                 'status' => 'paid',
                 'amount' => '120000.00',
                 'created_at' => '2026-10-07T12:00:00+00:00',
@@ -109,7 +109,7 @@ final class StoreOrdersTest extends HttpTestCase
             'devices' => null,
             'payments' => [[
                 'id' => $pending->id,
-                'method' => ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual'],
+                'method' => ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual', 'min_amount' => null, 'max_amount' => null],
                 'status' => 'pending',
                 'amount' => '50000.00',
                 'created_at' => '2026-10-07T12:01:00+00:00',
@@ -156,7 +156,7 @@ final class StoreOrdersTest extends HttpTestCase
         $row = $this->decode($this->get($this->storeApi($this->website, "/orders/{$renewal->id}")))['order'];
 
         self::assertSame(['renewal', ['id' => $this->server->id, 'name' => 'Berlin'], ['id' => $subscription->id, 'name' => $subscription->remote_name]], [$row['type'], $row['server'], $row['subscription']], 'a renewal names no server of its own: its service\'s');
-        self::assertSame(['id' => $this->walletMethod()->id, 'label' => $this->walletMethod()->label, 'kind' => 'instant'], $row['payments'][0]['method']);
+        self::assertSame(['id' => $this->walletMethod()->id, 'label' => $this->walletMethod()->label, 'kind' => 'instant', 'min_amount' => null, 'max_amount' => null], $row['payments'][0]['method']);
     }
 
     public function testTheListIsNarrowedToAStateAndAKind(): void

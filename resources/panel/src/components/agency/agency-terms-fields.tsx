@@ -2,16 +2,19 @@ import { useQuery } from '@tanstack/react-query'
 import { agencyLevelsQuery } from '@/components/agency/queries'
 import { ErrorState } from '@/components/error-state'
 import { Field } from '@/components/field'
-import { Input } from '@/components/ui/input'
+import { MoneyField } from '@/components/money-field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { AgencyTermsRequest } from '@/lib/api-types'
-import { decimalInput, decimalOf, formatMoney, formatPricePerGb } from '@/lib/format'
+import { decimalInput, formatPricePerGb } from '@/lib/format'
 
-/** What an agent is given — their level, and the credit their wallet may go below zero by —, as the form holds it: each as typed. */
-export type AgencyTerms = Record<keyof AgencyTermsRequest, string>
+/**
+ * What an agent is given — their level, and the credit their wallet may go below zero by —, as the form holds it: each
+ * as typed. Their terms of selling are SellingTermsFields'.
+ */
+export type AgencyTerms = Record<'level_id' | 'credit_limit', string>
 
 /** The two as the API takes them. */
-export const termsBody = (values: AgencyTerms): AgencyTermsRequest => ({ level_id: values.level_id, credit_limit: decimalInput(values.credit_limit) })
+export const termsBody = (values: AgencyTerms): Pick<AgencyTermsRequest, 'level_id' | 'credit_limit'> => ({ level_id: values.level_id, credit_limit: decimalInput(values.credit_limit) })
 
 interface AgencyTermsFieldsProps {
   values: AgencyTerms
@@ -23,7 +26,6 @@ interface AgencyTermsFieldsProps {
 export function AgencyTermsFields({ values, set, error }: AgencyTermsFieldsProps) {
   const levels = useQuery(agencyLevelsQuery)
   const { data } = levels
-  const credit = decimalOf(values.credit_limit)
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -49,14 +51,16 @@ export function AgencyTermsFields({ values, set, error }: AgencyTermsFieldsProps
           </Select>
         )}
       </Field>
-      <Field
+      <MoneyField
         id="agency_credit"
         label="اعتبار (تومان)"
+        placeholder="0"
+        value={values.credit_limit}
+        onChange={(credit) => set('credit_limit', credit)}
         error={error('credit_limit')}
-        hint={credit !== null && Number(credit) > 0 ? `= ${formatMoney(credit)}؛ موجودی کیف پول تا این اندازه منفی می‌شود.` : 'بدون اعتبار: فقط با موجودی کیف پول.'}
-      >
-        <Input dir="ltr" inputMode="decimal" autoComplete="off" placeholder="0" value={values.credit_limit} onChange={(e) => set('credit_limit', e.target.value)} />
-      </Field>
+        says={(money) => `= ${money}؛ موجودی کیف پول تا این اندازه منفی می‌شود.`}
+        hint="بدون اعتبار: فقط با موجودی کیف پول."
+      />
     </div>
   )
 }

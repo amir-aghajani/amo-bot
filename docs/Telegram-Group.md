@@ -34,18 +34,22 @@ without the right to manage topics.
 
 | Topic | What it hears |
 |---|---|
-| «خریدها» | A service sold and delivered: the customer, the plan, the location, the service, the amount and the way it was paid, the referrer's commission; a service a customer added to their account by its link: the customer, the service and its location ([Services added by their link](Service-Claims.md#who-gets-it)); a service handed to another customer: from whom, to whom, the service, its location, and whether its customer or support did it ([Services](Services.md#handing-a-service-to-another-customer)) |
+| «خریدها» | A service sold and delivered: the customer, the plan, the location, the service, the amount and the way it was paid, the referrer's commission; a service a customer added to their account by its link: the customer, the service and its location ([Services added by their link](Service-Claims.md#who-gets-it)); a service handed to another customer: from whom, to whom, the service, its location, and whether its customer or support did it ([Services](Services.md#handing-a-service-to-another-customer)); under an order support made by hand, «🎧 ثبت دستی توسط پشتیبانی» and how it was paid ([Orders and payments](Orders-And-Payments.md)) |
 | «تمدیدها» | A renewal — by which method, unless «تمدید پلن فعلی» — and the new end; extra traffic, time or devices bought for a service («حجم، زمان و کاربر اضافه»), and what the service has now |
-| «شارژ کیف پول» | A wallet top-up, and the balance |
-| «رسیدها» | A copy of each card receipt with what it pays for, «✅ تایید» and «❌ رد»; then its verdict as a reply to it |
+| «شارژ کیف پول» | A wallet top-up, and the balance; money one customer sent another («انتقال موجودی»), with both balances |
+| «رسیدها» | A copy of each card receipt with what it pays for and the card it was shown («🏦 کارت: …», or «🏦 کارت در پیوی پشتیبانی داده شد» for one taken in support's private chat), «✅ تایید» and «❌ رد»; then its verdict as a reply to it; and receipts support dismissed at once («🗑»): how many, and support's note |
 | «کاربران جدید» | A newcomer, and who brought them |
-| «خطاها» | A paid order whose delivery failed, with why and «🔁 تلاش دوباره برای تحویل»; in the main bot's group also a server's panel that stopped answering («🔴») and answers again («🟢») |
-| «نمایندگی» | The main bot's group alone: a request to become an agent with its buttons, then the verdict; a purchase of traffic |
+| «خطاها» | A paid order whose delivery failed, with why and «🔁 تلاش دوباره برای تحویل»; in the main bot's group also a server's panel that stopped answering («🔴») and answers again («🟢»), and a move of a server's services to another starting («🚚») and ending — done («✅»), stopped because the target could take no more («⛔️»), or cancelled («⏹») — with its numbers ([Servers](Servers.md#moving-its-services)) |
+| «نمایندگی» | The main bot's group alone: a request to become an agent with its buttons, then the verdict; a purchase of traffic; an agent's selling suspended («⛔️», with why and what opens it again) and opened again («✅») ([Agency](Agency.md)) |
 | «تیکت‌ها» | A ticket opened, then every later message, its closing, opening again and rating — [Support tickets](Support-Tickets.md#from-the-report-group) |
 | «نظرات» | A review written on the website: its number, name, stars, where they use the service from, who wrote it, the words — no buttons: it is decided on the panel's «نظرات» ([Reviews](Reviews.md)) |
 
 «بخش‌های گزارش», on the same screen, has a switch for each (all on). A topic switched off sends nothing, and its topic
 stays in the group.
+
+Who of support did something — handed a service on, dismissed receipts, made an order by hand, began moving a server's
+services — reads «🎧 توسط پشتیبانی»: an admin or an agent by name, you as plain «پشتیبانی», never your panel login (the
+group's members are not all you).
 
 ## Acting from the group
 

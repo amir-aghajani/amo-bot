@@ -59,6 +59,22 @@ final class MoneyTest extends TestCase
         self::assertSame('۰ تومان', Money::format(0));
     }
 
+    public function testDigitsAreTheWholeTomanFormatShowsInLatinDigitsWithoutSeparators(): void
+    {
+        self::assertSame('120000', Money::digits('120000.00'));
+        self::assertSame('120000', Money::digits('۱۲۰۰۰۰'), 'Persian digits in, Latin out');
+        self::assertSame('13', Money::digits('12.50'), 'rounded as format() shows it: «۱۳ تومان»');
+        self::assertSame('12', Money::digits('12.49'));
+        self::assertSame('0', Money::digits(0));
+    }
+
+    public function testWhatIsLeftIsNeverBelowZero(): void
+    {
+        self::assertSame('120.50', Money::atLeastZero('120.5'));
+        self::assertSame('0.00', Money::atLeastZero('-30000.00'), 'a debt leaves nothing');
+        self::assertSame('0.00', Money::atLeastZero(0));
+    }
+
     public function testSeveralOfOnePrice(): void
     {
         self::assertSame('288000.00', Money::times('96000.00', 3));

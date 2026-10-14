@@ -7,7 +7,6 @@ namespace App\Modules\Discounts\Services;
 use App\Modules\Orders\Enums\OrderType;
 use App\Support\Input;
 use App\Support\LocalTime;
-use App\Support\Persian;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -18,13 +17,12 @@ use Illuminate\Support\Carbon;
  */
 final class DiscountForm
 {
-    private const MOMENT = 'Y-m-d\TH:i';
     private const NOT_A_MOMENT = 'زمان را به شکل روز و ساعت بنویسید.';
     private const BACKWARDS = 'زمان پایان باید بعد از زمان شروع باشد.';
 
     /**
-     * `starts_at` and `ends_at` as the panels send them — "2026-03-20T18:00" on the shop's clock (APP_TIMEZONE), whatever
-     * the admin's browser says —, returned in UTC; blank or null is open on that side.
+     * `starts_at` and `ends_at` as the panels send them — "2026-03-20T18:00" on the shop's clock (LocalTime::moment()),
+     * whatever the admin's browser says —, returned in UTC; blank or null is open on that side.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
@@ -34,19 +32,13 @@ final class DiscountForm
     {
         $window = ['starts_at' => null, 'ends_at' => null];
         foreach (array_keys($window) as $field) {
-            $value = $input[$field] ?? null;
-            $text = is_string($value) ? Persian::latinDigits(trim($value)) : '';
-            if ($value === null || $text === '') {
-                continue;
-            }
-            $moment = preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $text) === 1 ? Carbon::createFromFormat(self::MOMENT, $text, LocalTime::zone()) : null;
-            // A date that does not exist (the 30th of February) parses into another one: compare it back.
-            if (!$moment instanceof Carbon || $moment->format(self::MOMENT) !== $text) {
+            $moment = LocalTime::moment($input[$field] ?? null);
+            if ($moment === false) {
                 $errors[$field][] = self::NOT_A_MOMENT;
 
                 continue;
             }
-            $window[$field] = $moment->utc();
+            $window[$field] = $moment;
         }
         if ($window['starts_at'] !== null && $window['ends_at'] !== null && $window['ends_at']->lessThanOrEqualTo($window['starts_at'])) {
             $errors['ends_at'][] = self::BACKWARDS;

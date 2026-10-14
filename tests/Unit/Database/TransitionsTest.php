@@ -39,6 +39,24 @@ final class TransitionsTest extends DatabaseTestCase
         self::assertSame($fulfilledAt->toDateTimeString(), $row->fulfilled_at?->toDateTimeString());
     }
 
+    /**
+     * A transaction tried again after a deadlock (Ledger::ATTEMPTS) moves the row again: the model still holds the first
+     * try's move, which the rollback took back, and every attribute given is written whatever the model holds.
+     */
+    public function testAMoveARollbackTookBackIsWrittenAgainThoughTheModelStillHoldsIt(): void
+    {
+        $db = $this->order->getConnection();
+        $db->beginTransaction();
+        self::assertTrue(Transitions::move($this->order, 'status', [OrderStatus::Pending], OrderStatus::Paid, ['notes' => 'x']));
+        $db->rollBack();
+        self::assertSame([OrderStatus::Paid, OrderStatus::Pending], [$this->order->status, Order::query()->findOrFail($this->order->id)->status], 'the model holds what the row lost');
+
+        self::assertTrue(Transitions::move($this->order, 'status', [OrderStatus::Pending], OrderStatus::Paid, ['notes' => 'x']));
+
+        $row = Order::query()->findOrFail($this->order->id);
+        self::assertSame([OrderStatus::Paid, 'x'], [$row->status, $row->notes]);
+    }
+
     public function testAMoveFromTheWrongStateChangesNothingAndReReadsTheRow(): void
     {
         // Another process got there first.

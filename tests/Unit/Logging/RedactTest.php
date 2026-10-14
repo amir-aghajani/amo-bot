@@ -35,6 +35,13 @@ final class RedactTest extends TestCase
         self::assertSame('GET /shop/cron/*** -> 500', Redact::text('GET /shop/cron/0123456789abcdef -> 500'));
     }
 
+    public function testAnAddresssLoginIsTakenOut(): void
+    {
+        self::assertSame('proxy socks5h://***@proxy.example.com:1080 refused', Redact::text('proxy socks5h://shop:s3cret%40pw@proxy.example.com:1080 refused'));
+        self::assertSame('https://***@panel.example.com/base', Redact::text('https://admin:pw@panel.example.com/base'));
+        self::assertSame('GET https://panel.example.com/a@b and mail@example.com', Redact::text('GET https://panel.example.com/a@b and mail@example.com'), 'an @ after the host, or in an address of mail, is no login');
+    }
+
     public function testOrdinaryTextStays(): void
     {
         $text = 'Sync of server 3 at 2026-10-05 20:44:25 took 12:30 minutes; order #42 paid.';

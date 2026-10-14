@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Rewards\Services;
 
 use App\Core\Database\DateRange;
+use App\Core\Database\Ledger;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Security\RateLimiter;
@@ -149,8 +150,9 @@ final class GiftCodes
         }
 
         $reward = $gift->reward();
-        if ($reward === null || ($reward->plan !== null && !$this->eligibility->delivers($reward->plan))) {
-            throw new GiftCodeRefusedException(GiftCodeRefusal::Unavailable, RewardUnavailableException::NO_SERVER);
+        if ($reward === null || $this->eligibility->givable($customer, [$reward]) === []) {
+            // A plan's service: none at all from an agent's shop whose selling is suspended, as Rewards::give() says.
+            throw new GiftCodeRefusedException(GiftCodeRefusal::Unavailable, $customer->shop()->sells() ? RewardUnavailableException::NO_SERVER : RewardUnavailableException::SUSPENDED);
         }
 
         $given = $reward->plan === null ? $this->credit($gift, $customer, $reward) : $this->givePlan($gift, $customer, $reward, $tell);
@@ -202,7 +204,7 @@ final class GiftCodes
             $this->take($gift, $customer);
 
             return $this->rewards->give($customer, $reward, sprintf(self::REASON, $gift->code));
-        });
+        }, Ledger::ATTEMPTS);
     }
 
     /**

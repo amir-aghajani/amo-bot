@@ -19,7 +19,7 @@ final class ThreeXuiDriverTest extends TestCase
     private const TOTP = 'JBSWY3DPEHPK3PXP';
 
     /** The connection's options, which every save sends. */
-    private const OPTIONS = ['verify_tls' => true, 'timeout' => 30, 'subscription_url' => ''];
+    private const OPTIONS = ['verify_tls' => true, 'timeout' => 30, 'subscription_url' => '', 'proxy_enabled' => false];
 
     private const ADDRESS = 'https://de1.example.com:2053/AbCdEf';
 
@@ -30,7 +30,7 @@ final class ThreeXuiDriverTest extends TestCase
         self::assertSame(['3x-ui', '3X-UI'], [$card['key'], $card['label']]);
         self::assertNotEmpty(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, 'نسخه 3')), 'the versions it needs');
         self::assertEquals((object) ['mark' => '3X', 'vendor' => 'MHSanaei', 'docs_url' => 'https://github.com/MHSanaei/3x-ui', 'inbounds' => true, 'link_rotation' => true], $card['traits']);
-        self::assertSame(['base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url'], array_column($card['fields'], 'name'));
+        self::assertSame(['base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'], array_column($card['fields'], 'name'));
         $fields = array_column($card['fields'], null, 'name');
         self::assertSame(['auth_mode' => ['password']], (array) $fields['totp_secret']['when'], 'the two-factor secret is the password way in\'s');
         self::assertSame(['base_url'], $fields['totp_secret']['bound_to'], 'and goes only where the panel is');
@@ -39,7 +39,7 @@ final class ThreeXuiDriverTest extends TestCase
 
     public function testATokenConnectionIsKeptWithItsOptions(): void
     {
-        $values = self::check(['base_url' => ' https://de1.example.com:2053/AbCdEf/ ', 'auth_mode' => 'token', 'api_token' => 'tok', 'verify_tls' => false, 'timeout' => '۴۵', 'subscription_url' => 'https://sub.example.com/sub/']);
+        $values = self::check(['base_url' => ' https://de1.example.com:2053/AbCdEf/ ', 'auth_mode' => 'token', 'api_token' => 'tok', 'verify_tls' => false, 'timeout' => '۴۵', 'subscription_url' => 'https://sub.example.com/sub/', 'proxy_enabled' => false]);
 
         self::assertSame([
             'base_url' => self::ADDRESS,
@@ -48,6 +48,7 @@ final class ThreeXuiDriverTest extends TestCase
             'meta.verify_tls' => false,
             'meta.timeout' => 45,
             'meta.subscription_url' => 'https://sub.example.com/sub',
+            'proxy_enabled' => false,
         ], $values, 'the token\'s way in alone: the login\'s fields are not read');
     }
 

@@ -21,7 +21,7 @@ Every operation may also return the common error shape ([errors](Store-API.md#er
 
 ## Grants
 
-The website's `staff_grants` setting holds any of `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`. What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
+The website's `staff_grants` setting holds any of `catalog`, `wallet`, `refunds`, `payments`, `extend`, `manual_orders`, `delete`, `account_security`. What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `payments` (reject receipts waiting for review in bulk), `extend` (add days and traffic to a service), `manual_orders` (make an order for a customer by hand, free, from their wallet or paid outside the shop, delivered at once), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
 An operation that needs a grant says which, and also needs a sign-in from the last 15 minutes, as approving a payment
 does without a grant (`x-staff-recent`).
 
@@ -60,6 +60,7 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 | [`PATCH /users/{id}`](#patch-usersid) | Ban or unban a customer |
 | [`GET /users/{id}/wallet`](#get-usersidwallet) | A customer's wallet balance and ledger |
 | [`POST /users/{id}/wallet`](#post-usersidwallet) | Credit or debit a customer's wallet |
+| [`POST /users/{id}/orders`](#post-usersidorders) | Make an order for a customer by hand («افزودن سفارش»), paid and delivered at once |
 | [`PUT /users/{id}/groups`](#put-usersidgroups) | Set a customer's groups |
 | [`POST /users/{id}/two-factor/disable`](#post-usersidtwo-factordisable) | Turn off a customer's two-factor sign-in on the website |
 | [`POST /users/{id}/sessions/end`](#post-usersidsessionsend) | Sign a customer out of the website on every device |
@@ -73,6 +74,7 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 | [`POST /orders/{id}/retry`](#post-ordersidretry) | Retry delivering a paid order whose delivery failed or stalled |
 | [`POST /orders/{id}/cancel`](#post-ordersidcancel) | Cancel an unpaid order |
 | [`GET /payments`](#get-payments) | All payments |
+| [`POST /payments/dismiss`](#post-paymentsdismiss) | Reject receipts waiting for review in bulk |
 | [`GET /payments/{id}`](#get-paymentsid) | One payment, as the list shows it |
 | [`GET /payments/{id}/receipt`](#get-paymentsidreceipt) | The payment's receipt picture |
 | [`POST /payments/{id}/approve`](#post-paymentsidapprove) | Approve a payment and deliver what it paid for |
@@ -836,6 +838,46 @@ A manual credit or debit, with the line the customer sees in their ledger. A deb
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /users/{id}/orders
+
+Make an order for a customer by hand («افزودن سفارش»), paid and delivered at once.
+
+- **Who:** an admin of the shop, signed in on its website, when the website grants `manual_orders` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **In the panels:** [`POST /api/{panel}/users/{id}/orders`](Panels-API-Reference.md#post-apipanelusersidorders).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the panel makes for each order support makes by hand (a UUID), and a new one after a refusal: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key (a network retry) returns the order the key made, as it is now: never a second order or charge, and never refused for what changed since (the wallet it charged, the name it took). Two identical requests at the same moment get one order. A key already used for another order of the customer's, or for another way to pay, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week. |
+
+**Body**, as JSON:
+
+An order support makes for a customer by hand: a plan (`plan_id`), or — without one — a service of support's own numbers (`traffic_gb`, `days`, `devices`, each required then), on `server_id`, paid as `payment` says.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `plan_id` | integer or null | no | A plan of the shop, switched on or off; left out or null for support's own numbers. |
+| `traffic_gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole gigabytes, 0 (unlimited) to 10000. Not in an agent's shop: 0, or more than the agent has left. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Whole days from the first connection, 0 (never ends) to 365. |
+| `devices` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Devices at once, 0 (unlimited) to 100. |
+| `server_id` | integer | yes | The server: one of the plan's that can deliver it now, or for support's own numbers any that can take a client now. |
+| `client_name` | string | no | The service's name on its panel («نام کاربری سرویس»): 3 to 32 Latin letters, digits, `_` and `-`, one the server's panel takes and no service there has. Blank for the shop's pattern. |
+| `payment` | [ManualPayment](API-Schemas.md#manualpayment) | yes |  |
+| `amount` | [AmountInput](API-Schemas.md#amountinput) | no | Whole Toman above zero, at most 100,000,000, for `wallet` and `outside`; ignored for `free`. |
+| `note` | string | no | Support's note, kept on the order and said in the report group; at most 300 characters. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The order the key made before, as it is now | [ManualOrderResponse](API-Schemas.md#manualorderresponse) |
+| `201` | Made, paid and delivered — or paid with its delivery failed | [ManualOrderResponse](API-Schemas.md#manualorderresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### PUT /users/{id}/groups
 
 Set a customer's groups. Replaces their groups with the ones listed.
@@ -1163,6 +1205,33 @@ All payments. Newest first, or sorted by `sort` and `dir`; with the count of rec
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [PaymentsResponse](API-Schemas.md#paymentsresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /payments/dismiss
+
+Reject receipts waiting for review in bulk: the payments `ids` names, or `all` of them (the oldest 100 a request).
+
+- **Who:** an admin of the shop, signed in on its website, when the website grants `payments` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **In the panels:** [`POST /api/{panel}/payments/dismiss`](Panels-API-Reference.md#post-apipanelpaymentsdismiss).
+
+**Body**, as JSON:
+
+Which receipts waiting for review to reject: the payments `ids` names, or `all` of them. One of the two; with `note`, support's note to each customer (at most 300 characters; blank for none).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `ids` | list of integer, at most 100 | no | Payment ids, at most 100. Those no longer waiting for review are skipped. |
+| `all` | boolean | no | True for every receipt waiting for review that had come by `until`, the oldest first — at most 100 a request (`left` says how many of them still wait). |
+| `until` | string (date-time) | no | With `all`: the previous answer's `until`, so the next round takes no receipt sent since the first began. Left out, now; never later than now. |
+| `note` | string | no |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Rejected | [DismissReceiptsResponse](API-Schemas.md#dismissreceiptsresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
@@ -1550,7 +1619,7 @@ Move a service to another server. It keeps its remaining days and traffic.
 
 **Body**, as JSON:
 
-Move an active service to another server, keeping its remaining days and traffic. `leave_previous` moves it without contacting the previous panel (when it is unreachable); the old client stays there for the owner to remove. In an agent's shop this is allowed only while that panel is unreachable.
+Move an active service to another server, keeping its remaining days and traffic. `leave_previous` moves it without contacting the previous panel (when it is unreachable); the old client stays there until that panel answers again, then it is removed by itself (the owner's server page lists it meanwhile). In an agent's shop this is allowed only while that panel is unreachable.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|

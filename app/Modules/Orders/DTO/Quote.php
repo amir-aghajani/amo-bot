@@ -25,9 +25,7 @@ final readonly class Quote
     /** What is paid: the base less every discount, never below zero. */
     public function amount(): string
     {
-        $amount = Money::subtract($this->base, $this->discountAmount());
-
-        return Money::compare($amount, 0) < 0 ? Money::normalize(0) : $amount;
+        return Money::atLeastZero(Money::subtract($this->base, $this->discountAmount()));
     }
 
     /** The Toman all discounts took off. */

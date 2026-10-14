@@ -36,9 +36,13 @@ program's terms.
 
 - `shop.name` — the main shop's name, or an agent's bot's title (else its @username, else the main shop's name).
   `shop.bot` is `null` while the bot's @username is unknown.
-- `shop.taking_orders` — whether the shop takes orders now: its bot switched on. While it is `false`, a purchase, a
-  renewal, a top-up and a receipt are refused (`503` `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.`); what it
-  sells is still read, and customers still sign in. Say so where the site sells.
+- `shop.taking_orders` — whether the shop takes orders now: its bot switched on, and — an agent's shop — its selling
+  not suspended by the main shop. While it is `false`, a purchase, a renewal, extra traffic, time or devices and a
+  top-up are refused with a `503` — `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.` while the bot is off, and a
+  receipt with it; `فروش این فروشگاه فعلا متوقف است؛ …` while the selling is suspended, when a renewal's preview and a
+  code's check say it as a `422` on `status` and a receipt for an earlier order is still taken
+  ([the flow](Store-API-Buying.md#the-flow)). What it sells is still read (a suspended agent's shop offers no plan), and
+  customers still sign in. Say so where the site sells.
 - `shop.service_claims` — whether a customer may add a service to their account by its link now (it stays so while
   `taking_orders` is false: adding a service is no order)
   ([adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)): the main shop's alone, while

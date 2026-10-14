@@ -10,7 +10,6 @@ import { useMoveBatch, type MoveBatch, type Outcome } from '@/components/subscri
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { SubscriptionRow } from '@/lib/api-types'
-import { useMainShop } from '@/lib/auth'
 import { formatNumber } from '@/lib/format'
 
 interface MoveDialogProps {
@@ -41,8 +40,6 @@ function MoveBody({ subscriptions, batch, servers: readServers, onClose }: { sub
   // The dialog stays while the batch runs.
   useHoldOpen(batch.running)
   const servers = useServerChoices(readServers)
-  // A client left on the previous server is the owner's to remove: in an agent's shop, support's — the agent reaches no panel.
-  const agentShop = !useMainShop()
   const { movable, queue, running, started, question } = batch
   // The way out takes the focus whenever the button pressed has gone: the start, once the batch runs; the prompt's, once
   // it is answered (while it asks, the prompt has it).
@@ -106,13 +103,14 @@ function MoveBody({ subscriptions, batch, servers: readServers, onClose }: { sub
         </ul>
       )}
 
+      {/* A client left on the previous server is written down and removed by itself once that server answers again. */}
       {question && (
         <SkipServerPrompt
           reason={question.reason}
           question={
             question.others > 0
-              ? `این سرویس و ${formatNumber(question.others)} سرویس دیگر همین سرور بدون حذف از «${question.subscription.server.name}» منتقل شوند؟ کلاینت‌های قبلی روی آن سرور می‌مانند و ${agentShop ? 'حذفشان از سرور با پشتیبانی است' : 'بعدا باید خودتان حذفشان کنید'}.`
-              : `بدون حذف از «${question.subscription.server.name}» منتقل شود؟ کلاینت قبلی روی آن سرور می‌ماند و ${agentShop ? 'حذفش از سرور با پشتیبانی است' : 'بعدا باید خودتان حذفش کنید'}.`
+              ? `این سرویس و ${formatNumber(question.others)} سرویس دیگر همین سرور بدون حذف از «${question.subscription.server.name}» منتقل شوند؟ کلاینت‌های قبلی روی آن سرور می‌مانند تا سرور دوباره جواب بدهد، بعد خودکار حذف می‌شوند.`
+              : `بدون حذف از «${question.subscription.server.name}» منتقل شود؟ کلاینت قبلی روی آن سرور می‌ماند تا سرور دوباره جواب بدهد، بعد خودکار حذف می‌شود.`
           }
           skipLabel="انتقال بدون حذف از سرور قبلی"
           cancelLabel="لغو انتقال"

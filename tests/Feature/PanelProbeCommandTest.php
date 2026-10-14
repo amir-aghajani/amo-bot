@@ -50,6 +50,34 @@ final class PanelProbeCommandTest extends DatabaseTestCase
         self::assertStringContainsString('Serving links.', $probe->getDisplay());
     }
 
+    public function testAPanelIsProbedThroughASocks5Proxy(): void
+    {
+        $this->panelHttp()->healthyPanel();
+
+        $probe = $this->probe(['driver' => '3x-ui', 'url' => 'https://panel.example:2053/base', '--token' => 'tok-1', '--proxy' => 'socks5h://shop:p%40ss@proxy.example.com:9050']);
+
+        self::assertSame(Command::SUCCESS, $probe->getStatusCode(), $probe->getDisplay());
+        foreach (array_keys($this->panelHttp()->history) as $i) {
+            self::assertSame('socks5h://shop:p%40ss@proxy.example.com:9050', $this->panelHttp()->options($i)['proxy'] ?? null, 'every request, the login as typed');
+        }
+
+        $this->panelHttp()->reset();
+        $this->panelHttp()->healthyPanel();
+        $this->probe(['driver' => '3x-ui', 'url' => 'https://panel.example:2053/base', '--token' => 'tok-1', '--proxy' => '203.0.113.10']);
+        self::assertSame('socks5h://203.0.113.10:1080', $this->panelHttp()->options(0)['proxy'] ?? null, 'no scheme, no port: SOCKS5 on 1080');
+
+        foreach (['http://proxy.example.com:3128', 'socks5h://proxy.example.com:1080/path', 'socks5h://:1080', 'socks5h://proxy.example.com:99999'] as $proxy) {
+            $this->panelHttp()->reset();
+            $refused = $this->probe(['driver' => '3x-ui', 'url' => 'https://panel.example:2053/base', '--token' => 'tok-1', '--proxy' => $proxy]);
+            self::assertSame(Command::INVALID, $refused->getStatusCode(), $proxy);
+            self::assertSame([], $this->panelHttp()->calls(), "{$proxy}: nothing sent");
+        }
+        $refused = $this->probe(['driver' => '3x-ui', 'url' => 'https://panel.example:2053/base', '--token' => 'tok-1', '--proxy' => 'socks5h://shop:secret@proxy.example.com:0']);
+        self::assertSame(Command::INVALID, $refused->getStatusCode(), 'the form\'s own refusal');
+        self::assertStringContainsString('پورت پراکسی', $refused->getDisplay());
+        self::assertStringNotContainsString('secret', $refused->getDisplay(), 'its password never printed');
+    }
+
     public function testAConnectorThatIsNotThereIsAnInvalidCall(): void
     {
         $probe = $this->probe(['driver' => 'marzban', 'url' => 'https://panel.example', '--token' => 't']);

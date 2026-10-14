@@ -35,15 +35,19 @@ final class AccountMerger
     /**
      * Every column that points at a customer (each foreign key on `users` in database/schema.php, plus `bots.user_id`,
      * which has none because users are made after bots) and how a merge carries it: `move` the rows to the survivor;
-     * `union` by `key` (a row the survivor already has for that key goes, the rest move); `drop` them; `ledger` the wallet
-     * lines into one ledger (WalletService::takeOver()); `referrer` the customers it brought, never the survivor itself.
-     * `as` names the count in `account_merges.moved`. A new such column goes here: AccountMergerReferencesTest reads the
-     * schema and fails while one is missing.
+     * `union` by `key` (a row the survivor already has for that key goes, the rest move); `unkey` by `key` (rows that
+     * record what happened all move, a key the survivor already has taken off the merged account's); `drop` them;
+     * `ledger` the wallet lines into one ledger (WalletService::takeOver()); `referrer` the customers it brought, never
+     * the survivor itself. `as` names the count in `account_merges.moved`. A new such column goes here:
+     * AccountMergerReferencesTest reads the schema and fails while one is missing.
      */
     public const REFERENCES = [
         'users.referred_by' => ['how' => 'referrer', 'as' => 'referrals'],
         'agency_requests.user_id' => ['how' => 'move', 'as' => 'agency_requests'],
         'wallet_transactions.user_id' => ['how' => 'ledger', 'as' => 'wallet_lines'],
+        // Money sent counts against the one account's daily cap; a website request's key both accounts sent stays the survivor's.
+        'wallet_transfers.sender_id' => ['how' => 'unkey', 'key' => 'request_key', 'as' => 'wallet_transfers_sent'],
+        'wallet_transfers.recipient_id' => ['how' => 'move', 'as' => 'wallet_transfers_received'],
         'customer_group_user.user_id' => ['how' => 'union', 'key' => 'customer_group_id', 'as' => 'groups'],
         'customer_sessions.user_id' => ['how' => 'move', 'as' => 'sessions'],
         'auth_challenges.user_id' => ['how' => 'drop'],
@@ -139,6 +143,7 @@ final class AccountMerger
                 $count = match ($rule['how']) {
                     'move' => $this->db->table($table)->where($column, $merged->id)->update([$column => $survivor->id]),
                     'union' => $this->union($table, $column, $rule['key'] ?? '', $survivor, $merged),
+                    'unkey' => $this->unkey($table, $column, $rule['key'] ?? '', $survivor, $merged),
                     'drop' => $this->db->table($table)->where($column, $merged->id)->delete(),
                     'ledger' => $this->wallet->takeOver($survivor, $merged),
                     'referrer' => $this->db->table($table)->where($column, $merged->id)->where('id', '!=', $survivor->id)->update([$column => $survivor->id]),
@@ -271,6 +276,20 @@ final class AccountMerger
         $held = $this->db->table($table)->where($column, $survivor->id)->pluck($key)->all();
         if ($held !== []) {
             $this->db->table($table)->where($column, $merged->id)->whereIn($key, $held)->delete();
+        }
+
+        return $this->db->table($table)->where($column, $merged->id)->update([$column => $survivor->id]);
+    }
+
+    /**
+     * Move a table whose rows record what happened (a wallet transfer), keyed by the customer and a nullable `$key`: every
+     * row moves; a key the survivor already has is taken off the merged account's row first, the survivor's answering it.
+     */
+    private function unkey(string $table, string $column, string $key, User $survivor, User $merged): int
+    {
+        $held = $this->db->table($table)->where($column, $survivor->id)->whereNotNull($key)->pluck($key)->all();
+        if ($held !== []) {
+            $this->db->table($table)->where($column, $merged->id)->whereIn($key, $held)->update([$key => null]);
         }
 
         return $this->db->table($table)->where($column, $merged->id)->update([$column => $survivor->id]);

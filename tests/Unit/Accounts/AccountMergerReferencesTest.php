@@ -24,8 +24,8 @@ final class AccountMergerReferencesTest extends TestCase
     public function testEveryReferenceSaysHowItIsCarriedOver(): void
     {
         foreach (AccountMerger::REFERENCES as $reference => $rule) {
-            self::assertContains($rule['how'], ['move', 'union', 'drop', 'ledger', 'referrer'], $reference);
-            self::assertSame($rule['how'] === 'union', isset($rule['key']), "{$reference}: a union names the key it is unique by");
+            self::assertContains($rule['how'], ['move', 'union', 'unkey', 'drop', 'ledger', 'referrer'], $reference);
+            self::assertSame(in_array($rule['how'], ['union', 'unkey'], true), isset($rule['key']), "{$reference}: a union or an unkey names the key it is unique by");
             self::assertSame($rule['how'] !== 'drop', isset($rule['as']), "{$reference}: what moves is counted on the merge's record");
         }
     }

@@ -98,21 +98,18 @@ final class TrafficPool
      * Draws the order's traffic from its bot's pool — once: an order whose traffic is already out (a delivery resumed
      * after its process died) draws nothing more.
      *
-     * @throws TrafficShortException when the pool does not have it
+     * @throws TrafficShortException when the pool does not have it (Bot::trafficRefusal())
      */
     public function draw(Order $order, Bot $bot): void
     {
         $bytes = self::bytesFor($order);
-        if ($bytes <= 0) {
-            throw new TrafficShortException(TrafficShortException::UNLIMITED);
-        }
-
         $this->write($bot, static function (int $balance) use ($order, $bytes): ?array {
             if (self::netFor($order) < 0) {
                 return null;
             }
-            if ($balance < $bytes) {
-                throw new TrafficShortException(sprintf(TrafficShortException::SHORT, Messages::bytes($bytes), Messages::bytes(max(0, $balance))));
+            $refusal = Bot::trafficRefusal($bytes, $balance);
+            if ($refusal !== null) {
+                throw new TrafficShortException($refusal);
             }
 
             return match ($order->type) {

@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Security\ReadableCode;
+use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
@@ -26,8 +27,8 @@ use Tests\Fakes\FakeProvider;
 
 /**
  * Gift codes: batches of readable unique codes; redeeming once however typed, Toman credited with the take, a plan's service
- * given (the code given back when no server delivers it), two takers at once, wrong codes rate-limited per customer and
- * network, and shops kept apart.
+ * given (the code given back when no server delivers it, or an agent's shop whose selling is suspended gives none), two
+ * takers at once, wrong codes rate-limited per customer and network, and shops kept apart.
  */
 final class GiftCodesTest extends DatabaseTestCase
 {
@@ -175,6 +176,33 @@ final class GiftCodesTest extends DatabaseTestCase
         $code = GiftCode::query()->sole();
         self::assertNull($code->redeemed_at, 'given back');
         self::assertNull($code->redeemed_by);
+    }
+
+    public function testAPlanCodeInAnAgentsShopWhoseSellingIsSuspendedSaysSoAndStaysTheCustomers(): void
+    {
+        $server = $this->sellingServer();
+        $bot = $this->agentBot();
+        CurrentBot::run($bot, function () use ($server): void {
+            $this->giftCodesOn();
+            $this->giftCode('PLANGIFT2345', ['kind' => GiftCodeKind::Plan, 'amount' => null, 'plan_id' => $this->plan([], $server)->id]);
+            $this->giftCode('TOMANGIFT234');
+        });
+        $this->service(AgencyStanding::class)->suspendByHand($bot, null);
+
+        CurrentBot::run($bot->refresh(), function (): void {
+            $reza = $this->customer(['telegram_id' => 7003]);
+            try {
+                $this->codes()->redeem($reza, 'PLANGIFT2345');
+                self::fail('a service was given');
+            } catch (GiftCodeRefusedException $e) {
+                // What the bot's text and the website's 422 on `code` say alike.
+                self::assertSame([GiftCodeRefusal::Unavailable, RewardUnavailableException::SUSPENDED], [$e->reason, $e->getMessage()], 'the suspension — no server that cannot deliver it');
+            }
+            self::assertNull(GiftCode::query()->where('code', 'PLANGIFT2345')->sole()->redeemed_at, "still the customer's for when it sells again");
+
+            $this->codes()->redeem($reza, 'TOMANGIFT234');
+            self::assertSame('50000.00', $reza->balance(), 'Toman are still given');
+        });
     }
 
     public function testExpiredUnknownAndOffAreRefused(): void

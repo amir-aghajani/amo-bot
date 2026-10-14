@@ -39,6 +39,15 @@ describe('the plans list', () => {
     expect(await screen.findByText(NO_SERVER)).toBeTruthy()
   })
 
+  it('marks a plan the main shop’s owner keeps from sale in its place, saying why when pressed', async () => {
+    const hidden = 'مدیر فروشگاه اصلی این پلن را پنهان کرده است؛ تا آن را آزاد نکند، به مشتری‌ها فروخته نمی‌شود.'
+    showPlans([planRow({ id: 1, name: 'یک‌ماهه', hidden_by_owner: true, unsellable_reason: hidden }), planRow()])
+
+    fireEvent.click(await screen.findByRole('button', { name: 'پنهان‌شده توسط مدیر' }))
+    expect(await screen.findByText(hidden)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'در ربات دیده نمی‌شود' })).toBeNull()
+  })
+
   it('says a first purchase’s own price under the plan’s price — «رایگان» for a free one —, and nothing of a plan without one', async () => {
     showPlans([
       planRow({ id: 1, name: 'ماهانه', first_purchase_price: '90000.00' }),

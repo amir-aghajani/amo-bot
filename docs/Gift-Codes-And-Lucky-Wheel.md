@@ -52,8 +52,9 @@ is, then confirmed. A code refused gets its reason and another one is awaited, u
 website, the same through the Store API ([gift codes](Store-API-After-Buying.md#gift-codes)).
 
 A code is taken once: of two customers — or two taps — at once, one gets it. It is refused when it is not the shop's
-(another shop's code is none of this one's), taken, past its last day, or worth a plan no server can deliver right now —
-then it stays the customer's to try again later. Every try counts until it names one of the shop's codes: a customer
+(another shop's code is none of this one's), taken, past its last day, or worth a plan no server can deliver right now
+— or any plan, in an agent's shop whose selling is suspended ([Agency](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum)),
+which it says —; then it stays the customer's to try again later. Every try counts until it names one of the shop's codes: a customer
 who sends 10 wrong codes in an hour waits (30 for a website's address network), so codes are not guessed.
 
 ## The lucky wheel
@@ -81,8 +82,9 @@ chance that weight makes among the enabled slices, and its switch. «افزود�
 
 At the moment of a spin, a slice that cannot reach that customer is left out and its chance shared among the rest:
 traffic or days for a customer without a running service that takes them (or whose server the shop is leaving alone
-after a failure; traffic in an agent's shop beyond the agent's traffic), a plan no server delivers now. A slice deleted
-leaves the spins that landed on it as they were.
+after a failure; traffic in an agent's shop beyond the agent's traffic), a plan no server delivers now — and in an
+agent's shop whose selling is suspended, every slice but Toman and «پوچ». A slice deleted leaves the spins that landed
+on it as they were.
 
 ### A spin
 

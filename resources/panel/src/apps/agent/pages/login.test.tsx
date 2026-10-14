@@ -20,7 +20,7 @@ vi.hoisted(() => window.history.replaceState(null, '', '/agent/'))
  * back to the page the session ended on, as the owner's does.
  */
 
-const AGENT: Session = { name: '@agent_shop_bot', shop: { id: 2, name: 'فروشگاه نماینده', username: 'agent_shop_bot', status: 'active' } }
+const AGENT: Session = { name: '@agent_shop_bot', shop: { id: 2, name: 'فروشگاه نماینده', username: 'agent_shop_bot', status: 'active', selling_suspended: null } }
 
 function Address() {
   const { pathname, search, hash } = useLocation()

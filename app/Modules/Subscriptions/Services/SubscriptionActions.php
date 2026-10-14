@@ -11,7 +11,9 @@ use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Services\TrafficPool;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
+use App\Modules\Catalog\Services\ServerSelector;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Providers\Exceptions\PanelFailedException;
@@ -38,7 +40,8 @@ use Psr\Log\LoggerInterface;
  * - A panel's failure is a 502 worded for the reader: the owner gets the diagnosis, anyone else the summary.
  * - Leaving a client on an unreachable panel (a move or delete without contacting it) is the owner's call in the main
  *   shop; elsewhere — an agent's shop, or the website's admins — only while that panel is in backoff (mayLeave()).
- * - Traffic added to a service of an agent's shop comes out of the agent's pool (extend()).
+ * - Traffic added to a service of an agent's shop comes out of the agent's pool (extend()); while the shop's selling is
+ *   suspended only the owner extends one, and only the owner moves one onto a server they keep from the shop.
  * - A shop admin never changes their own service (notTheirOwn()).
  * - Panel work from an agent's shop or the website's admins is rate-limited (PANEL_WORK per PANEL_WORK_WINDOW, per
  *   shop); the owner in the main shop is not.
@@ -94,6 +97,10 @@ final class SubscriptionActions
     {
         self::notTheirOwn($subscription, $actor);
         $this->allow($subscription, SubscriptionAction::Extend);
+        // An agent's shop whose selling is suspended gives nothing from its pool by hand either — but the owner may.
+        if (!$actor->isOwner() && !$subscription->shop()->sells()) {
+            throw ValidationException::on('status', SellingSuspendedException::STAFF);
+        }
         $gift = Gift::fromInput($input, 'note');
         self::fits($subscription, $gift);
         $this->panelWork($subscription, $actor);
@@ -158,7 +165,8 @@ final class SubscriptionActions
      * link. A refusal under `server_id` is about the target (no service can go there, so a batch stops); one under
      * `status` is about this service alone (a batch moves on) — except LEAVE_REFUSED, which is about the previous server.
      *
-     * @param bool $leavePrevious do not contact the previous server (out of reach): its client stays there
+     * @param bool $leavePrevious do not contact the previous server (out of reach): its client stays there, written down
+     *                            to be removed once that panel answers (ProvisioningService::move())
      * @throws ActorRefusedException 403 a shop admin's own service (a client left behind would be a second one)
      * @throws ValidationException|NoServerAvailableException|MoveException|ServiceBusyException|TooManyAttemptsException
      */
@@ -170,6 +178,10 @@ final class SubscriptionActions
             $this->mayLeave($subscription, $actor);
         }
         $target = Server::query()->find($serverId ?? 0) ?? throw ValidationException::on('server_id', 'سرور مقصد را انتخاب کنید.');
+        // A server the owner keeps from the service's shop takes none of its staff's moves; the owner's own may go there.
+        if (!$actor->isOwner() && $subscription->shop()->hidesServer($target->id)) {
+            throw ValidationException::on('server_id', sprintf('«%s»: %s', $target->name, ServerSelector::HIDDEN_SERVER));
+        }
 
         $this->panelWork($subscription, $actor);
         try {
