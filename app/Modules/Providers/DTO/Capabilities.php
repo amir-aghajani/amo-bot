@@ -15,6 +15,10 @@ final class Capabilities
         public readonly bool $inbounds = false,
         /** A client's credentials — and so its link — can be renewed in place («تغییر لینک»). */
         public readonly bool $linkRotation = false,
+        /** The panel enforces a client's IP limit (ClientSpec::$ipLimit), so «کاربر اضافه» may be sold. */
+        public readonly bool $ipLimit = false,
+        /** What the panel takes as a client's name; by default any name. */
+        public readonly ClientNameRule $names = new ClientNameRule(),
     ) {}
 
     /**

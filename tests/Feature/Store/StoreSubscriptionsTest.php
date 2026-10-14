@@ -91,6 +91,7 @@ final class StoreSubscriptionsTest extends HttpTestCase
             'name' => 'ali_1',
             'status' => 'active',
             'is_test' => false,
+            'claimed_at' => null,
             'plan' => ['id' => $this->plan->id, 'name' => 'یک‌ماهه'],
             'server' => ['id' => $this->server->id, 'name' => 'Berlin'],
             'link' => 'https://fake.test/sub/ali_1',
@@ -100,9 +101,13 @@ final class StoreSubscriptionsTest extends HttpTestCase
             'removes_at' => null,
             'auto_renew' => ['on' => true, 'offered' => true, 'days_before' => 2],
             'renewable' => true,
-            'extras' => ['traffic' => false, 'time' => false],
+            'picks_plan' => false,
+            'renewal_window' => ['open' => true, 'opens_at' => null, 'days_before' => null, 'traffic_percent' => null],
+            'devices' => 1,
+            'extras' => ['traffic' => false, 'time' => false, 'devices' => false],
             'link_rotation' => true,
             'next_period' => null,
+            'next_devices' => null,
             'presence' => null,
             'synced_at' => '2026-10-07T11:57:00+00:00',
             'created_at' => '2026-10-07T12:00:00+00:00',
@@ -129,6 +134,20 @@ final class StoreSubscriptionsTest extends HttpTestCase
         self::assertSame([['on' => false, 'offered' => false, 'days_before' => 2], false], [$row['auto_renew'], $row['renewable']], 'it never ends, and its plan renews nothing');
 
         self::assertSame(['ends_at' => '2026-10-12T12:00:00+00:00', 'bytes' => 30 * Traffic::GIGABYTE], $one($renewed)['next_period']);
+        self::assertNull($one($renewed)['next_devices'], 'its device limit stays as it is');
+    }
+
+    public function testADeviceLimitQueuedAloneSaysFromWhenItChanges(): void
+    {
+        // Renewed while three devices (two bought) last: the plan's one waits for the period in use; its traffic did not.
+        $renewed = $this->subscription($this->customer, $this->plan, $this->server, 'ali_1', ['ip_limit' => 3, 'period_ends_at' => now()->addDays(5), 'next_period_ip_limit' => 1]);
+        $unchanged = $this->subscription($this->customer, $this->plan, $this->server, 'ali_2', ['period_ends_at' => now()->addDays(5), 'next_period_ip_limit' => 1]);
+
+        $one = fn(Subscription $subscription): array => $this->decode($this->get($this->storeApi($this->website, "/subscriptions/{$subscription->id}")))['subscription'];
+
+        $row = $one($renewed);
+        self::assertSame([3, null, ['from' => '2026-10-12T12:00:00+00:00', 'devices' => 1]], [$row['devices'], $row['next_period'], $row['next_devices']]);
+        self::assertNull($one($unchanged)['next_devices'], 'the same limit queued: nothing changes');
     }
 
     public function testAnEndedServiceSaysWhenTheShopRemovesItWhileTheShopDoes(): void
@@ -158,9 +177,9 @@ final class StoreSubscriptionsTest extends HttpTestCase
 
         $row = $one();
         self::assertSame(
-            [true, null, false, false, ['traffic' => false, 'time' => false]],
-            [$row['is_test'], $row['plan'], $row['renewable'], $row['auto_renew']['offered'], $row['extras']],
-            'no plan to renew it on, and no extras though the shop sells them',
+            [true, null, false, false, false, ['traffic' => false, 'time' => false, 'devices' => false]],
+            [$row['is_test'], $row['plan'], $row['renewable'], $row['picks_plan'], $row['auto_renew']['offered'], $row['extras']],
+            'no plan to renew it on — nor one to pick, though plans are sold on its server — and no extras though the shop sells them',
         );
         self::assertSame([true, null, '2026-10-14T12:00:00+00:00'], [$row['term']['awaits_first_use'], $row['ended_at'], $row['removes_at']], 'never connected: removed a week after it was made');
 
@@ -177,14 +196,15 @@ final class StoreSubscriptionsTest extends HttpTestCase
         $planless = $this->subscription($this->customer, $this->plan, $this->server, 'ali_4', ['plan_id' => null]);
 
         $rows = array_column($this->decode($this->get($this->storeApi($this->website, '/subscriptions')))['subscriptions'], null, 'name');
-        $judged = static fn(array $row): array => [$row['auto_renew']['offered'], $row['renewable'], $row['link_rotation']];
+        $judged = static fn(array $row): array => [$row['auto_renew']['offered'], $row['renewable'], $row['picks_plan'], $row['link_rotation']];
 
-        self::assertSame([false, true, false], $judged($rows['ali_1']), 'an ended service is renewed by hand; its link stays as it is');
-        self::assertSame([false, false, false], $judged($rows['ali_2']), "support's switch: a renewal would turn it back on");
-        self::assertSame([false, false, false], $judged($rows['ali_3']), 'gone from its panel');
+        self::assertSame([false, true, false, false], $judged($rows['ali_1']), 'an ended service is renewed by hand, on its own plan; its link stays as it is');
+        self::assertSame([false, false, false, false], $judged($rows['ali_2']), "support's switch: a renewal would turn it back on");
+        self::assertSame([false, false, false, false], $judged($rows['ali_3']), 'gone from its panel');
         self::assertNull($rows['ali_3']['link'], 'the link of a client the panel no longer has works no more');
         self::assertSame('https://fake.test/sub/ali_1', $rows['ali_1']['link']);
-        self::assertSame([null, false, false, true], [$rows['ali_4']['plan'], $rows['ali_4']['auto_renew']['offered'], $rows['ali_4']['renewable'], $rows['ali_4']['link_rotation']], 'its plan deleted: nothing to renew on, its link still its own');
+        self::assertNull($rows['ali_4']['plan']);
+        self::assertSame([false, false, true, true], $judged($rows['ali_4']), 'its plan deleted: not renewable on a plan of its own — a website that knows `picks_plan` renews it on one picked among those sold on its server, as one added by its link; its link still its own');
         self::assertSame([$planless->id, $deleted->id, $disabled->id, $expired->id], array_column($rows, 'id'));
     }
 

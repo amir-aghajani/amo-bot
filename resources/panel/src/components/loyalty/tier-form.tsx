@@ -44,7 +44,7 @@ export function TierForm({ tier, invalidates, onSaved, onCancel }: TierFormProps
         id="tier_min_spent"
         label="حد خرید (تومان)"
         error={error('min_spent')}
-        hint="مشتری‌ای که جمع خریدهایش (خرید، تمدید، حجم و زمان اضافه — پرداخت‌شده و برگشت‌نخورده) به این مبلغ برسد روی این سطح است؛ صفر یعنی همه مشتری‌ها از ابتدا."
+        hint="مشتری‌ای که جمع خریدهایش (خرید، تمدید، حجم، زمان و کاربر اضافه — پرداخت‌شده و برگشت‌نخورده) به این مبلغ برسد روی این سطح است؛ صفر یعنی همه مشتری‌ها از ابتدا."
       >
         <Input dir="ltr" inputMode="numeric" value={values.min_spent} onChange={(e) => set('min_spent', e.target.value)} placeholder="500000" className="sm:max-w-48" />
       </Field>

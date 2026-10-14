@@ -23,7 +23,7 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Documentation: one tree in `docs/` for the repository, the wiki and GitHub Pages, its references generated from the code — `config.php`, the bot's texts and the API (with `docs/openapi.json`)
 
 ## Customer flows (bot)
-- ✅ Buy plan: plan details → choose server → choose how to pay (wallet / card receipt) → the subscription link (the one thing a customer gets); clients named `username_n` / `USER_n` with the Telegram id in the comment
+- ✅ Buy plan: plan details → choose server → choose how to pay (wallet / card receipt) → the subscription link (the one thing a customer gets); clients named by the owner's pattern (`username_n` / `USER_n` by default) or the buyer's choice, with the Telegram id in the comment
 - ✅ My services: paged list, one screen per service (status, usage, expiry, last connection, online now; the row's last numbers when the panel is down), the link on request (QR card or text), «تغییر لینک», «تمدید خودکار», renewal by hand, a report of a problem (a support ticket about the service)
 - ✅ Wallet: balance + ledger, top-up by preset or typed amount through the checkout; support's credit/debit from the users table
 - ✅ Notifications: payment settled / rejected / refunded, a service ending soon or its traffic running low («یادآوری»), a service granted, moved, switched off or deleted, an automatic renewal
@@ -36,6 +36,9 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Free test accounts («اکانت تست»): taken in the bot from the menu, `/free` or a start link, on each server's own
   terms (traffic, hours, from the first connection or from the moment it is made), by each shop's quota; removed by
   themselves once they end; in an agent's shop drawn from the agent's traffic
+- ✅ Services added by their link, custom services built by the customer (tiered prices), extra devices
+  («کاربر اضافه»), a service given to another customer, the renewal window and the renewal methods (extend, reset
+  traffic + add days, reset time + carry traffic)
 - [ ] Subscription link endpoint `/sub/{uuid}` of our own (today the panel's native subscription URL is handed out)
 
 ## The shop's website
@@ -53,11 +56,11 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 ## Panels
 - ✅ Two panels from one React project: the owner's (`/admin/`, each tab in the shop its address names) and an agent's (`/agent/`, their shop only, signed in by a one-time link from the main bot) — the Claude Console's design language, light and dark
 - ✅ Live: lists, counts, the dashboard and open detail modals follow changes made anywhere within seconds (the change feed)
-- ✅ Dashboard; servers (checks, inbounds for sale, «افزودن زمان و حجم»); plans and categories; payment methods; users and their groups; orders, payments (receipts reviewed one after another with «بعدی», approve / reject / refund / retry) and subscriptions (sync, extend, switch, move, delete); referrals; agents; support tickets
+- ✅ Dashboard; servers (checks, inbounds for sale, «افزودن زمان و حجم»); plans and categories; custom services; payment methods; users and their groups; orders, payments (receipts reviewed one after another with «بعدی», approve / reject / refund / retry) and subscriptions (sync, extend, switch, move, transfer, delete); referrals; agents; support tickets
 - ✅ Lists: paged on the server, sorted by a column, filtered (status, customer, server, a range of days in the Jalali calendar), searched (`#12` is that row), the view kept in the address; the stuck-orders queue («نیازمند رسیدگی»), the receipts to review and the tickets waiting on an answer counted in the menu
 - ✅ A customer's page: their services, payments, orders and tickets, wallet, referrals, groups, agency, website account
 - ✅ Extend one service: days and traffic on top of what it has (an agent's GB from their traffic)
-- ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked, live preview), settings (master switch, phone, required channels, wallet, renewal, reminders, the removal of ended services, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
+- ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked, live preview), settings (master switch, phone, required channels, wallet, renewal, extras, reminders, the removal of ended services, client usernames, services added by their link, transfers, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
 - ✅ Settings: the panel's own configuration in `config.php` (application, database, Telegram, email, advanced), the bots' webhooks set or removed, the owner's login changed and recovered without a shell; the website's settings in both panels
 - ✅ Failures drawn one way (what failed, why, what to do, the request's id), offline and stale-build handling
 - ✅ «تخفیف و جوایز»: discount codes, sales, loyalty tiers, cashback, gift codes, the lucky wheel and the nightly draw;

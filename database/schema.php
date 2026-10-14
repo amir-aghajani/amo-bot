@@ -460,6 +460,9 @@ return [
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
             $table->boolean('is_test')->default(false);
+            // When the customer added it to their account by sending its link: a client on the panel the shop did not
+            // sell (ServiceClaims). It has no plan until a renewal gives it one.
+            $table->timestamp('claimed_at')->nullable();
             $table->foreignId('server_id')->constrained('servers')->restrictOnDelete();
             $table->string('remote_name', 191);
             $table->string('subscription_url', 500);
@@ -485,9 +488,15 @@ return [
             // back under it.
             $table->timestamp('expiry_reminded_at')->nullable();
             $table->timestamp('traffic_reminded_at')->nullable();
-            // A renewal bought early, unused traffic not carried: at period_ends_at at most next_period_bytes remains.
+            // A renewal queued behind the period in use (bought before that period ended): at period_ends_at at most
+            // next_period_bytes remains (unused traffic not carried; null: nothing capped) and the device limit becomes
+            // next_period_ip_limit (null: as it is).
             $table->timestamp('period_ends_at')->nullable();
             $table->unsignedBigInteger('next_period_bytes')->nullable();
+            $table->unsignedInteger('next_period_ip_limit')->nullable();
+            // When the device limit last went back to a package's (a renewal's, at once or when its queued period
+            // began): extra devices bought before then are no longer in it.
+            $table->timestamp('ip_limit_reset_at')->nullable();
             $table->string('lease_token', 32)->nullable();
             $table->timestamp('leased_until')->nullable();
             $table->timestamps();
@@ -721,12 +730,40 @@ return [
             $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
             $table->foreignId('server_id')->nullable()->constrained('servers')->nullOnDelete();
             $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->nullOnDelete();
-            // What an order brings: traffic (an agent's, or a service's extra) or days (a service's extra time).
+            // What an order brings: traffic (an agent's, a service's extra, or a built service's) and days (a service's extra
+            // time, or a built service's term), and devices (extra devices, or a built service's limit).
             $table->unsignedBigInteger('traffic_bytes')->nullable();
             $table->unsignedInteger('days')->nullable();
-            // What a renewal gave its service — its plan's term and traffic as delivered —, what its refund takes back.
-            $table->unsignedInteger('given_hours')->nullable();
-            $table->unsignedBigInteger('given_bytes')->nullable();
+            $table->unsignedInteger('devices')->nullable();
+            // A purchase's client name the buyer asked for (typed, or drawn at random); null for the shop's pattern.
+            $table->string('client_name', 64)->nullable();
+            // How a renewal adds its package (Subscriptions\Enums\RenewalMethod); null for any other order.
+            $table->string('renewal_method', 16)->nullable();
+            // What a renewal gave its service — the term and traffic it added as delivered (signed: a reset that replaced
+            // more than it gave gave less than nothing), its plan when it had none (one added by its link), a term when it
+            // never ended, a quota when it was unlimited —, what its refund takes back; the term (in hours, and the
+            // deadline; null: waiting for the first connection) and the traffic left that a package without them
+            // replaced, which its refund puts back; and what it started afresh (its term, its traffic count, its device
+            // limit; extra days for a service whose time ran out start its term afresh too), which an earlier order's
+            // refund no longer takes, and hands on to it. Its device limit too: the one it set at once, or queued behind
+            // the period in use (ip_limit_queued), and what that replaced (the service's limit, or the limit queued
+            // before; null: none; set at once, when the limit had last gone back to a package's), which its refund puts
+            // back.
+            $table->integer('given_hours')->nullable();
+            $table->bigInteger('given_bytes')->nullable();
+            $table->boolean('gave_plan')->default(false);
+            $table->boolean('gave_term')->default(false);
+            $table->boolean('gave_quota')->default(false);
+            $table->unsignedInteger('term_was')->nullable();
+            $table->timestamp('expires_was')->nullable();
+            $table->unsignedBigInteger('quota_was')->nullable();
+            $table->boolean('reset_term')->default(false);
+            $table->boolean('reset_traffic')->default(false);
+            $table->boolean('reset_ip_limit')->default(false);
+            $table->unsignedInteger('given_ip_limit')->nullable();
+            $table->unsignedInteger('ip_limit_was')->nullable();
+            $table->boolean('ip_limit_queued')->default(false);
+            $table->timestamp('ip_limit_reset_was')->nullable();
             $table->decimal('amount', 14, 2);
             // Which of the plan's prices it was made at (Orders\Enums\OrderPricing).
             $table->string('pricing', 16)->default('regular');

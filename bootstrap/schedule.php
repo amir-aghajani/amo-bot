@@ -37,7 +37,7 @@ return static function (Scheduler $schedule): void {
     // Broadcasts (/broadcast) the bot started, a batch per minute until everyone has it.
     $schedule->everyMinutes(1, SendBroadcastsTask::class, eachBot: true);
     // «تمدید خودکار»: services within the admin's days of their deadline, renewed from the wallet.
-    $schedule->everyMinutes(30, AutoRenewTask::class, eachBot: true);
+    $schedule->everyMinutes(AutoRenewTask::INTERVAL_MINUTES, AutoRenewTask::class, eachBot: true);
     // A renewed period begins where the paid one ended: what that one left unused goes, unless carried.
     $schedule->everyMinutes(10, NextPeriodTask::class, eachBot: true);
     // «افزودن زمان و حجم» and «هدیه همگانی» no screen is working on: a batch per minute, and a panel that was out of reach tried again.

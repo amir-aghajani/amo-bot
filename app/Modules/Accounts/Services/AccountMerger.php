@@ -8,6 +8,9 @@ use App\Modules\Accounts\Enums\WayIn;
 use App\Modules\Accounts\Exceptions\AccountRefusedException;
 use App\Modules\Accounts\Models\AccountMerge;
 use App\Modules\Bots\Models\Bot;
+use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Services\ClientNaming;
+use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
@@ -21,7 +24,8 @@ use Psr\Log\LoggerInterface;
  *
  * Refused before anything changes (refusal()): an account with itself, either banned, a different way in of one kind on
  * each, two agents. One transaction, both rows locked in id order and judged again as they are then; recorded in
- * `account_merges` and logged.
+ * `account_merges` and logged. After it, each service whose client on its panel names its owner otherwise than the
+ * survivor now is relabelled (relabel()).
  */
 final class AccountMerger
 {
@@ -72,6 +76,8 @@ final class AccountMerger
     public function __construct(
         private readonly ConnectionInterface $db,
         private readonly WalletService $wallet,
+        private readonly ProvisioningService $provisioning,
+        private readonly ClientNaming $naming,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -117,7 +123,7 @@ final class AccountMerger
         }
         [$keep, $go] = self::older($a, $b) === $a ? [$a->id, $b->id] : [$b->id, $a->id];
 
-        [$survivor, $merge] = $this->db->transaction(function () use ($keep, $go, $actor): array {
+        [$survivor, $merge, $labels] = $this->db->transaction(function () use ($keep, $go, $actor): array {
             $locked = User::query()->whereKey([$keep, $go])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $survivor = $locked->get($keep) ?? throw AccountRefusedException::offerGone();
             $merged = $locked->get($go) ?? throw AccountRefusedException::offerGone();
@@ -125,6 +131,7 @@ final class AccountMerger
             if ($refusal !== null) {
                 throw $refusal;
             }
+            $labels = $this->labels($survivor, $merged);
 
             $moved = [];
             foreach (self::REFERENCES as $reference => $rule) {
@@ -159,12 +166,45 @@ final class AccountMerger
                 'actor' => $actor,
             ]);
 
-            return [User::query()->findOrFail($survivor->id), $merge];
+            return [User::query()->findOrFail($survivor->id), $merge, $labels];
         });
 
         $this->logger->info('Customer #{merged} was merged into customer #{survivor} by {actor}', ['merged' => $merge->merged_user_id, 'survivor' => $survivor->id, 'actor' => $actor, 'moved' => $merge->moved]);
+        $this->relabel($survivor, $labels);
 
         return $survivor;
+    }
+
+    /**
+     * What each service of the two accounts — gone from its panel aside — says of its owner there before the merge: its
+     * owner's comment (ClientNaming::comment(), which carries the Telegram id), by service id.
+     *
+     * @return array<int, string>
+     */
+    private function labels(User $survivor, User $merged): array
+    {
+        $comments = [$survivor->id => $this->naming->comment($survivor), $merged->id => $this->naming->comment($merged)];
+
+        return array_map(
+            static fn(mixed $owner): string => $comments[(int) $owner],
+            $this->db->table('subscriptions')->whereIn('user_id', [$survivor->id, $merged->id])->where('status', '!=', SubscriptionStatus::Deleted->value)->pluck('user_id', 'id')->all(),
+        );
+    }
+
+    /**
+     * Relabel (ProvisioningService::relabel()) each service whose client names its owner otherwise than the survivor now:
+     * every one the merged account had, unless the survivor took its Telegram account, and the survivor's own once it
+     * did. A panel that fails it is logged there; the merge stands.
+     *
+     * @param array<int, string> $labels labels()
+     */
+    private function relabel(User $survivor, array $labels): void
+    {
+        $now = $this->naming->comment($survivor);
+        $stale = array_keys(array_filter($labels, static fn(string $was): bool => $was !== $now));
+        if ($stale !== []) {
+            $this->provisioning->relabelServicesOf($survivor, $stale);
+        }
     }
 
     /**

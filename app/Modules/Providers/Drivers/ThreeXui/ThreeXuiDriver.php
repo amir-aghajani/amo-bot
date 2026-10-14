@@ -83,7 +83,7 @@ final class ThreeXuiDriver implements PanelDriver
 
     public function capabilities(): Capabilities
     {
-        return new Capabilities(inbounds: true, linkRotation: true);
+        return new Capabilities(inbounds: true, linkRotation: true, ipLimit: true);
     }
 
     public function connect(Server $server, PanelHttp $http): ProviderInterface

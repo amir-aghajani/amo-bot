@@ -21,7 +21,7 @@ Every operation may also return the common error shape ([errors](Store-API.md#er
 
 ## Grants
 
-The website's `staff_grants` setting holds any of `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`. What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
+The website's `staff_grants` setting holds any of `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`. What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
 An operation that needs a grant says which, and also needs a sign-in from the last 15 minutes, as approving a payment
 does without a grant (`x-staff-recent`).
 
@@ -89,6 +89,8 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 | [`POST /subscriptions/{id}/enable`](#post-subscriptionsidenable) | Switch a service back on |
 | [`POST /subscriptions/{id}/move`](#post-subscriptionsidmove) | Move a service to another server |
 | [`POST /subscriptions/{id}/delete`](#post-subscriptionsiddelete) | Delete a service from its panel and from the shop |
+| [`GET /subscriptions/{id}/transfer`](#get-subscriptionsidtransfer) | «انتقال سرویس», before it is done |
+| [`POST /subscriptions/{id}/transfer`](#post-subscriptionsidtransfer) | Hand a service to another customer of the shop («انتقال سرویس»), found by their numeric Telegram id |
 | [`GET /tickets`](#get-tickets) | All support tickets |
 | [`GET /tickets/{id}`](#get-ticketsid) | One ticket, with its whole conversation |
 | [`POST /tickets/{id}/messages`](#post-ticketsidmessages) | Answer a ticket as support |
@@ -319,7 +321,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
 | `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
-| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
+| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
 | `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
 | `is_active` | boolean | no | Left out: on for a new plan, unchanged for an existing one. |
@@ -462,7 +464,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
 | `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
-| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
+| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
 | `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
 | `is_active` | boolean | no | Left out: on for a new plan, unchanged for an existing one. |
@@ -1343,7 +1345,7 @@ Retry the delivery of what a paid payment bought.
 
 ### POST /payments/{id}/refund
 
-Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are.
+Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are.
 
 - **Who:** an admin of the shop, signed in on its website, when the website grants `refunds` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/refund`](Panels-API-Reference.md#post-apipanelpaymentsidrefund).
@@ -1373,7 +1375,7 @@ Support's note on a refund. It is a line of the message the customer gets and th
 
 ### GET /subscriptions
 
-All the shop's services: sold, renewed or given, and the free test accounts (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.
+All the shop's services: sold, renewed or given, the free test accounts, and those customers added by their link (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/subscriptions`](Panels-API-Reference.md#get-apipanelsubscriptions).
@@ -1579,7 +1581,7 @@ Delete a service from its panel and from the shop.
 
 **Body**, as JSON:
 
-Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable.
+Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable; the owner in the main shop may always (not the website's admins, who need the panel out of reach as any other shop's), which is how a service added by its link to the wrong customer (`SubscriptionRow.claimed_at`) is taken back for the right one to send its link again.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1591,6 +1593,59 @@ Delete a service from its panel and from the shop, permanently. The customer is 
 | Status | What it is | Body |
 |---|---|---|
 | `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /subscriptions/{id}/transfer
+
+«انتقال سرویس», before it is done: the shop's customer with this numeric Telegram id who would receive the service, so the form shows them before `POST`. The same refusals as `POST`, nothing changed.
+
+- **Who:** an admin of the shop, signed in on its website, when the website grants `delete` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **In the panels:** [`GET /api/{panel}/subscriptions/{id}/transfer`](Panels-API-Reference.md#get-apipanelsubscriptionsidtransfer).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `telegram_id` | query | string | yes | The recipient's numeric Telegram id (Persian digits are read too). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Who would receive the service | [SubscriptionTransferRecipientResponse](API-Schemas.md#subscriptiontransferrecipientresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /subscriptions/{id}/transfer
+
+Hand a service to another customer of the shop («انتقال سرویس»), found by their numeric Telegram id — support may whatever `transfer_enabled` says. The service keeps its link, term and traffic; its «تمدید خودکار» goes off; both customers are told in the bot — the new one, where its panel can change the link, that the previous one keeps it until they do; a renewal or an extra of it the previous customer left unpaid is cancelled, noted «سرویس این سفارش به حساب دیگری منتقل شد» (one whose receipt waits for review stays, and fails at its delivery), and the previous customer's message names them; the report group's «خریدها» topic hears of it; and its client on the panel takes the new customer's Telegram id and comment, its name unchanged (a panel that fails that is logged, and the transfer stands). A 422 on `status` for a free test account, a service gone from its panel, or one being changed on its panel right then (a delivery under way: try again in a moment); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the service's own customer, a banned account, or the admin themselves. A 403 for a shop admin's own service.
+
+- **Who:** an admin of the shop, signed in on its website, when the website grants `delete` ([grants](#grants)) and the sign-in is at most 15 minutes old.
+- **In the panels:** [`POST /api/{panel}/subscriptions/{id}/transfer`](Panels-API-Reference.md#post-apipanelsubscriptionsidtransfer).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+«انتقال سرویس»: whom to hand the service to — a customer of the shop, by their numeric Telegram id; they must have started the bot once.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `telegram_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Their numeric Telegram id: a number, or its digits as typed. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Transferred; the service, its new customer on it | [SubscriptionResponse](API-Schemas.md#subscriptionresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |

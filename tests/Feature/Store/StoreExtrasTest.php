@@ -13,6 +13,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Providers\DTO\Capabilities;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Store\Models\Website;
 use App\Modules\Store\Services\CustomerCheckout;
@@ -28,8 +29,8 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * Extra traffic and time on the website: what a service may buy (plan or shop prices), buying by wallet or card,
- * refusals in the shop's words, repeated requests, and an agent's traffic pool.
+ * Extra traffic, time and devices on the website: what a service may buy (plan or shop prices; devices for the days it
+ * has left), buying by wallet or card, refusals in the shop's words, repeated requests, and an agent's traffic pool.
  */
 final class StoreExtrasTest extends HttpTestCase
 {
@@ -67,11 +68,12 @@ final class StoreExtrasTest extends HttpTestCase
     public function testWhatMayBeBoughtIsTheShopsPriceList(): void
     {
         self::assertSame(['extras' => [
-            'traffic' => ['price' => '2000.00', 'options' => [['quantity' => 10, 'price' => '18000.00'], ['quantity' => 50, 'price' => '100000.00']], 'custom' => ['min' => 1, 'max' => 100]],
-            'time' => ['price' => '1000.00', 'options' => [['quantity' => 7, 'price' => '7000.00'], ['quantity' => 30, 'price' => '25000.00']], 'custom' => ['min' => 1, 'max' => 60]],
-        ]], $this->decode($this->get($this->extrasOf($this->subscription))), 'each amount offered with what it costs — its own price, or the price of a GB or a day times it —, and any amount between the bounds');
+            'traffic' => ['price' => '2000.00', 'options' => [['quantity' => 10, 'price' => '18000.00'], ['quantity' => 50, 'price' => '100000.00']], 'custom' => ['min' => 1, 'max' => 100], 'days' => null],
+            'time' => ['price' => '1000.00', 'options' => [['quantity' => 7, 'price' => '7000.00'], ['quantity' => 30, 'price' => '25000.00']], 'custom' => ['min' => 1, 'max' => 60], 'days' => null],
+            'devices' => null,
+        ]], $this->decode($this->get($this->extrasOf($this->subscription))), 'each amount offered with what it costs — its own price, or the price of a GB or a day times it —, and any amount between the bounds; no devices priced');
 
-        self::assertSame(['traffic' => true, 'time' => true], $this->row($this->subscription)['extras']);
+        self::assertSame(['traffic' => true, 'time' => true, 'devices' => false], $this->row($this->subscription)['extras']);
         self::assertSame(0, Order::query()->count(), 'nothing ordered for a look');
     }
 
@@ -87,15 +89,20 @@ final class StoreExtrasTest extends HttpTestCase
             'time_options' => [],
             'time_min' => 1,
             'time_max' => 30,
+            'devices_price' => '10000.00',
+            'devices_options' => [],
+            'devices_min' => 1,
+            'devices_max' => 2,
         ]], $this->server);
         $own = $this->subscription($this->ali, $plan, $this->server, 'ali_2');
         FakeProvider::mirror($own);
 
         self::assertSame(['extras' => [
-            'traffic' => ['price' => null, 'options' => [['quantity' => 20, 'price' => '30000.00']], 'custom' => null],
+            'traffic' => ['price' => null, 'options' => [['quantity' => 20, 'price' => '30000.00']], 'custom' => null, 'days' => null],
             'time' => null,
+            'devices' => ['price' => '10000.00', 'options' => [], 'custom' => ['min' => 1, 'max' => 2], 'days' => 30],
         ]], $this->decode($this->get($this->extrasOf($own))));
-        self::assertSame(['traffic' => true, 'time' => false], $this->row($own)['extras']);
+        self::assertSame(['traffic' => true, 'time' => false, 'devices' => true], $this->row($own)['extras']);
 
         $shops = $this->buying($own, ExtraKind::Traffic, 10, $this->walletMethod());
         self::assertSame([422, ['این مقدار فروخته نمی‌شود؛ یکی از این‌ها را بخرید: ۲۰ گیگابایت (۳۰٬۰۰۰ تومان).']], [$shops->getStatusCode(), $this->decode($shops)['errors']['gb'] ?? null], "the shop's 10 GB are not its");
@@ -111,9 +118,9 @@ final class StoreExtrasTest extends HttpTestCase
     {
         $this->extrasOnSale(['extras_enabled' => false]);
 
-        self::assertSame(['extras' => ['traffic' => null, 'time' => null]], $this->decode($this->get($this->extrasOf($this->subscription))));
-        self::assertSame(['traffic' => false, 'time' => false], $this->row($this->subscription)['extras']);
-        foreach ([ExtraKind::Traffic, ExtraKind::Time] as $kind) {
+        self::assertSame(['extras' => ['traffic' => null, 'time' => null, 'devices' => null]], $this->decode($this->get($this->extrasOf($this->subscription))));
+        self::assertSame(['traffic' => false, 'time' => false, 'devices' => false], $this->row($this->subscription)['extras']);
+        foreach (ExtraKind::cases() as $kind) {
             $response = $this->buying($this->subscription, $kind, 10, $this->walletMethod(), "off-{$kind->value}");
             self::assertSame([422, [sprintf(CustomerExtras::NOT_SOLD, $kind->label())]], [$response->getStatusCode(), $this->decode($response)['errors'][$kind->field()] ?? null], $kind->value);
         }
@@ -122,19 +129,21 @@ final class StoreExtrasTest extends HttpTestCase
 
     public function testEachKindIsOfferedWhileTheServiceMayTakeIt(): void
     {
+        $this->extraDevicesOnSale();
         $this->servicesInEveryState();
 
         $flags = array_column($this->decode($this->get($this->storeApi($this->website, '/subscriptions')))['subscriptions'], 'extras', 'name');
 
         self::assertSame([
-            'ali_7' => ['traffic' => false, 'time' => false],
-            'ali_6' => ['traffic' => false, 'time' => false],
-            'ali_5' => ['traffic' => true, 'time' => false],
-            'ali_4' => ['traffic' => false, 'time' => true],
-            'ali_3' => ['traffic' => true, 'time' => false],
-            'ali_2' => ['traffic' => false, 'time' => true],
-            'ali_1' => ['traffic' => true, 'time' => true],
-        ], $flags, 'running: both; unlimited: no traffic; never ending: no time; its time run out: time to start again, no traffic; its traffic run out: traffic to run again, no time; switched off by support, or gone from its panel: nothing');
+            'ali_8' => ['traffic' => true, 'time' => true, 'devices' => false],
+            'ali_7' => ['traffic' => false, 'time' => false, 'devices' => false],
+            'ali_6' => ['traffic' => false, 'time' => false, 'devices' => false],
+            'ali_5' => ['traffic' => true, 'time' => false, 'devices' => false],
+            'ali_4' => ['traffic' => false, 'time' => true, 'devices' => false],
+            'ali_3' => ['traffic' => true, 'time' => false, 'devices' => true],
+            'ali_2' => ['traffic' => false, 'time' => true, 'devices' => true],
+            'ali_1' => ['traffic' => true, 'time' => true, 'devices' => true],
+        ], $flags, 'running: all three; unlimited traffic: no traffic; never ending: no time; its time run out: time to start again, nothing else; its traffic run out: traffic to run again, nothing else; switched off by support, or gone from its panel: nothing; unlimited devices: no devices');
     }
 
     public function testAServiceThatCannotTakeItIsRefusedInTheShopsWords(): void
@@ -148,7 +157,10 @@ final class StoreExtrasTest extends HttpTestCase
             ['switched off', ExtraKind::Traffic, CustomerExtras::NOT_RUNNING],
             ['switched off', ExtraKind::Time, CustomerExtras::NOT_RUNNING],
             ['gone from its panel', ExtraKind::Traffic, CustomerExtras::NOT_RUNNING],
+            ['unlimited devices', ExtraKind::Devices, CustomerExtras::UNLIMITED_DEVICES],
+            ['its time run out', ExtraKind::Devices, CustomerExtras::TIME_OVER],
         ];
+        $this->extraDevicesOnSale();
 
         foreach ($refusals as $i => [$state, $kind, $why]) {
             $response = $this->buying($services[$state], $kind, 10, $this->walletMethod(), "refused-{$i}");
@@ -270,6 +282,20 @@ final class StoreExtrasTest extends HttpTestCase
         self::assertSame(OrderStatus::Pending, Order::query()->sole()->status);
     }
 
+    /** The service tells an extra apart, not its plan: a request made again after the service got one is the same request. */
+    public function testARequestMadeAgainAfterTheServiceGotAPlanIsStillItsOwnOrder(): void
+    {
+        $this->subscription->forceFill(['plan_id' => null])->save(); // added by its link, or built
+        $first = $this->decode($this->buying($this->subscription, ExtraKind::Traffic, 10, $this->card, 'by-card'))['checkout'];
+        $this->subscription->forceFill(['plan_id' => $this->plan->id])->save(); // since: renewed on a plan it picked
+
+        $again = $this->buying($this->subscription, ExtraKind::Traffic, 10, $this->card, 'by-card');
+
+        self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
+        self::assertSame($first['order']['id'], $this->decode($again)['checkout']['order']['id']);
+        self::assertSame(1, Order::query()->count());
+    }
+
     public function testAnAmountNotOnOfferIsRefusedUnderItsFieldWithWhatMayBeBought(): void
     {
         $traffic = 'این مقدار فروخته نمی‌شود؛ حجم اضافه بین ۱ تا ۱۰۰ گیگابایت بنویسید، یا یکی از این‌ها را بخرید: ۱۰ گیگابایت (۱۸٬۰۰۰ تومان)، ۵۰ گیگابایت (۱۰۰٬۰۰۰ تومان).';
@@ -298,7 +324,7 @@ final class StoreExtrasTest extends HttpTestCase
     {
         $both = [['id' => $this->walletMethod()->id, 'label' => 'کیف پول', 'kind' => 'instant'], ['id' => $this->card->id, 'label' => 'کارت به کارت (ملت)', 'kind' => 'manual']];
 
-        foreach (['extra_traffic', 'extra_time'] as $for) {
+        foreach (['extra_traffic', 'extra_time', 'extra_devices'] as $for) {
             self::assertSame($both, $this->decode($this->get($this->storeApi($this->website, "/payment-methods?for={$for}")))['methods'], $for);
         }
     }
@@ -349,7 +375,7 @@ final class StoreExtrasTest extends HttpTestCase
         $traffic = fn(): ?array => $this->decode($this->get($this->storeApi($website, "/subscriptions/{$service->id}/extras")))['extras']['traffic'];
 
         $offered = $traffic();
-        self::assertSame(['price' => '2000.00', 'options' => [['quantity' => 10, 'price' => '18000.00']], 'custom' => ['min' => 1, 'max' => 30]], $offered, 'their 30 GB: no 50 GB, nothing typed past 30');
+        self::assertSame(['price' => '2000.00', 'options' => [['quantity' => 10, 'price' => '18000.00']], 'custom' => ['min' => 1, 'max' => 30], 'days' => null], $offered, 'their 30 GB: no 50 GB, nothing typed past 30');
 
         $bought = $this->send('POST', $this->storeApi($website, "/subscriptions/{$service->id}/extra-traffic"), ['gb' => 10, 'method_id' => $wallet->id], ['Idempotency-Key' => 'agent-1']);
         self::assertSame('settled', $this->decode($bought)['checkout']['outcome'] ?? null, (string) $bought->getBody());
@@ -362,10 +388,66 @@ final class StoreExtrasTest extends HttpTestCase
         self::assertArrayHasKey('gb', $this->decode($more)['errors']);
     }
 
+    public function testExtraDevicesArePricedForTheDaysTheServiceHasLeftAndAddedAtOnce(): void
+    {
+        $this->extraDevicesOnSale();
+        // 12 of its 30 days left, two devices at once.
+        $this->subscription->forceFill(['ip_limit' => 2, 'starts_at' => now()->subDays(18), 'expires_at' => now()->addDays(12)])->save();
+        FakeProvider::mirror($this->subscription);
+
+        self::assertSame(
+            ['price' => '12000.00', 'options' => [['quantity' => 1, 'price' => '12000.00'], ['quantity' => 2, 'price' => '20000.00']], 'custom' => ['min' => 1, 'max' => 5], 'days' => 12],
+            $this->decode($this->get($this->extrasOf($this->subscription)))['extras']['devices'],
+            "12 of 30 days: 30,000 a device and the two's own 50,000, prorated",
+        );
+        self::assertSame([2, true], [$this->row($this->subscription)['devices'], $this->row($this->subscription)['extras']['devices']]);
+
+        $checkout = $this->decode($this->buying($this->subscription, ExtraKind::Devices, '۳', $this->walletMethod()))['checkout'];
+
+        self::assertSame(['settled', 'extra_devices', 'fulfilled', '36000.00', 3, null, null], [$checkout['outcome'], $checkout['order']['type'], $checkout['order']['status'], $checkout['order']['amount'], $checkout['order']['devices'], $checkout['order']['traffic_bytes'], $checkout['order']['days']], 'typed in Persian digits: three at 12,000');
+        self::assertSame(5, $checkout['subscription']['devices'], 'three on top of its two');
+        self::assertSame([5, Traffic::bytesOfGb(30)], [FakeProvider::lastUpdate('ali_1')->ipLimit, FakeProvider::lastUpdate('ali_1')->totalBytes], 'its panel given them, nothing else');
+        self::assertSame('464000.00', $this->ali->balance());
+
+        $rows = $this->decode($this->get($this->storeApi($this->website, '/orders?type=extra_devices')))['orders'];
+        self::assertSame([['extra_devices', 3, ['id' => $this->subscription->id, 'name' => 'ali_1']]], array_map(static fn(array $row): array => [$row['type'], $row['devices'], $row['subscription']], $rows), 'a kind of order of its own, saying how many it brought');
+    }
+
+    public function testExtraDevicesAreRefusedWhereTheyCannotBeHad(): void
+    {
+        $this->extraDevicesOnSale();
+
+        $notOnOffer = $this->buying($this->subscription, ExtraKind::Devices, 6, $this->walletMethod(), 'devices-1');
+        self::assertSame([422, ['این مقدار فروخته نمی‌شود؛ کاربر اضافه بین ۱ تا ۵ کاربر بنویسید، یا یکی از این‌ها را بخرید: ۱ کاربر (۳۰٬۰۰۰ تومان)، ۲ کاربر (۵۰٬۰۰۰ تومان).']], [$notOnOffer->getStatusCode(), $this->decode($notOnOffer)['errors']['devices'] ?? null]);
+        $words = $this->buying($this->subscription, ExtraKind::Devices, 'دو', $this->walletMethod(), 'devices-2');
+        self::assertSame([422, [sprintf(CustomerCheckout::NOT_A_QUANTITY, 'کاربر')]], [$words->getStatusCode(), $this->decode($words)['errors']['devices'] ?? null]);
+
+        FakeProvider::$capabilities = new Capabilities(inbounds: true, linkRotation: true, ipLimit: false);
+        self::assertNull($this->decode($this->get($this->extrasOf($this->subscription)))['extras']['devices'], 'a panel without an IP limit: none offered');
+        foreach (['devices-3' => 1, 'devices-4' => 'دو'] as $key => $devices) {
+            $refused = $this->buying($this->subscription, ExtraKind::Devices, $devices, $this->walletMethod(), $key);
+            self::assertSame([422, [CustomerExtras::NO_DEVICE_LIMIT]], [$refused->getStatusCode(), $this->decode($refused)['errors']['status'] ?? null], "the service's panel said first: {$key}");
+        }
+        self::assertSame([0, '500000.00'], [Order::query()->count(), $this->ali->balance()]);
+    }
+
+    public function testADiscountCodeIsCheckedOnExtraDevicesAtTheirProratedPrice(): void
+    {
+        $this->extraDevicesOnSale();
+        $this->subscription->forceFill(['expires_at' => now()->addDays(15)])->save();
+        $this->discountCode('MORE', 10);
+
+        $quote = $this->decode($this->postJson($this->storeApi($this->website, '/discount-codes/check'), ['code' => 'more', 'for' => 'extra_devices', 'subscription_id' => $this->subscription->id, 'devices' => 2]))['quote'];
+
+        self::assertSame(['base' => '25000.00', 'amount' => '22500.00'], ['base' => $quote['base'], 'amount' => $quote['amount']], "the two's 50,000 for 15 of 30 days, less 10%");
+        $methods = $this->decode($this->get($this->storeApi($this->website, '/payment-methods?for=extra_devices')))['methods'];
+        self::assertSame([$this->walletMethod()->id, $this->card->id], array_column($methods, 'id'), 'paid as every extra is');
+    }
+
     /**
      * The customer's services in every state an extra is judged by — beside the running one of setUp() (ali_1), by its
      * state's name: unlimited (ali_2), never ending (ali_3), its time run out (ali_4), its traffic run out (ali_5),
-     * switched off by support (ali_6), gone from its panel (ali_7).
+     * switched off by support (ali_6), gone from its panel (ali_7), unlimited devices (ali_8).
      *
      * @return array<string, Subscription>
      */
@@ -380,6 +462,7 @@ final class StoreExtrasTest extends HttpTestCase
             'its traffic run out' => $this->subscription($this->ali, $this->plan, $this->server, 'ali_5', ['status' => SubscriptionStatus::Expired, 'download_bytes' => Traffic::bytesOfGb(30)]),
             'switched off' => $this->subscription($this->ali, $this->plan, $this->server, 'ali_6', ['status' => SubscriptionStatus::Disabled]),
             'gone from its panel' => $this->subscription($this->ali, $this->plan, $this->server, 'ali_7', ['status' => SubscriptionStatus::Deleted]),
+            'unlimited devices' => $this->subscription($this->ali, $this->plan, $this->server, 'ali_8', ['ip_limit' => 0]),
         ];
     }
 
@@ -400,6 +483,7 @@ final class StoreExtrasTest extends HttpTestCase
         $path = match ($kind) {
             ExtraKind::Traffic => 'extra-traffic',
             ExtraKind::Time => 'extra-time',
+            ExtraKind::Devices => 'extra-devices',
         };
 
         return $this->send('POST', $this->storeApi($this->website, "/subscriptions/{$subscription->id}/{$path}"), [$kind->field() => $quantity, 'method_id' => $method->id], ['Idempotency-Key' => $key]);

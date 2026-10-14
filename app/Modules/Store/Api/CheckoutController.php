@@ -26,9 +26,10 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * A signed-in customer's checkout (Store\Services\CustomerCheckout): the ways to pay, a purchase, a renewal and its
- * preview, a service's extras, a discount code checked, a wallet top-up — each ordering request with its
- * Idempotency-Key, read before anything else — and a card transfer's receipt (Store\Services\CustomerReceipts).
+ * A signed-in customer's checkout (Store\Services\CustomerCheckout): the ways to pay, a purchase, a renewal, its
+ * preview and the plans it may be on, a service's extras, a discount code checked, a wallet top-up — each ordering
+ * request with its Idempotency-Key, read before anything else — and a card transfer's receipt
+ * (Store\Services\CustomerReceipts).
  */
 final class CheckoutController extends ApiController
 {
@@ -40,7 +41,8 @@ final class CheckoutController extends ApiController
     ) {}
 
     /**
-     * GET /payment-methods — ?for=purchase|renewal|wallet_topup|extra_traffic|extra_time: the ways to pay that kind of order.
+     * GET /payment-methods — ?for=purchase|renewal|wallet_topup|extra_traffic|extra_time|extra_devices: the ways to pay
+     * that kind of order.
      *
      * @throws ValidationException 422 on `for`
      */
@@ -65,20 +67,36 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * GET /subscriptions/{id}/renewal — the renewal before it is paid.
+     * GET /subscriptions/{id}/renewal — ?plan_id= (or ?gb=&days=, a package built) for a service without a plan, ?method=
+     * the renewal method: the renewal before it is paid.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
-     * @throws ValidationException 422 on `status`
+     * @throws ValidationException 422 on `method`, `status`, `plan_id`, `gb` or `days`
      * @throws RenewalUnderWayException 422 on `status`
      */
     public function renewal(Request $request, Response $response, array $args): Response
     {
-        return $this->json($response, ['renewal' => SubscriptionPresenter::renewal($this->checkout->renewal($this->own($request, $args)))]);
+        $preview = $this->checkout->renewal($this->own($request, $args), $request->getQueryParams());
+
+        return $this->json($response, ['renewal' => SubscriptionPresenter::renewal($preview)]);
     }
 
     /**
-     * POST /subscriptions/{id}/renewal — {method_id, discount_code?}: the service renewed, paid.
+     * GET /subscriptions/{id}/renewal-plans — the plans the service may be renewed on now, at the customer's prices, and
+     * whether a package the customer builds may renew it instead.
+     *
+     * @param array<string, string> $args
+     * @throws ModelNotFoundException 404
+     */
+    public function renewalPlans(Request $request, Response $response, array $args): Response
+    {
+        return $this->json($response, $this->checkout->renewalChoices(Customer::of($request)->user, $this->own($request, $args)));
+    }
+
+    /**
+     * POST /subscriptions/{id}/renewal — {method_id, plan_id? | gb? + days?, method?, discount_code?}: the service renewed,
+     * paid.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
@@ -96,7 +114,7 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * GET /subscriptions/{id}/extras — the extra traffic and time the service may buy now, at its prices.
+     * GET /subscriptions/{id}/extras — the extra traffic, time and devices the service may buy now, at its prices.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
@@ -135,8 +153,24 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * POST /discount-codes/check — {code, for, plan_id?, server_id?, subscription_id?, gb?, days?}: what the code takes off,
-     * nothing ordered.
+     * POST /subscriptions/{id}/extra-devices — {devices, method_id, discount_code?}: extra devices, paid at their price
+     * prorated to what the service has left.
+     *
+     * @param array<string, string> $args
+     * @throws ModelNotFoundException 404
+     * @throws ValidationException 422
+     * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws CheckoutRefusedException 422 / 409; 503 the shop takes no orders while its bot is switched off
+     */
+    public function extraDevices(Request $request, Response $response, array $args): Response
+    {
+        return $this->extra($request, $response, $args, ExtraKind::Devices);
+    }
+
+    /**
+     * POST /discount-codes/check — {code, for, plan_id?, server_id?, subscription_id?, gb?, days?, devices?}: what the
+     * code takes off, nothing ordered (a renewal of a service without a plan names the plan picked in `plan_id`, or the
+     * package built in `gb` and `days`, and a renewal its `method`).
      *
      * @throws ValidationException 422 on `code` and the rest
      * @throws ModelNotFoundException 404: no service of theirs

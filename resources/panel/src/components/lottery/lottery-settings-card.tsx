@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotLotterySettingsRequest, BotSettingsData, LotteryPrizeKind } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
-import { amountDraft, decimalInput } from '@/lib/format'
+import { amountDraft, decimalInput, formatNumber } from '@/lib/format'
+import { LOTTERY_SETTINGS } from '@/lib/limits'
 import { WHEEL_PRIZE_KIND } from '@/lib/statuses'
 import { trimmed } from '@/lib/use-form'
 
@@ -97,7 +98,7 @@ export function LotterySettingsCard({ settings }: { settings: BotSettingsData })
     >
       <SwitchRow
         label="قرعه‌کشی شبانه فعال باشد"
-        hint="خرید، تمدید و حجم و زمان اضافه شانس می‌آورد، اگر پرداخت شده و برگشت نخورده باشد؛ شارژ کیف پول و سرویس هدیه نه."
+        hint="خرید، تمدید و حجم، زمان و کاربر اضافه شانس می‌آورد، اگر پرداخت شده و برگشت نخورده باشد؛ شارژ کیف پول و سرویس هدیه نه."
         checked={values.lottery_enabled}
         onCheckedChange={(checked) => set('lottery_enabled', checked)}
         error={error('lottery_enabled')}
@@ -107,7 +108,7 @@ export function LotterySettingsCard({ settings }: { settings: BotSettingsData })
         <Field id="lottery_hour" label="ساعت قرعه‌کشی" error={error('lottery_hour')} hint="به وقت منطقه زمانی فروشگاه؛ شانس‌ها خریدهای ۲۴ ساعت پیش از همین ساعت است.">
           {(control) => <HourSelect {...control} value={values.lottery_hour} onChange={(hour) => set('lottery_hour', hour)} disabled={off} className="w-full sm:max-w-40" />}
         </Field>
-        <Field id="lottery_winners" label="تعداد برنده‌ها" error={error('lottery_winners')} hint="بین ۱ تا ۲۰؛ هر مشتری حداکثر یک بار برنده می‌شود.">
+        <Field id="lottery_winners" label="تعداد برنده‌ها" error={error('lottery_winners')} hint={`بین ۱ تا ${formatNumber(LOTTERY_SETTINGS.WINNERS_MAX)}؛ هر مشتری حداکثر یک بار برنده می‌شود.`}>
           <Input dir="ltr" inputMode="numeric" value={values.lottery_winners} onChange={(e) => set('lottery_winners', e.target.value)} disabled={off} className="sm:max-w-28" />
         </Field>
       </div>

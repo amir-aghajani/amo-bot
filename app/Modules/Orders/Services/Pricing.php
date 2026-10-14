@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Orders\Services;
 
+use App\Modules\Catalog\DTO\CustomPrice;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Discounts\DTO\AutomaticDiscounts;
 use App\Modules\Discounts\DTO\CodeTarget;
@@ -25,7 +26,8 @@ use App\Support\Money;
  * The one pricing of what a customer buys for themselves, used everywhere (the bot, the website, OrderService,
  * automatic renewal). Three steps:
  * 1. the base: the plan's price for this customer (buyer(): its price, first-purchase or agent price, the lowest that is
- *    theirs), or an extra's price as offered;
+ *    theirs), an extra's price as offered, or a package the customer builds by its tiers (bought: custom(); a service
+ *    renewed with one: renewal());
  * 2. the largest automatic discount (a sale, their own percent, their tier's — never added together);
  * 3. the code they typed, applied to what step 2 left (DiscountCodes::apply()).
  * Whole Toman, never below zero. Wallet top-ups and agents' traffic are never discounted.
@@ -84,7 +86,7 @@ final class Pricing
     {
         $price = $buyer->purchase($plan);
 
-        return new Quote($price->amount, $price->pricing, $automatic->best($plan->id, OrderType::Purchase, $price->amount));
+        return self::quoted($automatic, $price->amount, $price->pricing, OrderType::Purchase, $plan->id);
     }
 
     /**
@@ -94,43 +96,96 @@ final class Pricing
      */
     public function purchase(?User $user, Plan $plan, ?Server $server = null, ?string $code = null): Quote
     {
-        $quote = $this->offers($user, $plan)[$plan->id];
-
-        return $user === null || $code === null ? $quote : $this->coded($quote, $user, $code, new CodeTarget(OrderType::Purchase, $plan->id, $server?->id));
+        return $this->coded($this->offers($user, $plan)[$plan->id], $user, $code, new CodeTarget(OrderType::Purchase, $plan->id, $server?->id));
     }
 
     /**
-     * A renewal of the customer's service on the plan, with the code they typed (automatic renewal passes none).
+     * What renewing the customer's service on each plan costs them (no code): their renewal price for it (never a first
+     * purchase's) less the largest automatic discount — the customer read once for the list, as offers() reads them.
+     *
+     * @return array<int, Quote> By plan id
+     */
+    public function renewalOffers(User $user, Plan ...$plans): array
+    {
+        $buyer = $this->buyer($user, ...$plans);
+        $automatic = $this->automatic($user);
+        $quotes = [];
+        foreach ($plans as $plan) {
+            $price = $buyer->renewal($plan);
+            $quotes[$plan->id] = self::quoted($automatic, $price->amount, $price->pricing, OrderType::Renewal, $plan->id);
+        }
+
+        return $quotes;
+    }
+
+    /**
+     * A renewal of the customer's service with the code they typed (automatic renewal passes none): on a plan, at their
+     * renewal price for it (renewalOffers()); or with a package they build at `$with`'s price (CustomServices::quote()),
+     * priced as built() prices one.
      *
      * @throws DiscountCodeRefusedException the code does not hold for it
      */
-    public function renewal(User $user, Subscription $subscription, Plan $plan, ?string $code = null): Quote
+    public function renewal(User $user, Subscription $subscription, Plan|CustomPrice $with, ?string $code = null): Quote
     {
-        $price = $this->buyer($user, $plan)->renewal($plan);
-        $quote = new Quote($price->amount, $price->pricing, $this->automatic($user)->best($plan->id, OrderType::Renewal, $price->amount));
+        if ($with instanceof CustomPrice) {
+            return $this->built($user, $with, OrderType::Renewal, $subscription->server_id, $code);
+        }
 
-        return $code === null ? $quote : $this->coded($quote, $user, $code, new CodeTarget(OrderType::Renewal, $plan->id, $subscription->server_id));
+        return $this->coded($this->renewalOffers($user, $with)[$with->id], $user, $code, new CodeTarget(OrderType::Renewal, $with->id, $subscription->server_id));
     }
 
     /**
-     * Extra traffic or time for the customer's service at `$base` (CustomerExtras::quote()), with the code they typed.
+     * Extra traffic, time or devices for the customer's service at `$base` (CustomerExtras::quote()), with the code
+     * they typed.
      *
      * @throws DiscountCodeRefusedException the code does not hold for it
      */
     public function extra(User $user, Subscription $subscription, ExtraKind $kind, string $base, ?string $code = null): Quote
     {
-        $quote = new Quote(Money::normalize($base), OrderPricing::Regular, $this->automatic($user)->best($subscription->plan_id, $kind->orderType(), $base));
+        $quote = self::quoted($this->automatic($user), $base, OrderPricing::Regular, $kind->orderType(), $subscription->plan_id);
 
-        return $code === null ? $quote : $this->coded($quote, $user, $code, new CodeTarget($kind->orderType(), $subscription->plan_id, $subscription->server_id));
+        return $this->coded($quote, $user, $code, new CodeTarget($kind->orderType(), $subscription->plan_id, $subscription->server_id));
     }
 
     /**
-     * The quote with the code applied to what the automatic discount left.
+     * A service the customer builds at `$price` (CustomServices::quote(): its GB and days by their tiers), on `$server`
+     * once picked, with the code they typed — a purchase priced as built() prices one. A visitor (null) takes no code.
+     *
+     * @throws DiscountCodeRefusedException the code does not hold for it
+     */
+    public function custom(?User $user, CustomPrice $price, ?Server $server = null, ?string $code = null): Quote
+    {
+        return $this->built($user, $price, OrderType::Purchase, $server?->id, $code);
+    }
+
+    /**
+     * A package the customer builds, bought as `$type` (a purchase, or a renewal of their service on server `$serverId`)
+     * at `$price`, with the code they typed — an order of no plan, as an extra of a service without one is priced: no
+     * first-purchase or agent price (a plan's), only a sale of every plan reaches it, and a code held to plans never does.
+     *
+     * @throws DiscountCodeRefusedException the code does not hold for it
+     */
+    private function built(?User $user, CustomPrice $price, OrderType $type, ?int $serverId, ?string $code): Quote
+    {
+        $quote = self::quoted($this->automatic($user), $price->total(), OrderPricing::Regular, $type, null);
+
+        return $this->coded($quote, $user, $code, new CodeTarget($type, null, $serverId));
+    }
+
+    /** `$base` at `$pricing`, less the largest of the customer's automatic discounts for an order of `$type` on plan `$planId`. */
+    private static function quoted(AutomaticDiscounts $automatic, string $base, OrderPricing $pricing, OrderType $type, ?int $planId): Quote
+    {
+        return new Quote(Money::normalize($base), $pricing, $automatic->best($planId, $type, $base));
+    }
+
+    /**
+     * The quote with the code the customer typed applied to what the automatic discount left; as it is without one, or
+     * for a visitor (null), who takes none.
      *
      * @throws DiscountCodeRefusedException
      */
-    private function coded(Quote $quote, User $user, string $code, CodeTarget $target): Quote
+    private function coded(Quote $quote, ?User $user, ?string $code, CodeTarget $target): Quote
     {
-        return $quote->withCode($this->codes->apply($user, $code, $target, $quote->afterAutomatic()));
+        return $user === null || $code === null ? $quote : $quote->withCode($this->codes->apply($user, $code, $target, $quote->afterAutomatic()));
     }
 }

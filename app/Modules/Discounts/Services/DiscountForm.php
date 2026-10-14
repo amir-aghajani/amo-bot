@@ -75,7 +75,7 @@ final class DiscountForm
         }
         $allowed = OrderType::FOR_THEMSELVES;
         if (!is_array($value) || !array_is_list($value) || count(array_filter($value, 'is_string')) !== count($value) || array_diff($value, $allowed) !== []) {
-            $errors['order_types'][] = 'نوع سفارش باید خرید، تمدید، حجم اضافه یا زمان اضافه باشد.';
+            $errors['order_types'][] = 'نوع سفارش باید ' . OrderType::forThemselvesInWords() . ' باشد.';
 
             return null;
         }

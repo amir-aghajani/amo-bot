@@ -106,6 +106,19 @@ final class BotSubscriptionDetailTest extends BotTestCase
         self::assertSame($this->screen($this->asThePanelSays(online: false), rotates: false), $this->params(0)['text'], 'nor the hint that points at it');
     }
 
+    public function testTheScreenSaysHowManyDevicesMayConnectWithThoseBoughtOnTop(): void
+    {
+        foreach ([3 => '۳ کاربر', 0 => Messages::UNLIMITED] as $limit => $words) {
+            // «کاربر اضافه» raises the service's own limit: its screen is where the customer sees what they have.
+            $this->subscription->forceFill(['ip_limit' => $limit])->save();
+
+            $this->send($this->tap($this->screenButton()));
+
+            self::assertStringContainsString('👥 تعداد کاربر: ' . $words, $this->params(0)['text']);
+            self::assertSame($this->screen($this->asThePanelSays(online: false)), $this->params(0)['text']);
+        }
+    }
+
     public function testOfflineNeverConnectedAndUnlimitedRead(): void
     {
         FakeProvider::put($this->server, new ClientInfo(name: 'ali_1', enabled: true, totalBytes: 0, subscriptionUrl: self::LINK));
@@ -459,6 +472,7 @@ final class BotSubscriptionDetailTest extends BotTestCase
             'client' => 'ali_1',
             'plan' => $this->plan->name,
             'server' => $this->server->name,
+            'devices' => Messages::devices($this->subscription->ip_limit),
         ]);
 
         return implode("\n\n", array_filter([$details, $rotates ? self::text(BotText::ServiceRotateHint) : '', $stale ? self::text(BotText::ServiceStale) : '']));

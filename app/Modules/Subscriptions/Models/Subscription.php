@@ -29,6 +29,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $plan_id
  * @property bool $is_test a free test account (Services\TestAccounts): no plan, never renewed, removed once it ends while
  *                         its shop cleans up
+ * @property Carbon|null $claimed_at when the customer added it to their account by sending its link (Services\ServiceClaims):
+ *                                   a client the shop did not sell, with no plan until a renewal gives it one
  * @property int $server_id
  * @property string $remote_name
  * @property string $subscription_url
@@ -49,8 +51,12 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $renewal_notified_at when the customer was last told the wallet could not pay an automatic renewal
  * @property Carbon|null $expiry_reminded_at when the customer was reminded that it ends soon (ServiceReminders); null = not while it is near
  * @property Carbon|null $traffic_reminded_at when the customer was reminded that its traffic runs low; null = not while it is low
- * @property Carbon|null $period_ends_at when the paid period a renewal was queued behind ends (what is left is capped then)
- * @property int|null $next_period_bytes the most traffic left from period_ends_at on: the renewed traffic
+ * @property Carbon|null $period_ends_at when the paid period a renewal was queued behind ends (what is left is capped then,
+ *                                       and the device limit becomes the renewal's)
+ * @property int|null $next_period_bytes the most traffic left from period_ends_at on: the renewed traffic; null = no cap
+ * @property int|null $next_period_ip_limit the device limit from period_ends_at on: the renewal's package's; null = as now
+ * @property Carbon|null $ip_limit_reset_at when the device limit last went back to a package's: extra devices bought before
+ *                                          then are no longer in it
  * @property string|null $lease_token
  * @property Carbon|null $leased_until
  * @property Carbon $created_at
@@ -75,6 +81,7 @@ class Subscription extends Model
         'user_id',
         'plan_id',
         'is_test',
+        'claimed_at',
         'server_id',
         'remote_name',
         'subscription_url',
@@ -95,12 +102,15 @@ class Subscription extends Model
         'traffic_reminded_at',
         'period_ends_at',
         'next_period_bytes',
+        'next_period_ip_limit',
+        'ip_limit_reset_at',
     ];
 
     /** @var array<string, string> */
     protected $casts = [
         'status' => SubscriptionStatus::class,
         'is_test' => 'boolean',
+        'claimed_at' => 'datetime',
         'traffic_limit_bytes' => 'integer',
         'upload_bytes' => 'integer',
         'download_bytes' => 'integer',
@@ -117,6 +127,8 @@ class Subscription extends Model
         'traffic_reminded_at' => 'datetime',
         'period_ends_at' => 'datetime',
         'next_period_bytes' => 'integer',
+        'next_period_ip_limit' => 'integer',
+        'ip_limit_reset_at' => 'datetime',
         'leased_until' => 'datetime',
     ];
 

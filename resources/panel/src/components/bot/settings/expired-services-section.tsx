@@ -9,9 +9,7 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotExpiredServicesSettingsRequest, BotSettingsData } from '@/lib/api-types'
 import { formatDuration, wholeNumberOf } from '@/lib/format'
-
-/** The longest an ended service may be kept, in hours (a year): the server's bound. */
-const HOURS_MAX = 8760
+import { EXPIRED_SERVICES_SETTINGS } from '@/lib/limits'
 
 /**
  * «سرویس‌های منقضی‌شده»: whether an ended service — its time or traffic ran out, or its panel no longer has it — is
@@ -38,7 +36,7 @@ export function ExpiredServicesSection({ settings }: { settings: BotSettingsData
         onCheckedChange={(checked) => set('expired_cleanup', checked)}
         error={error('expired_cleanup')}
       />
-      <Field id="expired_cleanup_hours" label="فاصله حذف (ساعت)" error={error('expired_cleanup_hours')} hint={removalHint(hours, HOURS_MAX)}>
+      <Field id="expired_cleanup_hours" label="فاصله حذف (ساعت)" error={error('expired_cleanup_hours')} hint={removalHint(hours, EXPIRED_SERVICES_SETTINGS.HOURS_MAX)}>
         <Input
           dir="ltr"
           inputMode="numeric"

@@ -19,6 +19,7 @@ every 15 minutes).
     "name": "ali_1",
     "status": "active",
     "is_test": false,
+    "claimed_at": null,
     "plan": { "id": 3, "name": "یک ماهه ۵۰ گیگ" },
     "server": { "id": 2, "name": "هلند" },
     "link": "https://sub.example.net/sub/3d9e6b1f0a72",
@@ -28,9 +29,13 @@ every 15 minutes).
     "removes_at": null,
     "auto_renew": { "on": true, "offered": true, "days_before": 2 },
     "renewable": true,
-    "extras": { "traffic": true, "time": true },
+    "picks_plan": false,
+    "renewal_window": { "open": true, "opens_at": null, "days_before": null, "traffic_percent": null },
+    "devices": 2,
+    "extras": { "traffic": true, "time": true, "devices": true },
     "link_rotation": true,
     "next_period": { "ends_at": "2026-10-20T10:00:00+00:00", "bytes": 53687091200 },
+    "next_devices": null,
     "presence": null,
     "synced_at": "2026-10-08T09:30:12+00:00",
     "created_at": "2026-09-20T09:58:40+00:00"
@@ -42,8 +47,9 @@ every 15 minutes).
 |---|---|
 | `name` | its name on the server (`ali_1`, `USER_7`) — what the customer quotes to support |
 | `status` | `active` running (or waiting for its first connection); `expired` its time or traffic ran out; `disabled` switched off by support; `deleted` gone from its server |
-| `is_test` | a free test account the customer took in the bot ([Test accounts](Test-Accounts.md)): no plan, `renewable` false, both `extras` false, `auto_renew.offered` false (the field is there) — and once it ends, or if it is never connected, the shop may remove it, quietly (`removes_at`) |
-| `plan` | the plan it was sold or last renewed on; `null` for a free test, or once that plan was deleted |
+| `is_test` | a free test account the customer took in the bot ([Test accounts](Test-Accounts.md)): no plan, `renewable` and `picks_plan` false, every `extras` false, `auto_renew.offered` false (the field is there) — and once it ends, or if it is never connected, the shop may remove it, quietly (`removes_at`) |
+| `claimed_at` | when the customer added it to their account by its link ([adding a service by its link](#adding-a-service-by-its-link)): a service support made on its server by hand. `null` for every other service |
+| `plan` | the plan it was sold or last renewed on; `null` for a free test, for one added by its link or built by the customer until it is renewed on a plan |
 | `server` | where it is («لوکیشن») |
 | `link` | the one subscription link the customer adds to their app — show it with a copy button and a QR code the site draws; `null` once `deleted` |
 | `traffic` | `limit_bytes` (`0` unlimited), `used_bytes`, `remaining_bytes` (`null` when unlimited) |
@@ -51,10 +57,14 @@ every 15 minutes).
 | `ended_at` | when it ended — the deadline it passed, else when its server said its traffic was used up or it was gone; `null` while it runs (a renewal or an extra that brings it back clears it) |
 | `removes_at` | when the shop removes it by itself, from its server and the shop: an ended service while the shop's automatic removal is on, a free test by the shop's rules for tests; `null` when it does not. Show it on an ended service — "renew before … to keep it" — and drop the service from your screens once it is gone (`404`). A moment already passed means it goes at the shop's next check (every 15 minutes); an order about it still open makes it wait |
 | `auto_renew` | `on` the customer's switch, `offered` whether it may be set, `days_before` how many days before its end the wallet renews it — the shop's rule, one for every service ([automatic renewal](#automatic-renewal)) |
-| `renewable` | it may be renewed now ([a renewal](Store-API-Buying.md#a-renewal)): active or ended, its plan still there and renewing something — and in an agent's shop covered by their traffic |
-| `extras` | `traffic` and `time`: whether extra traffic, and extra time, may be bought for it now ([extra traffic and time](Store-API-Buying.md#extra-traffic-and-time)) — the shop sells it, and the service can take it: traffic while it has a quota and its time has not run out, time while it has a term and its traffic has not run out |
+| `renewable` | it may be renewed now on its own plan ([a renewal](Store-API-Buying.md#a-renewal)): active or ended, its plan still there and renewing something — in an agent's shop covered by their traffic. False for a service without a plan |
+| `picks_plan` | it may be renewed now on what the customer picks: it has no plan (added by its link, or built; never a free test), it is active or ended, and a plan on sale is sold on its server or the shop's builder is offered — list the choices with `GET …/renewal-plans`, send the plan picked as `plan_id` ([a renewal](Store-API-Buying.md#a-renewal)), or a package built as `gb` and `days` ([renewing with a package built](Store-API-Buying.md#renewing-with-a-package-built)). Renewed on a plan it has that plan, and `renewable` holds instead; renewed with a package it still picks |
+| `renewal_window` | whether the shop lets it be renewed yet («آستانه مجاز تمدید»): `open`, and while it is not, what opens it — `opens_at`, `days_before` (a service whose clock waits for its first connection), `traffic_percent` — whichever comes first; none of them, its end. Keep the renewal button and say from when ([a renewal](Store-API-Buying.md#a-renewal)) |
+| `devices` | how many devices may use it at once (its IP limit); `0` no limit. Extra devices raise it until the period in use ends; a renewal brings its plan's limit — once that period ends, for a running service renewed by `extend` or `reset_traffic`, else at once ([the renewal's `devices`](Store-API-Buying.md#a-renewal)) |
+| `extras` | `traffic`, `time` and `devices`: whether extra traffic, extra time, and extra devices may be bought for it now ([extra traffic, time and devices](Store-API-Buying.md#extra-traffic-time-and-devices)) — the shop sells it, and the service can take it: traffic while it has a quota and its time has not run out, time while it has a term and its traffic has not run out, devices while it has a device limit, neither its time nor its traffic has run out and its server enforces the limit (not on PasarGuard) |
 | `link_rotation` | its link may be changed now ([a new link](#a-new-link)): it runs, and its server can give it a new one |
-| `next_period` | a renewal queued behind the period in use: when that period ends, and the most that is left then ([a renewal](Store-API-Buying.md#a-renewal)); `null` for none |
+| `next_period` | a renewal's traffic queued behind the period in use: when that period ends, and the most that is left then ([a renewal](Store-API-Buying.md#a-renewal)); `null` for none — a renewal whose traffic counted at once (the shop carries unused traffic over, `reset_traffic`) queues none |
+| `next_devices` | a renewal's device limit queued behind the period in use: `from` when (that period's end) and how many `devices` then (`0` no limit) — say "from … N devices" beside `devices`; `null` while the limit stays as it is |
 | `presence` | whether it is connected — only in `POST …/refresh`'s answer, else `null` |
 
 **The term starts at the first connection.** A new service has `awaits_first_use: true`, `starts_at` and `expires_at`
@@ -75,7 +85,9 @@ counted too, then `429` (`اطلاعات سرویس را زیاد به‌روز 
 
 `PATCH /subscriptions/{id}` `{ "auto_renew": true }` or `false` (a JSON boolean) answers `{ "subscription": … }`. Offered
 (`auto_renew.offered`) while the service runs, ends some day, still has its plan — one whose term is at least the
-`days_before` it is renewed in: a plan of a few hours is not —, and the shop takes the wallet;
+`days_before` it is renewed in: a plan of a few hours is not —, and the shop takes the wallet. A service without a plan
+— added by its link, or built and renewed with packages built — is never renewed by itself until a renewal on a plan
+gives it one;
 otherwise — turning it off too — `422` on `auto_renew` (`تمدید خودکار برای این سرویس در دسترس نیست.`), and anything but
 a boolean is `422` on it too. With it on, the shop renews the service from the wallet `auto_renew.days_before` days
 before its end, on its plan at that plan's price. The customer hears of it: `auto_renewed`, `auto_renew_short` (the
@@ -91,6 +103,69 @@ link is cut off — ask the customer to confirm first. Offer it while `link_rota
 hour, the refused and the failed ones counted too (`لینک سرویس را زیاد عوض کرده‌اید؛ …`). The bot does not announce a
 new link.
 
+## Handing a service to another customer
+
+«انتقال سرویس»: a customer gives one of their services to another customer of the shop, found by their numeric Telegram
+id, free — as in the bot. Offer it while `shop.service_transfers` of `GET /` is true
+([what the site asks first](Store-API-Shop.md#what-the-site-asks-first)): off until the shop's admin switches it on, in
+any shop. The recipient must have started the bot once.
+
+1. **Who it goes to** — `GET /subscriptions/{id}/transfer?telegram_id=7070` → `200`
+   `{ "recipient": { "name": "Sara", "username": "sara" } }` (either may be `null`): show it and ask the customer to
+   confirm. Nothing changes.
+2. **Hand it over** — `POST /subscriptions/{id}/transfer` `{ "telegram_id": "7070" }` (a number, or its digits as typed;
+   Persian digits are read too), with a recent sign-in
+   ([a recent sign-in](Store-API-Account.md#a-recent-sign-in): a token that leaked gives no service away; a `403` asks
+   for `POST /me/reauthenticate` first) → `200` with the same `recipient`. The service is theirs from now on: the customer's
+   `GET /subscriptions/{id}` is a `404` after it, so drop it from the page. It keeps its link, end and traffic, and its
+   `name` on the server — by the shop's default pattern the giver's Telegram username and a number (`ali_1`), with
+   `{tg_id}` the giver's id ([service usernames](Bot-Settings.md#service-usernames)): a client is not renamed on its
+   server. Its «تمدید خودکار» goes off. The recipient is told in the bot and among their notices (`service_received`); the customer
+   is not — the answer is theirs. The report group hears of every one.
+
+The link goes with the service, so the giver's devices stay connected until the recipient changes it
+([a new link](#a-new-link)): tell the giver so before they confirm. Where its server can change a link
+(`link_rotation`), the recipient's notice says it.
+
+Every refusal is a `422`, in words to show as they are:
+
+| Under | When |
+|---|---|
+| `errors.status` | the shop does not offer it now (`انتقال سرویس در این فروشگاه فعال نیست.`); a free test; a service gone from its server; one with an order the customer made still open — a renewal or an extra waiting for its payment or receipt, or being delivered (`سفارشی از این سرویس هنوز باز است …`; an unpaid one is dropped by itself after 48 hours); one whose delivery failed, which support settles — a retry or the money back (`تحویل سفارشی از این سرویس ناموفق بوده و منتظر پشتیبانی است؛ …`) |
+| `errors.telegram_id` | no number (`شناسه عددی تلگرام را وارد کنید: …`); no customer of this shop has it (`مشتری‌ای با این شناسه تلگرام در این فروشگاه نیست؛ …`); the customer themselves; a banned account |
+
+Each `GET` — and each `POST`, which looks the recipient up again — counts: at most 10 in 10 minutes per customer; and at
+most 5 services handed on an hour. Past either, a `429` with `Retry-After`. Another customer's service is a `404`, as
+everywhere.
+
+## Adding a service by its link
+
+«افزودن سرویس با لینک» ([Services added by their link](Service-Claims.md)): a customer adds to their account a service
+support made on a server by hand, by sending its link — as in the bot. Offer it while `shop.service_claims` of `GET /`
+is true ([what the site asks first](Store-API-Shop.md#what-the-site-asks-first)): the main shop's alone, off until its
+admin switches it on.
+
+`POST /subscriptions/claim` `{ "link": "…" }` → `201` `{ "subscription": … }`, the service as
+[services](#services) shows it: `claimed_at` set, `plan` `null`. `link` is what the customer pasted, up to 2000
+characters — a subscription link (`https://…/sub/…`, through any domain) or one of the service's configs (`vless://`,
+`vmess://`, `trojan://`, `ss://`, `hysteria2://`, `tuic://`), alone or among other words; its links are read together,
+five at most.
+The first customer to send it gets it; the report group hears of every one. No `Idempotency-Key`: sent again, it is
+refused as theirs already.
+
+Every refusal is under `errors.link`, in words to show as they are:
+
+| Status | When |
+|---|---|
+| `422` | the shop takes none now (`افزودن سرویس با لینک فعلا فعال نیست.`); no link in the text, or the text is too long; none of the servers has it; it is the customer's own already; its server serves it no subscription link |
+| `409` | it is in another customer's account (`… اگر سرویس شماست با پشتیبانی تماس بگیرید.`) |
+| `502` | a server that might have it did not answer — try again a little later |
+| `429` | past 10 links in 10 minutes, with `Retry-After`: each link asks every server |
+
+A service added this way has no plan: its first renewal is on one the customer picks (`picks_plan`,
+[a renewal](Store-API-Buying.md#a-renewal)), which then becomes its plan. Until then, extra traffic, time and devices
+are sold for it at the shop's own prices, while the shop sells them.
+
 ## Orders and payments
 
 `GET /orders?status=&type=&page=` lists the customer's orders, newest first, each with its payments (newest first) — the
@@ -98,8 +173,10 @@ order shape of [what a checkout answers](Store-API-Buying.md#what-a-checkout-ans
 `{ "order": … }`. An order's `subscription` is the service it delivered, renews or adds extras to, as `{ id, name }` — its
 name on the server, as a ticket names its service ([the list](Store-API-Support-Tickets.md#the-list)): a purchase's once
 delivered, a renewal's and extras' from the start; `null` for none, or once that service was deleted. Link it to
-`GET /subscriptions/{id}`. `traffic_bytes` and `days` are what an order of extras brings its service — extra traffic in
-bytes, extra time in days —, `null` for the rest (an agent's `traffic` order says its traffic in `traffic_bytes` too).
+`GET /subscriptions/{id}`. `package_name` is what a purchase or a renewal buys in words — its plan's name, or a service
+the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز» —, `null` for the rest. `traffic_bytes`, `days` and `devices` are
+what an order of extras brings its service — extra traffic in bytes, extra time in days, extra devices — or a built
+service's own, `null` for the rest (an agent's `traffic` order says its traffic in `traffic_bytes` too).
 
 | `type` | |
 |---|---|
@@ -107,6 +184,7 @@ bytes, extra time in days —, `null` for the rest (an agent's `traffic` order s
 | `renewal` | a service's renewal (`subscription` is that service, `server` where it is) |
 | `extra_traffic` | extra traffic for a service (`traffic_bytes`; `subscription` is that service, `plan` its plan, `server` where it is) |
 | `extra_time` | extra time for a service (`days`; `subscription`, `plan` and `server` as for extra traffic) |
+| `extra_devices` | extra devices for a service (`devices`; `subscription`, `plan` and `server` as for extra traffic) |
 | `wallet_topup` | money into the wallet (`plan`, `server` and `subscription` are `null`) |
 | `traffic` | an agent's traffic for their bot, bought in the bot |
 
@@ -126,12 +204,13 @@ bytes, extra time in days —, `null` for the rest (an agent's `traffic` order s
 | `awaiting_review` | its receipt is with support (`receipt.sent_at`) |
 | `paid` | accepted (`paid_at`) |
 | `failed` | its receipt was refused, or the payment was turned down |
-| `cancelled` | cancelled by support, the order expired, or it was paid another way |
+| `cancelled` | cancelled by support, the order expired, it was paid another way, or its service went to another customer |
 | `refunded` | given back |
 
 A payment's `note` is the word on its latest verdict, for the customer: support's reason for a refusal, their note on a
-cancellation or a refund, or the shop's own (`سفارش با روش دیگری پرداخت شد`, `پرداخت در مهلت کامل نشد`). Show it under
-the payment. Support's internal notes on an order are never in the API.
+cancellation or a refund, or the shop's own (`سفارش با روش دیگری پرداخت شد`, `پرداخت در مهلت کامل نشد`,
+`سرویس این سفارش به حساب دیگری منتقل شد`). Show it under the payment. Support's internal notes on an order are never in
+the API.
 
 ## The wallet
 

@@ -45,7 +45,8 @@ export function DiscountCard({ customer, invalidates, onSaved }: DiscountCardPro
         <p className="text-body text-muted-foreground">
           {percent > 0 ? (
             <>
-              <span className="font-medium text-foreground tabular">{formatNumber(percent)}٪</span> روی هر خرید، تمدید و حجم و زمان اضافه — اگر فروش ویژه یا سطح وفاداری‌اش بیشتر باشد، همان بیشتر.
+              <span className="font-medium text-foreground tabular">{formatNumber(percent)}٪</span> روی هر خرید، تمدید و حجم، زمان و کاربر اضافه — اگر فروش ویژه یا سطح وفاداری‌اش بیشتر باشد، همان
+              بیشتر.
             </>
           ) : (
             'ندارد.'

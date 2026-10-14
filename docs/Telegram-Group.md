@@ -34,8 +34,8 @@ without the right to manage topics.
 
 | Topic | What it hears |
 |---|---|
-| «خریدها» | A service sold and delivered: the customer, the plan, the location, the service, the amount and the way it was paid, the referrer's commission |
-| «تمدیدها» | A renewal, and the new end; extra traffic or time bought for a service («حجم و زمان اضافه»), and what the service has now |
+| «خریدها» | A service sold and delivered: the customer, the plan, the location, the service, the amount and the way it was paid, the referrer's commission; a service a customer added to their account by its link: the customer, the service and its location ([Services added by their link](Service-Claims.md#who-gets-it)); a service handed to another customer: from whom, to whom, the service, its location, and whether its customer or support did it ([Services](Services.md#handing-a-service-to-another-customer)) |
+| «تمدیدها» | A renewal — by which method, unless «تمدید پلن فعلی» — and the new end; extra traffic, time or devices bought for a service («حجم، زمان و کاربر اضافه»), and what the service has now |
 | «شارژ کیف پول» | A wallet top-up, and the balance |
 | «رسیدها» | A copy of each card receipt with what it pays for, «✅ تایید» and «❌ رد»; then its verdict as a reply to it |
 | «کاربران جدید» | A newcomer, and who brought them |

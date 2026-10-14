@@ -73,4 +73,13 @@ final class MoneyTest extends TestCase
         self::assertSame('0.00', Money::percentOf('9', 10));
         self::assertSame('120000.00', Money::percentOf('120000', 100));
     }
+
+    public function testAShareOfAPeriodsPriceIsWholeTomanRoundedUp(): void
+    {
+        self::assertSame('18000.00', Money::shareOf('30000.00', 18, 30));
+        self::assertSame('234.00', Money::shareOf('1000', 7, 30), '233.33 — the shop never charges a fraction short');
+        self::assertSame('1.00', Money::shareOf('1', 1, 30));
+        self::assertSame('90000.00', Money::shareOf('30000', 90, 30), 'more than the period: more than its price');
+        self::assertSame('0.00', Money::shareOf('30000', 0, 30));
+    }
 }

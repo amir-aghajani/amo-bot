@@ -1,20 +1,18 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BotSettingsResponse, DiscountCodeRow, DiscountCodesResponse } from '@/lib/api-types'
+import type { DiscountCodeRow, DiscountCodesResponse } from '@/lib/api-types'
 import { DiscountCodesPage } from '@/pages/discount-codes'
 import { providers, until } from '@/test/render'
-import { botSettingsRow, discountCodeRow, planRow } from '@/test/rows'
-import { json, noContent, server, type Answer } from '@/test/server'
+import { botSettingsResponse, botSettingsRow, discountCodeRow, planRow } from '@/test/rows'
+import { json, noContent, refusal, server, type Answer } from '@/test/server'
 
 /*
  * The discount codes (pages/discount-codes): every code — the code, what it takes off and what it holds for, its uses of
  * its cap, how it stands and its switch —; a code made with every field the form has, its window on the shop's clock; a
- * code nobody used deleted, one with uses only switched off; and how long an unpaid order made with a code holds its use
- * (a group of the bot settings).
+ * code nobody used deleted, one with uses only switched off; the form's plans and servers while they are read, or could
+ * not be; and how long an unpaid order made with a code holds its use (a group of the bot settings).
  */
-
-const QR = { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 182_000, updated_at: 1_759_000_000, max_bytes: 5 * 1024 * 1024 }
 
 function codes(rows: DiscountCodeRow[] = [discountCodeRow()]): Answer {
   return json({ codes: rows, meta: { page: 1, per_page: 25, total: rows.length, last_page: 1 } } satisfies DiscountCodesResponse)
@@ -22,7 +20,7 @@ function codes(rows: DiscountCodeRow[] = [discountCodeRow()]): Answer {
 
 function open(at = '/discounts', answer: Answer = codes()) {
   server()
-    .on('GET', '/api/admin/bot/settings', json({ settings: botSettingsRow({ hold_minutes: 60 }), qr_background: QR } satisfies BotSettingsResponse))
+    .on('GET', '/api/admin/bot/settings', json(botSettingsResponse(botSettingsRow({ hold_minutes: 60 }))))
     .on('GET', '/api/admin/discount-codes', answer)
     .on('GET', '/api/admin/plans', json({ plans: [planRow({ id: 3, name: 'یک‌ماهه' })] }))
     .on('GET', '/api/admin/plans/options', json({ categories: [], servers: [] }))
@@ -94,7 +92,7 @@ describe('a code', () => {
     type('کد', 'yalda')
     type('درصد تخفیف', '۳۰')
     type(/^سقف تخفیف/, '50000')
-    fireEvent.click(screen.getByRole('checkbox', { name: 'همه: خرید، تمدید، حجم و زمان اضافه' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'همه: خرید، تمدید، حجم، زمان و کاربر اضافه' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'تمدید' }))
     type('پایان', '1405/07/30')
     type(/^سقف استفاده هر مشتری/, '1')
@@ -119,6 +117,31 @@ describe('a code', () => {
       enabled: true,
     })
     expect(toast.success).toHaveBeenCalledWith('کد تخفیف ساخته شد')
+  })
+
+  it('says while its plans and servers are read, and why they could not be — never that there is nothing to pick', async () => {
+    server()
+      .on('GET', '/api/admin/bot/settings', json(botSettingsResponse(botSettingsRow({ hold_minutes: 60 }))))
+      .on('GET', '/api/admin/discount-codes', codes())
+    const plans = server().hold('GET', '/api/admin/plans')
+    const options = server().hold('GET', '/api/admin/plans/options')
+    render(<DiscountCodesPage />, { wrapper: providers({ at: '/discounts' }).wrapper })
+    await table()
+
+    fireEvent.click(screen.getByRole('button', { name: 'ساخت کد تخفیف' }))
+    fireEvent.click(screen.getByRole('button', { name: 'محدودیت‌های بیشتر' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'همه پلن‌ها' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'همه سرورها' }))
+
+    expect(screen.getByText('در حال خواندن پلن‌ها…')).toBeTruthy()
+    expect(screen.getByText('در حال خواندن سرورها…')).toBeTruthy()
+    expect(screen.queryByText('چیزی برای انتخاب نیست.')).toBeNull()
+
+    plans.answer(refusal(403, 'دسترسی ندارید.'))
+    options.answer(refusal(403, 'دسترسی ندارید.'))
+    expect(await screen.findByText('لیست پلن‌ها خوانده نشد: دسترسی ندارید.')).toBeTruthy()
+    expect(await screen.findByText('لیست سرورها خوانده نشد: دسترسی ندارید.')).toBeTruthy()
+    expect(screen.queryByText('چیزی برای انتخاب نیست.')).toBeNull()
   })
 
   it('a random one is made by the form', async () => {

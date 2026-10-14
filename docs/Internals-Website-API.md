@@ -33,6 +33,7 @@ Besides `/health`, `/api/app` and the installer's `/api/install`, routes/api.php
 /api/store/v1/{store} ── StoreMiddleware (the key opens a website; the request runs in its shop) · JsonBodies
     public            GET /, the catalogue, the reviews, /auth/*
     customer          CustomerAuthMiddleware (bearer token) — and RecentSignInMiddleware on what changes the ways in
+                      or gives a service away
     /admin            CustomerAuthMiddleware · StaffMiddleware → $operations again, never $configuration
 ```
 
@@ -72,8 +73,9 @@ password), a Google account, or any mix (`Enums\WayIn`). The ways in:
 
 **Sessions** (`CustomerSessions`): a bearer token per device, only its sha256 kept, per shop, idle after 30 days, ended
 after 180. `authenticated_at` is when a way in was last proven: changes to the ways in, the password, two-factor
-sign-in or a merge need it within 15 minutes (`RecentSignInMiddleware`, a 403 with RFC 9470's challenge), and
-`POST /me/reauthenticate` proves one again. So a leaked token alone takes no account over.
+sign-in or a merge, and a service handed to another customer, need it within 15 minutes (`RecentSignInMiddleware`, a
+403 with RFC 9470's challenge), and `POST /me/reauthenticate` proves one again. So a leaked token alone takes no
+account over and gives no service away.
 
 **Challenges** (`AuthChallenges`) are every short-lived secret: a random secret whose sha256 is kept with an encrypted
 payload, spent once by one conditional DELETE. Emailed codes are six digits, so they are kept as an HMAC under a key
@@ -100,7 +102,10 @@ removes the last one, again by a conditional UPDATE.
 `AccountMerger` keeps the older account and moves everything the other owned by `REFERENCES` — every column that points
 at `users`. `tests/Unit/Accounts/AccountMergerReferencesTest` reads database/schema.php and fails when a new such
 column is missing there, so a merge never leaves rows behind. Both rows are locked in id order and the rules judged
-again under the locks.
+again under the locks. After the commit, each service whose client on its panel names its owner otherwise than the
+survivor now is relabelled (`ProvisioningService::relabel()`: its Telegram id and comment), a panel that fails it
+logged ([Services](Internals-Services.md#service-transfers)). A Telegram account linked or taken off relabels every
+service of the account the same way.
 
 ## The shop on the website
 
@@ -112,7 +117,9 @@ website's shape and limits.
 - **Checkout** (`CustomerCheckout`) is the bot's checkout (`Payments\Services\Checkout`) under the bot's rules. Every
   ordering request carries an `Idempotency-Key`; a repeat is answered by that key's order as it stands, before any rule
   is asked again — the rules may say otherwise a moment later, and a retry must never order or charge twice. While the
-  bot's master switch is off the website takes no orders (`takingOrders()`).
+  bot's master switch is off the website takes no orders (`takingOrders()`). A renewal names what it is with as the
+  bot's buttons do — a plan picked (`plan_id`) or a package built (`gb`, `days`: `renewsWith()`) — and goes through
+  `CustomerRenewal::preview()`; `refused()` turns its `refusal()` into the field and words the site shows.
 - **Services** (`CustomerSubscriptions`): what each may do is judged for a whole page at once; reading a panel and new
   links are rate-limited per customer, and a panel failure is told as its summary, never the owner's diagnosis.
 - **Receipts** (`CustomerReceipts`) are taken as the bot takes them, but an uploaded receipt never auto-approves: the
@@ -137,8 +144,8 @@ or an agent's account. See [Store API: admins](Store-API-Admins.md).
 
 `Websites` makes a shop's row (switched off, with a random key) the first time a panel asks. Each settings card sends
 only its fields: `update()` is a partial save on the field engine (`Form::checkSent()`), with the rules between fields
-judged on the row as the save would leave it (`Forms\Ruled`) and the captcha checked by its driver's form (see
-[Drivers](Drivers.md)). Secrets are never sent back, only whether one is kept.
+judged on the row as the save would leave it (`Core\Forms\Fields\Ruled`) and the captcha checked by its driver's form
+(see [Drivers](Drivers.md)). Secrets are never sent back, only whether one is kept.
 
 ## The panels' controllers
 

@@ -205,6 +205,24 @@ final class SubscriptionSyncTest extends DatabaseTestCase
         self::assertSame(12 * Traffic::GIGABYTE, $subscription->refresh()->download_bytes);
     }
 
+    public function testADeviceLimitChangedOnThePanelIsTheServicesFromThenOn(): void
+    {
+        $changed = $this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['ip_limit' => 1]);
+        $unsaid = $this->subscription($this->ali, $this->plan, $this->server, 'ali_2', ['ip_limit' => 2]);
+        $this->onThePanel('ali_1', usedGb: 1);
+        $client = FakeProvider::$clients[$this->server->id]['ali_1'];
+        // Raised to three by hand on the panel.
+        FakeProvider::put($this->server, new ClientInfo(name: 'ali_1', enabled: true, downloadBytes: $client->downloadBytes, totalBytes: $client->totalBytes, expiry: $client->expiry, subscriptionUrl: $client->subscriptionUrl, ipLimit: 3));
+        // A panel that keeps no IP limit (PasarGuard) says nothing of it.
+        $this->onThePanel('ali_2', usedGb: 1);
+
+        $this->sync();
+
+        self::assertSame([3, 2], [$changed->refresh()->ip_limit, $unsaid->refresh()->ip_limit], "the panel's limit, or the shop's where the panel keeps none");
+        $this->service(ProvisioningService::class)->grant($changed, 5, 0);
+        self::assertSame(3, FakeProvider::lastUpdate('ali_1')->ipLimit, 'the next change of it keeps the panel\'s limit, never the old one');
+    }
+
     private function onThePanel(string $name, int $usedGb, ?Expiry $expiry = null): void
     {
         FakeProvider::put($this->server, new ClientInfo(

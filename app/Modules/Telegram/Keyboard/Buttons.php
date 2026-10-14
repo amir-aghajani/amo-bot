@@ -81,6 +81,21 @@ final class Buttons
     }
 
     /**
+     * The answers to a question about a change of a service that cannot be taken back («تغییر لینک», «انتقال سرویس»), in
+     * one row: «انصراف» back to the service's screen, and the red `$yes` to `$confirm`. Telegram lays a row out left to
+     * right, so "yes" is read first, on the right.
+     *
+     * @return array{inline_keyboard: list<list<array<string, mixed>>>}
+     */
+    public function confirmChange(int $subscriptionId, BotText $yes, string $confirm): array
+    {
+        return InlineKeyboard::make()->row(
+            InlineKeyboard::callback($this->texts->get(BotText::Cancel), SubscriptionHandler::serviceCallback($subscriptionId)),
+            InlineKeyboard::callback($this->texts->get($yes), $confirm, 'danger'),
+        )->build();
+    }
+
+    /**
      * «💾 خرید حجم»: an agent's traffic purchase.
      *
      * @return array<string, mixed>

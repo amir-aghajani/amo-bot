@@ -54,8 +54,8 @@ answer what they make: a secret to set up, recovery codes, how long a code or a 
 
 ## A recent sign-in
 
-What changes how the account is signed in to asks more of a session than its token, so a token that leaked takes no
-account over:
+What changes how the account is signed in to, and handing a service away, ask more of a session than its token, so a
+token that leaked takes no account over and gives no service away:
 
 | Asks a recent sign-in | See |
 |---|---|
@@ -63,6 +63,7 @@ account over:
 | `POST /me/2fa/setup`, `POST /me/2fa/enable`, `POST /me/2fa/disable` | [two-factor sign-in](#two-factor-sign-in) |
 | `POST /me/identities/telegram`, `…/google`, `…/email`, `…/email/verify`, and `DELETE /me/identities/{kind}` | [ways in](#ways-in-adding-and-removing) |
 | `POST /me/merge` | [the merge offer](#the-merge-offer) |
+| `POST /subscriptions/{id}/transfer`, which gives a service away | [handing a service to another customer](Store-API-After-Buying.md#handing-a-service-to-another-customer) |
 
 The session's sign-in must be at most 15 minutes old, or a way into the account proven again on it since. Otherwise the
 answer is `403` with `WWW-Authenticate: Bearer error="insufficient_user_authentication", max_age=900` (RFC 9470), given

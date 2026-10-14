@@ -7,6 +7,7 @@ namespace App\Modules\Telegram\Notifications;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Subscriptions\Enums\ExtraKind;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Subscriptions\Services\ServiceCleanup;
@@ -43,8 +44,9 @@ final class ServiceCard
     ) {}
 
     /**
-     * What every text about one service is filled with; a free test, which has no plan, is named as one. The link is the
-     * one subscription link the row keeps, never the per-inbound config links (a panel with thirty inbounds would make a
+     * What every text about one service is filled with; a free test, which has no plan, is named as one, a service its
+     * customer built as one, and one added by its link and not renewed on a plan as having none. The link is the one
+     * subscription link the row keeps, never the per-inbound config links (a panel with thirty inbounds would make a
      * wall of them; the link carries them all).
      *
      * @return array{client: string, plan: string|Html, server: string, duration: string, expires: string, traffic: string, remaining: string, subscription: string}
@@ -55,7 +57,14 @@ final class ServiceCard
 
         return [
             'client' => $subscription->remote_name,
-            'plan' => $subscription->is_test ? $this->texts->part(BotText::TestPlanName) : ($subscription->plan->name ?? ''),
+            'plan' => match (true) {
+                $subscription->is_test => $this->texts->part(BotText::TestPlanName),
+                $subscription->plan !== null => $subscription->plan->name,
+                // Built by its customer («سرویس دلخواه»): neither added by its link nor ever on a plan.
+                $subscription->plan_id === null && $subscription->claimed_at === null => $this->texts->part(BotText::CustomPlanName),
+                // Added by its link and not renewed on a plan.
+                default => $this->texts->part(BotText::NoPlanName),
+            },
             'server' => $subscription->server->name,
             'duration' => Messages::duration($subscription->duration_hours),
             'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
@@ -129,8 +138,8 @@ final class ServiceCard
     }
 
     /**
-     * What a fulfilled order brought, in words: the new service, the renewed one, the extra traffic or time on it, the
-     * wallet's new balance, an agent's traffic.
+     * What a fulfilled order brought, in words: the new service, the renewed one, the extra traffic, time or devices on
+     * it, the wallet's new balance, an agent's traffic.
      */
     public function settledText(Order $order): string
     {
@@ -139,6 +148,7 @@ final class ServiceCard
             OrderType::Renewal => $this->renewalText($order, BotText::Renewed),
             OrderType::ExtraTraffic => $this->text(self::subscriptionOf($order), BotText::ExtraTrafficAdded, ['extra_traffic' => self::extraOf($order)]),
             OrderType::ExtraTime => $this->text(self::subscriptionOf($order), BotText::ExtraTimeAdded, ['extra_time' => self::extraOf($order)]),
+            OrderType::ExtraDevices => $this->text(self::subscriptionOf($order), BotText::ExtraDevicesAdded, ['extra_devices' => self::extraOf($order), 'devices' => Messages::devices(self::subscriptionOf($order)->ip_limit)]),
             OrderType::WalletTopUp => $this->texts->render(BotText::WalletCharged, ['balance' => Messages::balance($order->user->balance())]),
             OrderType::Traffic => $this->texts->render(BotText::AgencyTrafficAdded, [
                 'traffic' => Messages::bytes((int) $order->traffic_bytes),
@@ -153,7 +163,7 @@ final class ServiceCard
         return match ($order->type) {
             OrderType::Purchase => $this->texts->get(BotText::PayProvisionFailed),
             OrderType::Renewal => $this->texts->render(BotText::RenewFailed, ['client' => self::subscriptionOf($order)->remote_name]),
-            OrderType::ExtraTraffic, OrderType::ExtraTime => $this->texts->render(BotText::ExtraFailed, ['client' => self::subscriptionOf($order)->remote_name, 'extra' => self::extraOf($order)]),
+            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => $this->texts->render(BotText::ExtraFailed, ['client' => self::subscriptionOf($order)->remote_name, 'extra' => self::extraOf($order)]),
             OrderType::WalletTopUp => $this->texts->get(BotText::TopupFailed),
             OrderType::Traffic => $this->texts->get(BotText::AgencyTrafficFailed),
         };
@@ -169,7 +179,7 @@ final class ServiceCard
     {
         $subscription = self::subscriptionOf($renewal);
         $leftover = $this->periodNote($subscription);
-        if ($leftover === '' && $this->carried($subscription)) {
+        if ($leftover === '' && $this->carried($renewal, $subscription)) {
             $leftover = $this->texts->part(BotText::RenewalLeftoverCarried);
         }
 
@@ -195,6 +205,28 @@ final class ServiceCard
     }
 
     /**
+     * A renewal's device limit as the customer gets it (`$after`, ServiceTerms::preview()): the one queued behind the
+     * period in use, else the one it sets at once.
+     */
+    public static function devicesAfter(Subscription $after): string
+    {
+        return Messages::devices($after->next_period_ip_limit ?? $after->ip_limit);
+    }
+
+    /**
+     * With a renewal's device limit queued behind the period in use and other than the limit now: from when it holds
+     * (the devices bought until then stay); '' otherwise.
+     */
+    public function devicesFrom(Subscription $after): Html|string
+    {
+        if ($after->next_period_ip_limit === null || $after->period_ends_at === null || $after->next_period_ip_limit === $after->ip_limit) {
+            return '';
+        }
+
+        return $this->texts->part(BotText::RenewalDevicesFrom, ['date' => Persian::date($after->period_ends_at)]);
+    }
+
+    /**
      * The line saying when the shop removes the service by itself (ServiceCleanup::removesAt()): an ended service unless
      * it is renewed first, a free test by the test accounts' rule. For its screen and its renewal's checkout; '' when the
      * shop does not remove it.
@@ -209,12 +241,21 @@ final class ServiceCard
         return $this->texts->part($subscription->is_test ? BotText::ServiceTestRemoval : BotText::ServiceRemoval, ['date' => Persian::date($at, withTime: true)]);
     }
 
-    /** Whether the renewal carried the traffic left into the renewed period: more is left than the plan gives. */
-    private function carried(Subscription $subscription): bool
+    /**
+     * Whether the renewal carried the traffic left into the renewed period: its method carries it (a reset of the time
+     * always, a reset of the traffic never, an extension as the shop does) and more is left than it gave — the traffic
+     * delivered, else its package's (a plan's, or one built), as the renewal reads it (ProvisioningService::renew()).
+     */
+    private function carried(Order $renewal, Subscription $subscription): bool
     {
-        $planBytes = $subscription->plan?->trafficBytes() ?? 0;
+        $given = $renewal->given_bytes ?? $renewal->package()->bytes ?? $subscription->plan?->trafficBytes() ?? 0;
+        $carries = match ($renewal->renewal_method ?? RenewalMethod::Extend) {
+            RenewalMethod::Extend => $this->renewal->carriesTraffic(),
+            RenewalMethod::ResetTraffic => false,
+            RenewalMethod::ResetTime => true,
+        };
 
-        return $this->renewal->carriesTraffic() && $planBytes > 0 && ($subscription->remainingBytes() ?? 0) > $planBytes;
+        return $carries && $given > 0 && ($subscription->remainingBytes() ?? 0) > $given;
     }
 
     /** The QR card's JPEG, or null when it is off, GD cannot draw it, or the text is too long for a caption. */
@@ -232,7 +273,7 @@ final class ServiceCard
         return $order->subscription ?? throw new \LogicException("Order #{$order->id} has no subscription.");
     }
 
-    /** What an order of extra traffic or time brings, in words: «۱۰ گیگابایت», «۷ روز». */
+    /** What an order of extra traffic, time or devices brings, in words: «۱۰ گیگابایت», «۷ روز», «۲ کاربر». */
     private static function extraOf(Order $order): string
     {
         $kind = ExtraKind::of($order->type) ?? throw new \LogicException("Order #{$order->id} buys no extra.");

@@ -92,6 +92,23 @@ final class PasarGuardClient
     }
 
     /**
+     * GET one of the panel's public subscription routes — `$path` under the panel's address, without the API's
+     * credentials, as a client app asks it with a link's token. Its JSON object, or null for any other answer: a token it
+     * did not sign or revoked, a page, an error. Such an answer is no failure of the panel's API, and the path — which
+     * holds a customer's token — goes into no message.
+     *
+     * @return array<string, mixed>|null
+     * @throws ProviderException when nothing answered
+     */
+    public function anonymous(string $path): ?array
+    {
+        $response = $this->send('GET', $path, []);
+        $body = $response->getStatusCode() === 200 ? json_decode((string) $response->getBody(), true) : null;
+
+        return is_array($body) && $body !== [] && !array_is_list($body) ? $body : null;
+    }
+
+    /**
      * @param array<string, mixed> $options Guzzle request options
      * @return array<string, mixed>
      * @throws ProviderException

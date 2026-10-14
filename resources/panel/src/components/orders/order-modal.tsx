@@ -14,7 +14,7 @@ import type { OrderRow } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
 import { formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { ORDER_PRICING, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS, SUBSCRIPTION_STATUS } from '@/lib/statuses'
+import { ORDER_PRICING, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS, RENEWAL_METHOD, SUBSCRIPTION_STATUS } from '@/lib/statuses'
 
 type Action = keyof OrderRow['actions']
 
@@ -104,6 +104,8 @@ function Facts({ order }: { order: OrderRow }) {
         <StatusBadge status={ORDER_STATUS[order.status]} />
       </Fact>
       <Fact label="نوع">{ORDER_TYPE[order.type]}</Fact>
+      {/* A renewal: how it added its package — the term on top, or the traffic or the term afresh. */}
+      {order.renewal_method && <Fact label="روش تمدید">{RENEWAL_METHOD[order.renewal_method]}</Fact>}
       {brings && <Fact label={brings.label}>{brings.amount}</Fact>}
       {/* A space, not a margin alone, between the amount and the words beside it: two words for assistive tech, not one. */}
       <Fact label="مبلغ">
@@ -117,7 +119,8 @@ function Facts({ order }: { order: OrderRow }) {
       </Fact>
       <DiscountFact order={order} />
       <CustomerFacts user={order.user} />
-      {order.plan && <Fact label="پلن">{order.plan.name}</Fact>}
+      {/* A service the customer built has no plan: what it was built of, in its place. */}
+      {order.package_name && <Fact label="پلن">{order.package_name}</Fact>}
       {order.server && <Fact label="سرور">{order.server.name}</Fact>}
       {order.subscription && (
         <Fact label="سرویس">

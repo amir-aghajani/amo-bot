@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Store\Forms;
+namespace App\Core\Forms\Fields;
 
-use App\Core\Forms\Fields\Field;
 use App\Core\Forms\FieldType;
 
 /**
  * Wraps a field with a rule against the other fields' values as the save would leave them (`$rule` answers the refusal,
  * or null); everything else is the wrapped field's. For a switch that needs another field (Telegram sign-in, its Client
- * ID) or a field a switch needs (the website on, its address).
+ * ID), a field a switch needs (the website on, its address), or a choice among the switches that are on (the renewal
+ * methods' default).
  *
  * @template T
  * @extends Field<T>

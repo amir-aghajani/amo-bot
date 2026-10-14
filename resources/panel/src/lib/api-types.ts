@@ -648,14 +648,15 @@ export type OrderStatus = 'pending' | 'paid' | 'processing' | 'fulfilled' | 'can
 /** Which price a purchase or renewal was made at: `regular`, the plan's price (also used for every other order type); `first_purchase`, its first-purchase price («قیمت خرید اول», for a customer who had bought no service); `agent`, its agent price («قیمت نماینده», for an agent or a member of a group with agent prices); or `gift`, free (a prize, or a service from a gift code or referral reward). */
 export type OrderPricing = 'regular' | 'first_purchase' | 'agent' | 'gift'
 
-/** What an order buys: a plan (`purchase`), a service's `renewal`, a `wallet_topup`, `traffic` for an agent's bot (main bot only), or `extra_traffic` or `extra_time` for an existing service. */
-export type OrderType = 'purchase' | 'renewal' | 'wallet_topup' | 'traffic' | 'extra_traffic' | 'extra_time'
+/** What an order buys: a plan (`purchase`), a service's `renewal`, a `wallet_topup`, `traffic` for an agent's bot (main bot only), or `extra_traffic`, `extra_time` or `extra_devices` for an existing service. */
+export type OrderType = 'purchase' | 'renewal' | 'wallet_topup' | 'traffic' | 'extra_traffic' | 'extra_time' | 'extra_devices'
 
 export interface RecentOrder {
   id: number
   type: OrderType
   status: OrderStatus
   amount: string
+  /** Its plan's name — a service the customer built in words, «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز» —; null for an order of neither. */
   plan: string | null
   user: UserRef
   created_at: string
@@ -813,20 +814,23 @@ export interface PaymentRow {
   summary: string | null
   /** The gateway's own id for the payment (the wallet's ledger line); null when it has none (a card transfer). */
   reference: string | null
-  /** The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid), or a refund's note (also in `refund_note`). */
+  /** The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), or a refund's note (also in `refund_note`). */
   description: string | null
   user: UserRef
   order: {
     id: number
     type: OrderType
     status: OrderStatus
+    /** What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order. */
     plan: string | null
     server: string | null
     subscription_id: number | null
-    /** The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise. */
+    /** The traffic it adds, in bytes: an agent's traffic, a service's extra traffic, or a built service's traffic; null otherwise. */
     traffic_bytes: number | null
-    /** The days it adds to a service (extra time); null otherwise. */
+    /** The days it adds to a service (extra time), or a built service's term; null otherwise. */
     days: number | null
+    /** The devices it adds to a service's IP limit (extra devices), or a built service's limit; null otherwise. */
+    devices: number | null
     /** Why its delivery failed; null unless it did. The owner sees the panel's full diagnosis, anyone else a short summary. */
     notes: string | null
     /** The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. */
@@ -908,6 +912,9 @@ export interface OrderRow {
   user: UserRef
   /** The plan of a purchase or renewal; for extras, the service's plan. */
   plan: NamedRef | null
+  package_name: OrderPackageName
+  /** How a renewal adds its package (a renewal from before renewal methods, `extend`); null for any other order. */
+  renewal_method: RenewalMethod | null
   /** The server the customer chose; for a renewal or extras, the service's server. */
   server: NamedRef | null
   /** The service it bought, renewed or extended; null for a top-up, or once the service was deleted. */
@@ -916,10 +923,12 @@ export interface OrderRow {
     name: string
     status: SubscriptionStatus
   } | null
-  /** The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise. */
+  /** The traffic it adds, in bytes: an agent's traffic, a service's extra traffic, or a built service's traffic; null otherwise. */
   traffic_bytes: number | null
-  /** The days it adds to a service (extra time); null otherwise. */
+  /** The days it adds to a service (extra time), or a built service's term; null otherwise. */
   days: number | null
+  /** The devices it adds to a service's IP limit (extra devices), or a built service's limit; null otherwise. */
+  devices: number | null
   /** Why it failed or was cancelled. For a failed delivery, the owner sees the panel's full diagnosis; anyone else (an agent, a website admin) a short summary. */
   notes: string | null
   /** The payment attempts, newest first. */
@@ -988,8 +997,10 @@ export interface SubscriptionRow {
   link: string
   /** A free test account («اکانت تست»): no plan, never renewed, never counted as ending soon (`expiring_soon`); removed by the tests' own rule (`removes_at`). */
   is_test: boolean
+  /** When the customer added it by sending its link («افزودن سرویس با لینک», `claim_enabled`): a client made by hand on its panel. Null for any other service. Such a service has no plan until a renewal on one the customer picks, sold on its server (a renewal with a package built leaves it without). */
+  claimed_at: string | null
   user: UserRef
-  /** Null for a test account, or once the plan is deleted. */
+  /** Null for a service without a plan — a test account, a service added by its link (`claimed_at`) or built by the customer («سرویس دلخواه»), until a renewal on a plan; one renewed with a package built stays so — and once the plan is deleted. */
   plan: NamedRef | null
   server: NamedRef
   /** In bytes; a limit of 0 means unlimited. */
@@ -1005,11 +1016,13 @@ export interface SubscriptionRow {
   duration_hours: number
   /** The customer's auto-renewal («تمدید خودکار»): renewed from their wallet before the deadline. */
   auto_renew: boolean
-  /** A renewal queued after the current period (unused traffic of the current period is not carried over): when it starts, and the most traffic left then, in bytes. */
+  /** A renewal queued after the current period (unused traffic of the current period is not carried over): when it starts, and the most traffic left then, in bytes. Null while no traffic cap waits for it — a renewal may still have queued its device limit alone (`next_devices`). */
   next_period: {
     starts_at: string
     traffic: number
   } | null
+  /** A renewal's device limit queued after the current period: a running service renewed by `extend` or `reset_traffic` keeps the devices it has (extra devices bought included) until the period in use ends, and has the renewal's from then. Null while the limit stays as `ip_limit` says. */
+  next_devices: NextDevices | null
   /** When the first connection started the term; null until then. */
   starts_at: string | null
   /** Null while waiting for the first connection, or without a term. */
@@ -1030,6 +1043,8 @@ export interface SubscriptionRow {
     disable: boolean
     enable: boolean
     move: boolean
+    /** Handing it to another customer («انتقال سرویس»): anything but a free test account or a service gone from its panel. */
+    transfer: boolean
     delete: boolean
     /** Adding days and traffic: for an active service with an end date or a quota. */
     extend: boolean
@@ -1054,14 +1069,24 @@ export interface SubscriptionMoveRequest {
   leave_previous?: boolean
 }
 
-/** Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable. */
+/** Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable; the owner in the main shop may always (not the website's admins, who need the panel out of reach as any other shop's), which is how a service added by its link to the wrong customer (`SubscriptionRow.claimed_at`) is taken back for the right one to send its link again. */
 export interface SubscriptionDeleteRequest {
   note?: string
   leave_panel?: boolean
 }
 
-/** The services list's `kind` filter: the free test accounts (`test`), or every other service — sold, renewed or given (`regular`). */
-export type SubscriptionKind = 'test' | 'regular'
+/** «انتقال سرویس»: whom to hand the service to — a customer of the shop, by their numeric Telegram id; they must have started the bot once. */
+export interface SubscriptionTransferRequest {
+  /** Their numeric Telegram id: a number, or its digits as typed. */
+  telegram_id: WholeNumberInput
+}
+
+export interface SubscriptionTransferRecipientResponse {
+  recipient: UserRef
+}
+
+/** The services list's `kind` filter: the free test accounts (`test`), the services customers added by their link (`claimed`, «افزودن سرویس با لینک»: `SubscriptionRow.claimed_at` set), or every other service — sold, renewed or given (`regular`: neither a test nor a claimed one). */
+export type SubscriptionKind = 'test' | 'regular' | 'claimed'
 
 /** The services list's sort keys: creation time (the default), end date (services that never end or have not started come after every deadline), or traffic used. */
 export type SubscriptionSort = 'created' | 'expires' | 'used'
@@ -2059,7 +2084,7 @@ export interface PlanRow {
   traffic_gb: number
   /** Devices at once; 0 for unlimited */
   ip_limit: number
-  /** The plan's own prices for extra traffic and time; null to use the shop's (the bot settings' `extra_…`). */
+  /** The plan's own prices for extra traffic, time and devices; null to use the shop's (the bot settings' `extra_…`). */
   extras: ExtraPrices | null
   servers: PlanServerEntry[]
   /** Why the bot does not offer the plan now, apart from its switch: it has no server, none of its servers can sell (each entry says why), or an agent's traffic does not cover it. Null when it is offered. */
@@ -2139,7 +2164,7 @@ export interface PlanRequest {
   button_style?: '' | 'primary' | 'success' | 'danger' | null
   /** How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. */
   button_row?: WholeNumberInput
-  /** The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. */
+  /** The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. */
   extras?: ExtraPricesRequest | null
   /** A category id (`PlanCategoryRow.id`); blank or 0 for none. */
   category_id?: WholeNumberInput
@@ -2775,14 +2800,14 @@ export interface LoyaltyStanding {
   } | null
 }
 
-/** An order type a cashback rule can apply to: things a customer buys for themselves. */
-export type CashbackOrderType = 'purchase' | 'renewal' | 'extra_traffic' | 'extra_time'
+/** An order type a customer buys for themselves — what a discount and a cashback rule can apply to, and what loyalty and the nightly draw count: never a wallet top-up or an agent's traffic. */
+export type OwnOrderType = 'purchase' | 'renewal' | 'extra_traffic' | 'extra_time' | 'extra_devices'
 
 /** A cashback rule («کش‌بک»): this percent of what a delivered order paid goes back to the customer's wallet, for the listed order types, for members of its customer group (null: anyone) who paid with its payment method (null: any). Of the enabled rules matching an order, the highest percent applies; the customer's loyalty tier adds its own. */
 export interface CashbackRuleRow {
   id: number
   percent: number
-  order_types: CashbackOrderType[]
+  order_types: OwnOrderType[]
   customer_group: {
     id: number
     name: string
@@ -2807,7 +2832,7 @@ export interface CashbackRuleRequest {
   /** 1 to 100. */
   percent: WholeNumberInput
   /** At least one. */
-  order_types: CashbackOrderType[]
+  order_types: OwnOrderType[]
   /** A customer group of the shop; null or left out for anyone. */
   customer_group_id?: number | null
   /** The payment method the order must be paid with; null or left out for any. */
@@ -2859,9 +2884,6 @@ export interface LotteryDrawsResponse {
   meta: PageMeta
 }
 
-/** The order types a discount can apply to: things a customer buys for themselves, never a wallet top-up or an agent's traffic. */
-export type DiscountKind = 'purchase' | 'renewal' | 'extra_traffic' | 'extra_time'
-
 /** What a discount code takes off: a `percent` of the amount (capped at `max_discount` Toman when set), a `fixed` number of Toman (never more than the amount), or the whole amount (`free`). */
 export type DiscountType = 'percent' | 'fixed' | 'free'
 
@@ -2888,6 +2910,9 @@ export interface OrderDiscountCode {
   code: string
 }
 
+/** What a purchase or a renewal buys, in words — the one wording the bot and the report group use too: its plan's name, or a service the customer built («سرویس دلخواه») as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز». Extra traffic, time or devices: its service's plan's name (null for a service without a plan). Null for any other order (a wallet top-up, an agent's traffic). */
+export type OrderPackageName = string | null
+
 /** A discount code («کد تخفیف») a customer types at checkout, in the bot or on the website. Stored and matched in upper case. */
 export interface DiscountCodeRow {
   id: number
@@ -2902,7 +2927,7 @@ export interface DiscountCodeRow {
   /** The minimum order amount (after the automatic discount) for the code to apply; null for none. */
   min_amount: string | null
   /** The order types it applies to; null for every type a discount can apply to. */
-  order_types: DiscountKind[] | null
+  order_types: OwnOrderType[] | null
   /** The plans it applies to (for a renewal or extra, the service's plan); null for any. */
   plans: NamedRef[] | null
   /** The servers it applies to (for a purchase, the chosen server; for a renewal or extra, the service's); null for any. */
@@ -2946,7 +2971,7 @@ export interface DiscountCodeRequest {
   /** Whole Toman; blank or null for none. */
   min_amount?: AmountInput | null
   /** At least one; null (or all of them) for every type. */
-  order_types?: DiscountKind[] | null
+  order_types?: OwnOrderType[] | null
   /** Plan ids; null or empty for any. */
   plan_ids?: number[] | null
   /** Server ids; null or empty for any. */
@@ -2974,7 +2999,7 @@ export interface SaleRow {
   name: string
   percent: number
   /** Null for every type a discount can apply to. */
-  order_types: DiscountKind[] | null
+  order_types: OwnOrderType[] | null
   /** Null for every plan (for an extra, the service's plan counts). */
   plans: NamedRef[] | null
   starts_at: string | null
@@ -2999,7 +3024,7 @@ export interface SaleRequest {
   /** 1 to 100. */
   percent: WholeNumberInput
   /** At least one; null (or all of them) for every type. */
-  order_types?: DiscountKind[] | null
+  order_types?: OwnOrderType[] | null
   /** Plan ids; null or empty for every plan. */
   plan_ids?: number[] | null
   /** A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. */
@@ -3023,13 +3048,25 @@ export interface BotSettingsData {
   topup_presets: number[]
   /** Whether a delivered service comes with a QR code of its link. */
   qr_enabled: boolean
-  /** «تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends). */
+  /** «تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends) — by the renewal method `extend` («تمدید پلن فعلی»). */
   carry_traffic: boolean
+  /** «تمدید سرویس»: a customer may renew a running service only within this many days of its deadline (or with at most `renew_window_percent` of its traffic left, or once it ended); 0 — no such rule, and with `renew_window_percent` 0 too, any time. A service with no deadline yet (waiting for its first connection) or none at all is let in by its traffic alone. Automatic renewal goes by its own days. */
+  renew_window_days: number
+  /** A customer may renew a running service once at most this percent of its traffic is left (beside `renew_window_days`); 0 — however much is left. */
+  renew_window_percent: number
+  /** Renewal method «تمدید پلن فعلی» offered: the term on top of what is left, the traffic as `carry_traffic` says. */
+  renew_extend: boolean
+  /** Renewal method «ریست حجم + افزایش روز» offered: the term on top of what is left, the traffic counted afresh (what was left is lost). */
+  renew_reset_traffic: boolean
+  /** Renewal method «ریست زمان + انتقال حجم» offered: the term starts afresh (what was left of it is lost), the traffic left carries over. With more than one method on, the customer picks; with none on, `extend` is what renews. */
+  renew_reset_time: boolean
+  /** The method automatic renewal uses (the first one offered while this one is not). By `reset_time` it waits for the last half hour before the end, so the days left are not lost; a wallet short of it is still told `auto_renew_days` ahead. */
+  renew_default_method: RenewalMethod
   /** «تمدید خودکار»: how many days before its end a service is renewed from the wallet. */
   auto_renew_days: number
   /** Whether a new service starts with auto-renewal on. */
   auto_renew_default: boolean
-  /** «حجم و زمان اضافه»: whether customers can buy extra traffic and time for their services, at these prices or a plan's own (`PlanRow.extras`). When off, none is sold. */
+  /** «حجم، زمان و کاربر اضافه»: whether customers can buy extra traffic, time and devices («کاربر اضافه») for their services, at these prices or a plan's own (`PlanRow.extras`). When off, none is sold. */
   extras_enabled: boolean
   /** The shop's price per GB of extra traffic, in Toman; null when only the preset amounts with their own prices are sold (no custom amount). */
   extra_traffic_price: string | null
@@ -3047,6 +3084,14 @@ export interface BotSettingsData {
   extra_time_min: number
   /** The most custom days. */
   extra_time_max: number
+  /** The shop's price per extra device (the service's IP limit) for 30 days, in Toman, charged for the days left of a service's period in use, which they last; null when only the preset counts with their own prices are sold (no custom count). */
+  extra_devices_price: string | null
+  /** The device counts offered as buttons, fewest first. */
+  extra_devices_options: ExtraOption[]
+  /** The fewest custom devices (needs a price per device). */
+  extra_devices_min: number
+  /** The most custom devices. */
+  extra_devices_max: number
   /** «یادآوری»: remind the customer `expiry_reminder_days` days before a service ends. */
   expiry_reminder: boolean
   expiry_reminder_days: number
@@ -3073,6 +3118,40 @@ export interface BotSettingsData {
   test_cleanup_hours: number
   /** While `test_cleanup` is on, after how many days a test that never connected is removed (its hours wait for the first connection); 0 never. */
   test_unused_days: number
+  /** «افزودن سرویس با لینک», main shop only, always present there (an agent's shop has no such switch, nor the `service_claims` group): customers can add a client made by hand on a panel to their «سرویس‌های من» by sending the bot (or the website) its subscription link or one of its configs. The first to send it gets it, and each claim is reported in the report group's «خریدها» topic; a wrong one is fixed by deleting the service from the shop only (`leave_panel`), so the right customer can send it again. A claimed service (`SubscriptionRow.claimed_at`) has no plan until its first renewal, when the customer picks one sold on its server. Off by default. */
+  claim_enabled?: boolean
+  /** «انتقال سرویس»: customers may hand one of their services to another customer of the shop by their Telegram id (support transfers from the panels whatever this says). Off by default. */
+  transfer_enabled: boolean
+  /** «نام کاربری سرویس»: the pattern a sold service's client is named by on its panel, of the variables `BotSettingsResponse.name_variables` lists and the characters a panel takes (letters, digits, `_ - . @`); `{username}_{seq}` by default. */
+  name_pattern: string
+  /** The pattern a free test's client is named by; `test_{username}_{seq}` by default. */
+  test_name_pattern: string
+  /** A buyer may take a random name for their new service instead of the pattern. */
+  name_random: boolean
+  /** A buyer may type the name of their new service (letters, digits, `_` and `-`, 3 to 32) instead of the pattern. */
+  name_custom: boolean
+  /** «سرویس دلخواه», main shop only, always present there: customers build a service of the traffic and days they choose, each priced by its tiers, on `custom_servers`. Off by default. */
+  custom_enabled?: boolean
+  /** The price of a GB by tiers, the smallest `from` first: a built service's GB are priced whole at the tier they fall into. */
+  custom_traffic_tiers?: PriceTier[]
+  /** The least GB a customer may build. */
+  custom_traffic_min?: number
+  /** The most GB a customer may build. */
+  custom_traffic_max?: number
+  /** GB amounts offered as buttons, smallest first. */
+  custom_traffic_options?: number[]
+  /** The price of a day by tiers, the smallest `from` first. */
+  custom_days_tiers?: PriceTier[]
+  /** The least days a customer may build. */
+  custom_days_min?: number
+  /** The most days a customer may build. */
+  custom_days_max?: number
+  /** Day counts offered as buttons, smallest first. */
+  custom_days_options?: number[]
+  /** Devices at once on a built service; 0 — unlimited. */
+  custom_devices?: number
+  /** The servers a customer may build on, by id. */
+  custom_servers?: number[]
   /** «زیرمجموعه‌گیری»: the referral program. Referral links bring new customers, and their payments earn the referrer `referral_rate` percent. */
   referral_enabled: boolean
   referral_rate: number
@@ -3165,6 +3244,10 @@ export type BotSettingsGroup =
   | 'reminders'
   | 'expired_services'
   | 'test_accounts'
+  | 'service_claims'
+  | 'service_transfers'
+  | 'client_names'
+  | 'custom_services'
   | 'referral'
   | 'reports'
   | 'qr'
@@ -3177,6 +3260,15 @@ export type BotSettingsGroup =
 export interface BotSettingsResponse {
   settings: BotSettingsData
   qr_background: QrBackgroundInfo
+  /** «نام کاربری سرویس»: the variables `name_pattern` and `test_name_pattern` may hold, in the order a hint lists them. A pattern must hold `n` or `random`, or `seq` beside `username`, `tg_id` or `user_id`, so no two services are named alike. */
+  name_variables: {
+    /** Written in braces in a pattern: `{username}`. */
+    name: string
+    /** What it stands for, in Persian. */
+    description: string
+    /** Its value for a sample customer (@amir's third service, the shop's 128th; `date` today on the shop's clock), for the name a pattern would give as it is typed. */
+    example: string
+  }[]
 }
 
 export interface BotSettingsSaved {
@@ -3203,6 +3295,10 @@ export type BotSettingsRequest =
   | BotRemindersSettingsRequest
   | BotExpiredServicesSettingsRequest
   | BotTestAccountsSettingsRequest
+  | BotServiceClaimsSettingsRequest
+  | BotServiceTransfersSettingsRequest
+  | BotClientNamesSettingsRequest
+  | BotCustomServicesSettingsRequest
   | BotReferralSettingsRequest
   | BotReportsSettingsRequest
   | BotQrSettingsRequest
@@ -3271,6 +3367,68 @@ export interface BotTestAccountsSettingsRequest {
   test_unused_days: WholeNumberInput
 }
 
+/** «افزودن سرویس با لینک»: the switch (`BotSettingsData.claim_enabled`); a 404 in an agent's shop, which has no such group. */
+export interface BotServiceClaimsSettingsRequest {
+  claim_enabled: boolean
+}
+
+/** «انتقال سرویس»: the customers' switch (`BotSettingsData.transfer_enabled`). */
+export interface BotServiceTransfersSettingsRequest {
+  transfer_enabled: boolean
+}
+
+/** «نام کاربری سرویس»: the patterns and the buyers' choices. A pattern left blank is its default; one with an unknown variable, another character, or neither `{n}` nor `{random}` nor `{seq}` beside `{username}`, `{tg_id}` or `{user_id}` (`{seq}` alone names every customer's first service alike) is refused under its field. */
+export interface BotClientNamesSettingsRequest {
+  /** At most 48 characters. */
+  name_pattern?: string
+  /** At most 48 characters. */
+  test_name_pattern?: string
+  name_random: boolean
+  name_custom: boolean
+}
+
+/** «سرویس دلخواه»: the switch, the tiers, the bounds, the buttons, the devices and the servers; a 404 in an agent's shop, which has no such group. Every refusal is returned at once, under its field. */
+export interface BotCustomServicesSettingsRequest {
+  custom_enabled: boolean
+  /** `from` 1 to 10000 GB, each once, at most 10; left out for none. */
+  custom_traffic_tiers?: PriceTierInput[]
+  /** 1 to 10000 GB. */
+  custom_traffic_min: WholeNumberInput
+  /** `custom_traffic_min` to 10000 GB. */
+  custom_traffic_max: WholeNumberInput
+  /** 1 to 10000 GB, at most 8. */
+  custom_traffic_options?: NumbersInput
+  /** `from` 1 to 365 days, each once, at most 10; left out for none. */
+  custom_days_tiers?: PriceTierInput[]
+  /** 1 to 365 days. */
+  custom_days_min: WholeNumberInput
+  /** `custom_days_min` to 365 days. */
+  custom_days_max: WholeNumberInput
+  /** 1 to 365 days, at most 8. */
+  custom_days_options?: NumbersInput
+  /** 0 to 100; 0 — unlimited. */
+  custom_devices: WholeNumberInput
+  /** Server ids, at most 50. */
+  custom_servers?: NumbersInput
+}
+
+/** A tier of a price: from `from` units on, `price` Toman a unit. */
+export interface PriceTier {
+  from: number
+  price: string
+}
+
+export interface PriceTierInput {
+  from?: WholeNumberInput
+  price?: AmountInput
+}
+
+/** How a renewal adds its package: `extend` «تمدید پلن فعلی» (the term on top of what is left; the traffic as the shop carries unused traffic or not), `reset_traffic` «ریست حجم + افزایش روز» (the term on top; the traffic counted afresh), `reset_time` «ریست زمان + انتقال حجم» (the term afresh; the traffic left carried over). */
+export type RenewalMethod = 'extend' | 'reset_traffic' | 'reset_time'
+
+/** How a buyer has their new service named: `sequential` by the shop's pattern, `random`, or `custom` (the name they type) — the latter two while the shop offers them. */
+export type ClientNameMode = 'sequential' | 'random' | 'custom'
+
 export interface BotGeneralSettingsRequest {
   enabled: boolean
   phone_required: boolean
@@ -3291,6 +3449,16 @@ export interface BotWalletSettingsRequest {
 
 export interface BotRenewalSettingsRequest {
   carry_traffic: boolean
+  /** 0 to 365; 0 — any time. */
+  renew_window_days: WholeNumberInput
+  /** 0 to 100; 0 — off. */
+  renew_window_percent: WholeNumberInput
+  /** At least one method must be on: a save with none is a 422 on `renew_extend`. */
+  renew_extend: boolean
+  renew_reset_traffic: boolean
+  renew_reset_time: boolean
+  /** One of the methods on (a 422 otherwise). */
+  renew_default_method: RenewalMethod
 }
 
 export interface BotAutoRenewSettingsRequest {
@@ -3299,7 +3467,7 @@ export interface BotAutoRenewSettingsRequest {
   auto_renew_default: boolean
 }
 
-/** «حجم و زمان اضافه»: the switch and the shop's price list (ExtraPricesRequest's fields, each prefixed `extra_`). */
+/** «حجم، زمان و کاربر اضافه»: the switch and the shop's price list (ExtraPricesRequest's fields, each prefixed `extra_`). */
 export interface BotExtrasSettingsRequest {
   extras_enabled: boolean
   /** Whole Toman per GB, above zero. Blank, null or left out for none: only the preset amounts with their own prices are sold. */
@@ -3318,24 +3486,32 @@ export interface BotExtrasSettingsRequest {
   extra_time_min: WholeNumberInput
   /** `extra_time_min` to 365 days. */
   extra_time_max: WholeNumberInput
+  /** Whole Toman per device for 30 days, above zero. Blank, null or left out for none: only the preset counts with their own prices are sold. */
+  extra_devices_price?: AmountInput | null
+  /** Device counts, 1 to 20, each once, at most 8. Left out for none. */
+  extra_devices_options?: ExtraOptionInput[]
+  /** 1 to 20 devices. */
+  extra_devices_min: WholeNumberInput
+  /** `extra_devices_min` to 20 devices. */
+  extra_devices_max: WholeNumberInput
 }
 
-/** An amount of extra traffic (GB) or time (days) offered as a button, at its own price or at the price per GB or day. */
+/** An amount of extra traffic (GB), time (days) or devices offered as a button, at its own price or at the price per GB, day or device (a device's prices are for 30 days, prorated when sold). */
 export interface ExtraOption {
   quantity: number
-  /** Toman; null to charge the price per GB or day times the quantity. */
+  /** Toman; null to charge the price per GB, day or device times the quantity. */
   price: string | null
 }
 
 /** An amount offered as a button, as a form sends it. A row with both quantity and price blank is ignored. */
 export interface ExtraOptionInput {
-  /** GB or days. */
+  /** GB, days or devices. */
   quantity: WholeNumberInput | null
-  /** Whole Toman, above zero. Blank or null to use the price per GB or day (which must then be set). */
+  /** Whole Toman, above zero. Blank or null to use the price per GB, day or device (which must then be set). */
   price: AmountInput | null
 }
 
-/** A plan's own price list for extra traffic and time (the shop's list is BotSettingsData's `extra_…` fields). For each kind: the unit price, the preset amounts, and the smallest and largest custom amount. */
+/** A plan's own price list for extra traffic, time and devices (the shop's list is BotSettingsData's `extra_…` fields). For each kind: the unit price, the preset amounts, and the smallest and largest custom amount. A device's prices are for 30 days, charged for the days a service has left. */
 export interface ExtraPrices {
   /** Toman per GB; null when only the preset amounts with their own prices are sold (no custom amount). */
   traffic_price: string | null
@@ -3349,6 +3525,12 @@ export interface ExtraPrices {
   time_options: ExtraOption[]
   time_min: number
   time_max: number
+  /** Toman per device for 30 days; null when only the preset counts with their own prices are sold (no custom count). */
+  devices_price: string | null
+  /** Fewest devices first. */
+  devices_options: ExtraOption[]
+  devices_min: number
+  devices_max: number
 }
 
 /** A plan's own price list for extras, as a form sends it. Refusals are reported under `extras.<field>`. */
@@ -3369,6 +3551,14 @@ export interface ExtraPricesRequest {
   time_min: WholeNumberInput
   /** `time_min` to 365 days. */
   time_max: WholeNumberInput
+  /** Whole Toman per device for 30 days, above zero. Blank, null or left out for none. */
+  devices_price?: AmountInput | null
+  /** Device counts, 1 to 20, each once, at most 8. Left out for none. */
+  devices_options?: ExtraOptionInput[]
+  /** 1 to 20 devices; left out, 1 (a list sent as before 0.4.0 sold devices). */
+  devices_min?: WholeNumberInput
+  /** `devices_min` to 20 devices; left out, 5. */
+  devices_max?: WholeNumberInput
 }
 
 export interface BotRemindersSettingsRequest {
@@ -3954,7 +4144,7 @@ export interface Website {
   }
 }
 
-/** What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device). */
+/** What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device). */
 export type StaffGrant = 'catalog' | 'wallet' | 'refunds' | 'extend' | 'delete' | 'account_security'
 
 export interface WebsiteResponse {
@@ -4023,6 +4213,14 @@ export interface StoreResponse {
     name: string
     /** Whether the shop takes orders now (its bot is switched on). When false, purchases, renewals, top-ups and receipts are refused (503); the catalogue can still be read and customers can still sign in. */
     taking_orders: boolean
+    /** Whether a customer can add a service to their account by its link now (`POST /subscriptions/claim`, «افزودن سرویس با لینک»): the main shop's alone, while its admin switches it on (off by default). Always false in an agent's shop. */
+    service_claims: boolean
+    /** Whether a customer can hand one of their services to another customer of the shop now (`POST /subscriptions/{id}/transfer`, «انتقال سرویس»): while the shop's admin switches it on (off by default), in any shop. */
+    service_transfers: boolean
+    /** Whether a customer can build a service of the traffic and days they choose now («سرویس دلخواه», `GET /custom-services`): the main shop's alone, while its admin switches it on (off by default), both price lists sell and one of its servers can take a new client. Always false in an agent's shop. */
+    custom_services: boolean
+    /** The ways a buyer may name their new service (`name_mode` of `POST /orders`), `sequential` (the shop's pattern) first and always; `random` and `custom` while the shop's admin offers them. Just `sequential`: ask nothing. */
+    name_modes: ClientNameMode[]
     /** The shop's Telegram bot; null while its username is unknown. */
     bot: {
       /** Without the @. */
@@ -4537,7 +4735,9 @@ export interface StoreSubscription {
   status: SubscriptionStatus
   /** A free test account («اکانت تست»), taken in the bot: it has no plan and can be neither renewed nor bought extras (`extras`); the shop may remove it some time after it ends, or some days after it was made while never connected (`removes_at`). */
   is_test: boolean
-  /** The plan it was sold or last renewed on; null for a test account, or once that plan is deleted. */
+  /** When the customer added it to their account by its link (`POST /subscriptions/claim`, or in the bot): a service support made on the panel by hand, not sold by the shop. It has no plan until a renewal on a plan the customer picks (`GET …/renewal-plans`; a renewal with a package built leaves it without). Null for every other service. */
+  claimed_at: string | null
+  /** The plan it was sold or last renewed on; null for a service without one — a test account, a service added by its link (`claimed_at`) or built by the customer (`POST /custom-services/orders`), until a renewal on a plan (a renewal with a package built leaves it null) — or once that plan is deleted. */
   plan: NamedRef | null
   /** The server it is on («لوکیشن» in the bot). */
   server: NamedRef
@@ -4555,20 +4755,38 @@ export interface StoreSubscription {
     on: boolean
     /** The switch can be set (`PATCH`): the service is active, has an end date and still has its plan, and the wallet payment method is on. */
     offered: boolean
-    /** How many days before its end it is renewed when the switch is on. A shop-wide setting, 1 to 30. */
+    /** How many days before its end it is renewed when the switch is on — or, where the shop renews automatically by «ریست زمان» (which throws away the term left), how many days before its end a wallet short of the price is told, the renewal itself made shortly before the end. A shop-wide setting, 1 to 30. */
     days_before: number
   }
-  /** The customer can renew it now on its plan: it is active or ended, its plan still exists and the renewal adds something, and in an agent's shop the agent's traffic covers it. */
+  /** The customer can renew it now on its own plan: it is active or ended, its plan still exists and the renewal adds something (in an agent's shop, covered by the agent's traffic). False for a service without a plan, which `picks_plan` covers. Whether the shop lets it be renewed yet is `renewal_window`. */
   renewable: boolean
-  /** Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. */
+  /** The customer can renew it now on what they pick: it has no plan and is no test account (added by its link, `claimed_at`, or built), it is active or ended, and a plan on sale is sold on its server or the shop's builder is offered. List the choices with `GET …/renewal-plans` and send the plan picked as `plan_id` to `…/renewal` — that renewal makes it the service's plan, after which `renewable` is what holds —, or a package built as `gb` and `days`, after which it still picks. */
+  picks_plan: boolean
+  /** Whether the shop lets the customer renew it yet («آستانه مجاز تمدید»), beside `renewable` or `picks_plan`. A shop may hold a running service back until its end date is a few days away, or until little of its traffic is left; an ended service may always be renewed. While closed, the renewal's preview and the renewal are a 422 on `status` saying from when, and the fields say what opens it — any that is set, whichever comes first. Auto-renewal goes by its own days. */
+  renewal_window: {
+    /** It may be renewed now (as far as the window goes). */
+    open: boolean
+    /** While closed: the moment its end date comes within the window (that end date less the window's days); null otherwise. */
+    opens_at: string | null
+    /** While closed and its clock waits for its first connection (no end date yet): it opens this many days before the end date it will have; null otherwise. */
+    days_before: number | null
+    /** While closed: it opens once at most this percent of its traffic is left; null otherwise (unlimited traffic, or the shop holds nothing back by traffic). With no field set, only its end opens it. */
+    traffic_percent: number | null
+  }
+  /** How many devices may use it at once (its IP limit, raised by extra devices); 0 for no limit. */
+  devices: number
+  /** Whether extra traffic, extra time and extra devices («کاربر اضافه») can be bought for it now (`GET …/extras` gives the amounts and prices). All need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). Devices need a device limit (an unlimited one takes none), neither time nor traffic run out (a renewal then would replace the period they are for at once), and a server whose panel enforces the limit. In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. */
   extras: {
     traffic: boolean
     time: boolean
+    devices: boolean
   }
   /** Its link can be changed now (`POST …/rotate-link`): it is active and its server can rotate links. */
   link_rotation: boolean
-  /** Null while no renewal is queued after the current period. */
+  /** A renewal's traffic queued after the current period. Null while none waits for the period's end: nothing renewed ahead, or a renewal whose traffic counted at once (the shop carries unused traffic over, `reset_traffic`, or unlimited traffic) — its device limit may still wait (`next_devices`). */
   next_period: StoreNextPeriod | null
+  /** A renewal's device limit queued after the current period: a running service renewed by `extend` or `reset_traffic` keeps the devices it has (extra devices bought included) until the period in use ends, and has the renewal's from then. Null while the limit stays as `devices` says. */
+  next_devices: NextDevices | null
   /** Whether it is connected. Only set right after the panel was read (`POST …/refresh`) and still has it; null otherwise. */
   presence: {
     /** Connected right now; null when the panel cannot tell. */
@@ -4610,6 +4828,13 @@ export interface StoreNextPeriod {
   bytes: number
 }
 
+/** A device limit a renewal queued after the current period: from when (the current period's end) and how many devices at once then. */
+export interface NextDevices {
+  from: string
+  /** 0 for no limit. */
+  devices: number
+}
+
 export interface StoreSubscriptionsResponse {
   subscriptions: StoreSubscription[]
   meta: PageMeta
@@ -4619,9 +4844,25 @@ export interface StoreSubscriptionResponse {
   subscription: StoreSubscription
 }
 
+/** «انتقال سرویس»: who the service goes (or went) to — their Telegram name and handle, nothing else of their account. */
+export interface StoreTransferRecipientResponse {
+  recipient: {
+    /** Their name in Telegram; null when they show none. */
+    name: string | null
+    /** Their Telegram handle, without the @; null when they have none. */
+    username: string | null
+  }
+}
+
 export interface StoreSubscriptionRequest {
   /** Auto-renewal («تمدید خودکار») on or off. */
   auto_renew: boolean
+}
+
+/** A service's link, as the customer sent it, to add the service to their account. */
+export interface StoreClaimRequest {
+  /** A subscription link or one of the service's configs, alone or among other words (its links are read together, five at most). */
+  link: string
 }
 
 /** A payment attempt for an order. */
@@ -4638,7 +4879,7 @@ export interface StorePayment {
   receipt: {
     sent_at: string
   } | null
-  /** Support's note on its latest decision (a rejection's reason, or a cancellation or refund note), as the bot shows it to the customer; null if none. */
+  /** The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer); null if none. */
   note: string | null
 }
 
@@ -4658,16 +4899,19 @@ export interface StoreOrder {
   discount_code: OrderDiscountCode | null
   created_at: string
   fulfilled_at: string | null
-  /** The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, or once the plan is deleted. */
+  /** The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, a service the customer built, or once the plan is deleted. */
   plan: NamedRef | null
+  package_name: OrderPackageName
   /** Where a purchase was bought; for a renewal or extras, the service's server. Null for none. */
   server: NamedRef | null
   /** The service it is about, by its panel name (for a renewal or extras from the start, for a purchase once delivered); null for none, or once the service is deleted. */
   subscription: NamedRef | null
-  /** The traffic it adds, in bytes: a service's extra traffic, or an agent's traffic for their bot (`traffic` orders); null otherwise. */
+  /** The traffic it adds, in bytes: a service's extra traffic, a built service's traffic, or an agent's traffic for their bot (`traffic` orders); null otherwise. */
   traffic_bytes: number | null
-  /** The extra days it adds to its service; null otherwise. */
+  /** The extra days it adds to its service, or a built service's term; null otherwise. */
   days: number | null
+  /** The devices it adds to its service's IP limit (extra devices), or a built service's limit; null otherwise. */
+  devices: number | null
   payments: StorePayment[]
 }
 
@@ -4702,30 +4946,107 @@ export interface StoreOrderRequest {
   server_id: number
   /** A payment method for purchases (`GET /payment-methods?for=purchase`). */
   method_id: number
+  name_mode?: StoreNameModeInput
+  client_name?: StoreClientNameInput
   /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
   discount_code?: string | null
 }
+
+/** How the new service is named on its panel: `sequential` (left out: the default) by the shop's pattern; `random`, a name drawn now; `custom`, `client_name`. Only a way `shop.name_modes` of `GET /` offers; another is a 422 on `name_mode`. A random name is worked out from the `Idempotency-Key`, so two requests sent with one key at once ask the same; a request repeated with its key asks the name its order was made with, and is not refused for what took that name since. */
+export type StoreNameModeInput = ClientNameMode
+
+/** For `custom`: the name the customer typed, 3 to 32 English letters, digits, `_` and `-`. A 422 on `client_name` for another character or length, for one that server's panel does not take (a PasarGuard server: two of `_` and `-` side by side), or for a name a service on that server already has. Should a service (or a client made by hand on the panel) take it before the order is delivered, the service is named by the shop's pattern instead. Ignored for the other ways. */
+export type StoreClientNameInput = string
 
 /** A discount code and what the customer wants to buy with it, named as in the checkout's own request. */
 export interface StoreDiscountCheckRequest {
   /** As the customer typed it (any case, Persian digits accepted). */
   code: string
-  for: DiscountKind
-  /** For a purchase: a plan on sale now (`GET /plans`). */
+  for: OwnOrderType
+  /** For a purchase: a plan on sale now (`GET /plans`). For a renewal of a service without a plan: the plan picked (`GET …/renewal-plans`). */
   plan_id?: number
   /** For a purchase: one of the plan's `locations`. A code limited to certain servers is refused until one is picked. */
   server_id?: number
   /** For a renewal or extra: the customer's service. */
   subscription_id?: number
-  /** For extra traffic: how many GB. */
+  /** For a renewal: the renewal method, as the renewal would send it (a 422 on `method` for one the shop does not offer). */
+  method?: RenewalMethod
+  /** For extra traffic: how many GB. For a renewal with a package built (instead of `plan_id`): its GB. */
   gb?: WholeNumberInput
-  /** For extra time: how many days. */
+  /** For extra time: how many days. For a renewal with a package built: its days. */
   days?: WholeNumberInput
+  /** For extra devices: how many. */
+  devices?: WholeNumberInput
+}
+
+/** A price before anything is ordered, as the order would be made at it: the base, each discount taken off it, and what is left to pay. */
+export interface StoreQuote {
+  /** Toman before discounts: the customer's price for what they mean to buy — a plan's price, first-purchase price or agent price; an extra amount's cost; a built service's two prices added. */
+  base: string
+  /** The automatic discount, if any, then the code. */
+  discounts: DiscountLine[]
+  /** Toman left to pay, never below zero; 0 means free. */
+  amount: string
 }
 
 export interface StoreDiscountQuoteResponse {
+  quote: StoreQuote
+}
+
+export interface StoreCustomServicesResponse {
+  custom_services: StoreCustomServices
+}
+
+/** «سرویس دلخواه» as a customer meets it: each quantity's tiers, bounds and buttons, the devices and the servers. While nothing is `offered`, each quantity's `tiers` and `options` are empty. */
+export interface StoreCustomServices {
+  /** Whether a service may be built now (`shop.custom_services` of `GET /`). */
+  offered: boolean
+  /** The GB: `from` and the bounds in GB, a tier's `price` per GB. */
+  traffic: StoreCustomQuantity
+  /** The days: `from` and the bounds in days, a tier's `price` per day. */
+  days: StoreCustomQuantity
+  /** Devices at once on a built service; 0 — unlimited. */
+  devices: number
+  /** The servers a service may be built on now, in order; empty while nothing is offered. */
+  servers: NamedRef[]
+}
+
+/** One quantity of a built service. Any whole amount from `min` to `max` may be chosen; it is priced whole at the `price` of the last tier whose `from` it reaches (50 with tiers from 1 at 3000 and from 50 at 2500 costs 50 × 2500). The tiers start at `min`: none prices an amount outside the bounds. */
+export interface StoreCustomQuantity {
+  /** The smallest `from` first; empty while it is not priced, or nothing is offered. */
+  tiers: PriceTier[]
+  min: number
+  max: number
+  /** The amounts offered as buttons, smallest first, each within the bounds; empty while nothing is offered. */
+  options: number[]
+}
+
+/** A service the customer would build. */
+export interface StoreCustomQuoteRequest {
+  /** How many GB, within the bounds of `GET /custom-services`. */
+  gb: WholeNumberInput
+  /** How many days, within the bounds of `GET /custom-services`. */
+  days: WholeNumberInput
+  /** One of `servers` of `GET /custom-services`, once picked: a code limited to certain servers holds only then. */
+  server_id?: number
+  /** A discount code to check with it (any case, Persian digits accepted). Blank, null or left out for none. */
+  discount_code?: string | null
+}
+
+export interface StoreCustomQuoteResponse {
+  /** What the service would give and cost: its GB, days and devices, each quantity's price, and the price as a `StoreQuote` (`base` is the two prices added). */
   quote: {
-    /** Toman before discounts: the customer's price for the plan (its price, first-purchase price or agent price), or the cost of the extra amount. */
+    gb: number
+    days: number
+    /** Devices at once on the service; 0 — unlimited. */
+    devices: number
+    /** The server named; null for none. */
+    server_id: number | null
+    /** Toman: the GB at their tier's rate. */
+    traffic_price: string
+    /** Toman: the days at their tier's rate. */
+    days_price: string
+    /** Toman before discounts: the customer's price for what they mean to buy — a plan's price, first-purchase price or agent price; an extra amount's cost; a built service's two prices added. */
     base: string
     /** The automatic discount, if any, then the code. */
     discounts: DiscountLine[]
@@ -4734,10 +5055,34 @@ export interface StoreDiscountQuoteResponse {
   }
 }
 
-/** A service's renewal: the payment method. */
+/** A service the customer builds, the server to build it on, how to name it, and the payment method. */
+export interface StoreCustomOrderRequest {
+  /** How many GB, within the bounds of `GET /custom-services`. */
+  gb: WholeNumberInput
+  /** How many days, within the bounds of `GET /custom-services`. */
+  days: WholeNumberInput
+  /** One of `servers` of `GET /custom-services`; it may be left out while there is only one. */
+  server_id?: number
+  /** A payment method for purchases (`GET /payment-methods?for=purchase`). */
+  method_id: number
+  name_mode?: StoreNameModeInput
+  client_name?: StoreClientNameInput
+  /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
+  discount_code?: string | null
+}
+
+/** A service's renewal: the payment method, the plan (or a package built) for a service without one, and the renewal method. */
 export interface StoreRenewalRequest {
   /** A payment method for renewals (`GET /payment-methods?for=renewal`). */
   method_id: number
+  /** How the renewal adds its plan, one of the preview's `methods`; left out, the first of them. One the shop does not offer is a 422 on `method`. With an `Idempotency-Key`, a retry by another method than the key's order is a 422 on `idempotency_key`. */
+  method?: RenewalMethod
+  /** For a service without a plan (`picks_plan`): the plan to renew it on, one of `GET …/renewal-plans` (a 422 on `plan_id` when missing or not among them); it becomes the service's plan. For a service with its own plan it may be left out; sent, it must be that plan (a 422 on `plan_id` otherwise), so a page drawn before the service's first renewal never pays for a plan it did not show. With an `Idempotency-Key`, a retry naming another plan than the key's order is a 422 on `idempotency_key`. */
+  plan_id?: number
+  /** For a service without a plan, instead of `plan_id` while the builder is offered for it (`custom_services` of `GET …/renewal-plans`): the GB of a package the customer builds, within the bounds of `GET /custom-services`, with `days`. The renewal is priced by the builder's tiers, gives the builder's devices, and leaves the service without a plan. A 422 on `status` while the builder is not offered; on `gb` or `days` as the builder refuses them, or for a service renewed on its own plan; on `plan_id` sent with them. */
+  gb?: WholeNumberInput
+  /** With `gb`: the days of that package, within the bounds of `GET /custom-services`. */
+  days?: WholeNumberInput
   /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
   discount_code?: string | null
 }
@@ -4762,22 +5107,34 @@ export interface StoreExtraTimeRequest {
   discount_code?: string | null
 }
 
+/** Extra devices for a service: how many, and the payment method. */
+export interface StoreExtraDevicesRequest {
+  /** Whole devices, as `GET …/extras` offers: one of its amounts, or within its `custom` range. */
+  devices: WholeNumberInput
+  /** A payment method for extra devices (`GET /payment-methods?for=extra_devices`). */
+  method_id: number
+  /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
+  discount_code?: string | null
+}
+
 export interface StoreExtrasResponse {
   extras: {
     /** Extra traffic in GB; null when none can be bought now. */
     traffic: StoreExtraOffer | null
     /** Extra time in days; null when none can be bought now. */
     time: StoreExtraOffer | null
+    /** Extra devices (the IP limit); null when none can be bought now. Their prices are for the days left of the period in use (`days`), which they last. */
+    devices: StoreExtraOffer | null
   }
 }
 
-/** What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`. */
+/** What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`. Devices are priced for 30 days and charged for the days left of the period in use (`days`), which they last: every price here is already that share, rounded up to whole Toman. */
 export interface StoreExtraOffer {
-  /** Toman per GB or per day; null when only the preset amounts are sold. */
+  /** Toman per GB, per day or per device (for the days left of the period in use); null when only the preset amounts are sold. A custom count of devices is prorated as a whole, so it may cost a few Toman less than this times the count. */
   price: string | null
   /** The preset amounts, smallest first. */
   options: {
-    /** GB or days. */
+    /** GB, days or devices. */
     quantity: number
     /** Its price in Toman. */
     price: string
@@ -4787,6 +5144,8 @@ export interface StoreExtraOffer {
     min: number
     max: number
   } | null
+  /** For devices: the days their prices are charged for, which they last — what is left of the period in use (whole days, at least 1) until its end date, or until a renewal bought before then begins; its whole term while it waits for its first connection; or 30 for one that never ends. Null for traffic and time. */
+  days: number | null
 }
 
 /** A wallet top-up: how much, and the payment method. */
@@ -4805,7 +5164,7 @@ export interface StoreReceiptRequest {
   note?: string
 }
 
-/** The outcome of a checkout (a purchase, renewal, extra traffic or time, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409). */
+/** The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409). */
 export interface StoreCheckout {
   /** `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `processing`: paid, and the delivery is in progress. */
   outcome: 'settled' | 'transfer' | 'processing'
@@ -4823,7 +5182,7 @@ export interface StoreCheckout {
     /** The shop's payment instructions; null if none. */
     instructions: string | null
   } | null
-  /** Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise. */
+  /** Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise, and on a repeated request once the service is no longer the customer's (handed to another customer). */
   subscription: StoreSubscription | null
 }
 
@@ -4831,12 +5190,19 @@ export interface StoreCheckoutResponse {
   checkout: StoreCheckout
 }
 
-/** A preview of a service's renewal: on its own plan, at that plan's price today, and the service as the renewal would leave it. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid. */
+/** A preview of a service's renewal: on its own plan (or, for a service without one, the plan picked — or the package built, `custom`), at its price today, by a renewal method among those the shop offers, and the service as the renewal would leave it by that method. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid. */
 export interface StoreRenewal {
-  /** The service's own plan, which the renewal uses: what a renewal gives. */
+  /** The method this preview — and `after` — is by: the one asked for (`method`), else the first the shop offers. */
+  method: RenewalMethod
+  /** The methods the shop offers, in this order; the price is the same by each. With more than one, let the customer pick and send it as `method` to the preview and the renewal; with one, there is nothing to pick. */
+  methods: RenewalMethod[]
+  /** The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices). Null for a package built (`custom`). */
   plan: {
     id: number
     name: string
+    description: string | null
+    /** A note to show at checkout, as plain text; null for none. */
+    checkout_note: string | null
     /** Toman. */
     price: string
     /** Gigabytes, decimals allowed; 0 for unlimited. */
@@ -4845,24 +5211,68 @@ export interface StoreRenewal {
     duration_days: number
     /** Hours; 0 never ends. */
     duration_hours: number
-    /** A note to show at checkout, as plain text; null for none. */
-    checkout_note: string | null
-  }
-  /** What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). */
+    /** Devices at once the renewal gives; 0 for no limit — whatever the service has now, extra devices bought included. A running service renewed by `extend` or `reset_traffic` keeps its devices until the period in use ends, and has these from then; any other has them at once (one still waiting for its first connection with the extra devices bought for it on top). */
+    devices: number
+  } | null
+  /** The package a service without a plan is renewed with instead (`gb` and `days`): what it gives — its GB, its days and the builder's devices — and each quantity's price by the builder's tiers (`GET /custom-services`). Null for a renewal on a plan. */
+  custom: {
+    gb: number
+    days: number
+    /** Devices at once it gives; 0 — unlimited. From when, as a plan's `devices`. */
+    devices: number
+    /** Toman: the GB at their tier's rate. */
+    traffic_price: string
+    /** Toman: the days at their tier's rate. */
+    days_price: string
+  } | null
+  /** What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). */
   price: string
   /** The automatic discount in `price`: none, or one. */
   discounts: DiscountLine[]
-  /** The service as the renewal would leave it, in StoreSubscription's shapes. Remaining days always carry over; a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`). */
+  /** The service as the renewal would leave it by `method`, in StoreSubscription's shapes. By `extend` remaining days carry over, and a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`); by `reset_traffic` remaining days carry over and the traffic starts afresh; by `reset_time` the term starts afresh and the traffic left carries over. */
   after: {
     term: StoreServiceTerm
     traffic: StoreServiceTraffic
     /** The current period, whose unused traffic expires when it ends; null when nothing expires. */
     next_period: StoreNextPeriod | null
+    /** The renewal's device limit, when it waits for the current period's end; null when the service has it at once, or it is the one it has. */
+    next_devices: NextDevices | null
   }
 }
 
 export interface StoreRenewalResponse {
   renewal: StoreRenewal
+}
+
+/** A plan a service can be renewed on: what a renewal on it gives, its price, and what the renewal costs the customer today. */
+export interface StoreRenewalPlan {
+  /** The `plan_id` to renew on (`…/renewal`). */
+  id: number
+  name: string
+  description: string | null
+  /** A note to show at checkout, as plain text the site must escape; null for none. */
+  checkout_note: string | null
+  /** The plan's price, in Toman. */
+  price: string
+  /** What renewing on it costs the customer today, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying. The preview (`GET …/renewal?plan_id=`) says the same. */
+  renewal_price: string
+  /** The automatic discount in `renewal_price`: none, or one. */
+  discounts: DiscountLine[]
+  /** Gigabytes a renewal adds, decimals allowed; 0 for unlimited. */
+  traffic_gb: number
+  /** Whole days, rounded up; 0 never ends. `duration_hours` is exact. */
+  duration_days: number
+  /** Hours; 0 never ends. */
+  duration_hours: number
+  /** Devices at once once renewed on it; 0 for no limit. */
+  devices: number
+}
+
+export interface StoreRenewalPlansResponse {
+  /** In the catalogue's order; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way. */
+  plans: StoreRenewalPlan[]
+  /** Whether the service may be renewed instead with a package the customer builds («🛠 تمدید با سرویس دلخواه»): it has no plan, is no test account, may be renewed now (as `plans`), and the shop's builder is offered (`shop.custom_services` of `GET /`). Then send `gb` and `days` — within the bounds and tiers of `GET /custom-services` — to `…/renewal` in place of `plan_id`. */
+  custom_services: boolean
 }
 
 /** The customer's wallet. Amounts in Toman, as decimal strings. */
@@ -4957,7 +5367,7 @@ export interface StoreReferralResponse {
   rewards: number
 }
 
-/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. Services: switched off, back on, deleted, moved (with its new link), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). */
+/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). */
 export type StoreNoticeType =
   | 'payment_settled'
   | 'payment_rejected'
@@ -4969,6 +5379,8 @@ export type StoreNoticeType =
   | 'service_enabled'
   | 'service_deleted'
   | 'service_moved'
+  | 'service_transferred'
+  | 'service_received'
   | 'service_granted'
   | 'expiry_reminder'
   | 'traffic_reminder'
@@ -5321,7 +5733,7 @@ export type PanelWrite =
   | { method: 'POST'; path: `/payments/${number}/remind`; body: undefined; answer: ReminderResponse }
   /** Retry the delivery of what a paid payment bought. */
   | { method: 'POST'; path: `/payments/${number}/retry`; body: undefined; answer: PaymentResponse }
-  /** Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are. */
+  /** Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are. */
   | { method: 'POST'; path: `/payments/${number}/refund`; body: RefundRequest; answer: PaymentResponse }
   /** Refresh a service's usage and term from its panel. */
   | { method: 'POST'; path: `/subscriptions/${number}/sync`; body: undefined; answer: SubscriptionResponse }
@@ -5335,6 +5747,8 @@ export type PanelWrite =
   | { method: 'POST'; path: `/subscriptions/${number}/move`; body: SubscriptionMoveRequest; answer: SubscriptionResponse }
   /** Delete a service from its panel and from the shop. */
   | { method: 'POST'; path: `/subscriptions/${number}/delete`; body: SubscriptionDeleteRequest; answer: void }
+  /** Hand a service to another customer of the shop («انتقال سرویس»), found by their numeric Telegram id — support may whatever `transfer_enabled` says. The service keeps its link, term and traffic; its «تمدید خودکار» goes off; both customers are told in the bot — the new one, where its panel can change the link, that the previous one keeps it until they do; a renewal or an extra of it the previous customer left unpaid is cancelled, noted «سرویس این سفارش به حساب دیگری منتقل شد» (one whose receipt waits for review stays, and fails at its delivery), and the previous customer's message names them; the report group's «خریدها» topic hears of it; and its client on the panel takes the new customer's Telegram id and comment, its name unchanged (a panel that fails that is logged, and the transfer stands). A 422 on `status` for a free test account, a service gone from its panel, or one being changed on its panel right then (a delivery under way: try again in a moment); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the service's own customer, a banned account, or the admin themselves. A 403 for a shop admin's own service. */
+  | { method: 'POST'; path: `/subscriptions/${number}/transfer`; body: SubscriptionTransferRequest; answer: SubscriptionResponse }
   /** Answer a ticket as support. Send JSON, or a form to attach a picture. The ticket becomes answered (a closed ticket reopens), the customer is notified (in Telegram with the picture, else by email) and the report group gets the answer. A 422 on `body` (1 to 4000 characters), on `file` (a JPEG, PNG or WebP, at most 10 MB) or on `status` once the ticket has 200 messages. A 503 while the host has less than 200 MB of free disk, or once the shop's uploads for the day reach 1024 MB. A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: `/tickets/${number}/messages`; body: TicketMessageRequest | TicketMessageUploadRequest; answer: TicketResponse }
   /** Close a ticket. The customer and the report group are notified. A 422 on `status` when it is already closed. */
@@ -5537,21 +5951,31 @@ export type StoreWrite =
   | { method: 'DELETE'; path: `/me/identities/${StoreIdentityKind}`; body: undefined; answer: StoreMeResponse }
   /** Accept a merge offer (the 202 of a `POST /me/identities/…`). The two accounts become one: the older account stays and takes over everything the other owned, then also gets the way in being added. A password set this way ends every other session of the account. This session is signed in to the remaining account, and the customer is notified. A 403 when the session's sign-in is not recent; a 422 when the ticket is not this account's, is used or expired, the other account no longer has that way in, or the merge is no longer allowed. */
   | { method: 'POST'; path: '/me/merge'; body: StoreMergeRequest; answer: StoreMeResponse }
+  /** What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. */
+  | { method: 'POST'; path: '/custom-services/quote'; body: StoreCustomQuoteRequest; answer: StoreCustomQuoteResponse }
+  /** Buy a service the customer builds, paid with `method_id`: the same checkout as `POST /orders`, as the bot's «🛠 ساخت سرویس دلخواه» buys it, at `POST /custom-services/quote`'s price. The order is a purchase without a plan (`plan` null) carrying its own `traffic_bytes`, `days` and `devices`; once delivered, its service has no plan either. `server_id` may be left out while the builder sells on one server. The service is named as `POST /orders` names one (`name_mode`, `client_name`). A 422 on `status` while nothing may be built; on `gb` or `days` for an amount that is no whole number or outside its bounds; on `server_id` for none picked among several servers, or a server not on offer now; on `name_mode` or `client_name` as `POST /orders` refuses them; on `method_id` for a method that cannot pay it, or a wallet short of the price; on `discount_code` when it does not apply; on `idempotency_key` for a key used for a different order or first sent with another `method_id`. The 5 unpaid orders, the 409s, the 429 past 30 ordering requests in 10 minutes and the 503 while the bot is switched off are `POST /orders`' own. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
+  | { method: 'POST'; path: '/custom-services/orders'; body: StoreCustomOrderRequest; answer: StoreCheckoutResponse }
   /** Write a review. Send the signed name, 1 to 5 stars, the text, an optional line on where the service is used, and an optional avatar from the website's own set. It waits for support to approve it (then `GET /reviews` shows it) or reject it; the report group is notified. Guests may write while the website asks for a captcha; without one, a guest gets a 403 (sign in first). With a bearer token the review is that customer's; a token that is not valid is a 401 (never a guest review instead), and a banned customer gets a 403. A 404 while the website takes no reviews (`reviews_enabled`, off by default). A 422 lists every invalid field at once: `name` (2 to 64 characters), `rating` (1 to 5), `body` (10 to 600), `context` (at most 100) or `avatar` (1 to 32 of a-z, 0-9, - and _: a key, never an address); then `captcha` while the website asks for one. A 429 with `Retry-After` past 20 reviews an hour from one address network (IPv6 counted by /48; refused captchas included), 3 a day from one customer, or 20 an hour from all guests together (refused captchas not included). A 503 while 200 reviews wait for support (no new review is accepted until support decides some), or when the captcha could not be checked. */
   | { method: 'POST'; path: '/reviews'; body: StoreReviewRequest; answer: StoreReviewWrittenResponse }
+  /** Add a service to the customer's account by its link («افزودن سرویس با لینک»), as the bot does. `link` is the text the customer sent: a subscription link or one of the service's configs (vless://, vmess://, trojan://, ss://, hysteria2://, tuic://), alone or among other words; its links are read together, five at most. The shop asks its panels whose client it is and adds it as its panel has it, with no plan (`plan` null, `claimed_at` set) until its first renewal (`GET …/renewal-plans`); the report group is told. The first customer to send it gets it. Only while the shop offers it (`shop.service_claims` of `GET /`): the main shop's alone, off by default. Refusals are on `link`: a 422 while it is off, for text with no link in it (or longer than 2000 characters), for a link no panel has, for a service already the customer's own, or one whose panel serves it no subscription link; a 409 for a service already in another customer's account; a 502 when a panel that might have it did not answer. Each link sent asks every panel: at most 10 links in 10 minutes per customer, then a 429 with `Retry-After`. */
+  | { method: 'POST'; path: '/subscriptions/claim'; body: StoreClaimRequest; answer: StoreSubscriptionResponse }
   /** Switch the service's auto-renewal («تمدید خودکار») on or off. When on, the service is renewed from the wallet before it ends. A 422 on `auto_renew` while auto-renewal is not offered (`auto_renew.offered`), or for anything but a boolean. */
   | { method: 'PATCH'; path: `/subscriptions/${number}`; body: StoreSubscriptionRequest; answer: StoreSubscriptionResponse }
   /** Read the service from its panel now, with whether it is connected (`presence`). A client the panel no longer has comes back as deleted. A 502 when the panel cannot be read now (unreachable, or skipped for a while after a failure); the shop's stored copy is not returned instead. At most 10 reads a minute per customer, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: `/subscriptions/${number}/refresh`; body: undefined; answer: StoreSubscriptionResponse }
   /** Change the service's subscription link (`link_rotation`). Every device on the old link is disconnected; the bot sends no message about it. A 422 on `status` when the service is not active or its server cannot rotate links; a 409 while another change to it is running; a 502 when the server failed. At most 5 an hour per customer, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: `/subscriptions/${number}/rotate-link`; body: undefined; answer: StoreSubscriptionResponse }
-  /** Renew a service, paid with `method_id`, as the GET previews it. The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key`, it returns the renewal that key made, as it is now. */
+  /** «انتقال سرویس»: hand the service to another customer of the shop, found by their numeric Telegram id, for free — as the bot does it. Only while the shop lets customers (`shop.service_transfers` of `GET /`, off by default). The service keeps its link, term and traffic and is the recipient's from now on (this customer's `GET /subscriptions/{id}` is a 404 after it); its «تمدید خودکار» goes off; the link goes with it, so this customer's devices stay connected until the recipient changes it (`POST /subscriptions/{id}/rotate-link`); the recipient is told in the bot and among their notices (`service_received`, which says so where the link can change) — this customer is not: the answer is theirs; the report group hears of it. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first): a bearer token alone gives no service away. A 422 on `status` while the shop does not offer it, for a free test account, a service gone from its panel or being changed on it right then (try again in a moment), or one with an order this customer made not finished with (a renewal or an extra awaiting its payment or receipt, or being delivered; an unpaid one is dropped by itself after 48 hours; one whose delivery failed waits for support, and its message says to ask them); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the customer themselves, or a banned account. It looks the recipient up as `GET` does (one of its 10 in 10 minutes); at most 5 services handed on an hour per customer, then a 429 with `Retry-After`. */
+  | { method: 'POST'; path: `/subscriptions/${number}/transfer`; body: SubscriptionTransferRequest; answer: StoreTransferRecipientResponse }
+  /** Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/renewal`; body: StoreRenewalRequest; answer: StoreCheckoutResponse }
   /** Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-traffic`; body: StoreExtraTrafficRequest; answer: StoreCheckoutResponse }
   /** Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-time`; body: StoreExtraTimeRequest; answer: StoreCheckoutResponse }
-  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
+  /** Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  | { method: 'POST'; path: `/subscriptions/${number}/extra-devices`; body: StoreExtraDevicesRequest; answer: StoreCheckoutResponse }
+  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
   | { method: 'POST'; path: '/orders'; body: StoreOrderRequest; answer: StoreCheckoutResponse }
   /** Upload the receipt of a card transfer. For the payment the checkout returned (`transfer.payment_id`): a picture, with an optional note from the customer. Support always reviews it (in the panel or the report group): a card method's automatic approval window applies only to receipts sent in the bot, never to uploads. Returns the order, with the payment awaiting review. A 404 for another customer's payment; a 422 on `status` while the payment awaits no receipt (one was already sent, or it was rejected, paid, cancelled, or is not a card transfer), on `file` when it is not a JPEG, PNG or WebP of at most 10 MB, or on `note` when it is too long. A 429 with `Retry-After` past 10 pictures in an hour (receipts and ticket pictures share this budget). A 503 while the host has less than 200 MB of free disk, once the shop's uploads for the day reach 1024 MB, or while the shop takes no orders (its bot is switched off). A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: `/payments/${number}/receipt`; body: StoreReceiptRequest; answer: StoreOrderResponse }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Core\Exceptions\ValidationException;
 use App\Modules\Agency\Enums\TrafficTransactionType;
 use App\Modules\Agency\Models\TrafficTransaction;
 use App\Modules\Agency\Services\TrafficPool;
@@ -13,16 +12,10 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Notifications\Enums\NoticeType;
 use App\Modules\Notifications\Models\Notification;
-use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
-use App\Modules\Orders\Models\Order;
-use App\Modules\Orders\Services\OrderService;
-use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\Enums\CheckoutOutcome;
 use App\Modules\Payments\Enums\PaymentStatus;
-use App\Modules\Payments\Models\PaymentMethod;
-use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\DTO\Expiry;
@@ -68,12 +61,12 @@ final class ServiceExtrasTest extends DatabaseTestCase
 
     public function testNothingIsSoldUntilTheShopSwitchesItOnAndPricesIt(): void
     {
-        $service = $this->mirrored('ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
 
-        self::assertSame([$service->id => ['traffic' => null, 'time' => null]], $this->extras->offersFor([$service]), 'off, as a shop starts');
+        self::assertSame([$service->id => ['traffic' => null, 'time' => null, 'devices' => null]], $this->extras->offersFor([$service]), 'off, as a shop starts');
 
         $this->extrasOnSale(['extra_traffic_price' => '', 'extra_traffic_options' => [], 'extra_time_price' => '', 'extra_time_options' => []]);
-        self::assertSame([$service->id => ['traffic' => null, 'time' => null]], $this->extras->offersFor([$service]), 'on, with nothing priced');
+        self::assertSame([$service->id => ['traffic' => null, 'time' => null, 'devices' => null]], $this->extras->offersFor([$service]), 'on, with nothing priced');
 
         $this->extrasOnSale();
         $traffic = $this->extras->offer($service, ExtraKind::Traffic) ?? self::fail('no traffic on sale');
@@ -87,10 +80,11 @@ final class ServiceExtrasTest extends DatabaseTestCase
     public function testAPlansOwnPricesStandInForTheShopsButNotForItsSwitch(): void
     {
         $this->extrasOnSale();
-        $service = $this->mirrored('ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
         $this->plan->forceFill(['extras' => [
             'traffic_price' => '5000.00', 'traffic_options' => [], 'traffic_min' => 1, 'traffic_max' => 20,
             'time_price' => null, 'time_options' => [], 'time_min' => 1, 'time_max' => 30,
+            'devices_price' => null, 'devices_options' => [], 'devices_min' => 1, 'devices_max' => 5,
         ]])->save();
         $service->refresh();
 
@@ -101,7 +95,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
         self::assertSame('18000.00', $this->extras->quote($other, ExtraKind::Traffic, 10), "a plan without prices of its own: the shop's");
 
         $this->extrasOnSale(['extras_enabled' => false]);
-        self::assertSame(['traffic' => null, 'time' => null], $this->extras->offersFor([$service])[$service->id], "the shop's switch off: nothing, whatever a plan's prices say");
+        self::assertSame(['traffic' => null, 'time' => null, 'devices' => null], $this->extras->offersFor([$service])[$service->id], "the shop's switch off: nothing, whatever a plan's prices say");
     }
 
     public function testWhatAServiceMayTakeIsSaidByItsStateAndItsOtherCount(): void
@@ -122,7 +116,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
         $services = [];
         foreach ($cases as $case => [$overrides, $traffic, $time]) {
             $services[$case] = $service = $this->subscription($this->ali, $this->plan, $this->server, 'ali_' . (count($services) + 1), $overrides);
-            self::assertSame([$traffic, $time], [CustomerExtras::problem($service, ExtraKind::Traffic), CustomerExtras::problem($service, ExtraKind::Time)], $case);
+            self::assertSame([$traffic, $time], [$this->extras->refusal($service, ExtraKind::Traffic), $this->extras->refusal($service, ExtraKind::Time)], $case);
         }
 
         $offers = $this->extras->offersFor($services);
@@ -135,22 +129,22 @@ final class ServiceExtrasTest extends DatabaseTestCase
     public function testAQuoteIsItsPriceOrARefusalUnderItsField(): void
     {
         $this->extrasOnSale(['extra_time_price' => '', 'extra_time_options' => []]);
-        $service = $this->mirrored('ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
 
-        self::assertSame(['gb' => ['این مقدار فروخته نمی‌شود؛ حجم اضافه بین ۱ تا ۱۰۰ گیگابایت بنویسید، یا یکی از این‌ها را بخرید: ۱۰ گیگابایت (۱۸٬۰۰۰ تومان)، ۵۰ گیگابایت (۱۰۰٬۰۰۰ تومان).']], $this->refused($service, ExtraKind::Traffic, 101));
-        self::assertSame(['days' => [sprintf(CustomerExtras::NOT_SOLD, 'زمان اضافه')]], $this->refused($service, ExtraKind::Time, 7), 'the shop sells no time');
+        self::assertSame(['gb' => ['این مقدار فروخته نمی‌شود؛ حجم اضافه بین ۱ تا ۱۰۰ گیگابایت بنویسید، یا یکی از این‌ها را بخرید: ۱۰ گیگابایت (۱۸٬۰۰۰ تومان)، ۵۰ گیگابایت (۱۰۰٬۰۰۰ تومان).']], $this->refusedWith(fn() => $this->extras->quote($service, ExtraKind::Traffic, 101)));
+        self::assertSame(['days' => [sprintf(CustomerExtras::NOT_SOLD, 'زمان اضافه')]], $this->refusedWith(fn() => $this->extras->quote($service, ExtraKind::Time, 7)), 'the shop sells no time');
 
         $unlimited = $this->subscription($this->ali, $this->plan, $this->server, 'ali_2', ['traffic_limit_bytes' => 0]);
-        self::assertSame(['status' => [CustomerExtras::UNLIMITED]], $this->refused($unlimited, ExtraKind::Traffic, 10), 'what the service cannot take, before what it costs');
+        self::assertSame(['status' => [CustomerExtras::UNLIMITED]], $this->refusedWith(fn() => $this->extras->quote($unlimited, ExtraKind::Traffic, 10)), 'what the service cannot take, before what it costs');
 
         $this->extrasOnSale(['extra_traffic_price' => '', 'extra_traffic_options' => [['quantity' => 10, 'price' => '18000']]]);
-        self::assertSame(['gb' => ['این مقدار فروخته نمی‌شود؛ یکی از این‌ها را بخرید: ۱۰ گیگابایت (۱۸٬۰۰۰ تومان).']], $this->refused($service, ExtraKind::Traffic, 20), 'no price of a GB: only the amounts priced');
+        self::assertSame(['gb' => ['این مقدار فروخته نمی‌شود؛ یکی از این‌ها را بخرید: ۱۰ گیگابایت (۱۸٬۰۰۰ تومان).']], $this->refusedWith(fn() => $this->extras->quote($service, ExtraKind::Traffic, 20)), 'no price of a GB: only the amounts priced');
     }
 
     public function testExtraTrafficFromTheWalletGoesOnTopOfTheServiceAndNothingElseOfIt(): void
     {
         $this->extrasOnSale();
-        $service = $this->mirrored('ali_1', ['download_bytes' => 25 * Traffic::GIGABYTE]);
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['download_bytes' => 25 * Traffic::GIGABYTE]));
         $this->wallet($this->ali, '50000');
 
         $result = $this->buyExtra($service, ExtraKind::Traffic, 10);
@@ -185,7 +179,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
     public function testTimeForAServiceWhoseTimeRanOutStartsItsTermAgainAtItsNextConnection(): void
     {
         $this->extrasOnSale();
-        $service = $this->mirrored('ali_1', ['status' => SubscriptionStatus::Expired, 'starts_at' => now()->subDays(32), 'expires_at' => now()->subDays(2), 'download_bytes' => 12 * Traffic::GIGABYTE]);
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['status' => SubscriptionStatus::Expired, 'starts_at' => now()->subDays(32), 'expires_at' => now()->subDays(2), 'download_bytes' => 12 * Traffic::GIGABYTE]));
         $this->wallet($this->ali, '100000');
 
         $order = $this->buyExtra($service, ExtraKind::Time, 7)->order();
@@ -200,7 +194,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
     public function testTimeForARunningServiceGoesOntoItsDeadline(): void
     {
         $this->extrasOnSale();
-        $service = $this->mirrored('ali_1', ['starts_at' => now()->subDays(25), 'expires_at' => now()->addDays(5)]);
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['starts_at' => now()->subDays(25), 'expires_at' => now()->addDays(5)]));
         $this->wallet($this->ali, '100000');
 
         $this->buyExtra($service, ExtraKind::Time, 30);
@@ -214,7 +208,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
     public function testACardTransferDeliversOnApprovalAndTheCustomerIsToldWhatTheirServiceGot(): void
     {
         $this->extrasOnSale();
-        $service = $this->mirrored('ali_1', ['download_bytes' => 25 * Traffic::GIGABYTE]);
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['download_bytes' => 25 * Traffic::GIGABYTE]));
 
         $result = $this->buyExtra($service, ExtraKind::Traffic, 10, $this->cardMethod());
 
@@ -239,7 +233,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
     public function testADeliveryTheServiceCannotTakeAnyMoreFailsWithWhyAndWaitsForSupport(): void
     {
         $this->extrasOnSale();
-        $service = $this->mirrored('ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
         $result = $this->buyExtra($service, ExtraKind::Traffic, 10, $this->cardMethod());
         $payment = $this->receipt($result->payment());
         // Its time ran out while the receipt waited: the panel says so.
@@ -258,7 +252,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
     public function testARefundGivesTheMoneyBackAndTakesBackWhatWasDelivered(): void
     {
         $this->extrasOnSale();
-        $service = $this->mirrored('ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
         $result = $this->buyExtra($service, ExtraKind::Traffic, 10, $this->cardMethod());
         $payment = $this->receipt($result->payment());
         $this->service(PaymentActions::class)->approve($payment, $this->panelActor());
@@ -295,7 +289,7 @@ final class ServiceExtrasTest extends DatabaseTestCase
 
         $this->traffic($bot, 0);
         $offers = $this->inShop($bot, fn(): array => $this->extras->offersFor([$service->refresh()])[$service->id]);
-        self::assertSame(['traffic' => false, 'time' => true], array_map(static fn(?ExtraOffer $offer): bool => $offer !== null, $offers), 'an empty pool sells no traffic');
+        self::assertSame(['traffic' => false, 'time' => true, 'devices' => false], array_map(static fn(?ExtraOffer $offer): bool => $offer !== null, $offers), 'an empty pool sells no traffic (nor does this shop sell devices)');
     }
 
     public function testAnAgentsTrafficComesBackWhenTheDeliveryFails(): void
@@ -316,19 +310,6 @@ final class ServiceExtrasTest extends DatabaseTestCase
     }
 
     /**
-     * A service of Ali's whose client is on the fake panel as the row has it.
-     *
-     * @param array<string, mixed> $overrides
-     */
-    private function mirrored(string $name, array $overrides = []): Subscription
-    {
-        $subscription = $this->subscription($this->ali, $this->plan, $this->server, $name, $overrides);
-        FakeProvider::mirror($subscription);
-
-        return $subscription;
-    }
-
-    /**
      * A customer of the agent's bot with 100,000 Toman in their wallet, and their running service — the agent's plan
      * (30 days, 30 GB) on the shop's server —, the agent's shop selling extras.
      *
@@ -339,39 +320,10 @@ final class ServiceExtrasTest extends DatabaseTestCase
         return $this->inShop($bot, function (): array {
             $this->extrasOnSale();
             $reza = $this->wallet($this->customer(['telegram_id' => 2001, 'username' => 'reza']), '100000');
-            $service = $this->subscription($reza, $this->plan(['name' => 'پلن نماینده']), $this->server, 'reza_1');
-            FakeProvider::mirror($service);
+            $service = $this->mirrored($this->subscription($reza, $this->plan(['name' => 'پلن نماینده']), $this->server, 'reza_1'));
 
             return [$reza, $service];
         });
-    }
-
-    /**
-     * `$quantity` of `$kind` for the service bought through the shop's one checkout, at what it costs now — from the
-     * wallet unless another way to pay is given.
-     */
-    private function buyExtra(Subscription $service, ExtraKind $kind, int $quantity, ?PaymentMethod $method = null): CheckoutResult
-    {
-        $price = $this->extras->quote($service, $kind, $quantity);
-        $orders = $this->service(OrderService::class);
-
-        return $this->service(Checkout::class)->pay($service->user, $method ?? $this->walletMethod(), $price, static fn(?OrderKey $key): Order => $orders->openExtra($service->user, $service, $kind, $quantity, $price, $key));
-    }
-
-    /**
-     * What the quote was refused with, by field.
-     *
-     * @return array<string, list<string>>
-     */
-    private function refused(Subscription $service, ExtraKind $kind, int $quantity): array
-    {
-        try {
-            $this->extras->quote($service, $kind, $quantity);
-        } catch (ValidationException $e) {
-            return $e->errors();
-        }
-
-        self::fail('The quote was given.');
     }
 
     /**

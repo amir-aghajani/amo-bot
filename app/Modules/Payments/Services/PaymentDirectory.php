@@ -80,12 +80,15 @@ final class PaymentDirectory
                 'id' => $order->id,
                 'type' => $order->type->value,
                 'status' => $order->status->value,
-                'plan' => $order->plan?->name,
+                // Its plan's name — or a service the customer built, in words (Order::packageName()).
+                'plan' => $order->packageName(),
                 'server' => $order->server?->name,
                 'subscription_id' => $order->subscription_id,
-                // What it brings in traffic (an agent's, a service's extra) or in days (a service's extra time).
+                // What it brings in traffic (an agent's, a service's extra), in days (a service's extra time) or in
+                // devices.
                 'traffic_bytes' => $order->traffic_bytes,
                 'days' => $order->days,
+                'devices' => $order->devices,
                 // Why its delivery failed, as whoever reads the screen may read it.
                 'notes' => $order->status === OrderStatus::Failed ? OrderDirectory::notes($order) : null,
                 // What its discounts took off what is paid.

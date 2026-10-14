@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\Modules\Store\Presenters;
 
+use App\Modules\Catalog\DTO\CustomPrice;
 use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Subscriptions\DTO\ExtraOffer;
 use App\Modules\Subscriptions\DTO\RenewalPreview;
+use App\Modules\Subscriptions\DTO\RenewalWindow;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ServiceTerms;
+use App\Modules\Subscriptions\Services\SubscriptionDirectory;
 use Illuminate\Support\Carbon;
 
 /**
@@ -22,14 +26,17 @@ final class SubscriptionPresenter
 {
     /**
      * The service. The flags say what the customer may do now: `$autoRenewOffered` (its switch is offered, renewing
-     * `$autoRenewDays` before its end), `$renewable`, `$extras` (each kind null when none may be bought), `$linkRotation`.
-     * `$removesAt` is when the shop removes it by itself (ServiceCleanup::removesAt()). `$client` is what its panel was
-     * just asked, when it was (POST …/refresh): whether it is connected.
+     * `$autoRenewDays` before its end), `$renewable` (on its own plan: CustomerRenewal::plansFor()), `$picksPlan` (one
+     * without a plan, on a plan the customer picks or a package they build: CustomerRenewal::pickable()),
+     * `$renewalWindow` (whether either may be renewed yet: CustomerRenewal::window()), `$extras` (each kind null when
+     * none may be bought), `$linkRotation`. `$removesAt` is when the shop removes it by itself
+     * (ServiceCleanup::removesAt()). `$client` is what its panel was just asked, when it was (POST …/refresh): whether
+     * it is connected.
      *
-     * @param array{traffic: ExtraOffer|null, time: ExtraOffer|null} $extras
+     * @param array{traffic: ExtraOffer|null, time: ExtraOffer|null, devices: ExtraOffer|null} $extras
      * @return array<string, mixed>
      */
-    public static function present(Subscription $subscription, bool $autoRenewOffered, int $autoRenewDays, bool $renewable, array $extras, bool $linkRotation, ?Carbon $removesAt, ?ClientInfo $client = null): array
+    public static function present(Subscription $subscription, bool $autoRenewOffered, int $autoRenewDays, bool $renewable, bool $picksPlan, RenewalWindow $renewalWindow, array $extras, bool $linkRotation, ?Carbon $removesAt, ?ClientInfo $client = null): array
     {
         $plan = $subscription->plan;
         $server = $subscription->server;
@@ -39,6 +46,7 @@ final class SubscriptionPresenter
             'name' => $subscription->remote_name,
             'status' => $subscription->status->value,
             'is_test' => $subscription->is_test,
+            'claimed_at' => $subscription->claimed_at?->toIso8601String(),
             'plan' => $plan === null ? null : ['id' => $plan->id, 'name' => $plan->name],
             'server' => ['id' => $server->id, 'name' => $server->name],
             // The panel no longer has the client: the link it handed out works no more.
@@ -49,9 +57,19 @@ final class SubscriptionPresenter
             'removes_at' => $removesAt?->toIso8601String(),
             'auto_renew' => ['on' => $subscription->auto_renew, 'offered' => $autoRenewOffered, 'days_before' => $autoRenewDays],
             'renewable' => $renewable,
-            'extras' => ['traffic' => $extras['traffic'] !== null, 'time' => $extras['time'] !== null],
+            'picks_plan' => $picksPlan,
+            'renewal_window' => [
+                'open' => $renewalWindow->open,
+                'opens_at' => $renewalWindow->opensAt?->toIso8601String(),
+                'days_before' => $renewalWindow->daysBefore,
+                'traffic_percent' => $renewalWindow->percent,
+            ],
+            // How many devices may use it at once (0: no limit), what extra devices raise.
+            'devices' => $subscription->ip_limit,
+            'extras' => ['traffic' => $extras['traffic'] !== null, 'time' => $extras['time'] !== null, 'devices' => $extras['devices'] !== null],
             'link_rotation' => $linkRotation,
             'next_period' => self::nextPeriod($subscription),
+            'next_devices' => SubscriptionDirectory::nextDevices($subscription),
             'presence' => $client === null ? null : [
                 'online' => $client->online,
                 'last_online_at' => $client->lastOnlineAt === null ? null : Carbon::instance($client->lastOnlineAt)->utc()->toIso8601String(),
@@ -62,31 +80,35 @@ final class SubscriptionPresenter
     }
 
     /**
-     * A renewal before it is paid: the plan, what it costs the customer today (their price less their largest automatic
-     * discount, each discount a line), and the service as the renewal would leave it.
+     * A renewal before it is paid: the plan — or the package the customer built, with its two prices and the devices it
+     * gives —, what it costs the customer today (their price less their largest automatic discount, each discount a
+     * line), the method it is by among those the shop offers, and the service as the renewal would leave it by that
+     * method.
      *
      * @return array<string, mixed>
      */
     public static function renewal(RenewalPreview $preview): array
     {
-        $plan = $preview->plan;
+        $with = $preview->with;
 
         return [
-            'plan' => [
-                'id' => $plan->id,
-                'name' => $plan->name,
-                'price' => $plan->price,
-                'traffic_gb' => $plan->traffic_gb,
-                'duration_days' => ServiceTerms::daysOf($plan->duration_hours),
-                'duration_hours' => $plan->duration_hours,
-                'checkout_note' => $plan->checkout_note,
-            ],
-            'price' => $preview->price,
-            'discounts' => array_map(static fn(DiscountLine $line): array => $line->present(), $preview->quote->lines()),
+            'method' => $preview->method->value,
+            'methods' => array_map(static fn(RenewalMethod $method): string => $method->value, $preview->methods),
+            'plan' => $with instanceof CustomPrice ? null : PlanPresenter::terms($with),
+            'custom' => $with instanceof CustomPrice ? [
+                'gb' => $with->gb,
+                'days' => $with->days,
+                'devices' => $preview->package->ipLimit,
+                'traffic_price' => $with->traffic,
+                'days_price' => $with->time,
+            ] : null,
+            'price' => $preview->quote->amount(),
+            'discounts' => DiscountLine::presentAll($preview->quote->lines()),
             'after' => [
                 'term' => self::term($preview->after),
                 'traffic' => self::traffic($preview->after),
                 'next_period' => self::nextPeriod($preview->after),
+                'next_devices' => SubscriptionDirectory::nextDevices($preview->after),
             ],
         ];
     }
@@ -122,7 +144,8 @@ final class SubscriptionPresenter
     }
 
     /**
-     * A renewal queued behind the period in use: when that period ends, and the most traffic left then; null for none.
+     * A renewal's traffic queued behind the period in use: when that period ends, and the most traffic left then; null
+     * for none (a device limit may still wait for it: SubscriptionDirectory::nextDevices()).
      *
      * @return array{ends_at: string, bytes: int}|null
      */
@@ -135,24 +158,26 @@ final class SubscriptionPresenter
     }
 
     /**
-     * What of each extra (GB of traffic, days of time) may be bought now: the unit price, the amounts offered with their
-     * prices, and the least and most that may be typed while any amount may; null for a kind none of which may be bought.
+     * What of each extra (GB of traffic, days of time, devices) may be bought now: the unit price, the amounts offered
+     * with their prices, the least and most that may be typed while any amount may, and the days devices are charged
+     * for (their prices prorated to them); null for a kind none of which may be bought.
      *
-     * @param array{traffic: ExtraOffer|null, time: ExtraOffer|null} $offers
-     * @return array{traffic: array{price: string|null, options: list<array{quantity: int, price: string}>, custom: array{min: int, max: int}|null}|null, time: array{price: string|null, options: list<array{quantity: int, price: string}>, custom: array{min: int, max: int}|null}|null}
+     * @param array{traffic: ExtraOffer|null, time: ExtraOffer|null, devices: ExtraOffer|null} $offers
+     * @return array{traffic: array<string, mixed>|null, time: array<string, mixed>|null, devices: array<string, mixed>|null}
      */
     public static function extras(array $offers): array
     {
-        return ['traffic' => self::offer($offers['traffic']), 'time' => self::offer($offers['time'])];
+        return ['traffic' => self::offer($offers['traffic']), 'time' => self::offer($offers['time']), 'devices' => self::offer($offers['devices'])];
     }
 
-    /** @return array{price: string|null, options: list<array{quantity: int, price: string}>, custom: array{min: int, max: int}|null}|null */
+    /** @return array{price: string|null, options: list<array{quantity: int, price: string}>, custom: array{min: int, max: int}|null, days: int|null}|null */
     private static function offer(?ExtraOffer $offer): ?array
     {
         return $offer === null ? null : [
-            'price' => $offer->price,
+            'price' => $offer->unitPrice(),
             'options' => $offer->choices(),
             'custom' => $offer->typed() ? ['min' => $offer->min, 'max' => $offer->max] : null,
+            'days' => $offer->days,
         ];
     }
 }

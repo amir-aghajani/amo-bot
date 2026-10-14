@@ -6,13 +6,13 @@ import { FormActions } from '@/components/form-footer'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api } from '@/lib/api'
-import type { CashbackOrderType, CashbackRuleRow } from '@/lib/api-types'
+import type { CashbackRuleRow, OwnOrderType } from '@/lib/api-types'
 import { customerGroupsQuery, paymentMethodsQuery } from '@/lib/queries'
-import { ORDER_TYPE } from '@/lib/statuses'
+import { OWN_ORDER_TYPE } from '@/lib/statuses'
 import { asSet, useForm } from '@/lib/use-form'
 
 /** The kinds of order a rule may be for, in their own order. */
-const CASHBACK_TYPES = (['purchase', 'renewal', 'extra_traffic', 'extra_time'] satisfies CashbackOrderType[]).map((type) => ({ value: type, label: ORDER_TYPE[type] }))
+const CASHBACK_TYPES = (Object.keys(OWN_ORDER_TYPE) as OwnOrderType[]).map((type) => ({ value: type, label: OWN_ORDER_TYPE[type] }))
 
 /** The selects' value for "any" (the rule names no group or way to pay). */
 const ANY = 'any'
@@ -32,7 +32,7 @@ export function RuleForm({ rule, invalidates, onSaved, onCancel }: RuleFormProps
   const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm(
     {
       percent: rule ? String(rule.percent) : '',
-      order_types: rule ? [...rule.order_types] : (['purchase', 'renewal'] as CashbackOrderType[]),
+      order_types: rule ? [...rule.order_types] : (['purchase', 'renewal'] as OwnOrderType[]),
       customer_group_id: rule?.customer_group ? String(rule.customer_group.id) : ANY,
       payment_method_id: rule?.payment_method ? String(rule.payment_method.id) : ANY,
     },

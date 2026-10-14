@@ -25,13 +25,16 @@ use App\Modules\Discounts\Enums\DiscountType;
 use App\Modules\Discounts\Models\DiscountCode;
 use App\Modules\Discounts\Models\LoyaltyTier;
 use App\Modules\Discounts\Models\Sale;
+use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
+use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
+use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
@@ -50,6 +53,7 @@ use App\Modules\Store\Models\Website;
 use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\CustomerExtras;
 use App\Modules\Support\Enums\TicketAuthor;
 use App\Modules\Support\Enums\TicketChannel;
 use App\Modules\Support\Models\Ticket;
@@ -405,6 +409,41 @@ trait Fixtures
     }
 
     /**
+     * The service, its client on the fake panel as the row has it (switched off there when `$enabled` is false) — for a
+     * test whose panel is asked about it: `$this->mirrored($this->subscription(…))`.
+     */
+    protected function mirrored(Subscription $subscription, bool $enabled = true): Subscription
+    {
+        FakeProvider::mirror($subscription, $enabled);
+
+        return $subscription;
+    }
+
+    /**
+     * A service support made on the server's panel by hand that the customer added by its link (ServiceClaims), claimed
+     * now: no plan — its next renewal picks one —, 30 GB and one device for 30 days from now — `$overrides` its columns.
+     * Its client is not on the fake panel until a test puts it there (`mirrored()`).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function claimedSubscription(User $user, Server $server, string $name, array $overrides = []): Subscription
+    {
+        return Subscription::query()->create($overrides + [
+            'user_id' => $user->id,
+            'server_id' => $server->id,
+            'remote_name' => $name,
+            'subscription_url' => 'https://fake.test/sub/' . $name,
+            'status' => SubscriptionStatus::Active,
+            'claimed_at' => now(),
+            'traffic_limit_bytes' => Traffic::bytesOfGb(30),
+            'ip_limit' => 1,
+            'duration_hours' => 720,
+            'starts_at' => now(),
+            'expires_at' => now()->addHours(720),
+        ]);
+    }
+
+    /**
      * A channel the customer must join, public under `@channel<n>` unless told otherwise.
      *
      * @param array<string, mixed> $overrides
@@ -517,13 +556,15 @@ trait Fixtures
     }
 
     /**
-     * One group of the current bot's settings saved as the bot settings screen saves it («general», «wallet», «reminders»…).
+     * One group of the current bot's settings saved as the bot settings screen saves it («general», «wallet», «reminders»…),
+     * `$values` over what the screen shows now — so a group that gains a field leaves the tests that set others as they are.
      *
-     * @param array<string, mixed> $values The group's form
+     * @param array<string, mixed> $values The group's fields to change
      */
     protected function botSettings(string $group, array $values): void
     {
-        $this->service(BotSettingsScreen::class)->save($group, $values);
+        $screen = $this->service(BotSettingsScreen::class);
+        $screen->save($group, $values + $screen->present());
     }
 
     /** The agency program, switched on (or off) — agents start without credit; traffic offered as 50/100 GB, 10 GB at least. */
@@ -727,8 +768,8 @@ trait Fixtures
     }
 
     /**
-     * Extra traffic or time for the service at `$price`, paid from the wallet: credited, ordered, paid — and delivered by
-     * its panel, or the test stops here. The service is read again afterwards.
+     * Extra traffic, time or devices for the service at `$price`, paid from the wallet: credited, ordered, paid — and
+     * delivered by its panel, or the test stops here. The service is read again afterwards.
      */
     protected function paidExtra(Subscription $subscription, ExtraKind $kind, int $quantity, string $price): Order
     {
@@ -740,6 +781,18 @@ trait Fixtures
         $subscription->refresh();
 
         return $order;
+    }
+
+    /**
+     * `$quantity` of `$kind` for the service bought through the shop's one checkout, at what it costs now — from the
+     * wallet unless another way to pay is given.
+     */
+    protected function buyExtra(Subscription $subscription, ExtraKind $kind, int $quantity, ?PaymentMethod $method = null): CheckoutResult
+    {
+        $price = $this->service(CustomerExtras::class)->quote($subscription, $kind, $quantity);
+        $orders = $this->service(OrderService::class);
+
+        return $this->service(Checkout::class)->pay($subscription->user, $method ?? $this->walletMethod(), $price, static fn(?OrderKey $key): Order => $orders->openExtra($subscription->user, $subscription, $kind, $quantity, $price, $key));
     }
 
     /**
@@ -762,6 +815,59 @@ trait Fixtures
             'extra_time_min' => 1,
             'extra_time_max' => 60,
         ]);
+    }
+
+    /**
+     * «سرویس دلخواه» switched on in the main shop as its bot settings save it, on `$servers`: a GB at 3,000 Toman, from 50
+     * GB at 2,500; a day at 2,000, from 30 days at 1,500; 1 to 500 GB (10, 50 and 100 offered), 1 to 90 days (30 and 60
+     * offered); two devices — `$overrides` the group's fields.
+     *
+     * @param list<Server> $servers
+     * @param array<string, mixed> $overrides
+     */
+    protected function customServicesOn(array $servers, array $overrides = []): void
+    {
+        $this->botSettings('custom_services', $overrides + [
+            'custom_enabled' => true,
+            'custom_traffic_tiers' => [['from' => 1, 'price' => '3000'], ['from' => 50, 'price' => '2500']],
+            'custom_traffic_min' => 1,
+            'custom_traffic_max' => 500,
+            'custom_traffic_options' => [10, 50, 100],
+            'custom_days_tiers' => [['from' => 1, 'price' => '2000'], ['from' => 30, 'price' => '1500']],
+            'custom_days_min' => 1,
+            'custom_days_max' => 90,
+            'custom_days_options' => [30, 60],
+            'custom_devices' => 2,
+            'custom_servers' => array_map(static fn(Server $server): int => $server->id, $servers),
+        ]);
+    }
+
+    /**
+     * The current shop selling «کاربر اضافه» beside extrasOnSale()'s traffic and time: 30,000 Toman a device for 30
+     * days — one device offered at that price, two at 50,000 —, any 1 to 5 typed; `$overrides` the group's fields.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function extraDevicesOnSale(array $overrides = []): void
+    {
+        $this->extrasOnSale($overrides + [
+            'extra_devices_price' => '30000',
+            'extra_devices_options' => [['quantity' => 1, 'price' => null], ['quantity' => 2, 'price' => '50000']],
+            'extra_devices_min' => 1,
+            'extra_devices_max' => 5,
+        ]);
+    }
+
+    /** «افزودن سرویس با لینک» switched on (or off) in the main shop, as the bot settings save the switch. */
+    protected function claimsOn(bool $enabled = true): void
+    {
+        $this->botSettings('service_claims', ['claim_enabled' => $enabled]);
+    }
+
+    /** «انتقال سرویس» offered to the current shop's customers (or not), as the bot settings save the switch. */
+    protected function transfersOn(bool $enabled = true): void
+    {
+        $this->botSettings('service_transfers', ['transfer_enabled' => $enabled]);
     }
 
     /** Gift codes switched on (or off) in the current shop, as the bot settings save the switch. */

@@ -9,6 +9,7 @@ use App\Core\Forms\Form;
 use App\Modules\Providers\Contracts\PanelDriver;
 use App\Modules\Providers\Contracts\ProviderInterface;
 use App\Modules\Providers\DTO\Capabilities;
+use App\Modules\Providers\DTO\ClientNameRule;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Support\PanelConnection;
 use App\Modules\Providers\Support\PanelCredentials;
@@ -61,16 +62,20 @@ final class PasarGuardDriver implements PanelDriver
                 'نسخه 3.1 و بالاتر پشتیبانی می‌شود.',
                 'کلید API را از بخش API Keys پنل بسازید (پیشنهادی، از نسخه 5.1)؛ یا با نام کاربری و رمز یک ادمین وصل شوید.',
                 'آدرس پنل همان آدرس داشبورد بدون /dashboard است، مثل https://panel.example.com:8000',
-                'PasarGuard محدودیت IP ندارد؛ تعداد دستگاه پلن روی این سرور اعمال نمی‌شود.',
+                'PasarGuard محدودیت IP ندارد؛ تعداد کاربر پلن روی این سرور اعمال نمی‌شود و کاربر اضافه فروخته نمی‌شود.',
             ],
             traits: [self::MARK => 'PG', self::VENDOR => 'PasarGuard', self::DOCS => 'https://github.com/PasarGuard/panel'] + $this->capabilities()->traits(),
         );
     }
 
-    /** Groups are what a plan picks from (inbounds); revoking a subscription gives new secrets and a new link (rotation). */
+    /**
+     * Groups are what a plan picks from (inbounds); revoking a subscription gives new secrets and a new link
+     * (rotation). No IP limit (PasarGuardProvider): no extra devices are sold on it. A username is 3 to 128 letters,
+     * digits and `_ - . @`, never two of those side by side — the panel refuses any other.
+     */
     public function capabilities(): Capabilities
     {
-        return new Capabilities(inbounds: true, linkRotation: true);
+        return new Capabilities(inbounds: true, linkRotation: true, names: new ClientNameRule(min: 3, max: 128, characters: 'A-Za-z0-9_.@-', separatorRuns: false));
     }
 
     public function connect(Server $server, PanelHttp $http): ProviderInterface

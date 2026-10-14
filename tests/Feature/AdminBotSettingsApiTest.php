@@ -9,9 +9,12 @@ use App\Modules\Catalog\Models\Plan;
 use App\Modules\Rewards\Forms\PrizePlan;
 use App\Modules\Settings\Exceptions\UnknownGroupException;
 use App\Modules\Settings\Services\Settings;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Services\ExpiredServicesSettings;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Subscriptions\Services\RenewalSettings;
+use App\Modules\Subscriptions\Services\ServiceClaims;
+use App\Modules\Subscriptions\Services\ServiceClaimSettings;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Qr\QrBackground;
 use App\Modules\Users\Services\WalletSettings;
@@ -21,12 +24,15 @@ use Tests\HttpTestCase;
 /**
  * The bot settings screen — every bot its own, in both panels: the modules' groups (the switches, the channel rule, the
  * wallet's top-up amounts, the QR code and its picture, renewal and its automatic kind, extra traffic and time and their
- * prices, reminders, the removal of ended services, referrals, the report group's topics — the agency's only in the main
- * bot's shop), each saved on its own and refused whole, with each group's bounds. (The field engine itself:
- * Unit\Core\Forms.)
+ * prices, reminders, the removal of ended services, services added by their link, referrals, the report group's topics
+ * — the agency's only in the main bot's shop), each saved on its own and refused whole, with each group's bounds. (The
+ * field engine itself: Unit\Core\Forms.)
  */
 final class AdminBotSettingsApiTest extends HttpTestCase
 {
+    /** The renewal group's rules besides `carry_traffic`, as a fresh shop has them. */
+    private const RENEWAL_RULES = ['renew_window_days' => 0, 'renew_window_percent' => 0, 'renew_extend' => true, 'renew_reset_traffic' => false, 'renew_reset_time' => false, 'renew_default_method' => 'extend'];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -48,6 +54,12 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'topup_min' => 10000,
             'topup_presets' => [50000, 100000, 200000, 500000],
             'carry_traffic' => false,
+            'renew_window_days' => 0,
+            'renew_window_percent' => 0,
+            'renew_extend' => true,
+            'renew_reset_traffic' => false,
+            'renew_reset_time' => false,
+            'renew_default_method' => 'extend',
             'auto_renew_days' => 2,
             'auto_renew_default' => false,
             'extras_enabled' => false,
@@ -59,6 +71,10 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'extra_time_options' => [],
             'extra_time_min' => 1,
             'extra_time_max' => 30,
+            'extra_devices_price' => null,
+            'extra_devices_options' => [],
+            'extra_devices_min' => 1,
+            'extra_devices_max' => 5,
             'expiry_reminder' => false,
             'expiry_reminder_days' => 3,
             'traffic_reminder' => false,
@@ -73,6 +89,23 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'test_cleanup' => true,
             'test_cleanup_hours' => 24,
             'test_unused_days' => 7,
+            'claim_enabled' => false,
+            'transfer_enabled' => false,
+            'name_pattern' => '{username}_{seq}',
+            'test_name_pattern' => 'test_{username}_{seq}',
+            'name_random' => false,
+            'name_custom' => false,
+            'custom_enabled' => false,
+            'custom_traffic_tiers' => [],
+            'custom_traffic_min' => 1,
+            'custom_traffic_max' => 500,
+            'custom_traffic_options' => [10, 20, 50, 100],
+            'custom_days_tiers' => [],
+            'custom_days_min' => 1,
+            'custom_days_max' => 90,
+            'custom_days_options' => [30, 60, 90],
+            'custom_devices' => 2,
+            'custom_servers' => [],
             'referral_enabled' => false,
             'referral_rate' => 10,
             'referral_renewal_rate' => 10,
@@ -111,7 +144,7 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'lottery_plan_id' => null,
             'lottery_entries' => 'order',
             'lottery_exclude_agents' => true,
-        ], $this->decode($response)['settings'], 'renewal: the traffic left not carried; automatic renewal two days before the deadline, off for new services; extra traffic and time, reminders, the removal of ended services, test accounts and referrals off until the admin turns them on (a day after its end; a test each, for good; ended tests cleaned up); every report topic wanted (no group until one is connected)');
+        ], $this->decode($response)['settings'], 'renewal: the traffic left not carried; automatic renewal two days before the deadline, off for new services; extra traffic and time, reminders, the removal of ended services, test accounts, services added by their link and referrals off until the admin turns them on (a day after its end; a test each, for good; ended tests cleaned up); every report topic wanted (no group until one is connected)');
 
         $background = $this->decode($response)['qr_background'];
         self::assertFalse($background['custom'], 'the shipped picture until the admin uploads one');
@@ -230,16 +263,42 @@ final class AdminBotSettingsApiTest extends HttpTestCase
 
     public function testTheRenewalGroupDecidesWhatBecomesOfTheTrafficLeft(): void
     {
-        $response = $this->putJson('/api/admin/bot/settings/renewal', ['carry_traffic' => true]);
+        $response = $this->putJson('/api/admin/bot/settings/renewal', ['carry_traffic' => true] + self::RENEWAL_RULES);
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertTrue($this->decode($response)['settings']['carry_traffic']);
         self::assertTrue($this->service(RenewalSettings::class)->carriesTraffic());
 
-        $bad = $this->unchecked()->putJson('/api/admin/bot/settings/renewal', ['carry_traffic' => 'maybe']);
+        $bad = $this->unchecked()->putJson('/api/admin/bot/settings/renewal', ['carry_traffic' => 'maybe'] + self::RENEWAL_RULES);
         self::assertSame(422, $bad->getStatusCode());
         self::assertSame([Validation::NOT_A_SWITCH], $this->decode($bad)['errors']['carry_traffic']);
         self::assertTrue($this->service(RenewalSettings::class)->carriesTraffic(), 'nothing stored from a refused save');
+    }
+
+    public function testTheRenewalGroupTakesTheWindowAndTheMethodsOneAtLeastOnAndTheDefaultAmongThem(): void
+    {
+        $rules = ['carry_traffic' => false, 'renew_window_days' => '۵', 'renew_window_percent' => 20, 'renew_extend' => false, 'renew_reset_traffic' => true, 'renew_reset_time' => true, 'renew_default_method' => 'reset_time'];
+
+        $response = $this->putJson('/api/admin/bot/settings/renewal', $rules);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $settings = $this->decode($response)['settings'];
+        self::assertSame([5, 20, false, true, true, 'reset_time'], [$settings['renew_window_days'], $settings['renew_window_percent'], $settings['renew_extend'], $settings['renew_reset_traffic'], $settings['renew_reset_time'], $settings['renew_default_method']], 'Persian digits accepted');
+        $renewal = $this->service(RenewalSettings::class);
+        self::assertSame([5, 20, [RenewalMethod::ResetTraffic, RenewalMethod::ResetTime], RenewalMethod::ResetTime], [$renewal->windowDays(), $renewal->windowPercent(), $renewal->methods(), $renewal->defaultMethod()]);
+
+        $none = $this->putJson('/api/admin/bot/settings/renewal', ['renew_reset_traffic' => false, 'renew_reset_time' => false, 'renew_default_method' => 'extend'] + $rules);
+        self::assertSame([422, ['renew_extend' => [RenewalSettings::NO_METHOD]]], [$none->getStatusCode(), $this->decode($none)['errors']], 'no method on: said once, under the first');
+
+        $off = $this->putJson('/api/admin/bot/settings/renewal', ['renew_default_method' => 'extend'] + $rules);
+        self::assertSame([422, ['renew_default_method' => [RenewalSettings::DEFAULT_OFF]]], [$off->getStatusCode(), $this->decode($off)['errors']], 'a default that is off');
+
+        $bounds = $this->putJson('/api/admin/bot/settings/renewal', ['renew_window_days' => 366, 'renew_window_percent' => 101] + $rules);
+        self::assertSame(422, $bounds->getStatusCode());
+        self::assertSame(['بازه تمدید باید عددی بین 0 تا 365 روز باشد.'], $this->decode($bounds)['errors']['renew_window_days']);
+        self::assertSame(['حجم باقی‌مانده برای تمدید باید عددی بین 0 تا 100 درصد باشد.'], $this->decode($bounds)['errors']['renew_window_percent']);
+
+        self::assertSame([[RenewalMethod::ResetTraffic, RenewalMethod::ResetTime], 5], [$renewal->methods(), $renewal->windowDays()], 'nothing stored from a refused save');
     }
 
     public function testTheAutoRenewGroupTakesTheDaysAndTheDefaultForNewServices(): void
@@ -302,6 +361,51 @@ final class AdminBotSettingsApiTest extends HttpTestCase
 
         $atOnce = $this->putJson('/api/admin/bot/settings/expired_services', ['expired_cleanup' => true, 'expired_cleanup_hours' => 0]);
         self::assertSame(0, $this->decode($atOnce)['settings']['expired_cleanup_hours'], '0: removed as soon as it ends');
+    }
+
+    public function testTheServiceClaimsGroupIsOneSwitchTheShopTakesLinksBy(): void
+    {
+        $claims = $this->service(ServiceClaims::class);
+        self::assertFalse($claims->offered(), 'off until the admin turns it on');
+
+        $response = $this->putJson('/api/admin/bot/settings/service_claims', ['claim_enabled' => true]);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertTrue($this->decode($response)['settings']['claim_enabled']);
+        self::assertTrue($this->service(ServiceClaimSettings::class)->enabled());
+        self::assertTrue($claims->offered(), 'the main shop now takes services by their link');
+
+        $bad = $this->unchecked()->putJson('/api/admin/bot/settings/service_claims', ['claim_enabled' => 'maybe']);
+        self::assertSame(422, $bad->getStatusCode());
+        self::assertSame(['claim_enabled' => [Validation::NOT_A_SWITCH]], $this->decode($bad)['errors']);
+        $missing = $this->unchecked()->putJson('/api/admin/bot/settings/service_claims', []);
+        self::assertSame(['claim_enabled' => [Validation::NOT_A_SWITCH]], $this->decode($missing)['errors'], 'a missing switch is not "off"');
+        self::assertTrue($this->decode($this->get('/api/admin/bot/settings'))['settings']['claim_enabled'], 'nothing stored from a refused save');
+
+        $off = $this->putJson('/api/admin/bot/settings/service_claims', ['claim_enabled' => false]);
+        self::assertFalse($this->decode($off)['settings']['claim_enabled']);
+        self::assertFalse($claims->offered());
+    }
+
+    public function testAnAgentsShopHasNoServiceClaimsGroupInEitherPanel(): void
+    {
+        $this->putJson('/api/admin/bot/settings/service_claims', ['claim_enabled' => true]);
+        $bot = $this->agentBot();
+        $unknown = [404, (new UnknownGroupException())->getMessage()];
+
+        $this->loginAsAgent($bot);
+        self::assertArrayNotHasKey('claim_enabled', $this->decode($this->get('/api/agent/bot/settings'))['settings'], "the agent's panel: no shop but the main one takes services by their link");
+        $agent = $this->putJson('/api/agent/bot/settings/service_claims', ['claim_enabled' => true]);
+        self::assertSame($unknown, [$agent->getStatusCode(), $this->decode($agent)['message']]);
+
+        $this->openShop($bot);
+        self::assertArrayNotHasKey('claim_enabled', $this->decode($this->get('/api/admin/bot/settings'))['settings'], "the owner with the agent's shop open");
+        $owner = $this->putJson('/api/admin/bot/settings/service_claims', ['claim_enabled' => false]);
+        self::assertSame($unknown, [$owner->getStatusCode(), $this->decode($owner)['message']]);
+
+        $this->openShop(CurrentBot::main());
+        self::assertTrue($this->decode($this->get('/api/admin/bot/settings'))['settings']['claim_enabled'], "the main shop's switch untouched");
+        self::assertTrue($this->service(ServiceClaims::class)->offered());
     }
 
     public function testTheReferralGroupTakesItsCommissionsGiftsRewardAndAlerts(): void
@@ -371,10 +475,14 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'extra_time_options' => [['quantity' => 30, 'price' => 25000]],
             'extra_time_min' => 1,
             'extra_time_max' => 30,
+            'extra_devices_price' => '30000',
+            'extra_devices_options' => [['quantity' => '۲', 'price' => '50000']],
+            'extra_devices_min' => 1,
+            'extra_devices_max' => '۳',
         ]);
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
-        $saved = array_intersect_key($this->decode($response)['settings'], array_flip(['extras_enabled', 'extra_traffic_price', 'extra_traffic_options', 'extra_traffic_min', 'extra_traffic_max', 'extra_time_price', 'extra_time_options']));
+        $saved = array_intersect_key($this->decode($response)['settings'], array_flip(['extras_enabled', 'extra_traffic_price', 'extra_traffic_options', 'extra_traffic_min', 'extra_traffic_max', 'extra_time_price', 'extra_time_options', 'extra_devices_price', 'extra_devices_options', 'extra_devices_max']));
         self::assertSame([
             'extras_enabled' => true,
             'extra_traffic_price' => '2000.00',
@@ -383,13 +491,17 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'extra_traffic_max' => 200,
             'extra_time_price' => null,
             'extra_time_options' => [['quantity' => 30, 'price' => '25000.00']],
+            'extra_devices_price' => '30000.00',
+            'extra_devices_options' => [['quantity' => 2, 'price' => '50000.00']],
+            'extra_devices_max' => 3,
         ], $saved, 'Persian digits and separators, a blank row dropped, the smallest first');
         $prices = $this->service(ExtrasSettings::class)->prices();
-        self::assertSame(['100000.00', null], [$prices->traffic->priceOf(50), $prices->time->priceOf(7)], 'fifty GB at the price of a GB; no price of a day, only the thirty days');
+        self::assertSame(['100000.00', null, '90000.00'], [$prices->traffic->priceOf(50), $prices->time->priceOf(7), $prices->devices->priceOf(3)], 'fifty GB at the price of a GB; no price of a day, only the thirty days; three devices at 30,000 each for 30 days');
 
-        $bad = $this->putJson('/api/admin/bot/settings/extras', ['extras_enabled' => true, 'extra_traffic_price' => '', 'extra_traffic_options' => [['quantity' => 10, 'price' => '']], 'extra_traffic_min' => 50, 'extra_traffic_max' => 20, 'extra_time_min' => 1, 'extra_time_max' => 30]);
+        $bad = $this->putJson('/api/admin/bot/settings/extras', ['extras_enabled' => true, 'extra_traffic_price' => '', 'extra_traffic_options' => [['quantity' => 10, 'price' => '']], 'extra_traffic_min' => 50, 'extra_traffic_max' => 20, 'extra_time_min' => 1, 'extra_time_max' => 30, 'extra_devices_min' => 1, 'extra_devices_max' => 21]);
         self::assertSame(422, $bad->getStatusCode());
         self::assertSame([
+            'extra_devices_max' => ['بیشترین تعداد دلخواه باید عددی بین 1 تا 20 کاربر باشد.'],
             'extra_traffic_options' => ['۱۰ گیگابایت قیمت ندارد؛ قیمت آن، یا قیمت هر گیگابایت را بنویسید.'],
             'extra_traffic_max' => ['بیشترین حجم دلخواه نمی‌تواند از کمترین حجم دلخواه کمتر باشد.'],
         ], $this->decode($bad)['errors']);

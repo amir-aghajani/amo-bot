@@ -38,6 +38,7 @@ final class ApiDescriptionTest extends TestCase
         '/plans',
         '/plans/{id}',
         '/status',
+        '/custom-services',
         '/reviews',
         '/auth/nonce',
         '/auth/telegram/authorize',

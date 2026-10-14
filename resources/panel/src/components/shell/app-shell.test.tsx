@@ -12,7 +12,7 @@ import { AuthProvider, RequireAuth } from '@/lib/auth'
 import { useTitleSubject } from '@/lib/document-title'
 import { FAILURE_KINDS } from '@/lib/failure'
 import { ThemeProvider } from '@/lib/theme'
-import { testQueryClient, until } from '@/test/render'
+import { OWNER, testQueryClient, until } from '@/test/render'
 import { json, server } from '@/test/server'
 
 /*
@@ -209,5 +209,26 @@ describe('the menu’s queues', () => {
     expect(sales.getAttribute('aria-expanded')).toBe('false')
     expect(sales.textContent).toBe('فروش (نیازمند رسیدگی)')
     expect(screen.queryAllByRole('link', { name: /پرداخت‌ها/ })).toHaveLength(0)
+  })
+})
+
+describe('the tree it draws', () => {
+  const OWNERS: PanelShell = { nav: ADMIN_NAV, role: 'مالک فروشگاه' }
+
+  it.each([
+    ['the owner’s', OWNERS],
+    ['its own', PANEL],
+  ] as const)('is the shop’s it shows: an agent’s shop, in %s panel, has none of the main shop’s own sections', async (_whose, panel) => {
+    open('/bot-settings/general', panel)
+
+    expect(await screen.findByRole('link', { name: 'سرویس‌های منقضی‌شده' })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'افزودن سرویس با لینک' })).toBeNull()
+  })
+
+  it('holds them in the main shop', async () => {
+    server().on('GET', '/api/admin/auth/me', json({ session: OWNER }))
+    open('/bot-settings/general', OWNERS)
+
+    expect((await screen.findByRole('link', { name: 'افزودن سرویس با لینک' })).getAttribute('href')).toBe('/bot-settings/service-claims')
   })
 })

@@ -7,16 +7,21 @@ which is theirs ([read signed in](#read-signed-in)).
 
 ## What the site asks first
 
-`GET /` — the shop's name and bot, whether it takes orders, how to reach support, the ways in, the captcha and the
-referral program's terms.
+`GET /` — the shop's name and bot, whether it takes orders and services by their link, whether customers may hand a
+service on or build one, how they may name a new one, how to reach support, the ways in, the captcha and the referral
+program's terms.
 
 `GET /` → `200`
 ```json
 {
   "shop": {
     "name": "Amo Shop",
+    "bot": { "username": "amo_shop_bot", "url": "https://t.me/amo_shop_bot" },
     "taking_orders": true,
-    "bot": { "username": "amo_shop_bot", "url": "https://t.me/amo_shop_bot" }
+    "service_claims": false,
+    "service_transfers": false,
+    "custom_services": true,
+    "name_modes": ["sequential", "random", "custom"]
   },
   "support": { "url": "https://t.me/amo_support" },
   "sign_in": {
@@ -34,6 +39,20 @@ referral program's terms.
 - `shop.taking_orders` — whether the shop takes orders now: its bot switched on. While it is `false`, a purchase, a
   renewal, a top-up and a receipt are refused (`503` `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.`); what it
   sells is still read, and customers still sign in. Say so where the site sells.
+- `shop.service_claims` — whether a customer may add a service to their account by its link now (it stays so while
+  `taking_orders` is false: adding a service is no order)
+  ([adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)): the main shop's alone, while
+  its admin switches it on. Show «افزودن سرویس» among the customer's services while it is `true`.
+- `shop.service_transfers` — whether a customer may hand one of their services to another customer of the shop now
+  ([handing a service to another customer](Store-API-After-Buying.md#handing-a-service-to-another-customer)): in any
+  shop, while its admin switches it on. Show «انتقال سرویس» on a service while it is `true`.
+- `shop.custom_services` — whether a customer may build a service of the traffic and days they choose now
+  ([a service the customer builds](Store-API-Buying.md#a-service-the-customer-builds)): the main shop's alone, while its
+  admin switches it on, both price lists sell and one of its servers can take a new client; always `false` in an agent's
+  shop. Show «ساخت سرویس دلخواه» beside the plans while it is `true`.
+- `shop.name_modes` — the ways a buyer may name their new service on its panel: `sequential` (the shop's pattern) always
+  first, then `random` and `custom` while the shop's admin offers them. With `sequential` alone, ask nothing; else let
+  the customer choose at the checkout ([a purchase](Store-API-Buying.md#a-purchase)).
 - `support.url` — the bot's «پشتیبانی» contact as a link: a `https://t.me/…` address, a web address or a `tel:` number;
   `null` when none is set or it is plain words.
 - `sign_in` — [which ways in](Store-API-Sign-In.md#which-ways-in). `captcha` — `null`, or the captcha the website's
@@ -189,8 +208,8 @@ What a customer pays is priced in three steps, by the shop's one rule (the bot's
 3. **A discount code** the customer types, on what step 2 left — at checkout, `discount_code`
    ([discount codes](Store-API-Buying.md#discount-codes)); `POST /discount-codes/check` quotes it before they pay.
 
-A wallet top-up is never discounted. A renewal and extra traffic or time get the same automatic discount (a sale by
-the service's plan) and take a code too.
+A wallet top-up is never discounted. A renewal and extra traffic, time or devices get the same automatic discount (a sale
+by the service's plan) and take a code too.
 
 ## How its servers stand
 

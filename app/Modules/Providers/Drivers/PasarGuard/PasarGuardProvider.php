@@ -6,6 +6,7 @@ namespace App\Modules\Providers\Drivers\PasarGuard;
 
 use App\Modules\Providers\Contracts\ProviderInterface;
 use App\Modules\Providers\DTO\ClientInfo;
+use App\Modules\Providers\DTO\ClientLink;
 use App\Modules\Providers\DTO\ClientSpec;
 use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\DTO\InboundInfo;
@@ -25,7 +26,8 @@ use App\Support\Text;
  * /api/user/{x} turns id-based in v6). The shop's "inbounds" are PasarGuard's groups: a user reaches inbounds only
  * through its groups (`group_ids`), so a group's id is the inbound key and a plan entry sells groups. A term from the
  * first connection is PasarGuard's "on hold" (`on_hold_expire_duration`); a deadline is its `expire`. PasarGuard has no
- * per-client IP limit (its HWID device limit is another rule), so ClientSpec::$ipLimit is not sent.
+ * per-client IP limit (its HWID device limit is another rule), so ClientSpec::$ipLimit is not sent. A username is 3 to
+ * 128 letters, digits and `_ - . @`, never two of those side by side (PasarGuardDriver::capabilities()).
  *
  * The subscription link is the user's `subscription_url`, made absolute against the panel's address when it is a path.
  * PasarGuard signs a fresh token into every answer, each valid until the link is revoked, so the link a sync brings is
@@ -46,6 +48,19 @@ final class PasarGuardProvider implements ProviderInterface
     private const TAG_MAX = 128;
 
     private const USERS = '/api/user/by-username/';
+
+    /**
+     * What a subscription token looks like: base64url parts joined by dots (a signed payload, or a JWT), at least 16
+     * characters — PasarGuard signs nothing shorter.
+     */
+    private const TOKEN = '/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){0,2}$/';
+    private const TOKEN_MIN = 16;
+
+    /** The most parts of a link shown to the panel's subscription route at one try: each is a request. */
+    private const TOKENS_MAX = 3;
+
+    /** The proxy settings that are credentials: a protocol's id or password. */
+    private const CREDENTIALS = ['id', 'password', 'auth'];
 
     public function __construct(
         private readonly PasarGuardClient $client,
@@ -116,7 +131,7 @@ final class PasarGuardProvider implements ProviderInterface
     {
         $user = $this->client->put(self::USERS . rawurlencode($spec->name), [
             'data_limit' => $spec->totalBytes,
-        ] + self::term($spec->expiry) + self::note($spec));
+        ] + self::term($spec->expiry, $spec->enabled) + self::note($spec));
 
         return $this->clientOf($user, online: null);
     }
@@ -168,27 +183,45 @@ final class PasarGuardProvider implements ProviderInterface
         return $this->clientOf($user, online: $presence ? $seen !== null && $seen->getTimestamp() >= now()->getTimestamp() - self::ONLINE_WINDOW_SECONDS : null);
     }
 
-    /**
-     * Page by page, ordered by the unique username so a page boundary never shifts on a stable panel, until a short page
-     * or the reported total. A panel past MAX_PAGES — or one that never stops answering full pages — is not listed at
-     * once: the sync then asks for each service on its own.
-     */
+    /** Every user (users()), a client each. */
     public function listClients(): array
     {
         $clients = [];
-        for ($page = 0; $page < self::MAX_PAGES; $page++) {
-            $answer = $this->client->get('/api/users', ['offset' => $page * self::PAGE_SIZE, 'limit' => self::PAGE_SIZE, 'sort' => 'username', 'load_sub' => 'true']);
-            $users = Raw::objectsOf($answer['users'] ?? null);
-            foreach ($users as $user) {
-                $client = $this->clientOf($user, online: null);
-                $clients[$client->name] = $client;
-            }
-            if (count($users) < self::PAGE_SIZE || count($clients) >= Raw::int($answer, 'total')) {
-                return array_values($clients);
+        foreach ($this->users() as $user) {
+            $client = $this->clientOf($user, online: null);
+            $clients[$client->name] = $client;
+        }
+
+        return array_values($clients);
+    }
+
+    /**
+     * A subscription link's token is shown to the panel's own subscription route — `…/{token}/info`, under the path its
+     * links use — which answers the user it was signed for: the shop cannot check PasarGuard's signature itself, and a
+     * token's payload is no proof. At most TOKENS_MAX parts that can be a token are asked about, first: they are cheap.
+     * A config's credentials are then matched against every user's proxy settings (users(), without their links: the
+     * one that matches is read on its own).
+     */
+    public function findClientByLink(ClientLink $link): ?ClientInfo
+    {
+        $tokens = array_slice(array_values(array_filter($link->tokens, static fn(string $token): bool => strlen($token) >= self::TOKEN_MIN && preg_match(self::TOKEN, $token) === 1)), 0, self::TOKENS_MAX);
+        $path = $tokens === [] ? null : $this->subscriptionPath();
+        foreach ($path === null ? [] : $tokens as $token) {
+            $name = Raw::string($this->client->anonymous($path . '/' . $token . '/info') ?? [], 'username');
+            if ($name !== '') {
+                return $this->findClient($name);
             }
         }
 
-        throw new UnsupportedOperationException(sprintf('The PasarGuard panel lists more than %d users; its clients are read one by one.', self::MAX_PAGES * self::PAGE_SIZE));
+        if ($link->credentials !== []) {
+            foreach ($this->users(links: false) as $user) {
+                if ($link->hasCredential(...self::credentialsOf($user))) {
+                    return $this->findClient(Raw::string($user, 'username'));
+                }
+            }
+        }
+
+        return null;
     }
 
     public function resetClientTraffic(string $name): void
@@ -197,17 +230,84 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * The term of a client switched on, as PasarGuard words it: on hold with its duration, or active with a deadline —
-     * `expire: 0` says "none" (null would mean "leave it").
+     * Every user, page by page, ordered by the unique username so a page boundary never shifts on a stable panel, until a
+     * short page or the reported total. A panel past MAX_PAGES — or one that never stops answering full pages — is not
+     * listed at once: the sync then asks for each service on its own.
+     *
+     * `$links`: with each user's subscription link (which PasarGuard signs for each answer), or without.
+     *
+     * @return \Generator<int, array<string, mixed>>
+     * @throws UnsupportedOperationException past MAX_PAGES
+     */
+    private function users(bool $links = true): \Generator
+    {
+        $names = [];
+        for ($page = 0; $page < self::MAX_PAGES; $page++) {
+            $answer = $this->client->get('/api/users', ['offset' => $page * self::PAGE_SIZE, 'limit' => self::PAGE_SIZE, 'sort' => 'username', 'load_sub' => $links ? 'true' : 'false']);
+            $users = Raw::objectsOf($answer['users'] ?? null);
+            foreach ($users as $user) {
+                $names[Raw::string($user, 'username')] = true;
+
+                yield $user;
+            }
+            if (count($users) < self::PAGE_SIZE || count($names) >= Raw::int($answer, 'total')) {
+                return;
+            }
+        }
+
+        throw new UnsupportedOperationException(sprintf('The PasarGuard panel lists more than %d users; its clients are read one by one.', self::MAX_PAGES * self::PAGE_SIZE));
+    }
+
+    /**
+     * The path the panel serves subscription links under ("/sub"), read off one user's link: the folder its token is in —
+     * that alone, since a prefix the owner put in front of the links (a proxy's path) is not the panel's. Null with no
+     * user to read.
+     */
+    private function subscriptionPath(): ?string
+    {
+        $users = Raw::objectsOf($this->client->get('/api/users', ['offset' => 0, 'limit' => 1, 'load_sub' => 'true'])['users'] ?? null);
+        $parts = array_values(array_filter(explode('/', (string) parse_url($users === [] ? '' : Raw::string($users[0], 'subscription_url'), PHP_URL_PATH)), static fn(string $part): bool => $part !== ''));
+
+        return count($parts) < 2 ? null : '/' . $parts[count($parts) - 2];
+    }
+
+    /**
+     * The user's proxy credentials: each protocol's id or password.
+     *
+     * @param array<string, mixed> $user
+     * @return list<string>
+     */
+    private static function credentialsOf(array $user): array
+    {
+        $credentials = [];
+        foreach (Raw::nullableArray($user, 'proxy_settings') ?? [] as $settings) {
+            foreach (is_array($settings) ? $settings : [] as $key => $value) {
+                if (is_string($value) && in_array($key, self::CREDENTIALS, true)) {
+                    $credentials[] = $value;
+                }
+            }
+        }
+
+        return $credentials;
+    }
+
+    /**
+     * The term of a client, as PasarGuard words it: on hold with its duration, or active with a deadline — `expire: 0`
+     * says "none" (null would mean "leave it"). One kept switched off is `disabled` with its term all the same: a term
+     * still waiting keeps its duration, which setClientEnabled() puts back on hold.
      *
      * @return array<string, int|string>
      */
-    private static function term(Expiry $expiry): array
+    private static function term(Expiry $expiry, bool $enabled = true): array
     {
         $pending = $expiry->pendingSeconds();
 
         return [
-            'status' => $pending !== null ? 'on_hold' : 'active',
+            'status' => match (true) {
+                !$enabled => 'disabled',
+                $pending !== null => 'on_hold',
+                default => 'active',
+            },
             'expire' => $expiry->deadline()?->getTimestamp() ?? 0,
         ] + ($pending !== null ? ['on_hold_expire_duration' => $pending] : []);
     }

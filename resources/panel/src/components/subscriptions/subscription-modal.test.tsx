@@ -6,13 +6,15 @@ import { SubscriptionModal } from '@/components/subscriptions/subscription-modal
 import type { Session, SubscriptionRow } from '@/lib/api-types'
 import { formatDate } from '@/lib/format'
 import { AGENT_SHOP, OWNER, signedIn, until } from '@/test/render'
-import { subscriptionRow } from '@/test/rows'
+import { CLAIMED_AT, claimedServiceRow, subscriptionRow } from '@/test/rows'
 import { json, noContent, refusal, server, type Answer, type SentRequest } from '@/test/server'
 
 /*
  * A service's dialog (components/subscriptions/subscription-modal): a delete whose panel fails, then «حذف فقط از
- * فروشگاه» and its refusal; a dead link with nothing to copy; the focus after an operation; an hourly plan's terms; a
- * free test's plan line, and no auto-renewal; when an ended service goes by itself, while the shop removes it.
+ * فروشگاه» and its refusal; a service added by its link, deleted from the shop alone at the admin's choice, its client
+ * kept; a dead link with nothing to copy; the focus after an operation; an hourly plan's terms; a free test's plan line,
+ * and no auto-renewal; a claimed service's plan, picked when it is renewed, and when it was claimed; when an ended
+ * service goes by itself, while the shop removes it; the device limit a renewal queued behind the period in use.
  */
 
 const SERVICE = subscriptionRow()
@@ -51,6 +53,7 @@ const deletes = () =>
 
 beforeEach(() => {
   vi.spyOn(toast, 'warning')
+  vi.spyOn(toast, 'success')
 })
 
 describe('a delete the panel did not take', () => {
@@ -109,6 +112,61 @@ describe('a delete the panel did not take', () => {
   })
 })
 
+/** A service a customer added by its link, a client made by hand on its panel: no plan until a renewal gives it one. */
+const CLAIMED = claimedServiceRow()
+const KEEP_CLIENT = 'حذف فقط از فروشگاه (کلاینت روی پنل می‌ماند)'
+
+describe('a service added by its link', () => {
+  it('may be deleted from the shop alone, its client kept on the panel for the customer it belongs to to send the link again', async () => {
+    server().on('POST', `/api/admin/subscriptions/${SERVICE.id}/delete`, noContent)
+    const { onDeleted, onClose } = show(CLAIMED)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف سرویس' }))
+    expect(screen.getByText(/صاحبش می‌تواند با فرستادن لینک دوباره اضافه‌اش کند/)).toBeTruthy()
+    // A running one's customer hears of it, with the note, as from the delete itself.
+    expect(screen.getByRole('button', { name: KEEP_CLIENT, description: /اگر سرویس فعال باشد، مشتری با توضیح شما از حذفش خبردار می‌شود/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'حذف سرویس' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: KEEP_CLIENT }))
+
+    await until(() => expect(onDeleted).toHaveBeenCalledWith(CLAIMED))
+    expect(deletes()).toEqual([{ note: '', leave_panel: true }])
+    expect(onClose).toHaveBeenCalled()
+    expect(toast.success).toHaveBeenCalledWith('سرویس amir_1 فقط از فروشگاه حذف شد؛ کلاینتش روی سرور «آلمان» ماند تا صاحبش با لینکش اضافه‌اش کند')
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
+
+  it('is deleted from its panel too by the delete itself', async () => {
+    server().on('POST', `/api/admin/subscriptions/${SERVICE.id}/delete`, noContent)
+    const { onDeleted } = show(CLAIMED)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف سرویس' }))
+    fireEvent.click(screen.getByRole('button', { name: 'حذف سرویس' }))
+
+    await until(() => expect(onDeleted).toHaveBeenCalledWith(CLAIMED))
+    expect(deletes()).toEqual([{ note: '' }])
+  })
+
+  it('is the only service whose delete offers to keep its client', async () => {
+    show()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف سرویس' }))
+
+    expect(screen.getByRole('button', { name: 'برگشت' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: KEEP_CLIENT })).toBeNull()
+    expect(screen.queryByText(/صاحبش می‌تواند/)).toBeNull()
+  })
+
+  it('offers no delete from the shop alone in an agent’s shop — leaving a client on a working panel is the main shop’s alone', async () => {
+    show(CLAIMED, { session: AGENT_SHOP })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف سرویس' }))
+
+    expect(screen.getByRole('button', { name: 'برگشت' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: KEEP_CLIENT })).toBeNull()
+    expect(screen.queryByText(/صاحبش می‌تواند/)).toBeNull()
+  })
+})
+
 /** The modal as a list page holds it: the row an operation hands back is the one it shows. */
 function Following({ first }: { first: SubscriptionRow }) {
   const [subscription, setSubscription] = useState(first)
@@ -117,7 +175,7 @@ function Following({ first }: { first: SubscriptionRow }) {
 
 describe('an operation that takes its own button away', () => {
   it('leaves the focus on what the service offers now — never on the document', async () => {
-    const gone = subscriptionRow({ status: 'deleted', actions: { sync: false, extend: false, enable: false, disable: false, move: false, delete: true } })
+    const gone = subscriptionRow({ status: 'deleted', actions: { sync: false, extend: false, enable: false, disable: false, move: false, transfer: false, delete: true } })
     server().on('POST', `/api/admin/subscriptions/${SERVICE.id}/sync`, json({ subscription: gone }))
     render(<Following first={SERVICE} />, { wrapper: signedIn().wrapper })
     const sync = await screen.findByRole('button', { name: 'به‌روزرسانی از پنل' })
@@ -161,7 +219,18 @@ describe('its facts', () => {
   it('name the devices it may connect at once in one word, «هم‌زمان»', async () => {
     show()
 
-    expect(await screen.findByText('دستگاه هم‌زمان')).toBeTruthy()
+    expect(await screen.findByText('کاربر هم‌زمان')).toBeTruthy()
+    expect(fact('کاربر هم‌زمان')).toBe('۲ کاربر')
+  })
+
+  it('say from when the device limit a renewal queued behind the period in use holds — the devices bought last until then', async () => {
+    const from = '2026-10-25T10:00:00Z'
+    show(subscriptionRow({ ip_limit: 3, next_devices: { from, devices: 1 } }))
+
+    expect(await screen.findByText('کاربر هم‌زمان')).toBeTruthy()
+    expect(fact('کاربر هم‌زمان')).toBe(`۳ کاربراز ${formatDate(from, { dateStyle: 'medium' })}: ۱ کاربر`)
+    // Its traffic counted at once: no next period beside it.
+    expect(screen.queryByText('دوره بعدی')).toBeNull()
   })
 
   it('show an hourly plan’s term in hours, still waiting for the first connection', async () => {
@@ -204,6 +273,32 @@ describe('its facts', () => {
 
     expect(await screen.findByText('پایان')).toBeTruthy()
     expect(screen.queryByText('حذف خودکار')).toBeNull()
+  })
+
+  it('say when a service added by its link was claimed, and that the customer picks its plan when renewing — not that it was lost', async () => {
+    show(CLAIMED)
+
+    expect(await screen.findByText('افزودن')).toBeTruthy()
+    expect(fact('افزودن')).toBe(`افزوده‌شده با لینک مشتری در ${formatDate(CLAIMED_AT)}`)
+    // No «first renewal»: a renewed one whose plan was deleted since says the same.
+    expect(fact('پلن')).toBe('بدون پلنمشتری هنگام تمدید یکی از پلن‌هایی را که روی سرور این سرویس فروخته می‌شوند انتخاب می‌کند.')
+    expect(screen.queryByText('پلن حذف شده')).toBeNull()
+    expect(screen.queryByText('خرید')).toBeNull()
+  })
+
+  it('say when a sold one was bought', async () => {
+    show()
+
+    expect(await screen.findByText('خرید')).toBeTruthy()
+    expect(screen.queryByText('افزودن')).toBeNull()
+  })
+
+  it('say a service its customer built is one, as the bot does — no plan was deleted from under it', async () => {
+    show(subscriptionRow({ plan: null }))
+
+    expect(await screen.findByText('خرید')).toBeTruthy()
+    expect(fact('پلن')).toBe('سرویس دلخواه')
+    expect(screen.queryByText('پلن حذف شده')).toBeNull()
   })
 
   it('say a free test is one, with no plan and no auto-renewal — a test is never renewed', async () => {

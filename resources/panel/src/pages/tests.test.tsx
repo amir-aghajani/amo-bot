@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { BotSettingsResponse, KeyboardsResponse, TestAccountsResponse, TestServerRow } from '@/lib/api-types'
+import type { KeyboardsResponse, TestAccountsResponse, TestServerRow } from '@/lib/api-types'
 import { keyboardsQuery } from '@/lib/queries'
 import { TestsPage } from '@/pages/tests'
 import { providers, until } from '@/test/render'
-import { botSettingsRow, testAccountRow, testServerRow } from '@/test/rows'
+import { botSettingsResponse, botSettingsRow, testAccountRow, testServerRow } from '@/test/rows'
 import { json, server } from '@/test/server'
 
 /*
@@ -14,8 +14,6 @@ import { json, server } from '@/test/server'
  * group; and the page saying so while tests are off, while no server gives one, or while the bot's menu has no
  * «اکانت تست» button.
  */
-
-const QR = { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 182_000, updated_at: 1_759_000_000, max_bytes: 5 * 1024 * 1024 }
 
 const SERVERS: TestServerRow[] = [testServerRow(), testServerRow({ id: 2, name: 'هلند', test_enabled: false, available: false })]
 
@@ -38,7 +36,7 @@ interface Open {
 
 function open({ at = '/tests', enabled = true, servers = SERVERS, menu = ['buy', 'test'], serverPage }: Open = {}) {
   server()
-    .on('GET', '/api/admin/bot/settings', json({ settings: botSettingsRow({ test_enabled: enabled }), qr_background: QR } satisfies BotSettingsResponse))
+    .on('GET', '/api/admin/bot/settings', json(botSettingsResponse(botSettingsRow({ test_enabled: enabled }))))
     .on('GET', '/api/admin/keyboards', json(keyboards(menu)))
     .on('GET', '/api/admin/tests/servers', json({ servers }))
     .on(

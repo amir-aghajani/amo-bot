@@ -1,16 +1,18 @@
 import { useState } from 'react'
-import { ArrowLeftRight, Copy, Gift, Power, PowerOff, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeftRight, Copy, Forward, Gift, Power, PowerOff, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { DetailFooter, DetailModal, useSubjectGone } from '@/components/detail-modal'
 import { Fact, FactList } from '@/components/fact-list'
-import { OperationsSection, useOperations, type OperationSpec } from '@/components/operations'
+import { OperationsSection, useOperations, type OperationAlternative, type OperationSpec } from '@/components/operations'
 import { StatusBadge } from '@/components/status-badge'
 import { ExtendForm } from '@/components/subscriptions/extend-form'
+import { BUILT, PLAN_AT_RENEWAL } from '@/components/subscriptions/service-plan'
 import { ServiceExpiry, ServiceRemoval, UsageMeter } from '@/components/subscriptions/service-usage'
 import { SkipServerPrompt } from '@/components/subscriptions/skip-server-prompt'
+import { TransferForm } from '@/components/subscriptions/transfer-form'
 import { TextLink } from '@/components/text-link'
 import { Button } from '@/components/ui/button'
-import { CustomerFacts } from '@/components/user-identity'
+import { CustomerFacts, userLabel } from '@/components/user-identity'
 import { api, ApiError } from '@/lib/api'
 import type { SubscriptionRow } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
@@ -39,6 +41,16 @@ const OPERATIONS: Record<Action, OperationSpec> = {
   },
   // Not run from here: it opens the move dialog, which picks the server and shows how the move went.
   move: { label: 'انتقال به سرور دیگر', icon: ArrowLeftRight, tone: 'neutral', done: 'منتقل شد' },
+  // Its strip is a form (TransferForm): the new customer's Telegram id, and who it names, shown before anything is sent.
+  transfer: {
+    label: 'انتقال به مشتری دیگر',
+    icon: Forward,
+    tone: 'neutral',
+    done: 'به مشتری دیگر منتقل شد',
+    confirm:
+      'سرویس با همین لینک، زمان و حجم به حساب مشتری دیگری می‌رود و «تمدید خودکار» آن خاموش می‌شود. هر دو مشتری در ربات خبردار می‌شوند. دستگاه‌های مشتری قبلی تا وقتی مشتری جدید «تغییر لینک» را نزند وصل می‌مانند.',
+    form: true,
+  },
   delete: {
     label: 'حذف سرویس',
     icon: Trash2,
@@ -47,6 +59,16 @@ const OPERATIONS: Record<Action, OperationSpec> = {
     confirm: 'کلاینت از پنل و سرویس از فروشگاه کامل حذف می‌شود و لینکش دیگر کار نمی‌کند؛ این کار برگشت ندارد. اگر سرویس فعال باشد، مشتری در ربات خبردار می‌شود.',
     note: { label: 'توضیح برای مشتری', placeholder: 'اختیاری؛ فقط برای سرویسی که هنوز فعال است فرستاده می‌شود' },
   },
+}
+
+/**
+ * A service the customer added by its link, beside its delete: out of the shop alone, its client kept on the panel — a
+ * wrong claim undone, for the customer it belongs to to send the link again (the owner's, in the main shop: the only
+ * shop that takes links). A running one's customer is told, with the note, as by the delete.
+ */
+const KEEP_CLIENT: OperationAlternative = {
+  label: 'حذف فقط از فروشگاه (کلاینت روی پنل می‌ماند)',
+  hint: 'اگر این سرویس به دست مشتری اشتباهی رسیده، فقط از فروشگاه حذفش کنید: کلاینت روی پنل می‌ماند و صاحبش می‌تواند با فرستادن لینک دوباره اضافه‌اش کند. اگر سرویس فعال باشد، مشتری با توضیح شما از حذفش خبردار می‌شود.',
 }
 
 interface SubscriptionModalProps {
@@ -102,6 +124,8 @@ function SubscriptionBody({ subscription, onClose, onChanged, onDeleted, onStale
   const agentShop = !useMainShop()
   // A delete the panel did not take: what it said, while the admin decides whether to delete without it.
   const [panelDown, setPanelDown] = useState<string | null>(null)
+  // A claimed service may leave the shop alone, its client kept for the customer it belongs to (KEEP_CLIENT).
+  const keeps = subscription.claimed_at !== null && !agentShop
 
   const ops = useOperations({
     specs: OPERATIONS,
@@ -117,7 +141,10 @@ function SubscriptionBody({ subscription, onClose, onChanged, onDeleted, onStale
       ops.close()
       if (fresh === null) {
         onDeleted(subscription)
-        if (force) toast.warning(`سرویس ${subscription.name} حذف شد؛ کلاینتش روی سرور «${subscription.server.name}» ماند و ${agentShop ? 'حذفش از سرور با پشتیبانی است' : 'باید خودتان حذفش کنید'}`)
+        // Forced with no failed delete before it: the admin chose to keep a claimed service's client (KEEP_CLIENT).
+        if (force && panelDown === null) toast.success(`سرویس ${subscription.name} فقط از فروشگاه حذف شد؛ کلاینتش روی سرور «${subscription.server.name}» ماند تا صاحبش با لینکش اضافه‌اش کند`)
+        else if (force)
+          toast.warning(`سرویس ${subscription.name} حذف شد؛ کلاینتش روی سرور «${subscription.server.name}» ماند و ${agentShop ? 'حذفش از سرور با پشتیبانی است' : 'باید خودتان حذفش کنید'}`)
         else toast.success(`سرویس ${subscription.name} ${OPERATIONS.delete.done}`)
         onClose()
         return
@@ -158,20 +185,35 @@ function SubscriptionBody({ subscription, onClose, onChanged, onDeleted, onStale
         ops={ops}
         specs={OPERATIONS}
         subject="این سرویس"
-        form={() => (
-          <ExtendForm
-            subscription={subscription}
-            traffic={traffic}
-            invalidates={EXTENDED}
-            onCancel={ops.close}
-            onExtended={(fresh, gift) => {
-              ops.close()
-              onChanged(fresh)
-              toast.success(`${gift} به سرویس ${fresh.name} ${OPERATIONS.extend.done}`)
-            }}
-            onStale={onStale}
-          />
-        )}
+        alternative={(action) => (action === 'delete' && keeps ? KEEP_CLIENT : null)}
+        form={(action) =>
+          action === 'transfer' ? (
+            <TransferForm
+              subscription={subscription}
+              invalidates={CHANGES}
+              onCancel={ops.close}
+              onTransferred={(fresh) => {
+                ops.close()
+                onChanged(fresh)
+                toast.success(`سرویس ${fresh.name} به ${userLabel(fresh.user)} منتقل شد`)
+              }}
+              onStale={onStale}
+            />
+          ) : (
+            <ExtendForm
+              subscription={subscription}
+              traffic={traffic}
+              invalidates={EXTENDED}
+              onCancel={ops.close}
+              onExtended={(fresh, gift) => {
+                ops.close()
+                onChanged(fresh)
+                toast.success(`${gift} به سرویس ${fresh.name} ${OPERATIONS.extend.done}`)
+              }}
+              onStale={onStale}
+            />
+          )
+        }
         override={
           panelDown && (
             <SkipServerPrompt
@@ -227,7 +269,7 @@ function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; se
         {subscription.status === 'disabled' && subscription.disabled_at && <span className="ms-2 text-footnote text-muted-foreground">از {formatDate(subscription.disabled_at)}</span>}
       </Fact>
       <CustomerFacts user={subscription.user} />
-      <Fact label="پلن">{subscription.is_test ? 'اکانت تست رایگان' : (subscription.plan?.name ?? <span className="text-muted-foreground">پلن حذف شده</span>)}</Fact>
+      <Fact label="پلن">{subscription.is_test ? 'اکانت تست رایگان' : (subscription.plan?.name ?? <NoPlan claimed={subscription.claimed_at !== null} />)}</Fact>
       <Fact label="سرور">{serverPage ? <TextLink to={serverPage(subscription.server.id)}>{subscription.server.name}</TextLink> : subscription.server.name}</Fact>
       <Fact label="مصرف">
         <UsageMeter traffic={subscription.traffic} className="max-w-64" />
@@ -248,18 +290,47 @@ function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; se
           <span className="block text-footnote text-muted-foreground">تمدید شده؛ حجم مصرف‌نشده دوره فعلی تا آن روز قابل استفاده است.</span>
         </Fact>
       )}
-      <Fact label="دستگاه هم‌زمان">{formatDevices(subscription.ip_limit)}</Fact>
+      <Fact label="کاربر هم‌زمان">
+        {formatDevices(subscription.ip_limit)}
+        {/* A renewal's limit queued behind the period in use: the devices it has (extra ones bought included) last until then. */}
+        {subscription.next_devices && (
+          <span className="block text-footnote text-muted-foreground">
+            از {formatDate(subscription.next_devices.from, { dateStyle: 'medium' })}: {formatDevices(subscription.next_devices.devices)}
+          </span>
+        )}
+      </Fact>
       {subscription.starts_at && (
         <Fact label="اولین اتصال">
           <span className="text-muted-foreground">{formatDate(subscription.starts_at)}</span>
         </Fact>
       )}
-      <Fact label="خرید">
-        <span className="text-muted-foreground">{formatDate(subscription.created_at)}</span>
-      </Fact>
+      {subscription.claimed_at === null ? (
+        <Fact label="خرید">
+          <span className="text-muted-foreground">{formatDate(subscription.created_at)}</span>
+        </Fact>
+      ) : (
+        <Fact label="افزودن">
+          <span className="text-muted-foreground">افزوده‌شده با لینک مشتری در {formatDate(subscription.claimed_at)}</span>
+        </Fact>
+      )}
       <Fact label="آخرین پرسش از پنل">
         <span className="text-muted-foreground">{subscription.last_synced_at ? timeAgo(subscription.last_synced_at) : 'هنوز نه'}</span>
       </Fact>
     </FactList>
+  )
+}
+
+/**
+ * A service without a plan, as the bot's service card words it: one its customer built is «سرویس دلخواه»; one the
+ * customer added by its link, not renewed yet, has the customer pick a plan sold on its server when renewing it.
+ */
+function NoPlan({ claimed }: { claimed: boolean }) {
+  if (!claimed) return BUILT
+
+  return (
+    <>
+      {PLAN_AT_RENEWAL}
+      <span className="block text-footnote text-muted-foreground">مشتری هنگام تمدید یکی از پلن‌هایی را که روی سرور این سرویس فروخته می‌شوند انتخاب می‌کند.</span>
+    </>
   )
 }

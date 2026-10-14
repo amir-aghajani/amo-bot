@@ -11,6 +11,7 @@ use App\Modules\Providers\Drivers\ThreeXui\DTO\PanelSettings;
 use App\Modules\Providers\Drivers\ThreeXui\Support\ExpiryTime;
 use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
 use App\Modules\Providers\DTO\ClientInfo;
+use App\Modules\Providers\DTO\ClientLink;
 use App\Modules\Providers\DTO\ClientSpec;
 use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Enums\CoreState;
@@ -230,6 +231,38 @@ final class ThreeXuiProviderTest extends TestCase
         self::assertSame('https://panel.test:2096/sub/sub-1', $info->subscriptionUrl);
     }
 
+    public function testAnUpdateKeepsAClientSwitchedOffWhenItsSpecSaysSo(): void
+    {
+        $provider = $this->provider([
+            self::ok(self::wrapped(self::record(['enable' => false]), inboundIds: [3])), // get
+            self::ok(null),                                                           // update
+            self::ok(self::record(['enable' => false])),                              // read back
+            self::ok(self::SUB_SETTINGS),
+        ]);
+
+        $info = $provider->updateClient(new ClientSpec(name: 'alice', totalBytes: 99, enabled: false));
+
+        self::assertFalse($this->panel->params(1)['enable'], 'a relabel or a take-back never switches it on');
+        self::assertFalse($info->enabled);
+    }
+
+    /** The Telegram id is the owner's: a new owner's, or none (0) for one without Telegram — never the previous owner's. */
+    public function testAnUpdateGivesTheClientItsOwnersTelegramIdOrNone(): void
+    {
+        foreach ([[5151, 5151], [null, 0]] as [$telegramId, $sent]) {
+            $provider = $this->provider([
+                self::ok(self::wrapped(self::record(), inboundIds: [3])), // get: the previous owner's 4242
+                self::ok(null),                                          // update
+                self::ok(self::record()),                                // read back
+                self::ok(self::SUB_SETTINGS),
+            ]);
+
+            $provider->updateClient(new ClientSpec(name: 'alice', telegramId: $telegramId));
+
+            self::assertSame($sent, $this->panel->params(1)['tgId'], 'so 3x-ui\'s own bot tells no one else about it');
+        }
+    }
+
     public function testUpdatingAClientThatIsGoneIsNotFound(): void
     {
         $provider = $this->provider([new Response(200, [], '{"success":false,"msg":"Client not found"}')]);
@@ -347,6 +380,80 @@ final class ThreeXuiProviderTest extends TestCase
         self::assertSame([5120, 30], array_map(static fn(ClientInfo $client): int => $client->uploadBytes + $client->downloadBytes, $clients));
         self::assertNull($clients[0]->online, 'presence is not asked for a list');
         self::assertSame('https://panel.test:2096/sub/sub-2', $clients[1]->subscriptionUrl);
+    }
+
+    public function testASubscriptionLinkIsTheRowWithItsSubscriptionIdFromOneReadOfTheList(): void
+    {
+        $provider = $this->provider([
+            self::ok([self::record(['subId' => 'kq3xj8vr2mn9pl4w']), self::record(['email' => 'bob', 'uuid' => '0b0b0b0b-71bf-48d4-933f-8b9a46d4290c', 'subId' => 'zx5yc7vb9nm1qw3e', 'limitIp' => 3])]),
+            self::ok(self::SUB_SETTINGS),
+        ]);
+
+        $client = $provider->findClientByLink(self::link('https://panel.test:2096/sub/zx5yc7vb9nm1qw3e?format=json'));
+
+        self::assertSame(['GET /panel/api/clients/list', 'POST /panel/api/setting/all'], $this->panel->calls(), 'the list once, and the settings for its link');
+        self::assertSame('bob', $client?->name);
+        self::assertSame(3, $client->ipLimit, 'the row\'s IP limit');
+        self::assertSame([1024, 4096], [$client->uploadBytes, $client->downloadBytes]);
+        self::assertSame('https://panel.test:2096/sub/zx5yc7vb9nm1qw3e', $client->subscriptionUrl);
+        self::assertNull($client->online, 'presence is not asked');
+    }
+
+    public function testAConfigIsTheRowWithItsIdPasswordOrAuth(): void
+    {
+        $rows = [
+            self::record(['subId' => 'kq3xj8vr2mn9pl4w']),
+            self::record(['email' => 'carol', 'uuid' => '', 'password' => 'Tr0jan-Pass-1', 'subId' => 'c4r0lc4r0lc4r0l1']),
+            self::record(['email' => 'dave', 'uuid' => '', 'password' => '', 'auth' => 'Hy2-Auth-Secret', 'subId' => 'd4v3d4v3d4v3d4v3']),
+            self::record(['email' => 'erin', 'uuid' => '', 'password' => 'Zx5Yc7Vb9Nm1Qw3Er5Ty7U==', 'subId' => '3r1n3r1n3r1n3r1n']),
+        ];
+        $sip2022 = 'ss://' . base64_encode('2022-blake3-aes-128-gcm:Kq3XJ8vR2mN9pL4wT6yB1A==:Zx5Yc7Vb9Nm1Qw3Er5Ty7U==') . '@panel.test:443#erin';
+
+        foreach ([
+            'vless, its id in capitals' => ['vless://E18C9A96-71BF-48D4-933F-8B9A46D4290C@panel.test:443?type=tcp#alice', 'alice'],
+            'trojan, its password' => ['trojan://Tr0jan-Pass-1@panel.test:443#carol', 'carol'],
+            'hysteria2, its auth' => ['hysteria2://Hy2-Auth-Secret@panel.test:443/?sni=x#dave', 'dave'],
+            'Shadowsocks 2022, the user\'s half of the key' => [$sip2022, 'erin'],
+        ] as $case => [$config, $name]) {
+            $provider = $this->provider([self::ok($rows), self::ok(self::SUB_SETTINGS)]);
+
+            self::assertSame($name, $provider->findClientByLink(self::link($config))?->name, $case);
+        }
+    }
+
+    public function testASecretSetToTheClientsOwnNameFindsNothingButItsIdStillDoes(): void
+    {
+        // Support named the client and gave it its name as a subscription id and passwords: anyone who knows the name
+        // could send them.
+        $rows = [self::record(['email' => 'Manual-Client-1', 'subId' => 'manual-client-1', 'password' => 'MANUAL-CLIENT-1', 'auth' => 'manual-client-1'])];
+        foreach ([
+            'its name as its subscription id' => 'https://panel.test:2096/sub/manual-client-1',
+            'its name as a trojan password, in another case' => 'trojan://MANUAL-CLIENT-1@panel.test:443',
+            'its name as hysteria2\'s auth' => 'hysteria2://manual-client-1@panel.test:443',
+        ] as $case => $link) {
+            $provider = $this->provider([self::ok($rows)]);
+
+            self::assertNull($provider->findClientByLink(self::link($link)), $case);
+        }
+
+        $provider = $this->provider([self::ok($rows), self::ok(self::SUB_SETTINGS)]);
+        self::assertSame('Manual-Client-1', $provider->findClientByLink(self::link('vless://e18c9a96-71bf-48d4-933f-8b9a46d4290c@panel.test:443'))?->name, 'its id is the panel\'s own');
+    }
+
+    public function testALinkNoRowHasIsNoneAfterOneRead(): void
+    {
+        $rows = [self::record(['subId' => 'kq3xj8vr2mn9pl4w'])];
+        foreach ([
+            'another subscription id' => 'https://panel.test:2096/sub/zx5yc7vb9nm1qw3e',
+            'a client\'s id where its subscription id goes' => 'https://panel.test:2096/sub/e18c9a96-71bf-48d4-933f-8b9a46d4290c',
+            'a client\'s subscription id as a config\'s password' => 'trojan://kq3xj8vr2mn9pl4w@panel.test:443',
+            'another id' => 'vless://0b0b0b0b-71bf-48d4-933f-8b9a46d4290c@panel.test:443',
+        ] as $case => $link) {
+            $provider = $this->provider([self::ok($rows)]);
+
+            self::assertNull($provider->findClientByLink(self::link($link)), $case);
+            self::assertSame(['GET /panel/api/clients/list'], $this->panel->calls(), $case);
+        }
     }
 
     public function testInboundsAreListedSlimWithTheirTransportAndClientCount(): void
@@ -516,5 +623,10 @@ final class ThreeXuiProviderTest extends TestCase
     private static function ok(mixed $obj): Response
     {
         return FakePanel::success($obj);
+    }
+
+    private static function link(string $text): ClientLink
+    {
+        return ClientLink::find($text) ?? self::fail("No link in {$text}.");
     }
 }

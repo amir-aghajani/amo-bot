@@ -61,6 +61,7 @@ use App\Modules\Store\Api\AuthController as StoreAuthController;
 use App\Modules\Store\Api\CaptchaController;
 use App\Modules\Store\Api\CatalogController;
 use App\Modules\Store\Api\CheckoutController;
+use App\Modules\Store\Api\CustomServicesController;
 use App\Modules\Store\Api\GiftCodesController as StoreGiftCodesController;
 use App\Modules\Store\Api\IdentitiesController;
 use App\Modules\Store\Api\MeController;
@@ -186,6 +187,9 @@ return static function (App $app): void {
         $shop->post('/subscriptions/{id:[0-9]+}/enable', [SubscriptionsController::class, 'enable']);
         $shop->post('/subscriptions/{id:[0-9]+}/move', [SubscriptionsController::class, 'move']);
         $shop->post('/subscriptions/{id:[0-9]+}/delete', [SubscriptionsController::class, 'delete'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Delete->value);
+        // Handing a service to another customer takes it from its owner as surely as a delete: the same grant, its look-up too.
+        $shop->get('/subscriptions/{id:[0-9]+}/transfer', [SubscriptionsController::class, 'transferRecipient'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Delete->value);
+        $shop->post('/subscriptions/{id:[0-9]+}/transfer', [SubscriptionsController::class, 'transfer'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Delete->value);
 
         $shop->get('/referrals', [ReferralsController::class, 'summary']);
         $shop->get('/referrals/referrers', [ReferralsController::class, 'referrers']);
@@ -393,6 +397,7 @@ return static function (App $app): void {
         $store->get('/plans', [CatalogController::class, 'plans'])->add(OptionalCustomerMiddleware::class);
         $store->get('/plans/{id:[0-9]+}', [CatalogController::class, 'plan'])->add(OptionalCustomerMiddleware::class);
         $store->get('/status', [CatalogController::class, 'status']);
+        $store->get('/custom-services', [CustomServicesController::class, 'show']);
         $store->get('/reviews', [StoreReviewsController::class, 'index']);
         $store->post('/reviews', [StoreReviewsController::class, 'store'])->add(OptionalCustomerMiddleware::class);
         $store->post('/auth/nonce', [StoreAuthController::class, 'nonce']);
@@ -434,18 +439,26 @@ return static function (App $app): void {
             })->add(RecentSignInMiddleware::class);
 
             $customer->get('/subscriptions', [StoreSubscriptionsController::class, 'index']);
+            $customer->post('/subscriptions/claim', [StoreSubscriptionsController::class, 'claim']);
             $customer->get('/subscriptions/{id:[0-9]+}', [StoreSubscriptionsController::class, 'show']);
             $customer->patch('/subscriptions/{id:[0-9]+}', [StoreSubscriptionsController::class, 'update']);
             $customer->post('/subscriptions/{id:[0-9]+}/refresh', [StoreSubscriptionsController::class, 'refresh']);
             $customer->post('/subscriptions/{id:[0-9]+}/rotate-link', [StoreSubscriptionsController::class, 'rotateLink']);
+            $customer->get('/subscriptions/{id:[0-9]+}/transfer', [StoreSubscriptionsController::class, 'transferRecipient']);
+            // Handing a service to someone else asks a recent sign-in too: a bearer token alone gives no service away.
+            $customer->post('/subscriptions/{id:[0-9]+}/transfer', [StoreSubscriptionsController::class, 'transfer'])->add(RecentSignInMiddleware::class);
             $customer->get('/subscriptions/{id:[0-9]+}/renewal', [CheckoutController::class, 'renewal']);
             $customer->post('/subscriptions/{id:[0-9]+}/renewal', [CheckoutController::class, 'renew']);
+            $customer->get('/subscriptions/{id:[0-9]+}/renewal-plans', [CheckoutController::class, 'renewalPlans']);
             $customer->get('/subscriptions/{id:[0-9]+}/extras', [CheckoutController::class, 'extras']);
             $customer->post('/subscriptions/{id:[0-9]+}/extra-traffic', [CheckoutController::class, 'extraTraffic']);
             $customer->post('/subscriptions/{id:[0-9]+}/extra-time', [CheckoutController::class, 'extraTime']);
+            $customer->post('/subscriptions/{id:[0-9]+}/extra-devices', [CheckoutController::class, 'extraDevices']);
             $customer->get('/payment-methods', [CheckoutController::class, 'methods']);
             $customer->get('/orders', [StoreOrdersController::class, 'index']);
             $customer->post('/orders', [CheckoutController::class, 'purchase']);
+            $customer->post('/custom-services/quote', [CustomServicesController::class, 'quote']);
+            $customer->post('/custom-services/orders', [CustomServicesController::class, 'buy']);
             $customer->get('/orders/{id:[0-9]+}', [StoreOrdersController::class, 'show']);
             $customer->post('/discount-codes/check', [CheckoutController::class, 'checkCode']);
             $customer->post('/payments/{id:[0-9]+}/receipt', [CheckoutController::class, 'receipt'])->setArgument(JsonBodiesMiddleware::UPLOAD, 'picture');

@@ -26,8 +26,8 @@ not understand — a word typed, a button of a screen long gone — is answered 
 |---|---|
 | «🔐 خرید اشتراک» | [Buying](#buying) |
 | «🧪 اکانت تست» | While the shop gives tests: the servers giving one now, each with its traffic and term; a tap makes one ([a free test](#a-free-test)) |
-| «🛍️ سرویس‌های من» | The running services (and those waiting for their first connection), newest first, five a page; each opens [its screen](#a-services-screen) |
-| «♻️ تمدید سرویس» | The services that may be renewed — running or ended, on a plan still there —, five a page; each opens its renewal ([renewing](#renewing)) |
+| «🛍️ سرویس‌های من» | The running services (and those waiting for their first connection), newest first, five a page; each opens [its screen](#a-services-screen). While the shop takes services by their link, «➕ افزودن سرویس» under them ([adding a service by its link](#adding-a-service-by-its-link)) |
+| «♻️ تمدید سرویس» | The services that may be renewed — running or ended, on a plan still there, or without a plan (added by their link, or built) to pick what to renew them on —, five a page; each opens its renewal ([renewing](#renewing)) |
 | «💰 کیف پول + شارژ» | The balance («… تومان بدهی» for a debt; an agent's credit), the latest five lines, and «➕ افزایش موجودی» ([the wallet](#the-wallet)) |
 | «👥 زیرمجموعه‌گیری» | The invite link (a tap copies it), the terms (the start gift and the plan reward while they are on), what it brought, «📤 ارسال لینک برای دوستان» — while the program runs ([Referrals](Referrals.md)) |
 | «📚 آموزش» | A short guide to connecting — the shop's, which you may reword |
@@ -46,7 +46,12 @@ not understand — a word typed, a button of a screen long gone — is answered 
 4. **The checkout** — what is bought and its price, and a button per way to pay — a free plan's (price `0`), one
    «🎁 دریافت رایگان» instead, which delivers it at once, nothing taken —, and under it the plan's note when it has one
    («📌 …», [Plans](Plans.md#a-plan)). **Nothing is ordered until one is picked**; there is no cancel — a checkout left
-   alone orders nothing.
+   alone orders nothing. While the shop lets buyers name their service ([Bot settings](Bot-Settings.md#service-usernames)),
+   a line says what it will be called — «ترتیبی», the shop's pattern, until they choose — over a button per way:
+   «🔢 ترتیبی», «🎲 رندوم» (a name drawn at random, another at each tap) and «✏️ دلخواه» (the name typed next, 3 to 32
+   English letters, digits, `_` and `-`; one refused says why and another is awaited). The name is kept for that
+   checkout, through a discount code and back from a card's screen, and the service is delivered with it — or with the
+   pattern's, should a service on that server have taken it meanwhile.
 5. - **The wallet** pays at once: the checkout gives way to the service — a QR card of its subscription link, or the link
      as text. A wallet short of the price says how much is missing, with «➕ افزایش موجودی».
    - **A card** shows the amount, the card's number (a tap copies it), its holder and your words: the customer transfers
@@ -55,6 +60,20 @@ not understand — a word typed, a button of a screen long gone — is answered 
      comes later as a reply to it ([Orders and payments](Orders-And-Payments.md#payments)).
 
 An order left unpaid expires after 48 hours of nothing — but one whose receipt is with support.
+
+**A service the customer builds** — in the main bot, while «سرویس دلخواه» is on ([Custom services](Custom-Services.md)),
+«🛠 ساخت سرویس دلخواه» stands under the plans (or the categories), even when no plan is on sale:
+
+1. **The GB** — each gigabyte's price by its tiers, a button per amount offered, two a row; any amount within the bounds
+   may be typed instead («۵۰ گیگ» is fine). One outside them is refused, saying them, and another is awaited.
+2. **The days** — the same, for the days; «بازگشت» to the GB.
+3. **The server** — a button per server it is built on now; with only one, this step is skipped.
+4. **The checkout** — the GB and their price, the days and theirs (each whole at the rate of its tier, the two added),
+   the devices, the server and what is paid after the customer's discounts, with «🏷 کد تخفیف دارم» and the ways to pay.
+   Then as any purchase: the service comes with no plan, named «سرویس دلخواه» where a plan's name would be.
+
+A step tapped after the bounds changed shows that step again; once nothing may be built, the bot says so, with
+«بازگشت» to the plans. A payment reminder's «پرداخت دوباره» opens the checkout of what was built, as it is priced now.
 
 ### First-purchase prices
 
@@ -97,8 +116,8 @@ traffic and term, «(از اولین اتصال)» when the term counts from the
 tap makes the test at once and sends it as a bought service comes — a QR card of its link, or text —, with «📊 مشاهده
 سرویس». A test that could not be sent still counts: the bot says so («⚠️ اکانت تست شما ساخته شد ولی ارسال آن ناموفق
 بود؛ …») with the same button to open it. It is then one of their services, its plan named «اکانت تست»: no renewal, no
-extra traffic or time, no reminders; once it ends, or if it is never connected, the shop removes it after a while,
-without a word — its screen says when.
+extra traffic, time or devices, no reminders; once it ends, or if it is never connected, the shop removes it after a
+while, without a word — its screen says when.
 
 What a customer may take is the shop's rule — so many tests each, in all or within so many days, a cap a day, perhaps
 for newcomers only ([Test accounts](Test-Accounts.md#the-quota)). A test refused says why, with «🔐 خرید اشتراک» under
@@ -107,10 +126,23 @@ stopped giving tests since the screen was drawn shows the screen again as it is 
 says so («⚠️ ساخت اکانت تست الان ممکن نشد؛ …»), and nothing of the quota is spent. The bot's admins are held to the
 switch alone, though their tests count toward the shop's cap a day.
 
+### Adding a service by its link
+
+While the main shop takes services by their link ([Services added by their link](Service-Claims.md)), a customer who
+was given a service's subscription link or one of its configs — a client support made on a panel by hand — sends it to
+the bot, anywhere it waits for nothing else, or taps «➕ افزودن سرویس» under «سرویس‌های من» and sends it there. The
+service is added to their account at once («✅ سرویس … روی لوکیشن … به سرویس‌های شما اضافه شد.», with «📊 مشاهده
+سرویس»); a link the bot does not take — one no server has, one another customer has, one theirs already — is said in
+a word. A message holding no service's link is answered so only after «➕ افزودن سرویس», where the link stays awaited.
+Sent at no step, only a config or a web address on one of the shop's own subscription addresses is looked for: a
+channel's post forwarded, any other web address, and a link no server has are any message the bot does not
+understand. A picture's caption counts. Off, a link sent is an unknown message, as before.
+
 ### A service's screen
 
 Its status, name, plan, location, quota, what is used and left, when it ends — «⏳ در انتظار اولین اتصال (n روز)» until
-the first connection starts its days —, its last connection and whether it is online now: read from its panel as the
+the first connection starts its days —, how many devices may connect at once (with any «کاربر اضافه» bought, «👥 تعداد
+کاربر: ۳ کاربر»), its last connection and whether it is online now: read from its panel as the
 screen opens (a panel that cannot be read shows the last numbers, said to be so). While the shop removes ended services
 by itself ([Bot settings](Bot-Settings.md#ended-services)), the screen of one that ended — and its renewal's checkout,
 from «♻️ تمدید سرویس» too — says when it goes: «🗑️ اگر این سرویس تا … تمدید نشود، حذف می‌شود.» — renewed before then,
@@ -118,47 +150,97 @@ it stays; removed, it is gone with its link, and a new purchase brings a new one
 tests. Its buttons:
 
 - «🔄 به‌روزرسانی اطلاعات» — read it again;
-- «♻️ تمدید سرویس» — [its renewal](#renewing) (a free test has none);
+- «♻️ تمدید سرویس» — [its renewal](#renewing) (a free test has none; one without a plan picks what to renew on first);
 - «🔗 لینک اشتراک» — the link in place of the screen, as a QR card or text, a tap to copy — no panel asked, so it works
   while the panel is down;
-- «🔋 حجم اضافه» and «⏳ زمان اضافه» — [more traffic or time](#extra-traffic-and-time) for this service, each while the
-  shop sells it for the service (never for a free test);
-- «🔁 تمدید خودکار: روشن / خاموش» — the wallet renews it days before its end — while the shop offers it ([Bot
-  settings](Bot-Settings.md#renewal)); turned on, it says when and how much;
+- «🔋 حجم اضافه», «⏳ زمان اضافه» and «👥 کاربر اضافه» — [more traffic, time or devices](#extra-traffic-time-and-devices) for
+  this service, each while the shop sells it for the service (never for a free test);
+- «🔁 تمدید خودکار: روشن / خاموش» — the wallet renews it days before its end on its plan (shortly before the end where
+  the shop renews automatically by «ریست زمان») — while the shop offers it
+  ([Bot settings](Bot-Settings.md#renewal)) and it has a plan (not one added by its link or built, until a renewal on a
+  plan); turned on, it says when and how much;
 - «⚠️ ارسال گزارش اختلال» — a support ticket about this service, its first message awaited;
 - «⚙️ تغییر لینک» — new credentials and a new link, asked first (every device on the old one drops), when its server can;
   the new link comes as a delivery;
+- «🔁 انتقال سرویس» — [to another customer](#handing-a-service-to-another-customer), while the shop lets customers (never
+  a free test);
 - «⬅️ بازگشت به لیست سرویس‌ها».
+
+### Handing a service to another customer
+
+While the shop lets customers ([Bot settings](Bot-Settings.md#service-transfers)), «🔁 انتقال سرویس» on a service's screen
+gives it to another customer of the shop, free:
+
+1. **The recipient's numeric Telegram id** is asked for in place of the screen («بازگشت» leads back to it); Persian
+   digits are fine. They must have started the bot once. An id that names nobody of the shop, the customer themselves or
+   a banned account is said so in a word, and another awaited.
+2. **Who that is** — their name and @handle — with «✅ تایید انتقال» and «❌ انصراف» (back to the service). Another id
+   sent there asks about that one instead. A confirmation is good once: tapped again, or after the customer went
+   elsewhere, it hands nothing over («این تایید دیگر معتبر نیست؛ …»).
+3. **Confirmed**, the service is theirs: the question turns into «✅ سرویس … به … منتقل شد …», with the way back to
+   «سرویس‌های من». The recipient gets «🎁 سرویس … به حساب شما منتقل شد …» with «📊 مشاهده سرویس».
+
+The service goes as it is — its link, end and traffic —, its «تمدید خودکار» off. The link going with it, the previous
+owner's devices stay connected until the recipient taps «⚙️ تغییر لینک»: where its server can change a link, the
+recipient's message says so («🔐 صاحب قبلی این سرویس هنوز لینک آن را دارد؛ …»). A service with an order the customer
+made still open — a renewal or an extra waiting for its payment or receipt, or being delivered — waits for it («⚠️ این
+سرویس الان منتقل نمی‌شود: …»; an unpaid one is dropped by itself after 48 hours; one whose delivery failed sends the
+customer to support, who retries it or gives the money back), and a customer who looked up 10 ids in 10 minutes, or
+handed on 5 services in an hour, waits a while. Support transfers a service from the panel whatever the switch says
+([Services](Services.md#handing-a-service-to-another-customer)).
 
 ### Renewing
 
 A service is renewed on its own plan, at its price today: the checkout shows the service **as the renewal would leave
-it** — its new end, its traffic, what the period in use leaves —, then the ways to pay. The wallet renews it at once
-(«📊 مشاهده سرویس» under the word); a card waits for its receipt. A service switched off by support, on a plan gone, or —
+it** — its new end, its traffic, what the period in use leaves, and the devices the renewal gives (from the end of
+the period in use, when the devices bought for it stay until then) —, then the ways to pay. A service added by its link or
+built has no plan: its renewal first lists the plans on sale on its server, each at the
+customer's renewal price, and the plan picked is the checkout's — and, once renewed, the service's own. While the
+builder is on, «🛠 تمدید با سرویس دلخواه» comes under them — alone when no plan is sold there —: the builder's GB and
+days, then the renewal's checkout of that package, «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; renewed so, the service still has
+no plan, and «تمدید خودکار» is never offered for it ([Custom services](Custom-Services.md#renewing-a-built-service)).
+With nothing to pick: «فعلا پلنی برای تمدید این سرویس فروخته نمی‌شود …». The wallet renews it at once
+(«📊 مشاهده سرویس» under the word); a card waits for its receipt. A service switched off by support, without a plan while neither a plan nor the builder is there to pick, or —
 in an agent's bot — beyond the agent's traffic, cannot be renewed; one whose renewal is already with support or being
 delivered says so. A service bought at a [first-purchase price](#first-purchase-prices) renews at the plan's price — an
 agent's or a colleague's at its [agent price](#agent-prices). The plan's checkout note is under the renewal's checkout
 too.
 
-### Extra traffic and time
+While the shop offers more than one renewal method ([Bot settings](Bot-Settings.md#renewal)) the checkout has a row of
+them — «✅ تمدید پلن فعلی», «ریست حجم + افزایش روز», «ریست زمان + انتقال حجم» —, opens on the first one on, and draws the
+service's end and traffic again by the one tapped; a discount code applied stays, and the ways to pay renew by the one
+marked. A shop with one method shows no choice. A shop that holds a running service back until it nears its end
+(«آستانه مجاز تمدید») still lists it in «♻️ تمدید سرویس»; the tap answers «⏳ تمدید این سرویس از … ممکن است.» with the
+date and hour, or «وقتی ٪۲۰ از حجم یا کمتر مانده باشد», and nothing more happens. An ended service may always be
+renewed.
 
-While you sell them ([Bot settings](Bot-Settings.md)), a service's screen offers «🔋 حجم اضافه» and «⏳ زمان اضافه» —
-each bought on its own, at the prices of the service's plan when it has its own, else the shop's:
+### Extra traffic, time and devices
 
-1. **The kind's screen** — the service's traffic left and its end, and a button per amount you offer with its price. With
-   a price per GB (or per day) the customer may type any amount within your bounds right there instead («۲۰ گیگ», «۷ روز»
-   and Persian digits are fine); one you do not sell is said so, and another awaited.
-2. **The checkout** — what it costs and the service **as it would leave it** — its traffic left, its end —, then the
-   ways to pay. Nothing is ordered until one is picked.
+While you sell them ([Bot settings](Bot-Settings.md#extra-traffic-time-and-devices)), a service's screen offers «🔋 حجم اضافه»,
+«⏳ زمان اضافه» and «👥 کاربر اضافه» (more devices at once) — each bought on its own, at the prices of the service's plan
+when it has its own, else the shop's:
+
+1. **The kind's screen** — the service's traffic left and its end (for devices, how many it has now and the days their
+   price is for), and a button per amount you offer with its price. With a price per GB, day or device the customer may
+   type any amount within your bounds right there instead («۲۰ گیگ», «۷ روز», «۲ کاربر» and Persian digits are fine);
+   one you do not sell is said so, and another awaited.
+2. **The checkout** — what it costs and the service **as it would leave it** — its traffic left, its end, its devices
+   —, then the ways to pay. Nothing is ordered until one is picked.
 3. **The wallet** adds it at once («📊 مشاهده سرویس» under the word); **a card** waits for its receipt, as a purchase does.
+
+Devices are priced for 30 days and charged for the days left of the service's period — a service 15 days from its end
+pays half the price, its screen saying «قیمت‌ها برای ۱۵ روز مانده از دوره فعلی سرویس حساب شده است» —, and last as long:
+a renewal brings its plan's number of devices, and they are bought again for the new period.
 
 Traffic brings a service whose traffic ran out back to life; days for one whose time ran out count from its next
 connection, as a renewal's do (its screen says so). Neither is offered for a service switched off by support, nor for one
 that ended on both counts — that is a renewal's —; traffic is not offered for an unlimited one, nor time for one that
-never ends. A service whose traffic or time ran out is not in «🛍️ سرویس‌های من», which lists the running ones: the
-menu's «♻️ تمدید سرویس» list reaches it, and its renewal's checkout offers the extra it may take beside the renewal. In an
-agent's bot no more traffic is sold than the agent still has, and what is sold comes out of it. A button kept from
-before, for a service that can no longer take it, is answered in a popup and orders nothing.
+never ends. Devices are not offered for a service of unlimited devices, one whose time or traffic ran out, or one on a
+server whose panel has no device limit (PasarGuard). A service whose traffic or time ran out is not in «🛍️ سرویس‌های من», which
+lists the running ones: the menu's «♻️ تمدید سرویس» list reaches it, and its renewal's checkout offers the extra it may
+take beside the renewal. In an agent's bot no more traffic is sold than the agent still has, and what is sold comes out
+of it; days and devices cost the agent nothing. A button kept from before, for a service that can no longer take it, is
+answered in a popup and orders nothing.
 
 ### The wallet
 
@@ -184,10 +266,11 @@ but the wallet itself.
 
 | When | They get |
 |---|---|
-| A card payment approved — or retried, or delivered after a restart | Their service (a QR card), its renewal or the traffic or time it bought, the wallet charged or the agent's traffic added — or that the delivery failed and support will finish it |
+| A card payment approved — or retried, or delivered after a restart | Their service (a QR card), its renewal or the traffic, time or devices it bought, the wallet charged or the agent's traffic added — or that the delivery failed and support will finish it |
 | A receipt rejected, an order cancelled, a payment refunded | A word, with your note, as a reply to their receipt |
 | A payment reminder from the panel | A nudge, with «📎 ارسال رسید» and «🔄 پرداخت دوباره» |
 | A service switched off or on, deleted (while running), moved, given days or traffic | A word — a moved one with its new link |
+| A service handed to them, by its previous customer or support — or handed on by support | A word — theirs now with «📊 مشاهده سرویس» |
 | A service near its end or its traffic's end (when the shop turned reminders on) | A reminder, «📊 مشاهده سرویس» |
 | An automatic renewal — done, short of money (once a window), failed | A word; short, «➕ افزایش موجودی» |
 | A newcomer their link brought, a commission earned | A word |

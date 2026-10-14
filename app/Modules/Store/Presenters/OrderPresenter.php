@@ -21,7 +21,7 @@ final class OrderPresenter
 
     /**
      * The order: its plan, server and service each as `{id, name}` (a service by its panel name, as everywhere in the
-     * API), and what it brings in traffic or days.
+     * API), and what it brings in traffic, days or devices.
      *
      * @return array<string, mixed>
      */
@@ -43,10 +43,13 @@ final class OrderPresenter
             'created_at' => $order->created_at->toIso8601String(),
             'fulfilled_at' => $order->fulfilled_at?->toIso8601String(),
             'plan' => $plan === null ? null : ['id' => $plan->id, 'name' => $plan->name],
+            // What a purchase or a renewal buys, in words: its plan's name, or a built service's GB and days.
+            'package_name' => $order->packageName(),
             'server' => $server === null ? null : ['id' => $server->id, 'name' => $server->name],
             'subscription' => $service === null ? null : ['id' => $service->id, 'name' => $service->remote_name],
             'traffic_bytes' => $order->traffic_bytes,
             'days' => $order->days,
+            'devices' => $order->devices,
             'payments' => array_values($order->payments->map($this->payment(...))->all()),
         ];
     }

@@ -14,6 +14,7 @@ import type { GiftCodeBatchRequest, GiftCodeBatchResponse, GiftCodeKind } from '
 import { copyText } from '@/lib/clipboard'
 import { digitsOnly, formatDay, formatMoney, formatNumber, wholeOf } from '@/lib/format'
 import { addDays, today } from '@/lib/jalali'
+import { GIFT_CODES } from '@/lib/limits'
 import { queryKeys } from '@/lib/query-keys'
 import { GIFT_CODE_KIND } from '@/lib/statuses'
 import { useForm } from '@/lib/use-form'
@@ -112,13 +113,13 @@ function MakeCodesForm({ onMade, onCancel }: { onMade: (made: GiftCodeBatchRespo
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="gift_count" label="تعداد کدها" error={error('count')} hint="بین 1 تا 500">
+        <Field id="gift_count" label="تعداد کدها" error={error('count')} hint={`بین 1 تا ${GIFT_CODES.COUNT_MAX}`}>
           <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values.count} onChange={(e) => set('count', e.target.value)} />
         </Field>
         <Field id="gift_batch" label="نام سری" error={error('batch')} hint="کدهای یک سری با هم دیده، کپی و حذف می‌شوند.">
           <Input value={values.batch} onChange={(e) => set('batch', e.target.value)} placeholder="نوروز ۱۴۰۵" />
         </Field>
-        <Field id="gift_prefix" label="پیشوند" optional error={error('prefix')} hint="حروف انگلیسی و عدد، حداکثر 12 کاراکتر؛ اول همه کدها می‌آید.">
+        <Field id="gift_prefix" label="پیشوند" optional error={error('prefix')} hint={`حروف انگلیسی و عدد، حداکثر ${GIFT_CODES.PREFIX_MAX} کاراکتر؛ اول همه کدها می‌آید.`}>
           <Input dir="ltr" autoComplete="off" value={values.prefix} onChange={(e) => set('prefix', e.target.value)} placeholder="NOWRUZ" />
         </Field>
         <Field

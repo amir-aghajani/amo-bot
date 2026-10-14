@@ -7,10 +7,12 @@ namespace Tests\Feature;
 use App\Modules\Agency\Enums\TrafficTransactionType;
 use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Models\TrafficTransaction;
+use App\Modules\Agency\Services\TrafficPool;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderStatus;
+use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Services\PaymentService;
@@ -102,6 +104,14 @@ final class AgentBotsTest extends BotTestCase
         self::assertSame(Traffic::bytesOfGb(70), $this->bot->trafficBalance(), "the plan's 30 GB out of the 100");
         $line = TrafficTransaction::query()->where('order_id', $order->id)->sole();
         self::assertSame([TrafficTransactionType::Renewal, -Traffic::bytesOfGb(30)], [$line->type, $line->bytes]);
+    }
+
+    /** What an order draws is the traffic of the package it gives (Order::package()): a built one's own too. */
+    public function testAnOrderDrawsTheTrafficOfThePackageItGives(): void
+    {
+        $built = (new Order())->forceFill(['type' => OrderType::Purchase, 'plan_id' => null, 'traffic_bytes' => Traffic::bytesOfGb(50), 'days' => 30, 'devices' => 2]);
+
+        self::assertSame(Traffic::bytesOfGb(50), TrafficPool::bytesFor($built));
     }
 
     public function testARenewalTheTrafficCannotCoverFailsAndTheServiceStaysAsItWas(): void

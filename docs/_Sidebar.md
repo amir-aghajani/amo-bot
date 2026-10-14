@@ -17,6 +17,8 @@
   - [Orders and payments](Orders-And-Payments.md)
   - [Services](Services.md)
   - [Test accounts](Test-Accounts.md)
+  - [Services added by their link](Service-Claims.md)
+  - [Custom services](Custom-Services.md)
   - [Support tickets](Support-Tickets.md)
   - [Reviews](Reviews.md)
   - [Discounts](Discounts.md)

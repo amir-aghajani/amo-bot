@@ -6,9 +6,9 @@ namespace App\Modules\Store\Enums;
 
 /**
  * What a shop lets its admins do from its website beyond the daily work (`staff_grants`, a switch each in «مدیران سایت»,
- * all off by default): the catalogue, a wallet adjusted by hand, refunds, extending a service, deleting one, and a
- * customer's website account security. An operation that needs one names it in its route's ARGUMENT (routes/api.php);
- * the panels' principals hold every grant.
+ * all off by default): the catalogue, a wallet adjusted by hand, refunds, extending a service, deleting one or handing it
+ * to another customer (`delete`: either takes it from its customer), and a customer's website account security. An
+ * operation that needs one names it in its route's ARGUMENT (routes/api.php); the panels' principals hold every grant.
  */
 enum StaffGrant: string
 {

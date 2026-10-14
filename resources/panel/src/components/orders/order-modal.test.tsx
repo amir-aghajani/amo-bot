@@ -10,7 +10,8 @@ import { refusal, server } from '@/test/server'
 
 /*
  * An order as the admin works on it (components/orders/order-modal): what it brings, when that is an amount — a service's
- * extra traffic or time, an agent's traffic —; its amount, one at its plan's first-purchase price or its agent price
+ * extra traffic, time or devices, an agent's traffic —, or what a service the customer built is built of, in its plan's
+ * place; a renewal's method; its amount, one at its plan's first-purchase price or its agent price
  * saying so beside it; and when the order moves on under the admin: a cancel waiting on its strip is withdrawn with a word; one confirmed
  * and refused because the order moved on meanwhile is said once — the server's words standing for the withdrawal, never
  * both —, even though nothing is left to do; and the focus, its strip gone, is on that word — never on the document.
@@ -32,7 +33,7 @@ const fact = (label: string) => within(dialog()).getByText(label, { selector: 'd
 describe('what it brings', () => {
   const props = { onClose: vi.fn(), onChanged: vi.fn(), onStale: vi.fn() }
   /** A service's order: plan 3 «طلایی», its service amir_1 on «آلمان». */
-  const SERVICE = { plan: { id: 3, name: 'طلایی' }, server: { id: 1, name: 'آلمان' }, subscription: { id: 1, name: 'amir_1', status: 'active' as const } }
+  const SERVICE = { plan: { id: 3, name: 'طلایی' }, package_name: 'طلایی', server: { id: 1, name: 'آلمان' }, subscription: { id: 1, name: 'amir_1', status: 'active' as const } }
 
   it('is a service’s extra traffic, by its amount', () => {
     render(<OrderModal order={orderRow({ type: 'extra_traffic', traffic_bytes: 10 * 1024 ** 3, ...SERVICE })} {...props} />, { wrapper: providers().wrapper })
@@ -46,6 +47,30 @@ describe('what it brings', () => {
     render(<OrderModal order={orderRow({ type: 'extra_time', days: 7, ...SERVICE })} {...props} />, { wrapper: providers().wrapper })
 
     expect(fact('زمان اضافه')).toBe('۷ روز')
+  })
+
+  it('is a service’s extra devices, counted in users', () => {
+    render(<OrderModal order={orderRow({ type: 'extra_devices', devices: 2, ...SERVICE })} {...props} />, { wrapper: providers().wrapper })
+
+    expect(fact('نوع')).toBe('کاربر اضافه')
+    expect(fact('کاربر اضافه')).toBe('۲ کاربر')
+  })
+
+  it('is a service the customer built, renewed as one: what it is built of, in the server’s words, in its plan’s place', () => {
+    const built = { ...SERVICE, plan: null, package_name: 'سرویس دلخواه · ۲۰ گیگ · ۶۰ روز', traffic_bytes: 20 * 1024 ** 3, days: 60 }
+    render(<OrderModal order={orderRow({ type: 'renewal', ...built })} {...props} />, { wrapper: providers().wrapper })
+
+    expect(fact('نوع')).toBe('تمدید')
+    expect(fact('پلن')).toBe('سرویس دلخواه · ۲۰ گیگ · ۶۰ روز')
+  })
+
+  it('is a renewal by the method it renewed by', () => {
+    const { unmount } = render(<OrderModal order={orderRow({ type: 'renewal', renewal_method: 'reset_traffic', ...SERVICE })} {...props} />, { wrapper: providers().wrapper })
+    expect(fact('روش تمدید')).toBe('ریست حجم + افزایش روز')
+    unmount()
+
+    render(<OrderModal order={orderRow({ type: 'extra_time', days: 7, ...SERVICE })} {...props} />, { wrapper: providers().wrapper })
+    expect(within(dialog()).queryByText('روش تمدید', { selector: 'dt' })).toBeNull()
   })
 
   it('is an agent’s traffic, by its amount', () => {

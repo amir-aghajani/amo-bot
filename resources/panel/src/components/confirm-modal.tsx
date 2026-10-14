@@ -76,6 +76,8 @@ interface ConfirmActionsProps {
   icon?: LucideIcon
   destructive?: boolean
   busy?: boolean
+  /** Another way out of the same strip runs (an operation's alternative): both buttons wait, neither spins. */
+  waiting?: boolean
   /** The buttons of an inline strip are a size down. */
   size?: 'sm' | 'default'
   /** Inline (a strip that takes the place of the button pressed), cancel takes the focus as it appears; in a dialog, the dialog gives it. */
@@ -88,15 +90,26 @@ interface ConfirmActionsProps {
  * The second look's row — cancel, then the confirm (red when it takes something away) — of every "are you sure" in the
  * panels. While the decision runs, the dialog it is in waits for it.
  */
-export function ConfirmActions({ confirmLabel, cancelLabel = 'انصراف', icon, destructive = false, busy = false, size = 'default', focusCancel = false, onCancel, onConfirm }: ConfirmActionsProps) {
-  useHoldOpen(busy)
+export function ConfirmActions({
+  confirmLabel,
+  cancelLabel = 'انصراف',
+  icon,
+  destructive = false,
+  busy = false,
+  waiting = false,
+  size = 'default',
+  focusCancel = false,
+  onCancel,
+  onConfirm,
+}: ConfirmActionsProps) {
+  useHoldOpen(busy || waiting)
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button variant="secondary" size={size} onClick={onCancel} disabled={busy} data-autofocus autoFocus={focusCancel}>
+      <Button variant="secondary" size={size} onClick={onCancel} disabled={busy || waiting} data-autofocus autoFocus={focusCancel}>
         {cancelLabel}
       </Button>
-      <Button variant={destructive ? 'destructive' : 'default'} size={size} icon={icon} busy={busy} onClick={onConfirm}>
+      <Button variant={destructive ? 'destructive' : 'default'} size={size} icon={icon} busy={busy} aria-disabled={waiting || undefined} onClick={onConfirm}>
         {confirmLabel}
       </Button>
     </div>

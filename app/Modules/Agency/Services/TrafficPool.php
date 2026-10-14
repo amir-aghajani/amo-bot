@@ -13,9 +13,7 @@ use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Models\TrafficTransaction;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Services\Reviewers;
-use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
-use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Subscriptions\Models\Subscription;
@@ -50,16 +48,18 @@ final class TrafficPool
         private readonly Reviewers $reviewers,
     ) {}
 
-    /** What an order of an agent's bot draws: extra traffic's own bytes, else its plan's traffic (a renewal: its service's plan). */
+    /**
+     * What an order of an agent's bot draws: extra traffic's own bytes, else the traffic of the package it gives, as its
+     * delivery reads it (ProvisioningService): the order's own (Order::package(): its plan's, or one built), a renewal
+     * of none its service's plan's.
+     */
     public static function bytesFor(Order $order): int
     {
         if ($order->type === OrderType::ExtraTraffic) {
             return (int) $order->traffic_bytes;
         }
-        $planId = $order->plan_id ?? Subscription::query()->withoutGlobalScope(CurrentBot::SCOPE)->whereKey($order->subscription_id)->value('plan_id');
-        $plan = $planId === null ? null : Plan::query()->withoutGlobalScope(CurrentBot::SCOPE)->find($planId);
 
-        return $plan?->trafficBytes() ?? 0;
+        return ($order->package() ?? $order->subscription?->plan?->package())->bytes ?? 0;
     }
 
     /** Adds traffic the agent bought (its traffic order delivered), in the caller's transaction when there is one. */

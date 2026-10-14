@@ -1,13 +1,14 @@
-import { Suspense } from 'react'
+import { Suspense, useMemo } from 'react'
 import { Outlet, useLocation } from 'react-router'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { PageSkeleton } from '@/components/page'
 import { ConnectionBanner } from '@/components/shell/connection-banner'
 import { MobileDrawer } from '@/components/shell/mobile-drawer'
-import { areaFor, pageTitle, type PanelNav } from '@/components/shell/nav'
+import { areaFor, navOfShop, pageTitle, type PanelNav } from '@/components/shell/nav'
 import { ShellProvider, type PanelShell } from '@/components/shell/shell-context'
 import { Sidebar } from '@/components/shell/sidebar'
 import { Topbar } from '@/components/shell/topbar'
+import { useMainShop } from '@/lib/auth'
 import { pageOf } from '@/lib/config'
 import { useDocumentTitle } from '@/lib/document-title'
 import { useLiveUpdates } from '@/lib/use-live-updates'
@@ -15,18 +16,21 @@ import { useLiveUpdates } from '@/lib/use-live-updates'
 /**
  * The signed-in layout: the sidebar at the inline start and the page beside it under the topbar, which stays at the top;
  * the page owns the scroll and sets its own width (components/page). On a phone the sidebar is a drawer the topbar's menu
- * button opens. Each panel passes its own navigation and extras (`panel`). Also runs the live updates, and a strip over
- * the page while they cannot reach the server.
+ * button opens. Each panel passes its own navigation and extras (`panel`); the navigation is drawn as the shop on screen
+ * has it (navOfShop()). Also runs the live updates, and a strip over the page while they cannot reach the server.
  */
 export function AppShell({ panel }: { panel: PanelShell }) {
   const live = useLiveUpdates()
+  // The tree of the shop on screen: an agent's has none of the main shop's own sections.
+  const main = useMainShop()
+  const shell = useMemo(() => ({ ...panel, nav: navOfShop(panel.nav, main) }), [panel, main])
 
   // The tab and the history name the page — and its section —, not just the panel.
   const { pathname } = useLocation()
-  useDocumentTitle(placeTitle(panel.nav, pathname))
+  useDocumentTitle(placeTitle(shell.nav, pathname))
 
   return (
-    <ShellProvider panel={panel}>
+    <ShellProvider panel={shell}>
       <a href="#main" className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-body text-primary-foreground focus:not-sr-only focus:fixed focus:start-3 focus:top-3">
         پرش به محتوا
       </a>

@@ -149,6 +149,39 @@ final class UpgradesTest extends TestCase
         self::assertSame(['timed_out' => $past, 'used_up' => $read, 'gone' => $read, 'running' => null], $ended, 'the deadline it passed, else its last read — once');
     }
 
+    public function testEveryRenewalSoFarExtendedItsService(): void
+    {
+        $installed = self::firstRelease();
+        $user = $installed->table('users')->insertGetId(['telegram_id' => 1]);
+        $order = static fn(string $type): array => ['user_id' => $user, 'type' => $type, 'amount' => '120000'];
+        $installed->table('orders')->insert([$order('renewal'), $order('purchase'), $order('topup')]);
+
+        self::upgradeToCode($installed);
+        self::upgradeToCode($installed);
+
+        self::assertSame(['extend', null, null], $installed->table('orders')->orderBy('id')->pluck('renewal_method')->all(), 'a renewal extended its service; other orders have no method');
+    }
+
+    public function testACashbackRuleForEveryKindOfOrderIsForExtraDevicesToo(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.3.0', static function (): void {});
+        $rule = static fn(?array $kinds): array => ['percent' => 5, 'order_types' => $kinds === null ? null : json_encode($kinds)];
+        $installed->table('cashback_rules')->insert([
+            $rule(['purchase', 'renewal', 'extra_traffic', 'extra_time']),
+            $rule(['renewal', 'purchase', 'extra_time', 'extra_traffic']),
+            $rule(['purchase', 'renewal']),
+            $rule(null),
+        ]);
+
+        self::upgradeToCode($installed);
+        self::upgradeToCode($installed);
+
+        $kinds = $installed->table('cashback_rules')->orderBy('id')->pluck('order_types')->map(static fn(?string $kinds): ?array => $kinds === null ? null : json_decode($kinds, true))->all();
+        $every = ['purchase', 'renewal', 'extra_traffic', 'extra_time', 'extra_devices'];
+        self::assertSame([$every, $every, ['purchase', 'renewal'], null], $kinds, 'every kind 0.3.0 sold is every kind still; fewer, or none named (purchases and renewals), stay — once, however often it runs');
+    }
+
     public function testTheUpgradesBetweenTwoVersionsRunInVersionOrder(): void
     {
         foreach (['0.1.0', '0.2.0', '0.3.0', '0.10.0', '0.11.0'] as $version) {

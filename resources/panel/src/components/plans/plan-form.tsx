@@ -254,7 +254,7 @@ export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps)
         id={tabs}
         value={section}
         onChange={setSection}
-        tabs={[tab('details', 'مشخصات', Package), tab('quota', 'قیمت و سهمیه', Coins), tab('servers', 'سرورها', Server), tab('extras', 'حجم و زمان اضافه', PackagePlus)]}
+        tabs={[tab('details', 'مشخصات', Package), tab('quota', 'قیمت و سهمیه', Coins), tab('servers', 'سرورها', Server), tab('extras', 'خرید اضافه', PackagePlus)]}
         aria-label="بخش‌های پلن"
       />
 
@@ -362,12 +362,12 @@ export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps)
                   </div>
                 )}
               </Field>
-              <Field id="plan_devices" label="تعداد دستگاه" error={error('ip_limit')} hint="0 = نامحدود">
+              <Field id="plan_devices" label="تعداد کاربر" error={error('ip_limit')} hint="0 = نامحدود">
                 <Input dir="ltr" inputMode="numeric" value={values.ip_limit} onChange={(e) => set('ip_limit', e.target.value)} placeholder="1" />
               </Field>
             </div>
 
-            <p className="text-footnote leading-relaxed text-muted-foreground">حجم و مدت روی پنل اعمال می‌شوند و با پایان هر کدام اشتراک منقضی می‌شود؛ تعداد دستگاه یعنی چند اتصال هم‌زمان مجاز است.</p>
+            <p className="text-footnote leading-relaxed text-muted-foreground">حجم و مدت روی پنل اعمال می‌شوند و با پایان هر کدام اشتراک منقضی می‌شود؛ تعداد کاربر یعنی چند اتصال هم‌زمان مجاز است.</p>
           </>,
         )}
 

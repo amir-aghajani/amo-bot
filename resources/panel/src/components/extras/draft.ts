@@ -1,33 +1,38 @@
-import type { ExtraOption, ExtraOptionInput, ExtraPrices, ExtraPricesRequest } from '@/lib/api-types'
-import { amountDraft, decimalOf, wholeNumberOf, wholeOf } from '@/lib/format'
+import type { PricedRowDraft } from '@/components/priced-rows-editor'
+import type { BotSettingsData, ExtraOption, ExtraOptionInput, ExtraPrices, ExtraPricesRequest } from '@/lib/api-types'
+import { amountDraft, tomanOf, wholeNumberOf, wholeOf } from '@/lib/format'
 
 /*
- * A price list of «حجم و زمان اضافه» — the shop's (the bot settings' `extra_…`) or a plan's own (`extras.…`) — as a form
+ * A price list of «حجم، زمان و کاربر اضافه» — the shop's (the bot settings' `extra_…`) or a plan's own (`extras.…`) — as a form
  * holds it: for each kind the price of a unit, the amounts offered as buttons (each at a price of its own, or the unit
  * price), and the least and the most a customer may type. What the server keeps of it, what it sends and what the bot
  * then offers are read here, by the server's own rules (Subscriptions\Forms\UnitPrice and ExtraOptions, DTO\ExtraOffer).
+ * A device's prices are for 30 days; the bot charges each service its share for the days it has left.
  */
 
-/** The two extras a service may buy: traffic by the GB, time by the day. */
-export type ExtraKind = 'traffic' | 'time'
+/** The three extras a service may buy: traffic by the GB, time by the day, devices (its IP limit) by the device. */
+export type ExtraKind = 'traffic' | 'time' | 'devices'
 
 /** A price list's fields by their bare names — a plan's own; the shop's are the same, each named `extra_…`. */
 export type ExtraField = keyof ExtraPrices
 
-const FIELDS: readonly ExtraField[] = ['traffic_price', 'traffic_options', 'traffic_min', 'traffic_max', 'time_price', 'time_options', 'time_min', 'time_max']
+const FIELDS: readonly ExtraField[] = [
+  'traffic_price',
+  'traffic_options',
+  'traffic_min',
+  'traffic_max',
+  'time_price',
+  'time_options',
+  'time_min',
+  'time_max',
+  'devices_price',
+  'devices_options',
+  'devices_min',
+  'devices_max',
+]
 
-/** How many amounts a price list offers as buttons at most (ExtraOptions::MOST). */
-export const OPTIONS_MOST = 8
-
-/**
- * An amount offered as a button, as typed: its quantity and its price (blank: the unit price). `id` is local to the draft
- * so rows keep their elements and focus when one is removed; it is never sent.
- */
-export interface ExtraOptionDraft {
-  id: number
-  quantity: string
-  price: string
-}
+/** An amount offered as a button, as typed (a row of components/priced-rows-editor): its `quantity` and its price (blank: the unit price). */
+export type ExtraOptionDraft = PricedRowDraft<'quantity'>
 
 /** A price list as its fields are typed. */
 export interface ExtraPricesDraft {
@@ -39,9 +44,17 @@ export interface ExtraPricesDraft {
   time_options: ExtraOptionDraft[]
   time_min: string
   time_max: string
+  devices_price: string
+  devices_options: ExtraOptionDraft[]
+  devices_min: string
+  devices_max: string
 }
 
-/** A price list that sells nothing, where a plan's own list starts: the typed bounds at the server's defaults (1–100 GB, 1–30 days). */
+/**
+ * A price list that sells nothing, where a plan's own list starts: within the shop's bounds once they are read
+ * (`unpricedWithin()`), until then within the server's defaults (Subscriptions\Services\ExtrasSettings::fields(): 1–100
+ * GB, 1–30 days, 1–5 devices).
+ */
 export const NO_EXTRA_PRICES: ExtraPricesDraft = {
   traffic_price: '',
   traffic_options: [],
@@ -51,6 +64,10 @@ export const NO_EXTRA_PRICES: ExtraPricesDraft = {
   time_options: [],
   time_min: '1',
   time_max: '30',
+  devices_price: '',
+  devices_options: [],
+  devices_min: '1',
+  devices_max: '5',
 }
 
 /** A price as its field starts from it: whole Toman in Latin digits ("3000.00" → "3000"); none is blank. */
@@ -70,7 +87,35 @@ export function extraPricesDraft(prices: ExtraPrices): ExtraPricesDraft {
     time_options: optionDrafts(prices.time_options),
     time_min: String(prices.time_min),
     time_max: String(prices.time_max),
+    devices_price: priceDraft(prices.devices_price),
+    devices_options: optionDrafts(prices.devices_options),
+    devices_min: String(prices.devices_min),
+    devices_max: String(prices.devices_max),
   }
+}
+
+/** The shop's price list as the bot settings keep it (`extra_…`), as its form starts from it. */
+export function shopExtraPricesDraft(settings: BotSettingsData): ExtraPricesDraft {
+  return extraPricesDraft({
+    traffic_price: settings.extra_traffic_price,
+    traffic_options: settings.extra_traffic_options,
+    traffic_min: settings.extra_traffic_min,
+    traffic_max: settings.extra_traffic_max,
+    time_price: settings.extra_time_price,
+    time_options: settings.extra_time_options,
+    time_min: settings.extra_time_min,
+    time_max: settings.extra_time_max,
+    devices_price: settings.extra_devices_price,
+    devices_options: settings.extra_devices_options,
+    devices_min: settings.extra_devices_min,
+    devices_max: settings.extra_devices_max,
+  })
+}
+
+/** A price list that sells nothing (NO_EXTRA_PRICES) within the typed bounds of `prices`: a plan's own list started from the shop's. */
+export function unpricedWithin(prices: ExtraPricesDraft): ExtraPricesDraft {
+  const { traffic_min, traffic_max, time_min, time_max, devices_min, devices_max } = prices
+  return { ...NO_EXTRA_PRICES, traffic_min, traffic_max, time_min, time_max, devices_min, devices_max }
 }
 
 /** A row that says something: one whose quantity and price are both blank is nothing — the server leaves it out too. */
@@ -90,13 +135,11 @@ export function extraPricesRequest(draft: ExtraPricesDraft): Required<ExtraPrice
     time_options: optionInputs(draft.time_options),
     time_min: draft.time_min,
     time_max: draft.time_max,
+    devices_price: draft.devices_price,
+    devices_options: optionInputs(draft.devices_options),
+    devices_min: draft.devices_min,
+    devices_max: draft.devices_max,
   }
-}
-
-/** A typed price as whole Toman, read the way the server reads it (`Input::amountOf()`); null for anything else. */
-export function tomanOf(typed: string): number | null {
-  const number = decimalOf(typed.trim().replace(/\s*\p{L}+$/u, ''))
-  return number !== null && /^\d+(?:\.0{1,2})?$/.test(number) ? Number.parseInt(number, 10) : null
 }
 
 /** A whole number as the server reads one typed (Input::wholeOf()); the text, trimmed, when it is none — for the server to refuse. */
@@ -137,6 +180,10 @@ export function extraPricesRead(draft: ExtraPricesDraft) {
     time_options: optionsRead(draft.time_options),
     time_min: wholeRead(draft.time_min),
     time_max: wholeRead(draft.time_max),
+    devices_price: priceRead(draft.devices_price),
+    devices_options: optionsRead(draft.devices_options),
+    devices_min: wholeRead(draft.devices_min),
+    devices_max: wholeRead(draft.devices_max),
   }
 }
 
@@ -151,12 +198,10 @@ export interface ExtraOfferPreview {
 /**
  * What the typed price list sells of `kind`, by the server's rule: each amount offered at its own price or the unit
  * price times it, and with a unit price any amount between the bounds. Invalid amounts are dropped, repeats merged.
+ * Devices as set, for 30 days: what each service pays is its share for the days it has left.
  */
 export function extraOffer(draft: ExtraPricesDraft, kind: ExtraKind): ExtraOfferPreview {
-  const prices =
-    kind === 'traffic'
-      ? { unit: draft.traffic_price, rows: draft.traffic_options, min: draft.traffic_min, max: draft.traffic_max }
-      : { unit: draft.time_price, rows: draft.time_options, min: draft.time_min, max: draft.time_max }
+  const prices = { unit: draft[`${kind}_price`], rows: draft[`${kind}_options`], min: draft[`${kind}_min`], max: draft[`${kind}_max`] }
   const unit = positive(tomanOf(prices.unit))
   const buttons = new Map<number, number | null>()
   for (const row of prices.rows) {
@@ -179,7 +224,7 @@ const positive = (number: number | null): number | null => (number !== null && n
 
 /**
  * A price list's fields under a form's names for them — the names the server refuses them by: `extra_traffic_price` in
- * the bot settings, `extras.traffic_price` in a plan.
+ * the bot settings, `extras.traffic_price` in a plan (and so for time and devices).
  */
 export type ExtraPricesAs<P extends string> = { [K in ExtraField as `${P}${K}`]: ExtraPricesDraft[K] }
 

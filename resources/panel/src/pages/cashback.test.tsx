@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { BotSettingsResponse, BotSettingsSaved, CashbackRuleResponse, CashbackRuleRow, CashbackRulesResponse, CustomerGroupsResponse, PaymentMethodsResponse } from '@/lib/api-types'
+import type { BotSettingsSaved, CashbackRuleResponse, CashbackRuleRow, CashbackRulesResponse, CustomerGroupsResponse, PaymentMethodsResponse } from '@/lib/api-types'
 import { CashbackPage } from '@/pages/cashback'
 import { providers, until } from '@/test/render'
-import { botSettingsRow, groupRow } from '@/test/rows'
+import { botSettingsResponse, botSettingsRow, groupRow } from '@/test/rows'
 import { json, server } from '@/test/server'
 
 /*
@@ -14,11 +14,9 @@ import { json, server } from '@/test/server'
 
 const RULE: CashbackRuleRow = { id: 3, percent: 10, order_types: ['purchase', 'renewal'], customer_group: { id: 1, name: 'VIP' }, payment_method: null, enabled: true }
 
-const QR_BACKGROUND = { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 1, updated_at: 1, max_bytes: 5_000_000 }
-
 function open(rules: CashbackRuleRow[] = [RULE]) {
   server().on('GET', '/api/admin/cashback/rules', json({ rules } satisfies CashbackRulesResponse))
-  server().on('GET', '/api/admin/bot/settings', json({ settings: botSettingsRow(), qr_background: QR_BACKGROUND } satisfies BotSettingsResponse))
+  server().on('GET', '/api/admin/bot/settings', json(botSettingsResponse()))
   render(<CashbackPage />, { wrapper: providers().wrapper })
 }
 

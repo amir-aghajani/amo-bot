@@ -4,7 +4,6 @@ import type {
   BotMode,
   BroadcastStatus,
   Delivery,
-  DiscountKind,
   DiscountState,
   DiscountType,
   GiftCodeKind,
@@ -12,7 +11,9 @@ import type {
   OrderPricing,
   OrderStatus,
   OrderType,
+  OwnOrderType,
   PaymentStatus,
+  RenewalMethod,
   ReviewStatus,
   ServerGrantStatus,
   ServerRow,
@@ -55,14 +56,15 @@ export const ORDER_STATUS: Record<OrderStatus, Status> = {
 export const ORDER_STUCK: Status = { label: 'نیازمند رسیدگی', tone: 'danger' }
 
 /**
- * What an order was for — a plan, then what is bought for a service (its renewal, extra traffic or time), a wallet's
- * top-up, an agent's traffic —, in the order a list's «نوع» filter offers them.
+ * What an order was for — a plan, then what is bought for a service (its renewal, extra traffic, time or devices), a
+ * wallet's top-up, an agent's traffic —, in the order a list's «نوع» filter offers them.
  */
 export const ORDER_TYPE: Record<OrderType, string> = {
   purchase: 'خرید',
   renewal: 'تمدید',
   extra_traffic: 'حجم اضافه',
   extra_time: 'زمان اضافه',
+  extra_devices: 'کاربر اضافه',
   wallet_topup: 'شارژ کیف پول',
   traffic: 'خرید حجم نمایندگی',
 }
@@ -77,6 +79,13 @@ export const ORDER_PRICING: Record<OrderPricing, string | null> = {
   first_purchase: 'قیمت خرید اول',
   agent: 'قیمت نماینده',
   gift: 'هدیه',
+}
+
+/** How a renewal adds its package to a service, as the bot and the website name each method (RenewalMethod::label()), in the bot's order. */
+export const RENEWAL_METHOD: Record<RenewalMethod, string> = {
+  extend: 'تمدید پلن فعلی',
+  reset_traffic: 'ریست حجم + افزایش روز',
+  reset_time: 'ریست زمان + انتقال حجم',
 }
 
 /**
@@ -185,12 +194,16 @@ export const DISCOUNT_TYPE: Record<DiscountType, string> = {
   free: 'رایگان',
 }
 
-/** The kinds of order a discount takes, in the order a form offers them. */
-export const DISCOUNT_KIND: Record<DiscountKind, string> = {
-  purchase: 'خرید',
-  renewal: 'تمدید',
-  extra_traffic: 'حجم اضافه',
-  extra_time: 'زمان اضافه',
+/**
+ * The orders a customer places for themselves (`OwnOrderType`, OrderType::FOR_THEMSELVES) as ORDER_TYPE words them —
+ * the choices of a discount's and a cashback rule's kinds of order —, in the order a form offers them.
+ */
+export const OWN_ORDER_TYPE: Record<OwnOrderType, string> = {
+  purchase: ORDER_TYPE.purchase,
+  renewal: ORDER_TYPE.renewal,
+  extra_traffic: ORDER_TYPE.extra_traffic,
+  extra_time: ORDER_TYPE.extra_time,
+  extra_devices: ORDER_TYPE.extra_devices,
 }
 
 /** What a gift code is worth. */

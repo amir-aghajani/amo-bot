@@ -21,7 +21,7 @@ Every operation may also return the common error shape ([errors](Store-API.md#er
 
 ## The customer scheme
 
-A website customer's session: `Authorization: Bearer <token>`, with the token from their sign-in (64 hex characters), one per device. Once the session ends, every request with its token is a 401 with `WWW-Authenticate: Bearer`, and the customer signs in again. A session ends when the customer signs that device out (`POST /auth/logout`) or ends it from another device (`DELETE /me/sessions/{id}`); when their password is changed (`PUT /me/password`, or set by a merge: every session except the one that changed it) or reset (`POST /auth/password/reset` or its second step: every session); when support signs them out of every device from a panel; when a 21st session opens (the oldest ends: at most 20 per customer); after 30 days unused; and 180 days after the sign-in. A banned customer's token gets a 403. Changing how the account signs in also needs a recent sign-in: within 15 minutes, or a way in proven again since (`POST /me/reauthenticate`). Otherwise the answer is a 403 whose `WWW-Authenticate` says so (`Bearer error="insufficient_user_authentication", max_age=900`).
+A website customer's session: `Authorization: Bearer <token>`, with the token from their sign-in (64 hex characters), one per device. Once the session ends, every request with its token is a 401 with `WWW-Authenticate: Bearer`, and the customer signs in again. A session ends when the customer signs that device out (`POST /auth/logout`) or ends it from another device (`DELETE /me/sessions/{id}`); when their password is changed (`PUT /me/password`, or set by a merge: every session except the one that changed it) or reset (`POST /auth/password/reset` or its second step: every session); when support signs them out of every device from a panel; when a 21st session opens (the oldest ends: at most 20 per customer); after 30 days unused; and 180 days after the sign-in. A banned customer's token gets a 403. Changing how the account signs in, and handing a service to another customer (`POST /subscriptions/{id}/transfer`), also need a recent sign-in: within 15 minutes, or a way in proven again since (`POST /me/reauthenticate`). Otherwise the answer is a 403 whose `WWW-Authenticate` says so (`Bearer error="insufficient_user_authentication", max_age=900`).
 
 ## Public
 
@@ -45,6 +45,7 @@ Anyone can call these; only the store key is needed.
 | [`GET /plans`](#get-plans) | What the shop sells now, as the bot's «خرید اشتراک» offers it |
 | [`GET /plans/{id}`](#get-plansid) | One plan, as `GET /plans` shows it |
 | [`GET /status`](#get-status) | Server status |
+| [`GET /custom-services`](#get-custom-services) | «سرویس دلخواه» |
 | [`GET /reviews`](#get-reviews) | The approved reviews, newest first, a page at a time |
 | [`POST /reviews`](#post-reviews) | Write a review |
 
@@ -383,6 +384,19 @@ Server status. The servers of the plans on sale, in order: whether each takes ne
 | `200` | OK | [StoreStatusResponse](#storestatusresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /custom-services
+
+«سرویس دلخواه»: what a customer may build — a service of the traffic and days they choose, on one of the builder's servers, with the builder's devices. Each quantity has its tiers (the whole quantity priced at the rate of the tier it falls into; the GB's price and the days' price added), its bounds and the amounts offered as buttons; any whole amount within the bounds may be chosen. `offered` says whether one may be built now: the main shop's alone, while its admin switches it on (off by default), both price lists sell and one of its servers can take a new client (`servers`, empty otherwise — and no tiers or buttons then). Anyone may read it; the customer's own price is `POST /custom-services/quote`.
+
+- **Who:** anyone.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreCustomServicesResponse](#storecustomservicesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /reviews
 
 The approved reviews, newest first, a page at a time. `meta.summary` covers all of them: their count and average rating. A 404 while the website shows no reviews (`reviews_enabled`, off by default).
@@ -453,16 +467,23 @@ For the signed-in customer, with their bearer token ([the customer scheme](#the-
 | [`POST /me/identities/email/verify`](#post-meidentitiesemailverify) | Finish adding an email with the emailed code |
 | [`DELETE /me/identities/{kind}`](#delete-meidentitieskind) | Remove a way in from the customer's account |
 | [`POST /me/merge`](#post-memerge) | Accept a merge offer (the 202 of a `POST /me/identities/…`) |
+| [`POST /custom-services/quote`](#post-custom-servicesquote) | What a service the customer builds would cost them, nothing ordered |
+| [`POST /custom-services/orders`](#post-custom-servicesorders) | Buy a service the customer builds, paid with `method_id` |
 | [`GET /subscriptions`](#get-subscriptions) | The customer's services, newest first |
+| [`POST /subscriptions/claim`](#post-subscriptionsclaim) | Add a service to the customer's account by its link («افزودن سرویس با لینک»), as the bot does |
 | [`GET /subscriptions/{id}`](#get-subscriptionsid) | One of the customer's services, as last read from its panel (`synced_at`) |
 | [`PATCH /subscriptions/{id}`](#patch-subscriptionsid) | Switch the service's auto-renewal («تمدید خودکار») on or off |
 | [`POST /subscriptions/{id}/refresh`](#post-subscriptionsidrefresh) | Read the service from its panel now, with whether it is connected (`presence`) |
 | [`POST /subscriptions/{id}/rotate-link`](#post-subscriptionsidrotate-link) | Change the service's subscription link (`link_rotation`) |
+| [`GET /subscriptions/{id}/transfer`](#get-subscriptionsidtransfer) | «انتقال سرویس», before it is done |
+| [`POST /subscriptions/{id}/transfer`](#post-subscriptionsidtransfer) | «انتقال سرویس» |
 | [`GET /subscriptions/{id}/renewal`](#get-subscriptionsidrenewal) | Preview a service's renewal |
 | [`POST /subscriptions/{id}/renewal`](#post-subscriptionsidrenewal) | Renew a service, paid with `method_id`, as the GET previews it |
-| [`GET /subscriptions/{id}/extras`](#get-subscriptionsidextras) | The extra traffic and time a service can buy now |
+| [`GET /subscriptions/{id}/renewal-plans`](#get-subscriptionsidrenewal-plans) | The plans a service can be renewed on now, each at the customer's renewal price today |
+| [`GET /subscriptions/{id}/extras`](#get-subscriptionsidextras) | The extra traffic, time and devices a service can buy now |
 | [`POST /subscriptions/{id}/extra-traffic`](#post-subscriptionsidextra-traffic) | Buy extra traffic for a service |
 | [`POST /subscriptions/{id}/extra-time`](#post-subscriptionsidextra-time) | Buy extra time for a service |
+| [`POST /subscriptions/{id}/extra-devices`](#post-subscriptionsidextra-devices) | Buy extra devices for a service («کاربر اضافه») |
 | [`GET /payment-methods`](#get-payment-methods) | The payment methods for a kind of order, in checkout order |
 | [`GET /orders`](#get-orders) | The customer's orders, newest first, each with its payments |
 | [`POST /orders`](#post-orders) | Buy a plan on one of its locations, paid with `method_id` |
@@ -880,6 +901,65 @@ Accept a merge offer (the 202 of a `POST /me/identities/…`). The two accounts 
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /custom-services/quote
+
+What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Body**, as JSON:
+
+A service the customer would build.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | How many GB, within the bounds of `GET /custom-services`. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | How many days, within the bounds of `GET /custom-services`. |
+| `server_id` | integer | no | One of `servers` of `GET /custom-services`, once picked: a code limited to certain servers holds only then. |
+| `discount_code` | string or null | no | A discount code to check with it (any case, Persian digits accepted). Blank, null or left out for none. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreCustomQuoteResponse](#storecustomquoteresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /custom-services/orders
+
+Buy a service the customer builds, paid with `method_id`: the same checkout as `POST /orders`, as the bot's «🛠 ساخت سرویس دلخواه» buys it, at `POST /custom-services/quote`'s price. The order is a purchase without a plan (`plan` null) carrying its own `traffic_bytes`, `days` and `devices`; once delivered, its service has no plan either. `server_id` may be left out while the builder sells on one server. The service is named as `POST /orders` names one (`name_mode`, `client_name`). A 422 on `status` while nothing may be built; on `gb` or `days` for an amount that is no whole number or outside its bounds; on `server_id` for none picked among several servers, or a server not on offer now; on `name_mode` or `client_name` as `POST /orders` refuses them; on `method_id` for a method that cannot pay it, or a wallet short of the price; on `discount_code` when it does not apply; on `idempotency_key` for a key used for a different order or first sent with another `method_id`. The 5 unpaid orders, the 409s, the 429 past 30 ordering requests in 10 minutes and the 503 while the bot is switched off are `POST /orders`' own. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID), and a new one when the customer picks another payment method: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key and `method_id` (a network retry) returns the order the key led to, either the one it created or the open order for the same thing it found and paid, as it is now. Never a second order or charge, whatever changed since: even after a price change it is the order made at the old price. Two identical requests at the same moment get one order and one answer. If the order was cancelled since (by support, or left unpaid past its deadline, maybe days ago), the answer is a 409 with its own message («این سفارش لغو شده است…»), unlike the 409 for an order closed elsewhere a moment ago: buying again is a new attempt with a new key. A key already used for a different order (another type, plan, server or service, or a top-up of another amount), or first sent with another `method_id`, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week; after that, a request with it counts as new. |
+
+**Body**, as JSON:
+
+A service the customer builds, the server to build it on, how to name it, and the payment method.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | How many GB, within the bounds of `GET /custom-services`. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | How many days, within the bounds of `GET /custom-services`. |
+| `server_id` | integer | no | One of `servers` of `GET /custom-services`; it may be left out while there is only one. |
+| `method_id` | integer | yes | A payment method for purchases (`GET /payment-methods?for=purchase`). |
+| `name_mode` | [StoreNameModeInput](#storenamemodeinput) | no |  |
+| `client_name` | [StoreClientNameInput](#storeclientnameinput) | no |  |
+| `discount_code` | string or null | no | A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The checkout's outcome | [StoreCheckoutResponse](#storecheckoutresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /subscriptions
 
 The customer's services, newest first. In one status, or all.
@@ -898,6 +978,28 @@ The customer's services, newest first. In one status, or all.
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [StoreSubscriptionsResponse](#storesubscriptionsresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /subscriptions/claim
+
+Add a service to the customer's account by its link («افزودن سرویس با لینک»), as the bot does. `link` is the text the customer sent: a subscription link or one of the service's configs (vless://, vmess://, trojan://, ss://, hysteria2://, tuic://), alone or among other words; its links are read together, five at most. The shop asks its panels whose client it is and adds it as its panel has it, with no plan (`plan` null, `claimed_at` set) until its first renewal (`GET …/renewal-plans`); the report group is told. The first customer to send it gets it. Only while the shop offers it (`shop.service_claims` of `GET /`): the main shop's alone, off by default. Refusals are on `link`: a 422 while it is off, for text with no link in it (or longer than 2000 characters), for a link no panel has, for a service already the customer's own, or one whose panel serves it no subscription link; a 409 for a service already in another customer's account; a 502 when a panel that might have it did not answer. Each link sent asks every panel: at most 10 links in 10 minutes per customer, then a 429 with `Retry-After`.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Body**, as JSON:
+
+A service's link, as the customer sent it, to add the service to their account.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `link` | string | yes | A subscription link or one of the service's configs, alone or among other words (its links are read together, five at most). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Added: the service, as `GET /subscriptions/{id}` shows it | [StoreSubscriptionResponse](#storesubscriptionresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
@@ -991,9 +1093,9 @@ Change the service's subscription link (`link_rotation`). Every device on the ol
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
-### GET /subscriptions/{id}/renewal
+### GET /subscriptions/{id}/transfer
 
-Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, a free test account, its plan deleted or renewing nothing, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered).
+«انتقال سرویس», before it is done: who the shop's customer with this numeric Telegram id is (their Telegram name and handle), so the website asks the customer to confirm them before `POST`. The same refusals as `POST`, nothing changed. Each look-up counts: at most 10 in 10 minutes per customer, then a 429 with `Retry-After`.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1002,6 +1104,60 @@ Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | integer | yes |  |
+| `telegram_id` | query | string | yes | The recipient's numeric Telegram id (Persian digits are read too). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Who would receive the service | [StoreTransferRecipientResponse](#storetransferrecipientresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /subscriptions/{id}/transfer
+
+«انتقال سرویس»: hand the service to another customer of the shop, found by their numeric Telegram id, for free — as the bot does it. Only while the shop lets customers (`shop.service_transfers` of `GET /`, off by default). The service keeps its link, term and traffic and is the recipient's from now on (this customer's `GET /subscriptions/{id}` is a 404 after it); its «تمدید خودکار» goes off; the link goes with it, so this customer's devices stay connected until the recipient changes it (`POST /subscriptions/{id}/rotate-link`); the recipient is told in the bot and among their notices (`service_received`, which says so where the link can change) — this customer is not: the answer is theirs; the report group hears of it. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first): a bearer token alone gives no service away. A 422 on `status` while the shop does not offer it, for a free test account, a service gone from its panel or being changed on it right then (try again in a moment), or one with an order this customer made not finished with (a renewal or an extra awaiting its payment or receipt, or being delivered; an unpaid one is dropped by itself after 48 hours; one whose delivery failed waits for support, and its message says to ask them); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the customer themselves, or a banned account. It looks the recipient up as `GET` does (one of its 10 in 10 minutes); at most 5 services handed on an hour per customer, then a 429 with `Retry-After`.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+«انتقال سرویس»: whom to hand the service to — a customer of the shop, by their numeric Telegram id; they must have started the bot once.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `telegram_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Their numeric Telegram id: a number, or its digits as typed. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Transferred: who received the service | [StoreTransferRecipientResponse](#storetransferrecipientresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /subscriptions/{id}/renewal
+
+Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A service without a plan (added by its link, `claimed_at`, or built) is renewed on a plan the customer picks, `plan_id`, among `GET …/renewal-plans`: a 422 on `plan_id` when none is picked, or one that is not among them. While the shop's builder is offered for it (`custom_services` of `GET …/renewal-plans`), it may be renewed instead with a package the customer builds, `gb` and `days` (as `POST /custom-services/quote` takes them; the answer's `custom`), which leaves it without a plan: a 422 on `status` while the builder is not offered, on `gb` or `days` as the builder refuses them or for a service renewed on its own plan, on `plan_id` sent with them. A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, a free test account, its plan renewing nothing, without a plan while neither a plan on sale is sold on its server nor the builder is offered, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered). A 422 on `status` too while the shop does not let it be renewed yet (`renewal_window`), saying from when: «تمدید این سرویس از … ممکن است.». By the renewal method `method`, one of the shop's (`methods` in the answer; the first when left out): a 422 on `method` for one it does not offer.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `plan_id` | query | integer | no | For a service without a plan (`picks_plan`): the plan to renew it on, one of `GET …/renewal-plans`. For a service with its own plan it may be left out; sent, it must be that plan (a 422 on `plan_id` otherwise: the service got a plan since the page was drawn). |
+| `gb` | query | integer | no | For a service without a plan, instead of `plan_id` while the builder is offered for it: the GB of a package the customer builds, within the bounds of `GET /custom-services`. With `days`. |
+| `days` | query | integer | no | With `gb`: the days of that package, within the bounds of `GET /custom-services`. |
+| `method` | query | [RenewalMethod](API-Schemas.md#renewalmethod) | no | The renewal method to preview by, one of the shop's (`methods`); left out, the first of them. |
 
 **Answers**
 
@@ -1013,7 +1169,7 @@ Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows
 
 ### POST /subscriptions/{id}/renewal
 
-Renew a service, paid with `method_id`, as the GET previews it. The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key`, it returns the renewal that key made, as it is now.
+Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1026,11 +1182,15 @@ Renew a service, paid with `method_id`, as the GET previews it. The wallet renew
 
 **Body**, as JSON:
 
-A service's renewal: the payment method.
+A service's renewal: the payment method, the plan (or a package built) for a service without one, and the renewal method.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `method_id` | integer | yes | A payment method for renewals (`GET /payment-methods?for=renewal`). |
+| `method` | [RenewalMethod](API-Schemas.md#renewalmethod) | no | How the renewal adds its plan, one of the preview's `methods`; left out, the first of them. One the shop does not offer is a 422 on `method`. With an `Idempotency-Key`, a retry by another method than the key's order is a 422 on `idempotency_key`. |
+| `plan_id` | integer | no | For a service without a plan (`picks_plan`): the plan to renew it on, one of `GET …/renewal-plans` (a 422 on `plan_id` when missing or not among them); it becomes the service's plan. For a service with its own plan it may be left out; sent, it must be that plan (a 422 on `plan_id` otherwise), so a page drawn before the service's first renewal never pays for a plan it did not show. With an `Idempotency-Key`, a retry naming another plan than the key's order is a 422 on `idempotency_key`. |
+| `gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For a service without a plan, instead of `plan_id` while the builder is offered for it (`custom_services` of `GET …/renewal-plans`): the GB of a package the customer builds, within the bounds of `GET /custom-services`, with `days`. The renewal is priced by the builder's tiers, gives the builder's devices, and leaves the service without a plan. A 422 on `status` while the builder is not offered; on `gb` or `days` as the builder refuses them, or for a service renewed on its own plan; on `plan_id` sent with them. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `gb`: the days of that package, within the bounds of `GET /custom-services`. |
 | `discount_code` | string or null | no | A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. |
 
 **Answers**
@@ -1041,9 +1201,29 @@ A service's renewal: the payment method.
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /subscriptions/{id}/renewal-plans
+
+The plans a service can be renewed on now, each at the customer's renewal price today. For a service without a plan (added by its link, `claimed_at`, or built) that is no test account: the plans on sale that are sold on its server and give a renewal something, in the catalogue's order, for the customer to pick one (`plan_id` of `…/renewal`); the renewal makes it the service's plan. For any other service: its own plan. Empty — and `custom_services` false — while the service cannot be renewed now: not at all, not yet (its `renewal_window` closed), or a renewal of it under way (as `…/renewal` would refuse it). `custom_services` says whether a service without a plan may be renewed with a package the customer builds instead (`gb` and `days` of `…/renewal`).
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreRenewalPlansResponse](#storerenewalplansresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /subscriptions/{id}/extras
 
-The extra traffic and time a service can buy now. As the bot's «🔋 حجم اضافه» and «⏳ زمان اضافه» offer them, at the plan's own prices or else the shop's: each kind's preset amounts with their prices and, when there is a price per GB or per day, any amount within `custom`. A kind is null when none can be bought: the shop does not sell it, or the service cannot take it. (`StoreSubscription.extras` gives the same answer as one flag per kind; a refused POST explains why.)
+The extra traffic, time and devices a service can buy now. As the bot's «🔋 حجم اضافه», «⏳ زمان اضافه» and «👥 کاربر اضافه» offer them, at the plan's own prices or else the shop's: each kind's preset amounts with their prices and, when there is a price per GB, day or device, any amount within `custom`. Devices are priced for 30 days and charged for the days left of the period in use (`days`), which they last; their prices here are already that share. A kind is null when none can be bought: the shop does not sell it, or the service cannot take it. (`StoreSubscription.extras` gives the same answer as one flag per kind; a refused POST explains why.)
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1123,6 +1303,37 @@ Extra time for a service: how many days, and the payment method.
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /subscriptions/{id}/extra-devices
+
+Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the website makes for each checkout attempt (a UUID), and a new one when the customer picks another payment method: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key and `method_id` (a network retry) returns the order the key led to, either the one it created or the open order for the same thing it found and paid, as it is now. Never a second order or charge, whatever changed since: even after a price change it is the order made at the old price. Two identical requests at the same moment get one order and one answer. If the order was cancelled since (by support, or left unpaid past its deadline, maybe days ago), the answer is a 409 with its own message («این سفارش لغو شده است…»), unlike the 409 for an order closed elsewhere a moment ago: buying again is a new attempt with a new key. A key already used for a different order (another type, plan, server or service, or a top-up of another amount), or first sent with another `method_id`, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week; after that, a request with it counts as new. |
+
+**Body**, as JSON:
+
+Extra devices for a service: how many, and the payment method.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `devices` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Whole devices, as `GET …/extras` offers: one of its amounts, or within its `custom` range. |
+| `method_id` | integer | yes | A payment method for extra devices (`GET /payment-methods?for=extra_devices`). |
+| `discount_code` | string or null | no | A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The checkout's outcome | [StoreCheckoutResponse](#storecheckoutresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /payment-methods
 
 The payment methods for a kind of order, in checkout order. The same as the bot's checkout offers: every enabled method, except the wallet for a wallet top-up.
@@ -1133,7 +1344,7 @@ The payment methods for a kind of order, in checkout order. The same as the bot'
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `for` | query | string: `purchase`, `renewal`, `wallet_topup`, `extra_traffic`, `extra_time` | yes | The kind of order: a purchase, a renewal, a wallet top-up, or a service's extra traffic or time. Anything else is a 422 on `for`. |
+| `for` | query | string: `purchase`, `renewal`, `wallet_topup`, `extra_traffic`, `extra_time`, `extra_devices` | yes | The kind of order: a purchase, a renewal, a wallet top-up, or a service's extra traffic, time or devices. Anything else is a 422 on `for`. |
 
 **Answers**
 
@@ -1167,7 +1378,7 @@ The customer's orders, newest first, each with its payments. Filter by status an
 
 ### POST /orders
 
-Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.
+Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1186,6 +1397,8 @@ A purchase: the plan, the location to buy it on, and the payment method.
 | `plan_id` | integer | yes | A plan on sale now (`GET /plans`). |
 | `server_id` | integer | yes | One of the plan's `locations`. |
 | `method_id` | integer | yes | A payment method for purchases (`GET /payment-methods?for=purchase`). |
+| `name_mode` | [StoreNameModeInput](#storenamemodeinput) | no |  |
+| `client_name` | [StoreClientNameInput](#storeclientnameinput) | no |  |
 | `discount_code` | string or null | no | A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. |
 
 **Answers**
@@ -1321,12 +1534,14 @@ A discount code and what the customer wants to buy with it, named as in the chec
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `code` | string | yes | As the customer typed it (any case, Persian digits accepted). |
-| `for` | [DiscountKind](API-Schemas.md#discountkind) | yes |  |
-| `plan_id` | integer | no | For a purchase: a plan on sale now (`GET /plans`). |
+| `for` | [OwnOrderType](API-Schemas.md#ownordertype) | yes |  |
+| `plan_id` | integer | no | For a purchase: a plan on sale now (`GET /plans`). For a renewal of a service without a plan: the plan picked (`GET …/renewal-plans`). |
 | `server_id` | integer | no | For a purchase: one of the plan's `locations`. A code limited to certain servers is refused until one is picked. |
 | `subscription_id` | integer | no | For a renewal or extra: the customer's service. |
-| `gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For extra traffic: how many GB. |
-| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For extra time: how many days. |
+| `method` | [RenewalMethod](API-Schemas.md#renewalmethod) | no | For a renewal: the renewal method, as the renewal would send it (a 422 on `method` for one the shop does not offer). |
+| `gb` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For extra traffic: how many GB. For a renewal with a package built (instead of `plan_id`): its GB. |
+| `days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For extra time: how many days. For a renewal with a package built: its days. |
+| `devices` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | For extra devices: how many. |
 
 **Answers**
 
@@ -1634,6 +1849,12 @@ A captcha a website can use: `turnstile`, Cloudflare Turnstile (its widget is dr
 
 String: `turnstile`, `altcha`.
 
+### ClientNameMode
+
+How a buyer has their new service named: `sequential` by the shop's pattern, `random`, or `custom` (the name they type) — the latter two while the shop offers them.
+
+String: `sequential`, `random`, `custom`.
+
 ### StoreAccountResponse
 
 The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), and their loyalty standing.
@@ -1677,7 +1898,7 @@ The result of a token check: whether it passed, the action and host it was solve
 
 ### StoreCheckout
 
-The outcome of a checkout (a purchase, renewal, extra traffic or time, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409).
+The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1689,7 +1910,7 @@ The outcome of a checkout (a purchase, renewal, extra traffic or time, or top-up
 | `transfer.card` | string | yes | The card number: 16 digits, no separators. |
 | `transfer.holder` | string | yes | The card holder's name. |
 | `transfer.instructions` | string or null | yes | The shop's payment instructions; null if none. |
-| `subscription` | [StoreSubscription](#storesubscription) or null | yes | Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise. |
+| `subscription` | [StoreSubscription](#storesubscription) or null | yes | Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise, and on a repeated request once the service is no longer the customer's (handed to another customer). |
 
 ### StoreCheckoutResponse
 
@@ -1697,11 +1918,61 @@ The outcome of a checkout (a purchase, renewal, extra traffic or time, or top-up
 |---|---|---|---|
 | `checkout` | [StoreCheckout](#storecheckout) | yes |  |
 
+### StoreClientNameInput
+
+For `custom`: the name the customer typed, 3 to 32 English letters, digits, `_` and `-`. A 422 on `client_name` for another character or length, for one that server's panel does not take (a PasarGuard server: two of `_` and `-` side by side), or for a name a service on that server already has. Should a service (or a client made by hand on the panel) take it before the order is delivered, the service is named by the shop's pattern instead. Ignored for the other ways.
+
+String.
+
 ### StoreCodeSentResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `expires_in` | integer | yes | Seconds until the code expires (it allows five tries). |
+
+### StoreCustomQuantity
+
+One quantity of a built service. Any whole amount from `min` to `max` may be chosen; it is priced whole at the `price` of the last tier whose `from` it reaches (50 with tiers from 1 at 3000 and from 50 at 2500 costs 50 × 2500). The tiers start at `min`: none prices an amount outside the bounds.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `tiers` | list of [PriceTier](API-Schemas.md#pricetier) | yes | The smallest `from` first; empty while it is not priced, or nothing is offered. |
+| `min` | integer | yes |  |
+| `max` | integer | yes |  |
+| `options` | list of integer | yes | The amounts offered as buttons, smallest first, each within the bounds; empty while nothing is offered. |
+
+### StoreCustomQuoteResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `quote` | object | yes | What the service would give and cost: its GB, days and devices, each quantity's price, and the price as a `StoreQuote` (`base` is the two prices added). |
+| `quote.gb` | integer | yes |  |
+| `quote.days` | integer | yes |  |
+| `quote.devices` | integer | yes | Devices at once on the service; 0 — unlimited. |
+| `quote.server_id` | integer or null | yes | The server named; null for none. |
+| `quote.traffic_price` | string | yes | Toman: the GB at their tier's rate. |
+| `quote.days_price` | string | yes | Toman: the days at their tier's rate. |
+| `quote.base` | string | yes | Toman before discounts: the customer's price for what they mean to buy — a plan's price, first-purchase price or agent price; an extra amount's cost; a built service's two prices added. |
+| `quote.discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The automatic discount, if any, then the code. |
+| `quote.amount` | string | yes | Toman left to pay, never below zero; 0 means free. |
+
+### StoreCustomServices
+
+«سرویس دلخواه» as a customer meets it: each quantity's tiers, bounds and buttons, the devices and the servers. While nothing is `offered`, each quantity's `tiers` and `options` are empty.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `offered` | boolean | yes | Whether a service may be built now (`shop.custom_services` of `GET /`). |
+| `traffic` | [StoreCustomQuantity](#storecustomquantity) | yes | The GB: `from` and the bounds in GB, a tier's `price` per GB. |
+| `days` | [StoreCustomQuantity](#storecustomquantity) | yes | The days: `from` and the bounds in days, a tier's `price` per day. |
+| `devices` | integer | yes | Devices at once on a built service; 0 — unlimited. |
+| `servers` | list of [NamedRef](API-Schemas.md#namedref) | yes | The servers a service may be built on now, in order; empty while nothing is offered. |
+
+### StoreCustomServicesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `custom_services` | [StoreCustomServices](#storecustomservices) | yes |  |
 
 ### StoreCustomer
 
@@ -1727,24 +1998,22 @@ The signed-in customer's account.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `quote` | object | yes |  |
-| `quote.base` | string | yes | Toman before discounts: the customer's price for the plan (its price, first-purchase price or agent price), or the cost of the extra amount. |
-| `quote.discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The automatic discount, if any, then the code. |
-| `quote.amount` | string | yes | Toman left to pay, never below zero; 0 means free. |
+| `quote` | [StoreQuote](#storequote) | yes |  |
 
 ### StoreExtraOffer
 
-What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`.
+What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`. Devices are priced for 30 days and charged for the days left of the period in use (`days`), which they last: every price here is already that share, rounded up to whole Toman.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `price` | string or null | yes | Toman per GB or per day; null when only the preset amounts are sold. |
+| `price` | string or null | yes | Toman per GB, per day or per device (for the days left of the period in use); null when only the preset amounts are sold. A custom count of devices is prorated as a whole, so it may cost a few Toman less than this times the count. |
 | `options` | list of object | yes | The preset amounts, smallest first. |
-| `options[].quantity` | integer | yes | GB or days. |
+| `options[].quantity` | integer | yes | GB, days or devices. |
 | `options[].price` | string | yes | Its price in Toman. |
 | `custom` | object or null | yes | Any amount in this range can be bought at `price` per unit; null when only the preset amounts are sold. |
 | `custom.min` | integer | yes |  |
 | `custom.max` | integer | yes |  |
+| `days` | integer or null | yes | For devices: the days their prices are charged for, which they last — what is left of the period in use (whole days, at least 1) until its end date, or until a renewal bought before then begins; its whole term while it waits for its first connection; or 30 for one that never ends. Null for traffic and time. |
 
 ### StoreExtrasResponse
 
@@ -1753,6 +2022,7 @@ What a service can buy of one extra: the preset amounts with their prices and, w
 | `extras` | object | yes |  |
 | `extras.traffic` | [StoreExtraOffer](#storeextraoffer) or null | yes | Extra traffic in GB; null when none can be bought now. |
 | `extras.time` | [StoreExtraOffer](#storeextraoffer) or null | yes | Extra time in days; null when none can be bought now. |
+| `extras.devices` | [StoreExtraOffer](#storeextraoffer) or null | yes | Extra devices (the IP limit); null when none can be bought now. Their prices are for the days left of the period in use (`days`), which they last. |
 
 ### StoreGiftCodeResponse
 
@@ -1797,6 +2067,12 @@ The way in being added belongs to another account of the shop. Shows that accoun
 | `merge.account.google` | boolean | yes | It can sign in with Google. |
 | `merge.keeps` | string: `this`, `other` | yes | The account that remains, the older one: `this` or the `other`. It takes over everything the other owns, and the other's ways in fill its empty slots. |
 
+### StoreNameModeInput
+
+How the new service is named on its panel: `sequential` (left out: the default) by the shop's pattern; `random`, a name drawn now; `custom`, `client_name`. Only a way `shop.name_modes` of `GET /` offers; another is a 422 on `name_mode`. A random name is worked out from the `Idempotency-Key`, so two requests sent with one key at once ask the same; a request repeated with its key asks the name its order was made with, and is not refused for what took that name since.
+
+[ClientNameMode](#clientnamemode).
+
 ### StoreNextPeriod
 
 A renewal queued after the current period (whose unused traffic is not carried over): when the current period ends, and the most traffic left then, in bytes.
@@ -1815,9 +2091,9 @@ A renewal queued after the current period (whose unused traffic is not carried o
 
 ### StoreNoticeType
 
-The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. Services: switched off, back on, deleted, moved (with its new link), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»).
+The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»).
 
-String: `payment_settled`, `payment_rejected`, `order_cancelled`, `payment_refunded`, `topup_refunded`, `payment_reminder`, `service_disabled`, `service_enabled`, `service_deleted`, `service_moved`, `service_granted`, `expiry_reminder`, `traffic_reminder`, `auto_renewed`, `auto_renew_short`, `renewal_failed`, `referral_joined`, `referral_commission`, `referral_start_gift`, `referral_reward`, `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked`, `agency_traffic_short`, `two_factor_disabled`, `way_in_added`, `way_in_removed`, `password_changed`, `two_factor_enabled`, `account_merged`, `second_step_locked`, `email_codes_failed`, `ticket_answered`, `ticket_closed`, `loyalty_tier_up`, `cashback_earned`, `lottery_won`.
+String: `payment_settled`, `payment_rejected`, `order_cancelled`, `payment_refunded`, `topup_refunded`, `payment_reminder`, `service_disabled`, `service_enabled`, `service_deleted`, `service_moved`, `service_transferred`, `service_received`, `service_granted`, `expiry_reminder`, `traffic_reminder`, `auto_renewed`, `auto_renew_short`, `renewal_failed`, `referral_joined`, `referral_commission`, `referral_start_gift`, `referral_reward`, `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked`, `agency_traffic_short`, `two_factor_disabled`, `way_in_added`, `way_in_removed`, `password_changed`, `two_factor_enabled`, `account_merged`, `second_step_locked`, `email_codes_failed`, `ticket_answered`, `ticket_closed`, `loyalty_tier_up`, `cashback_earned`, `lottery_won`.
 
 ### StoreNotification
 
@@ -1863,11 +2139,13 @@ One of the customer's orders: what it was for, its status, and its payments (new
 | `discount_code` | [OrderDiscountCode](API-Schemas.md#orderdiscountcode) or null | yes | The discount code used; null for none. |
 | `created_at` | string (date-time) | yes |  |
 | `fulfilled_at` | string (date-time) or null | yes |  |
-| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, or once the plan is deleted. |
+| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, a service the customer built, or once the plan is deleted. |
+| `package_name` | [OrderPackageName](API-Schemas.md#orderpackagename) | yes |  |
 | `server` | [NamedRef](API-Schemas.md#namedref) or null | yes | Where a purchase was bought; for a renewal or extras, the service's server. Null for none. |
 | `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | The service it is about, by its panel name (for a renewal or extras from the start, for a purchase once delivered); null for none, or once the service is deleted. |
-| `traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: a service's extra traffic, or an agent's traffic for their bot (`traffic` orders); null otherwise. |
-| `days` | integer or null | yes | The extra days it adds to its service; null otherwise. |
+| `traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: a service's extra traffic, a built service's traffic, or an agent's traffic for their bot (`traffic` orders); null otherwise. |
+| `days` | integer or null | yes | The extra days it adds to its service, or a built service's term; null otherwise. |
+| `devices` | integer or null | yes | The devices it adds to its service's IP limit (extra devices), or a built service's limit; null otherwise. |
 | `payments` | list of [StorePayment](#storepayment) | yes |  |
 
 ### StoreOrderResponse
@@ -1897,7 +2175,7 @@ A payment attempt for an order.
 | `paid_at` | string (date-time) or null | yes |  |
 | `receipt` | object or null | yes | The receipt the customer sent for it, in the bot or on the website; null if none was sent. |
 | `receipt.sent_at` | string (date-time) | yes |  |
-| `note` | string or null | yes | Support's note on its latest decision (a rejection's reason, or a cancellation or refund note), as the bot shows it to the customer; null if none. |
+| `note` | string or null | yes | The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer); null if none. |
 
 ### StorePaymentMethod
 
@@ -1962,6 +2240,16 @@ The automatic discount on a plan for this reader: its source, its label («فر�
 | `groups[].category` | [NamedRef](API-Schemas.md#namedref) or null | yes | Null for the group without a category («سایر پلن‌ها» in the bot). |
 | `groups[].plans` | list of [StorePlan](#storeplan) | yes |  |
 
+### StoreQuote
+
+A price before anything is ordered, as the order would be made at it: the base, each discount taken off it, and what is left to pay.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `base` | string | yes | Toman before discounts: the customer's price for what they mean to buy — a plan's price, first-purchase price or agent price; an extra amount's cost; a built service's two prices added. |
+| `discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The automatic discount, if any, then the code. |
+| `amount` | string | yes | Toman left to pay, never below zero; 0 means free. |
+
 ### StoreReauthenticatedResponse
 
 | Field | Type | Required | What it is |
@@ -2001,24 +2289,60 @@ The customer's referral details.
 
 ### StoreRenewal
 
-A preview of a service's renewal: on its own plan, at that plan's price today, and the service as the renewal would leave it. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid.
+A preview of a service's renewal: on its own plan (or, for a service without one, the plan picked — or the package built, `custom`), at its price today, by a renewal method among those the shop offers, and the service as the renewal would leave it by that method. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `plan` | object | yes | The service's own plan, which the renewal uses: what a renewal gives. |
+| `method` | [RenewalMethod](API-Schemas.md#renewalmethod) | yes | The method this preview — and `after` — is by: the one asked for (`method`), else the first the shop offers. |
+| `methods` | list of [RenewalMethod](API-Schemas.md#renewalmethod) | yes | The methods the shop offers, in this order; the price is the same by each. With more than one, let the customer pick and send it as `method` to the preview and the renewal; with one, there is nothing to pick. |
+| `plan` | object or null | yes | The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices). Null for a package built (`custom`). |
 | `plan.id` | integer | yes |  |
 | `plan.name` | string | yes |  |
+| `plan.description` | string or null | yes |  |
+| `plan.checkout_note` | string or null | yes | A note to show at checkout, as plain text; null for none. |
 | `plan.price` | string | yes | Toman. |
 | `plan.traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 for unlimited. |
 | `plan.duration_days` | integer | yes | Whole days, rounded up; 0 never ends. |
 | `plan.duration_hours` | integer | yes | Hours; 0 never ends. |
-| `plan.checkout_note` | string or null | yes | A note to show at checkout, as plain text; null for none. |
-| `price` | string | yes | What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). |
+| `plan.devices` | integer | yes | Devices at once the renewal gives; 0 for no limit — whatever the service has now, extra devices bought included. A running service renewed by `extend` or `reset_traffic` keeps its devices until the period in use ends, and has these from then; any other has them at once (one still waiting for its first connection with the extra devices bought for it on top). |
+| `custom` | object or null | yes | The package a service without a plan is renewed with instead (`gb` and `days`): what it gives — its GB, its days and the builder's devices — and each quantity's price by the builder's tiers (`GET /custom-services`). Null for a renewal on a plan. |
+| `custom.gb` | integer | yes |  |
+| `custom.days` | integer | yes |  |
+| `custom.devices` | integer | yes | Devices at once it gives; 0 — unlimited. From when, as a plan's `devices`. |
+| `custom.traffic_price` | string | yes | Toman: the GB at their tier's rate. |
+| `custom.days_price` | string | yes | Toman: the days at their tier's rate. |
+| `price` | string | yes | What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). |
 | `discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The automatic discount in `price`: none, or one. |
-| `after` | object | yes | The service as the renewal would leave it, in StoreSubscription's shapes. Remaining days always carry over; a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`). |
+| `after` | object | yes | The service as the renewal would leave it by `method`, in StoreSubscription's shapes. By `extend` remaining days carry over, and a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`); by `reset_traffic` remaining days carry over and the traffic starts afresh; by `reset_time` the term starts afresh and the traffic left carries over. |
 | `after.term` | [StoreServiceTerm](#storeserviceterm) | yes |  |
 | `after.traffic` | [StoreServiceTraffic](#storeservicetraffic) | yes |  |
 | `after.next_period` | [StoreNextPeriod](#storenextperiod) or null | yes | The current period, whose unused traffic expires when it ends; null when nothing expires. |
+| `after.next_devices` | [NextDevices](API-Schemas.md#nextdevices) or null | yes | The renewal's device limit, when it waits for the current period's end; null when the service has it at once, or it is the one it has. |
+
+### StoreRenewalPlan
+
+A plan a service can be renewed on: what a renewal on it gives, its price, and what the renewal costs the customer today.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes | The `plan_id` to renew on (`…/renewal`). |
+| `name` | string | yes |  |
+| `description` | string or null | yes |  |
+| `checkout_note` | string or null | yes | A note to show at checkout, as plain text the site must escape; null for none. |
+| `price` | string | yes | The plan's price, in Toman. |
+| `renewal_price` | string | yes | What renewing on it costs the customer today, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying. The preview (`GET …/renewal?plan_id=`) says the same. |
+| `discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The automatic discount in `renewal_price`: none, or one. |
+| `traffic_gb` | number | yes | Gigabytes a renewal adds, decimals allowed; 0 for unlimited. |
+| `duration_days` | integer | yes | Whole days, rounded up; 0 never ends. `duration_hours` is exact. |
+| `duration_hours` | integer | yes | Hours; 0 never ends. |
+| `devices` | integer | yes | Devices at once once renewed on it; 0 for no limit. |
+
+### StoreRenewalPlansResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `plans` | list of [StoreRenewalPlan](#storerenewalplan) | yes | In the catalogue's order; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way. |
+| `custom_services` | boolean | yes | Whether the service may be renewed instead with a package the customer builds («🛠 تمدید با سرویس دلخواه»): it has no plan, is no test account, may be renewed now (as `plans`), and the shop's builder is offered (`shop.custom_services` of `GET /`). Then send `gb` and `days` — within the bounds and tiers of `GET /custom-services` — to `…/renewal` in place of `plan_id`. |
 
 ### StoreRenewalResponse
 
@@ -2035,6 +2359,10 @@ The Store API's `GET /`: the shop's public profile, which a website asks for fir
 | `shop` | object | yes |  |
 | `shop.name` | string | yes | The main shop's name (APP_NAME); for an agent's shop, their bot's title (else its username). |
 | `shop.taking_orders` | boolean | yes | Whether the shop takes orders now (its bot is switched on). When false, purchases, renewals, top-ups and receipts are refused (503); the catalogue can still be read and customers can still sign in. |
+| `shop.service_claims` | boolean | yes | Whether a customer can add a service to their account by its link now (`POST /subscriptions/claim`, «افزودن سرویس با لینک»): the main shop's alone, while its admin switches it on (off by default). Always false in an agent's shop. |
+| `shop.service_transfers` | boolean | yes | Whether a customer can hand one of their services to another customer of the shop now (`POST /subscriptions/{id}/transfer`, «انتقال سرویس»): while the shop's admin switches it on (off by default), in any shop. |
+| `shop.custom_services` | boolean | yes | Whether a customer can build a service of the traffic and days they choose now («سرویس دلخواه», `GET /custom-services`): the main shop's alone, while its admin switches it on (off by default), both price lists sell and one of its servers can take a new client. Always false in an agent's shop. |
+| `shop.name_modes` | list of [ClientNameMode](#clientnamemode) | yes | The ways a buyer may name their new service (`name_mode` of `POST /orders`), `sequential` (the shop's pattern) first and always; `random` and `custom` while the shop's admin offers them. Just `sequential`: ask nothing. |
 | `shop.bot` | object or null | yes | The shop's Telegram bot; null while its username is unknown. |
 | `shop.bot.username` | string | yes | Without the @. |
 | `shop.bot.url` | string | yes | https://t.me/ and the username. |
@@ -2172,7 +2500,8 @@ One of the customer's services, as last read from its panel (`synced_at`), with 
 | `name` | string | yes | Its name on the panel ("amir_2", "USER_7"). |
 | `status` | [SubscriptionStatus](API-Schemas.md#subscriptionstatus) | yes |  |
 | `is_test` | boolean | yes | A free test account («اکانت تست»), taken in the bot: it has no plan and can be neither renewed nor bought extras (`extras`); the shop may remove it some time after it ends, or some days after it was made while never connected (`removes_at`). |
-| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan it was sold or last renewed on; null for a test account, or once that plan is deleted. |
+| `claimed_at` | string (date-time) or null | yes | When the customer added it to their account by its link (`POST /subscriptions/claim`, or in the bot): a service support made on the panel by hand, not sold by the shop. It has no plan until a renewal on a plan the customer picks (`GET …/renewal-plans`; a renewal with a package built leaves it without). Null for every other service. |
+| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan it was sold or last renewed on; null for a service without one — a test account, a service added by its link (`claimed_at`) or built by the customer (`POST /custom-services/orders`), until a renewal on a plan (a renewal with a package built leaves it null) — or once that plan is deleted. |
 | `server` | [NamedRef](API-Schemas.md#namedref) | yes | The server it is on («لوکیشن» in the bot). |
 | `link` | string or null | yes | The subscription link; null once the panel no longer has the service (deleted). |
 | `traffic` | [StoreServiceTraffic](#storeservicetraffic) | yes |  |
@@ -2182,13 +2511,22 @@ One of the customer's services, as last read from its panel (`synced_at`), with 
 | `auto_renew` | object | yes | Auto-renewal («تمدید خودکار»): the service is renewed from the wallet before it ends, on its plan at the plan's price. |
 | `auto_renew.on` | boolean | yes | The customer's switch. |
 | `auto_renew.offered` | boolean | yes | The switch can be set (`PATCH`): the service is active, has an end date and still has its plan, and the wallet payment method is on. |
-| `auto_renew.days_before` | integer | yes | How many days before its end it is renewed when the switch is on. A shop-wide setting, 1 to 30. |
-| `renewable` | boolean | yes | The customer can renew it now on its plan: it is active or ended, its plan still exists and the renewal adds something, and in an agent's shop the agent's traffic covers it. |
-| `extras` | object | yes | Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. |
+| `auto_renew.days_before` | integer | yes | How many days before its end it is renewed when the switch is on — or, where the shop renews automatically by «ریست زمان» (which throws away the term left), how many days before its end a wallet short of the price is told, the renewal itself made shortly before the end. A shop-wide setting, 1 to 30. |
+| `renewable` | boolean | yes | The customer can renew it now on its own plan: it is active or ended, its plan still exists and the renewal adds something (in an agent's shop, covered by the agent's traffic). False for a service without a plan, which `picks_plan` covers. Whether the shop lets it be renewed yet is `renewal_window`. |
+| `picks_plan` | boolean | yes | The customer can renew it now on what they pick: it has no plan and is no test account (added by its link, `claimed_at`, or built), it is active or ended, and a plan on sale is sold on its server or the shop's builder is offered. List the choices with `GET …/renewal-plans` and send the plan picked as `plan_id` to `…/renewal` — that renewal makes it the service's plan, after which `renewable` is what holds —, or a package built as `gb` and `days`, after which it still picks. |
+| `renewal_window` | object | yes | Whether the shop lets the customer renew it yet («آستانه مجاز تمدید»), beside `renewable` or `picks_plan`. A shop may hold a running service back until its end date is a few days away, or until little of its traffic is left; an ended service may always be renewed. While closed, the renewal's preview and the renewal are a 422 on `status` saying from when, and the fields say what opens it — any that is set, whichever comes first. Auto-renewal goes by its own days. |
+| `renewal_window.open` | boolean | yes | It may be renewed now (as far as the window goes). |
+| `renewal_window.opens_at` | string (date-time) or null | yes | While closed: the moment its end date comes within the window (that end date less the window's days); null otherwise. |
+| `renewal_window.days_before` | integer or null | yes | While closed and its clock waits for its first connection (no end date yet): it opens this many days before the end date it will have; null otherwise. |
+| `renewal_window.traffic_percent` | integer or null | yes | While closed: it opens once at most this percent of its traffic is left; null otherwise (unlimited traffic, or the shop holds nothing back by traffic). With no field set, only its end opens it. |
+| `devices` | integer | yes | How many devices may use it at once (its IP limit, raised by extra devices); 0 for no limit. |
+| `extras` | object | yes | Whether extra traffic, extra time and extra devices («کاربر اضافه») can be bought for it now (`GET …/extras` gives the amounts and prices). All need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). Devices need a device limit (an unlimited one takes none), neither time nor traffic run out (a renewal then would replace the period they are for at once), and a server whose panel enforces the limit. In an agent's shop, traffic also needs the agent's bot to have traffic left to sell. |
 | `extras.traffic` | boolean | yes |  |
 | `extras.time` | boolean | yes |  |
+| `extras.devices` | boolean | yes |  |
 | `link_rotation` | boolean | yes | Its link can be changed now (`POST …/rotate-link`): it is active and its server can rotate links. |
-| `next_period` | [StoreNextPeriod](#storenextperiod) or null | yes | Null while no renewal is queued after the current period. |
+| `next_period` | [StoreNextPeriod](#storenextperiod) or null | yes | A renewal's traffic queued after the current period. Null while none waits for the period's end: nothing renewed ahead, or a renewal whose traffic counted at once (the shop carries unused traffic over, `reset_traffic`, or unlimited traffic) — its device limit may still wait (`next_devices`). |
+| `next_devices` | [NextDevices](API-Schemas.md#nextdevices) or null | yes | A renewal's device limit queued after the current period: a running service renewed by `extend` or `reset_traffic` keeps the devices it has (extra devices bought included) until the period in use ends, and has the renewal's from then. Null while the limit stays as `devices` says. |
 | `presence` | object or null | yes | Whether it is connected. Only set right after the panel was read (`POST …/refresh`) and still has it; null otherwise. |
 | `presence.online` | boolean or null | yes | Connected right now; null when the panel cannot tell. |
 | `presence.last_online_at` | string (date-time) or null | yes | Its last connection; null if never, or when the panel cannot tell. |
@@ -2271,6 +2609,16 @@ A message in their ticket, from them or from support (the support person is neve
 | `meta.total` | integer | yes |  |
 | `meta.last_page` | integer | yes |  |
 | `meta.unread` | integer | yes | How many of all their tickets have unread messages from support, regardless of the filters (for a badge). |
+
+### StoreTransferRecipientResponse
+
+«انتقال سرویس»: who the service goes (or went) to — their Telegram name and handle, nothing else of their account.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `recipient` | object | yes |  |
+| `recipient.name` | string or null | yes | Their name in Telegram; null when they show none. |
+| `recipient.username` | string or null | yes | Their Telegram handle, without the @; null when they have none. |
 
 ### StoreTwoFactorResponse
 

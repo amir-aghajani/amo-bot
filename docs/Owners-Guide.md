@@ -65,6 +65,8 @@ live: there is no need to reload.
 | [Orders and payments](Orders-And-Payments.md) | Receipts, approvals, rejections, refunds, reminders, stuck orders |
 | [Services](Services.md) | Customers' services: read, extended, switched, moved, deleted — and what runs by itself |
 | [Test accounts](Test-Accounts.md) | Free tests in the bot: each server's terms, the shop's quota, the clean-up |
+| [Services added by their link](Service-Claims.md) | A client made by hand on a panel, added to a customer's account when they send its link |
+| [Custom services](Custom-Services.md) | A service the customer builds of the traffic and days they choose, priced by tiers |
 | [Support tickets](Support-Tickets.md) | Answering customers, from the panel and from the report group |
 | [Reviews](Reviews.md) | Customers' reviews from the website: approved, rejected, deleted |
 | [Discounts](Discounts.md) | Discount codes, timed sales and a customer's own discount, and how they add up |

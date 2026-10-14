@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Core\Exceptions\ValidationException;
+use App\Modules\Accounts\Services\AccountMerger;
 use App\Modules\Agency\Models\TrafficTransaction;
 use App\Modules\Agency\Services\TrafficPool;
 use App\Modules\Bots\CurrentBot;
@@ -18,9 +19,11 @@ use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Subscriptions\Enums\ExtraKind;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ProvisioningService;
+use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Enums\WalletTransactionType;
@@ -29,6 +32,7 @@ use App\Modules\Users\Models\WalletTransaction;
 use App\Modules\Users\Services\WalletService;
 use App\Support\Money;
 use App\Support\Traffic;
+use Illuminate\Support\Carbon;
 use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
@@ -50,6 +54,8 @@ final class PaymentRefundsTest extends HttpTestCase
     {
         parent::setUp();
 
+        // One moment throughout: a term given and the one taken back are compared to the second.
+        Carbon::setTestNow('2026-10-01 12:00:00');
         $this->telegram();
         $this->loginAsAdmin();
 
@@ -158,8 +164,201 @@ final class PaymentRefundsTest extends HttpTestCase
         self::assertSame('50000.00', $this->ali->balance(), 'the amount went to the wallet');
         $subscription->refresh();
         self::assertSame([SubscriptionStatus::Active, 720, 30 * Traffic::GIGABYTE], [$subscription->status, $subscription->duration_hours, $subscription->traffic_limit_bytes], 'its term and traffic back to what the purchase gave');
+        self::assertSame($plan->id, $subscription->plan_id, 'a sold service keeps its plan: the renewal did not give it');
+        self::assertFalse($renewal->order->gave_plan);
         self::assertNotNull($renewal->order->refresh()->taken_back_at);
         self::assertStringEndsWith(self::text(BotText::PaymentRefundedTakenBack, ['client' => $subscription->remote_name]), $this->telegram()->sentTo(1001)[0]);
+    }
+
+    public function testTheRefundOfAResetTakesBackOnlyWhatItAddedToWhatItReplaced(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
+        $orders = $this->service(OrderService::class);
+        $refunded = function (Payment $payment): void {
+            $response = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+            self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        };
+        // Ten days and 10 GB of its 30 left.
+        $running = fn(string $name): Subscription => $this->mirrored($this->subscription($this->ali, $plan, $server, $name, ['download_bytes' => 20 * Traffic::GIGABYTE, 'starts_at' => now()->subDays(20), 'expires_at' => now()->addDays(10)]));
+
+        $time = $running('ali_1');
+        $payment = $this->paidByCard($orders->createRenewal($this->ali, $time, $plan, RenewalMethod::ResetTime), $this->card);
+        self::assertSame([now()->addDays(30)->toIso8601String(), 480], [$time->refresh()->expires_at?->toIso8601String(), $payment->order->refresh()->given_hours], 'thirty days from now: twenty more than it had');
+        $refunded($payment);
+        self::assertSame([now()->addDays(10)->toIso8601String(), 10 * Traffic::GIGABYTE, SubscriptionStatus::Active], [$time->refresh()->expires_at?->toIso8601String(), $time->remainingBytes(), $time->status], 'its ten days back — not ended at the moment it was renewed');
+
+        $traffic = $running('ali_2');
+        $payment = $this->paidByCard($orders->createRenewal($this->ali, $traffic, $plan, RenewalMethod::ResetTraffic), $this->card);
+        self::assertSame([30 * Traffic::GIGABYTE, 20 * Traffic::GIGABYTE], [$traffic->refresh()->remainingBytes(), $payment->order->refresh()->given_bytes], 'thirty afresh: twenty more than it had');
+        $refunded($payment);
+        self::assertSame([10 * Traffic::GIGABYTE, now()->addDays(10)->toIso8601String()], [$traffic->refresh()->remainingBytes(), $traffic->expires_at?->toIso8601String()], 'its 10 GB back — not one byte');
+
+        $waiting = $this->mirrored($this->subscription($this->ali, $plan, $server, 'ali_3', ['starts_at' => null, 'expires_at' => null]));
+        $payment = $this->paidByCard($orders->createRenewal($this->ali, $waiting, $plan, RenewalMethod::ResetTime), $this->card);
+        self::assertSame(0, $payment->order->refresh()->given_hours, 'its thirty days still waiting replaced by thirty');
+        $refunded($payment);
+        self::assertSame([720, null, SubscriptionStatus::Active], [$waiting->refresh()->duration_hours, $waiting->expires_at, $waiting->status], 'still its thirty days, waiting for the first connection — not ended');
+    }
+
+    public function testNothingIsTakenFromAServiceHandedToAnotherCustomer(): void
+    {
+        $this->extrasOnSale();
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00'], $server);
+        $sara = $this->customer(['telegram_id' => 7070, 'username' => 'sara']);
+        $purchase = $this->paidByCard($this->purchaseOrder($this->ali, $plan, $server), $this->card);
+        $service = $purchase->order->subscription ?? self::fail('nothing delivered');
+        $renewal = $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $service, $plan), $this->card);
+        $extra = $this->paidExtra($service->refresh(), ExtraKind::Traffic, 10, '18000')->payments()->firstOrFail();
+        $this->service(ServiceTransfers::class)->transfer($service, $sara, $this->panelActor());
+        $kept = static fn(): array => $service->refresh()->only(['user_id', 'traffic_limit_bytes', 'duration_hours', 'ip_limit']);
+        $before = [$kept(), count(FakeProvider::$updated)];
+
+        foreach (['the purchase' => $purchase, 'the renewal' => $renewal, 'the extra' => $extra] as $what => $payment) {
+            $refused = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+
+            self::assertSame(422, $refused->getStatusCode(), $what);
+            self::assertSame(RefundRefusedException::serviceChangedHands()->getMessage(), $this->decode($refused)['message'], $what);
+            self::assertSame(PaymentStatus::Paid, $payment->refresh()->status, "{$what}: not refunded");
+        }
+        self::assertSame($before, [$kept(), count(FakeProvider::$updated)], "Sara's service as she got it, its panel untouched");
+        self::assertSame('0.00', $this->ali->balance());
+
+        // Support gives it back to Ali, then refunds: taken from his service again.
+        $this->service(ServiceTransfers::class)->transfer($service, $this->ali, $this->panelActor());
+        self::assertSame(200, $this->postJson("/api/admin/payments/{$extra->id}/refund", [])->getStatusCode());
+        self::assertSame(60 * Traffic::GIGABYTE, $service->refresh()->traffic_limit_bytes, 'the purchase\'s and the renewal\'s 30 GB each stand; the extra\'s 10 went');
+    }
+
+    public function testAServiceWhoseBuyersAccountsWereMergedIsStillTheirs(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $web = $this->webCustomer();
+        $payment = $this->paidByCard($this->purchaseOrder($web, $this->plan(['price' => '50000.00'], $server), $server), $this->card);
+        $service = $payment->order->subscription ?? self::fail('nothing delivered');
+
+        $this->service(AccountMerger::class)->merge($this->ali, $web, 'root');
+
+        $refunded = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+        self::assertSame(200, $refunded->getStatusCode(), (string) $refunded->getBody());
+        self::assertFalse(Subscription::query()->whereKey($service->id)->exists(), 'the order went with its service: the purchase took it back');
+    }
+
+    public function testTheRefundOfTheRenewalThatGaveAClaimedServiceItsPlanTakesThePlanBack(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
+        $claimed = $this->mirrored($this->claimedSubscription($this->ali, $server, 'manual_1'));
+        $first = $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $claimed, $plan), $this->card);
+        self::assertSame($plan->id, $claimed->refresh()->plan_id, 'the renewal gave it its plan');
+        $claimed->forceFill(['auto_renew' => true])->save();
+
+        $refunded = $this->postJson("/api/admin/payments/{$first->id}/refund", []);
+
+        self::assertSame(200, $refunded->getStatusCode(), (string) $refunded->getBody());
+        self::assertSame([null, false], [$claimed->refresh()->plan_id, $claimed->auto_renew], 'refunded, it has no plan again: its next renewal picks one');
+    }
+
+    public function testAPlanAClaimedServiceCameBackWithStaysWhenItsRenewalIsRefunded(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
+        // Claimed again from a record of the customer's the shop had listed gone, its plan carried over.
+        $claimed = $this->mirrored($this->claimedSubscription($this->ali, $server, 'manual_1', ['plan_id' => $plan->id, 'auto_renew' => true]));
+        $renewal = $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $claimed, $plan), $this->card);
+        self::assertFalse($renewal->order->refresh()->gave_plan, 'it had its plan before');
+
+        self::assertSame(200, $this->postJson("/api/admin/payments/{$renewal->id}/refund", [])->getStatusCode());
+        self::assertSame([$plan->id, true], [$claimed->refresh()->plan_id, $claimed->auto_renew]);
+    }
+
+    public function testARefundedLaterRenewalLeavesAClaimedServiceOnItsPlan(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
+        $claimed = $this->mirrored($this->claimedSubscription($this->ali, $server, 'manual_1'));
+        $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $claimed, $plan), $this->card);
+        $second = $this->paidByCard($this->service(OrderService::class)->createRenewal($this->ali, $claimed->refresh(), $plan), $this->card);
+
+        self::assertSame(200, $this->postJson("/api/admin/payments/{$second->id}/refund", [])->getStatusCode());
+        self::assertSame($plan->id, $claimed->refresh()->plan_id, 'the first renewal still stands on it');
+    }
+
+    public function testARefundedRenewalLeavesAServiceThatNeverEndedAndHadNoQuotaSoAgain(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
+        $orders = $this->service(OrderService::class);
+        $refunded = function (Payment $payment): void {
+            $response = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+            self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        };
+        // Made by hand on its panel, without an end or a quota, and claimed by its link.
+        $endless = fn(string $name): Subscription => $this->mirrored($this->claimedSubscription($this->ali, $server, $name, ['duration_hours' => 0, 'starts_at' => null, 'expires_at' => null, 'traffic_limit_bytes' => 0]));
+        $state = static fn(Subscription $service): array => [$service->refresh()->status, $service->duration_hours, $service->expires_at, $service->traffic_limit_bytes, $service->plan_id, $service->ended_at];
+
+        $service = $endless('hand_1');
+        $renewal = $this->paidByCard($orders->createRenewal($this->ali, $service, $plan), $this->card);
+        self::assertSame([720, 30 * Traffic::GIGABYTE, $plan->id], [$service->refresh()->duration_hours, $service->traffic_limit_bytes, $plan->id], 'renewed: thirty days and 30 GB, on the plan');
+        self::assertSame([true, true, true], [$renewal->order->refresh()->gave_term, $renewal->order->gave_quota, $renewal->order->gave_plan]);
+        $refunded($renewal);
+        self::assertSame([SubscriptionStatus::Active, 0, null, 0, null, null], $state($service), 'never ending, unlimited and without a plan again — not ended now, nothing for the clean-up to remove');
+        $spec = FakeProvider::lastUpdate('hand_1');
+        self::assertSame([null, null, 0], [$spec->expiry->deadline(), $spec->expiry->pendingSeconds(), $spec->totalBytes], 'on its panel too');
+
+        foreach (['the first first' => true, 'the second first' => false] as $case => $firstFirst) {
+            $service = $endless($firstFirst ? 'hand_2' : 'hand_3');
+            $first = $this->paidByCard($orders->createRenewal($this->ali, $service, $plan), $this->card);
+            $second = $this->paidByCard($orders->createRenewal($this->ali, $service->refresh(), $plan), $this->card);
+            $refunded($firstFirst ? $first : $second);
+            self::assertSame([720, 30 * Traffic::GIGABYTE, $plan->id], [$service->refresh()->duration_hours, $service->traffic_limit_bytes, $service->plan_id], "{$case}: the other's thirty days and 30 GB stand, on its plan");
+            $refunded($firstFirst ? $second : $first);
+            self::assertSame([SubscriptionStatus::Active, 0, null, 0, null, null], $state($service), "{$case}: both refunded, as it was before either");
+        }
+    }
+
+    public function testAnEarlierOrdersRefundLeavesWhatALaterRenewalStartedAfresh(): void
+    {
+        $this->extrasOnSale();
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00', 'duration_hours' => 720], $server);
+        $long = $this->plan(['price' => '90000.00', 'duration_hours' => 60 * 24, 'traffic_gb' => 50], $server);
+        $orders = $this->service(OrderService::class);
+        $refunded = function (Payment $payment): void {
+            $response = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+            self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        };
+
+        foreach (['the earlier first' => true, 'the reset first' => false] as $case => $earlierFirst) {
+            Carbon::setTestNow('2026-10-01 12:00:00');
+            // Two days and 20 GB of its 30 left; extended by thirty days, then — a day later — its time reset to sixty.
+            $time = $this->mirrored($this->subscription($this->ali, $plan, $server, $earlierFirst ? 'ali_1' : 'ali_2', ['download_bytes' => 10 * Traffic::GIGABYTE, 'starts_at' => now()->subDays(28), 'expires_at' => now()->addDays(2)]));
+            $extension = $this->paidByCard($orders->createRenewal($this->ali, $time, $plan), $this->card);
+            Carbon::setTestNow('2026-10-02 12:00:00');
+            $reset = $this->paidByCard($orders->createRenewal($this->ali, $time->refresh(), $long, RenewalMethod::ResetTime), $this->card);
+            self::assertSame(['2026-12-01 12:00:00', 696, true], [$time->refresh()->expires_at?->format('Y-m-d H:i:s'), $reset->order->refresh()->given_hours, $reset->order->reset_term], 'sixty days from now in place of the thirty-one left');
+
+            $refunded($earlierFirst ? $extension : $reset);
+            self::assertSame([$earlierFirst ? '2026-12-01 12:00:00' : '2026-11-02 12:00:00'], [$time->refresh()->expires_at?->format('Y-m-d H:i:s')], $earlierFirst
+                ? "{$case}: the reset replaced the extension's days — none of its sixty taken"
+                : "{$case}: the reset's twenty-nine days beyond what it replaced taken back");
+            $refunded($earlierFirst ? $reset : $extension);
+            self::assertSame(['2026-10-03 12:00:00', 20 * Traffic::GIGABYTE, SubscriptionStatus::Active], [$time->refresh()->expires_at?->format('Y-m-d H:i:s'), $time->remainingBytes(), $time->status], "{$case}: both refunded, the day and the 20 GB it had");
+
+            // 20 GB of its 30 left, 10 GB bought on top, then its traffic reset to 50.
+            $traffic = $this->mirrored($this->subscription($this->ali, $plan, $server, $earlierFirst ? 'ali_3' : 'ali_4', ['download_bytes' => 10 * Traffic::GIGABYTE, 'expires_at' => now()->addDays(10)]));
+            $extra = $this->paidExtra($traffic, ExtraKind::Traffic, 10, '18000')->payments()->firstOrFail();
+            $renewal = $this->paidByCard($orders->createRenewal($this->ali, $traffic->refresh(), $long, RenewalMethod::ResetTraffic), $this->card);
+            self::assertSame([50 * Traffic::GIGABYTE, 20 * Traffic::GIGABYTE, true], [$traffic->refresh()->remainingBytes(), $renewal->order->refresh()->given_bytes, $renewal->order->reset_traffic]);
+
+            $refunded($earlierFirst ? $extra : $renewal);
+            self::assertSame($earlierFirst ? 50 * Traffic::GIGABYTE : 30 * Traffic::GIGABYTE, $traffic->refresh()->remainingBytes(), $earlierFirst
+                ? "{$case}: the reset counted the extra's traffic afresh — none of its 50 GB taken"
+                : "{$case}: the reset's 20 GB beyond what it replaced taken back");
+            $refunded($earlierFirst ? $renewal : $extra);
+            self::assertSame([20 * Traffic::GIGABYTE, '2026-10-12 12:00:00'], [$traffic->refresh()->remainingBytes(), $traffic->expires_at?->format('Y-m-d H:i:s')], "{$case}: both refunded, the 20 GB and the days it had");
+        }
     }
 
     public function testARenewalNeverDeliveredHasNothingTakenBack(): void
@@ -237,21 +436,21 @@ final class PaymentRefundsTest extends HttpTestCase
         self::assertSame(30 * Traffic::GIGABYTE, $subscription->refresh()->traffic_limit_bytes);
     }
 
-    public function testAServiceSwitchedOffIsNotTakenFrom(): void
+    public function testAServiceSwitchedOffIsTakenFromAndStaysOff(): void
     {
         $this->extrasOnSale();
         $server = $this->sellingServer('Berlin');
         $subscription = $this->subscription($this->ali, $this->plan(['price' => '50000.00'], $server), $server, 'ali_1', ['expires_at' => now()->addDays(10)]);
         FakeProvider::mirror($subscription);
         $order = $this->paidExtra($subscription, ExtraKind::Traffic, 10, '18000');
-        $subscription->forceFill(['status' => SubscriptionStatus::Disabled])->save();
+        $this->service(ProvisioningService::class)->setEnabled($subscription, false);
 
-        $refused = $this->postJson("/api/admin/payments/{$order->payments()->firstOrFail()->id}/refund", []);
+        $refunded = $this->postJson("/api/admin/payments/{$order->payments()->firstOrFail()->id}/refund", []);
 
-        self::assertSame(422, $refused->getStatusCode());
-        self::assertSame(RefundRefusedException::serviceDisabled()->getMessage(), $this->decode($refused)['message']);
-        self::assertSame(40 * Traffic::GIGABYTE, $subscription->refresh()->traffic_limit_bytes, 'nothing taken');
-        self::assertCount(1, FakeProvider::$updated, 'its panel never asked: an update would switch it on');
+        self::assertSame(200, $refunded->getStatusCode(), (string) $refunded->getBody());
+        self::assertSame([30 * Traffic::GIGABYTE, SubscriptionStatus::Disabled], [$subscription->refresh()->traffic_limit_bytes, $subscription->status], 'its 10 GB back, support\'s switch as it was');
+        self::assertFalse(FakeProvider::lastUpdate('ali_1')->enabled, 'the update keeps it switched off');
+        self::assertFalse(FakeProvider::$clients[$server->id]['ali_1']->enabled);
     }
 
     public function testAnExtraWhosePanelFailsWaitsForThePanel(): void

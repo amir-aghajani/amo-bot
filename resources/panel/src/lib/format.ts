@@ -89,9 +89,9 @@ export function formatDuration(hours: number): string {
   return parts.join(' و ')
 }
 
-/** Devices at once: "۲ دستگاه", 0 = نامحدود. */
+/** Devices at once — a plan's, a service's, «کاربر اضافه» bought —, as the bot counts them (Messages::devices): "۲ کاربر", 0 = نامحدود. */
 export function formatDevices(count: number): string {
-  return count > 0 ? `${formatNumber(count)} دستگاه` : UNLIMITED
+  return count > 0 ? `${formatNumber(count)} کاربر` : UNLIMITED
 }
 
 /** A plan's traffic, in gigabytes as the plan holds it (decimals allowed): "۳۰ گیگابایت", 0 = نامحدود. */
@@ -161,6 +161,12 @@ export function decimalOf(typed: string): string | null {
   const match = /^(\d{1,3}(?:[, ]\d{3})+|\d{1,12})(\.\d{1,2})?$/.exec(text)
   const whole = match?.[1]?.replace(/[, ]/g, '') ?? ''
   return match && whole.length <= 12 ? whole + (match[2] ?? '') : null
+}
+
+/** A typed price as whole Toman — a unit after it allowed («۳۰٬۰۰۰ تومان») —, read the way the server reads it (`Input::amountOf()`); null for anything else. */
+export function tomanOf(typed: string): number | null {
+  const number = decimalOf(typed.trim().replace(/\s*\p{L}+$/u, ''))
+  return number !== null && /^\d+(?:\.0{1,2})?$/.test(number) ? Number.parseInt(number, 10) : null
 }
 
 /** A typed amount as a request sends it: the API's form when it is one (decimalOf), else as typed, for the API to refuse. */

@@ -120,7 +120,7 @@ final class NoticesTest extends HttpTestCase
     public function testEveryNoticeOfAServiceIsKeptWithTheServiceAndOneDeletedWithNothing(): void
     {
         $subscriptions = $this->service(SubscriptionActions::class);
-        $service = $this->mirrored('ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
 
         $subscriptions->disable($service, $this->panelActor(), 'استفاده خارج از قوانین');
         $this->assertKept($this->ali, NoticeType::ServiceDisabled, $service);
@@ -281,7 +281,7 @@ final class NoticesTest extends HttpTestCase
         $mail = $this->mail();
         $this->ali->forceFill(['email' => 'ali@example.com'])->save();
 
-        $this->service(CustomerNotifier::class)->serviceEnabled($this->mirrored('ali_1'));
+        $this->service(CustomerNotifier::class)->serviceEnabled($this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1')));
 
         self::assertSame(['sendMessage'], $this->telegram()->calls());
         self::assertSame([], $mail->sent(), 'Telegram is their door');
@@ -328,7 +328,7 @@ final class NoticesTest extends HttpTestCase
 
     public function testTheHousekeepingForgetsWhatIsHalfAYearOld(): void
     {
-        $customer = $this->mirrored('ali_1');
+        $customer = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
         $notifier = $this->service(CustomerNotifier::class);
         Carbon::setTestNow('2026-03-01 12:00:00');
         $notifier->serviceEnabled($customer);
@@ -421,21 +421,9 @@ final class NoticesTest extends HttpTestCase
         return $emails[0];
     }
 
-    /** A service of Ali's whose client is on the fake panel as the row has it. */
-    private function mirrored(string $name): Subscription
-    {
-        $subscription = $this->subscription($this->ali, $this->plan, $this->server, $name);
-        FakeProvider::mirror($subscription);
-
-        return $subscription;
-    }
-
     /** A service of Ali's within the automatic renewal's days, its switch on, mirrored on the panel. */
     private function due(string $name): Subscription
     {
-        $subscription = $this->subscription($this->ali, $this->plan, $this->server, $name, ['auto_renew' => true, 'expires_at' => now()->addDay()]);
-        FakeProvider::mirror($subscription);
-
-        return $subscription;
+        return $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, $name, ['auto_renew' => true, 'expires_at' => now()->addDay()]));
     }
 }

@@ -12,6 +12,7 @@ final readonly class ExtraPrices
     public function __construct(
         public ExtraOffer $traffic,
         public ExtraOffer $time,
+        public ExtraOffer $devices,
     ) {}
 
     public function of(ExtraKind $kind): ExtraOffer
@@ -19,6 +20,7 @@ final readonly class ExtraPrices
         return match ($kind) {
             ExtraKind::Traffic => $this->traffic,
             ExtraKind::Time => $this->time,
+            ExtraKind::Devices => $this->devices,
         };
     }
 }

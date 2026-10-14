@@ -16,6 +16,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Models\ServerInbound;
 use App\Modules\Providers\ProviderRegistry;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
@@ -317,7 +318,7 @@ final class PlanService
 
         $devices = Input::integer($input, 'ip_limit');
         if ($devices === null || $devices > self::MAX_DEVICES) {
-            $errors['ip_limit'][] = sprintf('تعداد دستگاه باید عددی بین 0 (نامحدود) تا %d باشد.', self::MAX_DEVICES);
+            $errors['ip_limit'][] = sprintf('تعداد کاربر باید عددی بین 0 (نامحدود) تا %d باشد.', self::MAX_DEVICES);
         }
 
         // Blank, null or 0 = no category.
@@ -640,6 +641,7 @@ final class PlanService
 
     /**
      * The plan's own extras price list (ExtrasSettings::planForm()), refused under `extras.<field>`; null: the shop's.
+     * A list sent as 0.3.0 sent it — no `devices_*` field — sells no devices, at the default bounds.
      *
      * @param array<string, list<string>> $errors
      * @return array<string, mixed>|null
@@ -650,13 +652,20 @@ final class PlanService
             return null;
         }
         if (!is_array($input)) {
-            $errors['extras'][] = 'قیمت‌های حجم و زمان اضافه این پلن خوانده نشد.';
+            $errors['extras'][] = 'قیمت‌های حجم، زمان و کاربر اضافه این پلن خوانده نشد.';
 
             return null;
         }
 
+        $form = ExtrasSettings::planForm();
+        foreach ($form->fields as $field) {
+            if (str_starts_with($field->name, ExtraKind::Devices->value . '_') && !array_key_exists($field->name, $input)) {
+                $input[$field->name] = $field->default;
+            }
+        }
+
         try {
-            return ExtrasSettings::planForm()->check($input, static fn(): mixed => null);
+            return $form->check($input, static fn(): mixed => null);
         } catch (ValidationException $refused) {
             foreach ($refused->errors() as $field => $messages) {
                 $errors["extras.{$field}"] = $messages;

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram;
 
+use App\Modules\Subscriptions\Enums\ExtraKind;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Services\ServiceTerms;
 use App\Support\Money;
 use App\Support\Persian;
@@ -24,14 +26,17 @@ final class Messages
     private const UNIT_HOURS = 'ساعت';
     private const UNIT_GB = 'گیگابایت';
     private const UNIT_MB = 'مگابایت';
-    /** After a device count: «۲ دستگاه». */
-    private const PLAN_DEVICES = 'دستگاه';
 
     // When a service ends (expiry()): the clock starts at the first connection, so until then there is no date.
     private const EXPIRY_PENDING = '⏳ در انتظار اولین اتصال (%term%)';
     private const EXPIRY_DAYS_LEFT = '%days% روز مانده';
     private const EXPIRY_HOURS_LEFT = '%hours% ساعت مانده';
     private const EXPIRY_ENDED = 'تمام شده';
+
+    // When automatic renewal renews a service (autoRenews()): so many days before its end, or — by «ریست زمان», which
+    // throws away the term left — shortly before it.
+    private const AUTO_RENEWS_DAYS_BEFORE = '%days% روز پیش از پایان سرویس';
+    private const AUTO_RENEWS_AT_THE_END = 'کمی پیش از پایان سرویس';
 
     // A wallet below zero (an agent's credit in use), and an agent without credit (balance(), credit()).
     private const DEBT = '%amount% بدهی';
@@ -180,6 +185,15 @@ final class Messages
         return implode(' و ', array_filter([$days > 0 ? self::duration($days * ServiceTerms::HOURS_A_DAY) : '', $bytes > 0 ? self::bytes($bytes) : '']));
     }
 
+    /**
+     * When automatic renewal renews a service by `$method` (AutoRenewal): "۲ روز پیش از پایان سرویس", or shortly before
+     * its end by «ریست زمان».
+     */
+    public static function autoRenews(RenewalMethod $method, int $days): string
+    {
+        return $method === RenewalMethod::ResetTime ? self::AUTO_RENEWS_AT_THE_END : self::fill(self::AUTO_RENEWS_DAYS_BEFORE, ['days' => Persian::digits($days)]);
+    }
+
     /** A term from its hours: "۳۰ روز", "۶ ساعت" under a day, "۱ روز و ۶ ساعت" between; "نامحدود" for 0. */
     public static function duration(int $hours): string
     {
@@ -194,10 +208,13 @@ final class Messages
         };
     }
 
-    /** A number of devices: "۲ دستگاه", "نامحدود" for 0. */
+    /**
+     * How many devices may connect at once — a plan's, a service's, «کاربر اضافه» bought —, in the one word they are
+     * counted in (ExtraKind::Devices): "۲ کاربر", "نامحدود" for 0.
+     */
     public static function devices(int $count): string
     {
-        return $count > 0 ? Persian::digits($count) . ' ' . self::PLAN_DEVICES : self::UNLIMITED;
+        return $count > 0 ? ExtraKind::Devices->words($count) : self::UNLIMITED;
     }
 
     /** A wallet's balance: "۸۰٬۰۰۰ تومان", or "۲۰٬۰۰۰ تومان بدهی" below zero (an agent's credit in use). */

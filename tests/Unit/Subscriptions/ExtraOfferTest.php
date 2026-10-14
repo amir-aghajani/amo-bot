@@ -9,7 +9,8 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * What an extra costs by a price list: an amount offered at its own price or the unit price, any amount typed between
- * the least and the most while a unit price prices it — and nothing else.
+ * the least and the most while a unit price prices it — and nothing else. Devices' prices are prorated to the days a
+ * service has left.
  */
 final class ExtraOfferTest extends TestCase
 {
@@ -56,5 +57,21 @@ final class ExtraOfferTest extends TestCase
 
         $short = (new ExtraOffer('3000.00', [10 => null], 5, 100))->upTo(3);
         self::assertFalse($short->sells(), 'less in the pool than the least typed and every amount offered: nothing');
+    }
+
+    public function testProratedEveryPriceIsItsShareOfThirtyDaysRoundedUpOnceForTheWholeAmount(): void
+    {
+        $set = new ExtraOffer('1000.00', [2 => '1500.00', 3 => null], 1, 5);
+        $offer = $set->prorated(7);
+
+        self::assertSame([7, null], [$offer->days, $set->days], 'a copy: the list as set stays');
+        self::assertSame('350.00', $offer->priceOf(2), 'its own 1,500 for 7 of 30 days');
+        self::assertSame('700.00', $offer->priceOf(3), 'the unit price three times, then its share');
+        self::assertSame(['234.00', '934.00'], [$offer->priceOf(1), $offer->priceOf(4)], '233.33 and 933.33, each rounded up once');
+        self::assertSame('234.00', $offer->unitPrice());
+        self::assertSame('1000.00', $set->unitPrice(), 'at the price set');
+        self::assertSame([['quantity' => 2, 'price' => '350.00'], ['quantity' => 3, 'price' => '700.00']], $offer->choices());
+        self::assertSame([[2], 7], [array_keys($offer->upTo(2)->options), $offer->upTo(2)->days], 'held to a pool, still prorated');
+        self::assertSame('2000.00', $set->prorated(60)->priceOf(1), 'sixty days: twice the price');
     }
 }

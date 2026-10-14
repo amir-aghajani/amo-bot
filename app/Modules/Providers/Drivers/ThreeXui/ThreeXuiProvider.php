@@ -12,6 +12,7 @@ use App\Modules\Providers\Drivers\ThreeXui\DTO\PanelSettings;
 use App\Modules\Providers\Drivers\ThreeXui\DTO\Traffic;
 use App\Modules\Providers\Drivers\ThreeXui\Support\ExpiryTime;
 use App\Modules\Providers\DTO\ClientInfo;
+use App\Modules\Providers\DTO\ClientLink;
 use App\Modules\Providers\DTO\ClientSpec;
 use App\Modules\Providers\DTO\InboundInfo;
 use App\Modules\Providers\DTO\PanelStatus;
@@ -121,13 +122,14 @@ final class ThreeXuiProvider implements ProviderInterface
         $existing = $this->existing($spec->name);
 
         // /update replaces the row, so it starts from what the panel has: the credentials, the subscription id and the
-        // protocol's own fields (keys, addresses, flow) stay.
+        // protocol's own fields (keys, addresses, flow) stay. The Telegram id is the owner's, none (0) for an owner
+        // without Telegram, so 3x-ui's own bot never keeps telling a previous owner about the client.
         $this->api->updateClient($spec->name, ClientPayload::fromRecord($existing)->with([
-            'enable' => true,
+            'enable' => $spec->enabled,
             'totalBytes' => $spec->totalBytes,
             'expiryTime' => ExpiryTime::of($spec->expiry),
             'limitIp' => $spec->ipLimit,
-            'tgId' => $spec->telegramId ?? $existing->tgId,
+            'tgId' => $spec->telegramId ?? 0,
             'comment' => $spec->comment ?? $existing->comment,
         ]));
 
@@ -186,6 +188,23 @@ final class ThreeXuiProvider implements ProviderInterface
         return array_map(fn(ClientRecord $record): ClientInfo => $this->clientOf($record, null), $this->api->clients());
     }
 
+    /**
+     * /clients/list read once: the row whose subscription id the link carries, or one of whose secrets the config does. A
+     * subscription id or password set to the client's own name is no secret — anyone who knows the name could send it —,
+     * so it finds nothing.
+     */
+    public function findClientByLink(ClientLink $link): ?ClientInfo
+    {
+        foreach ($this->api->clients() as $record) {
+            $secret = static fn(string $value): string => strcasecmp($value, $record->email) === 0 ? '' : $value;
+            if ($link->hasToken($secret($record->subId)) || $link->hasCredential($record->uuid, $secret($record->password), $secret($record->auth))) {
+                return $this->clientOf($record, null);
+            }
+        }
+
+        return null;
+    }
+
     public function resetClientTraffic(string $name): void
     {
         $this->api->resetClientTraffic($name);
@@ -218,6 +237,7 @@ final class ThreeXuiProvider implements ProviderInterface
             subscriptionUrl: $this->linkOf($record),
             online: $online,
             lastOnlineAt: Raw::millis($traffic->lastOnline),
+            ipLimit: $record->limitIp,
         );
     }
 

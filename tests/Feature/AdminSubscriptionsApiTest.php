@@ -31,8 +31,8 @@ use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
 
 /**
- * The subscriptions screen: the list (tabs, the "expiring" one, server filter, search; when a service ended and when the
- * shop removes it by itself) and the modal's operations — sync, switch off and on, move to another server with what is
+ * The subscriptions screen: the list (tabs, the "expiring" one, the kinds — tests, services added by their link —, server
+ * filter, search; when a service ended and when the shop removes it by itself) and the modal's operations — sync, switch off and on, move to another server with what is
  * left, delete (leaving the client on an unreachable panel when allowed). The customer is told of a switch, gets the new
  * link after a move, and hears of a delete only when it took a running service. A service another change holds is a 409;
  * a panel failure is a 502 worded for the reader; an agent's shop is rate-limited on the owner's panels.
@@ -80,9 +80,9 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         self::assertSame(['id' => $this->server->id, 'name' => 'آلمان'], $row['server']);
         self::assertSame(['limit' => 30 * Traffic::GIGABYTE, 'used' => 0], $row['traffic']);
         self::assertSame(30, $row['duration_days']);
-        self::assertSame(['sync' => true, 'disable' => true, 'enable' => false, 'move' => true, 'delete' => true, 'extend' => true], $row['actions']);
+        self::assertSame(['sync' => true, 'disable' => true, 'enable' => false, 'move' => true, 'transfer' => true, 'delete' => true, 'extend' => true], $row['actions']);
         self::assertNull($data['subscriptions'][1]['expires_at'], 'waiting for the first connection: no deadline yet');
-        self::assertSame(['sync' => true, 'disable' => false, 'enable' => false, 'move' => false, 'delete' => true, 'extend' => false], $data['subscriptions'][0]['actions'], 'an expired one needs a renewal, not a switch');
+        self::assertSame(['sync' => true, 'disable' => false, 'enable' => false, 'move' => false, 'transfer' => true, 'delete' => true, 'extend' => false], $data['subscriptions'][0]['actions'], 'an expired one needs a renewal, not a switch');
 
         $ids = fn(string $query): array => array_column($this->decode($this->get("/api/admin/subscriptions?{$query}"))['subscriptions'], 'id');
         self::assertSame([$ending->id], $ids('status=expiring'), 'the one the dashboard\'s card counts');
@@ -122,6 +122,23 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         self::assertSame([$ended->id, $there->id, $here->id], $ids('server='), 'blank = every server');
     }
 
+    public function testAServiceAddedByItsLinkIsAKindOfItsOwnAndSaysWhenItWasClaimed(): void
+    {
+        $sold = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1');
+        $test = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_2', ['is_test' => true, 'plan_id' => null]);
+        $claimed = $this->claimedSubscription($this->ali, $this->server, 'hand_made', ['claimed_at' => now()->subHour()]);
+
+        $ids = fn(string $kind): array => array_column($this->decode($this->get("/api/admin/subscriptions?kind={$kind}"))['subscriptions'], 'id');
+        self::assertSame([$claimed->id], $ids('claimed'));
+        self::assertSame([$sold->id], $ids('regular'), 'neither a test nor a service added by its link');
+        self::assertSame([$test->id], $ids('test'));
+        self::assertSame([$claimed->id, $test->id, $sold->id], array_column($this->decode($this->get('/api/admin/subscriptions'))['subscriptions'], 'id'), 'no kind: all of them');
+
+        $row = $this->decode($this->get("/api/admin/subscriptions/{$claimed->id}"))['subscription'];
+        self::assertSame(['2026-09-20T11:00:00+00:00', null], [$row['claimed_at'], $row['plan']], 'no plan until its first renewal');
+        self::assertNull($this->decode($this->get("/api/admin/subscriptions/{$sold->id}"))['subscription']['claimed_at']);
+    }
+
     public function testOneServiceIsReadAsTheListShowsIt(): void
     {
         $service = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1');
@@ -140,6 +157,20 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
         self::assertSame([true, ['starts_at' => now()->addDays(5)->toIso8601String(), 'traffic' => 30 * Traffic::GIGABYTE]], [$row($queued)['auto_renew'], $row($queued)['next_period']]);
         self::assertSame([false, null], [$row($plain)['auto_renew'], $row($plain)['next_period']]);
+    }
+
+    public function testTheRowSaysFromWhenADeviceLimitQueuedAloneHolds(): void
+    {
+        // Renewed while three devices (two bought) last: the plan's one waits for the period in use; its traffic did not.
+        $renewed = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1', ['ip_limit' => 3, 'period_ends_at' => now()->addDays(5), 'next_period_ip_limit' => 1]);
+        $unchanged = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_2', ['ip_limit' => 1, 'period_ends_at' => now()->addDays(5), 'next_period_ip_limit' => 1]);
+        $plain = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_3');
+
+        $row = fn(Subscription $subscription): array => $this->decode($this->get("/api/admin/subscriptions/{$subscription->id}"))['subscription'];
+
+        self::assertSame([3, null, ['from' => now()->addDays(5)->toIso8601String(), 'devices' => 1]], [$row($renewed)['ip_limit'], $row($renewed)['next_period'], $row($renewed)['next_devices']]);
+        self::assertNull($row($unchanged)['next_devices'], 'the same limit queued: nothing changes');
+        self::assertNull($row($plain)['next_devices']);
     }
 
     public function testTheRowSaysWhenAServiceEndedAndWhenTheShopRemovesIt(): void
@@ -194,7 +225,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         $row = $this->decode($this->postJson("/api/admin/subscriptions/{$subscription->id}/sync"))['subscription'];
 
         self::assertSame('deleted', $row['status'], 'the panel no longer has it');
-        self::assertSame(['sync' => false, 'disable' => false, 'enable' => false, 'move' => false, 'delete' => true, 'extend' => false], $row['actions'], 'only deleting it is left');
+        self::assertSame(['sync' => false, 'disable' => false, 'enable' => false, 'move' => false, 'transfer' => false, 'delete' => true, 'extend' => false], $row['actions'], 'only deleting it is left');
     }
 
     public function testAPanelOutOfReachIsNamedInTheAdminsWordsAndNothingChanges(): void
@@ -224,7 +255,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         });
         FakeProvider::$unreachable = true;
 
-        $owners = $this->decode($this->postJson("/api/admin/subscriptions/{$this->mirrored('ali_r_1')->id}/sync"))['message'];
+        $owners = $this->decode($this->postJson("/api/admin/subscriptions/{$this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'))->id}/sync"))['message'];
         self::assertSame('پنل «آلمان»: ' . ProviderErrorPresenter::describe(new ConnectionException(ConnectionFailure::Timeout, 'Connection timed out')), $owners, 'the owner, who runs the servers, gets the diagnosis');
 
         $this->loginAsAgent($bot);
@@ -273,7 +304,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         self::assertSame((string) SubscriptionActions::PANEL_WORK_WINDOW, $refused->getHeaderLine('Retry-After'));
         self::assertSame($calls, $asked, 'the panel was not asked');
 
-        $mine = $this->mirrored('ali_r_1');
+        $mine = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         $actions = $this->service(SubscriptionActions::class);
         for ($i = 0; $i <= SubscriptionActions::PANEL_WORK; $i++) {
             $actions->sync($mine, $this->panelActor());
@@ -324,7 +355,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testAPanelThatRefusesTheOneThingAskedStillCountsAsAnswering(): void
     {
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         FakeProvider::$down = [$this->server->id];
         $this->service(SyncSubscriptionsTask::class)->run(); // the sync found it out of reach
         FakeProvider::$down = [];
@@ -338,7 +369,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testAServiceAnotherChangeHoldsIsBusyAndNothingHappens(): void
     {
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         $target = $this->movingTarget();
         self::assertNotNull(Lease::take($subscription, 60), 'a renewal, a grant or a move is working on it');
 
@@ -356,14 +387,14 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testDisablingSwitchesTheClientOffAndTellsTheCustomerWithTheNote(): void
     {
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
 
         $row = $this->decode($this->postJson("/api/admin/subscriptions/{$subscription->id}/disable", ['note' => 'استفاده خارج از قوانین']))['subscription'];
 
         self::assertSame([['name' => 'ali_r_1', 'enabled' => false]], FakeProvider::$enabled);
         self::assertSame('disabled', $row['status']);
         self::assertNotNull($row['disabled_at']);
-        self::assertSame(['sync' => true, 'disable' => false, 'enable' => true, 'move' => false, 'delete' => true, 'extend' => false], $row['actions']);
+        self::assertSame(['sync' => true, 'disable' => false, 'enable' => true, 'move' => false, 'transfer' => true, 'delete' => true, 'extend' => false], $row['actions']);
 
         self::assertSame(['sendMessage'], $this->telegram()->calls());
         self::assertSame([self::text(BotText::ServiceDisabledBySupport, ['client' => 'ali_r_1', 'note' => self::text(BotText::AdminNote, ['comment' => 'استفاده خارج از قوانین'])])], $this->telegram()->sentTo(1001));
@@ -378,7 +409,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testASwitchAnotherTabMadeAMomentAgoIsNeitherMadeNorToldTwice(): void
     {
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
 
         // Another tab switches it off between this request's read of the service and its change.
         $response = $this->whileListening('eloquent.retrieved: ' . Subscription::class, static function (Subscription $read): void {
@@ -393,7 +424,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testAServiceDeletedFromUnderAChangeIsNotFound(): void
     {
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
 
         // Another tab deletes it between this request's read of the service and its change.
         $response = $this->whileListening('eloquent.retrieved: ' . Subscription::class, static function (Subscription $read): void {
@@ -406,7 +437,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testEnablingSwitchesItBackOnAndSaysSo(): void
     {
-        $subscription = $this->mirrored('ali_r_1', ['status' => SubscriptionStatus::Disabled, 'disabled_at' => now()]);
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1', ['status' => SubscriptionStatus::Disabled, 'disabled_at' => now()]));
 
         $row = $this->decode($this->postJson("/api/admin/subscriptions/{$subscription->id}/enable"))['subscription'];
 
@@ -419,7 +450,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testAnExpiredServiceIsNotSwitchedBackOn(): void
     {
-        $subscription = $this->mirrored('ali_r_1', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subDay()]);
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subDay()]));
 
         $response = $this->postJson("/api/admin/subscriptions/{$subscription->id}/enable");
 
@@ -430,8 +461,8 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testDeletingAWorkingServiceRemovesItAndTellsTheCustomerAndTidyingAnEndedOneDoesNot(): void
     {
-        $working = $this->mirrored('ali_r_1');
-        $ended = $this->mirrored('ali_r_2', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subDay()]);
+        $working = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        $ended = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_2', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subDay()]));
         $sale = $this->purchaseOrder($this->ali, $this->plan, $this->server, ['status' => OrderStatus::Fulfilled, 'subscription_id' => $working->id]);
 
         $response = $this->postJson("/api/admin/subscriptions/{$working->id}/delete", ['note' => 'درخواست خود مشتری']);
@@ -473,7 +504,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testAServiceWhosePanelIsOutOfReachIsDeletedHereWhenThePanelIsLeftOut(): void
     {
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         FakeProvider::$down = [$this->server->id];
 
         $refused = $this->postJson("/api/admin/subscriptions/{$subscription->id}/delete", ['note' => 'سرور از دست رفت']);
@@ -499,7 +530,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testATooLongNoteIsRefusedBeforeThePanelIsTouched(): void
     {
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
 
         $response = $this->postJson("/api/admin/subscriptions/{$subscription->id}/disable", ['note' => str_repeat('ا', Input::NOTE_MAX + 1)]);
 
@@ -555,7 +586,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         $target = $this->movingTarget();
         $pinned = $this->inbound($target, '8', ['is_selectable' => false]);
         $this->planEntry($this->plan, $target, [$pinned->id]);
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
 
         self::assertSame(200, $this->move($subscription, $target)->getStatusCode());
 
@@ -565,7 +596,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
     public function testAnUnlimitedServiceStaysUnlimitedOnTheTarget(): void
     {
         $target = $this->movingTarget();
-        $subscription = $this->mirrored('ali_r_1', ['traffic_limit_bytes' => 0, 'download_bytes' => 50 * Traffic::GIGABYTE]);
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1', ['traffic_limit_bytes' => 0, 'download_bytes' => 50 * Traffic::GIGABYTE]));
 
         $row = $this->decode($this->move($subscription, $target))['subscription'];
 
@@ -576,7 +607,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
     public function testATargetThatGivesNoLinkHasItsClientTakenBackAndTheServiceStays(): void
     {
         $target = $this->movingTarget();
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         FakeProvider::$mintsSubId = false; // the target's panel makes the client but no subscription link for it
 
         $response = $this->move($subscription, $target);
@@ -592,7 +623,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
     public function testATargetThatRefusesTheClientIsNamedInTheOwnersWords(): void
     {
         $target = $this->movingTarget();
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         FakeProvider::$refusing = [$target->id => ['createClient']];
 
         $response = $this->move($subscription, $target);
@@ -623,7 +654,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
     public function testAPreviousClientGoneBeforeItsDeleteCountsAsDeleted(): void
     {
         $target = $this->movingTarget();
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         // Removed on the previous panel by hand while the new client was being made.
         FakeProvider::$onCall = function (int $server, string $call): void {
             if ($call === 'deleteClient' && $server === $this->server->id) {
@@ -668,12 +699,29 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
     {
         $target = $this->movingTarget();
         $this->subscription($this->ali, $this->plan, $target, 'ali_r_1');
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
 
         $row = $this->decode($this->postJson("/api/admin/subscriptions/{$subscription->id}/move", ['server_id' => $target->id]))['subscription'];
 
         self::assertSame('ali_r_2', $row['name'], 'Ali\'s next number, as a new purchase of his would be called');
         self::assertSame('ali_r_2', FakeProvider::$created[0]['spec']->name);
+    }
+
+    public function testANameAClientMadeByHandHasOnTheTargetGivesWayToTheCustomersNext(): void
+    {
+        $target = $this->movingTarget();
+        // Made on the target's panel by hand: the shop keeps no service by that name there, and its panel refuses it.
+        FakeProvider::put($target, new ClientInfo(name: 'ali_r_1', enabled: true, totalBytes: 0, expiry: Expiry::never(), subscriptionUrl: null));
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+
+        $response = $this->move($subscription, $target);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame('ali_r_2', $this->decode($response)['subscription']['name'], 'Ali\'s next number');
+        self::assertSame(['ali_r_2'], array_map(static fn(array $made): string => $made['spec']->name, FakeProvider::$created), 'made once, under the next name');
+        self::assertSame([$target->id, 'ali_r_2'], [$subscription->refresh()->server_id, $subscription->remote_name]);
+        self::assertNull(FakeProvider::$clients[$target->id]['ali_r_1']->subscriptionUrl, 'the client made by hand left as it was');
+        self::assertSame([['server' => $this->server->id, 'name' => 'ali_r_1']], FakeProvider::$deleted, 'only the previous client deleted');
     }
 
     public function testAServiceItsPanelSaysHasEndedIsNotMoved(): void
@@ -695,7 +743,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
     public function testAPreviousServerOutOfReachStopsTheMove(): void
     {
         $target = $this->movingTarget();
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         FakeProvider::$down = [$this->server->id];
 
         $response = $this->postJson("/api/admin/subscriptions/{$subscription->id}/move", ['server_id' => $target->id]);
@@ -722,7 +770,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
     public function testADeleteThePreviousServerRefusesTakesTheNewClientBack(): void
     {
         $target = $this->movingTarget();
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         FakeProvider::$refusing = [$this->server->id => ['deleteClient']];
 
         $response = $this->postJson("/api/admin/subscriptions/{$subscription->id}/move", ['server_id' => $target->id]);
@@ -736,7 +784,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
 
     public function testTheTargetMustBeAnotherServerThatCanTakeIt(): void
     {
-        $subscription = $this->mirrored('ali_r_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         $error = fn(array $body): array => $this->decode($this->postJson("/api/admin/subscriptions/{$subscription->id}/move", $body))['errors'];
 
         $this->unchecked(); // no target at all
@@ -746,7 +794,7 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         self::assertSame(['«فرانسه»: اینباند قابل فروشی ندارد؛ در صفحه سرور اینباندی را برای فروش علامت بزنید.'], $error(['server_id' => $this->fakeServer('فرانسه')->id])['server_id']);
         self::assertSame([], FakeProvider::$created);
 
-        $expired = $this->mirrored('ali_r_2', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subDay()]);
+        $expired = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_2', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subDay()]));
         $response = $this->postJson("/api/admin/subscriptions/{$expired->id}/move", ['server_id' => $this->movingTarget()->id]);
         self::assertSame('این سرویس منقضی شده است و تمدید لازم دارد.', $this->decode($response)['errors']['status'][0]);
     }
@@ -767,19 +815,6 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         $this->inbound($target, '7');
 
         return $target;
-    }
-
-    /**
-     * A subscription of Ali's whose client is on the fake panel as the row has it.
-     *
-     * @param array<string, mixed> $overrides
-     */
-    private function mirrored(string $name, array $overrides = []): Subscription
-    {
-        $subscription = $this->subscription($this->ali, $this->plan, $this->server, $name, $overrides);
-        FakeProvider::mirror($subscription);
-
-        return $subscription;
     }
 
     /** The admin moves the service to the server. */

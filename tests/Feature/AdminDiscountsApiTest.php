@@ -125,7 +125,7 @@ final class AdminDiscountsApiTest extends HttpTestCase
 
         $fixed = $this->postJson('/api/admin/discount-codes', ['code' => 'FIX', 'type' => 'fixed', 'value' => null, 'first_purchase_only' => false, 'enabled' => true]);
         self::assertSame(['value'], array_keys($this->decode($fixed)['errors']), "a fixed code's Toman");
-        $free = $this->decode($this->postJson('/api/admin/discount-codes', ['code' => 'FREE', 'type' => 'free', 'first_purchase_only' => false, 'enabled' => true, 'order_types' => ['purchase', 'renewal', 'extra_traffic', 'extra_time']]))['code'];
+        $free = $this->decode($this->postJson('/api/admin/discount-codes', ['code' => 'FREE', 'type' => 'free', 'first_purchase_only' => false, 'enabled' => true, 'order_types' => ['purchase', 'renewal', 'extra_traffic', 'extra_time', 'extra_devices']]))['code'];
         self::assertSame([null, null], [$free['value'], $free['order_types']], 'every kind named is every kind');
     }
 

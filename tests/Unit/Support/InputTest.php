@@ -104,6 +104,15 @@ final class InputTest extends TestCase
         self::assertNull(Input::integerOf(null));
     }
 
+    public function testATelegramIdIsAPositiveNumberOfUpTo16DigitsInAnyDigits(): void
+    {
+        self::assertSame([7070, 7070, 7070, 1234567890123456], [Input::telegramIdOf(7070), Input::telegramIdOf(' ۷۰۷۰ '), Input::telegramIdOf('٧٠٧٠'), Input::telegramIdOf('1234567890123456')]);
+        foreach (['', '0', '-7070', '07070', '@ali', '70 70', '7070.0', '12345678901234567', '1e5'] as $typed) {
+            self::assertNull(Input::telegramIdOf($typed), $typed);
+        }
+        self::assertSame([null, null, null, null], [Input::telegramIdOf(true), Input::telegramIdOf(7070.0), Input::telegramIdOf(null), Input::telegramIdOf(['7070'])], 'a boolean, a float, nothing or a list is no id');
+    }
+
     public function testAWholeNumberAnAdminTypesSetsItsThousandsApartAsAnAmountDoes(): void
     {
         self::assertSame(10000, Input::wholeOf('10,000'));

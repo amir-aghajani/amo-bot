@@ -126,5 +126,6 @@ the role and the ban.
 - **Nothing tells the customer** of a ban or its end, a role, a wallet change made by hand, or «خروج از همه دستگاه‌ها».
   Say it yourself, from «گفتگو در تلگرام» or a ticket, when it matters.
 - **A customer's number can change** when they merge two accounts of theirs on the website: the older account stays,
-  with the other's orders, services, wallet, tickets and reviews.
+  with the other's orders, services, wallet, tickets and reviews; on the panels, the services' clients then carry its
+  Telegram id and comment.
 - **«آخرین بازدید»** counts the website too: a customer who never writes to the bot may still be active.

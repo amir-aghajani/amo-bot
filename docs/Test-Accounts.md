@@ -111,15 +111,16 @@ had; «سروری برای اکانت تست نیست» only when no server is l
 
 ## What a test is
 
-A test is a service marked as one, with no plan: one client on every inbound the server sells, named `test_` and the
-customer's usual name on the panel (`test_amir_3`, or `test_USER_17` for a customer without a username), with their
-Telegram id in its comment, no limit on devices, and the server's traffic and term. Moved to a server that has its name
-already, it gets the customer's next name there, `test_` still before it.
+A test is a service marked as one, with no plan: one client on every inbound the server sells, named by the shop's test
+pattern ([Bot settings](Bot-Settings.md#service-usernames)) — by default `test_` and the customer's usual name on the
+panel (`test_amir_3`, or `test_USER_17` for a customer without a username) —, with their Telegram id in its comment, no
+limit on devices, and the server's traffic and term. Moved to a server that has its name already, it gets the next name
+the test pattern gives there.
 
 It is not a purchase, and gets nothing a purchase gets:
 
 - **No renewal** — no «♻️ تمدید سرویس» on its screen, not in the menu's renewals list —, **no «تمدید خودکار»**, and
-  **no extra traffic or time**.
+  **no extra traffic, time or devices**.
 - **No reminders** of its end or its traffic.
 - **No gifts**: a server's «افزودن زمان و حجم» and the [mass gift](Broadcasts.md#the-mass-gift) pass it by, and the
   lucky wheel's and the nightly draw's prizes of traffic or days never go to it.
@@ -131,7 +132,8 @@ It is not a purchase, and gets nothing a purchase gets:
 It still takes room on its server: «ظرفیت» counts every active service, tests too.
 
 In the panels' services list ([Services](Services.md#test-services)) it carries a «تست» badge where a service shows its
-plan, and the filter «نوع» — «اکانت تست» or «سرویس عادی» — shows the tests alone or every other service. Support may
+plan, and the filter «نوع» — «همه», «اکانت تست», «سرویس عادی», and in the main shop «افزوده‌شده با لینک» — shows the
+tests alone with «اکانت تست»; «سرویس عادی» is the services sold or given, neither a test nor added by their link. Support may
 still work it like any service: read it, switch it off or on, move it, give it days and traffic, delete it. On the
 shop's website its service says `is_test` ([Store API](Store-API-After-Buying.md#services)).
 

@@ -1,15 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentBot, Delivery } from '@/lib/api-types'
-import { agentBotStatus, EMAILED, isDelivered, NOT_DELIVERED, ORDER_TYPE, serverStatus } from '@/lib/statuses'
+import { agentBotStatus, EMAILED, isDelivered, NOT_DELIVERED, ORDER_TYPE, OWN_ORDER_TYPE, RENEWAL_METHOD, serverStatus } from '@/lib/statuses'
 
 /**
  * A server's and an agent's bot's state in a word (lib/statuses), in the order the reasons outrank each other; what came
- * of a message the bot wrote someone of its own accord; and what an order was for.
+ * of a message the bot wrote someone of its own accord; what an order was for — the customer's own orders, a discount's
+ * and a cashback rule's, in the same words — and how a renewal adds its package.
  */
 
 describe('an order', () => {
-  it('is for a plan, then what is bought for a service — its extra traffic and time too —, a top-up, an agent’s traffic', () => {
-    expect(Object.values(ORDER_TYPE)).toEqual(['خرید', 'تمدید', 'حجم اضافه', 'زمان اضافه', 'شارژ کیف پول', 'خرید حجم نمایندگی'])
+  it('is for a plan, then what is bought for a service — its extra traffic, time and devices too —, a top-up, an agent’s traffic', () => {
+    expect(Object.values(ORDER_TYPE)).toEqual(['خرید', 'تمدید', 'حجم اضافه', 'زمان اضافه', 'کاربر اضافه', 'شارژ کیف پول', 'خرید حجم نمایندگی'])
+  })
+
+  it('a customer places for themselves is what a discount or a cashback rule is for, worded as any order', () => {
+    expect(OWN_ORDER_TYPE).toEqual({ purchase: 'خرید', renewal: 'تمدید', extra_traffic: 'حجم اضافه', extra_time: 'زمان اضافه', extra_devices: 'کاربر اضافه' })
+  })
+
+  it('renewing a service adds its package by a method the bot names as the panels do', () => {
+    expect(Object.values(RENEWAL_METHOD)).toEqual(['تمدید پلن فعلی', 'ریست حجم + افزایش روز', 'ریست زمان + انتقال حجم'])
   })
 })
 

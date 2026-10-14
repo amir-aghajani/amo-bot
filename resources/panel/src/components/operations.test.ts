@@ -1,7 +1,8 @@
-import { act, renderHook } from '@testing-library/react'
+import { createElement } from 'react'
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { Ban, Check, Gift, X } from 'lucide-react'
 import { describe, expect, it, vi } from 'vitest'
-import { useOperations, type OperationSpec } from '@/components/operations'
+import { OperationsSection, useOperations, type OperationAlternative, type OperationSpec } from '@/components/operations'
 import { ApiError } from '@/lib/api'
 import { FAILURE_KINDS } from '@/lib/failure'
 import { queryKeys } from '@/lib/query-keys'
@@ -10,7 +11,7 @@ import { providers, until } from '@/test/render'
 /*
  * A detail dialog's operations (components/operations): which run at once and which wait on a strip or a form, what is
  * read again after one, how a refusal is shown (and the list read again when the subject moved on), withdrawing an
- * operation the new state no longer allows, and where the focus goes when each ends.
+ * operation the new state no longer allows, where the focus goes when each ends, and a strip's alternative while it runs.
  */
 
 type Action = 'approve' | 'reject' | 'cancel'
@@ -229,5 +230,43 @@ describe('a refusal', () => {
     act(() => result.current.choose('cancel'))
 
     expect(result.current.error).toBeNull()
+  })
+})
+
+/** A second way through the cancel's strip, as a subject may offer one. */
+const ALTERNATIVE: OperationAlternative = { label: 'لغو بدون بازگشت پول', hint: 'پول مشتری برنمی‌گردد.' }
+
+/** The operations as a dialog draws them (OperationsSection), the cancel's strip offering ALTERNATIVE. */
+function Section({ perform }: { perform: NonNullable<Options['perform']> }) {
+  const ops = useOperations({ specs: SPECS, allowed: EVERYTHING, perform, invalidates: CHANGES, onDone: vi.fn(), onStale: vi.fn() })
+  return createElement(OperationsSection<Action>, { ops, specs: SPECS, subject: 'این سفارش', alternative: (action) => (action === 'cancel' ? ALTERNATIVE : null) })
+}
+
+describe('a strip’s alternative', () => {
+  it('runs the operation forced, with nothing failed before it, its hint read with its button', async () => {
+    const perform = vi.fn<NonNullable<Options['perform']>>(() => Promise.resolve('fresh'))
+    render(createElement(Section, { perform }), { wrapper: providers().wrapper })
+
+    fireEvent.click(screen.getByRole('button', { name: 'لغو' }))
+    fireEvent.click(screen.getByRole('button', { name: ALTERNATIVE.label, description: 'پول مشتری برنمی‌گردد.' }))
+
+    await until(() => expect(perform).toHaveBeenCalledTimes(1))
+    expect(perform.mock.calls[0]?.[0]).toEqual({ action: 'cancel', note: undefined, force: true })
+  })
+
+  it('spins alone while its run is in flight: the confirm held without a spinner, back disabled', async () => {
+    let finish!: (value: unknown) => void
+    render(createElement(Section, { perform: () => new Promise((resolve) => (finish = resolve)) }), { wrapper: providers().wrapper })
+    fireEvent.click(screen.getByRole('button', { name: 'لغو' }))
+    const alternative = screen.getByRole('button', { name: ALTERNATIVE.label })
+
+    fireEvent.click(alternative)
+
+    await until(() => expect(alternative.getAttribute('aria-busy')).toBe('true'))
+    expect(alternative.getAttribute('aria-disabled')).toBe('true')
+    const confirm = screen.getByRole('button', { name: 'لغو' })
+    expect([confirm.getAttribute('aria-busy'), confirm.getAttribute('aria-disabled')]).toEqual([null, 'true'])
+    expect(screen.getByRole('button', { name: 'برگشت' }).hasAttribute('disabled')).toBe(true)
+    await act(async () => finish('fresh'))
   })
 })

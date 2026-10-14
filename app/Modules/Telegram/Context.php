@@ -172,6 +172,25 @@ final class Context
         $this->api->answerCallbackQuery($id, $text, $alert);
     }
 
+    /**
+     * A refusal's plain words (a popup's text): in a popup on the button tapped, the screen left as it was — or, for
+     * something typed at a step (no button to answer, so a popup would never show), a message of its own with
+     * `$options`, the step over.
+     *
+     * @param array<string, mixed> $options sendMessage options (reply_markup etc.)
+     */
+    public function alert(string $text, array $options = []): void
+    {
+        if ($this->update->isCallback()) {
+            $this->answer($text, alert: true);
+
+            return;
+        }
+
+        $this->session->clear();
+        $this->reply(htmlspecialchars($text), $options);
+    }
+
     /** Whether the tap was answered; a failure after that is reported in a message instead. */
     public function answered(): bool
     {

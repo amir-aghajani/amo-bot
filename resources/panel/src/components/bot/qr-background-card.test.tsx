@@ -1,15 +1,16 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { QrBackgroundCard } from '@/components/bot/qr-background-card'
-import type { QrBackgroundInfo } from '@/lib/api-types'
 import { providers } from '@/test/render'
+import { qrBackgroundRow } from '@/test/rows'
 
 /*
  * The QR code's background (components/bot/qr-background-card): the largest upload it takes said before one is refused —
  * the server's own limit —, and a picture's size in pixels written as a measure of the file: Latin digits, no separators.
  */
 
-const SHIPPED: QrBackgroundInfo = { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 182_000, updated_at: 1_759_000_000, max_bytes: 5 * 1024 * 1024 }
+/** The background the shop ships: a 1024×1024 JPEG, uploads up to 5 MB. */
+const SHIPPED = qrBackgroundRow()
 
 describe('the QR background card', () => {
   it('says the largest upload it takes, and the picture’s size in Latin digits', () => {

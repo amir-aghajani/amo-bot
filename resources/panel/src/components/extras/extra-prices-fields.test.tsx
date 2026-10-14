@@ -8,10 +8,10 @@ import { AGENT_SHOP, OWNER, signedIn } from '@/test/render'
 
 /*
  * The price list's editor (components/extras/extra-prices-fields), as any form holds it: each extra's unit price, the
- * amounts offered — a row each, added with the focus on its amount, removed with the focus on the row that takes its
- * place, eight at most —, the bounds of what may be typed, and what the bot offers by them as they are typed: each amount
- * at its own price or the unit price, any amount between the bounds at the unit price, an amount without a price flagged,
- * or that nothing is sold. In an agent's shop, the traffic is said to come out of the agent's.
+ * amounts offered — a row each (components/priced-rows-editor), eight at most —, the bounds of what may be typed, and
+ * what the bot offers by them as they are typed: each amount at its own price or the unit price, any amount between the
+ * bounds at the unit price, an amount without a price flagged, or that nothing is sold. In an agent's shop, the traffic
+ * is said to come out of the agent's.
  */
 
 /** A form holding the price list under its own names (`x_…`), as the settings card and the plan form hold theirs. */
@@ -79,28 +79,6 @@ describe('the bot’s offer', () => {
 })
 
 describe('the amounts offered', () => {
-  it('take a row each: a new one with the focus on its amount', async () => {
-    const traffic = await show()
-
-    fireEvent.click(within(traffic).getByRole('button', { name: 'افزودن مقدار' }))
-
-    expect(document.activeElement).toBe(screen.getByLabelText('حجم پیشنهادی ۱ (گیگابایت)'))
-  })
-
-  it('removed, hand the focus to the row that takes the place — or, the last gone, to adding one', async () => {
-    const traffic = await show({ traffic_price: '1000', traffic_options: [row(0, '10'), row(1, '20'), row(2, '30')] })
-
-    fireEvent.click(screen.getByRole('button', { name: 'حذف حجم پیشنهادی ۱' }))
-    expect(screen.getByLabelText<HTMLInputElement>('حجم پیشنهادی ۱ (گیگابایت)').value).toBe('20')
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'حذف حجم پیشنهادی ۱' }))
-
-    fireEvent.click(screen.getByRole('button', { name: 'حذف حجم پیشنهادی ۲' }))
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'حذف حجم پیشنهادی ۱' }))
-
-    fireEvent.click(screen.getByRole('button', { name: 'حذف حجم پیشنهادی ۱' }))
-    expect(document.activeElement).toBe(within(traffic).getByRole('button', { name: 'افزودن مقدار' }))
-  })
-
   it('are eight at most: adding is held then — keeping the focus —, and says why', async () => {
     const traffic = await show({ traffic_price: '1000', traffic_options: Array.from({ length: 8 }, (_, i) => row(i, String(i + 1))) })
     const add = within(traffic).getByRole('button', { name: 'افزودن مقدار' })

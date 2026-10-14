@@ -7,7 +7,7 @@ import { botSettingsRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
- * «حجم و زمان اضافه» in the bot settings (components/bot/settings/extras-section): the switch and the shop's price list,
+ * «حجم، زمان و کاربر اضافه» in the bot settings (components/bot/settings/extras-section): the switch and the shop's price list,
  * saved as one PUT of the group — the switch, every field as typed, the amounts offered that say something —; a change is
  * what the server would keep, so a blank row, the rows' order or how a number is written is none; and a refusal lands
  * under the field it names (`extra_…`), the amounts offered marked as one field, each going as its own field is typed.
@@ -39,11 +39,16 @@ describe('the shop’s prices', () => {
     server().on('PUT', '/api/admin/bot/settings/extras', json(saved))
     const traffic = await show(botSettingsRow())
 
-    fireEvent.click(screen.getByRole('switch', { name: 'فروش حجم و زمان اضافه' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'فروش حجم، زمان و کاربر اضافه' }))
     type('قیمت هر گیگابایت (تومان)', '۳٬۰۰۰')
     fireEvent.click(within(traffic).getByRole('button', { name: 'افزودن مقدار' }))
     type('حجم پیشنهادی ۱ (گیگابایت)', '10')
     fireEvent.click(within(traffic).getByRole('button', { name: 'افزودن مقدار' }))
+    type('قیمت هر کاربر برای 30 روز (تومان)', '30000')
+    fireEvent.click(within(screen.getByRole('group', { name: 'کاربر اضافه' })).getByRole('button', { name: 'افزودن مقدار' }))
+    type('تعداد پیشنهادی ۱ (کاربر)', '2')
+    type('قیمت تعداد پیشنهادی ۱ (تومان)', '50000')
+    type('بیشترین (کاربر)', '3')
     save()
 
     await until(() => expect(server().sent('PUT', '/api/admin/bot/settings/extras')).toHaveLength(1))
@@ -57,7 +62,24 @@ describe('the shop’s prices', () => {
       extra_time_options: [],
       extra_time_min: '1',
       extra_time_max: '30',
+      extra_devices_price: '30000',
+      extra_devices_options: [{ quantity: '2', price: '50000' }],
+      extra_devices_min: '1',
+      extra_devices_max: '3',
     })
+  })
+
+  it('of devices are for 30 days, each service paying its share of the days it has left', async () => {
+    await show(botSettingsRow({ extras_enabled: true, extra_devices_price: '30000.00', extra_devices_options: [{ quantity: 2, price: '50000.00' }] }))
+    const devices = screen.getByRole('group', { name: 'کاربر اضافه' })
+
+    expect(within(devices).getByRole('list', { name: 'دکمه‌های کاربر اضافه' }).textContent).toBe('۲ کاربر · ۵۰٬۰۰۰ تومان')
+    expect(within(devices).getByText('یا تعداد دلخواه بین ۱ تا ۵ کاربر، هر کاربر ۳۰٬۰۰۰ تومان')).toBeTruthy()
+    expect(within(devices).getByText(/هر سرویس به نسبت روزهای مانده‌اش می‌پردازد/)).toBeTruthy()
+
+    type('قیمت هر کاربر برای 30 روز (تومان)', '')
+    fireEvent.change(within(devices).getByLabelText('قیمت تعداد پیشنهادی ۱ (تومان)'), { target: { value: '' } })
+    expect(within(devices).getByText('با این قیمت‌ها کاربر اضافه فروخته نمی‌شود.')).toBeTruthy()
   })
 
   it('changed only by what the server would keep: not a blank row, the rows’ order or how a number is written', async () => {
@@ -78,7 +100,7 @@ describe('the shop’s prices', () => {
 
   it('switched off is a change of its own', async () => {
     await show()
-    fireEvent.click(screen.getByRole('switch', { name: 'فروش حجم و زمان اضافه' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'فروش حجم، زمان و کاربر اضافه' }))
     expect(unsaved()).toBe(true)
   })
 })

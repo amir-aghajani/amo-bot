@@ -40,6 +40,12 @@ enum NoticeType: string
     /** A service moved to another server: its new link. */
     case ServiceMoved = 'service_moved';
 
+    /** Support handed a service of theirs to another customer. */
+    case ServiceTransferred = 'service_transferred';
+
+    /** A service was handed to them: by its previous owner, or by support. */
+    case ServiceReceived = 'service_received';
+
     /** A service got days or traffic: a grant's share, or support's extension. */
     case ServiceGranted = 'service_granted';
 
@@ -138,6 +144,8 @@ enum NoticeType: string
             self::ServiceEnabled => 'سرویس شما دوباره فعال شد',
             self::ServiceDeleted => 'سرویس شما حذف شد',
             self::ServiceMoved => 'سرویس شما به سرور دیگری منتقل شد',
+            self::ServiceTransferred => 'سرویس شما به حساب دیگری منتقل شد',
+            self::ServiceReceived => 'سرویسی به حساب شما منتقل شد',
             self::ServiceGranted => 'زمان یا حجم به سرویس شما اضافه شد',
             self::ExpiryReminder => 'سرویس شما رو به پایان است',
             self::TrafficReminder => 'حجم سرویس شما رو به پایان است',

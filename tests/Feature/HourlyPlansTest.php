@@ -54,7 +54,7 @@ final class HourlyPlansTest extends BotTestCase
             'description' => '',
             'traffic' => '۲ گیگابایت',
             'duration' => '۶ ساعت',
-            'devices' => '۱ دستگاه',
+            'devices' => '۱ کاربر',
             'price' => Money::format('5000'),
         ]), self::text(BotText::PlanPickServer))], $this->said());
 

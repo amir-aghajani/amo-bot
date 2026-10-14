@@ -17,6 +17,7 @@ use App\Modules\Users\Models\User;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
 use Psr\Http\Message\ResponseInterface;
+use Tests\Fakes\FakeProvider;
 use Tests\Fakes\RecordingMailTransport;
 use Tests\HttpTestCase;
 use Tests\Support\FakeGoogleLogin;
@@ -468,6 +469,23 @@ final class IdentitiesTest extends HttpTestCase
         self::assertNull($this->decode($removed)['customer']['telegram']);
         $ali->refresh();
         self::assertSame([null, null, false, 'Ali'], [$ali->telegram_id, $ali->username, $ali->bot_blocked, $ali->first_name]);
+    }
+
+    public function testTheServicesClientsNameTheTelegramAccountLinkedThenTakenOff(): void
+    {
+        $this->telegramLogin();
+        $sara = $this->webCustomer();
+        $server = $this->sellingServer();
+        $this->mirrored($this->subscription($sara, $this->plan([], $server), $server, 'web_1'));
+        $this->bearer($this->customerSession($sara));
+
+        self::assertSame(200, $this->linkTelegram()->getStatusCode());
+        $linked = FakeProvider::lastUpdate('web_1');
+        self::assertSame([self::TELEGRAM_ID, self::TELEGRAM_ID . ' | ali'], [$linked->telegramId, $linked->comment], 'the panel knows the customer by their Telegram account now');
+
+        self::assertSame(200, $this->deleteJson($this->storeApi($this->website, '/me/identities/telegram'))->getStatusCode());
+        $removed = FakeProvider::lastUpdate('web_1');
+        self::assertSame([null, "web#{$sara->id} | USER"], [$removed->telegramId, $removed->comment], 'and by the website once it is taken off');
     }
 
     private function linkTelegram(): ResponseInterface

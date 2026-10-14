@@ -10,8 +10,8 @@ use App\Support\Money;
 
 /**
  * A refund that must take back what the order added — a top-up's credit, an agent's traffic, a purchase's service — and
- * cannot: spent or sold since, held by another order, or on a panel that failed. Nothing was written (or refunded); the
- * message says why and what to do.
+ * cannot: spent or sold since, held by another order, handed to another customer, or on a panel that failed. Nothing was
+ * written (or refunded); the message says why and what to do.
  */
 final class RefundRefusedException extends DomainRuleException
 {
@@ -21,10 +21,14 @@ final class RefundRefusedException extends DomainRuleException
         return new self(sprintf('سرویس این خرید سفارش دیگری هم دارد (سفارش #%d)؛ اول آن سفارش را بازپرداخت یا لغو کنید، یا سرویس را خودتان از صفحه اشتراک‌ها حذف کنید.', $orderId));
     }
 
-    /** The service a renewal or an extra was for is switched off: changing it on its panel would switch it on. */
-    public static function serviceDisabled(): self
+    /**
+     * The order's service was handed to another customer since (a transfer): nothing of theirs goes for the buyer's
+     * refund. Support takes it from them by hand — deletes it, or hands it back — and refunds again, or gives the money
+     * back by the wallet.
+     */
+    public static function serviceChangedHands(): self
     {
-        return new self('سرویس این سفارش غیرفعال است و چیزی از آن پس گرفته نمی‌شود؛ اول آن را فعال یا حذف کنید، بعد بازپرداخت کنید.');
+        return new self('سرویس این سفارش به مشتری دیگری منتقل شده است و چیزی بازپرداخت نشد؛ سرویس را در صفحه اشتراک‌ها حذف کنید یا به همین مشتری برگردانید و دوباره بازپرداخت کنید، یا مبلغ را دستی به کیف پول او اضافه کنید.');
     }
 
     /**

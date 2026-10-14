@@ -12,10 +12,10 @@ import type { RecentOrder } from '@/lib/api-types'
 import { formatMoney, timeAgo } from '@/lib/format'
 import { ORDER_STATUS, ORDER_TYPE } from '@/lib/statuses'
 
-/** What an order was on: its plan — a service's extra traffic or time said before its service's plan —, else what it was for. */
+/** What an order was on: its plan — a service's extra traffic, time or devices said before its service's plan —, else what it was for. */
 function onWhat(order: RecentOrder): string {
   if (order.plan === null) return ORDER_TYPE[order.type]
-  return order.type === 'extra_traffic' || order.type === 'extra_time' ? `${ORDER_TYPE[order.type]} · ${order.plan}` : order.plan
+  return order.type.startsWith('extra_') ? `${ORDER_TYPE[order.type]} · ${order.plan}` : order.plan
 }
 
 /** The latest orders on the overview, linked to the orders screen and their customers; «—» when they could not be read. */

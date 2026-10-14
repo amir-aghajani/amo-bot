@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * Each server's free test accounts: the owner's form for them (whether the server gives tests, and a test's traffic,
  * hours and "on hold" — counted from the first connection or from the moment it is made), and which servers give a
- * test now: switched on for tests, able to take a client (ServerSelector::testInbounds()), and — in an agent's shop —
+ * test now: switched on for tests, able to take a client (ServerSelector::wholeServer()), and — in an agent's shop —
  * with a test's traffic left in the agent's pool.
  */
 final class TestServers
@@ -96,7 +96,7 @@ final class TestServers
         $choices = [];
         foreach ($servers->where('test_enabled', true)->withCount(Server::activeServicesCount())->with('inbounds')->orderBy('sort')->orderBy('id')->get() as $server) {
             $terms = TestTerms::of($server);
-            $inbounds = $pool === null || $pool >= $terms->bytes ? $this->selector->testInbounds($server) : null;
+            $inbounds = $pool === null || $pool >= $terms->bytes ? $this->selector->wholeServer($server) : null;
             if ($inbounds !== null) {
                 $choices[] = ['server' => $server, 'terms' => $terms, 'inbounds' => $inbounds];
             }

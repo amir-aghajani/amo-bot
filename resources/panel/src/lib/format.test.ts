@@ -29,6 +29,7 @@ import {
   shownTimeZone,
   timeAgo,
   timeLeft,
+  tomanOf,
   UNLIMITED,
   wholeNumberOf,
   wholeOf,
@@ -96,7 +97,7 @@ describe('quotas and terms', () => {
 
   it('formats days, devices and a plan traffic', () => {
     expect(formatDays(30)).toBe('۳۰ روز')
-    expect(formatDevices(2)).toBe('۲ دستگاه')
+    expect(formatDevices(2)).toBe('۲ کاربر')
     expect(formatGb(1.5)).toBe('۱٫۵ گیگابایت')
   })
 
@@ -300,6 +301,11 @@ describe('a typed amount', () => {
   it('goes in a request in the API’s form, or as typed for the API to refuse', () => {
     expect(decimalInput('۱٫۵')).toBe('1.5')
     expect(decimalInput(' پنجاه ')).toBe('پنجاه')
+  })
+
+  it('reads as a price in whole Toman — its thousands set apart, a unit after it, or the API’s own form —, and nothing else', () => {
+    expect([tomanOf('۳۰٬۰۰۰ تومان'), tomanOf('30,000'), tomanOf('30000.00'), tomanOf('۳۰۰۰۰')]).toEqual([30000, 30000, 30000, 30000])
+    expect([tomanOf('1.5'), tomanOf('سی هزار'), tomanOf('')]).toEqual([null, null, null])
   })
 })
 

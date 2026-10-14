@@ -65,6 +65,8 @@ screens, a wallet purchase's or renewal's own confirmation (the website's checko
 | `service_disabled`, `service_enabled` | a service switched off by support, or back on | subscription |
 | `service_deleted` | a running service deleted by support | `null` |
 | `service_moved` | a service moved to another server — its new link | subscription |
+| `service_transferred` | a service of theirs support handed to another customer ([handing a service on](Store-API-After-Buying.md#handing-a-service-to-another-customer)) | `null` |
+| `service_received` | a service handed to them, by its previous owner or by support — who keeps its link until they change it | subscription |
 | `service_granted` | days or traffic added to a service | subscription |
 | `expiry_reminder`, `traffic_reminder` | a service ending soon, or its traffic running low | subscription |
 | `auto_renewed` | a service renewed from the wallet | order (the renewal) |

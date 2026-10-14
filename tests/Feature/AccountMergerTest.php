@@ -36,6 +36,7 @@ use App\Modules\Users\Models\WalletTransaction;
 use App\Modules\Users\Services\WalletService;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
+use Tests\Fakes\FakeProvider;
 
 /**
  * Merging two accounts: the older stays, everything the other owned moves (one ledger, no duplicate rows), its ways in
@@ -165,6 +166,52 @@ final class AccountMergerTest extends DatabaseTestCase
         $sameMoment = $this->webCustomer(['email' => 'same@example.com']);
         self::assertSame($twin->id, $this->merger->merge($sameMoment, $twin, 'root')->id, 'the same moment: numbered first');
         self::assertSame('root', AccountMerge::query()->latest('id')->firstOrFail()->actor, "a panel's principal");
+    }
+
+    public function testEachServiceWhoseClientNamesItsOwnerOtherwiseIsRelabelled(): void
+    {
+        $server = $this->sellingServer();
+        $plan = $this->plan([], $server);
+        Carbon::setTestNow('2026-09-01 10:00:00');
+        $sara = $this->webCustomer();
+        $bought = $this->mirrored($this->subscription($sara, $plan, $server, 'web_1'));
+        Carbon::setTestNow('2026-09-02 10:00:00');
+        $ali = $this->customer(['telegram_id' => 7301, 'username' => 'ali']);
+        $kept = $this->mirrored($this->subscription($ali, $plan, $server, 'ali_1'));
+
+        $this->merger->merge($ali, $sara, AccountMerger::BY_CUSTOMER);
+
+        self::assertSame(['web_1'], FakeProvider::updatedNames(), "the website's service only: Ali's names its Telegram account, the survivor's now");
+        $spec = FakeProvider::lastUpdate('web_1');
+        self::assertSame([7301, '7301 | ali'], [$spec->telegramId, $spec->comment]);
+        self::assertSame([$sara->id, $sara->id], [$bought->refresh()->user_id, $kept->refresh()->user_id]);
+
+        // The other way round: the older account holds the Telegram account, the newer's services were the website's.
+        FakeProvider::$updated = [];
+        Carbon::setTestNow('2026-09-03 10:00:00');
+        $web = $this->webCustomer(['email' => null, 'password_hash' => null, 'google_sub' => 'sara-google']);
+        $this->mirrored($this->subscription($web, $plan, $server, 'web_2'));
+        $this->merger->merge($web, $sara->refresh(), AccountMerger::BY_CUSTOMER);
+        self::assertSame(['web_2'], FakeProvider::updatedNames());
+        self::assertSame('7301 | ali', FakeProvider::lastUpdate('web_2')->comment);
+    }
+
+    public function testAPanelThatFailsTheRelabelIsLoggedAndTheMergeStands(): void
+    {
+        $logs = $this->logs();
+        $server = $this->sellingServer();
+        Carbon::setTestNow('2026-09-01 10:00:00');
+        $ali = $this->customer(['telegram_id' => 7401, 'username' => 'ali']);
+        Carbon::setTestNow('2026-09-02 10:00:00');
+        $sara = $this->webCustomer();
+        $service = $this->mirrored($this->subscription($sara, $this->plan([], $server), $server, 'web_1'));
+        FakeProvider::$down = [$server->id];
+
+        $survivor = $this->merger->merge($sara, $ali, AccountMerger::BY_CUSTOMER);
+
+        self::assertSame([$ali->id, $ali->id], [$survivor->id, $service->refresh()->user_id]);
+        self::assertSame([], FakeProvider::$updated);
+        self::assertTrue($logs->hasWarningThatContains('does not name them yet'));
     }
 
     public function testTheMergesTheRulesRefuseChangeNothing(): void

@@ -14,7 +14,6 @@ use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Bots\CurrentBot;
-use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\Payment;
@@ -249,7 +248,7 @@ final class StaffApiTest extends HttpTestCase
         $this->assertRefused(ActorRefusedException::OWN_WALLET, $this->postJson($this->staffApi("/users/{$this->sara->id}/wallet"), ['type' => 'credit', 'amount' => 1000]));
         self::assertSame('20000.00', $this->sara->balance(), 'her wallet as it was');
 
-        $service = $this->mirrored($this->sara, $plan, $server, 'sara_1');
+        $service = $this->mirrored($this->subscription($this->sara, $plan, $server, 'sara_1'));
         $this->assertRefused(ActorRefusedException::OWN_SERVICE, $this->postJson($this->staffApi("/subscriptions/{$service->id}/extend"), ['days' => 3, 'traffic_gb' => 0]));
         $this->assertRefused(ActorRefusedException::OWN_SERVICE, $this->postJson($this->staffApi("/subscriptions/{$service->id}/disable"), []));
         $this->assertRefused(ActorRefusedException::OWN_SERVICE, $this->postJson($this->staffApi("/subscriptions/{$service->id}/move"), ['server_id' => $this->fakeServer('دوم')->id]));
@@ -273,7 +272,7 @@ final class StaffApiTest extends HttpTestCase
         $alis = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '30000.00'), $card));
         self::assertSame(200, $this->postJson($this->staffApi("/payments/{$alis->id}/approve"))->getStatusCode());
         self::assertSame(201, $this->postJson($this->staffApi("/users/{$this->ali->id}/wallet"), ['type' => 'credit', 'amount' => 1000])->getStatusCode());
-        $theirs = $this->mirrored($this->ali, $plan, $server, 'ali_1');
+        $theirs = $this->mirrored($this->subscription($this->ali, $plan, $server, 'ali_1'));
         self::assertSame(200, $this->postJson($this->staffApi("/subscriptions/{$theirs->id}/extend"), ['days' => 3, 'traffic_gb' => 0])->getStatusCode());
         self::assertSame(204, $this->postJson($this->staffApi("/subscriptions/{$theirs->id}/delete"), [])->getStatusCode());
         self::assertSame(200, $this->postJson($this->staffApi("/reviews/{$this->review($this->ali)->id}/approve"))->getStatusCode());
@@ -358,7 +357,7 @@ final class StaffApiTest extends HttpTestCase
         $plan = $this->plan([], $server);
         $target = $this->fakeServer('هلند');
         $this->inbound($target, '7');
-        $service = $this->mirrored($this->ali, $plan, $server, 'ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $plan, $server, 'ali_1'));
 
         $moved = $this->postJson($this->staffApi("/subscriptions/{$service->id}/move"), ['server_id' => $target->id, 'leave_previous' => true]);
         self::assertSame([sprintf(SubscriptionActions::LEAVE_REFUSED, 'آلمان')], $this->decode($moved)['errors']['status'] ?? null, "the main bot's shop, but no owner asks");
@@ -378,7 +377,7 @@ final class StaffApiTest extends HttpTestCase
     {
         $server = $this->fakeServer();
         $plan = $this->plan([], $server);
-        $service = $this->mirrored($this->ali, $plan, $server, 'ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $plan, $server, 'ali_1'));
         FakeProvider::$unreachable = true;
 
         $this->loginAsAdmin();
@@ -415,7 +414,7 @@ final class StaffApiTest extends HttpTestCase
     {
         $this->loginAsStaff($this->website, $this->sara);
         $server = $this->fakeServer();
-        $service = $this->mirrored($this->ali, $this->plan([], $server), $server, 'ali_1');
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan([], $server), $server, 'ali_1'));
         for ($i = 0; $i < SubscriptionActions::PANEL_WORK; $i++) {
             self::assertSame(200, $this->postJson($this->staffApi("/subscriptions/{$service->id}/sync"))->getStatusCode());
         }
@@ -504,14 +503,5 @@ final class StaffApiTest extends HttpTestCase
         self::assertSame([403, $message], [$response->getStatusCode(), $this->decode($response)['message'] ?? null], (string) $response->getBody());
 
         return $response;
-    }
-
-    /** A service of the customer's whose client is on the fake panel as the row has it. */
-    private function mirrored(User $user, Plan $plan, Server $server, string $name): Subscription
-    {
-        $subscription = $this->subscription($user, $plan, $server, $name);
-        FakeProvider::mirror($subscription);
-
-        return $subscription;
     }
 }

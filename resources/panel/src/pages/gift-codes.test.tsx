@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BotSettingsResponse, GiftCodeBatchesResponse, GiftCodeRow, GiftCodesResponse } from '@/lib/api-types'
+import type { GiftCodeBatchesResponse, GiftCodeRow, GiftCodesResponse } from '@/lib/api-types'
 import { GiftCodesPage } from '@/pages/gift-codes'
 import { providers, until } from '@/test/render'
-import { botSettingsRow, giftCodeRow, planRow } from '@/test/rows'
+import { botSettingsResponse, botSettingsRow, giftCodeRow, planRow } from '@/test/rows'
 import { json, noContent, server, type Answer } from '@/test/server'
 
 /*
@@ -13,8 +13,6 @@ import { json, noContent, server, type Answer } from '@/test/server'
  * a batch made, its codes shown to copy; a batch picked, its counts with its unused codes copied or deleted; a code nobody
  * took deleted, asked first.
  */
-
-const QR = { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 182_000, updated_at: 1_759_000_000, max_bytes: 5 * 1024 * 1024 }
 
 function codes(rows: GiftCodeRow[] = [giftCodeRow()]): Answer {
   return json({ codes: rows, meta: { page: 1, per_page: 25, total: rows.length, last_page: 1 } } satisfies GiftCodesResponse)
@@ -27,7 +25,7 @@ const BATCHES: GiftCodeBatchesResponse = {
 /** The screen at `at`, gift codes on unless said otherwise. */
 function open(at = '/gift-codes', answer: Answer = codes(), enabled = true) {
   server()
-    .on('GET', '/api/admin/bot/settings', json({ settings: botSettingsRow({ gift_codes_enabled: enabled }), qr_background: QR } satisfies BotSettingsResponse))
+    .on('GET', '/api/admin/bot/settings', json(botSettingsResponse(botSettingsRow({ gift_codes_enabled: enabled }))))
     .on('GET', '/api/admin/keyboards', json({ keyboards: [], actions: [], styles: [], limits: { rows: 10, per_row: 8, label: 64 } }))
     .on('GET', '/api/admin/gift-codes/batches', json(BATCHES))
     .on('GET', '/api/admin/gift-codes', answer)

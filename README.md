@@ -11,15 +11,17 @@ It runs on shared hosting — cPanel, DirectAdmin and the like —, the one way 
 nothing else, the panels ship as static files, a web installer sets the shop up from the browser, the host's cron runs
 its scheduler and Telegram reaches its bots through webhooks — no shell, Composer or Node on the host.
 
-> **Status:** pre-release (0.3.0). The [Roadmap](docs/Roadmap.md) says what is done and what is left,
+> **Status:** pre-release (0.4.0). The [Roadmap](docs/Roadmap.md) says what is done and what is left,
 > [Releases](docs/Releases.md) what each release brought.
 
 ## Features
 
-- **A bot that sells** — plans by category and location, the wallet and card-to-card payments with a receipt, the
-  subscription link delivered as a QR card, renewals by hand and automatic, extra traffic or time for a service, each
-  on its own, at the owner's prices, reminders before a service ends, referrals, and support tickets. Every word it says
-  and its whole menu are the owner's to reword.
+- **A bot that sells** — plans by category and location, services the customer builds by the gigabyte and the day, the
+  wallet and card-to-card payments with a receipt, the subscription link delivered as a QR card, renewals by hand and
+  automatic (by the methods and within the window the owner allows), extra traffic, time or devices for a service, each
+  on its own, at the owner's prices, services handed to another customer or added by their link, free test accounts,
+  reminders before a service ends, referrals, and support tickets. Every word it says and its whole menu are the
+  owner's to reword.
 - **The owner's panel** — servers, plans, payment methods, customers, orders and payments (receipts reviewed one after
   another), services (extended, switched, moved between servers), support, broadcasts, gifts of days and traffic, the
   bot's texts, menu and rules; live as the shop moves, light and dark, on a phone too.

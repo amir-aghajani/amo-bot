@@ -6,6 +6,7 @@ namespace App\Modules\Store\Presenters;
 
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanCategory;
+use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Discounts\Services\DiscountForm;
 use App\Modules\Orders\DTO\Buyer;
 use App\Modules\Orders\DTO\Quote;
@@ -16,7 +17,8 @@ use Illuminate\Database\Eloquent\Collection;
 
 /**
  * A plan as the website offers it: what it gives and costs, its category, and the servers it may be picked on today
- * («لوکیشن» in the bot) — nothing of the panels behind them.
+ * («لوکیشن» in the bot) — nothing of the panels behind them; or as a service may be renewed on it. Each says the same
+ * of the plan itself (terms()).
  */
 final class PlanPresenter
 {
@@ -32,12 +34,7 @@ final class PlanPresenter
     {
         $discount = $offer->automatic;
 
-        return [
-            'id' => $plan->id,
-            'name' => $plan->name,
-            'description' => $plan->description,
-            'checkout_note' => $plan->checkout_note,
-            'price' => $plan->price,
+        return self::terms($plan, [
             'first_purchase_price' => $buyer->firstPurchase ? $plan->firstPurchasePrice() : null,
             'agent_price' => $buyer->agent ? $plan->agentPrice() : null,
             'offer_price' => $offer->amount(),
@@ -47,12 +44,43 @@ final class PlanPresenter
                 'percent' => $discount->percent,
                 'ends_at' => DiscountForm::moment($discount->endsAt),
             ],
+        ]) + [
+            'category_id' => $category?->id,
+            'locations' => array_map(static fn(array $choice): array => ['id' => $choice['server']->id, 'name' => $choice['server']->name], $choices),
+        ];
+    }
+
+    /**
+     * A plan a service may be renewed on: what a renewal on it gives, its price, and `$quote` — what the renewal costs the
+     * customer today (Pricing::renewal()), its automatic discount a line.
+     *
+     * @return array<string, mixed>
+     */
+    public static function renewal(Plan $plan, Quote $quote): array
+    {
+        return self::terms($plan, ['renewal_price' => $quote->amount(), 'discounts' => DiscountLine::presentAll($quote->lines())]);
+    }
+
+    /**
+     * What every presentation says of the plan itself — what it is, its price, what it gives —, with `$priced` (what it
+     * costs the reader) between its price and what it gives.
+     *
+     * @param array<string, mixed> $priced
+     * @return array<string, mixed>
+     */
+    public static function terms(Plan $plan, array $priced = []): array
+    {
+        return [
+            'id' => $plan->id,
+            'name' => $plan->name,
+            'description' => $plan->description,
+            'checkout_note' => $plan->checkout_note,
+            'price' => $plan->price,
+        ] + $priced + [
             'traffic_gb' => $plan->traffic_gb,
             'duration_days' => ServiceTerms::daysOf($plan->duration_hours),
             'duration_hours' => $plan->duration_hours,
             'devices' => $plan->ip_limit,
-            'category_id' => $category?->id,
-            'locations' => array_map(static fn(array $choice): array => ['id' => $choice['server']->id, 'name' => $choice['server']->name], $choices),
         ];
     }
 

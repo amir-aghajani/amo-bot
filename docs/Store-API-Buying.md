@@ -1,16 +1,17 @@
 # Store API: buying
 
-A purchase, a renewal, extra traffic or time for a service and a wallet top-up go through the shop's one checkout — the
-one the bot's purchases go through — so the same rules answer on both doors. Paths are under the
+A purchase, a renewal, extra traffic, time or devices for a service and a wallet top-up go through the shop's one
+checkout — the one the bot's purchases go through — so the same rules answer on both doors. Paths are under the
 [base address](Store-API.md#the-base-address); every one here takes the customer's bearer token.
 
 ## The flow
 
 1. The customer is signed in.
-2. Read the ways to pay that kind of order: `GET /payment-methods?for=purchase|renewal|wallet_topup|extra_traffic|extra_time`.
+2. Read the ways to pay that kind of order:
+   `GET /payment-methods?for=purchase|renewal|wallet_topup|extra_traffic|extra_time|extra_devices`.
 3. When they confirm, make the attempt's `Idempotency-Key`.
 4. Send the order: `POST /orders`, `POST /subscriptions/{id}/renewal`, `POST /subscriptions/{id}/extra-traffic`,
-   `POST /subscriptions/{id}/extra-time` or `POST /wallet/top-up`.
+   `POST /subscriptions/{id}/extra-time`, `POST /subscriptions/{id}/extra-devices` or `POST /wallet/top-up`.
 5. Act on the outcome: delivered, a card to pay, or a delivery under way ([what a checkout answers](#what-a-checkout-answers)).
 6. For a card transfer, upload the receipt ([card transfer and the receipt](#card-transfer-and-the-receipt)) and wait
    for the review ([the review](#the-review)).
@@ -34,13 +35,14 @@ receipt is `503` (`فروشگاه فعلا سفارش نمی‌گیرد؛ کمی
 In checkout order, as the bot offers them. `kind: "instant"` is the wallet — paid at once from the balance (an agent's
 credit counting); `"manual"` is a card-to-card transfer and its receipt. A way of paying whose driver is no longer
 installed is never offered (an earlier payment made with one shows it in its order with `kind: null`). The wallet is
-never offered for a top-up — and is for extra traffic or time. An empty list means the shop takes no way to pay that kind
-of order now. `for` is required: anything but the five kinds is `422` on `for`.
+never offered for a top-up — and is for extra traffic, time or devices. An empty list means the shop takes no way to pay
+that kind of order now. `for` is required: anything but the six kinds is `422` on `for`.
 
 ## The Idempotency-Key
 
 `POST /orders`, `POST /subscriptions/{id}/renewal`, `POST /subscriptions/{id}/extra-traffic`,
-`POST /subscriptions/{id}/extra-time` and `POST /wallet/top-up` must carry an `Idempotency-Key` header: 1 to 64 Latin
+`POST /subscriptions/{id}/extra-time`, `POST /subscriptions/{id}/extra-devices` and `POST /wallet/top-up` must carry an
+`Idempotency-Key` header: 1 to 64 Latin
 letters, digits, `-` and `_` — a `crypto.randomUUID()`. The shop records each request's key with the order it came to and
 the way to pay it was first sent with (`method_id`), for a week.
 
@@ -53,8 +55,8 @@ the way to pay it was first sent with (`method_id`), for a week.
     order as it stands, whatever changed since (a price, the plan, the wallet, the extras on sale);
   - **still to be paid** — a card transfer with no receipt yet, a wallet payment the wallet refused: the request is
     tried again on that same order, at the price it was made at — and today's rules are asked again first, so a plan
-    switched off, a location or a way to pay no longer offered, an amount of extra traffic or time no longer sold, or a
-    top-up outside today's bounds is a `422` although the order exists (look at `GET /orders`);
+    switched off, a location or a way to pay no longer offered, an amount of extra traffic, time or devices no longer
+    sold, or a top-up outside today's bounds is a `422` although the order exists (look at `GET /orders`);
   - **cancelled since** — see the next point.
 - **Once that order was cancelled** — by support, or left unpaid for 48 hours, perhaps days ago —, a retry with its key
   is a `409` in words of its own (`این سفارش لغو شده است؛ پرداخت نشد یا پشتیبانی آن را لغو کرد. برای خرید دوباره از نو
@@ -114,6 +116,24 @@ deliver), and only the same key finds it.
 
 `discount_code` is optional — a code the customer typed ([discount codes](#discount-codes)).
 
+`name_mode` and `client_name` are optional — how the new service is named on its panel. Left out, or `sequential`, by
+the shop's pattern (`amir_3`, [Bot settings](Bot-Settings.md#service-usernames)). While the shop offers more —
+`shop.name_modes` of `GET /` lists `random`, `custom` or both after `sequential` —, let the customer choose:
+
+```json
+{ "plan_id": 3, "server_id": 1, "method_id": 1, "name_mode": "custom", "client_name": "my-vpn" }
+```
+
+- `random` — a name of six letters and digits, worked out from the request's key as the order is made; the delivered
+  service (`subscription.name`) says it.
+- `custom` — `client_name`, the name the customer typed: 3 to 32 English letters, digits, `_` and `-`, one that
+  server's panel takes (on a PasarGuard server, never two of `_` and `-` side by side) and no service on it has.
+
+Made again with its key, the request asks the name its order was made with, and is not refused for what changed since.
+
+A name the customer chose that a service — or a client made by hand on the panel — takes before the order is delivered
+gives way to the pattern: show the delivered `subscription.name`, not the name sent.
+
 `server_id` is one of the plan's `locations`, `method_id` one of `GET /payment-methods?for=purchase`. The checks run one
 at a time, in this order, each a `422` on its field:
 
@@ -122,9 +142,13 @@ at a time, in this order, each a `422` on its field:
 2. `server_id` — `سرور را انتخاب کنید.` when missing; or that location does not sell it now while another of its
    locations does (`سرور #2 برای پلن «یک ماهه ۵۰ گیگ» در دسترس نیست.`): read the plan again (`GET /plans/{id}`) and let
    the customer pick from its `locations`.
-3. `method_id` — `روش پرداخت را انتخاب کنید.`, `این روش پرداخت برای این سفارش در دسترس نیست.`, or the wallet short of
+3. `name_mode` — a way the shop does not offer (`نام رندوم برای سرویس در این فروشگاه فعال نیست.`): read `GET /` again.
+   `client_name`, for `custom` — `نام کاربری سرویس باید بین ۳ تا ۳۲ کاراکتر و فقط از حروف و رقم انگلیسی، _ و - باشد.`,
+   what the server's panel does not take (`روی این سرور دو علامت _ یا - پشت سر هم در نام کاربری سرویس نمی‌آید.`), or
+   `این نام روی این سرور گرفته شده است.`: let the customer type another.
+4. `method_id` — `روش پرداخت را انتخاب کنید.`, `این روش پرداخت برای این سفارش در دسترس نیست.`, or the wallet short of
    the price ([refusals and what to do](#refusals-and-what-to-do)).
-4. `discount_code` — the code does not hold for it, worded for the customer ([discount codes](#discount-codes)).
+5. `discount_code` — the code does not hold for it, worded for the customer ([discount codes](#discount-codes)).
 
 Then the unpaid-order cap of [the Idempotency-Key](#the-idempotency-key). A request made again with its key whose order
 is no longer to be paid is answered by that order before any of these is asked (or refused on `idempotency_key`); one
@@ -143,6 +167,71 @@ settles it on the spot, taking nothing — no transfer, no line in the customer'
 with its service, its payment the wallet's at `"0.00"`. Show such a plan's checkout as one button («دریافت رایگان»),
 sending the first of the ways to pay.
 
+## A service the customer builds
+
+While `shop.custom_services` of `GET /` is true, a customer may build a service of the traffic and days they choose
+(«سرویس دلخواه», the main shop's alone — [Custom services](Custom-Services.md)) instead of picking a plan. Read what may
+be built — anyone may:
+
+`GET /custom-services` response
+```json
+{
+  "custom_services": {
+    "offered": true,
+    "traffic": { "tiers": [{ "from": 1, "price": "3000.00" }, { "from": 50, "price": "2500.00" }], "min": 1, "max": 500, "options": [10, 50, 100] },
+    "days": { "tiers": [{ "from": 1, "price": "2000.00" }, { "from": 30, "price": "1500.00" }], "min": 1, "max": 90, "options": [30, 60] },
+    "devices": 2,
+    "servers": [{ "id": 1, "name": "آلمان" }, { "id": 2, "name": "فرانسه" }]
+  }
+}
+```
+
+While `offered` is false — switched off, or none of its servers can take a client now — `servers` and every `tiers`
+and `options` are empty. Offer the `options` as buttons and any whole amount from `min` to `max` typed. A quantity is
+priced **whole** at the `price` of the last tier whose `from` it reaches — 49 GB at 3,000 a GB, 50 GB at 2,500 —, and
+the GB's price and the days' are added; you may show that as the customer types. The customer's own price, with their
+discount and — once they type one — a code, is a quote, nothing ordered:
+
+`POST /custom-services/quote` request
+```json
+{ "gb": 50, "days": 30, "server_id": 1, "discount_code": "NOWRUZ" }
+```
+
+response
+```json
+{
+  "quote": {
+    "gb": 50, "days": 30, "devices": 2, "server_id": 1,
+    "traffic_price": "125000.00", "days_price": "45000.00", "base": "170000.00",
+    "discounts": [{ "source": "personal", "label": "تخفیف اختصاصی شما ۱۰٪", "amount": "17000.00", "percent": 10 }],
+    "amount": "153000.00"
+  }
+}
+```
+
+`server_id` and `discount_code` are optional there. A built service is a purchase of no plan: only a sale of every plan
+reaches it, and a code limited to certain plans never does (one limited to servers holds once `server_id` names one of
+them). Then buy it — `server_id` may be left out while `servers` holds one:
+
+`POST /custom-services/orders` request
+```json
+{ "gb": 50, "days": 30, "server_id": 1, "method_id": 1, "name_mode": "custom", "client_name": "my-vpn", "discount_code": "NOWRUZ" }
+```
+
+with its `Idempotency-Key`, answered as any checkout ([what a checkout answers](#what-a-checkout-answers)). Its order
+has `plan` null and carries `traffic_bytes`, `days` and `devices` — its `package_name` says them in words, «سرویس دلخواه
+· ۵۰ گیگ · ۳۰ روز» —; its delivered service has `plan` null too. `name_mode` and `client_name` name it as they name [a
+purchase](#a-purchase)'s, on the server it is built on. The checks, each a `422` on its field:
+
+1. `status` — `ساخت سرویس دلخواه الان در دسترس نیست.`: switched off, no tier, or none of its servers can take a client
+   now. Read `GET /custom-services` again.
+2. `gb`, `days` — no whole number (`تعداد گیگابایت را با عدد و بدون اعشار بنویسید.`), or outside the bounds
+   (`حجم را عددی بین ۱ تا ۵۰۰ گیگابایت بنویسید.`, `مدت را عددی بین ۱ تا ۹۰ روز بنویسید.`).
+3. `server_id` — `سرور را انتخاب کنید.` among several, or `این سرور برای سرویس دلخواه در دسترس نیست.`.
+4. `name_mode` and `client_name`, `method_id`, then `discount_code`, as for [a purchase](#a-purchase).
+
+The limits, the `409`s and the `503` are a purchase's; a request made again with its key is answered by its order.
+
 ## A renewal
 
 A service is renewed on its own plan at that plan's price today — its agent price for an agent or a colleague
@@ -152,13 +241,16 @@ A service is renewed on its own plan at that plan's price today — its agent pr
 ```json
 {
   "renewal": {
-    "plan": { "id": 3, "name": "یک ماهه ۵۰ گیگ", "price": "120000.00", "traffic_gb": 50, "duration_days": 30, "duration_hours": 720, "checkout_note": null },
+    "method": "extend",
+    "methods": ["extend", "reset_traffic"],
+    "plan": { "id": 3, "name": "یک ماهه ۵۰ گیگ", "description": null, "checkout_note": null, "price": "120000.00", "traffic_gb": 50, "duration_days": 30, "duration_hours": 720, "devices": 2 },
     "price": "108000.00",
     "discounts": [{ "source": "personal", "label": "تخفیف اختصاصی شما ۱۰٪", "amount": "12000.00", "percent": 10 }],
     "after": {
       "term": { "duration_days": 60, "duration_hours": 1440, "starts_at": "2026-09-20T10:00:00+00:00", "expires_at": "2026-11-19T10:00:00+00:00", "awaits_first_use": false },
       "traffic": { "limit_bytes": 107374182400, "used_bytes": 42949672960, "remaining_bytes": 64424509440 },
-      "next_period": { "ends_at": "2026-10-20T10:00:00+00:00", "bytes": 53687091200 }
+      "next_period": { "ends_at": "2026-10-20T10:00:00+00:00", "bytes": 53687091200 },
+      "next_devices": null
     }
   }
 }
@@ -170,24 +262,124 @@ A service is renewed on its own plan at that plan's price today — its agent pr
 renewal itself reads the server as it is paid). This one runs until 20 October with 10 GB left of 50: renewed, it ends on
 19 November, its quota grows to 100 GB at once (60 GB left), and when the current period ends on 20 October what is
 left is cut to at most 50 GB — the 10 GB of the old period go then (`next_period`), unless the shop carries unused
-traffic, in which case `next_period` is `null`. The days left always carry over: a running service gets the plan's days
-on top of its end, one waiting for its first connection a longer term, an expired one a new term from its next
-connection — its `after.term` then has `awaits_first_use: true`, and no `starts_at` nor `expires_at` until that
-connection.
+traffic, in which case `next_period` is `null`. The days left carry over: a running service gets the plan's days on top
+of its end, one waiting for its first connection a longer term, an expired one a new term from its next connection —
+its `after.term` then has `awaits_first_use: true`, and no `starts_at` nor `expires_at` until that connection.
 
-Then `POST /subscriptions/{id}/renewal` `{ method_id, discount_code? }` with an `Idempotency-Key` (`GET /payment-methods?for=renewal`)
+**The renewal method.** `methods` are the ways the shop renews (its admin switches them on); `method` is the one this
+preview is by — the first of them unless you ask for another with `?method=`:
+
+| `method` | the bot calls it | the term | the traffic |
+|---|---|---|---|
+| `extend` | «تمدید پلن فعلی» | the plan's days on top of what is left | on top of the quota; the period's unused traffic as the shop carries it (above) |
+| `reset_traffic` | «ریست حجم + افزایش روز» | the plan's days on top of what is left | counted afresh from the plan's: what was left is lost |
+| `reset_time` | «ریست زمان + انتقال حجم» | the plan's, starting again now (`starts_at` now): the days left are lost | the plan's on top of what is left, whatever the shop carries |
+
+**The devices.** `plan.devices` (or `custom.devices`) is the device limit the renewal gives, whatever the service has now
+— the extra devices bought for its period count no more, nor an unlimited limit of its own. By `extend` and
+`reset_traffic` a running service keeps its devices until the period in use ends (its end date, the same moment as
+`next_period`'s) and has the plan's from then — `after.next_devices` says from when and how many, `null` when the limit
+comes at once or stays as it is (the service's `next_devices` says it again once renewed); by `reset_time`, or for a
+service ended by time or traffic, it has them at once; one still waiting for its first connection has them at once with
+the extra devices bought for it on top.
+
+With more than one, let the customer pick — the price is the same by each — and preview again with `?method=` to show
+the `after` it leaves; send the one picked as `method` with the renewal (and with `POST /discount-codes/check`, for a
+renewal). One the shop does not offer is `422` on `method` (`این روش تمدید در این فروشگاه نیست.`). With one, there is
+nothing to pick and `method` may be left out. A request made again with its `Idempotency-Key` sends the same `method`.
+
+Then `POST /subscriptions/{id}/renewal` `{ method_id, plan_id? | gb? + days?, method?, discount_code? }` with an `Idempotency-Key` (`GET /payment-methods?for=renewal`)
 answers a checkout ([what a checkout answers](#what-a-checkout-answers)). Both refuse with `422` on `status`: `تمدید
 این سرویس در حال حاضر ممکن نیست؛ با پشتیبانی در تماس باشید.` (switched off by support, gone from its server, its plan
-deleted, renewing nothing, or — an agent's shop — more than the agent's traffic), or `برای سرویس ali_1 یک تمدید در حال بررسی یا انجام است.` while another
+renewing nothing, without a plan while neither a plan on sale is sold on its server nor the builder is offered, or — an
+agent's shop — more than the agent's traffic), or `برای سرویس ali_1 یک تمدید در حال بررسی یا انجام است.` while another
 renewal of it is with support or being delivered. The `POST` is refused as
 `POST /orders` is, too ([refusals and what to do](#refusals-and-what-to-do)). Offer renewal while the service's
-`renewable` is true.
+`renewable` is true — or, for a service without a plan, while its `picks_plan` is true (below).
 
-## Extra traffic and time
+**Not yet.** A shop may hold a running service back until it nears its end («آستانه مجاز تمدید»): its
+`renewal_window` ([services](Store-API-After-Buying.md#services)) says whether it is `open`, and while it is not, what
+opens it — `opens_at` (the moment its end date comes near enough), `days_before` (for one whose clock waits for its first
+connection: so many days before the end date it will have), `traffic_percent` (once that share of its traffic or less
+is left); whichever comes first, and with none of them its end. Until then the preview, the renewal and a code's check
+are `422` on `status` saying from when: `تمدید این سرویس از ۲۳ مهر ۱۴۰۵، ۱۵:۳۰ یا وقتی ٪۲۰ از حجم یا کمتر مانده باشد
+ممکن است.` Keep the renewal button and show the same words beside it. An ended service may always be renewed.
 
-«حجم و زمان اضافه»: more traffic (whole GB) or more time (whole days) for one of the customer's services, each bought on
-its own, on top of what the service has — as the bot's «🔋 حجم اضافه» and «⏳ زمان اضافه» sell them —, at its plan's own
-prices when it has some, else the shop's. Offer each while the service's `extras.traffic` or `extras.time` is true
+**A service without a plan** — one added by its link (`claimed_at`,
+[adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)), one built
+([a service the customer builds](#a-service-the-customer-builds)) — is renewed on a plan
+the customer picks among those on sale on its server, and that plan becomes its own: its next renewal, and «تمدید
+خودکار», are on it — or [with a package they build](#renewing-with-a-package-built). List the choices first, each plan at
+what renewing on it costs the customer today:
+
+`GET /subscriptions/{id}/renewal-plans` → `200`
+```json
+{
+  "plans": [
+    { "id": 3, "name": "یک ماهه ۵۰ گیگ", "description": null, "checkout_note": null, "price": "120000.00", "renewal_price": "108000.00", "discounts": [{ "source": "personal", "label": "تخفیف اختصاصی شما ۱۰٪", "amount": "12000.00", "percent": 10 }], "traffic_gb": 50, "duration_days": 30, "duration_hours": 720, "devices": 2 }
+  ],
+  "custom_services": true
+}
+```
+
+Then pass the one picked as `plan_id`: `GET /subscriptions/{id}/renewal?plan_id=3` previews it, and the `POST` body
+carries it too (and `POST /discount-codes/check`'s, for a renewal). Without it both are `422` on `plan_id` (`یک پلن برای
+تمدید این سرویس انتخاب کنید.`), and one not in the list is `422` on it too (`این پلن برای تمدید این سرویس در دسترس
+نیست.`); while no plan on sale is sold on its server the list is empty — and, the builder not offered either, the
+renewal is refused on `status`, as above. While the service cannot be renewed now — not at all, not yet (its window), or
+a renewal of it under way — the list is empty and `custom_services` false: the renewal would be refused. A service with
+its own plan lists that plan alone, and `custom_services` is false for it; `plan_id` may be left out for it, and sent it
+must be that plan — another is `422` on `plan_id`, so a page drawn before the service's first renewal never pays for a
+plan it did not show. A request made again with its `Idempotency-Key` sends the same `plan_id`: another one is `422` on
+`idempotency_key`.
+
+### Renewing with a package built
+
+While `custom_services` of `GET …/renewal-plans` is true — the service has no plan, and the shop's builder is offered
+(`shop.custom_services`) —, the customer may renew it with the traffic and days they choose instead, as the bot's «🛠
+تمدید با سرویس دلخواه» does: read the bounds, buttons and tiers from `GET /custom-services` (its `servers` play no part —
+a renewal makes no new client), then send `gb` and `days` in place of `plan_id`:
+`GET /subscriptions/{id}/renewal?gb=50&days=30` previews it, and the `POST` body and `POST /discount-codes/check`'s (for
+a renewal) carry them too:
+
+```json
+{
+  "renewal": {
+    "method": "extend",
+    "methods": ["extend"],
+    "plan": null,
+    "custom": { "gb": 50, "days": 30, "devices": 2, "traffic_price": "125000.00", "days_price": "45000.00" },
+    "price": "170000.00",
+    "discounts": [],
+    "after": { "…": "as above" }
+  }
+}
+```
+
+It is priced by the builder's tiers, discounted as a renewal of no plan — a sale for renewals of every plan, the
+customer's own percent or tier, and a code not limited to certain plans (one limited to servers holds on the service's
+own server) —, by any of the shop's `methods`, inside its window. It adds the package and gives the builder's `devices`
+(from when, as a plan's: [a renewal](#a-renewal)). Its order has `plan` null and carries `traffic_bytes`, `days` and `devices`; the
+service it renews **keeps having no plan**, so `picks_plan` stays true, its next renewal is picked again, and
+`auto_renew.offered` stays false ([automatic renewal](Store-API-After-Buying.md#automatic-renewal)). The refusals, each a
+`422`:
+
+1. `status` — `ساخت سرویس دلخواه الان در دسترس نیست.` while the builder is not offered (read `GET …/renewal-plans`
+   again), or the renewal's own refusals above.
+2. `gb`, `days` — the builder's: no whole number, or outside its bounds (`حجم را عددی بین ۱ تا ۵۰۰ گیگابایت بنویسید.`);
+   `gb` also for a service renewed on its own plan (`این سرویس با پلن خودش تمدید می‌شود.`).
+3. `plan_id` — sent beside them (`برای تمدید یا یک پلن انتخاب کنید یا حجم و مدت دلخواه را، نه هر دو.`); and, neither sent
+   while either may be, `یک پلن برای تمدید این سرویس انتخاب کنید، یا حجم و مدت دلخواه را.`.
+
+A request made again with its `Idempotency-Key` sends the same `gb` and `days`: another package is `422` on
+`idempotency_key`.
+
+## Extra traffic, time and devices
+
+«حجم، زمان و کاربر اضافه»: more traffic (whole GB), more time (whole days) or more devices at once (whole devices, «کاربر
+اضافه» — the service's IP limit) for one of the customer's services, each bought on its own, on top of what the service
+has — as the bot's «🔋 حجم اضافه», «⏳ زمان اضافه» and «👥 کاربر اضافه» sell them —, at its plan's own prices when it
+has some, else the shop's. Offer each while the service's `extras.traffic`, `extras.time` or `extras.devices` is true
 ([services](Store-API-After-Buying.md#services)), and read what may be bought when the customer opens it:
 
 `GET /subscriptions/{id}/extras` → `200`
@@ -200,7 +392,8 @@ prices when it has some, else the shop's. Offer each while the service's `extras
         { "quantity": 10, "price": "18000.00" },
         { "quantity": 50, "price": "100000.00" }
       ],
-      "custom": { "min": 1, "max": 100 }
+      "custom": { "min": 1, "max": 100 },
+      "days": null
     },
     "time": {
       "price": "1000.00",
@@ -208,16 +401,32 @@ prices when it has some, else the shop's. Offer each while the service's `extras
         { "quantity": 7, "price": "7000.00" },
         { "quantity": 30, "price": "25000.00" }
       ],
-      "custom": { "min": 1, "max": 60 }
+      "custom": { "min": 1, "max": 60 },
+      "days": null
+    },
+    "devices": {
+      "price": "18000.00",
+      "options": [
+        { "quantity": 1, "price": "18000.00" },
+        { "quantity": 2, "price": "30000.00" }
+      ],
+      "custom": { "min": 1, "max": 5 },
+      "days": 18
     }
   }
 }
 ```
 
-- `traffic` is counted in GB, `time` in days; a kind is `null` while none of it may be bought for this service — the shop
-  sells none (it starts with none on sale), or the service cannot take it (below).
+- `traffic` is counted in GB, `time` in days, `devices` in devices; a kind is `null` while none of it may be bought for
+  this service — the shop sells none (it starts with none on sale), or the service cannot take it (below).
 - `options` are the amounts offered as buttons, the smallest first, each with what it costs: a price of its own, or
-  `price` — one GB's or one day's — times it.
+  `price` — one GB's, one day's or one device's — times it.
+- `days` — devices alone: the shop prices them for 30 days, and a service pays its share for the days it has left — to
+  its end date (whole days, a part of one counting as one, at least 1), its whole term while it waits for its first
+  connection, 30 for one that never ends. Every price of `devices` is already that share, rounded up to whole Toman
+  (above: 30,000 a device and two at 50,000, for 18 of 30 days); say "for the 18 days left". A custom count costs its
+  whole price prorated and rounded up once, so it may come a Toman or so under `price` times it — the checkout and the
+  code check say it exactly. `null` for traffic and time.
 - `custom`, while not `null`: any whole amount from `min` to `max` may be bought, at `price` each — show a field for it,
   and its cost as it is typed. `null`: the `options` alone.
 - In an agent's shop, no more traffic than the agent still has to sell is offered: the amounts above it go, and
@@ -226,11 +435,14 @@ prices when it has some, else the shop's. Offer each while the service's `extras
 Which services take them: an active or ended one — not one support switched off, nor one gone from its server. Traffic
 while it has a quota and its time has not run out — one whose traffic ran out runs again with it; time while it has a
 term and its traffic has not run out — one whose time ran out starts again, its days counted from its next connection.
-One that ran out on both counts is a [renewal](#a-renewal)'s.
+Devices while it has a device limit (its `devices` above 0) and neither its time nor its traffic has run out, on a
+server whose panel enforces the limit — none on PasarGuard —; they last until the period in use ends (`days`), and a
+renewal brings its plan's limit. One that ran out on both counts is a [renewal](#a-renewal)'s.
 
-Then `POST /subscriptions/{id}/extra-traffic` `{ gb, method_id, discount_code? }` or `POST /subscriptions/{id}/extra-time`
-`{ days, method_id, discount_code? }`, with an `Idempotency-Key` (`GET /payment-methods?for=extra_traffic` or `for=extra_time`; the wallet
-pays them as it pays a purchase):
+Then `POST /subscriptions/{id}/extra-traffic` `{ gb, method_id, discount_code? }`, `POST /subscriptions/{id}/extra-time`
+`{ days, method_id, discount_code? }` or `POST /subscriptions/{id}/extra-devices`
+`{ devices, method_id, discount_code? }`, with an `Idempotency-Key` (`GET /payment-methods?for=extra_traffic`,
+`for=extra_time` or `for=extra_devices`; the wallet pays them as it pays a purchase):
 
 `POST /subscriptions/{id}/extra-traffic` request
 ```json
@@ -242,10 +454,12 @@ time, in this order, each a `422` on its field:
 
 1. `status` — the service cannot take it: `این سرویس فعال نیست؛ با پشتیبانی در تماس باشید.` (switched off by support,
    gone from its server), `حجم این سرویس نامحدود است.`, `زمان این سرویس نامحدود است.`, `زمان این سرویس تمام شده است؛
-   اول زمانش را بخرید یا سرویس را تمدید کنید.` (traffic for one whose time ran out), `حجم این سرویس تمام شده است؛ اول
-   حجمش را بخرید یا سرویس را تمدید کنید.` (time for one whose traffic ran out).
-2. `gb` or `days` — none sold for this service now (`این فروشگاه برای این سرویس حجم اضافه نمی‌فروشد.`, or `زمان
-   اضافه`); no whole number (`تعداد گیگابایت را با عدد و بدون اعشار بنویسید.`, or `روز`); or an amount not on offer, with
+   اول زمانش را بخرید یا سرویس را تمدید کنید.` (traffic or devices for one whose time ran out), `حجم این سرویس تمام شده
+   است؛ اول حجمش را بخرید یا سرویس را تمدید کنید.` (time for one whose traffic ran out), `تعداد کاربر این سرویس نامحدود
+   است.`, `سرور این سرویس تعداد کاربر را محدود نمی‌کند؛ کاربر اضافه برایش فروخته نمی‌شود.` (devices on PasarGuard).
+2. `gb`, `days` or `devices` — none sold for this service now (`این فروشگاه برای این سرویس حجم اضافه نمی‌فروشد.`, or
+   `زمان اضافه`, `کاربر اضافه`); no whole number (`تعداد گیگابایت را با عدد و بدون اعشار بنویسید.`, or `روز`, `کاربر`);
+   or an amount not on offer, with
    what is (`این مقدار فروخته نمی‌شود؛ حجم اضافه بین ۱ تا ۱۰۰ گیگابایت بنویسید، یا یکی از این‌ها را بخرید: ۱۰ گیگابایت
    (۱۸٬۰۰۰ تومان)، ۵۰ گیگابایت (۱۰۰٬۰۰۰ تومان).`) — read the offer again.
 3. `method_id` — as for a purchase.
@@ -255,23 +469,24 @@ time, in this order, each a `422` on its field:
 Then the unpaid-order cap of [the Idempotency-Key](#the-idempotency-key); a request made again with its key whose order
 is no longer to be paid is answered by that order before any of these is asked, whatever the prices say since.
 
-The answer is a checkout ([what a checkout answers](#what-a-checkout-answers)) of an order of type `extra_traffic` or
-`extra_time`, its `traffic_bytes` or `days` what it brings. Paid from the wallet, it is `settled` with the service as it
-now stands in `subscription`: its quota grown by the GB — counted on from what it used, where that ran past the quota —,
-or its end moved by the days — or, its time run out, a new term from its next connection (`awaits_first_use` true). By
+The answer is a checkout ([what a checkout answers](#what-a-checkout-answers)) of an order of type `extra_traffic`,
+`extra_time` or `extra_devices`, its `traffic_bytes`, `days` or `devices` what it brings. Paid from the wallet, it is
+`settled` with the service as it now stands in `subscription`: its quota grown by the GB — counted on from what it used,
+where that ran past the quota —, its end moved by the days — or, its time run out, a new term from its next connection
+(`awaits_first_use` true) —, or its `devices` grown by those bought. By
 card, the extra is added once support approves the receipt. As it is added the server is read again: a service switched
 off since, or run out on the other count, fails the order, for support to finish or give the money back.
 
 ## Discount codes
 
 A code the customer types («کد تخفیف») goes with the ordering request as `discount_code` — any case, Persian digits too —
-on a purchase, a renewal, extra traffic or time (never a top-up). It is applied to what the customer's automatic discount
-left ([discounts](Store-API-Shop.md#discounts)): a percent (held to its cap), a fixed number of Toman, or the whole amount
-— a code that takes it all is a free order, `settled` at `"0.00"`. It holds while it is the shop's, switched on, inside
-its window (an "hourly" code ends at an hour), for that kind of order, plan and server (a renewal's and an extra's: their
-service's), for a customer who has bought nothing when it says so, for an order of at least its least, and while it has
-uses left — in all, and for this customer. Each refusal is a `422` on `discount_code`, worded for the customer: show it
-under the code's field.
+on a purchase, a renewal, extra traffic, time or devices (never a top-up). It is applied to what the customer's automatic
+discount left ([discounts](Store-API-Shop.md#discounts)): a percent (held to its cap), a fixed number of Toman, or the
+whole amount — a code that takes it all is a free order, `settled` at `"0.00"`. It holds while it is the shop's,
+switched on, inside its window (an "hourly" code ends at an hour), for that kind of order, plan and server (a renewal's
+and an extra's: their service's), for a customer who has bought nothing when it says so, for an order of at least its
+least, and while it has uses left — in all, and for this customer. Each refusal is a `422` on `discount_code`, worded for
+the customer: show it under the code's field.
 
 Quote it before the customer pays: `POST /discount-codes/check` — the same quote their order would be made at, nothing
 ordered:
@@ -282,7 +497,9 @@ ordered:
 ```
 
 `for` is `purchase` (`plan_id`, and `server_id` once a location is picked — a code for some servers alone is refused
-until it is), `renewal` (`subscription_id`) or `extra_traffic` / `extra_time` (`subscription_id` and `gb` / `days`).
+until it is), `renewal` (`subscription_id`; for one without a plan the `plan_id` picked, or the `gb` and `days` of a
+package built) or `extra_traffic` / `extra_time` / `extra_devices` (`subscription_id` and
+`gb` / `days` / `devices` — devices at their share for the days the service has left, as `GET …/extras` shows them).
 
 `POST /discount-codes/check` → `200`
 ```json
@@ -299,7 +516,7 @@ until it is), `renewal` (`subscription_id`) or `extra_traffic` / `extra_time` (`
 ```
 
 A code that does not hold is a `422` on `code`, worded for the customer; the rest of the request is refused as the
-checkout's own would be (`plan_id`, `server_id`, `status`, `gb`, `days`, a `404` for a service not theirs).
+checkout's own would be (`plan_id`, `server_id`, `status`, `gb`, `days`, `devices`, a `404` for a service not theirs).
 
 - **Its uses.** A use is an order made with the code that is not cancelled. An order nobody pays gives its use back as it
   is cancelled or expires — an order made with a code expires once the shop's hold is over (60 minutes by default, set
@@ -331,7 +548,7 @@ Every ordering request answers `{ "checkout": { outcome, order, transfer, subscr
 
 | `outcome` | `order.status` | Meaning | The site |
 |---|---|---|---|
-| `settled` | `fulfilled` | paid from the wallet and delivered | show `subscription` — for a purchase the new service, for a renewal the renewed one, for extra traffic or time the service with it: its link and a QR code of it |
+| `settled` | `fulfilled` | paid from the wallet and delivered | show `subscription` — for a purchase the new service, for a renewal the renewed one, for extra traffic, time or devices the service with it: its link and a QR code of it |
 | `settled` | `failed` | paid, but the delivery failed; support delivers it (the money is not lost) | "Paid — support is finishing your order", with a link to the order |
 | `transfer` | `pending` | pay by card: `transfer` says where | show the card and the receipt upload for `transfer.payment_id` ([the receipt](#card-transfer-and-the-receipt)) |
 | `processing` | `paid` or `processing` | paid, its delivery under way | read `GET /orders/{id}` every few seconds until `fulfilled` or `failed` |
@@ -358,6 +575,7 @@ support. Support's own notes on an order are never in the answer.
       "created_at": "2026-10-07T12:00:00+00:00",
       "fulfilled_at": "2026-10-07T12:00:03+00:00",
       "plan": { "id": 3, "name": "یک ماهه ۵۰ گیگ" },
+      "package_name": "یک ماهه ۵۰ گیگ",
       "server": { "id": 1, "name": "آلمان" },
       "subscription": { "id": 17, "name": "ali_2" },
       "traffic_bytes": null,
@@ -387,9 +605,11 @@ support. Support's own notes on an order are never in the answer.
       "term": { "duration_days": 30, "duration_hours": 720, "starts_at": null, "expires_at": null, "awaits_first_use": true },
       "auto_renew": { "on": false, "offered": true, "days_before": 2 },
       "renewable": true,
+      "picks_plan": false,
       "extras": { "traffic": true, "time": true },
       "link_rotation": true,
       "next_period": null,
+      "next_devices": null,
       "presence": null,
       "synced_at": "2026-10-07T12:00:03+00:00",
       "created_at": "2026-10-07T12:00:03+00:00"
@@ -412,6 +632,7 @@ support. Support's own notes on an order are never in the answer.
       "created_at": "2026-10-07T12:10:00+00:00",
       "fulfilled_at": null,
       "plan": { "id": 3, "name": "یک ماهه ۵۰ گیگ" },
+      "package_name": "یک ماهه ۵۰ گیگ",
       "server": { "id": 1, "name": "آلمان" },
       "subscription": null,
       "traffic_bytes": null,
@@ -452,8 +673,9 @@ A wallet purchase, renewal or extra made on the site sends no notice: this answe
 | `422` on `plan_id` | not on sale now | read the catalogue again (`GET /plans`, with the customer's token) |
 | `422` on `server_id` | not on that location now, while another of the plan's sells it | read the plan again (`GET /plans/{id}`) and offer its `locations` |
 | `422` on `amount` | a top-up outside the bounds | show the message |
-| `422` on `gb` or `days` | extra traffic or time none of which is sold for the service now, an amount that is no whole number, or one not on offer | read the offer again (`GET /subscriptions/{id}/extras`) |
-| `422` on `status` | a renewal not possible now, or one under way — or extra traffic or time the service cannot take | show the message; link to the orders |
+| `422` on `gb`, `days` or `devices` | extra traffic, time or devices none of which is sold for the service now, an amount that is no whole number, or one not on offer | read the offer again (`GET /subscriptions/{id}/extras`) |
+| `422` on `status` | a renewal not possible now, not yet (the shop's window: the message says from when), or one under way — or extra traffic, time or devices the service cannot take | show the message; link to the orders |
+| `422` on `method` | a renewal method the shop does not offer (switched off since the page was drawn) | preview the renewal again and offer its `methods` |
 | `422` on `idempotency_key` | a key reused for something else or with another `method_id`, or none | a new key for a new attempt — and look at `GET /orders` first, the earlier attempt may have gone through |
 | `422`, no field: `سفارش‌های پرداخت‌نشده شما زیاد است؛ اول آن‌ها را پرداخت کنید یا بگذارید منقضی شوند.` | 5 unpaid orders open; nothing was ordered | link to the orders: pay one, or let it expire |
 | `409` `این سفارش همین حالا جای دیگری پرداخت یا بسته شد؛ وضعیت آن را در سفارش‌ها ببینید.` | the order was paid or closed elsewhere in the same moment; nothing was charged | show the orders |

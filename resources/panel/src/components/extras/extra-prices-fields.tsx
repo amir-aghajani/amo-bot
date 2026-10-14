@@ -1,23 +1,12 @@
-import { useId, useLayoutEffect, useRef } from 'react'
-import { BatteryPlus, ClockPlus, PencilLine, Plus, X, type LucideIcon } from 'lucide-react'
-import {
-  extraOffer,
-  extraPricesIn,
-  OPTIONS_MOST,
-  tomanOf,
-  type ExtraField,
-  type ExtraKind,
-  type ExtraOfferPreview,
-  type ExtraOptionDraft,
-  type ExtraPricesAs,
-  type ExtraPricesDraft,
-} from '@/components/extras/draft'
+import { useId } from 'react'
+import { BatteryPlus, ClockPlus, PencilLine, UserPlus, type LucideIcon } from 'lucide-react'
+import { extraOffer, extraPricesIn, type ExtraField, type ExtraKind, type ExtraOfferPreview, type ExtraPricesAs, type ExtraPricesDraft } from '@/components/extras/draft'
 import { Field, FieldGroup, FormPart } from '@/components/field'
-import { IconButton } from '@/components/icon-button'
-import { Button } from '@/components/ui/button'
+import { PricedRowsEditor } from '@/components/priced-rows-editor'
 import { Input } from '@/components/ui/input'
 import { useMainShop } from '@/lib/auth'
-import { formatDays, formatGb, formatMoney, formatNumber, wholeOf } from '@/lib/format'
+import { formatDays, formatDevices, formatGb, formatMoney, formatNumber, tomanOf, wholeNumberOf } from '@/lib/format'
+import { EXTRA_OFFER, EXTRA_OPTIONS, EXTRAS_SETTINGS, PACKAGE } from '@/lib/limits'
 import type { Form } from '@/lib/use-form'
 import { cn } from '@/lib/utils'
 
@@ -38,10 +27,12 @@ interface KindWords {
   typedOn: string
   typedOff: string
   none: string
-  /** An amount in words: «۱۰ گیگابایت», «۷ روز». */
+  /** An amount in words: «۱۰ گیگابایت», «۷ روز», «۲ کاربر». */
   amount: (quantity: number) => string
   /** A quantity's placeholder: guidance, in Latin digits. */
   example: string
+  /** Said under the bot's preview, for a kind whose prices are not what each service pays; nothing otherwise. */
+  charged: string | null
 }
 
 const KINDS: Record<ExtraKind, KindWords> = {
@@ -55,11 +46,12 @@ const KINDS: Record<ExtraKind, KindWords> = {
     option: 'حجم پیشنهادی',
     unit: 'گیگابایت',
     typed: 'حجم دلخواه',
-    typedOn: 'مشتری می‌تواند حجم دلخواهش را هم بنویسد، بین این دو عدد (1 تا 10000 گیگابایت).',
+    typedOn: `مشتری می‌تواند حجم دلخواهش را هم بنویسد، بین این دو عدد (1 تا ${PACKAGE.MAX_GB} گیگابایت).`,
     typedOff: 'تا قیمت هر گیگابایت خالی است، مشتری حجم دلخواه نمی‌نویسد و این دو به کار نمی‌آیند.',
     none: 'با این قیمت‌ها حجم اضافه فروخته نمی‌شود.',
     amount: formatGb,
     example: '10',
+    charged: null,
   },
   time: {
     title: 'زمان اضافه',
@@ -71,11 +63,30 @@ const KINDS: Record<ExtraKind, KindWords> = {
     option: 'زمان پیشنهادی',
     unit: 'روز',
     typed: 'زمان دلخواه',
-    typedOn: 'مشتری می‌تواند تعداد روز دلخواهش را هم بنویسد، بین این دو عدد (1 تا 365 روز).',
+    typedOn: `مشتری می‌تواند تعداد روز دلخواهش را هم بنویسد، بین این دو عدد (1 تا ${PACKAGE.MAX_DAYS} روز).`,
     typedOff: 'تا قیمت هر روز خالی است، مشتری زمان دلخواه نمی‌نویسد و این دو به کار نمی‌آیند.',
     none: 'با این قیمت‌ها زمان اضافه فروخته نمی‌شود.',
     amount: formatDays,
     example: '7',
+    charged: null,
+  },
+  devices: {
+    title: 'کاربر اضافه',
+    icon: UserPlus,
+    about:
+      'کاربرهایی که مشتری به تعداد کاربر هم‌زمان سرویسش اضافه می‌کند، تا پایان دوره فعلی سرویس؛ قیمتشان هم برای روزهای مانده تا همان روز حساب می‌شود و تمدید، تعداد کاربر پلن را می‌دهد. سرویسی که تعداد کاربرش نامحدود است، یا روی سروری است که تعداد کاربر را محدود نمی‌کند (PasarGuard)، کاربر اضافه نمی‌خرد.',
+    agent: null,
+    unitPrice: `قیمت هر کاربر برای ${EXTRA_OFFER.PERIOD_DAYS} روز`,
+    options: 'تعدادهای پیشنهادی',
+    option: 'تعداد پیشنهادی',
+    unit: 'کاربر',
+    typed: 'تعداد دلخواه',
+    typedOn: `مشتری می‌تواند تعداد دلخواهش را هم بنویسد، بین این دو عدد (1 تا ${EXTRAS_SETTINGS.MAX_DEVICES} کاربر).`,
+    typedOff: 'تا قیمت هر کاربر خالی است، مشتری تعداد دلخواه نمی‌نویسد و این دو به کار نمی‌آیند.',
+    none: 'با این قیمت‌ها کاربر اضافه فروخته نمی‌شود.',
+    amount: formatDevices,
+    example: '1',
+    charged: `این قیمت‌ها برای ${EXTRA_OFFER.PERIOD_DAYS} روز است؛ هر سرویس به نسبت روزهای مانده‌اش می‌پردازد، مثلا سرویسی که ${EXTRA_OFFER.PERIOD_DAYS / 2} روز مانده دارد نصف آن را.`,
   },
 }
 
@@ -89,9 +100,9 @@ interface ExtraPricesFieldsProps<P extends string> {
 }
 
 /**
- * The «حجم و زمان اضافه» price-list editor, for the shop's list and a plan's own: per extra, the unit price, the amounts
- * offered as buttons, the bounds a customer may type, and a live preview of the bot's buttons. Fields live in the host
- * form under `prefix` + name, the names the server refuses them by.
+ * The «حجم، زمان و کاربر اضافه» price-list editor, for the shop's list and a plan's own: per extra (traffic, time, devices), the
+ * unit price, the amounts offered as buttons, the bounds a customer may type, and a live preview of the bot's buttons.
+ * Fields live in the host form under `prefix` + name, the names the server refuses them by.
  */
 export function ExtraPricesFields<P extends string>({ form, prefix }: ExtraPricesFieldsProps<P>) {
   const prices = extraPricesIn(prefix, form.values)
@@ -101,9 +112,10 @@ export function ExtraPricesFields<P extends string>({ form, prefix }: ExtraPrice
 
   return (
     <div className="@container">
-      <div className="grid gap-4 @xl:grid-cols-2">
+      <div className="grid gap-4 @xl:grid-cols-2 @5xl:grid-cols-3">
         <ExtraBlock kind="traffic" prices={prices} change={change} error={error} />
         <ExtraBlock kind="time" prices={prices} change={change} error={error} />
+        <ExtraBlock kind="devices" prices={prices} change={change} error={error} />
       </div>
     </div>
   )
@@ -116,9 +128,6 @@ interface ExtraBlockProps {
   error: (field: ExtraField) => string | undefined
 }
 
-/** Where the focus goes once the rows have changed: a row's part — the new row's amount, the remove beside a removed row — or the add. */
-type FocusTarget = { row: number; part: 'quantity' | 'remove' } | 'add'
-
 /** One extra's prices: the unit price, the amounts offered, the bounds of what may be typed, and the bot's offer by them. */
 function ExtraBlock({ kind, prices, change, error }: ExtraBlockProps) {
   const id = useId()
@@ -129,36 +138,9 @@ function ExtraBlock({ kind, prices, change, error }: ExtraBlockProps) {
   const unit = tomanOf(prices[field.price])
   const priced = unit !== null && unit >= 1
   const optionsRefused = error(field.options)
-  const full = rows.length >= OPTIONS_MOST
-
-  // The rows changed under the focus (a row added, one removed): it goes where the change leads, never to the document.
-  const block = useRef<HTMLDivElement>(null)
-  const focus = useRef<FocusTarget | null>(null)
-  useLayoutEffect(() => {
-    const target = focus.current
-    if (target === null) return
-    focus.current = null
-    const selector = target === 'add' ? '[data-add]' : `[data-row="${target.row}"] [data-part="${target.part}"]`
-    block.current?.querySelector<HTMLElement>(selector)?.focus()
-  })
-
-  const setRows = (next: ExtraOptionDraft[]) => change(field.options, next)
-  const add = () => {
-    if (full) return
-    const row = { id: Math.max(-1, ...rows.map((option) => option.id)) + 1, quantity: '', price: '' }
-    focus.current = { row: row.id, part: 'quantity' }
-    setRows([...rows, row])
-  }
-  const remove = (index: number) => {
-    const next = rows.filter((_, i) => i !== index)
-    const neighbour = next[index] ?? next[index - 1]
-    focus.current = neighbour ? { row: neighbour.id, part: 'remove' } : 'add'
-    setRows(next)
-  }
-  const edit = (index: number, edits: Partial<ExtraOptionDraft>) => setRows(rows.map((row, i) => (i === index ? { ...row, ...edits } : row)))
 
   return (
-    <FormPart ref={block} icon={words.icon} title={words.title} about={agentShop && words.agent ? `${words.about} ${words.agent}` : words.about}>
+    <FormPart icon={words.icon} title={words.title} about={agentShop && words.agent ? `${words.about} ${words.agent}` : words.about}>
       <Field
         id={`${id}-price`}
         label={`${words.unitPrice} (تومان)`}
@@ -168,57 +150,27 @@ function ExtraBlock({ kind, prices, change, error }: ExtraBlockProps) {
         <Input dir="ltr" inputMode="numeric" autoComplete="off" value={prices[field.price]} onChange={(e) => change(field.price, e.target.value)} />
       </Field>
 
-      <FieldGroup label={words.options} description={`دکمه‌هایی که مشتری می‌بیند؛ قیمت خالی یعنی به ${words.unitPrice}.`} error={optionsRefused} className="gap-2">
-        {rows.length > 0 && (
-          <div className="grid gap-1.5">
-            <div aria-hidden className="grid grid-cols-[4.5rem_minmax(0,1fr)_2rem] gap-2 text-caption text-muted-foreground">
-              <span>{words.unit}</span>
-              <span>قیمت (تومان)</span>
-            </div>
-            <ul className="grid gap-2">
-              {rows.map((row, index) => {
-                const name = `${words.option} ${formatNumber(index + 1)}`
-                const quantity = wholeOf(row.quantity)
-                return (
-                  <li key={row.id} data-row={row.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)_2rem] items-center gap-2">
-                    <Input
-                      data-part="quantity"
-                      dir="ltr"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      aria-label={`${name} (${words.unit})`}
-                      placeholder={words.example}
-                      value={row.quantity}
-                      onChange={(e) => edit(index, { quantity: e.target.value })}
-                    />
-                    <Input
-                      dir="ltr"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      aria-label={`قیمت ${name} (تومان)`}
-                      // Left blank, it sells at the unit price: what that comes to, as the field's guidance.
-                      placeholder={priced && quantity !== null ? String(unit * Number(quantity)) : undefined}
-                      value={row.price}
-                      onChange={(e) => edit(index, { price: e.target.value })}
-                    />
-                    <IconButton data-part="remove" aria-label={`حذف ${name}`} onClick={() => remove(index)}>
-                      <X className="size-4" aria-hidden />
-                    </IconButton>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {/* Held, not disabled, once the list is full: just pressed, it keeps the focus. */}
-          <Button data-add variant="secondary" size="sm" icon={Plus} aria-disabled={full} onClick={add}>
-            افزودن مقدار
-          </Button>
-          {full && <span className="text-footnote text-muted-foreground">{`حداکثر ${formatNumber(OPTIONS_MOST)} مقدار؛ برای مقدار تازه یکی را بردارید.`}</span>}
-        </div>
-      </FieldGroup>
+      <PricedRowsEditor
+        label={words.options}
+        description={`دکمه‌هایی که مشتری می‌بیند؛ قیمت خالی یعنی به ${words.unitPrice}.`}
+        error={optionsRefused}
+        rows={rows}
+        onChange={(next) => change(field.options, next)}
+        amount="quantity"
+        headings={{ amount: words.unit, price: 'قیمت (تومان)' }}
+        names={(place) => {
+          const row = `${words.option} ${place}`
+          return { row, amount: `${row} (${words.unit})`, price: `قیمت ${row} (تومان)` }
+        }}
+        example={words.example}
+        // Left blank, it sells at the unit price: what that comes to, as the field's guidance.
+        pricePlaceholder={(row) => {
+          const quantity = wholeNumberOf(row.quantity)
+          return priced && quantity !== null ? String(unit * quantity) : undefined
+        }}
+        noun="مقدار"
+        most={EXTRA_OPTIONS.MOST}
+      />
 
       <FieldGroup label={words.typed} hint={priced ? words.typedOn : words.typedOff} className="gap-2">
         <div className="grid grid-cols-2 gap-3">
@@ -270,6 +222,7 @@ function OfferPreview({ words, offer, refused }: { words: KindWords; offer: Extr
         </p>
       )}
       {!sold && <p className="text-footnote text-muted-foreground">{words.none}</p>}
+      {sold && words.charged && <p className="text-footnote leading-relaxed text-muted-foreground">{words.charged}</p>}
       {unpriced && !refused && <p className="text-footnote text-warning">{`${words.amount(unpriced.quantity)} قیمت ندارد؛ قیمت آن، یا ${words.unitPrice} را بنویسید.`}</p>}
     </div>
   )

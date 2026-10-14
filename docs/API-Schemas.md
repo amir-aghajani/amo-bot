@@ -25,7 +25,7 @@ No valid session for this shop: no bearer token, an ended session (the `customer
 
 ### Response: SignInAgain
 
-The session's sign-in is too old to change how the account signs in. The message is «برای این کار دوباره وارد شوید.»; proving a way in again (`POST /me/reauthenticate`) allows it for 15 minutes. (A banned customer's 403 says so in its message, without this header.)
+The session's sign-in is too old to change how the account signs in, or to hand a service to another customer. The message is «برای این کار دوباره وارد شوید.»; proving a way in again (`POST /me/reauthenticate`) allows it for 15 minutes. (A banned customer's 403 says so in its message, without this header.)
 
 - Header `WWW-Authenticate`: `Bearer error="insufficient_user_authentication", max_age=900` (RFC 9470): the sign-in may be at most this many seconds old.
 - Body: [ErrorResponse](#errorresponse).
@@ -334,12 +334,6 @@ What happened to a notice the bot sent a customer: `told` (delivered in Telegram
 
 String: `told`, `emailed`, `turned_away`, `unreachable`, `refused`, `no_telegram`.
 
-### DiscountKind
-
-The order types a discount can apply to: things a customer buys for themselves, never a wallet top-up or an agent's traffic.
-
-String: `purchase`, `renewal`, `extra_traffic`, `extra_time`.
-
 ### DiscountLine
 
 One discount applied to a price, labelled for the customer («فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪», «کد NOWRUZ»).
@@ -373,12 +367,12 @@ The shape of every refusal and failure, whatever produced it. A 429 also sends t
 
 ### ExtraOption
 
-An amount of extra traffic (GB) or time (days) offered as a button, at its own price or at the price per GB or day.
+An amount of extra traffic (GB), time (days) or devices offered as a button, at its own price or at the price per GB, day or device (a device's prices are for 30 days, prorated when sold).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `quantity` | integer | yes |  |
-| `price` | string or null | yes | Toman; null to charge the price per GB or day times the quantity. |
+| `price` | string or null | yes | Toman; null to charge the price per GB, day or device times the quantity. |
 
 ### ExtraOptionInput
 
@@ -386,12 +380,12 @@ An amount offered as a button, as a form sends it. A row with both quantity and 
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `quantity` | [WholeNumberInput](#wholenumberinput) or null | yes | GB or days. |
-| `price` | [AmountInput](#amountinput) or null | yes | Whole Toman, above zero. Blank or null to use the price per GB or day (which must then be set). |
+| `quantity` | [WholeNumberInput](#wholenumberinput) or null | yes | GB, days or devices. |
+| `price` | [AmountInput](#amountinput) or null | yes | Whole Toman, above zero. Blank or null to use the price per GB, day or device (which must then be set). |
 
 ### ExtraPrices
 
-A plan's own price list for extra traffic and time (the shop's list is BotSettingsData's `extra_…` fields). For each kind: the unit price, the preset amounts, and the smallest and largest custom amount.
+A plan's own price list for extra traffic, time and devices (the shop's list is BotSettingsData's `extra_…` fields). For each kind: the unit price, the preset amounts, and the smallest and largest custom amount. A device's prices are for 30 days, charged for the days a service has left.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -403,6 +397,10 @@ A plan's own price list for extra traffic and time (the shop's list is BotSettin
 | `time_options` | list of [ExtraOption](#extraoption) | yes | Fewest days first. |
 | `time_min` | integer | yes |  |
 | `time_max` | integer | yes |  |
+| `devices_price` | string or null | yes | Toman per device for 30 days; null when only the preset counts with their own prices are sold (no custom count). |
+| `devices_options` | list of [ExtraOption](#extraoption) | yes | Fewest devices first. |
+| `devices_min` | integer | yes |  |
+| `devices_max` | integer | yes |  |
 
 ### ExtraPricesRequest
 
@@ -418,6 +416,10 @@ A plan's own price list for extras, as a form sends it. Refusals are reported un
 | `time_options` | list of [ExtraOptionInput](#extraoptioninput) | no | Day counts, 1 to 365, each once, at most 8. Left out for none. |
 | `time_min` | [WholeNumberInput](#wholenumberinput) | yes | 1 to 365 days. |
 | `time_max` | [WholeNumberInput](#wholenumberinput) | yes | `time_min` to 365 days. |
+| `devices_price` | [AmountInput](#amountinput) or null | no | Whole Toman per device for 30 days, above zero. Blank, null or left out for none. |
+| `devices_options` | list of [ExtraOptionInput](#extraoptioninput) | no | Device counts, 1 to 20, each once, at most 8. Left out for none. |
+| `devices_min` | [WholeNumberInput](#wholenumberinput) | no | 1 to 20 devices; left out, 1 (a list sent as before 0.4.0 sold devices). |
+| `devices_max` | [WholeNumberInput](#wholenumberinput) | no | `devices_min` to 20 devices; left out, 5. |
 
 ### GatewayKind
 
@@ -489,6 +491,15 @@ A reference by id and name (a plan, a server).
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
 
+### NextDevices
+
+A device limit a renewal queued after the current period: from when (the current period's end) and how many devices at once then.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `from` | string (date-time) | yes |  |
+| `devices` | integer | yes | 0 for no limit. |
+
 ### OrderDiscountCode
 
 The discount code used for an order.
@@ -497,6 +508,12 @@ The discount code used for an order.
 |---|---|---|---|
 | `id` | integer or null | yes | Null once the code is deleted. |
 | `code` | string | yes |  |
+
+### OrderPackageName
+
+What a purchase or a renewal buys, in words — the one wording the bot and the report group use too: its plan's name, or a service the customer built («سرویس دلخواه») as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز». Extra traffic, time or devices: its service's plan's name (null for a service without a plan). Null for any other order (a wallet top-up, an agent's traffic).
+
+String or null.
 
 ### OrderPayment
 
@@ -538,13 +555,16 @@ An order, as a row of the orders screen: what the customer asked for, and how fa
 | `discount_code` | [OrderDiscountCode](#orderdiscountcode) or null | yes | The discount code used; it counts as one of the code's uses unless the order is cancelled. Null for none. |
 | `user` | [UserRef](#userref) | yes |  |
 | `plan` | [NamedRef](#namedref) or null | yes | The plan of a purchase or renewal; for extras, the service's plan. |
+| `package_name` | [OrderPackageName](#orderpackagename) | yes |  |
+| `renewal_method` | [RenewalMethod](#renewalmethod) or null | yes | How a renewal adds its package (a renewal from before renewal methods, `extend`); null for any other order. |
 | `server` | [NamedRef](#namedref) or null | yes | The server the customer chose; for a renewal or extras, the service's server. |
 | `subscription` | object or null | yes | The service it bought, renewed or extended; null for a top-up, or once the service was deleted. |
 | `subscription.id` | integer | yes |  |
 | `subscription.name` | string | yes |  |
 | `subscription.status` | [SubscriptionStatus](#subscriptionstatus) | yes |  |
-| `traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise. |
-| `days` | integer or null | yes | The days it adds to a service (extra time); null otherwise. |
+| `traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: an agent's traffic, a service's extra traffic, or a built service's traffic; null otherwise. |
+| `days` | integer or null | yes | The days it adds to a service (extra time), or a built service's term; null otherwise. |
+| `devices` | integer or null | yes | The devices it adds to a service's IP limit (extra devices), or a built service's limit; null otherwise. |
 | `notes` | string or null | yes | Why it failed or was cancelled. For a failed delivery, the owner sees the panel's full diagnosis; anyone else (an agent, a website admin) a short summary. |
 | `payments` | list of [OrderPayment](#orderpayment) | yes | The payment attempts, newest first. |
 | `paid_at` | string (date-time) or null | yes |  |
@@ -566,9 +586,9 @@ String: `pending`, `paid`, `processing`, `fulfilled`, `cancelled`, `failed`, `re
 
 ### OrderType
 
-What an order buys: a plan (`purchase`), a service's `renewal`, a `wallet_topup`, `traffic` for an agent's bot (main bot only), or `extra_traffic` or `extra_time` for an existing service.
+What an order buys: a plan (`purchase`), a service's `renewal`, a `wallet_topup`, `traffic` for an agent's bot (main bot only), or `extra_traffic`, `extra_time` or `extra_devices` for an existing service.
 
-String: `purchase`, `renewal`, `wallet_topup`, `traffic`, `extra_traffic`, `extra_time`.
+String: `purchase`, `renewal`, `wallet_topup`, `traffic`, `extra_traffic`, `extra_time`, `extra_devices`.
 
 ### OrdersResponse
 
@@ -585,6 +605,12 @@ String: `purchase`, `renewal`, `wallet_topup`, `traffic`, `extra_traffic`, `extr
 | `meta.stuck` | integer | yes | Stuck orders (paid but not delivered), regardless of the filters. |
 | `meta.sold` | integer | yes | How many of the listed orders (tab, type, search and dates) are sales: paid, being delivered or delivered. |
 | `meta.sold_amount` | string | yes | Their total, in Toman. |
+
+### OwnOrderType
+
+An order type a customer buys for themselves — what a discount and a cashback rule can apply to, and what loyalty and the nightly draw count: never a wallet top-up or an agent's traffic.
+
+String: `purchase`, `renewal`, `extra_traffic`, `extra_time`, `extra_devices`.
 
 ### PageMeta
 
@@ -617,17 +643,18 @@ A payment, as a row of the payments screen.
 | `method` | string | yes | The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. |
 | `summary` | string or null | yes | What the customer was told to pay to, from the driver (the masked card number and holder); null for a driver without one (the wallet). |
 | `reference` | string or null | yes | The gateway's own id for the payment (the wallet's ledger line); null when it has none (a card transfer). |
-| `description` | string or null | yes | The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid), or a refund's note (also in `refund_note`). |
+| `description` | string or null | yes | The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), or a refund's note (also in `refund_note`). |
 | `user` | [UserRef](#userref) | yes |  |
 | `order` | object | yes |  |
 | `order.id` | integer | yes |  |
 | `order.type` | [OrderType](#ordertype) | yes |  |
 | `order.status` | [OrderStatus](#orderstatus) | yes |  |
-| `order.plan` | string or null | yes |  |
+| `order.plan` | string or null | yes | What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order. |
 | `order.server` | string or null | yes |  |
 | `order.subscription_id` | integer or null | yes |  |
-| `order.traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise. |
-| `order.days` | integer or null | yes | The days it adds to a service (extra time); null otherwise. |
+| `order.traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: an agent's traffic, a service's extra traffic, or a built service's traffic; null otherwise. |
+| `order.days` | integer or null | yes | The days it adds to a service (extra time), or a built service's term; null otherwise. |
+| `order.devices` | integer or null | yes | The devices it adds to a service's IP limit (extra devices), or a built service's limit; null otherwise. |
 | `order.notes` | string or null | yes | Why its delivery failed; null unless it did. The owner sees the panel's full diagnosis, anyone else a short summary. |
 | `order.discount_amount` | string | yes | The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. |
 | `order.discounts` | list of [DiscountLine](#discountline) | yes | The discounts applied, the automatic one first. |
@@ -787,7 +814,7 @@ A plan, as the list shows it.
 | `duration_hours` | integer | yes | The term in hours from the first connection (a daily plan's is days × 24); 0 for no time limit. |
 | `traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 for unlimited |
 | `ip_limit` | integer | yes | Devices at once; 0 for unlimited |
-| `extras` | [ExtraPrices](#extraprices) or null | yes | The plan's own prices for extra traffic and time; null to use the shop's (the bot settings' `extra_…`). |
+| `extras` | [ExtraPrices](#extraprices) or null | yes | The plan's own prices for extra traffic, time and devices; null to use the shop's (the bot settings' `extra_…`). |
 | `servers` | list of [PlanServerEntry](#planserverentry) | yes |  |
 | `unsellable_reason` | string or null | yes | Why the bot does not offer the plan now, apart from its switch: it has no server, none of its servers can sell (each entry says why), or an agent's traffic does not cover it. Null when it is offered. |
 | `is_active` | boolean | yes |  |
@@ -838,6 +865,15 @@ A server, as the plan form and the plans table show it.
 |---|---|---|---|
 | `plans` | list of [PlanRow](#planrow) | yes |  |
 
+### PriceTier
+
+A tier of a price: from `from` units on, `price` Toman a unit.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `from` | integer | yes |  |
+| `price` | string | yes |  |
+
 ### QueueCounts
 
 What waits for support: the sidebar's counts, and the first rows of the dashboard's attention card.
@@ -867,7 +903,7 @@ Integer: `7`, `30`, `90`.
 | `type` | [OrderType](#ordertype) | yes |  |
 | `status` | [OrderStatus](#orderstatus) | yes |  |
 | `amount` | string | yes |  |
-| `plan` | string or null | yes |  |
+| `plan` | string or null | yes | Its plan's name — a service the customer built in words, «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز» —; null for an order of neither. |
 | `user` | [UserRef](#userref) | yes |  |
 | `created_at` | string (date-time) | yes |  |
 
@@ -1015,6 +1051,12 @@ String: `referrals`, `earned`, `last_referral`.
 | `payment` | [PaymentRow](#paymentrow) | yes |  |
 | `delivery` | [Delivery](#delivery) | yes |  |
 
+### RenewalMethod
+
+How a renewal adds its package: `extend` «تمدید پلن فعلی» (the term on top of what is left; the traffic as the shop carries unused traffic or not), `reset_traffic` «ریست حجم + افزایش روز» (the term on top; the traffic counted afresh), `reset_time` «ریست زمان + انتقال حجم» (the term afresh; the traffic left carried over).
+
+String: `extend`, `reset_traffic`, `reset_time`.
+
 ### ReviewResponse
 
 | Field | Type | Required | What it is |
@@ -1076,15 +1118,15 @@ String: `asc`, `desc`.
 
 ### StaffGrant
 
-What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
+What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
 
 String: `catalog`, `wallet`, `refunds`, `extend`, `delete`, `account_security`.
 
 ### SubscriptionKind
 
-The services list's `kind` filter: the free test accounts (`test`), or every other service — sold, renewed or given (`regular`).
+The services list's `kind` filter: the free test accounts (`test`), the services customers added by their link (`claimed`, «افزودن سرویس با لینک»: `SubscriptionRow.claimed_at` set), or every other service — sold, renewed or given (`regular`: neither a test nor a claimed one).
 
-String: `test`, `regular`.
+String: `test`, `regular`, `claimed`.
 
 ### SubscriptionResponse
 
@@ -1103,8 +1145,9 @@ A service, as a row of the subscriptions screen: a client on a panel, as last re
 | `name` | string | yes | The client's name on the panel ("amir_2", "USER_7"). |
 | `link` | string | yes | The customer's subscription link. |
 | `is_test` | boolean | yes | A free test account («اکانت تست»): no plan, never renewed, never counted as ending soon (`expiring_soon`); removed by the tests' own rule (`removes_at`). |
+| `claimed_at` | string (date-time) or null | yes | When the customer added it by sending its link («افزودن سرویس با لینک», `claim_enabled`): a client made by hand on its panel. Null for any other service. Such a service has no plan until a renewal on one the customer picks, sold on its server (a renewal with a package built leaves it without). |
 | `user` | [UserRef](#userref) | yes |  |
-| `plan` | [NamedRef](#namedref) or null | yes | Null for a test account, or once the plan is deleted. |
+| `plan` | [NamedRef](#namedref) or null | yes | Null for a service without a plan — a test account, a service added by its link (`claimed_at`) or built by the customer («سرویس دلخواه»), until a renewal on a plan; one renewed with a package built stays so — and once the plan is deleted. |
 | `server` | [NamedRef](#namedref) | yes |  |
 | `traffic` | object | yes | In bytes; a limit of 0 means unlimited. |
 | `traffic.limit` | integer | yes |  |
@@ -1113,9 +1156,10 @@ A service, as a row of the subscriptions screen: a client on a panel, as last re
 | `duration_days` | integer | yes | The term in whole days, rounded up; 0 only when it never expires. `duration_hours` is exact. |
 | `duration_hours` | integer | yes | The term in hours, counted from the first connection; 0 never expires. |
 | `auto_renew` | boolean | yes | The customer's auto-renewal («تمدید خودکار»): renewed from their wallet before the deadline. |
-| `next_period` | object or null | yes | A renewal queued after the current period (unused traffic of the current period is not carried over): when it starts, and the most traffic left then, in bytes. |
+| `next_period` | object or null | yes | A renewal queued after the current period (unused traffic of the current period is not carried over): when it starts, and the most traffic left then, in bytes. Null while no traffic cap waits for it — a renewal may still have queued its device limit alone (`next_devices`). |
 | `next_period.starts_at` | string (date-time) | yes |  |
 | `next_period.traffic` | integer | yes |  |
+| `next_devices` | [NextDevices](#nextdevices) or null | yes | A renewal's device limit queued after the current period: a running service renewed by `extend` or `reset_traffic` keeps the devices it has (extra devices bought included) until the period in use ends, and has the renewal's from then. Null while the limit stays as `ip_limit` says. |
 | `starts_at` | string (date-time) or null | yes | When the first connection started the term; null until then. |
 | `expires_at` | string (date-time) or null | yes | Null while waiting for the first connection, or without a term. |
 | `expiring_soon` | boolean | yes | Active, no free test account, and ending within the list's `meta.expiring_days`. |
@@ -1129,6 +1173,7 @@ A service, as a row of the subscriptions screen: a client on a panel, as last re
 | `actions.disable` | boolean | yes |  |
 | `actions.enable` | boolean | yes |  |
 | `actions.move` | boolean | yes |  |
+| `actions.transfer` | boolean | yes | Handing it to another customer («انتقال سرویس»): anything but a free test account or a service gone from its panel. |
 | `actions.delete` | boolean | yes |  |
 | `actions.extend` | boolean | yes | Adding days and traffic: for an active service with an end date or a quota. |
 
@@ -1141,6 +1186,12 @@ String: `created`, `expires`, `used`.
 ### SubscriptionStatus
 
 String: `active`, `expired`, `disabled`, `deleted`.
+
+### SubscriptionTransferRecipientResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `recipient` | [UserRef](#userref) | yes |  |
 
 ### SubscriptionsResponse
 

@@ -46,9 +46,11 @@ An upgrade file:
   hours);
 - **can be run again after it stopped half-way.** MySQL changes a table outside any transaction, so a run that died
   (a time limit, a killed request) or failed on one statement leaves part of the work done. Every step therefore asks
-  first and adds one thing: `hasTable()`, `hasColumn()`, `hasIndex()`, and `getForeignKeys()` for a foreign key. Make a
-  table with its columns alone, then add its indexes, then its foreign keys, each guarded on its own — Laravel issues
-  them as separate statements on MySQL, so guarding the table alone would leave an index missing forever. Indexes come
+  first and adds one thing: `hasTable()`, `hasColumn()`, `hasIndex()`, and `getForeignKeys()` for a foreign key — and
+  changes a column (`->change()`) only while `getColumns()` shows it as it was, as `0.4.0.php` makes `given_hours`
+  signed on MySQL and MariaDB (SQLite keeps no sign: nothing to change there). Make a table with its columns alone,
+  then add its indexes, then its foreign keys, each guarded on its own — Laravel issues them as separate statements on
+  MySQL, so guarding the table alone would leave an index missing forever. Indexes come
   before foreign keys because MySQL gives a foreign key without a usable index an index of its own. A data step must be
   safe to repeat: copy only what is not there yet, compute from a column that is still there.
   `database/upgrades/0.2.0.php` is the model: four small guarded helpers and a section per feature.

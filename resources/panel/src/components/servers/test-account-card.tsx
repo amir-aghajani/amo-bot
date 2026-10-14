@@ -11,15 +11,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import type { ServerTestAccount, ServerTestAccountRequest, ServerTestAccountResponse } from '@/lib/api-types'
 import { formatBytes, formatDuration, MEGABYTE, wholeNumberOf } from '@/lib/format'
+import { TEST_SERVERS } from '@/lib/limits'
 import { queryKeys } from '@/lib/query-keys'
 import { useSettingsGroup } from '@/lib/use-settings-group'
 
 /** The card's address on the server page: the tests page's servers link here. */
 const ANCHOR = 'test-account'
-
-/** The server's bounds on a test's terms (TestServers): its traffic in MB and its hours. */
-const TRAFFIC_MAX_MB = 102_400
-const HOURS_MAX = 720
 
 /** A typed term within 1…max, for its hint to word; null otherwise, and the hint says the bounds. */
 function termOf(typed: string, max: number): number | null {
@@ -74,8 +71,8 @@ function TestAccountForm({ serverId, terms }: { serverId: number; terms: ServerT
     invalidates: [queryKeys.testServers],
   })
   const { values, set, error } = group
-  const megabytes = termOf(values.test_traffic_mb, TRAFFIC_MAX_MB)
-  const hours = termOf(values.test_duration_hours, HOURS_MAX)
+  const megabytes = termOf(values.test_traffic_mb, TEST_SERVERS.TRAFFIC_MAX_MB)
+  const hours = termOf(values.test_duration_hours, TEST_SERVERS.HOURS_MAX)
 
   return (
     <SectionCard
@@ -103,11 +100,16 @@ function TestAccountForm({ serverId, terms }: { serverId: number; terms: ServerT
           id="test_traffic_mb"
           label="حجم (مگابایت)"
           error={error('test_traffic_mb')}
-          hint={megabytes !== null ? `هر اکانت تست ${formatBytes(megabytes * MEGABYTE)}` : `بین 1 تا ${TRAFFIC_MAX_MB} مگابایت`}
+          hint={megabytes !== null ? `هر اکانت تست ${formatBytes(megabytes * MEGABYTE)}` : `بین 1 تا ${TEST_SERVERS.TRAFFIC_MAX_MB} مگابایت`}
         >
           <Input dir="ltr" inputMode="numeric" value={values.test_traffic_mb} onChange={(e) => set('test_traffic_mb', e.target.value)} />
         </Field>
-        <Field id="test_duration_hours" label="مدت (ساعت)" error={error('test_duration_hours')} hint={hours !== null ? `هر اکانت تست ${formatDuration(hours)}` : `بین 1 تا ${HOURS_MAX} ساعت`}>
+        <Field
+          id="test_duration_hours"
+          label="مدت (ساعت)"
+          error={error('test_duration_hours')}
+          hint={hours !== null ? `هر اکانت تست ${formatDuration(hours)}` : `بین 1 تا ${TEST_SERVERS.HOURS_MAX} ساعت`}
+        >
           <Input dir="ltr" inputMode="numeric" value={values.test_duration_hours} onChange={(e) => set('test_duration_hours', e.target.value)} />
         </Field>
       </div>

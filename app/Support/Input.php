@@ -22,6 +22,9 @@ final class Input
     /** The whole part of an amount: up to twelve digits, or thousands separated by commas or spaces («1,5» is no 15). */
     private const WHOLE = '[0-9]{1,3}(?:[, ][0-9]{3})+|[0-9]{1,12}';
 
+    /** A Telegram id: a positive number of at most 16 digits (Telegram's ids fit in 52 bits). */
+    private const TELEGRAM_ID = '/^[1-9][0-9]{0,15}$/';
+
     /** Booleans as browsers and JSON send them: true/1/"1"/"true"/"on"/"yes"; everything else is false. */
     public static function truthy(mixed $value): bool
     {
@@ -92,6 +95,17 @@ final class Input
         $text = self::digitsOf($value);
 
         return preg_match('/^\d{1,9}$/', $text) === 1 ? (int) $text : null;
+    }
+
+    /**
+     * A Telegram id a person typed or sent — a number, or its digits (Persian ones too) with spaces around; null for
+     * anything else (a handle, a sign, a leading zero, a boolean).
+     */
+    public static function telegramIdOf(mixed $value): ?int
+    {
+        $digits = is_int($value) || is_string($value) ? self::digitsOf($value) : '';
+
+        return preg_match(self::TELEGRAM_ID, $digits) === 1 ? (int) $digits : null;
     }
 
     /**

@@ -29,7 +29,8 @@ and the form of a server's connection) and builds a client, `Contracts\ProviderI
 is panel-agnostic on purpose: clients go in as a `ClientSpec` and come out as a `ClientInfo`, a term is an `Expiry`
 (never, a fixed deadline, or a term counted from the first connection), inbounds are `InboundInfo` with an opaque key
 only the connector understands. What a panel cannot answer is a `null` on the DTO or an
-`UnsupportedOperationException`; the generic code branches only on `Capabilities` (inbounds, link rotation).
+`UnsupportedOperationException`; the generic code branches only on `Capabilities` (inbounds, link rotation, an IP
+limit the panel enforces).
 
 - **3x-ui** (`Drivers/ThreeXui`, v3+): `ThreeXuiClient` (token, or a cookie session behind the panel's CSRF guard with a
   TOTP code) → `ThreeXuiApi` (one method per endpoint, held to the panel's own OpenAPI file by `ThreeXuiContractTest`)
@@ -107,12 +108,59 @@ Three rules keep concurrent work safe — keep them in any change here:
 The arithmetic of what a service gets is `ServiceTerms`: pure functions of the row and the plan — `renewal()`,
 `grant()`, `extra()`, `nextPeriod()`, and `preview()` for a checkout — with no panel and no database, so every rule is
 unit-tested in one place. `ProvisioningService::applyTerms()` sends them and records the answer with what the change
-decides itself (`ServiceTerms::columns()`: the term and the queued period; a renewal adds its plan and IP limit).
+decides itself (`ServiceTerms::columns()`: the term and the queued period; a renewal adds its plan and IP limit). Each
+change says whether the client ends up switched on (`ClientSpec::$enabled`): a renewal and an extra switch it on (the
+service runs again), a grant unless support switched the service off, and a refund's take-back, the next period and
+a relabel leave it as the panel had it — no change but `setEnabled()` ever undoes a switch.
 
 `provision()` makes **one client on every inbound** of the plan entry, so the customer has one link for all of them,
-named after the customer by `ClientNaming` (`amir_3`, or `USER_17`; counters only go up, so a deleted service's name is
-never reused; a name is unique across every bot's services on that server). A panel that answers without a link, or a
-transaction that fails after the panel call, takes the client back off the panel.
+named by `ClientNaming` (below). A panel that answers without a link, or a transaction that fails after the panel call,
+takes the client back off the panel.
+
+### Client names
+
+`ClientNaming` names a client by the shop's pattern (`ClientNameSettings`, the `client_names` group: `pattern()`,
+`testPattern()`; `DTO\ClientNamePattern` holds the variables — one list for the setting's check (`problem()`: `{n}` or
+`{random}`, or `{seq}` beside `{username}`, `{tg_id}` or `{user_id}`, so no two services are named alike), the naming
+and the panels' hint, `BotSettingsResponse.name_variables` from `variables()`, each with a sample customer's `example`
+the panel's example name is drawn from). `render()` takes a closure per variable and calls only those the pattern
+holds, so a counter moves only for a pattern that uses it; each closure is worked out once per name, so a name over
+`NAME_MAX` (64) is rendered again with its username shortened — never the part that tells names apart — and cut there
+at worst. The counters are `sequences` rows: `{seq}` is `clients.user.<user id>` for a customer with a username
+and `clients.anonymous` for every one without (the keys every shop's names had before the pattern, so the defaults
+`{username}_{seq}` and `test_{username}_{seq}` go on where they were), `{n}` `clients.shop.<bot id>`; `{random}` is
+`ReadableCode` lowercased, `{date}` `ClientNamePattern::date()` (`ymd` on the shop's clock). A name any bot's service
+on that server carries is skipped for the next, `TRIES` (100) times at most, then `NoServerAvailableException` — a
+delivery failure saying to check the pattern. `nameOn()` keeps a moving service's name unless taken on the target, or
+one the target's panel would refuse (a name a client claimed by its link came with), then names it as `next()` would
+(a test's by the test pattern) — and a client made by hand on the target under it is met as below (`named()`).
+
+**The panel's own rule.** Every name is one the server's panel takes: its connector says what that is
+(`Capabilities::$names`, a `Providers\DTO\ClientNameRule` — any name by default; PasarGuard's 3 to 128 letters, digits
+and `_ - . @`, never two of those side by side). The shop's own names — the pattern's, a random one — are
+`fit()` to it (characters it does not take dropped, a run of separators cut to its first, cut to its longest, too short
+padded with leading zeros: `{n}` → `001`), and `render()` shortens a username to its longest when that is under
+`NAME_MAX`. A typed name it would refuse is refused at the checkout under `client_name` (`PANEL_LENGTH`, `PANEL_RUNS`,
+`PANEL_REFUSES`), and an order's name it would refuse — asked for on another server — gives way to the pattern.
+
+A buyer's own name is one domain rule for every door — the bot's checkout (`CheckoutScreen`, `ClientNameHandler`), the
+Store API's `POST /orders` (`CustomerCheckout::clientName()`) and the custom builder: `requested(ClientNameMode,
+?typed, Server, ?seed)` is null for the pattern, a random name free on the server, or the typed one
+(`[A-Za-z0-9_-]{3,32}`, free there), each way refused on `name_mode` while `ClientNameSettings::modes()` does not offer
+it, a typed name on `client_name`. The order keeps it (`orders.client_name`, part of the order's shape: the same
+purchase with another name is another order, and an Idempotency-Key's request must name the same —
+`OrderService::same()` compares each shape column as the database keeps it, as `open()` finds an order by it). So the
+website's random name is worked out from the customer and the key (the seed: two requests sent with one key at once
+ask the same name), and a request made again with its key asks what its order was made with, judged no more.
+`provision()` asks `forPurchase()`: the order's name while the panel takes it, no service on the server carries it and
+the panel — one `findClient()` through `onPanel()`, asked only for an order with a name — has no client by it (one made
+by hand); else the pattern's. The shop knows only the names of the services it keeps, so `ProvisioningService::named()`
+makes every new client — a purchase's, a test's, a moved service's on its target — and, whenever the panel refuses its
+name (`PanelApiException`) and has a client by it (one `findClient()`, asked only then) — made there by hand with the
+pattern's next name or the moved service's own, or another order's asking the same name delivered at the same moment —,
+tries the pattern's next (`next()`, a test's by the test pattern, each name drawn once), `NAME_TRIES` (10) names in
+all; a refusal for another reason fails the delivery (or the move) as it came. The bot keeps a name per checkout in the chat's session (`_client_name`, as a discount code is kept), and `requestedName()` hands it to the
+order while its way is still offered.
 
 ## Operations from the screens
 
@@ -132,20 +180,173 @@ anyway, worded by the state found. Who asks matters:
 A move creates the new client first and deletes the old one second, so a failure at any step leaves the service where
 it was (`MoveException` names the step; `errors.previous` is the screen's cue to offer leaving the old panel out).
 
+## Service transfers
+
+«انتقال سرویس» is `Subscriptions\Services\ServiceTransfers`, one rule for every door — the bot
+(`Telegram\Handlers\ServiceTransferHandler`), the website (`POST /subscriptions/{id}/transfer`, its `GET` the
+recipient), the panels and the website's admins (`Admin\Api\SubscriptionsController::transfer()`, the delete's grant):
+
+- **Who asks** is an `Actor`: a customer is `Actor::customer()` (`ActorKind::Customer`), support any other. A customer
+  needs `ServiceTransferSettings` (`service_transfers`, off by default) on, gives only their own service, never while an
+  order of it they made is open (`Order::OPEN`, `refuseOpenOrder()`: a failed one is support's to settle —
+  `FAILED_ORDER` sends the customer there —, since once the service changed hands it could never be delivered and a
+  failed renewal would hold the new owner's renewals; a previous owner's left from support's transfer holds nobody), and
+  is rate-limited: `LOOKUPS` recipients per `LOOKUP_WINDOW`, `TRANSFERS` per `TRANSFER_WINDOW`. Support is refused only
+  its own service (`ActorRefusedException::ownService()`) and taking one itself.
+- **What may go** — `transferable()`: no free test, its client still on its panel; the panels' `actions.transfer`.
+- **The recipient** — `recipient()` reads the id as typed (Persian digits too, up to 16 digits) and finds the customer
+  of that Telegram id in the service's shop (`CurrentBot::run()`): not its owner, not banned. Refusals are
+  `ValidationException`s — the service under `status`, the recipient under `telegram_id` —, which the bot shows in its
+  own texts (`%reason%`).
+- **The change** — `transfer()`: holding the service's lease as a change on its panel does (`Lease::take()`, for
+  `HOLD_SECONDS`, let go at the end): a change under way there — a renewal's or an extra's delivery, which checked the
+  owner as it began (`ProvisioningService::renew()`, `addExtra()`) — makes it refuse with `BUSY` («try again in a
+  moment»), so a paid order of the giver's never lands on the new owner's service; one that begins after finds the
+  new owner. Then, under the service's row lock (the one `AutoRenewal` and `OrderService::holding()`
+  make a renewal or an extra order under), its owner, status and open orders checked again, then the new owner's columns
+  (`ProvisioningService::newOwner()`) with `ShopReports::serviceTransferred()` («خریدها») in the same transaction. After
+  the commit `cancelLeftOrders()` cancels the previous owner's unpaid orders of it at once, as an idle one expires
+  (`PaymentService::expire()`, its locks and receipts discarded; `NOTE_CANCELLED`): they could no longer be paid or
+  delivered (`Order::serviceChangedHands()`), and a renewal of them would hold the new owner's `AutoRenewal` back. One
+  whose receipt waits for support stays — it may be the money — and fails at its delivery for support to give it back.
+  Only support's transfer leaves any. Then `CustomerNotifier::serviceReceived()` tells the new owner (with «📊 مشاهده
+  سرویس» and, where the panel can change the link — `ProvisioningService::rotates()` —, that the previous owner keeps it
+  until «تغییر لینک») and, when support did it, `serviceTransferred()` the previous one, with the orders cancelled
+  (`%cancelled%`) — a customer's own change is answered at its door, as a new link is.
+- **A change of owner** is one path for a transfer and a claim by its link: `newOwner()` is what the row takes — the
+  owner, `auto_renew` off, `renewal_notified_at`, `expiry_reminded_at` and `traffic_reminded_at` cleared (a claim's new
+  row keeps a stale record's `auto_renew`, the same customer's) —, then `ProvisioningService::relabel()` after the
+  commit: it holds the service, reads it, and sends the client back with its quota, term, IP limit and switch as the
+  panel had them and the owner's `ClientSpec` (Telegram id, `ClientNaming::comment()`) — one update, never a switch on.
+  A merge of two accounts (`Accounts\Services\AccountMerger`) relabels too, after its transaction: each service whose
+  owner's comment before the merge is not the survivor's now — the merged account's, unless the survivor took its
+  Telegram account, and the survivor's own once it did —, and so does a Telegram account linked to an account or taken
+  off it (`Accounts\Services\Identities`): every service of the account (`relabelServicesOf()`). It never fails the
+  change: a panel in backoff (not asked), a
+  failure (`ProviderException`, `ServiceBusyException`, the service gone) is logged, and the next change of the service
+  on its panel writes the owner anyway, since every `spec()` reads the service's customer. The client's name stays.
+
 ## Renewals, extras and reminders
 
 - **Renewal** (`CustomerRenewal`, the bot's and the website's): the service's own plan at today's price
-  (`Orders\Services\Pricing`), delivered by `renew()`. The days left always carry; the traffic left carries only when
-  the admin says so (`RenewalSettings`). Not carried, the renewal adds the plan's traffic at once and queues the end of
-  the paid period (`period_ends_at`, `next_period_bytes`); `NextPeriodTask` caps what remains then.
-- **Automatic renewal** (`AutoRenewal`, every 30 minutes): the customer's switch, renewed from the wallet within the
-  admin's days of the deadline. The panel is read first (its deadline is the truth). The renewal order is made under a
-  lock on the service row and only while no renewal of it is open, so two runs never charge twice; a short wallet is
-  told once per window (`Transitions::claim()` on `renewal_notified_at`). A plan whose term is shorter than the window
-  never renews itself: it would be due again at once.
-- **Extras** (`CustomerExtras`, «حجم و زمان اضافه»): traffic or days bought for a service at the plan's or the shop's
-  price list (`ExtrasSettings`). `problem()` is the one rule of what a service can take, asked at checkout and again at
-  delivery against the panel's numbers.
+  (`Orders\Services\Pricing`), delivered by `renew()`, by a `RenewalMethod` (`ServiceTerms::renewal()` is the rule of
+  each): `Extend` carries the days left, and the traffic left only when the admin says so (`RenewalSettings`) — not
+  carried, the renewal adds the plan's traffic at once and queues the end of the paid period (`period_ends_at`,
+  `next_period_bytes`), which `NextPeriodTask` caps then; `ResetTraffic` carries the days and counts the traffic afresh;
+  `ResetTime` starts the term again (`starts_at` now for a running service) and carries the traffic. Neither reset
+  queues traffic, and either drops what was queued before. The order keeps its method (`orders.renewal_method`, part of
+  its shape in `OrderService::openRenewal()` and `openCustomRenewal()`: an open renewal by another method is another
+  order, and a key's request must name the same), so the delivery adds what the checkout showed. `renew()` adds the
+  order's package (`Order::package()`): its plan's, or a built one's own GB, days and devices.
+- **A renewal's devices** are its package's, whatever the service had: extra devices last as long as the period they
+  were bought for. A running service renewed by `Extend` or `ResetTraffic` goes on with the period in use, so the
+  package's limit is queued behind it (`next_period_ip_limit` at `period_ends_at` — the period queued already, else the
+  deadline; always, so its end is known) and `NextPeriodTask` brings it then (`ServiceTerms::nextPeriod()`,
+  `periodOver()`; a period queued for its devices alone asks the panel only when the limit changes on a panel that
+  keeps one). Any other takes it at once and stamps `ip_limit_reset_at` — a period over by time or traffic, a
+  `ResetTime`, a service that never ends —, except one waiting for its first connection: it takes the package's with
+  the devices bought for its term on top (`CustomerExtras::devicesBought()`: delivered since the last reset, not taken
+  back — its checkout's preview counts them too), since they were charged for all of it and its term runs on. Extra
+  devices bought while a period is queued are priced to `period_ends_at` and end with it (`ServiceTerms::extra()` keeps
+  the next period's limit as it was to be; one whose end passed has begun, and they go onto it — a renewal then goes
+  on from that period as begun, `ServiceTerms::begun()`: its limit, its traffic capped, queued behind the deadline).
+  Days given or bought move the queued period with them. The order keeps what the renewal gave for its refund and the
+  refunds of the orders before it (`ServiceTerms::given()`): `given_hours` and `given_bytes` (signed) — a reset's beyond
+  what it replaced: `ResetTime` the term less the hours left to the deadline (or the term still waiting), `ResetTraffic`
+  on a quota whose period has not passed the package's traffic less what was left; less than nothing when it replaced
+  more (a week in place of 25 days left, 10 GB in place of 40), which its refund gives back —; what it gave where there
+  was none, `gave_plan`, `gave_term` (a term to a service that never ended), `gave_quota` (a quota to an unlimited
+  one); what a package without a term or a quota replaced, `term_was` and `expires_was` (the term in hours and its
+  deadline, null while it waited for the first connection) and `quota_was` (the traffic left); what it started afresh,
+  `reset_term` (`ResetTime`, a service whose time ran out or that never ended, or a term it ended), `reset_traffic`
+  (`ResetTraffic`, a fresh count with nothing carried, or a quota it ended), `reset_ip_limit` (its package's limit at
+  once, the devices bought before gone); and `given_ip_limit`, `ip_limit_was`, `ip_limit_queued`, `ip_limit_reset_was`
+  (set at once: the service's `ip_limit_reset_at` before it). `given_hours` and `given_bytes` became signed in 0.4.0:
+  the upgrade changes the two columns on MySQL and MariaDB while they are still unsigned (SQLite keeps no sign).
+- **A refund's take-back** (`ProvisioningService::undo()`, `undone()`; `ServiceTerms::takeBack()`, `limitPutBack()`)
+  takes what a renewal or an extra gave as far as the service still has it, and gives back what a reset replaced
+  beyond what it gave, so a service's renewals and extras, refunded in any order, leave it exactly where it was
+  (`tests/Feature/RefundsInEveryOrderTest` refunds them in every order):
+  - what an order delivered after it, still standing, started afresh is no longer there to give back: nothing of it
+    is taken, and it is handed on to the first such order — a renewal, or extra days that started a new term for a
+    service whose time ran out (`ServiceTerms::extra()`; `addExtra()` keeps that restart on the order, `reset_term`
+    and `given_hours`) —, its hours added to `given_hours`, its traffic to `given_bytes`, extra devices gone with a
+    renewal's reset (`ServiceTerms::devicesGone()`) taken off its `ip_limit_was`, so its own refund takes it with its
+    own;
+  - what only the last renewal standing may undo goes back once none delivered after it stands, and passes to the next
+    one until then, in place of what that one would undo of it: the plan, a term or a quota given where there was none
+    (no plan, never ending, unlimited again); a term or a quota a package without them ended, put back whole
+    (`term_was`, `expires_was`, `quota_was`) — less what was handed on to it, with the days and traffic of the extras
+    delivered after it and still standing on top (`extrasAfter()`), which their own refunds take later; passed on, the
+    next one keeps what was handed on to it less the extras between the two —; and a device limit set at once —
+    undone on the limit as it is now (`ServiceTerms::limitUndone()`: devices bought or taken back since, and the
+    panel's change, stay on top), with `ip_limit_reset_at` back to `ip_limit_reset_was` when it had reset it, so the
+    devices bought before it count again; the next renewal set at once takes it over as what it replaced
+    (`ip_limit_was`, `ip_limit_reset_was`), and a queued period that began since (a reset after the order) leaves it as
+    it is. A limit queued behind the period in use goes back while no other was queued after it, else the next one
+    replaces what it did;
+  - with nothing taken — all of it gone or handed on — the panel is not asked and `undo()` answers false, so the
+    refund's message names no service (`RefundedDeliveries`); the order is marked taken back all the same, with what
+    it handed on, in one transaction.
+
+  What a refund leaves as it finds it: a `ResetTime`'s refund does not bring back the period queued that it dropped
+  (in the customer's favour), and leaves `starts_at` and `duration_hours` as the reset set them (cosmetic: the deadline
+  is the panel's truth); traffic given back is the period in use's (a queued period's cap stays); the traffic left of a
+  period whose time ran out, which a renewal not carrying it dropped, is not given back (it went with that period); a
+  quota put back whole leaves out what was used while the service was unlimited, and a term put back whole the days
+  support gave since (a grant is no order to refund); and hours given back to a term still waiting for its first
+  connection wait with it.
+- **The renewal's doors** — `CustomerRenewal::preview()` is the one every checkout goes through: the bot's
+  (`RenewalHandler`), the website's (`Store\Services\CustomerCheckout`: the preview, the renewal and a code's check), a
+  reminder's «پرداخت دوباره». It takes what the renewal is with — its own plan (null), a plan picked (its id) or a
+  package built (a `CustomPrice`) — and answers a `DTO\RenewalPreview` whose `with` is the `Plan` or the `CustomPrice`
+  and `package` what it gives, its `quote` today's price. It refuses (null) a method the shop does not offer
+  (`resolveMethod()` against `methods()`: the admin's switches, one at least — `Core\Forms\Fields\Ruled` holds the form
+  to that and the default to one of them), a service whose window is closed (`window()` → `DTO\RenewalWindow`:
+  `windowDays()` before the deadline, or `windowPercent()` of the traffic left; an ended service always open, one
+  without a deadline only by its traffic; `when()` words from when for the bot's popup and the website's `422`), and one
+  whose renewal is under way. `refusal()` says why in an `Enums\RenewalRefusal`, asked in one order for both doors,
+  which only put it in their words; `picks()` is what the service may be renewed on now (the website's
+  `…/renewal-plans`, empty while it is refused), `priced()` the preview with a code typed. The three share their
+  questions (`renewsWith()`) and only `preview()` prices, so a picker prices each plan once (`Pricing::renewalOffers()`).
+  The lists (the bot's «♻️ تمدید سرویس», the website's `renewable`/`picks_plan`) do not ask the window: the tap
+  explains, and the website gets `renewal_window`. The bot carries the method a checkout
+  is drawn by in its callbacks (`renew:{s}:{f}:{pay}:{plan}:{method}`, the method's place among the cases, left out for
+  `Extend`: `RenewalHandler::methodArg()`), so a pay button renews by what its checkout showed; the discount code stays
+  kept for the checkout without its method, so switching keeps it. A package built has the builder's callbacks
+  (`custom:r:{s}:{f}:{gb}:{days}[:{method}[:{pay}]]`, `CustomServiceHandler`), whose GB and days steps are the
+  purchase's, parameterised by the service; once its amounts hold, it hands the checkout and the payment to
+  `RenewalHandler::checkout()` and `pay()` with the `CustomPrice` — so the window, the methods, the code and the
+  under-way popup are the plan's.
+- **Automatic renewal** (`AutoRenewal`, every `AutoRenewTask::INTERVAL_MINUTES`, 30): the customer's switch, renewed
+  from the wallet within the admin's days of the deadline, by the admin's default method
+  (`RenewalSettings::defaultMethod()`, passed to `OrderService::createRenewal()`); the customer's window does not hold
+  it back. The panel is read first (its deadline is the truth). By ResetTime, which starts the term afresh from the
+  renewal and drops what was left of it, it waits for the last run before the deadline (`LAST_RUN_MINUTES`: the
+  interval and 5 minutes for a late run — `opensAt()`, `renewsNow()`), its panel not read meanwhile, so it loses that
+  much at most; a short wallet is still told from the window's start, whatever the method. `claim()` makes the order
+  under a lock on the service row, only while the row is still due by the method (another renewal may have moved its
+  deadline meanwhile) and no renewal of it by its owner is open or has `fulfilled_at` since that deadline's renewal
+  could begin (`opensAt()`, refunded since or not, the customer's own too): two runs never charge twice, and a deadline
+  a renewal left where it was (a panel that kept its own) is never renewed again — no loop, whatever the method. A
+  short wallet is told once per window (`Transitions::claim()` on `renewal_notified_at`). A plan whose term is shorter
+  than the window never renews itself: it would be due again at once.
+- **Extras** (`CustomerExtras`, «حجم، زمان و کاربر اضافه»): traffic, days or devices (`Enums\ExtraKind`; each its own
+  `OrderType`) bought for a service at the plan's or the shop's price list (`ExtrasSettings`, `DTO\ExtraPrices` of
+  `DTO\ExtraOffer`s). `refusal()` is the one rule of what a service can take, asked at checkout and again at delivery
+  (`ProvisioningService::addExtra()`) against the panel's numbers; devices also need a panel that enforces an IP limit
+  (`Capabilities::$ipLimit`: 3x-ui yes, PasarGuard no), and time and traffic left (a renewal of a service ended on
+  either count replaces its period at once). Devices are priced for 30 days (`ExtraOffer::PERIOD_DAYS`) and charged
+  `prorated()` to `deviceDays()` — the whole days left of the period in use (at least 1): to `period_ends_at` while a
+  renewal is queued, else to the deadline; its whole term while it waits for its first connection, 30 for one that
+  never ends —, rounded up once to whole Toman (`Money::shareOf()`), so the bot, the website and a code's check all
+  quote the same price. `ServiceTerms::extra()` raises the IP limit, `takeBack()` lowers it again — never below 1, and
+  not at all once the limit went back to a package's since they were delivered (`devicesGone()`: `ip_limit_reset_at`
+  after the order's `fulfilled_at`; they went with their period — a refund's take-back, above, hands them to the
+  renewal that reset it). Days for a service whose time ran out start a new term from its next connection, which the
+  order keeps as a renewal's restart (`reset_term`, `given_hours`): an earlier order's refund takes nothing of it. The
+  order keeps the amount under the kind's column (`ExtraKind::columns()`, read back by `quantityOf()`). An agent's pool
+  pays for traffic alone.
 - **Reminders** (`ServiceReminders`): a mark on the row (`expiry_reminded_at`, `traffic_reminded_at`) is claimed
   before a reminder goes and cleared once the service is back under its threshold, so each goes once per approach.
 
@@ -178,11 +379,11 @@ takes one.
   `issued_at`; a failure deletes the claim (only while still unissued) and goes up as it came. A claim whose process
   died is deleted by the clean-up's first run 30 minutes after it was made.
 - **The terms are the server's.** `TestServers` holds the owner's form for `servers.test_*` (read as `DTO\TestTerms`)
-  and `choices()`: switched on for tests, able to take a client (`ServerSelector::testInbounds()` — `ServerReadiness`,
+  and `choices()`: switched on for tests, able to take a client (`ServerSelector::wholeServer()` — `ServerReadiness`,
   then every inbound for sale), and in an agent's shop a pool holding the test's traffic.
 - **Made like a sale.** `ProvisioningService::provisionTest()` goes through the same `create()` as `provision()` — one
   client on every inbound, the panel's link required, the client taken back if the row's transaction fails —, named by
-  `ClientNaming` with `test_` before the customer's name (a move that must rename it keeps the prefix), with no IP
+  `ClientNaming` by the shop's test pattern (`test_amir_3` by default; a move that must rename it keeps to it), with no IP
   limit and `TestTerms::expiry()`: from the first connection, or a deadline from now.
 - **An agent's pool** is drawn in the transaction that writes the service row and issues the claim (the closure
   `issue()` hands `provisionTest()`): `TrafficPool::drawTest()` writes one `sale` line «اکانت تست · سرویس …», so a test
@@ -190,7 +391,7 @@ takes one.
   rolls the row back, takes the client off the panel and is the no-server refusal; the bot's tap then redraws the
   screen.
 - **What a test never gets** is decided where each feature picks its services: renewals and «تمدید خودکار» need a plan,
-  `CustomerExtras::problem()` refuses it, and `ServiceReminders`, `Grants::services()` and `Rewards::takes()` leave
+  `CustomerExtras::refusal()` refuses it, and `ServiceReminders`, `Grants::services()` and `Rewards::takes()` leave
   `is_test` out. `Subscription::expiringWithin()` (and `isExpiringWithin()`) leaves tests out, so automatic renewal,
   the end reminders, the services list's «رو به انقضا» and the dashboard's count never see one; the dashboard's active
   services leave them out too. `Server::activeServices()` counts them: a test takes room in the server's capacity. A
@@ -204,6 +405,54 @@ takes one.
 
 The `test_accounts` row outlives its service (`subscription_id` is set null by `delete()`, which the change feed sees),
 so the quota still counts a removed test; `AccountMerger` moves the rows to the account that stays.
+
+## Services added by their link
+
+A customer claims a client made by hand on a panel by sending its link ([Services added by their link](Service-Claims.md)).
+
+- **The link** is `Providers\DTO\ClientLink`: `find()` reads the links in a text together, five at most — a
+  subscription link's path parts (its `tokens`, the last first), or a config's credentials: a vless, vmess or tuic id, a
+  trojan, Shadowsocks (a 2022 key whole and in its halves) or hysteria password. A web address stops at the first
+  character no address is written in, and punctuation after a link (Persian too) is dropped. Values under eight
+  characters are dropped, ids lower-cased.
+- **Whose client it is** is each connector's to say: `ProviderInterface::findClientByLink()`. 3x-ui reads
+  `/clients/list` once and matches a row's `subId` among the tokens, or its `uuid`, `password` or `auth` among the
+  credentials — a `subId`, password or auth equal to the client's own name is no secret and matches nothing. PasarGuard
+  first shows at most three parts of the links that can be its tokens (16 characters and more) to the panel's own public
+  route `{path}/{token}/info`, without the API's credentials — its tokens are signed with a secret the shop does not
+  have, so only the panel can say whose one is —, under the folder its links use (read off one user's
+  `subscription_url`); any answer but a JSON object is no match, never a failure of the panel nor a message holding the
+  token. Then it pages its users without their links for a config's credentials (`proxy_settings`' ids and passwords)
+  and reads the one that matches.
+- **The claim** is `Subscriptions\Services\ServiceClaims::claim()`: the main shop's, while `ServiceClaimSettings`
+  (`service_claims`) is on; `RateLimiter` allows `TRIES` links within `WINDOW_SECONDS` per customer. The servers are
+  asked in their order through `ProvisioningService::findByLink()` (each contact recorded by `ServerHealth`), a panel
+  in backoff passed over and a failing one logged: not found is said only when every panel answered, else "try later".
+  A client the shop keeps — any `subscriptions` row of that server and name, in any shop — is the customer's own
+  already or someone else's, except the customer's own row marked `deleted` (its client gone, now back): that stale row
+  is deleted, the panel untouched, and the client claimed afresh. One without a subscription link is refused.
+- **The row** is `ProvisioningService::adopt()`: through `values()`, as a sync would write it, with `claimed_at`, no
+  plan (a stale record's carried over), the panel's IP limit (`ClientInfo::$ipLimit`, so a later update does not wipe
+  it) and, for a deadline still ahead, the hours left to it as its term — `starts_at` left null, since the panel does
+  not say when its clock started (`ServiceTerms::startedAt()` keeps a start unknown while the clock runs). A client
+  that ended comes `expired` — 3x-ui
+  switches a used-up client off by itself — with `ended_at` the claim, so the automatic removal counts from it; one
+  switched off while it runs comes `disabled`. The `(server_id, remote_name)` unique key settles two claims at once; the
+  report (`ShopReports::serviceClaimed()`, «خریدها») is written in the row's transaction. The customer is its owner
+  as a transferred service's new one is ([a change of owner](#service-transfers): `newOwner()`, then `relabel()`).
+- **A refund of the renewal that gave it its plan** (`ProvisioningService::undo()`, `gave_plan`: a claimed service on
+  the order's plan, no renewal delivered after it standing — while one does, that one takes it over) takes the plan and
+  «تمدید خودکار» back with the time and traffic; one made by hand without an end or a quota never ends, or is
+  unlimited, again (`gave_term`, `gave_quota`), so nothing ends it and the automatic removal leaves it.
+- **Its renewal** — `CustomerRenewal::picksPlan()`: no plan, no test, active or ended. `choices()` are the active plans
+  whose entries list its server — not `ServerSelector::offers()`: a server full or switched off for sales still renews
+  what is on it — and, in an agent's shop, that the agent's traffic covers; `preview($service, $planId)` takes one of
+  them, `buildable()` says whether a package built may renew it instead (the builder offered,
+  `CustomServices::offered()`), `pickable()` says either for a page with the plans and the builder read once (the
+  website's `picks_plan`, beside `renewable` on the own plan), and `candidates()` lists such services. The renewal order
+  carries the plan picked, and `ProvisioningService::renew()` writes the order's plan onto the service, which then
+  renews on it; a renewal with a package carries none, so the service keeps picking and `AutoRenewal::renews()` (a plan
+  needed) never takes it.
 
 ## The automatic removal
 
@@ -236,7 +485,9 @@ no other. Nobody is told. The orders and the `test_accounts` rows lose their lin
 ## The sync and the tasks
 
 `SyncSubscriptionsTask` reads every running service from its panel every 15 minutes: one `listClients()` per server,
-then `apply()` per row. A client missing from the list is asked for on its own; only that answer marks a service
+then `apply()` per row — counters, quota, term, link and the IP limit where the panel keeps one (`ClientInfo::$ipLimit`;
+PasarGuard's null leaves the shop's), so what was changed by hand on the panel is what the next renewal, extra or
+grant builds on. A client missing from the list is asked for on its own; only that answer marks a service
 deleted, never a list that came back short. Every task that talks to panels skips servers in backoff and stops at its
 share of the scheduler's time (`Core\Scheduling\Budget`); one service that breaks is logged and stops no other.
 

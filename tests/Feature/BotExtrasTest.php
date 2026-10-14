@@ -39,11 +39,12 @@ use Tests\BotTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * «حجم اضافه» and «زمان اضافه» in the bot: a service's screen offers each while the shop sells it for the service; the
- * kind's screen offers its amounts with their prices and takes one typed; the checkout says what it costs and the service
- * as it would leave it; a way to pay picked, the extra is ordered (or the open one found) and paid — the wallet adds it at
- * once, a card once support approved its receipt. A service that cannot take it gets a popup saying so and nothing is
- * ordered; in an agent's bot their traffic holds what is sold, and the extra draws it.
+ * «حجم اضافه», «زمان اضافه» and «کاربر اضافه» in the bot: a service's screen offers each while the shop sells it for
+ * the service; the kind's screen offers its amounts with their prices (devices for the days the service has left) and
+ * takes one typed; the checkout says what it costs and the service as it would leave it; a way to pay picked, the extra
+ * is ordered (or the open one found) and paid — the wallet adds it at once, a card once support approved its receipt. A
+ * service that cannot take it gets a popup saying so and nothing is ordered; in an agent's bot their traffic holds what
+ * is sold, and the extra draws it.
  */
 final class BotExtrasTest extends BotTestCase
 {
@@ -447,6 +448,82 @@ final class BotExtrasTest extends BotTestCase
         self::assertSame([ExtrasHandler::screenCallback($service->id, ExtraKind::Time)], $this->extraButtons());
     }
 
+    public function testTheDevicesScreenPricesThemForTheDaysLeftAndTheWalletAddsThemAtOnce(): void
+    {
+        $this->extraDevicesOnSale();
+        // Half its term left: 15 of 30 days.
+        $this->subscription->forceFill(['starts_at' => now()->subDays(15), 'expires_at' => now()->addDays(15)])->save();
+        FakeProvider::mirror($this->subscription);
+        $expires = Messages::expiry(now()->addDays(15), 30 * 24);
+
+        $this->send($this->tap($this->serviceScreen()));
+        self::assertSame([$this->screen(ExtraKind::Devices), $this->screen(ExtraKind::Time), $this->screen(ExtraKind::Traffic)], $this->extraButtons(), '«کاربر اضافه» beside the two, «حجم اضافه» still on the right');
+
+        $this->send($this->tap($this->screen(ExtraKind::Devices)));
+        self::assertSame([self::text(BotText::ExtraDevicesMenu, [
+            'client' => 'ali_1',
+            'devices' => ExtraKind::Devices->words(1),
+            'expires' => $expires,
+            'days_left' => ExtraKind::Time->words(15),
+            'typed' => self::text(BotText::ExtraDevicesTyped, ['least' => Persian::number(1), 'most' => Persian::number(5), 'unit_price' => Money::format('15000')]),
+        ])], $this->said());
+        self::assertSame([
+            [$this->option(ExtraKind::Devices, 1, '15000'), $this->option(ExtraKind::Devices, 2, '25000')],
+            [['text' => self::text(BotText::Back), 'callback_data' => $this->serviceScreen()]],
+        ], $this->inlineKeyboard(0), "half the 30,000 of a device, half the two's own 50,000");
+
+        $this->send($this->message('۳ کاربر'));
+        self::assertSame([self::text(BotText::ExtraDevicesCheckout, [
+            'client' => 'ali_1',
+            'extra_devices' => ExtraKind::Devices->words(3),
+            'amount' => Money::format('45000'),
+            'days_left' => ExtraKind::Time->words(15),
+            'devices' => ExtraKind::Devices->words(4),
+            'expires' => $expires,
+        ])], $this->said(), 'three typed: 90,000 for 30 days, half of it');
+        self::assertSame([$this->pay(ExtraKind::Devices, 3, $this->wallet), $this->screen(ExtraKind::Devices)], $this->callbacks(0));
+
+        $this->send($this->tap($this->pay(ExtraKind::Devices, 3, $this->wallet)));
+
+        self::assertSame([self::text(BotText::ExtraDevicesAdded, [
+            'extra_devices' => ExtraKind::Devices->words(3),
+            'client' => 'ali_1',
+            'devices' => ExtraKind::Devices->words(4),
+            'expires' => $expires,
+        ])], $this->said(), 'the numbers the checkout showed');
+        $order = Order::query()->sole();
+        self::assertSame([OrderType::ExtraDevices, OrderStatus::Fulfilled, 3, null, null, '45000.00'], [$order->type, $order->status, $order->devices, $order->traffic_bytes, $order->days, $order->amount]);
+        self::assertSame([4, 4], [FakeProvider::lastUpdate('ali_1')->ipLimit, $this->subscription->refresh()->ip_limit], 'on its panel and its row');
+        self::assertSame('455000.00', $this->ali->balance());
+    }
+
+    public function testACardsReceiptForDevicesSaysWhatItBrings(): void
+    {
+        $this->extraDevicesOnSale();
+        $card = $this->cardMethod();
+
+        $this->send($this->tap($this->checkout(ExtraKind::Devices, 2)));
+        $this->send($this->tap($this->pay(ExtraKind::Devices, 2, $card)));
+        $this->send($this->message(null, ['message_id' => 4321, 'photo' => [['file_id' => 'receipt-1']]]));
+
+        self::assertSame([self::text(BotText::ReceiptReceived, ['outcome' => self::text(BotText::ReceiptOutcomeExtraDevices)])], $this->said());
+        self::assertSame([OrderType::ExtraDevices, OrderStatus::Pending, '50000.00'], [Order::query()->sole()->type, Order::query()->sole()->status, Order::query()->sole()->amount], 'all 30 days left: the full price');
+    }
+
+    public function testAServiceOfUnlimitedDevicesIsOfferedNone(): void
+    {
+        $this->extraDevicesOnSale();
+        $this->subscription->forceFill(['ip_limit' => 0])->save();
+        $this->mirrored($this->subscription);
+
+        $this->send($this->tap($this->serviceScreen()));
+        self::assertSame([$this->screen(ExtraKind::Time), $this->screen(ExtraKind::Traffic)], $this->extraButtons());
+
+        $this->send($this->tap($this->screen(ExtraKind::Devices)));
+        self::assertSame([self::text(BotText::ExtraUnavailable), 'true'], [$this->popup(), $this->params(0)['show_alert'] ?? null], 'a button kept from before says so');
+        self::assertSame(0, Order::query()->count());
+    }
+
     public function testTheRemindersPayAgainOfAnExtraOpensItsCheckout(): void
     {
         $order = $this->service(OrderService::class)->openExtra($this->ali, $this->subscription, ExtraKind::Traffic, 10, '18000');
@@ -546,7 +623,7 @@ final class BotExtrasTest extends BotTestCase
         return Messages::expiry(Carbon::parse(self::DEADLINE), 30 * 24);
     }
 
-    /** @return list<string> The «حجم اضافه» and «زمان اضافه» of the screen last drawn, in their row's order. */
+    /** @return list<string> The extras' buttons of the screen last drawn, in their row's order. */
     private function extraButtons(): array
     {
         return array_values(array_filter($this->callbacks(0), static fn(string $data): bool => str_starts_with($data, ExtrasHandler::PREFIX)));

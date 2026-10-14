@@ -2,13 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Modules\Providers\DTO\ClientLink;
 use App\Modules\Telegram\Channels\JoinPrompt;
 use App\Modules\Telegram\Gates\ChannelGate;
 use App\Modules\Telegram\Gates\MaintenanceGate;
 use App\Modules\Telegram\Gates\PhoneGate;
 use App\Modules\Telegram\Handlers\AgencyHandler;
 use App\Modules\Telegram\Handlers\BroadcastHandler;
+use App\Modules\Telegram\Handlers\ClientNameHandler;
 use App\Modules\Telegram\Handlers\CustomEmojiHandler;
+use App\Modules\Telegram\Handlers\CustomServiceHandler;
 use App\Modules\Telegram\Handlers\DiscountCodeHandler;
 use App\Modules\Telegram\Handlers\ExtrasHandler;
 use App\Modules\Telegram\Handlers\FallbackHandler;
@@ -18,6 +21,8 @@ use App\Modules\Telegram\Handlers\MenuHandler;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Handlers\ReceiptHandler;
 use App\Modules\Telegram\Handlers\RenewalHandler;
+use App\Modules\Telegram\Handlers\ServiceClaimHandler;
+use App\Modules\Telegram\Handlers\ServiceTransferHandler;
 use App\Modules\Telegram\Handlers\StartHandler;
 use App\Modules\Telegram\Handlers\SubscriptionHandler;
 use App\Modules\Telegram\Handlers\TestAccountHandler;
@@ -36,7 +41,8 @@ use App\Modules\Telegram\Update\Dispatcher;
 
 /*
  * The bot's routes: the gates every private update passes first, then which handler answers each command, keyboard
- * label, callback prefix and conversation state, then the report group's routes. Dispatcher documents the order.
+ * label, callback prefix, conversation state and text pattern, then the report group's routes. Dispatcher documents the
+ * order.
  */
 return static function (Dispatcher $bot): void {
     $bot->gate(MaintenanceGate::class);
@@ -53,13 +59,22 @@ return static function (Dispatcher $bot): void {
     $bot->text(static fn(MainMenu $menu): array => $menu->labels(), MenuHandler::class);
     $bot->callback(MainMenu::PREFIX, MenuHandler::class, navigation: true);
     $bot->callback(MenuHandler::CATEGORY, MenuHandler::class);
+    // «🛠 ساخت سرویس دلخواه» under the plans: its steps and checkout, and an amount typed.
+    $bot->callback(CustomServiceHandler::PREFIX, CustomServiceHandler::class);
+    $bot->state(CustomServiceHandler::STATE, CustomServiceHandler::class);
     $bot->callback(SubscriptionHandler::PREFIX, SubscriptionHandler::class);
+    // «🔁 انتقال سرویس»: the recipient's Telegram id asked for, typed, and the handover confirmed.
+    $bot->callback(ServiceTransferHandler::PREFIX, ServiceTransferHandler::class);
+    $bot->state(ServiceTransferHandler::STATE, ServiceTransferHandler::class);
     $bot->callback(RenewalHandler::PREFIX, RenewalHandler::class);
-    // «حجم اضافه» and «زمان اضافه»: their screens and checkouts, and an amount typed.
+    // «حجم، زمان و کاربر اضافه»: their screens and checkouts, and an amount typed.
     $bot->callback(ExtrasHandler::PREFIX, ExtrasHandler::class);
     $bot->state(ExtrasHandler::STATE, ExtrasHandler::class);
     $bot->callback(PurchaseHandler::PLAN, PurchaseHandler::class);
     $bot->callback(PurchaseHandler::CHECKOUT, PurchaseHandler::class);
+    // «نام سرویس» under a purchase's checkout: the way chosen, a name typed.
+    $bot->callback(ClientNameHandler::PREFIX, ClientNameHandler::class);
+    $bot->state(ClientNameHandler::STATE, ClientNameHandler::class);
     // «🏷 کد تخفیف دارم» under a discountable checkout: the code awaited, typed, removed.
     $bot->callback(DiscountCodeHandler::PREFIX, DiscountCodeHandler::class);
     $bot->state(DiscountCodeHandler::STATE, DiscountCodeHandler::class);
@@ -83,6 +98,11 @@ return static function (Dispatcher $bot): void {
     // «🧪 اکانت تست»: /free opens its screen as the menu's button does; a server tapped takes a test there.
     $bot->command(TestAccountHandler::COMMAND, TestAccountHandler::class);
     $bot->callback(TestAccountHandler::PREFIX, TestAccountHandler::class);
+
+    // «➕ افزودن سرویس»: the link asked for and sent there — or sent at no step that takes it, from anywhere.
+    $bot->callback(ServiceClaimHandler::PREFIX, ServiceClaimHandler::class, navigation: true);
+    $bot->state(ServiceClaimHandler::STATE, ServiceClaimHandler::class);
+    $bot->pattern(ClientLink::PATTERN, ServiceClaimHandler::class);
 
     // Bot admins only (anyone else gets no answer): /broadcast.
     $bot->command(BroadcastHandler::COMMAND, BroadcastHandler::class, adminOnly: true);

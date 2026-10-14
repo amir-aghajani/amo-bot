@@ -464,7 +464,7 @@ describe('the shop’s admins’ card', () => {
 
     expect(screen.getByRole('switch', LET_IN).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('switch', STRONG).getAttribute('aria-checked')).toBe('true')
-    for (const name of ['پلن‌ها و دسته‌بندی‌ها', 'کیف پول مشتری', 'بازپرداخت', 'افزایش زمان و حجم سرویس', 'حذف سرویس', 'امنیت حساب مشتری']) {
+    for (const name of ['پلن‌ها و دسته‌بندی‌ها', 'کیف پول مشتری', 'بازپرداخت', 'افزایش زمان و حجم سرویس', 'حذف یا انتقال سرویس', 'امنیت حساب مشتری']) {
       expect(grant(name).getAttribute('aria-checked')).toBe('false')
     }
   })
@@ -499,9 +499,9 @@ describe('the shop’s admins’ card', () => {
   it('is unchanged once a grant switched on is switched off again', async () => {
     await show('/website-settings/staff', websiteRow({ staff: { enabled: true, strong_sign_in: true, grants: ['extend'] } }))
 
-    fireEvent.click(grant('حذف سرویس'))
+    fireEvent.click(grant('حذف یا انتقال سرویس'))
     expect(screen.getByText('تغییرات ذخیره نشده')).toBeTruthy()
-    fireEvent.click(grant('حذف سرویس'))
+    fireEvent.click(grant('حذف یا انتقال سرویس'))
 
     expect(screen.queryByText('تغییرات ذخیره نشده')).toBeNull()
   })

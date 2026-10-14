@@ -19,6 +19,7 @@ use App\Modules\Telegram\Session\ChatSession;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
+use App\Modules\Telegram\Update\Dispatcher;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\CustomerPictures;
 use App\Support\Text;
@@ -49,7 +50,7 @@ final class TicketMessageHandler implements Handler
         private readonly CustomerPictures $pictures,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
-        private readonly FallbackHandler $fallback,
+        private readonly Dispatcher $dispatcher,
     ) {}
 
     /** A new ticket's first message awaited — about the customer's service `$serviceId`, or none. */
@@ -99,9 +100,9 @@ final class TicketMessageHandler implements Handler
         $state = (string) $ctx->session->state();
         $replying = str_starts_with($state, self::REPLY);
         if ($replying && !self::lately($ctx->session)) {
-            // The chat stopped on the ticket a while ago: this message is not the ticket's.
-            $ctx->session->clear();
-            $this->fallback->handle($ctx);
+            // The chat stopped on the ticket a while ago: this message is not the ticket's — a service's link in it is a
+            // service sent, anything else the fallback's.
+            $this->dispatcher->atNoStep($ctx);
 
             return;
         }

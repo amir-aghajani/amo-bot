@@ -36,9 +36,9 @@ import {
 } from '@/pages/lazy'
 
 /*
- * The owner's panel (/admin/): the shared shop pages plus the owner's own — servers, agents, the mass gift, the
- * dashboard's system card, the panel's settings and, before the shop is installed, the installer. Every page is its own
- * chunk.
+ * The owner's panel (/admin/): the shared shop pages plus the owner's own — servers, agents, the mass gift, the main
+ * shop's «سرویس دلخواه», the dashboard's system card, the panel's settings and, before the shop is installed, the
+ * installer. Every page is its own chunk.
  */
 
 const AgentsPage = lazyPage(
@@ -48,6 +48,10 @@ const AgentsPage = lazyPage(
 const BroadcastsPage = lazyPage(
   () => import('@/apps/admin/pages/broadcasts'),
   (module) => module.OwnerBroadcastsPage,
+)
+const CustomServicesPage = lazyPage(
+  () => import('@/apps/admin/pages/custom-services'),
+  (module) => module.CustomServicesPage,
 )
 const DashboardPage = lazyPage(
   () => import('@/apps/admin/pages/dashboard'),
@@ -125,6 +129,7 @@ export const ADMIN_ROUTES: RouteObject[] = [
                   { path: 'servers/:id', element: <ServerDetailPage /> },
                   { path: 'plans', element: <PlansPage addServers="/servers" /> },
                   { path: 'tests/:section?', element: <TestsPage serverPage={testCard} /> },
+                  { path: 'custom-services', element: <CustomServicesPage /> },
                   { path: 'categories', element: <PlanCategoriesPage /> },
                   { path: 'payment-methods', element: <PaymentMethodsPage /> },
                   { path: 'users', element: <UsersPage /> },

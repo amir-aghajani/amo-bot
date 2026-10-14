@@ -47,6 +47,8 @@ export const queryKeys = {
   subscriptions: ['subscriptions'] as const,
   subscription: (id: number) => ['subscription', id] as const,
   everySubscription: ['subscription'] as const,
+  /** Who a service would go to by a typed Telegram id, as the server judges it (components/subscriptions/transfer-form). */
+  transferRecipient: (id: number, telegramId: string) => ['transfer-recipient', id, telegramId] as const,
   users: ['users'] as const,
   /** One customer as their page shows them (lib/queries' `customerQuery`). */
   user: (id: number) => ['user', id] as const,

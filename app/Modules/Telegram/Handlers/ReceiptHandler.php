@@ -51,6 +51,7 @@ final class ReceiptHandler implements Handler
             OrderType::Renewal => BotText::ReceiptOutcomeRenewal,
             OrderType::ExtraTraffic => BotText::ReceiptOutcomeExtraTraffic,
             OrderType::ExtraTime => BotText::ReceiptOutcomeExtraTime,
+            OrderType::ExtraDevices => BotText::ReceiptOutcomeExtraDevices,
             OrderType::Purchase => BotText::ReceiptOutcomeSubscription,
         };
     }

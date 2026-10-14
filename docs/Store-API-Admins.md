@@ -18,7 +18,7 @@ GET {base}/admin/payments?status=awaiting_review      the panels' GET /api/{pane
 | The dashboard, the queues, the change feed | `GET /admin/dashboard`, `/admin/queues`, `/admin/changes` (poll it to follow the shop live) |
 | Payments | the list and a payment, its receipt; approve, reject, cancel, remind, retry — refund with the `refunds` grant |
 | Orders | the list and an order; retry a delivery, cancel an unpaid order |
-| Services | the list and a service; read it from its panel, switch it off or on, move it — days and traffic with `extend`, delete with `delete` |
+| Services | the list and a service; read it from its panel, switch it off or on, move it — days and traffic with `extend`, delete or hand to another customer with `delete` |
 | Customers | the list (by role too) and a customer's page, their wallet's ledger, their groups, a ban — the wallet changed with `wallet`; two-factor sign-in turned off and every device signed out with `account_security` |
 | Customer groups | the list; add, rename, reorder, delete |
 | Support tickets | the list and a ticket; answer (a picture too), close, open again |
@@ -98,7 +98,7 @@ the website lets no admin in:
 | `wallet` | A customer's wallet credited or debited by hand |
 | `refunds` | A payment given back |
 | `extend` | A service given days and traffic |
-| `delete` | A service deleted for good, from its panel and the shop |
+| `delete` | «حذف یا انتقال سرویس»: a service deleted for good, from its panel and the shop — or handed to another customer of the shop (`GET` and `POST …/subscriptions/{id}/transfer`, as from a service's dialog in the panels): either takes it from its customer |
 | `account_security` | A customer's website account taken in hand: two-factor sign-in turned off, every device signed out |
 
 The rest of the daily work asks none. An operation that asks one names it in the [reference](Store-Admin-API-Reference.md).
@@ -122,11 +122,14 @@ And past the door, what no admin decides, whatever the row's state allows — a 
 |---|---|
 | `پرداخت خودتان را نمی‌توانید تایید یا بازپرداخت کنید؛ این کار با مدیر دیگری است.` | Their own payment, approved or given back |
 | `موجودی کیف پول خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.` | Their own wallet |
-| `سرویس خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.` | Their own service: days and traffic, switched off or on, moved, deleted (reading it from its panel is fine) |
+| `سرویس خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.` | Their own service: days and traffic, switched off or on, moved, deleted, handed to another customer (reading it from its panel is fine) |
 | `نظر خودتان را نمی‌توانید تایید، رد یا حذف کنید؛ این کار با مدیر دیگری است.` | Their own review, approved, rejected or deleted |
 | `حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.` | An admin's account — a ban, two-factor sign-in, the devices — theirs or another admin's |
 | `حساب نماینده‌ها فقط از پنل تغییر می‌کند.` | An agent's account, the same way: the owner's partners are the panel's |
 | `از وب‌سایت فقط پرداختی تایید می‌شود که رسیدش رسیده و در انتظار بررسی است.` | Approving a payment without a receipt in review |
+
+Nor does an admin hand a customer's service to themselves: a `422` on `telegram_id` (`سرویس را به حساب خودتان نمی‌توانید
+منتقل کنید؛ این کار با مدیر دیگری است.`).
 
 **These guards stop an admin acting on their own account only: two admins can do these things for each other** — approve
 each other's payments, credit each other's wallets. Give the role only to people you trust.

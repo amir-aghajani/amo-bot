@@ -16,6 +16,7 @@ import { api, ApiError } from '@/lib/api'
 import type { PlanPrices, PlanPricesPreviewResponse, PlanPricesRequest, PlanRow } from '@/lib/api-types'
 import { messageOf } from '@/lib/failure'
 import { decimalInput, formatMoney, formatNumber, MONEY_UNIT } from '@/lib/format'
+import { PLAN_SERVICE } from '@/lib/limits'
 import { useForm } from '@/lib/use-form'
 import { useProbe } from '@/lib/use-probe'
 import { cn } from '@/lib/utils'
@@ -196,7 +197,7 @@ function BulkPricesForm({ plans, invalidates, onClose, onSaved }: Omit<BulkPrice
           id={`${ids}-value`}
           label={percent ? 'درصد تغییر' : `مبلغ تغییر (${MONEY_UNIT})`}
           error={error('value')}
-          hint={percent ? 'اعشار هم می‌شود؛ حداکثر 1000 درصد، در کاهش حداکثر 100.' : 'به تومان و بدون اعشار.'}
+          hint={percent ? `اعشار هم می‌شود؛ حداکثر ${PLAN_SERVICE.PERCENT_MAX} درصد، در کاهش حداکثر 100.` : 'به تومان و بدون اعشار.'}
         >
           {(control) => (
             <div className="grid grid-cols-[1fr_auto] items-center gap-2">

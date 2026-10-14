@@ -163,6 +163,7 @@ final class AdminPlansApiTest extends HttpTestCase
         $response = $this->postJson('/api/admin/plans', $this->input(['extras' => [
             'traffic_price' => '۵٬۰۰۰', 'traffic_options' => [['quantity' => '20', 'price' => '90000']], 'traffic_min' => 1, 'traffic_max' => '50',
             'time_price' => '', 'time_options' => [], 'time_min' => 1, 'time_max' => 30,
+            'devices_price' => '۲۰٬۰۰۰', 'devices_options' => [], 'devices_min' => 1, 'devices_max' => '3',
         ]]));
 
         self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
@@ -170,9 +171,10 @@ final class AdminPlansApiTest extends HttpTestCase
         self::assertSame([
             'traffic_price' => '5000.00', 'traffic_options' => [['quantity' => 20, 'price' => '90000.00']], 'traffic_min' => 1, 'traffic_max' => 50,
             'time_price' => null, 'time_options' => [], 'time_min' => 1, 'time_max' => 30,
+            'devices_price' => '20000.00', 'devices_options' => [], 'devices_min' => 1, 'devices_max' => 3,
         ], $plan['extras']);
         $prices = ExtrasSettings::planPrices(Plan::query()->findOrFail($plan['id'])) ?? self::fail('no prices of its own');
-        self::assertSame(['90000.00', '150000.00', false], [$prices->traffic->priceOf(20), $prices->traffic->priceOf(30), $prices->time->sells()]);
+        self::assertSame(['90000.00', '150000.00', false, '40000.00'], [$prices->traffic->priceOf(20), $prices->traffic->priceOf(30), $prices->time->sells(), $prices->devices->priceOf(2)]);
 
         $kept = $this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input(['name' => 'یک‌ماهه ویژه'])))['plan'];
         self::assertSame($plan['extras'], $kept['extras'], 'changed without them — a form made before them —: its own stay');
@@ -182,10 +184,46 @@ final class AdminPlansApiTest extends HttpTestCase
         $refused = $this->postJson('/api/admin/plans', $this->input(['name' => '', 'extras' => [
             'traffic_price' => '0', 'traffic_min' => 10, 'traffic_max' => 5,
             'time_options' => [['quantity' => 7, 'price' => '']], 'time_min' => 1, 'time_max' => 30,
+            'devices_options' => [['quantity' => 30, 'price' => '1000']], 'devices_min' => 1, 'devices_max' => 5,
         ]]));
         self::assertSame(422, $refused->getStatusCode());
-        self::assertSame(['name', 'extras.traffic_price', 'extras.traffic_max', 'extras.time_options'], array_keys($this->decode($refused)['errors']), 'with the rest of the form, each under its field');
+        self::assertSame(['name', 'extras.traffic_price', 'extras.devices_options', 'extras.traffic_max', 'extras.time_options'], array_keys($this->decode($refused)['errors']), 'with the rest of the form, each under its field: what each field reads first, then what fields say of each other');
         self::assertSame(2, Plan::query()->count());
+    }
+
+    public function testAPlansOwnPricesKeptBeforeDevicesWereSoldLoadAndSaveAsTheyAre(): void
+    {
+        $id = $this->decode($this->postJson('/api/admin/plans', $this->input()))['plan']['id'];
+        // As 0.3.0 kept a plan's own list: traffic and time alone.
+        $kept = ['traffic_price' => '5000.00', 'traffic_options' => [['quantity' => 20, 'price' => '90000.00']], 'traffic_min' => 1, 'traffic_max' => 50, 'time_price' => null, 'time_options' => [], 'time_min' => 1, 'time_max' => 30];
+        Plan::query()->findOrFail($id)->forceFill(['extras' => $kept])->save();
+
+        $shown = $this->decode($this->get('/api/admin/plans'))['plans'][0]['extras'];
+        self::assertSame($kept + ['devices_price' => null, 'devices_options' => [], 'devices_min' => 1, 'devices_max' => 5], $shown, 'its devices shown unsold, at the default bounds');
+        self::assertFalse((ExtrasSettings::planPrices(Plan::query()->findOrFail($id)) ?? self::fail('no prices of its own'))->devices->sells(), "its services buy devices once the plan prices them, not at the shop's");
+
+        $saved = $this->putJson("/api/admin/plans/{$id}", $this->input(['extras' => $shown]));
+        self::assertSame(200, $saved->getStatusCode(), (string) $saved->getBody());
+        self::assertSame($shown, $this->decode($saved)['plan']['extras'], 'saved as the form shows it');
+    }
+
+    public function testAPlansOwnPricesSentAsBeforeDevicesWereSoldSaveAndSellNoDevices(): void
+    {
+        // As a 0.3.0 form or website sends a plan's own list: traffic and time alone.
+        $sent = ['traffic_price' => '5000', 'traffic_options' => [], 'traffic_min' => 1, 'traffic_max' => 50, 'time_price' => '', 'time_options' => [], 'time_min' => 1, 'time_max' => 30];
+
+        $created = $this->postJson('/api/admin/plans', $this->input(['extras' => $sent]));
+        self::assertSame(201, $created->getStatusCode(), (string) $created->getBody());
+        $plan = $this->decode($created)['plan'];
+        self::assertSame(['devices_price' => null, 'devices_options' => [], 'devices_min' => 1, 'devices_max' => 5], array_intersect_key($plan['extras'], array_flip(['devices_price', 'devices_options', 'devices_min', 'devices_max'])), 'no devices, at the default bounds');
+        self::assertFalse((ExtrasSettings::planPrices(Plan::query()->findOrFail($plan['id'])) ?? self::fail('no prices of its own'))->devices->sells());
+
+        $updated = $this->putJson("/api/admin/plans/{$plan['id']}", $this->input(['extras' => ['traffic_price' => '7000'] + $sent]));
+        self::assertSame(200, $updated->getStatusCode(), (string) $updated->getBody());
+        self::assertSame('7000.00', $this->decode($updated)['plan']['extras']['traffic_price']);
+
+        $refused = $this->putJson("/api/admin/plans/{$plan['id']}", $this->input(['extras' => ['devices_min' => 4, 'devices_max' => 2] + $sent]));
+        self::assertSame(['extras.devices_max'], array_keys($this->decode($refused)['errors'] ?? []), 'bounds sent are still checked');
     }
 
     public function testAFirstPurchasePriceIsWholeTomanBelowThePriceOrNone(): void

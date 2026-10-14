@@ -27,7 +27,8 @@ use Psr\Log\LoggerInterface;
  *   3. contact card         (navigation)
  *   4. callback prefix      (longest prefix wins; navigation where registered so; an unknown one goes to the fallback)
  *   5. conversation state   (longest prefix: "topup" takes "topup.amount")
- *   6. fallback             (the menu: navigation)
+ *   6. text pattern         (a text message one matches — a link sent outside any step: navigation)
+ *   7. fallback             (the menu: navigation)
  * Navigation leaves the flow in progress. An admin-only route answers anyone else nothing. A tap the handler left
  * unanswered is acknowledged afterwards, and a failure is reported on the button or, once the tap was answered, in a message.
  */
@@ -50,6 +51,9 @@ final class Dispatcher
 
     /** @var array<string, Route> By conversation state prefix */
     private array $states = [];
+
+    /** @var array<string, Route> By the regular expression a text message matches, in the order registered */
+    private array $patterns = [];
 
     private ?Route $contact = null;
 
@@ -124,6 +128,19 @@ final class Dispatcher
     public function state(string $prefix, string $handler, bool $adminOnly = false): self
     {
         $this->states[$prefix] = new Route($handler, adminOnly: $adminOnly);
+
+        return $this;
+    }
+
+    /**
+     * A text message that matches `$regex` while the chat is at no step that takes it — a step's answer stays the step's.
+     * It leaves the flow in progress, as the fallback it would otherwise reach does.
+     *
+     * @param class-string<Handler> $handler
+     */
+    public function pattern(string $regex, string $handler): self
+    {
+        $this->patterns[$regex] = new Route($handler, navigation: true);
 
         return $this;
     }
@@ -219,6 +236,19 @@ final class Dispatcher
             ]);
 
             $this->reportFailure($update, $chatId, $ctx);
+        }
+    }
+
+    /**
+     * Serve the message as one sent at no step, the flow left: a step that finds it is not its own (a ticket the chat left
+     * a while ago) hands it to the text pattern it matches, or the fallback — the one list of them.
+     */
+    public function atNoStep(Context $ctx): void
+    {
+        $ctx->session->clear();
+        $route = $this->route($ctx->update, null, $ctx->isAdmin());
+        if ($route !== null) {
+            $this->container->get($route->handler)->handle($ctx);
         }
     }
 
@@ -377,6 +407,16 @@ final class Dispatcher
             $step = $allowed(self::longestPrefix($this->states, $state));
             if ($step !== null) {
                 return $step;
+            }
+        }
+
+        if ($update->isMessage()) {
+            // A picture's caption is its words.
+            $text = (string) ($update->text() ?? $update->caption());
+            foreach ($this->patterns as $regex => $route) {
+                if (preg_match($regex, $text) === 1) {
+                    return $route;
+                }
             }
         }
 

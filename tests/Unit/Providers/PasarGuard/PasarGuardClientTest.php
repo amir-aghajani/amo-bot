@@ -260,6 +260,47 @@ final class PasarGuardClientTest extends TestCase
         self::assertFalse($options['http_errors']);
     }
 
+    public function testThePublicSubscriptionRouteIsAskedAsAClientAppAsksAndOnlyAJsonObjectIsAnAnswer(): void
+    {
+        $path = '/sub/YW1pcl8xLDE3NjAyNjI0MDA.c2lnbmF0dXJlLTE/info';
+        $this->panel->raw(
+            self::json(200, ['username' => 'amir_1']),
+            self::json(404, ['detail' => 'Not Found']),
+            self::json(403, ['detail' => 'Invalid subscription token']),
+            self::json(500, ['detail' => 'Internal Server Error']),
+            new Response(302, ['Location' => self::BASE . '/dashboard/']),
+            new Response(200, ['Content-Type' => 'text/html'], '<html><body>dashboard</body></html>'),
+            self::json(200, 'a string'),
+            self::json(200, ['username' => 'amir_1']),
+        );
+        $client = $this->passwordClient();
+
+        self::assertSame(['username' => 'amir_1'], $client->anonymous($path));
+        foreach (['not found', 'refused', 'a server error', 'a redirect', 'a web page', 'JSON that is no object'] as $case) {
+            self::assertNull($client->anonymous($path), "{$case}: no answer, and no failure");
+        }
+        self::assertSame(['username' => 'amir_1'], $this->keyClient()->anonymous($path));
+
+        self::assertCount(8, $this->panel->calls(), 'nobody signed in for it');
+        foreach ($this->panel->history as $i => $call) {
+            self::assertSame("GET {$path}", "{$call['method']} {$call['path']}", "call {$i}");
+            self::assertFalse($call['request']->hasHeader('Authorization'), "call {$i}: no admin's token");
+            self::assertFalse($call['request']->hasHeader('X-Api-Key'), "call {$i}: no API key");
+        }
+    }
+
+    public function testNothingAnsweringThePublicRouteFailsWithoutThePathInWhatItSays(): void
+    {
+        $address = self::BASE . '/sub/YW1pcl8xLDE3NjAyNjI0MDA.c2lnbmF0dXJlLTE/info';
+        $this->panel->refuse(new ConnectException("cURL error 7: Failed to connect to pg.test port 8000 after 3 ms: Could not connect to server (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for {$address}", new Request('GET', $address)));
+
+        $failure = self::failure(fn() => $this->keyClient()->anonymous('/sub/YW1pcl8xLDE3NjAyNjI0MDA.c2lnbmF0dXJlLTE/info'));
+
+        self::assertInstanceOf(ConnectionException::class, $failure);
+        self::assertStringNotContainsString('YW1pcl8xLDE3NjAyNjI0MDA', $failure->getMessage());
+        self::assertStringNotContainsString('YW1pcl8xLDE3NjAyNjI0MDA', $failure->detail);
+    }
+
     private function keyClient(): PasarGuardClient
     {
         return new PasarGuardClient(new PanelHttp($this->panel->client(), new NullLogger()), new PanelConnection(self::BASE), new PanelCredentials(AuthMode::Token, token: self::KEY));

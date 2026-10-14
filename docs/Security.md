@@ -38,7 +38,8 @@ What the code does by itself, in short — [Running in production](Running-In-Pr
   bearer token, no cookie, and answers CORS for the website's own origins alone.
 - Every sign-in — the owner's, an agent's link, a website customer's password, code or provider — is throttled per
   address and per account, counted before it is judged, and fails closed when the throttle cannot count. What changes
-  how a customer's account is signed in to asks a recent sign-in, and is notified on every channel the account has.
+  how a customer's account is signed in to asks a recent sign-in, and is notified on every channel the account has;
+  handing a service to another customer on the website asks a recent sign-in too.
 - The shop's admins on its website are shut out until the shop lets them in, asked a strong sign-in (not a password
   alone) by default and a sign-in of the last 12 hours always, given nothing beyond the daily work but what the shop
   grants — each grant, and approving a payment, asking a sign-in of the last 15 minutes —, never let decide about

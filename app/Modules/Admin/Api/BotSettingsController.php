@@ -7,6 +7,7 @@ namespace App\Modules\Admin\Api;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Settings\Services\BotSettingsScreen;
+use App\Modules\Subscriptions\DTO\ClientNamePattern;
 use App\Modules\Telegram\Qr\QrBackground;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -22,10 +23,14 @@ final class BotSettingsController extends ApiController
         private readonly QrBackground $background,
     ) {}
 
-    /** GET /bot/settings */
+    /** GET /bot/settings — with the variables a client name pattern may hold, for «نام کاربری سرویس»'s hint and example */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, ['settings' => $this->settings->present(), 'qr_background' => $this->background->describe()]);
+        return $this->json($response, [
+            'settings' => $this->settings->present(),
+            'qr_background' => $this->background->describe(),
+            'name_variables' => ClientNamePattern::variables(now()),
+        ]);
     }
 
     /** GET /bot/qr-background — the picture itself, for the screen's preview */

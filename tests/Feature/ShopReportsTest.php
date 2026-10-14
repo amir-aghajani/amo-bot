@@ -21,6 +21,7 @@ use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Providers\Services\ServerHealth;
 use App\Modules\Referrals\Services\ReferralService;
 use App\Modules\Subscriptions\Enums\ExtraKind;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Support\Enums\TicketStatus;
 use App\Modules\Support\Services\Tickets;
@@ -134,6 +135,22 @@ final class ShopReportsTest extends BotTestCase
         ]), $this->reported(Topic::Renewals));
     }
 
+    public function testARenewalByAnotherMethodThanTheUsualSaysWhich(): void
+    {
+        $ali = $this->customer(['username' => 'ali']);
+        $server = $this->sellingServer();
+        $plan = $this->plan([], $server);
+        $this->buy($ali, $plan, $server);
+        $subscription = Subscription::query()->sole();
+
+        $this->service(WalletService::class)->credit($ali, $plan->price, 'test');
+        $order = $this->service(OrderService::class)->createRenewal($ali, $subscription, $plan, RenewalMethod::ResetTraffic);
+        $this->service(PaymentService::class)->createForOrder($order, $this->walletMethod());
+        self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status, (string) $order->notes);
+
+        self::assertSame("♻️ <b>تمدید سرویس</b> · سفارش #{$order->id} · ریست حجم + افزایش روز", explode("\n", $this->reported(Topic::Renewals))[0]);
+    }
+
     public function testExtraTrafficOrTimeIsReportedWithRenewalsWithTheServiceAsItNowStands(): void
     {
         $ali = $this->customer(['username' => 'ali']);
@@ -164,6 +181,29 @@ final class ShopReportsTest extends BotTestCase
                 '💳 مبلغ: ۷٬۰۰۰ تومان · کیف پول',
             ]),
         ], $this->reportedIn(Topic::Renewals), 'its term still waits for the first connection: seven days longer');
+    }
+
+    public function testExtraDevicesAreReportedWithRenewalsWithTheServicesNewLimit(): void
+    {
+        $ali = $this->customer(['username' => 'ali']);
+        $server = $this->sellingServer();
+        $this->buy($ali, $this->plan(['ip_limit' => 2], $server), $server);
+        $subscription = Subscription::query()->sole();
+
+        $devices = $this->paidExtra($subscription, ExtraKind::Devices, 3, '30000');
+
+        self::assertSame([
+            implode("\n", [
+                "👥 <b>کاربر اضافه</b> · سفارش #{$devices->id}",
+                '👤 ' . self::ALI,
+                '🔖 سرویس: <code>ali_1</code> · آلمان',
+                '➕ ۳ کاربر',
+                '📥 حجم باقی‌مانده: ۳۰ گیگابایت',
+                '📅 پایان: ' . Messages::expiry(null, 30 * 24),
+                '👥 تعداد کاربر: ۵ کاربر',
+                '💳 مبلغ: ۳۰٬۰۰۰ تومان · کیف پول',
+            ]),
+        ], $this->reportedIn(Topic::Renewals), 'its two and the three bought');
     }
 
     public function testADeliveryThatFailsIsAnErrorWithItsReasonAndTheSaleComesWithTheRetry(): void

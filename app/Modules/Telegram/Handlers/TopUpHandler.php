@@ -18,7 +18,6 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Services\WalletSettings;
-use App\Support\Input;
 use App\Support\Money;
 
 /**
@@ -44,6 +43,7 @@ final class TopUpHandler implements Handler
         private readonly OrderService $orders,
         private readonly PaymentMethods $methods,
         private readonly CheckoutScreen $screen,
+        private readonly TypedAmounts $amounts,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
     ) {}
@@ -108,14 +108,10 @@ final class TopUpHandler implements Handler
     /** State `topup.amount`: the amount typed — its checkout, or why it is refused. */
     private function typed(Context $ctx): void
     {
-        $amount = Input::amountOf($ctx->update->text());
-        if ($amount === null || !$this->orders->topUpAllowed($amount)) {
-            $ctx->reply($this->texts->render(BotText::TopupInvalid, $this->minimum()), ['reply_markup' => $this->buttons->backOnly(self::START)]);
-
-            return;
+        $amount = $this->amounts->read($ctx, $this->orders->topUpAllowed(...), $this->texts->render(BotText::TopupInvalid, $this->minimum()), self::START);
+        if ($amount !== null) {
+            $this->checkout($ctx, $amount);
         }
-
-        $this->checkout($ctx, $amount);
     }
 
     /** A way to pay picked: the top-up ordered — or the open one of that amount found — and paid. */

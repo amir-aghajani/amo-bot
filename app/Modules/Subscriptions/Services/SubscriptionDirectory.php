@@ -26,16 +26,13 @@ final class SubscriptionDirectory
     /** The window of that tab, and of the dashboard's card that links to it. */
     public const EXPIRING_DAYS = 3;
 
-    /** The `kind` filter's values: the free test accounts alone, or every other service (sold, renewed or given). */
-    private const KINDS = ['test' => true, 'regular' => false];
-
     public function __construct(
         private readonly SubscriptionActions $actions,
         private readonly ServiceCleanup $cleanup,
     ) {}
 
     /**
-     * The page asked for, filtered by `status` (a SubscriptionStatus, or EXPIRING), `kind` (KINDS), `server`, `user` and
+     * The page asked for, filtered by `status` (a SubscriptionStatus, or EXPIRING), `kind` (applyKind()), `server`, `user` and
      * the search box (applySearch()); newest first, or sorted by its end (no deadline after every deadline) or the traffic
      * used. With the expiring tab's count and window.
      */
@@ -46,10 +43,7 @@ final class SubscriptionDirectory
         if ($status !== null) {
             $query->where('status', $status->value);
         }
-        $test = self::KINDS[$list->text('kind')] ?? null;
-        if ($test !== null) {
-            $query->where('is_test', $test);
-        }
+        self::applyKind($query, $list->text('kind'));
         $server = $list->id('server');
         if ($server !== null) {
             $query->where('server_id', $server);
@@ -79,6 +73,7 @@ final class SubscriptionDirectory
             'name' => $subscription->remote_name,
             'link' => $subscription->subscription_url,
             'is_test' => $subscription->is_test,
+            'claimed_at' => $subscription->claimed_at?->toIso8601String(),
             'user' => UserDirectory::presentRef($subscription->user),
             'plan' => $subscription->plan === null ? null : ['id' => $subscription->plan->id, 'name' => $subscription->plan->name],
             'server' => ['id' => $subscription->server->id, 'name' => $subscription->server->name],
@@ -87,11 +82,13 @@ final class SubscriptionDirectory
             'duration_days' => ServiceTerms::daysOf($subscription->duration_hours),
             'duration_hours' => $subscription->duration_hours,
             'auto_renew' => $subscription->auto_renew,
-            // A renewal queued behind the period in use: when it begins, and the most it leaves then.
-            'next_period' => $subscription->period_ends_at === null ? null : [
+            // A renewal queued behind the period in use that caps the traffic: when it begins, and the most it leaves then
+            // (one queued for its devices alone caps nothing: next_devices says it).
+            'next_period' => $subscription->period_ends_at === null || $subscription->next_period_bytes === null ? null : [
                 'starts_at' => $subscription->period_ends_at->toIso8601String(),
-                'traffic' => $subscription->next_period_bytes ?? 0,
+                'traffic' => $subscription->next_period_bytes,
             ],
+            'next_devices' => self::nextDevices($subscription),
             'starts_at' => $subscription->starts_at?->toIso8601String(),
             'expires_at' => $subscription->expires_at?->toIso8601String(),
             'expiring_soon' => $subscription->isExpiringWithin(self::EXPIRING_DAYS),
@@ -102,6 +99,39 @@ final class SubscriptionDirectory
             'created_at' => $subscription->created_at->toIso8601String(),
             'actions' => $this->actions->allowed($subscription),
         ];
+    }
+
+    /**
+     * A renewal's device limit queued behind the period in use (ServiceTerms::renewal()), as every API presents it (the
+     * website's SubscriptionPresenter too): from when, and how many devices then (0: no limit); null while the limit
+     * stays as it is when that period ends.
+     *
+     * @return array{from: string, devices: int}|null
+     */
+    public static function nextDevices(Subscription $subscription): ?array
+    {
+        $next = $subscription->next_period_ip_limit;
+
+        return $subscription->period_ends_at === null || $next === null || $next === $subscription->ip_limit ? null : [
+            'from' => $subscription->period_ends_at->toIso8601String(),
+            'devices' => $next,
+        ];
+    }
+
+    /**
+     * The `kind` filter: the free test accounts (`test`), the services customers added by their link (`claimed`,
+     * ServiceClaims), or every other service — sold, renewed or given (`regular`); anything else leaves all of them.
+     *
+     * @param Builder<Subscription> $query
+     */
+    private static function applyKind(Builder $query, string $kind): void
+    {
+        match ($kind) {
+            'test' => $query->where('is_test', true),
+            'claimed' => $query->whereNotNull('claimed_at'),
+            'regular' => $query->where('is_test', false)->whereNull('claimed_at'),
+            default => null,
+        };
     }
 
     /**

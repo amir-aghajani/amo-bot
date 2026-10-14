@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotDiscountsSettingsRequest, BotSettingsData } from '@/lib/api-types'
 import { formatMinutes, wholeOf } from '@/lib/format'
+import { DISCOUNT_SETTINGS } from '@/lib/limits'
 
 /**
  * The discount codes' rules — a group of the bot settings (`discounts`): how long an unpaid order made with a code holds
@@ -27,7 +28,7 @@ export function DiscountSettingsCard({ settings }: { settings: BotSettingsData }
         error={error('hold_minutes')}
         hint={
           minutes === null
-            ? 'بین 0 تا 1440 دقیقه'
+            ? `بین 0 تا ${DISCOUNT_SETTINGS.HOLD_MAX} دقیقه`
             : Number(minutes) === 0
               ? 'صفر یعنی سفارش با کد هم مثل هر سفارش پرداخت‌نشده دیگر، بعد از دو روز لغو می‌شود.'
               : `سفارش پرداخت‌نشده با کد، ${formatMinutes(Number(minutes))} بعد از آخرین تغییرش لغو می‌شود؛ سفارشی که رسیدش در دست بررسی است لغو نمی‌شود.`

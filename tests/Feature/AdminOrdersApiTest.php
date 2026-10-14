@@ -14,6 +14,7 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\ExtraKind;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Notifications\ServiceCard;
@@ -56,7 +57,7 @@ final class AdminOrdersApiTest extends HttpTestCase
     {
         $sara = $this->customer(['telegram_id' => 1002, 'first_name' => 'Sara']);
         $bought = $this->buy($this->ali, $this->plan, $this->server);
-        $renewal = $this->paid($this->purchaseOrder($this->ali, $this->plan, $this->server, ['type' => OrderType::Renewal, 'server_id' => null, 'subscription_id' => $bought->subscription_id, 'status' => OrderStatus::Failed, 'notes' => 'پنل جواب نداد.']));
+        $renewal = $this->paid($this->purchaseOrder($this->ali, $this->plan, $this->server, ['type' => OrderType::Renewal, 'server_id' => null, 'subscription_id' => $bought->subscription_id, 'status' => OrderStatus::Failed, 'notes' => 'پنل جواب نداد.', 'renewal_method' => RenewalMethod::ResetTraffic]));
         $topUp = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '20000.00'), $this->card))->order;
         $walkedAway = $this->purchaseOrder($sara, $this->plan, $this->server);
 
@@ -76,9 +77,11 @@ final class AdminOrdersApiTest extends HttpTestCase
         self::assertNotNull($row['paid_at']);
         self::assertNotNull($row['fulfilled_at']);
         self::assertSame(['retry' => false, 'cancel' => false], $row['actions']);
+        self::assertNull($row['renewal_method'], 'a purchase is renewed by none');
 
         $renewed = $data['orders'][2];
         self::assertSame(['id' => $this->server->id, 'name' => 'Berlin'], $renewed['server'], 'a renewal is where its service is');
+        self::assertSame('reset_traffic', $renewed['renewal_method'], 'how it renews');
         self::assertSame('پنل جواب نداد.', $renewed['notes']);
         self::assertSame(['retry' => true, 'cancel' => false], $renewed['actions'], 'stuck: delivered again from here');
         self::assertSame(['retry' => false, 'cancel' => true], $data['orders'][0]['actions']);

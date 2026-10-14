@@ -2,9 +2,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Creating } from '@/components/form-footer'
 import { PlanForm } from '@/components/plans/plan-form'
-import type { BotSettingsResponse, ExtraPrices, PlanOptions, PlanRow } from '@/lib/api-types'
+import type { BotSettingsData, ExtraPrices, PlanOptions, PlanRow } from '@/lib/api-types'
 import { signedIn, until } from '@/test/render'
-import { botSettingsRow, planRow } from '@/test/rows'
+import { botSettingsResponse, botSettingsRow, planRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
@@ -182,7 +182,7 @@ describe('its servers section', () => {
   })
 })
 
-/** A plan's own prices of its extras: 3٬000 a GB, 10 GB offered at that; no time sold. */
+/** A plan's own prices of its extras: 3٬000 a GB, 10 GB offered at that; no time nor devices sold. */
 const OWN: ExtraPrices = {
   traffic_price: '3000.00',
   traffic_options: [{ quantity: 10, price: null }],
@@ -192,15 +192,17 @@ const OWN: ExtraPrices = {
   time_options: [],
   time_min: 1,
   time_max: 30,
+  devices_price: null,
+  devices_options: [],
+  devices_min: 1,
+  devices_max: 5,
 }
 
-/** The form on `plan` (null: a new one, as its dialog opens it), the shop's extras switched on — or off. */
-function showPlan(plan: PlanRow | null, extrasEnabled = true) {
-  const settings: BotSettingsResponse = {
-    settings: botSettingsRow({ extras_enabled: extrasEnabled }),
-    qr_background: { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 182_000, updated_at: 1_759_000_000, max_bytes: 5 * 1024 * 1024 },
-  }
-  server().on('GET', '/api/admin/plans/options', json(OPTIONS)).on('GET', '/api/admin/bot/settings', json(settings))
+/** The form on `plan` (null: a new one, as its dialog opens it), the shop's extras switched on — or off —, its price list `shop`. */
+function showPlan(plan: PlanRow | null, extrasEnabled = true, shop: Partial<BotSettingsData> = {}) {
+  server()
+    .on('GET', '/api/admin/plans/options', json(OPTIONS))
+    .on('GET', '/api/admin/bot/settings', json(botSettingsResponse(botSettingsRow({ ...shop, extras_enabled: extrasEnabled }))))
   render(
     <Creating value={plan === null}>
       <PlanForm plan={plan} onSaved={vi.fn()} onCancel={vi.fn()} />
@@ -210,7 +212,7 @@ function showPlan(plan: PlanRow | null, extrasEnabled = true) {
 }
 
 async function openExtras() {
-  fireEvent.click(await screen.findByRole('tab', { name: /حجم و زمان اضافه/ }))
+  fireEvent.click(await screen.findByRole('tab', { name: /خرید اضافه/ }))
 }
 
 /** Where the plan's extras are priced, picked. */
@@ -247,6 +249,7 @@ describe('its extra traffic and time', () => {
     pricing('قیمت‌های این پلن')
     expect(screen.getByText('با این قیمت‌ها حجم اضافه فروخته نمی‌شود.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('قیمت هر روز (تومان)'), { target: { value: '2000' } })
+    fireEvent.change(screen.getByLabelText('قیمت هر کاربر برای 30 روز (تومان)'), { target: { value: '30000' } })
     fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
 
     await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
@@ -259,7 +262,25 @@ describe('its extra traffic and time', () => {
       time_options: [],
       time_min: '1',
       time_max: '30',
+      devices_price: '30000',
+      devices_options: [],
+      devices_min: '1',
+      devices_max: '5',
     })
+  })
+
+  it('at the plan’s own prices start within the shop’s bounds once those are read — still nothing priced', async () => {
+    showPlan(null, false, { extra_traffic_price: '3000.00', extra_traffic_options: [{ quantity: 10, price: null }], extra_traffic_min: 5, extra_traffic_max: 500, extra_time_max: 90 })
+    await openExtras()
+    await screen.findByText(/خاموش است؛ تا روشن نشود/)
+
+    pricing('قیمت‌های این پلن')
+
+    expect(screen.getByLabelText<HTMLInputElement>('قیمت هر گیگابایت (تومان)').value).toBe('')
+    expect(screen.queryByLabelText('حجم پیشنهادی ۱ (گیگابایت)')).toBeNull()
+    expect(screen.getByLabelText<HTMLInputElement>('کمترین (گیگابایت)').value).toBe('5')
+    expect(screen.getByLabelText<HTMLInputElement>('بیشترین (گیگابایت)').value).toBe('500')
+    expect(screen.getByLabelText<HTMLInputElement>('بیشترین (روز)').value).toBe('90')
   })
 
   it('of a plan with its own start from them, kept while the shop’s are chosen — which are then sent', async () => {
@@ -311,9 +332,9 @@ describe('its extra traffic and time', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
 
-    await until(() => expect(screen.getByRole('tab', { name: /حجم و زمان اضافه/ }).getAttribute('aria-selected')).toBe('true'))
+    await until(() => expect(screen.getByRole('tab', { name: /خرید اضافه/ }).getAttribute('aria-selected')).toBe('true'))
     const price = screen.getByLabelText('قیمت هر گیگابایت (تومان)')
-    expect(screen.getByRole('tab', { name: /حجم و زمان اضافه.*دارای خطا/ })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /خرید اضافه.*دارای خطا/ })).toBeTruthy()
     expect(price.getAttribute('aria-invalid')).toBe('true')
     expect(screen.getByText(tooMuch)).toBeTruthy()
     await until(() => expect(document.activeElement).toBe(price))
@@ -332,11 +353,11 @@ describe('its extra traffic and time', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
 
-    await until(() => expect(screen.getByRole('tab', { name: /حجم و زمان اضافه.*دارای خطا/ })).toBeTruthy())
+    await until(() => expect(screen.getByRole('tab', { name: /خرید اضافه.*دارای خطا/ })).toBeTruthy())
     pricing('قیمت‌های فروشگاه')
     expect(screen.queryByRole('tab', { name: /دارای خطا/ })).toBeNull()
     pricing('قیمت‌های این پلن')
-    expect(screen.getByRole('tab', { name: /حجم و زمان اضافه.*دارای خطا/ })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /خرید اضافه.*دارای خطا/ })).toBeTruthy()
     expect(screen.getByRole('group', { name: 'حجم‌های پیشنهادی' }).hasAttribute('data-invalid')).toBe(true)
   })
 })

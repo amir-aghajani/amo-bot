@@ -55,6 +55,12 @@ describe('what it says', () => {
     expect(within(dialog()).getByText('زمان اضافه · ۷ روز · طلایی')).toBeTruthy()
   })
 
+  it('labels approving a service’s extra devices as adding them, and says how many', () => {
+    show(paymentRow({ order: { ...paymentRow().order, type: 'extra_devices', plan: 'طلایی', server: 'آلمان', subscription_id: 1, devices: 2 } }))
+    expect(button('تایید و افزودن کاربر')).toBeTruthy()
+    expect(within(dialog()).getByText('کاربر اضافه · ۲ کاربر · طلایی · آلمان')).toBeTruthy()
+  })
+
   it('sets the card apart left to right, the holder’s name as written', () => {
     show(paymentRow())
     const card = within(dialog()).getByText('6037 •••• •••• 1119')
@@ -194,6 +200,22 @@ describe('a refund', () => {
     fireEvent.click(button('بازپرداخت به کیف پول'))
 
     expect(within(dialog()).getByText('مبلغ به کیف پول مشتری برمی‌گردد و زمانی که به سرویس اضافه شده پس گرفته می‌شود. اگر پنل جواب ندهد یا سرویس غیرفعال باشد، بازپرداخت انجام نمی‌شود.')).toBeTruthy()
+  })
+
+  it('of a service’s extra devices says the devices added are taken back', () => {
+    show(
+      paymentRow({
+        status: 'paid',
+        reviewer: 'root',
+        order: { ...paymentRow().order, type: 'extra_devices', status: 'fulfilled', subscription_id: 1, devices: 2 },
+        actions: { ...paymentRow().actions, approve: false, reject: false, cancel: false, refund: true },
+      }),
+    )
+    fireEvent.click(button('بازپرداخت به کیف پول'))
+
+    expect(
+      within(dialog()).getByText('مبلغ به کیف پول مشتری برمی‌گردد و کاربرهایی که به سرویس اضافه شده پس گرفته می‌شود. اگر پنل جواب ندهد یا سرویس غیرفعال باشد، بازپرداخت انجام نمی‌شود.'),
+    ).toBeTruthy()
   })
 })
 

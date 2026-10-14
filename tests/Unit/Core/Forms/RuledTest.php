@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Store;
+namespace Tests\Unit\Core\Forms;
 
 use App\Core\Exceptions\ValidationException;
 use App\Core\Forms\Fields\Field;
+use App\Core\Forms\Fields\Ruled;
 use App\Core\Forms\Fields\Secret;
 use App\Core\Forms\Fields\Text;
 use App\Core\Forms\Form;
-use App\Modules\Store\Forms\Ruled;
 use PHPUnit\Framework\TestCase;
 
 /** A Ruled field: its own rule first, then everything of the wrapped field, a kept secret's binding included. */

@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { extraOffer, extraPricesAs, extraPricesDraft, extraPricesIn, extraPricesRead, extraPricesRequest, NO_EXTRA_PRICES, tomanOf, type ExtraPricesDraft } from '@/components/extras/draft'
+import { extraOffer, extraPricesAs, extraPricesDraft, extraPricesIn, extraPricesRead, extraPricesRequest, NO_EXTRA_PRICES, type ExtraPricesDraft } from '@/components/extras/draft'
 import type { ExtraPrices } from '@/lib/api-types'
 
 /*
- * A price list of «حجم و زمان اضافه» as a form holds it (components/extras/draft): read from what the server keeps, sent
+ * A price list of «حجم، زمان و کاربر اضافه» as a form holds it (components/extras/draft): read from what the server keeps, sent
  * as typed, measured as the server keeps it — a blank row, the rows' order or how a number is written is no change —, and
  * what the bot offers by it: an amount at its own price, else the unit price times it; any amount typed between the least
  * and the most while a unit price prices it; without one, only the amounts with a price of their own.
  */
 
-/** The shop's price list as the server answers it: 3٬000 a GB, 10 GB at the unit price and 50 GB at 120٬000; time priced by its periods alone. */
+/**
+ * The shop's price list as the server answers it: 3٬000 a GB, 10 GB at the unit price and 50 GB at 120٬000; time priced
+ * by its periods alone; 30٬000 a device for 30 days, two at 50٬000, up to 5 typed.
+ */
 const KEPT: ExtraPrices = {
   traffic_price: '3000.00',
   traffic_options: [
@@ -22,6 +25,10 @@ const KEPT: ExtraPrices = {
   time_options: [{ quantity: 7, price: '20000.00' }],
   time_min: 1,
   time_max: 30,
+  devices_price: '30000.00',
+  devices_options: [{ quantity: 2, price: '50000.00' }],
+  devices_min: 1,
+  devices_max: 5,
 }
 
 /** A price list as typed: NO_EXTRA_PRICES with these fields. */
@@ -40,6 +47,10 @@ describe('a price list’s draft', () => {
       time_options: [row(0, '7', '20000')],
       time_min: '1',
       time_max: '30',
+      devices_price: '30000',
+      devices_options: [row(0, '2', '50000')],
+      devices_min: '1',
+      devices_max: '5',
     })
   })
 
@@ -58,6 +69,10 @@ describe('a price list’s draft', () => {
       time_options: [],
       time_min: '1',
       time_max: '60',
+      devices_price: '',
+      devices_options: [],
+      devices_min: '1',
+      devices_max: '5',
     })
   })
 
@@ -80,6 +95,8 @@ describe('what the server keeps of it', () => {
       traffic_options: [row(5, '۵۰', '120,000'), row(6, ''), row(7, '010')],
       traffic_max: '۱۰۰',
       time_options: [row(3, ' 7 ', '۲۰۰۰۰')],
+      devices_price: '30,000',
+      devices_options: [row(1, ''), row(2, '۲', '۵۰٬۰۰۰')],
     })
 
     expect(extraPricesRead(retyped)).toEqual(kept)
@@ -91,11 +108,7 @@ describe('what the server keeps of it', () => {
     expect(extraPricesRead({ ...draft, traffic_price: '3500' })).not.toEqual(kept)
     expect(extraPricesRead({ ...draft, time_options: [row(0, '14', '20000')] })).not.toEqual(kept)
     expect(extraPricesRead({ ...draft, time_max: '31' })).not.toEqual(kept)
-  })
-
-  it('reads a price as whole Toman — its thousands set apart, a unit after it, or the API’s own form —, and nothing else', () => {
-    expect([tomanOf('۳۰٬۰۰۰ تومان'), tomanOf('30,000'), tomanOf('30000.00'), tomanOf('۳۰۰۰۰')]).toEqual([30000, 30000, 30000, 30000])
-    expect([tomanOf('1.5'), tomanOf('سی هزار'), tomanOf('')]).toEqual([null, null, null])
+    expect(extraPricesRead({ ...draft, devices_price: '25000' })).not.toEqual(kept)
   })
 })
 
@@ -133,5 +146,10 @@ describe('what the bot offers by it', () => {
 
   it('sells nothing from a price list with nothing priced', () => {
     expect(extraOffer(NO_EXTRA_PRICES, 'traffic')).toEqual({ buttons: [], typed: null })
+    expect(extraOffer(NO_EXTRA_PRICES, 'devices')).toEqual({ buttons: [], typed: null })
+  })
+
+  it('offers devices as they are set, for 30 days', () => {
+    expect(extraOffer(extraPricesDraft(KEPT), 'devices')).toEqual({ buttons: [{ quantity: 2, price: 50000 }], typed: { min: 1, max: 5, price: 30000 } })
   })
 })

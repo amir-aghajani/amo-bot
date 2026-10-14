@@ -10,9 +10,11 @@ import {
   isGroup,
   isNavItemActive,
   isSectionCurrent,
+  navOfShop,
   pageTitle,
   REFERRAL_SECTIONS,
   REVIEWS,
+  sectionsOfShop,
   SUPPORT,
   USER_SECTIONS,
   WEBSITE_SETTINGS_SECTIONS,
@@ -22,8 +24,8 @@ import { pageOf } from '@/lib/config'
 
 /*
  * Each panel's navigation (components/shell/nav, apps/admin/nav, apps/agent/nav): what the sidebar shows on a page —
- * the menu, or the page's own column of sections, or the settings' —, what the page is called, and that an agent's
- * panel names none of the owner's own pages.
+ * the menu, or the page's own column of sections, or the settings' —, what the page is called, that an agent's
+ * panel names none of the owner's own pages, and that an agent's shop has none of the main shop's own sections.
  */
 
 /** Every address a panel's navigation links to. */
@@ -188,5 +190,33 @@ describe('the panels’ trees', () => {
       expect(new Set(sections).size).toBe(sections.length)
       for (const to of sections) expect(to).not.toBe(pageOf(to))
     }
+  })
+})
+
+/** The addresses of a panel's bot settings' sections, as its settings' column lists them. */
+function botSettingsOf(nav: PanelNav): string[] | undefined {
+  return areaFor(nav, '/bot-settings/general')
+    ?.groups.find((group) => group.id === 'bot')
+    ?.sections.map((section) => section.to)
+}
+
+describe('the main shop’s own sections', () => {
+  const claims = '/bot-settings/service-claims'
+
+  it('are in the main shop’s settings: services added by their link', () => {
+    expect(botSettingsOf(navOfShop(ADMIN_NAV, true))).toContain(claims)
+    expect(navOfShop(ADMIN_NAV, true)).toBe(ADMIN_NAV)
+    expect(areaFor(navOfShop(ADMIN_NAV, true), claims)?.id).toBe('settings')
+  })
+
+  it('are in no agent’s shop — the owner’s panel opened at one, or the agent’s own —, which keeps every other section', () => {
+    for (const nav of [ADMIN_NAV, AGENT_NAV]) {
+      const shop = navOfShop(nav, false)
+      expect(botSettingsOf(shop)).not.toContain(claims)
+      expect(botSettingsOf(shop)).toEqual(BOT_SETTINGS_SECTIONS.filter((section) => section.to !== claims).map((section) => section.to))
+      expect(shop.sections).toEqual(nav.sections)
+    }
+    expect(sectionsOfShop(BOT_SETTINGS_SECTIONS, false).map((section) => section.value)).not.toContain('service_claims')
+    expect(sectionsOfShop(BOT_SETTINGS_SECTIONS, true)).toBe(BOT_SETTINGS_SECTIONS)
   })
 })

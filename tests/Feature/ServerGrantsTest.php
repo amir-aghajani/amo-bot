@@ -17,7 +17,6 @@ use App\Modules\Subscriptions\Enums\GrantStatus;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Grant;
 use App\Modules\Subscriptions\Models\GrantPart;
-use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Subscriptions\Tasks\GrantsTask;
 use App\Modules\Telegram\Messages;
@@ -491,14 +490,6 @@ final class ServerGrantsTest extends HttpTestCase
 
         $id = $this->decode($this->start(['days' => 3]))['grant']['id'];
         self::assertSame(404, $this->postJson("/api/admin/servers/{$empty->id}/grants/{$id}/run")->getStatusCode(), 'another server\'s grant');
-    }
-
-    /** The service, its client on the fake panel as the row has it (switched off there when `$enabled` is false). */
-    private function mirrored(Subscription $subscription, bool $enabled = true): Subscription
-    {
-        FakeProvider::mirror($subscription, $enabled);
-
-        return $subscription;
     }
 
     /** @param array<string, mixed> $body */

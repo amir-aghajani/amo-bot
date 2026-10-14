@@ -7,15 +7,18 @@ namespace App\Modules\Admin\Api;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Subscriptions\Services\SubscriptionActions;
 use App\Modules\Subscriptions\Services\SubscriptionDirectory;
+use App\Modules\Users\Services\UserDirectory;
 use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * The subscriptions screen (SubscriptionDirectory) and the modal's operations (SubscriptionActions, by the request's
- * principal): sync from the panel, extend, switch off or on, move to another server, delete. An operation answers the
+ * principal): sync from the panel, extend, switch off or on, move to another server, hand to another customer
+ * (ServiceTransfers), delete. An operation answers the
  * fresh row (a delete: 204), or a refusal: 422 the state or a field, 403 a shop admin's own service, 409 another change
  * in flight, 502 a panel (under `errors.panel`, or a move's `errors.previous`/`errors.target`).
  */
@@ -26,6 +29,7 @@ final class SubscriptionsController extends ApiController
     public function __construct(
         private readonly SubscriptionDirectory $subscriptions,
         private readonly SubscriptionActions $actions,
+        private readonly ServiceTransfers $transfers,
     ) {}
 
     /** GET /subscriptions?search=&status=&server=&user=&sort=&dir=&page= */
@@ -109,6 +113,35 @@ final class SubscriptionsController extends ApiController
         $input = $this->input($request);
         $subscription = $this->load(Subscription::class, $args, self::RELATIONS);
         $this->actions->move($subscription, Principal::of($request)->actor(), Input::integer($input, 'server_id'), Input::truthy($input['leave_previous'] ?? false));
+
+        return $this->present($response, $subscription);
+    }
+
+    /**
+     * GET /subscriptions/{id}/transfer?telegram_id= — before a transfer: the shop's customer with that Telegram id who may
+     * receive the service (ServiceTransfers::recipient()), or the transfer's refusal; nothing changed
+     *
+     * @param array<string, string> $args
+     */
+    public function transferRecipient(Request $request, Response $response, array $args): Response
+    {
+        $subscription = $this->load(Subscription::class, $args, self::RELATIONS);
+        $recipient = $this->transfers->recipient($subscription, $request->getQueryParams()['telegram_id'] ?? null, Principal::of($request)->actor());
+
+        return $this->json($response, ['recipient' => UserDirectory::presentRef($recipient)]);
+    }
+
+    /**
+     * POST /subscriptions/{id}/transfer — {telegram_id}: the service handed to the shop's customer with that Telegram id
+     * (ServiceTransfers), «تمدید خودکار» off; both customers hear of it. Answers the fresh row, its new customer on it.
+     *
+     * @param array<string, string> $args
+     */
+    public function transfer(Request $request, Response $response, array $args): Response
+    {
+        $input = $this->input($request);
+        $subscription = $this->load(Subscription::class, $args, self::RELATIONS);
+        $this->transfers->transferById($subscription, $input['telegram_id'] ?? null, Principal::of($request)->actor());
 
         return $this->present($response, $subscription);
     }

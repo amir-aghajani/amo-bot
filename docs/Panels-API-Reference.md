@@ -87,6 +87,8 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`POST /api/{panel}/subscriptions/{id}/enable`](#post-apipanelsubscriptionsidenable) | Switch a service back on |
 | [`POST /api/{panel}/subscriptions/{id}/move`](#post-apipanelsubscriptionsidmove) | Move a service to another server |
 | [`POST /api/{panel}/subscriptions/{id}/delete`](#post-apipanelsubscriptionsiddelete) | Delete a service from its panel and from the shop |
+| [`GET /api/{panel}/subscriptions/{id}/transfer`](#get-apipanelsubscriptionsidtransfer) | «انتقال سرویس», before it is done |
+| [`POST /api/{panel}/subscriptions/{id}/transfer`](#post-apipanelsubscriptionsidtransfer) | Hand a service to another customer of the shop («انتقال سرویس»), found by their numeric Telegram id |
 | [`GET /api/{panel}/tickets`](#get-apipaneltickets) | All support tickets |
 | [`GET /api/{panel}/tickets/{id}`](#get-apipanelticketsid) | One ticket, with its whole conversation |
 | [`POST /api/{panel}/tickets/{id}/messages`](#post-apipanelticketsidmessages) | Answer a ticket as support |
@@ -407,7 +409,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
 | `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
-| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
+| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
 | `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
 | `is_active` | boolean | no | Left out: on for a new plan, unchanged for an existing one. |
@@ -535,7 +537,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
 | `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
-| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
+| `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
 | `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
 | `is_active` | boolean | no | Left out: on for a new plan, unchanged for an existing one. |
@@ -1363,7 +1365,7 @@ Retry the delivery of what a paid payment bought.
 
 ### POST /api/{panel}/payments/{id}/refund
 
-Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are.
+Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are.
 
 - **On the website:** the website's admins can also use it, as [`POST /payments/{id}/refund`](Store-Admin-API-Reference.md#post-paymentsidrefund), when the website grants `refunds` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
@@ -1390,7 +1392,7 @@ Support's note on a refund. It is a line of the message the customer gets and th
 
 ### GET /api/{panel}/subscriptions
 
-All the shop's services: sold, renewed or given, and the free test accounts (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.
+All the shop's services: sold, renewed or given, the free test accounts, and those customers added by their link (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.
 
 - **On the website:** the website's admins can also use it, as [`GET /subscriptions`](Store-Admin-API-Reference.md#get-subscriptions).
 
@@ -1574,7 +1576,7 @@ Delete a service from its panel and from the shop.
 
 **Body**, as JSON:
 
-Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable.
+Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable; the owner in the main shop may always (not the website's admins, who need the panel out of reach as any other shop's), which is how a service added by its link to the wrong customer (`SubscriptionRow.claimed_at`) is taken back for the right one to send its link again.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1586,6 +1588,53 @@ Delete a service from its panel and from the shop, permanently. The customer is 
 | Status | What it is | Body |
 |---|---|---|
 | `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/subscriptions/{id}/transfer
+
+«انتقال سرویس», before it is done: the shop's customer with this numeric Telegram id who would receive the service, so the form shows them before `POST`. The same refusals as `POST`, nothing changed.
+
+- **On the website:** the website's admins can also use it, as [`GET /subscriptions/{id}/transfer`](Store-Admin-API-Reference.md#get-subscriptionsidtransfer), when the website grants `delete` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+| `telegram_id` | query | string | yes | The recipient's numeric Telegram id (Persian digits are read too). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Who would receive the service | [SubscriptionTransferRecipientResponse](API-Schemas.md#subscriptiontransferrecipientresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/subscriptions/{id}/transfer
+
+Hand a service to another customer of the shop («انتقال سرویس»), found by their numeric Telegram id — support may whatever `transfer_enabled` says. The service keeps its link, term and traffic; its «تمدید خودکار» goes off; both customers are told in the bot — the new one, where its panel can change the link, that the previous one keeps it until they do; a renewal or an extra of it the previous customer left unpaid is cancelled, noted «سرویس این سفارش به حساب دیگری منتقل شد» (one whose receipt waits for review stays, and fails at its delivery), and the previous customer's message names them; the report group's «خریدها» topic hears of it; and its client on the panel takes the new customer's Telegram id and comment, its name unchanged (a panel that fails that is logged, and the transfer stands). A 422 on `status` for a free test account, a service gone from its panel, or one being changed on its panel right then (a delivery under way: try again in a moment); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the service's own customer, a banned account, or the admin themselves. A 403 for a shop admin's own service.
+
+- **On the website:** the website's admins can also use it, as [`POST /subscriptions/{id}/transfer`](Store-Admin-API-Reference.md#post-subscriptionsidtransfer), when the website grants `delete` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body**, as JSON:
+
+«انتقال سرویس»: whom to hand the service to — a customer of the shop, by their numeric Telegram id; they must have started the bot once.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `telegram_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Their numeric Telegram id: a number, or its digits as typed. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Transferred; the service, its new customer on it | [SubscriptionResponse](API-Schemas.md#subscriptionresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/tickets
@@ -2016,6 +2065,12 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `carry_traffic` | boolean | yes |  |
+| `renew_window_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 365; 0 — any time. |
+| `renew_window_percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100; 0 — off. |
+| `renew_extend` | boolean | yes | At least one method must be on: a save with none is a 422 on `renew_extend`. |
+| `renew_reset_traffic` | boolean | yes |  |
+| `renew_reset_time` | boolean | yes |  |
+| `renew_default_method` | [RenewalMethod](API-Schemas.md#renewalmethod) | yes | One of the methods on (a 422 otherwise). |
 
 **`BotAutoRenewSettingsRequest`**
 
@@ -2024,7 +2079,7 @@ One of:
 | `auto_renew_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 30. |
 | `auto_renew_default` | boolean | yes |  |
 
-**`BotExtrasSettingsRequest`** — «حجم و زمان اضافه»: the switch and the shop's price list (ExtraPricesRequest's fields, each prefixed `extra_`).
+**`BotExtrasSettingsRequest`** — «حجم، زمان و کاربر اضافه»: the switch and the shop's price list (ExtraPricesRequest's fields, each prefixed `extra_`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2037,6 +2092,10 @@ One of:
 | `extra_time_options` | list of [ExtraOptionInput](API-Schemas.md#extraoptioninput) | no | Day counts, 1 to 365, each once, at most 8. Left out for none. |
 | `extra_time_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 365 days. |
 | `extra_time_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | `extra_time_min` to 365 days. |
+| `extra_devices_price` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman per device for 30 days, above zero. Blank, null or left out for none: only the preset counts with their own prices are sold. |
+| `extra_devices_options` | list of [ExtraOptionInput](API-Schemas.md#extraoptioninput) | no | Device counts, 1 to 20, each once, at most 8. Left out for none. |
+| `extra_devices_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 20 devices. |
+| `extra_devices_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | `extra_devices_min` to 20 devices. |
 
 **`BotRemindersSettingsRequest`**
 
@@ -2066,6 +2125,43 @@ One of:
 | `test_cleanup` | boolean | yes |  |
 | `test_cleanup_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 720. |
 | `test_unused_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 365; 0 never. |
+
+**`BotServiceClaimsSettingsRequest`** — «افزودن سرویس با لینک»: the switch (`BotSettingsData.claim_enabled`); a 404 in an agent's shop, which has no such group.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `claim_enabled` | boolean | yes |  |
+
+**`BotServiceTransfersSettingsRequest`** — «انتقال سرویس»: the customers' switch (`BotSettingsData.transfer_enabled`).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `transfer_enabled` | boolean | yes |  |
+
+**`BotClientNamesSettingsRequest`** — «نام کاربری سرویس»: the patterns and the buyers' choices. A pattern left blank is its default; one with an unknown variable, another character, or neither `{n}` nor `{random}` nor `{seq}` beside `{username}`, `{tg_id}` or `{user_id}` (`{seq}` alone names every customer's first service alike) is refused under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name_pattern` | string | no | At most 48 characters. |
+| `test_name_pattern` | string | no | At most 48 characters. |
+| `name_random` | boolean | yes |  |
+| `name_custom` | boolean | yes |  |
+
+**`BotCustomServicesSettingsRequest`** — «سرویس دلخواه»: the switch, the tiers, the bounds, the buttons, the devices and the servers; a 404 in an agent's shop, which has no such group. Every refusal is returned at once, under its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `custom_enabled` | boolean | yes |  |
+| `custom_traffic_tiers` | list of [PriceTierInput](#pricetierinput) | no | `from` 1 to 10000 GB, each once, at most 10; left out for none. |
+| `custom_traffic_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 10000 GB. |
+| `custom_traffic_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | `custom_traffic_min` to 10000 GB. |
+| `custom_traffic_options` | [NumbersInput](#numbersinput) | no | 1 to 10000 GB, at most 8. |
+| `custom_days_tiers` | list of [PriceTierInput](#pricetierinput) | no | `from` 1 to 365 days, each once, at most 10; left out for none. |
+| `custom_days_min` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 365 days. |
+| `custom_days_max` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | `custom_days_min` to 365 days. |
+| `custom_days_options` | [NumbersInput](#numbersinput) | no | 1 to 365 days, at most 8. |
+| `custom_devices` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 100; 0 — unlimited. |
+| `custom_servers` | [NumbersInput](#numbersinput) | no | Server ids, at most 50. |
 
 **`BotReferralSettingsRequest`**
 
@@ -2732,7 +2828,7 @@ A discount code's whole form. Every refusal is returned at once, under its field
 | `value` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: 1 to 100. For `fixed`: whole Toman above zero. Ignored for `free`. |
 | `max_discount` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: the cap, whole Toman above zero; blank or null for none. Ignored for other types. |
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman; blank or null for none. |
-| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | no | At least one; null (or all of them) for every type. |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | no | At least one; null (or all of them) for every type. |
 | `plan_ids` | list of integer or null | no | Plan ids; null or empty for any. |
 | `server_ids` | list of integer or null | no | Server ids; null or empty for any. |
 | `first_purchase_only` | boolean | yes |  |
@@ -2771,7 +2867,7 @@ A discount code's whole form. Every refusal is returned at once, under its field
 | `value` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: 1 to 100. For `fixed`: whole Toman above zero. Ignored for `free`. |
 | `max_discount` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: the cap, whole Toman above zero; blank or null for none. Ignored for other types. |
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman; blank or null for none. |
-| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | no | At least one; null (or all of them) for every type. |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | no | At least one; null (or all of them) for every type. |
 | `plan_ids` | list of integer or null | no | Plan ids; null or empty for any. |
 | `server_ids` | list of integer or null | no | Server ids; null or empty for any. |
 | `first_purchase_only` | boolean | yes |  |
@@ -2851,7 +2947,7 @@ A sale's whole form. Every refusal is returned at once, under its field.
 |---|---|---|---|
 | `name` | string | yes | At most 64 characters. |
 | `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
-| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | no | At least one; null (or all of them) for every type. |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | no | At least one; null (or all of them) for every type. |
 | `plan_ids` | list of integer or null | no | Plan ids; null or empty for every plan. |
 | `starts_at` | string or null | no | A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. |
 | `ends_at` | string or null | no | The same format, after `starts_at`. Blank or null: no end. |
@@ -2882,7 +2978,7 @@ A sale's whole form. Every refusal is returned at once, under its field.
 |---|---|---|---|
 | `name` | string | yes | At most 64 characters. |
 | `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
-| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | no | At least one; null (or all of them) for every type. |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | no | At least one; null (or all of them) for every type. |
 | `plan_ids` | list of integer or null | no | Plan ids; null or empty for every plan. |
 | `starts_at` | string or null | no | A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. |
 | `ends_at` | string or null | no | The same format, after `starts_at`. Blank or null: no end. |
@@ -3316,7 +3412,7 @@ A cashback rule to add or update. Every refusal is returned at once, under its f
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
-| `order_types` | list of [CashbackOrderType](#cashbackordertype) | yes | At least one. |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) | yes | At least one. |
 | `customer_group_id` | integer or null | no | A customer group of the shop; null or left out for anyone. |
 | `payment_method_id` | integer or null | no | The payment method the order must be paid with; null or left out for any. |
 | `enabled` | boolean | no | Left out: on for a new rule, unchanged for an existing one. |
@@ -3345,7 +3441,7 @@ A cashback rule to add or update. Every refusal is returned at once, under its f
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
-| `order_types` | list of [CashbackOrderType](#cashbackordertype) | yes | At least one. |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) | yes | At least one. |
 | `customer_group_id` | integer or null | no | A customer group of the shop; null or left out for anyone. |
 | `payment_method_id` | integer or null | no | The payment method the order must be paid with; null or left out for any. |
 | `enabled` | boolean | no | Left out: on for a new rule, unchanged for an existing one. |
@@ -5222,10 +5318,16 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `topup_min` | integer | yes | The smallest top-up, in Toman. |
 | `topup_presets` | list of integer | yes | The amounts offered as buttons, ascending. |
 | `qr_enabled` | boolean | yes | Whether a delivered service comes with a QR code of its link. |
-| `carry_traffic` | boolean | yes | «تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends). |
+| `carry_traffic` | boolean | yes | «تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends) — by the renewal method `extend` («تمدید پلن فعلی»). |
+| `renew_window_days` | integer | yes | «تمدید سرویس»: a customer may renew a running service only within this many days of its deadline (or with at most `renew_window_percent` of its traffic left, or once it ended); 0 — no such rule, and with `renew_window_percent` 0 too, any time. A service with no deadline yet (waiting for its first connection) or none at all is let in by its traffic alone. Automatic renewal goes by its own days. |
+| `renew_window_percent` | integer | yes | A customer may renew a running service once at most this percent of its traffic is left (beside `renew_window_days`); 0 — however much is left. |
+| `renew_extend` | boolean | yes | Renewal method «تمدید پلن فعلی» offered: the term on top of what is left, the traffic as `carry_traffic` says. |
+| `renew_reset_traffic` | boolean | yes | Renewal method «ریست حجم + افزایش روز» offered: the term on top of what is left, the traffic counted afresh (what was left is lost). |
+| `renew_reset_time` | boolean | yes | Renewal method «ریست زمان + انتقال حجم» offered: the term starts afresh (what was left of it is lost), the traffic left carries over. With more than one method on, the customer picks; with none on, `extend` is what renews. |
+| `renew_default_method` | [RenewalMethod](API-Schemas.md#renewalmethod) | yes | The method automatic renewal uses (the first one offered while this one is not). By `reset_time` it waits for the last half hour before the end, so the days left are not lost; a wallet short of it is still told `auto_renew_days` ahead. |
 | `auto_renew_days` | integer | yes | «تمدید خودکار»: how many days before its end a service is renewed from the wallet. |
 | `auto_renew_default` | boolean | yes | Whether a new service starts with auto-renewal on. |
-| `extras_enabled` | boolean | yes | «حجم و زمان اضافه»: whether customers can buy extra traffic and time for their services, at these prices or a plan's own (`PlanRow.extras`). When off, none is sold. |
+| `extras_enabled` | boolean | yes | «حجم، زمان و کاربر اضافه»: whether customers can buy extra traffic, time and devices («کاربر اضافه») for their services, at these prices or a plan's own (`PlanRow.extras`). When off, none is sold. |
 | `extra_traffic_price` | string or null | yes | The shop's price per GB of extra traffic, in Toman; null when only the preset amounts with their own prices are sold (no custom amount). |
 | `extra_traffic_options` | list of [ExtraOption](API-Schemas.md#extraoption) | yes | The GB amounts offered as buttons, smallest first. |
 | `extra_traffic_min` | integer | yes | The smallest custom GB amount (needs a price per GB). |
@@ -5234,6 +5336,10 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `extra_time_options` | list of [ExtraOption](API-Schemas.md#extraoption) | yes | The day counts offered as buttons, fewest first. |
 | `extra_time_min` | integer | yes | The fewest custom days (needs a price per day). |
 | `extra_time_max` | integer | yes | The most custom days. |
+| `extra_devices_price` | string or null | yes | The shop's price per extra device (the service's IP limit) for 30 days, in Toman, charged for the days left of a service's period in use, which they last; null when only the preset counts with their own prices are sold (no custom count). |
+| `extra_devices_options` | list of [ExtraOption](API-Schemas.md#extraoption) | yes | The device counts offered as buttons, fewest first. |
+| `extra_devices_min` | integer | yes | The fewest custom devices (needs a price per device). |
+| `extra_devices_max` | integer | yes | The most custom devices. |
 | `expiry_reminder` | boolean | yes | «یادآوری»: remind the customer `expiry_reminder_days` days before a service ends. |
 | `expiry_reminder_days` | integer | yes |  |
 | `traffic_reminder` | boolean | yes | Remind the customer once `traffic_reminder_percent` of a service's quota is used. |
@@ -5248,6 +5354,23 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `test_cleanup` | boolean | yes | Tests that ended are removed from their panels by themselves (checked every 15 minutes). A removed test still counts in the quota. |
 | `test_cleanup_hours` | integer | yes | How many hours an ended test is kept before it is removed; 0 at once. |
 | `test_unused_days` | integer | yes | While `test_cleanup` is on, after how many days a test that never connected is removed (its hours wait for the first connection); 0 never. |
+| `claim_enabled` | boolean | no | «افزودن سرویس با لینک», main shop only, always present there (an agent's shop has no such switch, nor the `service_claims` group): customers can add a client made by hand on a panel to their «سرویس‌های من» by sending the bot (or the website) its subscription link or one of its configs. The first to send it gets it, and each claim is reported in the report group's «خریدها» topic; a wrong one is fixed by deleting the service from the shop only (`leave_panel`), so the right customer can send it again. A claimed service (`SubscriptionRow.claimed_at`) has no plan until its first renewal, when the customer picks one sold on its server. Off by default. |
+| `transfer_enabled` | boolean | yes | «انتقال سرویس»: customers may hand one of their services to another customer of the shop by their Telegram id (support transfers from the panels whatever this says). Off by default. |
+| `name_pattern` | string | yes | «نام کاربری سرویس»: the pattern a sold service's client is named by on its panel, of the variables `BotSettingsResponse.name_variables` lists and the characters a panel takes (letters, digits, `_ - . @`); `{username}_{seq}` by default. |
+| `test_name_pattern` | string | yes | The pattern a free test's client is named by; `test_{username}_{seq}` by default. |
+| `name_random` | boolean | yes | A buyer may take a random name for their new service instead of the pattern. |
+| `name_custom` | boolean | yes | A buyer may type the name of their new service (letters, digits, `_` and `-`, 3 to 32) instead of the pattern. |
+| `custom_enabled` | boolean | no | «سرویس دلخواه», main shop only, always present there: customers build a service of the traffic and days they choose, each priced by its tiers, on `custom_servers`. Off by default. |
+| `custom_traffic_tiers` | list of [PriceTier](API-Schemas.md#pricetier) | no | The price of a GB by tiers, the smallest `from` first: a built service's GB are priced whole at the tier they fall into. |
+| `custom_traffic_min` | integer | no | The least GB a customer may build. |
+| `custom_traffic_max` | integer | no | The most GB a customer may build. |
+| `custom_traffic_options` | list of integer | no | GB amounts offered as buttons, smallest first. |
+| `custom_days_tiers` | list of [PriceTier](API-Schemas.md#pricetier) | no | The price of a day by tiers, the smallest `from` first. |
+| `custom_days_min` | integer | no | The least days a customer may build. |
+| `custom_days_max` | integer | no | The most days a customer may build. |
+| `custom_days_options` | list of integer | no | Day counts offered as buttons, smallest first. |
+| `custom_devices` | integer | no | Devices at once on a built service; 0 — unlimited. |
+| `custom_servers` | list of integer | no | The servers a customer may build on, by id. |
 | `referral_enabled` | boolean | yes | «زیرمجموعه‌گیری»: the referral program. Referral links bring new customers, and their payments earn the referrer `referral_rate` percent. |
 | `referral_rate` | integer | yes |  |
 | `referral_renewal_rate` | integer | yes | The percent a referred customer's renewal earns instead (0: renewals earn nothing). |
@@ -5288,7 +5411,7 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 
 ### BotSettingsGroup
 
-String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`.
+String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`.
 
 ### BotSettingsResponse
 
@@ -5296,6 +5419,10 @@ String: `general`, `channels`, `wallet`, `renewal`, `auto_renew`, `extras`, `rem
 |---|---|---|---|
 | `settings` | [BotSettingsData](#botsettingsdata) | yes |  |
 | `qr_background` | [QrBackgroundInfo](#qrbackgroundinfo) | yes |  |
+| `name_variables` | list of object | yes | «نام کاربری سرویس»: the variables `name_pattern` and `test_name_pattern` may hold, in the order a hint lists them. A pattern must hold `n` or `random`, or `seq` beside `username`, `tg_id` or `user_id`, so no two services are named alike. |
+| `name_variables[].name` | string | yes | Written in braces in a pattern: `{username}`. |
+| `name_variables[].description` | string | yes | What it stands for, in Persian. |
+| `name_variables[].example` | string | yes | Its value for a sample customer (@amir's third service, the shop's 128th; `date` today on the shop's clock), for the name a pattern would give as it is typed. |
 
 ### BotSettingsSaved
 
@@ -5358,12 +5485,6 @@ A `%name%` placeholder the bot fills in when it sends the text.
 |---|---|---|---|
 | `groups` | list of [BotTextGroup](#bottextgroup) | yes | The text groups of the shop's bot, in the screen's order. An agent's bot has no «نمایندگی» group. |
 
-### CashbackOrderType
-
-An order type a cashback rule can apply to: things a customer buys for themselves.
-
-String: `purchase`, `renewal`, `extra_traffic`, `extra_time`.
-
 ### CashbackRuleResponse
 
 | Field | Type | Required | What it is |
@@ -5378,7 +5499,7 @@ A cashback rule («کش‌بک»): this percent of what a delivered order paid g
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `percent` | integer | yes |  |
-| `order_types` | list of [CashbackOrderType](#cashbackordertype) | yes |  |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) | yes |  |
 | `customer_group` | object or null | yes |  |
 | `customer_group.id` | integer | yes |  |
 | `customer_group.name` | string | yes |  |
@@ -5533,7 +5654,7 @@ A discount code («کد تخفیف») a customer types at checkout, in the bot o
 | `value` | string or null | yes | For `percent`: the whole percent; for `fixed`: Toman; null for `free`. |
 | `max_discount` | string or null | yes | For `percent`: the most Toman it takes off; null for no cap. |
 | `min_amount` | string or null | yes | The minimum order amount (after the automatic discount) for the code to apply; null for none. |
-| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | yes | The order types it applies to; null for every type a discount can apply to. |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | yes | The order types it applies to; null for every type a discount can apply to. |
 | `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The plans it applies to (for a renewal or extra, the service's plan); null for any. |
 | `servers` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The servers it applies to (for a purchase, the chosen server; for a renewal or extra, the service's); null for any. |
 | `first_purchase_only` | boolean | yes | Only for customers who have not bought a service yet. |
@@ -6050,6 +6171,13 @@ One of:
 |---|---|---|---|
 | `methods` | list of [PaymentMethodRow](#paymentmethodrow) | yes |  |
 
+### PriceTierInput
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `from` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no |  |
+| `price` | [AmountInput](API-Schemas.md#amountinput) | no |  |
+
 ### Probe
 
 The result of contacting a panel.
@@ -6216,7 +6344,7 @@ A timed sale («فروش ویژه»): a percent off the listed plans, for the li
 | `id` | integer | yes |  |
 | `name` | string | yes | The name customers see, such as «فروش ویژه نوروز». |
 | `percent` | integer | yes |  |
-| `order_types` | list of [DiscountKind](API-Schemas.md#discountkind) or null | yes | Null for every type a discount can apply to. |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | yes | Null for every type a discount can apply to. |
 | `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | Null for every plan (for an extra, the service's plan counts). |
 | `starts_at` | string (date-time) or null | yes |  |
 | `ends_at` | string (date-time) or null | yes |  |

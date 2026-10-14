@@ -7,6 +7,7 @@ namespace Tests\Fakes;
 use App\Modules\Providers\Contracts\ProviderInterface;
 use App\Modules\Providers\DTO\Capabilities;
 use App\Modules\Providers\DTO\ClientInfo;
+use App\Modules\Providers\DTO\ClientLink;
 use App\Modules\Providers\DTO\ClientSpec;
 use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\DTO\PanelStatus;
@@ -59,6 +60,9 @@ final class FakeProvider implements ProviderInterface
     /** @var array<int, array<string, ClientInfo>> The clients on each panel: server id → name → client */
     public static array $clients = [];
 
+    /** @var array<int, array<string, list<string>>> A client's proxy credentials (a config's id, password), per server and name */
+    public static array $credentials = [];
+
     /** @var list<string> Clients the panels report connected right now */
     public static array $online = [];
 
@@ -104,7 +108,7 @@ final class FakeProvider implements ProviderInterface
 
     public static function reset(): void
     {
-        self::$capabilities = new Capabilities(inbounds: true, linkRotation: true);
+        self::$capabilities = new Capabilities(inbounds: true, linkRotation: true, ipLimit: true);
         self::$subscriptionBase = 'https://fake.test/sub/';
         self::$mintsSubId = true;
         self::$defersClock = true;
@@ -114,6 +118,7 @@ final class FakeProvider implements ProviderInterface
         self::$refusing = [];
         self::$failing = [];
         self::$clients = [];
+        self::$credentials = [];
         self::$online = [];
         self::$whileListing = null;
         self::$onCall = null;
@@ -133,8 +138,8 @@ final class FakeProvider implements ProviderInterface
     }
 
     /**
-     * The service's client on its server's panel, as the shop's row has it: its quota, counters, term and link (a counter a
-     * fixture left out is the column's 0).
+     * The service's client on its server's panel, as the shop's row has it: its quota, counters, term, link and — where
+     * the panel keeps one (Capabilities::$ipLimit) — device limit (a counter a fixture left out is the column's 0).
      */
     public static function mirror(Subscription $subscription, bool $enabled = true): void
     {
@@ -150,6 +155,7 @@ final class FakeProvider implements ProviderInterface
                 default => Expiry::never(),
             },
             subscriptionUrl: $subscription->subscription_url,
+            ipLimit: self::$capabilities->ipLimit ? (int) $subscription->ip_limit : null,
         ));
     }
 
@@ -193,9 +199,19 @@ final class FakeProvider implements ProviderInterface
         return self::$subscriptionBase !== null;
     }
 
+    /**
+     * Like a real panel: a name its rule (Capabilities::$names) does not allow is refused, and so is one a client there
+     * has already (3x-ui's "Duplicate email", PasarGuard's 409); the IP limit kept where it holds one.
+     */
     public function createClient(array $inboundKeys, ClientSpec $spec): ClientInfo
     {
         $this->answer(__FUNCTION__);
+        if (!self::$capabilities->names->allows($spec->name)) {
+            throw new PanelApiException("The fake panel refused the name {$spec->name}.", 200, 'invalid username');
+        }
+        if (isset(self::$clients[$this->server->id][$spec->name])) {
+            throw new PanelApiException("The fake panel has a client named {$spec->name} already.", 200, 'duplicate name');
+        }
         self::$created[] = ['server' => $this->server->id, 'inbounds' => array_values($inboundKeys), 'spec' => $spec];
 
         // Like 3x-ui: the subscription id is minted by the panel, and the link follows its settings.
@@ -209,6 +225,7 @@ final class FakeProvider implements ProviderInterface
             totalBytes: $spec->totalBytes,
             expiry: self::kept($spec->expiry),
             subscriptionUrl: $this->linkOf($spec->name),
+            ipLimit: self::ipLimitOf($spec),
         );
     }
 
@@ -218,7 +235,7 @@ final class FakeProvider implements ProviderInterface
         $client = $this->existing($spec->name);
         self::$updated[] = $spec;
 
-        return self::$clients[$this->server->id][$spec->name] = self::changed($client, ['enabled' => true, 'totalBytes' => $spec->totalBytes, 'expiry' => self::kept($spec->expiry)]);
+        return self::$clients[$this->server->id][$spec->name] = self::changed($client, ['enabled' => $spec->enabled, 'totalBytes' => $spec->totalBytes, 'expiry' => self::kept($spec->expiry), 'ipLimit' => self::ipLimitOf($spec)]);
     }
 
     public function rotateClientCredentials(string $name): ClientInfo
@@ -275,6 +292,20 @@ final class FakeProvider implements ProviderInterface
         return $clients;
     }
 
+    /** Like 3x-ui: the client whose link ends in the link's token, or one of whose `$credentials` the config carries. */
+    public function findClientByLink(ClientLink $link): ?ClientInfo
+    {
+        $this->answer(__FUNCTION__);
+        foreach (self::$clients[$this->server->id] ?? [] as $name => $client) {
+            $token = basename((string) parse_url((string) $client->subscriptionUrl, PHP_URL_PATH));
+            if ($link->hasToken($token) || $link->hasCredential(...self::$credentials[$this->server->id][$name] ?? [])) {
+                return self::changed($client, []);
+            }
+        }
+
+        return null;
+    }
+
     public function resetClientTraffic(string $name): void
     {
         $this->answer(__FUNCTION__);
@@ -297,6 +328,12 @@ final class FakeProvider implements ProviderInterface
     private function existing(string $name): ClientInfo
     {
         return self::$clients[$this->server->id][$name] ?? throw new NotFoundException("The fake panel has no client \"{$name}\".");
+    }
+
+    /** The spec's IP limit as the panel keeps it: like 3x-ui where it holds one (Capabilities::$ipLimit), else none. */
+    private static function ipLimitOf(ClientSpec $spec): ?int
+    {
+        return self::$capabilities->ipLimit ? $spec->ipLimit : null;
     }
 
     /** The term as the panel keeps it: one that cannot defer the clock (`$defersClock` false) starts it now. */

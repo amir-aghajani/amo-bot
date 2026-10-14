@@ -10,7 +10,7 @@ bot.
 
 ### What a customer has spent
 
-A customer's spending is what their purchases, renewals and extra traffic and time came to — paid, and not given back:
+A customer's spending is what their purchases, renewals and extra traffic, time and devices came to — paid, and not given back:
 an order being delivered, delivered, or waiting for support's retry counts; one refunded, cancelled or never paid does
 not, and neither does a wallet top-up, an agent's traffic, or a service given free (a prize, a gift code's).
 
@@ -58,8 +58,8 @@ extra cashback neither.
 Each rule is:
 
 - «درصد کش‌بک» — 1 to 100;
-- «نوع سفارش» — the kinds of order it is for: «خرید», «تمدید», «حجم اضافه», «زمان اضافه» (one at least; purchases and
-  renewals ticked to start with). A wallet top-up and an agent's traffic never earn cashback;
+- «نوع سفارش» — the kinds of order it is for: «خرید», «تمدید», «حجم اضافه», «زمان اضافه», «کاربر اضافه» (one at least;
+  purchases and renewals ticked to start with). A wallet top-up and an agent's traffic never earn cashback;
 - «گروه مشتری» — one of the shop's customer groups, or «همه مشتری‌ها»;
 - «روش پرداخت» — the way the order was paid (the wallet is one), or «همه روش‌ها»;
 - its switch, in the list.

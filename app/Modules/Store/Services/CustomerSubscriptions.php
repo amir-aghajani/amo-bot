@@ -17,6 +17,7 @@ use App\Modules\Store\Presenters\SubscriptionPresenter;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Exceptions\AutoRenewUnavailableException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
+use App\Modules\Subscriptions\Exceptions\ServiceClaimRefusedException;
 use App\Modules\Subscriptions\Exceptions\ServiceNotReadException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\AutoRenewal;
@@ -24,8 +25,10 @@ use App\Modules\Subscriptions\Services\CustomerExtras;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Subscriptions\Services\RenewalSettings;
+use App\Modules\Subscriptions\Services\ServiceClaims;
 use App\Modules\Subscriptions\Services\ServiceCleanup;
 use App\Modules\Users\Models\User;
+use App\Support\Input;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -33,9 +36,10 @@ use Psr\Log\LoggerInterface;
 
 /**
  * A customer's own services on the website (another's is a 404), and what they do with one, through the same services and
- * rules as the bot's service screen: read it from its panel now, switch «تمدید خودکار», get a new link. What each may do is
- * judged for a whole page at once, never a query per service. What asks a panel is rate-limited per customer: REFRESHES
- * reads per REFRESH_WINDOW, ROTATIONS new links per ROTATE_WINDOW.
+ * rules as the bot's service screen: read it from its panel now, switch «تمدید خودکار», get a new link; and a service
+ * added by its link (ServiceClaims). What each may do is judged for a whole page at once, never a query per service. What
+ * asks a panel is rate-limited per customer: REFRESHES reads per REFRESH_WINDOW, ROTATIONS new links per ROTATE_WINDOW
+ * (and a link sent, ServiceClaims::TRIES per its window).
  */
 final class CustomerSubscriptions
 {
@@ -53,8 +57,13 @@ final class CustomerSubscriptions
     public const ROTATIONS = 5;
     public const ROTATE_WINDOW = 3600;
 
+    /** The longest text a link is sent in (claim()): a subscription link or a config, and a few words around it. */
+    public const LINK_MAX = 2000;
+    public const LINK_TOO_LONG = 'این متن برای یک لینک سرویس بیش از حد بلند است؛ فقط لینک را بفرستید.';
+
     public function __construct(
         private readonly ProvisioningService $provisioning,
+        private readonly ServiceClaims $claims,
         private readonly AutoRenewal $autoRenewal,
         private readonly CustomerRenewal $renewal,
         private readonly CustomerExtras $extras,
@@ -84,6 +93,25 @@ final class CustomerSubscriptions
     public function find(User $customer, int $id): Subscription
     {
         return self::of($customer)->with(self::RELATIONS)->findOrFail($id);
+    }
+
+    /**
+     * «افزودن سرویس با لینک»: the service the links in `link` are for added to the customer's account, as the bot adds
+     * it (ServiceClaims::claim()); read again as find() reads one.
+     *
+     * @param array<string, mixed> $input
+     * @throws ValidationException 422 on `link`: longer than LINK_MAX
+     * @throws ServiceClaimRefusedException 422 / 409 / 502 on `link`
+     * @throws TooManyAttemptsException 429
+     */
+    public function claim(User $customer, array $input): Subscription
+    {
+        $text = Input::text($input, 'link');
+        if (mb_strlen($text) > self::LINK_MAX) {
+            throw ValidationException::on('link', self::LINK_TOO_LONG);
+        }
+
+        return $this->find($customer, $this->claims->claim($customer, $text)->id);
     }
 
     /**
@@ -155,6 +183,7 @@ final class CustomerSubscriptions
         $offered = $this->autoRenewal->offeredForAll($subscriptions);
         $days = $this->renewalSettings->autoRenewDays();
         $plans = $this->renewal->plansFor($subscriptions);
+        $pickable = $this->renewal->pickable($subscriptions);
         $extras = $this->extras->offersFor($subscriptions);
 
         return array_values($subscriptions->map(fn(Subscription $subscription): array => SubscriptionPresenter::present(
@@ -162,6 +191,8 @@ final class CustomerSubscriptions
             autoRenewOffered: $offered[$subscription->id],
             autoRenewDays: $days,
             renewable: $plans[$subscription->id] !== null,
+            picksPlan: $pickable[$subscription->id],
+            renewalWindow: $this->renewal->window($subscription),
             extras: $extras[$subscription->id],
             linkRotation: $this->provisioning->rotatable($subscription),
             removesAt: $this->cleanup->removesAt($subscription),

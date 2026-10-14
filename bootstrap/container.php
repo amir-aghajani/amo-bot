@@ -48,6 +48,7 @@ use App\Modules\Auth\Services\OwnerAuth;
 use App\Modules\Auth\Services\RecoveryKey;
 use App\Modules\Bots\Scheduling\BotShops;
 use App\Modules\Bots\ShopScopeMiddleware;
+use App\Modules\Catalog\Services\CustomServiceSettings;
 use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Installer\Services\InstallKey;
 use App\Modules\Payments\Contracts\RefundedOrders;
@@ -68,11 +69,14 @@ use App\Modules\Settings\Services\DatabaseSettings;
 use App\Modules\Settings\Services\MailSettings;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Store\Http\WebsiteCorsPolicy;
+use App\Modules\Subscriptions\Services\ClientNameSettings;
 use App\Modules\Subscriptions\Services\ExpiredServicesSettings;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Subscriptions\Services\RefundedDeliveries;
 use App\Modules\Subscriptions\Services\ReminderSettings;
 use App\Modules\Subscriptions\Services\RenewalSettings;
+use App\Modules\Subscriptions\Services\ServiceClaimSettings;
+use App\Modules\Subscriptions\Services\ServiceTransferSettings;
 use App\Modules\Subscriptions\Services\TestAccountSettings;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\BotSettings;
@@ -282,6 +286,10 @@ return [
         $c->get(ReminderSettings::class),
         $c->get(ExpiredServicesSettings::class),
         $c->get(TestAccountSettings::class),
+        $c->get(ServiceClaimSettings::class),
+        $c->get(ServiceTransferSettings::class),
+        $c->get(ClientNameSettings::class),
+        $c->get(CustomServiceSettings::class),
         $c->get(ReferralSettings::class),
         $c->get(ReportSettings::class),
         $c->get(DiscountSettings::class),

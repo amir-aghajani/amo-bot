@@ -33,6 +33,15 @@ final class PasarGuardDriverTest extends TestCase
         self::assertSame(['token' => 'کلید API', 'password' => 'نام کاربری و رمز'], array_column(array_column($card['fields'], null, 'name')['auth_mode']['options'], 'label', 'value'));
     }
 
+    public function testAUsernameIsThreeTo128LettersDigitsAndSeparatorsNeverTwoSideBySide(): void
+    {
+        $names = (new PasarGuardDriver())->capabilities()->names;
+
+        self::assertSame([true, true, true], [$names->allows('ali'), $names->allows('ali.reza@x-1_2'), $names->allows(str_repeat('a', 128))]);
+        self::assertSame([false, false, false, false], [$names->allows('al'), $names->allows(str_repeat('a', 129)), $names->allows('ali__1'), $names->allows('علی_1')]);
+        self::assertSame(['ali_1', '001', 'ali-reza'], [$names->fit('ali__1'), $names->fit('1'), $names->fit('ali-_reza')], 'the shop\'s own names made to fit: a run cut to its first');
+    }
+
     public function testAnApiKeyConnectionIsKeptWithTheOptions(): void
     {
         $values = self::check(['base_url' => ' https://panel.example.com:8000/ ', 'auth_mode' => 'token', 'api_token' => self::KEY, 'verify_tls' => false, 'timeout' => '۴۵', 'subscription_url' => 'https://sub.example.com/sub/']);

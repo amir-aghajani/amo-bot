@@ -1,6 +1,7 @@
 import type {
   AgencyLevelRow,
   BotSettingsData,
+  BotSettingsResponse,
   CustomerAccount,
   CustomerGroupRow,
   DiscountCodeRow,
@@ -14,6 +15,7 @@ import type {
   PaymentRow,
   PlanCategoryRow,
   PlanRow,
+  QrBackgroundInfo,
   ReviewRow,
   SaleRow,
   ServerRow,
@@ -35,8 +37,9 @@ import { MEGABYTE } from '@/lib/format'
  */
 
 /**
- * A bot's settings as its page reads them: the bot on, top-ups from 10٬000 Toman offered at 50٬000 and 100٬000, no extra
- * traffic or time sold (nothing priced, what may be typed at the server's bounds), every report topic on.
+ * A bot's settings as its page reads them — the main shop's: the bot on, top-ups from 10٬000 Toman offered at 50٬000 and
+ * 100٬000, no extra traffic, time or devices sold (nothing priced, what may be typed at the server's defaults), every
+ * report topic on, the rest at the server's defaults (services added by their link and the custom builder off).
  */
 export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSettingsData {
   return {
@@ -48,6 +51,12 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     topup_presets: [50000, 100000],
     qr_enabled: true,
     carry_traffic: false,
+    renew_window_days: 0,
+    renew_window_percent: 0,
+    renew_extend: true,
+    renew_reset_traffic: false,
+    renew_reset_time: false,
+    renew_default_method: 'extend',
     auto_renew_days: 2,
     auto_renew_default: false,
     extras_enabled: false,
@@ -59,6 +68,10 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     extra_time_options: [],
     extra_time_min: 1,
     extra_time_max: 30,
+    extra_devices_price: null,
+    extra_devices_options: [],
+    extra_devices_min: 1,
+    extra_devices_max: 5,
     expiry_reminder: false,
     expiry_reminder_days: 3,
     traffic_reminder: false,
@@ -73,6 +86,23 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     test_cleanup: true,
     test_cleanup_hours: 24,
     test_unused_days: 7,
+    claim_enabled: false,
+    transfer_enabled: false,
+    name_pattern: '{username}_{seq}',
+    test_name_pattern: 'test_{username}_{seq}',
+    name_random: false,
+    name_custom: false,
+    custom_enabled: false,
+    custom_traffic_tiers: [],
+    custom_traffic_min: 1,
+    custom_traffic_max: 500,
+    custom_traffic_options: [10, 20, 50, 100],
+    custom_days_tiers: [],
+    custom_days_min: 1,
+    custom_days_max: 90,
+    custom_days_options: [30, 60, 90],
+    custom_devices: 2,
+    custom_servers: [],
     referral_enabled: false,
     referral_rate: 10,
     referral_renewal_rate: 10,
@@ -114,6 +144,16 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
   }
 }
 
+/** The QR code's background as the shop ships it: a 1024×1024 JPEG, uploads up to 5 MB. */
+export function qrBackgroundRow(overrides: Partial<QrBackgroundInfo> = {}): QrBackgroundInfo {
+  return { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 182_000, updated_at: 1_759_000_000, max_bytes: 5 * 1024 * 1024, ...overrides }
+}
+
+/** The bot settings as their page reads them (GET /bot/settings): `settings`, the shipped QR background, and the name variables `more` gives (none). */
+export function botSettingsResponse(settings: BotSettingsData = botSettingsRow(), more: Partial<Omit<BotSettingsResponse, 'settings'>> = {}): BotSettingsResponse {
+  return { settings, qr_background: qrBackgroundRow(), name_variables: [], ...more }
+}
+
 /** A term's whole days as the API says them beside its hours: rounded up — 0 only for none. */
 const daysOf = (hours: number): number => Math.ceil(hours / 24)
 
@@ -129,6 +169,7 @@ export function subscriptionRow(overrides: Partial<SubscriptionRow> = {}): Subsc
     name: 'amir_1',
     link: 'https://sub.example.com/s/Zx81',
     is_test: false,
+    claimed_at: null,
     user: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null },
     plan: { id: 3, name: 'طلایی' },
     server: { id: 1, name: 'آلمان' },
@@ -138,6 +179,7 @@ export function subscriptionRow(overrides: Partial<SubscriptionRow> = {}): Subsc
     duration_hours: hours,
     auto_renew: false,
     next_period: null,
+    next_devices: null,
     starts_at: '2026-09-20T10:00:00Z',
     expires_at: '2026-10-20T10:00:00Z',
     expiring_soon: false,
@@ -146,9 +188,17 @@ export function subscriptionRow(overrides: Partial<SubscriptionRow> = {}): Subsc
     ended_at: null,
     removes_at: null,
     created_at: '2026-09-19T10:00:00Z',
-    actions: { sync: true, disable: true, enable: false, move: true, delete: true, extend: true },
+    actions: { sync: true, disable: true, enable: false, move: true, transfer: true, delete: true, extend: true },
     ...overrides,
   }
+}
+
+/** When claimedServiceRow()'s customer added it. */
+export const CLAIMED_AT = '2026-10-01T10:00:00Z'
+
+/** A service a customer added by its link («افزودن سرویس با لینک»), a client made by hand on its panel: no plan until a renewal gives it one. */
+export function claimedServiceRow(overrides: Partial<SubscriptionRow> = {}): SubscriptionRow {
+  return subscriptionRow({ plan: null, claimed_at: CLAIMED_AT, ...overrides })
 }
 
 /** A card payment as the payments screen lists it: a wallet top-up's receipt waiting for review, what such a one allows. */
@@ -173,6 +223,7 @@ export function paymentRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
       subscription_id: null,
       traffic_bytes: null,
       days: null,
+      devices: null,
       notes: null,
       discount_amount: '0.00',
       discounts: [],
@@ -202,10 +253,13 @@ export function orderRow(overrides: Partial<OrderRow> = {}): OrderRow {
     discount_code: null,
     user: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null },
     plan: null,
+    package_name: null,
+    renewal_method: null,
     server: null,
     subscription: null,
     traffic_bytes: null,
     days: null,
+    devices: null,
     notes: null,
     payments: [{ id: 7, status: 'awaiting_review', amount: '50000.00', gateway: 'manual', method: 'کارت به کارت (ملت)', paid_at: null, created_at: '2026-10-06T08:55:00Z' }],
     paid_at: null,

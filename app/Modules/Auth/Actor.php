@@ -9,9 +9,10 @@ use App\Modules\Users\Models\User;
 
 /**
  * Who makes a decision, passed to every operation that records one: a principal (of() — the owner, an agent, a shop's
- * admin on its website), an admin in the report group (groupAdmin()) or the shop itself (system(), a timer). `reviewer`
- * is the name the decision keeps; `userId` is the acting admin's own customer account, so a rule can refuse them a
- * decision about themselves.
+ * admin on its website), an admin in the report group (groupAdmin()), a customer deciding about their own (customer(),
+ * a service they hand to another) or the shop itself (system(), a timer). `reviewer` is the name the decision keeps;
+ * `userId` is the acting admin's own customer account — or the customer's —, so a rule can refuse them a decision about
+ * themselves.
  */
 final class Actor
 {
@@ -40,6 +41,12 @@ final class Actor
         return new self(ActorKind::GroupAdmin, Reviewers::forAdmin($admin), $admin->id);
     }
 
+    /** A customer deciding about what is theirs (a service they hand to another): no admin's name on it. */
+    public static function customer(User $customer): self
+    {
+        return new self(ActorKind::Customer, null, $customer->id);
+    }
+
     /** The shop itself (a task, a timer): a decision with nobody's name on it. */
     public static function system(): self
     {
@@ -60,6 +67,12 @@ final class Actor
     public function isStaff(): bool
     {
         return $this->kind === ActorKind::Staff;
+    }
+
+    /** A customer about their own, not support. */
+    public function isCustomer(): bool
+    {
+        return $this->kind === ActorKind::Customer;
     }
 
     /** The owner, who runs the servers and so reads a panel's failure in full. */

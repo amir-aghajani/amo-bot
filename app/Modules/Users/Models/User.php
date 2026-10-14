@@ -14,6 +14,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
+use App\Support\Input;
 use App\Support\Money;
 use Illuminate\Contracts\Database\Query\Expression as ExpressionContract;
 use Illuminate\Database\Eloquent\Builder;
@@ -213,6 +214,12 @@ class User extends Model
         return $name === '' ? null : $name;
     }
 
+    /** The Telegram handle, without the @; null when the account shows none. */
+    public function handle(): ?string
+    {
+        return ($this->username ?? '') !== '' ? $this->username : null;
+    }
+
     /**
      * Narrows `$query` to customers matching a search term (already normalised, Page::term()): name, handle (a leading
      * "@" allowed) and email by substring, a Telegram id exactly. Every list searches customers this way.
@@ -222,15 +229,16 @@ class User extends Model
     public static function matching(Builder $query, string $term): void
     {
         $handle = ltrim($term, '@');
+        $telegramId = Input::telegramIdOf($term);
 
-        $query->where(static function (Builder $q) use ($term, $handle): void {
+        $query->where(static function (Builder $q) use ($term, $handle, $telegramId): void {
             Page::whereContains($q, 'first_name', $term);
             Page::orWhereContains($q, 'last_name', $term);
             Page::orWhereContains($q, 'username', $handle);
             // An email is kept in lower case: what was typed is looked for the same way.
             Page::orWhereContains($q, 'email', mb_strtolower($term));
-            if (ctype_digit($term)) {
-                $q->orWhere('telegram_id', (int) $term);
+            if ($telegramId !== null) {
+                $q->orWhere('telegram_id', $telegramId);
             }
         });
     }

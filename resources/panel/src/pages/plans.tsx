@@ -78,7 +78,7 @@ export function PlansPage({ addServers }: { addServers?: string }) {
       <ListView
         list={list}
         noun="پلن‌ها"
-        empty={<EmptyState framed icon={Package} title="هنوز پلنی تعریف نشده است" description="اولین بسته را بسازید: حجم، مدت، تعداد دستگاه و قیمت." action={add('secondary')} />}
+        empty={<EmptyState framed icon={Package} title="هنوز پلنی تعریف نشده است" description="اولین بسته را بسازید: حجم، مدت، تعداد کاربر و قیمت." action={add('secondary')} />}
       >
         <Table>
           <TableHeader>
@@ -88,7 +88,7 @@ export function PlansPage({ addServers }: { addServers?: string }) {
               <TableHead className="hidden xl:table-cell">دسته</TableHead>
               <TableHead className="hidden md:table-cell">حجم</TableHead>
               <TableHead className="hidden md:table-cell">مدت</TableHead>
-              <TableHead className="hidden xl:table-cell">دستگاه</TableHead>
+              <TableHead className="hidden xl:table-cell">کاربر</TableHead>
               <TableHead>قیمت</TableHead>
               <TableHead className="hidden lg:table-cell">سرورها</TableHead>
               <TableHead className="hidden lg:table-cell">اشتراک</TableHead>
@@ -166,7 +166,7 @@ export function PlansPage({ addServers }: { addServers?: string }) {
         title={(plan) => (plan ? `ویرایش «${plan.name}»` : 'افزودن پلن')}
         // A renewal is the plan as it is then: its price, term and traffic.
         description={(plan) =>
-          plan ? 'تغییرات روی خریدهای بعدی و تمدیدها اثر می‌گذارد؛ اشتراک‌های فعلی تا تمدید بعدی با شرایط قبلی ادامه می‌دهند.' : 'بسته‌ای که مشتری می‌خرد: حجم، مدت، تعداد دستگاه و قیمت.'
+          plan ? 'تغییرات روی خریدهای بعدی و تمدیدها اثر می‌گذارد؛ اشتراک‌های فعلی تا تمدید بعدی با شرایط قبلی ادامه می‌دهند.' : 'بسته‌ای که مشتری می‌خرد: حجم، مدت، تعداد کاربر و قیمت.'
         }
       >
         {(plan) => (

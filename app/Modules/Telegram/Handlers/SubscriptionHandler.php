@@ -39,8 +39,9 @@ use Psr\Log\LoggerInterface;
  *   sub:{id}:rotate     → «تغییر لینک» asks first; `rotate:yes` claims that confirmation once, so a second tap
  *                         cannot kill the link just delivered
  *   sub:{id}:autorenew  → «تمدید خودکار» on or off; only the buttons are redrawn
- *   sub:{id}:renew      → the renewal's checkout (RenewalHandler)
+ *   sub:{id}:renew      → the renewal's checkout, or the plans to pick for one without a plan (RenewalHandler)
  *   sub:{id}:report     → «ارسال گزارش اختلال»: a support ticket about the service (TicketHandler::report())
+ * «🔁 انتقال سرویس», while the shop lets customers hand a service on, is ServiceTransferHandler's.
  * Showing the screen leaves whatever step the chat was at, so nothing typed next is taken as an old step's answer.
  */
 final class SubscriptionHandler implements Handler
@@ -57,6 +58,7 @@ final class SubscriptionHandler implements Handler
         private readonly AutoRenewal $autoRenewal,
         private readonly RenewalSettings $renewalSettings,
         private readonly ExtrasHandler $extras,
+        private readonly ServiceTransferHandler $transfer,
         private readonly Pricing $pricing,
         private readonly ServiceCard $card,
         private readonly Buttons $buttons,
@@ -143,6 +145,7 @@ final class SubscriptionHandler implements Handler
         }
 
         $ctx->answer($on ? $this->texts->render(BotText::AutoRenewEnabled, [
+            'renews' => Messages::autoRenews($this->renewalSettings->defaultMethod(), $this->renewalSettings->autoRenewDays()),
             'days' => Persian::digits($this->renewalSettings->autoRenewDays()),
             // The customer's renewal price: an agent's at the agent price, less the automatic discount.
             'amount' => Money::format($subscription->plan === null ? 0 : $this->pricing->renewal($ctx->user, $subscription, $subscription->plan)->amount()),
@@ -159,13 +162,10 @@ final class SubscriptionHandler implements Handler
             return;
         }
 
-        // Reading order: "yes" first (right), "no" after it (left) — Telegram lays a row out left to right.
-        $keyboard = InlineKeyboard::make()->row(
-            InlineKeyboard::callback($this->texts->get(BotText::Cancel), self::serviceCallback($subscription->id)),
-            InlineKeyboard::callback($this->texts->get(BotText::ServiceRotateYes), self::serviceCallback($subscription->id, 'rotate', 'yes'), 'danger'),
-        );
         $ctx->session->enter(self::ROTATING . $subscription->id);
-        $ctx->edit($this->texts->render(BotText::ServiceRotateConfirm, ['client' => $subscription->remote_name]), ['reply_markup' => $keyboard->build()]);
+        $ctx->edit($this->texts->render(BotText::ServiceRotateConfirm, ['client' => $subscription->remote_name]), [
+            'reply_markup' => $this->buttons->confirmChange($subscription->id, BotText::ServiceRotateYes, self::serviceCallback($subscription->id, 'rotate', 'yes')),
+        ]);
     }
 
     /**
@@ -213,6 +213,8 @@ final class SubscriptionHandler implements Handler
 
         $text = $this->texts->render(BotText::ServiceDetails, array_intersect_key($this->card->values($subscription), array_flip(['client', 'plan', 'server', 'traffic', 'expires'])) + [
             'status' => $this->status($subscription, $client),
+            // With the devices bought on top («کاربر اضافه»): the screen is where the customer sees them.
+            'devices' => Messages::devices($subscription->ip_limit),
             'used' => $used > 0 ? Messages::bytes($used) : $this->texts->part(BotText::ServiceUnused),
             'remaining' => $remaining === null
                 ? Messages::UNLIMITED
@@ -255,8 +257,9 @@ final class SubscriptionHandler implements Handler
 
     /**
      * The screen's buttons (Telegram lays a row out left to right, so a row's first button sits on the left): refresh;
-     * renew (none without a plan: a free test, or a service whose plan was deleted) | link; the extras; the «تمدید خودکار»
-     * switch while offered; report | change link (when the panel can); back to the list page the service is on.
+     * renew (none for a free test; one without a plan picks it there) | link; the extras; the «تمدید خودکار» switch while
+     * offered; report | change link (when the panel can); «انتقال سرویس» while offered; back to the list page the service
+     * is on.
      *
      * @return array<string, mixed>
      */
@@ -267,7 +270,7 @@ final class SubscriptionHandler implements Handler
         $autoRenew = $subscription->auto_renew
             ? InlineKeyboard::callback($this->texts->get(BotText::ServiceAutoRenewOn), self::serviceCallback($id, 'autorenew'), 'success')
             : InlineKeyboard::callback($this->texts->get(BotText::ServiceAutoRenewOff), self::serviceCallback($id, 'autorenew'));
-        $renew = $subscription->plan_id === null ? [] : [InlineKeyboard::callback($this->texts->get(BotText::ServiceRenew), self::serviceCallback($id, 'renew'), 'success')];
+        $renew = $subscription->is_test ? [] : [InlineKeyboard::callback($this->texts->get(BotText::ServiceRenew), self::serviceCallback($id, 'renew'), 'success')];
 
         return InlineKeyboard::make()
             ->row(InlineKeyboard::callback($this->texts->get(BotText::ServiceRefresh), self::serviceCallback($id, 'refresh'), 'primary'))
@@ -275,6 +278,7 @@ final class SubscriptionHandler implements Handler
             ->row(...$this->extras->buttons($subscription))
             ->row(...$this->autoRenewal->offeredFor($subscription) ? [$autoRenew] : [])
             ->row(...$rotates ? [InlineKeyboard::callback($this->texts->get(BotText::ServiceRotate), self::serviceCallback($id, 'rotate')), $report] : [$report])
+            ->row(...$this->transfer->buttons($subscription))
             ->row($this->backToList(MenuHandler::subscriptionsCallbackFor($subscription)))
             ->build();
     }

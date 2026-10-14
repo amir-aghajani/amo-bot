@@ -101,7 +101,7 @@ final class CashbackRules
         $types = [];
         $sent = $input['order_types'] ?? null;
         if (!is_array($sent) || $sent === [] || array_diff(array_map(static fn(mixed $type): string => is_string($type) ? $type : '', $sent), OrderType::FOR_THEMSELVES) !== []) {
-            $errors['order_types'][] = 'دست‌کم یکی از نوع‌های سفارش را انتخاب کنید: خرید، تمدید، حجم اضافه یا زمان اضافه.';
+            $errors['order_types'][] = 'دست‌کم یکی از نوع‌های سفارش را انتخاب کنید: ' . OrderType::forThemselvesInWords() . '.';
         } else {
             // In the kinds' own order, each once.
             $types = array_values(array_intersect(OrderType::FOR_THEMSELVES, $sent));

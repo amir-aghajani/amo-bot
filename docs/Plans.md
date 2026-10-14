@@ -41,8 +41,10 @@ colleagues) — and the servers it can be bought on. «افزودن پلن» ope
 - «مدت اعتبار» — a number and, beside it, its unit: «روز» for a plan of days, «ساعت» for an hourly one (a one-hour test,
   a six-hour plan); at most 3650 days — 87600 hours —; `0` never ends. The term is kept in hours, so «۱ روز» and
   «۲۴ ساعت» are the same term: a plan of whole days opens in days, any other in hours.
-- «تعداد دستگاه» — how many devices may connect at the same time, 0 to 1000; `0` no limit. PasarGuard panels have no
-  such limit, so it is not applied on a PasarGuard server.
+- «تعداد کاربر» — how many devices may connect at the same time, 0 to 1000; `0` no limit. PasarGuard panels have no
+  such limit, so it is not applied on a PasarGuard server. It is where a service starts, and where every renewal on the
+  plan brings it back: extra devices («کاربر اضافه») raise the service's limit for the period they are bought for only
+  ([below](#devices-and-renewals)).
 
 **«سرورها»** — where the plan is sold; at least one. Pick a server, then how:
 
@@ -54,8 +56,8 @@ colleagues) — and the servers it can be bought on. «افزودن پلن» ope
 An entry is changed by removing it (✕) and adding it again. The order of the entries is the order the customer's
 server buttons come in.
 
-**«حجم و زمان اضافه»** — the prices its services buy extra traffic and time at
-([below](#extra-traffic-and-time)).
+**«خرید اضافه»** — the prices its services buy extra traffic, time and devices at
+([below](#extra-traffic-time-and-devices)).
 
 A refused save jumps to the tab that has the problem.
 
@@ -107,20 +109,41 @@ latest orders, on their page), beside it in the order's dialog.
 
 The orders screen marks an order made at it «قیمت نماینده», and the report group's sale says «🤝 قیمت نماینده».
 
-### Extra traffic and time
+### Extra traffic, time and devices
 
-A service's customer may buy more traffic or more days for it, each on its own, while the shop sells them
-([Bot settings](Bot-Settings.md#extra-traffic-and-time)). The plan's tab «حجم و زمان اضافه» says at what prices:
+A service's customer may buy more traffic, more days or more devices at once («کاربر اضافه») for it, each on its own,
+while the shop sells them ([Bot settings](Bot-Settings.md#extra-traffic-time-and-devices)). The plan's tab «خرید اضافه»
+says at what prices:
 
 - **«قیمت‌های فروشگاه»** — the shop's, set in the bot settings: what a plan starts with.
 - **«قیمت‌های این پلن»** — a price list of the plan's own, the same fields as the shop's — for each extra a price of a
   unit, the amounts offered with their prices, the least and the most a customer may type — and the same preview of
   what the bot then offers. It stands in for the shop's whole, for this plan's services alone: what it does not price,
-  they do not buy, even when the shop sells it. A new one starts with nothing priced.
+  they do not buy, even when the shop sells it. A new one starts with nothing priced, within the shop's least and most.
+  Its devices are priced for 30 days too, each service paying its share for the days left of its period; a list of a
+  plan's own saved before 0.4.0 prices no devices until it is saved with some.
 
 Switching to «قیمت‌های فروشگاه» keeps the plan's own list on the form until it is saved, so switching back finds it as it
 was; saved so, the plan's own prices are gone. Refusals are said under the field they are about, on this tab. The
 shop's switch rules both: while it is off, nothing is sold, and the tab says so.
+
+### Devices and renewals
+
+The plan's «تعداد کاربر» is the device limit of every period sold on it: each renewal brings it back — the plan's as it
+is then, whatever the service had: extra devices bought, an older plan's higher limit, or none at all (a service added
+by its link) —, and the customer buys extra devices again for the new period. When it comes:
+
+- **A running service renewed by «تمدید پلن فعلی» or «ریست حجم + افزایش روز»** goes on with the period it is in, and the
+  devices paid for that period last until it ends — its end date when it was renewed —: the plan's limit takes over
+  then. Extra devices bought meanwhile are for that period too, priced to its end.
+- **One whose period is over** — ended by time or by traffic —, **one renewed by «ریست زمان + انتقال حجم»** (its term
+  starts over now), and one that never ends have the plan's limit at once.
+- **One still waiting for its first connection** has the plan's limit at once, with the extra devices bought for it on
+  top: they were charged for its whole term, none of which has run, and the renewal's term follows on from it — so they
+  last both.
+
+Extra days — bought, or given by support — lengthen the period in use, its devices with it. A refund of the renewal
+puts the limit back as it was ([Orders and payments](Orders-And-Payments.md#refunds)).
 
 ## How a customer buys one
 
@@ -134,8 +157,10 @@ shop's switch rules both: while it is off, nothing is sold, and the tab says so.
 4. Paid, the service is made on that server: **one client on the panel**, on every inbound of the plan's entry for it,
    and the customer gets **one subscription link** — as a QR card, or as text.
 
-The client on the panel is named after the customer: their Telegram username and a number of their own (`amir_1`,
-`amir_2` …, counted across every server), or `USER_7` for a customer without a username. Its comment holds their
+The client on the panel is named by the shop's pattern ([Bot settings](Bot-Settings.md#service-usernames)) — by
+default after the customer: their Telegram username and a number of their own (`amir_1`, `amir_2` …, counted across
+every server), or `USER_7` for a customer without a username —, or as the customer asked where the shop lets them
+(random, or typed). Its comment holds their
 Telegram id (`123456789 | amir`; a customer of the website alone, `web#42 | USER`; an agent's customer, with `| @agent_bot`
 at the end), so the panel's list leads back to the customer.
 
@@ -186,7 +211,7 @@ changes the next renewal of the services sold on the plan, as any change of pric
 A change takes effect for what is bought next — and for **renewals**: a service is renewed on its plan as the plan is at
 the moment of renewal, its price, term, traffic and devices then, whether the customer renews it or it renews itself. A
 plan switched off still renews the services it sold. Its prices of the extras are read the same way, when a customer
-looks: a service bought on it buys extra traffic and time at the plan's prices of the day.
+looks: a service bought on it buys extra traffic, time and devices at the plan's prices of the day.
 
 The traffic, days and inbounds of a purchase are read when the order is delivered: a card payment is delivered when
 support approves the receipt. If the plan's server stopped selling meanwhile, the delivery fails and the order waits

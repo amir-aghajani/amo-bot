@@ -41,7 +41,8 @@ use App\Support\Persian;
 
 /**
  * Everything the shop tells a customer on its own, once something was decided — a method per notice: payments (settled,
- * rejected, cancelled, refunded, reminded), services (switched off or on, moved, deleted, given days and traffic),
+ * rejected, cancelled, refunded, reminded), services (switched off or on, moved, deleted, given days and traffic, handed
+ * to another customer),
  * renewals («تمدید خودکار» done or short), reminders («یادآوری»), referrals, the agency, tickets, cashback and loyalty,
  * the nightly draw, and every change of how their website account is signed in to.
  *
@@ -49,7 +50,8 @@ use App\Support\Persian;
  * agent's bot, in the agent's wording, with balances read in that shop. That is why every method hands tell() a closure
  * instead of finished words. Notices then keeps it for their website and sends it to their Telegram chat or, failing
  * that, their email. A payment's message replies to the customer's receipt when there is one. Buttons only where the
- * customer is asked something: the payment reminder, the short wallet, the service reminders and a ticket's notices.
+ * customer is asked something: the payment reminder, the short wallet, the service reminders, a service handed to them
+ * and a ticket's notices.
  * A service itself is sent by Telegram\Notifications\ServiceCard, its caption what the website keeps.
  */
 final class CustomerNotifier
@@ -108,8 +110,8 @@ final class CustomerNotifier
     /**
      * The payment was refunded, with support's note. A service's money came back as balance, and what the refund took
      * back of the service (`$service`, its panel name; null for nothing) is said: a purchase's service removed, a
-     * renewal's or an extra's term and traffic. A top-up's charge went out of the wallet again (or, never delivered, the
-     * wallet is as it was). Cashback the order earned is said taken back.
+     * renewal's or an extra's term and traffic, an extra's devices. A top-up's charge went out of the wallet again (or,
+     * never delivered, the wallet is as it was). Cashback the order earned is said taken back.
      */
     public function paymentRefunded(Payment $payment, ?string $service = null): void
     {
@@ -135,7 +137,11 @@ final class CustomerNotifier
             return '';
         }
 
-        return (string) $this->texts->part($order->type === OrderType::Purchase ? BotText::PaymentRefundedService : BotText::PaymentRefundedTakenBack, ['client' => $service]);
+        return (string) $this->texts->part(match ($order->type) {
+            OrderType::Purchase => BotText::PaymentRefundedService,
+            OrderType::ExtraDevices => BotText::PaymentRefundedDevicesTakenBack,
+            default => BotText::PaymentRefundedTakenBack,
+        }, ['client' => $service]);
     }
 
     /**
@@ -188,6 +194,34 @@ final class CustomerNotifier
 
             return [$caption, fn(int $chat): array => $this->card->send($chat, $subscription, $caption)];
         });
+    }
+
+    /**
+     * Support handed the service to another customer (ServiceTransfers): its previous owner hears it, and which of their
+     * unpaid orders of it went with it (`$cancelled`, their ids). It is theirs no more, so the notice is about their
+     * account, with nothing for their website to open.
+     *
+     * @param list<int> $cancelled
+     */
+    public function serviceTransferred(Subscription $subscription, User $from, array $cancelled): void
+    {
+        $this->tell($from, NoticeType::ServiceTransferred, fn(): array => $this->serviceChanged($subscription, BotText::ServiceTransferredBySupport, [
+            'cancelled' => $cancelled === [] ? '' : $this->texts->part(BotText::ServiceTransferredOrders, [
+                'orders' => implode('، ', array_map(static fn(int $id): string => '#' . $id, $cancelled)),
+            ]),
+        ]));
+    }
+
+    /**
+     * A service was handed to the customer (ServiceTransfers), by its previous owner or by support: what it is and where it
+     * stands now, with «📊 مشاهده سرویس» — its screen has the link. Its previous owner keeps that link: where its panel can
+     * change it (`$rotates`, ProvisioningService::rotates()), the notice says «تغییر لینک» cuts their devices off.
+     */
+    public function serviceReceived(Subscription $subscription, bool $rotates): void
+    {
+        $this->tell($subscription, NoticeType::ServiceReceived, fn(): array => $this->message($this->card->text($subscription, BotText::ServiceReceived, [
+            'link_change' => $rotates ? $this->texts->part(BotText::ServiceReceivedLinkChange) : '',
+        ]), ['reply_markup' => $this->buttons->serviceOnly($subscription->id)]));
     }
 
     /** The service got days and traffic (a grant's share, or support's extension): what, support's note, and where it stands now. */

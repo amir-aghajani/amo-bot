@@ -80,4 +80,15 @@ final readonly class DiscountLine
     {
         return ['source' => $this->source->value, 'label' => $this->label, 'amount' => Money::normalize($this->amount), 'percent' => $this->percent];
     }
+
+    /**
+     * Lines — a quote's, an order's — as the APIs answer them (present()), in order.
+     *
+     * @param list<self> $lines
+     * @return list<array{source: string, label: string, amount: string, percent: int|null}>
+     */
+    public static function presentAll(array $lines): array
+    {
+        return array_map(static fn(self $line): array => $line->present(), $lines);
+    }
 }

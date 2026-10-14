@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Telegram;
 
+use App\Modules\Subscriptions\Enums\ClientNameMode;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Telegram\Update\Update;
 use PHPUnit\Framework\TestCase;
@@ -159,5 +161,16 @@ final class UpdateTest extends TestCase
 
         $this->expectException(\LogicException::class);
         CallbackData::build('plan:', str_repeat('x', CallbackData::MAX_BYTES));
+    }
+
+    public function testAnEnumsCaseIsItsPlaceAmongTheCases(): void
+    {
+        self::assertSame([0, 1, 3], [CallbackData::place(null), CallbackData::place(RenewalMethod::Extend), CallbackData::place(RenewalMethod::ResetTime)]);
+        self::assertSame([ClientNameMode::Random, RenewalMethod::ResetTraffic], [CallbackData::caseAt(ClientNameMode::class, 2), CallbackData::caseAt(RenewalMethod::class, 2)]);
+        self::assertSame([null, null, null], [CallbackData::caseAt(RenewalMethod::class, 0), CallbackData::caseAt(RenewalMethod::class, 4), CallbackData::caseAt(RenewalMethod::class, -1)], 'none, or no case there');
+
+        foreach (ClientNameMode::cases() as $mode) {
+            self::assertSame($mode, CallbackData::caseAt(ClientNameMode::class, CallbackData::place($mode)), 'read back as written');
+        }
     }
 }

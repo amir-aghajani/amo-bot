@@ -74,11 +74,17 @@ final class OrderDirectory
         ] + self::discounts($order) + [
             'user' => UserDirectory::presentRef($order->user),
             'plan' => $order->plan === null ? null : ['id' => $order->plan->id, 'name' => $order->plan->name],
+            // What a purchase or a renewal buys, in words: its plan's name, or a built service's GB and days.
+            'package_name' => $order->packageName(),
+            // How a renewal added its package; null for any other order.
+            'renewal_method' => $order->renewal_method?->value,
             'server' => $server === null ? null : ['id' => $server->id, 'name' => $server->name],
             'subscription' => $subscription === null ? null : ['id' => $subscription->id, 'name' => $subscription->remote_name, 'status' => $subscription->status->value],
-            // What it brings in traffic (an agent's, a service's extra) or in days (a service's extra time).
+            // What it brings in traffic (an agent's, a service's extra), in days (a service's extra time) or in
+            // devices.
             'traffic_bytes' => $order->traffic_bytes,
             'days' => $order->days,
+            'devices' => $order->devices,
             // Why it failed, or why it was cancelled — as whoever reads the screen may read it.
             'notes' => self::notes($order),
             'payments' => $order->payments->map(static fn(Payment $payment): array => [
@@ -109,7 +115,7 @@ final class OrderDirectory
 
         return [
             'discount_amount' => $order->discount_amount,
-            'discounts' => array_map(static fn(DiscountLine $line): array => $line->present(), $order->discountLines()),
+            'discounts' => DiscountLine::presentAll($order->discountLines()),
             'discount_code' => $code?->code === null ? null : ['id' => $order->discount_code_id, 'code' => $code->code],
         ];
     }

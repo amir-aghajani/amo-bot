@@ -181,7 +181,8 @@ final class DashboardStats
                 'type' => $order->type->value,
                 'status' => $order->status->value,
                 'amount' => $order->amount,
-                'plan' => $order->plan?->name,
+                // Its plan's name — or a service the customer built, in words (Order::packageName()).
+                'plan' => $order->packageName(),
                 'user' => UserDirectory::presentRef($order->user),
                 'created_at' => $order->created_at->toIso8601String(),
             ])

@@ -54,7 +54,7 @@ final class RenewalTrafficTest extends BotTestCase
         self::assertSame(60 * Traffic::GIGABYTE, $subscription->traffic_limit_bytes, '30 of this period and 30 of the plan');
         self::assertSame(40 * Traffic::GIGABYTE, $subscription->remainingBytes(), 'the 10 left, carried, and the plan\'s 30');
         self::assertSame([], FakeProvider::$trafficReset, 'the count goes on');
-        self::assertNull($subscription->period_ends_at, 'nothing to take away later');
+        self::assertNull($subscription->next_period_bytes, 'nothing to take away later');
         self::assertSame('2026-10-25', $subscription->expires_at?->format('Y-m-d'), 'the days left carry too');
 
         self::assertSame(self::text(BotText::Renewed, [
@@ -218,7 +218,7 @@ final class RenewalTrafficTest extends BotTestCase
         $this->renew($subscription, $unlimited);
 
         self::assertSame(0, $subscription->traffic_limit_bytes);
-        self::assertNull($subscription->period_ends_at);
+        self::assertNull($subscription->next_period_bytes);
     }
 
     public function testTheServiceScreenSaysWhatGoesAndWhen(): void

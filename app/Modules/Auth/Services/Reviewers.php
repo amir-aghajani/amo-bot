@@ -27,7 +27,7 @@ final class Reviewers
     public static function forAdmin(User $admin): string
     {
         return match (true) {
-            ($admin->username ?? '') !== '' => mb_substr('@' . $admin->username, 0, 64),
+            $admin->handle() !== null => mb_substr('@' . $admin->handle(), 0, 64),
             $admin->telegram_id !== null => 'tg:' . $admin->telegram_id,
             default => 'user#' . $admin->id,
         };

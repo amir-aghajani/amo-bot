@@ -13,9 +13,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Guards what changes how an account is signed in to (ways in, the password, two-factor sign-in, a merge): the session
- * must have proven a way in within CustomerSessions::RECENT_SECONDS, so a leaked bearer token alone cannot take the
- * account over. Otherwise a 403 whose `WWW-Authenticate` asks for a more recent sign-in (RFC 9470) — never a 401, which
+ * Guards what changes how an account is signed in to (ways in, the password, two-factor sign-in, a merge) and a service
+ * handed to another customer: the session must have proven a way in within CustomerSessions::RECENT_SECONDS, so a leaked
+ * bearer token alone can neither take the account over nor give its services away. Otherwise a 403 whose `WWW-Authenticate` asks for a more recent sign-in (RFC 9470) — never a 401, which
  * would tell the site the session ended.
  */
 final class RecentSignInMiddleware implements MiddlewareInterface

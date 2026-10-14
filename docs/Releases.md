@@ -11,6 +11,150 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.4.0
+
+### Added
+
+- **Services added by their link** («افزودن سرویس با لینک») — a customer adds a client you made by hand on a panel to
+  their account by sending the bot its subscription link or one of its configs (`vless://`, `vmess://`, `trojan://`,
+  `ss://`, `hysteria2://`, `tuic://`): anywhere the bot waits for nothing else, or after «➕ افزودن سرویس» under
+  «سرویس‌های من». The shop finds which of its panels has the client and adds it as its panel has it — traffic, term, IP
+  limit, switched off or not —, and the client takes the customer's Telegram id there. The first customer to send it
+  gets it; a client the shop keeps already is never taken from its customer, every claim is reported in the report
+  group's «خریدها», and a service's dialog can delete a claimed one from the shop alone, its client left working, so the
+  right customer sends the link again. Such a service has no plan until its first renewal, when the customer picks one
+  of the plans sold on its server — or builds one, where the shop sells custom services —; from then on it renews on
+  that plan, «تمدید خودکار» included (refunded, that first renewal takes the plan back). The panels file them under
+  «نوع › افزوده‌شده با لینک». The main shop's alone, off until it is switched on in «تنظیمات ربات › افزودن سرویس با
+  لینک».
+- **Custom services** («سرویس دلخواه») — a customer builds a service of the traffic and days they choose: «🛠 ساخت سرویس
+  دلخواه» under the plans, then the gigabytes and the days — a button, or any amount typed within the bounds —, the
+  server when more than one sells it, and the checkout as for a plan, discount codes included. Each amount is priced by
+  its tiers: the whole amount at the rate of the tier it falls into (60 GB at the rate from 50 GB on), the traffic's
+  price and the days' added. The new «فروشگاه › سرویس دلخواه» page holds it all: the switch, a tier list for the
+  gigabytes and one for the days, their bounds and buttons, how many devices a built service takes, the servers it is
+  sold on, and a calculator that prices an amount as the customer sees it. A built service has every inbound its server
+  sells and no plan: the services call it «سرویس دلخواه», its orders and the reports «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز». It
+  renews on a plan
+  sold on its server, or built again with «🛠 تمدید با سرویس دلخواه» beside the plans; «تمدید خودکار» never renews
+  it. The main shop's alone, off until it is switched on.
+- **Extra devices** («کاربر اضافه») — a third extra beside «حجم اضافه» and «زمان اضافه»: «👥 کاربر اضافه» raises how
+  many devices may use a service at once. A device is priced for 30 days and charged for the days the service has left
+  (rounded up to the Toman): its whole term while it waits for its first connection, 30 days when it never ends. It is
+  offered for a service with a device limit on a panel that enforces one — 3x-ui; PasarGuard does not —, never for a
+  free test or a service whose time or traffic ran out. Its prices sit beside the other extras' on «تنظیمات ربات › خرید اضافه»
+  and on a plan's own price list. The devices last until the end of the term they were bought for: a renewal gives
+  the plan's limit — from the end of the term in use, when it extends a running service —, and the customer buys them
+  again for the new term. A refund takes them back, and in an agent's shop they draw nothing from the agent's traffic.
+  The bot's service screen says how many devices a service takes.
+- **Service usernames** («نام کاربری سرویس») — how the shop names its clients on the panels is yours to set, on
+  «تنظیمات ربات › نام کاربری سرویس»: a pattern of `{username}`, `{seq}` (the customer's own count), `{tg_id}`,
+  `{user_id}`, `{n}` (the shop's count), `{random}` and `{date}`, and one for free tests, each shown as an example while
+  it is typed. The defaults name clients as before. A pattern makes a different name every time — `{n}`, `{random}`, or
+  `{seq}` with something of the customer's —, and a name is always made to fit the panel it goes to. A buyer may choose
+  the name at the checkout, in the bot and on the website — «🔢 ترتیبی» (the pattern), «🎲 رندوم», «✏️ دلخواه» typed —
+  where the shop offers the last two; a name taken by the time it is delivered falls back to the pattern. A name the
+  panel already has — a client made there by hand — gives way to the pattern's next, for purchases and free tests
+  alike, where a purchase used to fail.
+- **Service transfers** («انتقال سرویس») — a customer gives a service to another customer of the shop by their numeric
+  Telegram id: «🔁 انتقال سرویس» on the service's screen, the id, then a confirmation that shows who it goes to. Free.
+  Support transfers from a service's dialog («انتقال به مشتری دیگر»), and a website's admins with the «حذف یا انتقال
+  سرویس» grant. A free test, a service gone from its panel, and — for a customer — a service with an order of theirs
+  still open are refused, as is a recipient unknown to the shop, banned, or the owner. The new owner gets it with
+  «تمدید خودکار» off and is told — with how «تغییر لینک» cuts off the devices of the previous owner, who keeps the
+  link —, its client on the panel takes their Telegram id, and the report group's «خریدها» says so. A service being
+  changed on its panel at that moment is refused for a moment («چند لحظه بعد دوباره امتحان کنید»). Transferred by
+  support, the previous owner's unpaid orders of it are cancelled, an order of theirs paid later is never delivered
+  onto it, and a refund of what they bought for it is refused until support settles the service by hand. The service
+  keeps its username, which may name the previous owner (`{username}` of the pattern). Customers' transfers are off
+  until switched on in «تنظیمات ربات › انتقال سرویس»; support's always work.
+- **The renewal window** («آستانه مجاز تمدید») — a shop may let customers renew a running service only near its end:
+  within so many days of its deadline, or once at most so many percent of its traffic is left, on «تنظیمات ربات ›
+  تمدید سرویس». Before then the bot says from when, and the website refuses with the same words; an ended service renews
+  any time, and automatic renewal keeps its own days. Off by default.
+- **Renewal methods** («روش‌های تمدید») — beside «تمدید پلن فعلی» (the plan's term and traffic added, as before), a shop
+  may offer «ریست حجم + افزایش روز» (the traffic starts over at the plan's, the days are added) and «ریست زمان + انتقال
+  حجم» (the term starts over now, the traffic left carried into the new one), on «تنظیمات ربات › تمدید سرویس». With
+  more than one on, the customer picks at the renewal's checkout, in the bot and on the website; automatic renewal uses
+  «روش تمدید خودکار». An order says the method it renewed by, and the report group's «تمدیدها» names a reset. A refund
+  of a reset takes back what it added beyond what the service had, and gives back what it replaced beyond what it gave
+  (a week in place of 25 days left, 10 GB in place of 40). Automatic renewal by «ریست زمان» waits for the
+  last half hour before the service's end, so it throws away no more of the paid term, while a wallet short of the
+  price is still told days ahead; whatever the method, a service's end is renewed automatically once.
+- **For website developers** — `POST /subscriptions/claim` adds a service by its link, offered while
+  `shop.service_claims` of `GET /` is true. A service gains `claimed_at` and `picks_plan`: a service without a plan is
+  renewed on what the customer picks — `GET /subscriptions/{id}/renewal-plans`, then `plan_id` on `…/renewal` (and on
+  `POST /discount-codes/check` for a renewal), or `gb` and `days` when its `custom_services` is true. `renewable` keeps
+  its meaning (renewed on its own plan), so a site that knows nothing of `picks_plan` offers nothing it cannot finish;
+  for a service with its own plan a `plan_id` sent must be that plan. Also new:
+  - custom services: `GET /custom-services` (its tiers and buttons empty while it is not offered),
+    `POST /custom-services/quote` and `POST /custom-services/orders`, offered while `shop.custom_services` is true;
+  - extra devices: `POST /subscriptions/{id}/extra-devices`, a `devices` offer in `GET …/extras` (each offer with its
+    `days`), `devices` on a service (its device limit) and on an order, and `extra_devices` among the order kinds of
+    the payment methods and the discount check;
+  - client names: `name_mode` and `client_name` on `POST /orders` and `POST /custom-services/orders`, the modes
+    offered in `shop.name_modes`;
+  - transfers: `GET` (who an id is) and `POST /subscriptions/{id}/transfer` (after a recent sign-in, as a change of
+    credentials), offered while `shop.service_transfers` is true, and the notices `service_transferred` and
+    `service_received`;
+  - renewals: `method` on `…/renewal` and the discount check, the preview's `method` and `methods`, a service's
+    `renewal_window` (`open`, `opens_at`, …) — before it opens a renewal is a 422 on `status` —, and its
+    `next_devices` (from when the device limit a renewal queued holds); `GET …/renewal-plans` lists nothing while the
+    service cannot be renewed;
+  - an order's `package_name`: what it buys in words, a plan's name or a built package;
+  - the API description's `DiscountKind` and `CashbackOrderType` are one schema, `OwnOrderType`: the JSON is the same,
+    but types generated from the description change their name;
+  - for the shop's admins on the website: `GET` and `POST /admin/subscriptions/{id}/transfer` under the «حذف یا انتقال
+    سرویس» grant (`delete`), services with `claimed_at`, the kind `claimed` and the action `transfer`, and orders with
+    `package_name`, `devices`, `renewal_method` and the kind `extra_devices`. A plan's own extra prices sent without the
+    devices' fields save as before and sell no devices.
+
+### Changed
+
+- **One word for a service's device limit**: plans, services, the extras and custom services say «کاربر» («۲ کاربر»)
+  where some said «دستگاه», and the extras are «حجم، زمان و کاربر اضافه» («خرید اضافه» in the settings menu). The
+  bot's default texts say it too; a text you changed stays as you wrote it.
+- **A renewal's device limit waits for the period in use**: a running service renewed by «تمدید پلن فعلی» or «ریست حجم
+  + افزایش روز» keeps its device limit until the end of its current period, then takes its plan's — before, a renewal
+  set it at once. Any other renewal sets it at once, as before.
+- **A device limit set on the panel is the shop's**: syncing reads it back from 3x-ui as it does the traffic and term,
+  so the next extra builds on it instead of overwriting it (a renewal still brings its plan's).
+- **An update of a client on its panel never switches it on by itself**: a renewal and an extra switch a service on, as
+  before, but support's extension of a service support switched off, a refund, and a service changing owner leave it as
+  it was. A refund of a renewal or an extra of a switched-off service is no longer refused: it takes back what it gave,
+  and the service stays off.
+- **A service's client follows its owner's Telegram account**: when two accounts are merged, or a Telegram account is
+  linked to a website account or taken off it, the services' clients on their panels take the owner's Telegram id and
+  comment.
+- **A refund takes back what its order gave, as far as the service still has it**: what a later order started afresh
+  — a reset of the time or the traffic, a renewal after the service ran out, its plan's device limit, days bought after
+  the service's time ran out — is taken back by that order's own refund, and a reset that replaced more than it gave
+  gives the rest back, so a service's renewals and extras, refunded in any order, leave it exactly where it was. A
+  renewal's refund puts back the device limit it replaced, the term or quota it replaced where it gave the first or an
+  endless one, and the end and traffic left it replaced where it put the service on a plan that never ends or has no
+  quota; a refund of devices already gone with their period no longer says they were taken back.
+
+### Fixed
+
+- **Moving a service to a server whose panel has a client by its name** — one made there by hand — failed with the
+  panel's refusal; the moved service now takes the customer's next name, as a purchase does.
+
+### Upgrading
+
+- The database gains when a service was added by its link, the device limit a renewal queued behind the period in use
+  (and when a service's limit last went back to its plan's), what an order brings in devices, the client name a buyer
+  asked for, its renewal method, and what a renewal or an extra started afresh or replaced — term, traffic, device
+  limit — for its refund to put back; the renewals so far are recorded as
+  «تمدید پلن فعلی», and what a renewal gave may now be less than nothing (on MySQL and MariaDB two columns of `orders`
+  become signed). The panel's update runs this upgrade by itself; a shop updated by hand runs it from «تنظیمات پنل ›
+  به‌روزرسانی».
+- A plan with its own extra prices sells no extra devices until they are priced on it, and a discount code or a sale
+  that lists its order kinds leaves out «کاربر اضافه» until it is added; a cashback rule that covered every kind of
+  order covers it after the upgrade.
+- A panel connector of your own implements one more method, `findClientByLink()`, says in its capabilities whether its
+  panel enforces a device limit and what client names it takes, and keeps a client switched on or off as the update
+  asks ([Drivers](Drivers.md#a-vpn-panel-connector)).
+
 ## Version 0.3.0
 
 ### Added

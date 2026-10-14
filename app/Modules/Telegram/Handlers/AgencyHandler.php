@@ -29,7 +29,6 @@ use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
-use App\Support\Input;
 use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Traffic;
@@ -67,6 +66,7 @@ final class AgencyHandler implements Handler
         private readonly OrderService $orders,
         private readonly PaymentMethods $methods,
         private readonly CheckoutScreen $screen,
+        private readonly TypedAmounts $amounts,
         private readonly MainMenu $menu,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
@@ -233,14 +233,10 @@ final class AgencyHandler implements Handler
     /** State `agency.gb`: the GB the agent typed («۲۰ گیگ» is fine). */
     private function typedGb(Context $ctx): void
     {
-        $gb = Input::amountOf($ctx->update->text());
-        if ($gb === null || !$this->orders->trafficAllowed($gb)) {
-            $ctx->reply($this->texts->render(BotText::AgencyTrafficInvalid, ['min' => Persian::number($this->settings->trafficMin())]), ['reply_markup' => $this->buttons->backOnly(self::TRAFFIC)]);
-
-            return;
+        $gb = $this->amounts->read($ctx, $this->orders->trafficAllowed(...), $this->texts->render(BotText::AgencyTrafficInvalid, ['min' => Persian::number($this->settings->trafficMin())]), self::TRAFFIC);
+        if ($gb !== null) {
+            $this->checkout($ctx, $gb);
         }
-
-        $this->checkout($ctx, $gb);
     }
 
     /** A way to pay picked: the traffic ordered — or the open order of that much found — and paid. */

@@ -16,8 +16,10 @@ use App\Modules\Orders\Services\Pricing;
 use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Exceptions\ProviderException;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Exceptions\AutoRenewUnavailableException;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Users\Enums\UserStatus;
 use App\Support\Money;
 use Illuminate\Database\ConnectionInterface;
@@ -27,16 +29,28 @@ use Psr\Log\LoggerInterface;
 
 /**
  * «تمدید خودکار»: a service whose customer turned the switch on is renewed from their wallet once its deadline is within
- * the admin's days (RenewalSettings): a renewal order at the customer's price, paid by the wallet (an agent's credit
- * counts), delivered like any renewal (ProvisioningService::renew()). The customer is notified of the outcome:
- * renewed, the wallet short (once per renewal window), or paid but not delivered (support finishes it).
+ * the admin's days (RenewalSettings): a renewal order at the customer's price by the admin's default method
+ * (RenewalSettings::defaultMethod()), paid by the wallet (an agent's credit counts), delivered like any renewal
+ * (ProvisioningService::renew()); the window a customer renews in by hand (CustomerRenewal::window()) does not hold it
+ * back. The customer is notified of the outcome: renewed, the wallet short (once per renewal window), or paid but not
+ * delivered (support finishes it).
  *
  * Only a running service with a deadline qualifies — one waiting for its first connection has none yet, one that never
  * ends needs none, an ended one is renewed by hand — and only on a plan whose term is at least the window (renews()):
- * a shorter term would leave the service due again at once. Two runs never charge a service twice (claim()).
+ * a shorter term would leave the service due again at once. By ResetTime, which starts the term afresh and throws away
+ * what was left of it, the renewal waits for the last run before the deadline (LAST_RUN_MINUTES), so it loses no more
+ * than that; a wallet that cannot pay is still told at the window's start. A deadline is renewed once, and two runs
+ * never charge a service twice (claim()).
  */
 final class AutoRenewal
 {
+    /**
+     * How near its deadline a renewal by ResetTime waits to be: the last run before it — the task's interval
+     * (AutoRenewTask::INTERVAL_MINUTES), and a few minutes for a run that comes late (the scheduler's minute, the shops
+     * before this one) —, so the term it throws away is that much at most.
+     */
+    public const LAST_RUN_MINUTES = AutoRenewTask::INTERVAL_MINUTES + 5;
+
     /** `orders.notes` of a renewal the wallet could not pay after all (its balance dropped between check and charge). */
     private const NOTE_UNPAID = 'تمدید خودکار: موجودی کیف پول کافی نبود';
 
@@ -107,7 +121,7 @@ final class AutoRenewal
 
     /**
      * The services to renew now, nearest deadline first: switch on, deadline within the admin's days, customer not
-     * banned, on a plan whose term is at least the window.
+     * banned, on a plan whose term is at least the window — by ResetTime, renew() lets them wait for the last run.
      *
      * @return list<Subscription>
      */
@@ -123,11 +137,12 @@ final class AutoRenewal
     }
 
     /**
-     * Renew one service if it is still due, and tell the customer the outcome. The panel is asked first — its deadline is
-     * the truth (an admin may have extended the client there) —; a panel out of reach or in backoff waits for the next
-     * run with nothing charged. A customer whose wallet cannot pay is notified once per renewal window, and one whose
-     * delivery broke on a bug (paid, the order failed for support's retry) too; that exception goes on up for the run
-     * to log.
+     * Renew one service if it is still due by the admin's default method, and tell the customer the outcome. The panel is
+     * asked first — its deadline is the truth (an admin may have extended the client there) —; a panel out of reach or
+     * in backoff waits for the next run with nothing charged. A renewal by ResetTime waits for the last run before the
+     * deadline (renewsNow()), its panel not asked meanwhile. A customer whose wallet cannot pay is notified once per
+     * renewal window, from its start whatever the method, and one whose delivery broke on a bug (paid, the order failed
+     * for support's retry) too; that exception goes on up for the run to log.
      */
     public function renew(Subscription $subscription): void
     {
@@ -135,6 +150,15 @@ final class AutoRenewal
         $plan = $subscription->plan;
         // A plan whose term was shortened below the window since is not renewed, whatever the switch says.
         if ($wallet === null || $plan === null || !$this->settings->autoRenews($plan) || $subscription->server->isBackingOff()) {
+            return;
+        }
+
+        // The customer's price (agent price where theirs, less the automatic discount), as createRenewal() orders it.
+        $price = $this->pricing->renewal($subscription->user, $subscription, $plan)->amount();
+        $pays = Money::compare($subscription->user->refresh()->spendable(), $price) >= 0;
+        $method = $this->settings->defaultMethod();
+        // Not its method's time yet (ResetTime's last run): its panel is not asked — but a short wallet is told from now.
+        if ($pays && !$this->renewsNow($subscription->expires_at, $method)) {
             return;
         }
 
@@ -149,16 +173,16 @@ final class AutoRenewal
         if ($deadline === null) {
             return;
         }
-
-        // The customer's price (agent price where theirs, less the automatic discount), as createRenewal() orders it.
-        $price = $this->pricing->renewal($subscription->user, $subscription, $plan)->amount();
-        if (Money::compare($subscription->user->refresh()->spendable(), $price) < 0) {
+        if (!$pays) {
             $this->short($subscription, $deadline, $price);
 
             return;
         }
+        if (!$this->renewsNow($deadline, $method)) {
+            return;
+        }
 
-        $order = $this->claim($subscription, $plan);
+        $order = $this->claim($subscription, $plan, $method);
         if ($order === null) {
             return;
         }
@@ -201,24 +225,50 @@ final class AutoRenewal
     }
 
     /**
-     * Make the renewal order under a lock on the service's row, only while the switch is still on and no renewal of it is
-     * open — pending, paid, processing, or failed (a failed one waits for support's retry, never a second charge) — so
-     * two runs never both charge.
+     * When a renewal by `$method` of a service due at `$deadline` may be made from: the admin's days before it — by
+     * ResetTime, which throws away the term left, only from the last run before it (LAST_RUN_MINUTES).
      */
-    private function claim(Subscription $subscription, Plan $plan): ?Order
+    private function opensAt(Carbon $deadline, RenewalMethod $method): Carbon
     {
-        return $this->db->transaction(function () use ($subscription, $plan): ?Order {
+        return $method === RenewalMethod::ResetTime
+            ? $deadline->copy()->subMinutes(self::LAST_RUN_MINUTES)
+            : $deadline->copy()->subDays($this->settings->autoRenewDays());
+    }
+
+    /** Whether a service due at `$deadline` is renewed by `$method` now (opensAt()); one without a deadline is not. */
+    private function renewsNow(?Carbon $deadline, RenewalMethod $method): bool
+    {
+        return $deadline !== null && now()->greaterThanOrEqualTo($this->opensAt($deadline, $method));
+    }
+
+    /**
+     * Make the renewal order by `$method` under a lock on the service's row, only while the switch is still on, the row
+     * still due by it now (another renewal may have moved its deadline since it was read), and no renewal of it by its
+     * owner either is open — pending, paid, processing, or failed (a failed one waits for support's retry, never a
+     * second charge) — or was delivered since this deadline's renewal could be made (opensAt(); refunded since or not,
+     * this task's or the customer's own): one that left the deadline where it was (a panel that kept its own) is not
+     * followed by another. So a deadline is renewed once, and two runs never both charge. One a previous owner left is
+     * never delivered onto it, so it holds nothing.
+     */
+    private function claim(Subscription $subscription, Plan $plan, RenewalMethod $method): ?Order
+    {
+        return $this->db->transaction(function () use ($subscription, $plan, $method): ?Order {
             $row = $subscription->newModelQuery()->whereKey($subscription->id)->lockForUpdate()->first();
-            $open = Order::query()
+            $deadline = $row !== null && $row->auto_renew ? $this->dueDeadline($row) : null;
+            if ($row === null || $deadline === null || !$this->renewsNow($deadline, $method)) {
+                return null;
+            }
+            $renewals = Order::query()
                 ->where('subscription_id', $subscription->id)
-                ->where('type', OrderType::Renewal->value)
-                ->whereIn('status', Order::OPEN)
-                ->exists();
-            if ($row === null || !$row->auto_renew || $open) {
+                ->where('user_id', $row->user_id)
+                ->where('type', OrderType::Renewal->value);
+            $held = (clone $renewals)->whereIn('status', Order::OPEN)->exists()
+                || $renewals->where('fulfilled_at', '>=', $this->opensAt($deadline, $method))->exists();
+            if ($held) {
                 return null;
             }
 
-            return $this->orders->createRenewal($subscription->user, $subscription, $plan);
+            return $this->orders->createRenewal($subscription->user, $subscription, $plan, $method);
         });
     }
 

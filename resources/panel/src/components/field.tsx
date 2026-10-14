@@ -1,4 +1,4 @@
-import { cloneElement, useId, type ReactElement, type ReactNode, type Ref } from 'react'
+import { cloneElement, useId, type ReactElement, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
@@ -130,16 +130,15 @@ interface FormPartProps {
   title: string
   /** A line under the title about what the part sets. */
   about: ReactNode
-  ref?: Ref<HTMLDivElement>
   children: ReactNode
 }
 
 /** A titled, framed part of a long form or settings card (the referral program's parts, one extra's prices). */
-export function FormPart({ icon: Icon, title, about, ref, children }: FormPartProps) {
+export function FormPart({ icon: Icon, title, about, children }: FormPartProps) {
   const id = useId()
 
   return (
-    <div ref={ref} role="group" aria-labelledby={`${id}-title`} className="grid content-start gap-4 rounded-xl border border-border p-4">
+    <div role="group" aria-labelledby={`${id}-title`} className="grid content-start gap-4 rounded-xl border border-border p-4">
       <div className="grid gap-1">
         <h3 id={`${id}-title`} className="flex items-center gap-2 text-body font-medium">
           <Icon className="size-4 text-muted-foreground" aria-hidden />

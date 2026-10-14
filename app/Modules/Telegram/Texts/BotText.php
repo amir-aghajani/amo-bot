@@ -41,6 +41,23 @@ enum BotText: string
     case PlansEmpty = 'plans_empty';
     case CategoryPlans = 'category_plans';
     case PlanButton = 'plan_button';
+    // «🛠 ساخت سرویس دلخواه»: a service the customer builds (the main bot only)
+    case CustomButton = 'custom_button';
+    case CustomTraffic = 'custom_traffic';
+    case CustomTrafficButton = 'custom_traffic_button';
+    case CustomDays = 'custom_days';
+    case CustomDaysButton = 'custom_days_button';
+    case CustomTier = 'custom_tier';
+    case CustomServer = 'custom_server';
+    case CustomCheckout = 'custom_checkout';
+    case CustomTrafficInvalid = 'custom_traffic_invalid';
+    case CustomDaysInvalid = 'custom_days_invalid';
+    case CustomUnavailable = 'custom_unavailable';
+    case CustomPlanName = 'custom_plan_name';
+    // … and a service without a plan renewed with one it builds
+    case CustomRenewButton = 'custom_renew_button';
+    case CustomRenewTraffic = 'custom_renew_traffic';
+    case CustomRenewDays = 'custom_renew_days';
     case PlanDetails = 'plan_details';
     case PlanFirstPurchase = 'plan_first_purchase';
     case PlanAgentPrice = 'plan_agent_price';
@@ -60,6 +77,13 @@ enum BotText: string
     case CheckoutPlanNote = 'checkout_plan_note';
     case CheckoutDiscount = 'checkout_discount';
     case CheckoutBeforeDiscount = 'checkout_before_discount';
+    case CheckoutName = 'checkout_name';
+    case CheckoutNamePattern = 'checkout_name_pattern';
+    case CheckoutNameSequential = 'checkout_name_sequential';
+    case CheckoutNameRandom = 'checkout_name_random';
+    case CheckoutNameCustom = 'checkout_name_custom';
+    case CheckoutNameAsk = 'checkout_name_ask';
+    case CheckoutNameRefused = 'checkout_name_refused';
     case DiscountCodeButton = 'discount_code_button';
     case DiscountCodeRemove = 'discount_code_remove';
     case DiscountCodeAsk = 'discount_code_ask';
@@ -80,6 +104,7 @@ enum BotText: string
     case ReceiptOutcomeTopup = 'receipt_outcome_topup';
     case ReceiptOutcomeExtraTraffic = 'receipt_outcome_extra_traffic';
     case ReceiptOutcomeExtraTime = 'receipt_outcome_extra_time';
+    case ReceiptOutcomeExtraDevices = 'receipt_outcome_extra_devices';
     case PayProcessing = 'pay_processing';
 
     // delivery and what support decided about a payment
@@ -90,6 +115,7 @@ enum BotText: string
     case PaymentRefunded = 'payment_refunded';
     case PaymentRefundedService = 'payment_refunded_service';
     case PaymentRefundedTakenBack = 'payment_refunded_taken_back';
+    case PaymentRefundedDevicesTakenBack = 'payment_refunded_devices_taken_back';
     case TopupRefunded = 'topup_refunded';
     case TopupRefundedUndelivered = 'topup_refunded_undelivered';
     case AdminNote = 'admin_note';
@@ -105,6 +131,19 @@ enum BotText: string
     case ServiceButton = 'service_button';
     case PageNext = 'page_next';
     case PagePrev = 'page_prev';
+
+    // «➕ افزودن سرویس»: a service added by its link (the main bot only)
+    case ClaimButton = 'claim_button';
+    case ClaimPrompt = 'claim_prompt';
+    case ClaimAdded = 'claim_added';
+    case ClaimOff = 'claim_off';
+    case ClaimNotALink = 'claim_not_a_link';
+    case ClaimNotFound = 'claim_not_found';
+    case ClaimTaken = 'claim_taken';
+    case ClaimYours = 'claim_yours';
+    case ClaimNoLink = 'claim_no_link';
+    case ClaimUnavailable = 'claim_unavailable';
+    case ClaimWait = 'claim_wait';
 
     // one service's screen
     case ServiceDetails = 'service_details';
@@ -129,6 +168,16 @@ enum BotText: string
     case ServiceRefresh = 'service_refresh';
     case ServiceLink = 'service_link';
     case ServiceRenew = 'service_renew';
+    case ServiceTransfer = 'service_transfer';
+    case TransferAsk = 'transfer_ask';
+    case TransferRecipientRefused = 'transfer_recipient_refused';
+    case TransferRefused = 'transfer_refused';
+    case TransferConfirm = 'transfer_confirm';
+    case TransferYes = 'transfer_yes';
+    case TransferExpired = 'transfer_expired';
+    case TransferDone = 'transfer_done';
+    case ServiceReceived = 'service_received';
+    case ServiceReceivedLinkChange = 'service_received_link_change';
     case ServiceReport = 'service_report';
     case ServiceRotate = 'service_rotate';
     case ServiceBack = 'service_back';
@@ -148,13 +197,20 @@ enum BotText: string
     case ServiceEnabledBySupport = 'service_enabled_by_support';
     case ServiceMoved = 'service_moved';
     case ServiceDeletedBySupport = 'service_deleted_by_support';
+    case ServiceTransferredBySupport = 'service_transferred_by_support';
+    case ServiceTransferredOrders = 'service_transferred_orders';
     case ServiceGranted = 'service_granted';
 
     // renewal and «تمدید خودکار»
     case RenewChoose = 'renew_choose';
     case RenewNothing = 'renew_nothing';
+    case RenewPickPlan = 'renew_pick_plan';
+    case RenewNoPlans = 'renew_no_plans';
     case RenewCheckout = 'renew_checkout';
+    case RenewMethodButton = 'renew_method_button';
+    case RenewMethodChosen = 'renew_method_chosen';
     case RenewUnavailable = 'renew_unavailable';
+    case RenewNotYet = 'renew_not_yet';
     case RenewUnderWay = 'renew_under_way';
     case ServiceAutoRenewOn = 'service_auto_renew_on';
     case ServiceAutoRenewOff = 'service_auto_renew_off';
@@ -166,23 +222,29 @@ enum BotText: string
     case Renewed = 'renewed';
     case RenewalLeftoverUntil = 'renewal_leftover_until';
     case RenewalLeftoverCarried = 'renewal_leftover_carried';
+    case RenewalDevicesFrom = 'renewal_devices_from';
     case RenewFailed = 'renew_failed';
 
-    // «حجم و زمان اضافه»
+    // «حجم، زمان و کاربر اضافه»
     case ServiceExtraTraffic = 'service_extra_traffic';
     case ServiceExtraTime = 'service_extra_time';
+    case ServiceExtraDevices = 'service_extra_devices';
     case ExtraTrafficMenu = 'extra_traffic_menu';
     case ExtraTrafficTyped = 'extra_traffic_typed';
     case ExtraTimeMenu = 'extra_time_menu';
     case ExtraTimeRestart = 'extra_time_restart';
     case ExtraTimeTyped = 'extra_time_typed';
+    case ExtraDevicesMenu = 'extra_devices_menu';
+    case ExtraDevicesTyped = 'extra_devices_typed';
     case ExtraOption = 'extra_option';
     case ExtraInvalid = 'extra_invalid';
     case ExtraTrafficCheckout = 'extra_traffic_checkout';
     case ExtraTimeCheckout = 'extra_time_checkout';
+    case ExtraDevicesCheckout = 'extra_devices_checkout';
     case ExtraUnavailable = 'extra_unavailable';
     case ExtraTrafficAdded = 'extra_traffic_added';
     case ExtraTimeAdded = 'extra_time_added';
+    case ExtraDevicesAdded = 'extra_devices_added';
     case ExtraFailed = 'extra_failed';
 
     // «یادآوری»
@@ -373,6 +435,7 @@ enum BotText: string
     case TestUnsent = 'test_unsent';
     case TestFailed = 'test_failed';
     case TestPlanName = 'test_plan_name';
+    case NoPlanName = 'no_plan_name';
 
     // loyalty tiers, cashback and the nightly draw («سطح وفاداری»، «کش‌بک»، «قرعه‌کشی شبانه»)
     case LoyaltyTierLine = 'loyalty_tier_line';

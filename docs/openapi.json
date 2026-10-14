@@ -2,8 +2,8 @@
     "openapi": "3.0.3",
     "info": {
         "title": "AmoBot API",
-        "version": "0.2.0",
-        "description": "AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.\n\n**The panels.** `/api/admin/*` is the owner's panel and `/api/agent/*` an agent's; each has its own session. The\nowner signs in with the login kept in config.php and may work in any shop: each request names its shop in the\n`X-Shop` header (none means the main shop), and the session itself remembers no shop. An agent signs in with a\none-time link from the main bot and works only in their own bot's shop. Screens both panels have are described once,\nunder `/api/{panel}/…`; a screen only one panel has is under that panel's prefix. Panel requests send the session\ncookie, and a request that changes something also sends `X-Requested-With: XMLHttpRequest` (the CSRF guard).\n`/api/app` is public. `/api/install/*` answers only until the shop is installed, and only with the install key in\n`X-Install-Key` (the text of storage/install-key.txt, which the first request creates); without it the answer is a\n403 on `key`. Every answer carries its request id in `X-Request-Id`; an error answer also has it in its body\n(`request_id`), and every log line the request wrote carries the same id.\n\n**The Store API.** `/api/store/v1/{store}/*` is the API of a shop's own website (the main bot's or an agent's). The\nstore key in the path names the shop. A customer signs in (Telegram, Google, or an email and a password, plus a\nsecond step when two-factor sign-in is on) and gets a bearer token: the `customer` scheme, with no cookie, session or\nCSRF header. Pages on the website's origins may call it from a browser: preflight requests are answered, and every\nanswer, errors included, carries the CORS headers.\n- Public: the plans the bot sells now, the status of the servers they are sold on and, while the website shows\n  reviews, the approved reviews with their count and average rating. Anyone may then write a review: a guest\n  through the website's captcha (only signed-in customers while the website asks for no captcha). A review waits for\n  support's approval; sent with a bearer token, it belongs to that customer.\n- A signed-in customer manages their account: names, password, two-factor sign-in, the ways they sign in (adding one\n  that another account of the shop already has offers a merge, 202) and their signed-in devices. Changing how the\n  account signs in (the password, two-factor sign-in, a way in, a merge) also needs a sign-in from the last 15\n  minutes, else a 403 whose `WWW-Authenticate` says so; `POST /me/reauthenticate` proves a way in again. A bearer\n  token alone cannot change any of it.\n- They read their own services (refreshed from the panel, auto-renewal switched, link changed), orders and\n  payments, wallet and ledger, referral numbers and notifications. They order through the bot's checkout (a plan, a\n  renewal, a wallet top-up, extra traffic or time), each ordering request with an `Idempotency-Key`, and upload a\n  card transfer's receipt. They open support tickets, about a service or not, write with or without a picture, close\n  them, reopen them by writing, and rate them.\n- A form on the site itself (a contact form) may use the website's captcha too: the site's backend asks the shop to\n  check the widget's token (`POST /captcha/verify`), so the site never holds the captcha's secret.\n- Request bodies are JSON (`Content-Type: application/json`). A form is accepted only where a picture may be\n  uploaded (a receipt, a ticket message); any other body type is a 415.\n\n**The website's admin API.** `/api/store/v1/{store}/admin/*` gives the shop's admins (customers whose role is admin)\nthe shop's daily work on its website, with their bearer token. It has the panel operations marked `x-staff`: the\nmarker's value is the grant the operation needs, or `true` for none.\n- It answers only while the website lets admins in (`staff_enabled`).\n- While the website asks for a strong sign-in (`staff_strong_sign_in`), a session signed in with a password alone is\n  refused: it needs Telegram, Google, or a password with its second step (`POST /me/reauthenticate` can prove one).\n- Every operation needs a way in proven on the session within the last 12 hours: an admin's token lasts a working\n  day, not the months a customer's does.\n- An operation that names a grant works only while the website grants it (`staff_grants`), and it needs a sign-in\n  from the last 15 minutes. Approving a payment, which delivers a service, needs one too (`x-staff-recent`).\n- Each refusal is a 403 (`StaffRefused`). The shop's configuration (payment methods, the bot's settings, texts and\n  keyboards, the report group, the website, who the admins are) is not there at all (404).\n- An admin cannot act on themselves: approve or refund their own payment, adjust their own wallet, change their own\n  service (days and traffic, switch, move, delete) or moderate their own review. They cannot touch another admin's or\n  an agent's account, approve a payment without a receipt in review, or leave a client on a panel that answers.\n  These guards protect only an admin's own account: two admins can do for each other what each is refused for\n  themselves, so give the role only to people you trust.\nThe admin paths are the panel paths, described once: tests/Support/ApiDescription expands each marked operation to\nits `/admin` path (the store key instead of the panel, the `customer` bearer scheme, the 401 and the 403).\n\n**Versioning.** The Store API's version is in its address: this is v1. Within v1 an answer only gains fields; no\nfield is removed, renamed or given another type, and a request keeps accepting what it accepted, so a website keeps\nworking across the shop's upgrades. A breaking change comes as v2, beside v1. Every refusal and failure uses the one\nerror shape; its `message` is written for the reader (the customer on the Store API, the admin on the panels).\n\n**The contract.** Both sides are checked against this file. Every request the PHP tests send and every answer they\nget must match it (tests/HttpTestCase); every route must be described here, and nothing else; every POST, PUT and\nPATCH describes its body or says it takes none (`x-no-body: true`) (tests/Unit/Http/ApiDescriptionTest); and the\npanels' TypeScript types are generated from it (`pnpm api:types` writes resources/panel/src/lib/api-types.ts).\nObjects are closed: a field the server sends, or a request carries, that is not described here fails the tests.\n"
+        "version": "0.4.0",
+        "description": "AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.\n\n**The panels.** `/api/admin/*` is the owner's panel and `/api/agent/*` an agent's; each has its own session. The\nowner signs in with the login kept in config.php and may work in any shop: each request names its shop in the\n`X-Shop` header (none means the main shop), and the session itself remembers no shop. An agent signs in with a\none-time link from the main bot and works only in their own bot's shop. Screens both panels have are described once,\nunder `/api/{panel}/…`; a screen only one panel has is under that panel's prefix. Panel requests send the session\ncookie, and a request that changes something also sends `X-Requested-With: XMLHttpRequest` (the CSRF guard).\n`/api/app` is public. `/api/install/*` answers only until the shop is installed, and only with the install key in\n`X-Install-Key` (the text of storage/install-key.txt, which the first request creates); without it the answer is a\n403 on `key`. Every answer carries its request id in `X-Request-Id`; an error answer also has it in its body\n(`request_id`), and every log line the request wrote carries the same id.\n\n**The Store API.** `/api/store/v1/{store}/*` is the API of a shop's own website (the main bot's or an agent's). The\nstore key in the path names the shop. A customer signs in (Telegram, Google, or an email and a password, plus a\nsecond step when two-factor sign-in is on) and gets a bearer token: the `customer` scheme, with no cookie, session or\nCSRF header. Pages on the website's origins may call it from a browser: preflight requests are answered, and every\nanswer, errors included, carries the CORS headers.\n- Public: the plans the bot sells now, the status of the servers they are sold on and, while the website shows\n  reviews, the approved reviews with their count and average rating. Anyone may then write a review: a guest\n  through the website's captcha (only signed-in customers while the website asks for no captcha). A review waits for\n  support's approval; sent with a bearer token, it belongs to that customer.\n- A signed-in customer manages their account: names, password, two-factor sign-in, the ways they sign in (adding one\n  that another account of the shop already has offers a merge, 202) and their signed-in devices. Changing how the\n  account signs in (the password, two-factor sign-in, a way in, a merge) also needs a sign-in from the last 15\n  minutes, else a 403 whose `WWW-Authenticate` says so; `POST /me/reauthenticate` proves a way in again. A bearer\n  token alone cannot change any of it, nor hand a service to another customer (`POST /subscriptions/{id}/transfer`\n  asks the same).\n- They read their own services (refreshed from the panel, auto-renewal switched, link changed), orders and\n  payments, wallet and ledger, referral numbers and notifications. They order through the bot's checkout (a plan, a\n  renewal, a wallet top-up, extra traffic, time or devices), each ordering request with an `Idempotency-Key`, and upload a\n  card transfer's receipt. They open support tickets, about a service or not, write with or without a picture, close\n  them, reopen them by writing, and rate them.\n- A form on the site itself (a contact form) may use the website's captcha too: the site's backend asks the shop to\n  check the widget's token (`POST /captcha/verify`), so the site never holds the captcha's secret.\n- Request bodies are JSON (`Content-Type: application/json`). A form is accepted only where a picture may be\n  uploaded (a receipt, a ticket message); any other body type is a 415.\n\n**The website's admin API.** `/api/store/v1/{store}/admin/*` gives the shop's admins (customers whose role is admin)\nthe shop's daily work on its website, with their bearer token. It has the panel operations marked `x-staff`: the\nmarker's value is the grant the operation needs, or `true` for none.\n- It answers only while the website lets admins in (`staff_enabled`).\n- While the website asks for a strong sign-in (`staff_strong_sign_in`), a session signed in with a password alone is\n  refused: it needs Telegram, Google, or a password with its second step (`POST /me/reauthenticate` can prove one).\n- Every operation needs a way in proven on the session within the last 12 hours: an admin's token lasts a working\n  day, not the months a customer's does.\n- An operation that names a grant works only while the website grants it (`staff_grants`), and it needs a sign-in\n  from the last 15 minutes. Approving a payment, which delivers a service, needs one too (`x-staff-recent`).\n- Each refusal is a 403 (`StaffRefused`). The shop's configuration (payment methods, the bot's settings, texts and\n  keyboards, the report group, the website, who the admins are) is not there at all (404).\n- An admin cannot act on themselves: approve or refund their own payment, adjust their own wallet, change their own\n  service (days and traffic, switch, move, transfer, delete) or moderate their own review. They cannot touch another admin's or\n  an agent's account, approve a payment without a receipt in review, or leave a client on a panel that answers.\n  These guards protect only an admin's own account: two admins can do for each other what each is refused for\n  themselves, so give the role only to people you trust.\nThe admin paths are the panel paths, described once: tests/Support/ApiDescription expands each marked operation to\nits `/admin` path (the store key instead of the panel, the `customer` bearer scheme, the 401 and the 403).\n\n**Versioning.** The Store API's version is in its address: this is v1. Within v1 an answer only gains fields; no\nfield is removed, renamed or given another type, and a request keeps accepting what it accepted, so a website keeps\nworking across the shop's upgrades. A breaking change comes as v2, beside v1. Every refusal and failure uses the one\nerror shape; its `message` is written for the reader (the customer on the Store API, the admin on the panels).\n\n**The contract.** Both sides are checked against this file. Every request the PHP tests send and every answer they\nget must match it (tests/HttpTestCase); every route must be described here, and nothing else; every POST, PUT and\nPATCH describes its body or says it takes none (`x-no-body: true`) (tests/Unit/Http/ApiDescriptionTest); and the\npanels' TypeScript types are generated from it (`pnpm api:types` writes resources/panel/src/lib/api-types.ts).\nObjects are closed: a field the server sends, or a request carries, that is not described here fails the tests.\n"
     },
     "paths": {
         "/health": {
@@ -3118,7 +3118,7 @@
             ],
             "post": {
                 "x-staff": "refunds",
-                "summary": "Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are.",
+                "summary": "Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -3157,7 +3157,7 @@
             ],
             "get": {
                 "x-staff": true,
-                "summary": "All the shop's services: sold, renewed or given, and the free test accounts (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.",
+                "summary": "All the shop's services: sold, renewed or given, the free test accounts, and those customers added by their link (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.",
                 "parameters": [
                     {
                         "$ref": "#/components/parameters/Search"
@@ -3467,6 +3467,78 @@
                 "responses": {
                     "204": {
                         "$ref": "#/components/responses/NoContent"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/{panel}/subscriptions/{id}/transfer": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Panel"
+                },
+                {
+                    "$ref": "#/components/parameters/Id"
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "get": {
+                "x-staff": "delete",
+                "summary": "«انتقال سرویس», before it is done: the shop's customer with this numeric Telegram id who would receive the service, so the form shows them before `POST`. The same refusals as `POST`, nothing changed.",
+                "parameters": [
+                    {
+                        "name": "telegram_id",
+                        "in": "query",
+                        "required": true,
+                        "description": "The recipient's numeric Telegram id (Persian digits are read too).",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Who would receive the service",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscriptionTransferRecipientResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            },
+            "post": {
+                "x-staff": "delete",
+                "summary": "Hand a service to another customer of the shop («انتقال سرویس»), found by their numeric Telegram id — support may whatever `transfer_enabled` says. The service keeps its link, term and traffic; its «تمدید خودکار» goes off; both customers are told in the bot — the new one, where its panel can change the link, that the previous one keeps it until they do; a renewal or an extra of it the previous customer left unpaid is cancelled, noted «سرویس این سفارش به حساب دیگری منتقل شد» (one whose receipt waits for review stays, and fails at its delivery), and the previous customer's message names them; the report group's «خریدها» topic hears of it; and its client on the panel takes the new customer's Telegram id and comment, its name unchanged (a panel that fails that is logged, and the transfer stands). A 422 on `status` for a free test account, a service gone from its panel, or one being changed on its panel right then (a delivery under way: try again in a moment); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the service's own customer, a banned account, or the admin themselves. A 403 for a shop admin's own service.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubscriptionTransferRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transferred; the service, its new customer on it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscriptionResponse"
+                                }
+                            }
+                        }
                     },
                     "default": {
                         "$ref": "#/components/responses/Error"
@@ -8224,6 +8296,122 @@
                 }
             }
         },
+        "/api/store/v1/{store}/custom-services": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                }
+            ],
+            "get": {
+                "summary": "«سرویس دلخواه»: what a customer may build — a service of the traffic and days they choose, on one of the builder's servers, with the builder's devices. Each quantity has its tiers (the whole quantity priced at the rate of the tier it falls into; the GB's price and the days' price added), its bounds and the amounts offered as buttons; any whole amount within the bounds may be chosen. `offered` says whether one may be built now: the main shop's alone, while its admin switches it on (off by default), both price lists sell and one of its servers can take a new client (`servers`, empty otherwise — and no tiers or buttons then). Anyone may read it; the customer's own price is `POST /custom-services/quote`.",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreCustomServicesResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/store/v1/{store}/custom-services/quote": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                }
+            ],
+            "post": {
+                "summary": "What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`.",
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreCustomQuoteRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreCustomQuoteResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/store/v1/{store}/custom-services/orders": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                }
+            ],
+            "post": {
+                "summary": "Buy a service the customer builds, paid with `method_id`: the same checkout as `POST /orders`, as the bot's «🛠 ساخت سرویس دلخواه» buys it, at `POST /custom-services/quote`'s price. The order is a purchase without a plan (`plan` null) carrying its own `traffic_bytes`, `days` and `devices`; once delivered, its service has no plan either. `server_id` may be left out while the builder sells on one server. The service is named as `POST /orders` names one (`name_mode`, `client_name`). A 422 on `status` while nothing may be built; on `gb` or `days` for an amount that is no whole number or outside its bounds; on `server_id` for none picked among several servers, or a server not on offer now; on `name_mode` or `client_name` as `POST /orders` refuses them; on `method_id` for a method that cannot pay it, or a wallet short of the price; on `discount_code` when it does not apply; on `idempotency_key` for a key used for a different order or first sent with another `method_id`. The 5 unpaid orders, the 409s, the 429 past 30 ordering requests in 10 minutes and the 503 while the bot is switched off are `POST /orders`' own. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.",
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreCustomOrderRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "The checkout's outcome",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreCheckoutResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/store/v1/{store}/reviews": {
             "parameters": [
                 {
@@ -8325,6 +8513,49 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/StoreSubscriptionsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/store/v1/{store}/subscriptions/claim": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                }
+            ],
+            "post": {
+                "summary": "Add a service to the customer's account by its link («افزودن سرویس با لینک»), as the bot does. `link` is the text the customer sent: a subscription link or one of the service's configs (vless://, vmess://, trojan://, ss://, hysteria2://, tuic://), alone or among other words; its links are read together, five at most. The shop asks its panels whose client it is and adds it as its panel has it, with no plan (`plan` null, `claimed_at` set) until its first renewal (`GET …/renewal-plans`); the report group is told. The first customer to send it gets it. Only while the shop offers it (`shop.service_claims` of `GET /`): the main shop's alone, off by default. Refusals are on `link`: a 422 while it is off, for text with no link in it (or longer than 2000 characters), for a link no panel has, for a service already the customer's own, or one whose panel serves it no subscription link; a 409 for a service already in another customer's account; a 502 when a panel that might have it did not answer. Each link sent asks every panel: at most 10 links in 10 minutes per customer, then a 429 with `Retry-After`.",
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreClaimRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Added: the service, as `GET /subscriptions/{id}` shows it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreSubscriptionResponse"
                                 }
                             }
                         }
@@ -8484,6 +8715,92 @@
                 }
             }
         },
+        "/api/store/v1/{store}/subscriptions/{id}/transfer": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                },
+                {
+                    "$ref": "#/components/parameters/Id"
+                }
+            ],
+            "get": {
+                "summary": "«انتقال سرویس», before it is done: who the shop's customer with this numeric Telegram id is (their Telegram name and handle), so the website asks the customer to confirm them before `POST`. The same refusals as `POST`, nothing changed. Each look-up counts: at most 10 in 10 minutes per customer, then a 429 with `Retry-After`.",
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "telegram_id",
+                        "in": "query",
+                        "required": true,
+                        "description": "The recipient's numeric Telegram id (Persian digits are read too).",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Who would receive the service",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreTransferRecipientResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            },
+            "post": {
+                "summary": "«انتقال سرویس»: hand the service to another customer of the shop, found by their numeric Telegram id, for free — as the bot does it. Only while the shop lets customers (`shop.service_transfers` of `GET /`, off by default). The service keeps its link, term and traffic and is the recipient's from now on (this customer's `GET /subscriptions/{id}` is a 404 after it); its «تمدید خودکار» goes off; the link goes with it, so this customer's devices stay connected until the recipient changes it (`POST /subscriptions/{id}/rotate-link`); the recipient is told in the bot and among their notices (`service_received`, which says so where the link can change) — this customer is not: the answer is theirs; the report group hears of it. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first): a bearer token alone gives no service away. A 422 on `status` while the shop does not offer it, for a free test account, a service gone from its panel or being changed on it right then (try again in a moment), or one with an order this customer made not finished with (a renewal or an extra awaiting its payment or receipt, or being delivered; an unpaid one is dropped by itself after 48 hours; one whose delivery failed waits for support, and its message says to ask them); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the customer themselves, or a banned account. It looks the recipient up as `GET` does (one of its 10 in 10 minutes); at most 5 services handed on an hour per customer, then a 429 with `Retry-After`.",
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubscriptionTransferRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transferred: who received the service",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreTransferRecipientResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/SignInAgain"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/store/v1/{store}/subscriptions/{id}/renewal": {
             "parameters": [
                 {
@@ -8494,10 +8811,44 @@
                 }
             ],
             "get": {
-                "summary": "Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, a free test account, its plan deleted or renewing nothing, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered).",
+                "summary": "Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows it: on the service's own plan, at that plan's price today, and the service as the renewal would leave it (its term, its traffic, and the unused traffic of the current period that expires when the period ends). A service without a plan (added by its link, `claimed_at`, or built) is renewed on a plan the customer picks, `plan_id`, among `GET …/renewal-plans`: a 422 on `plan_id` when none is picked, or one that is not among them. While the shop's builder is offered for it (`custom_services` of `GET …/renewal-plans`), it may be renewed instead with a package the customer builds, `gb` and `days` (as `POST /custom-services/quote` takes them; the answer's `custom`), which leaves it without a plan: a 422 on `status` while the builder is not offered, on `gb` or `days` as the builder refuses them or for a service renewed on its own plan, on `plan_id` sent with them. A 422 on `status` while it cannot be renewed (switched off by support, gone from its panel, a free test account, its plan renewing nothing, without a plan while neither a plan on sale is sold on its server nor the builder is offered, or in an agent's shop more than the agent's traffic covers), or while a renewal of it is in progress (its receipt is with support, or it is paid and being delivered). A 422 on `status` too while the shop does not let it be renewed yet (`renewal_window`), saying from when: «تمدید این سرویس از … ممکن است.». By the renewal method `method`, one of the shop's (`methods` in the answer; the first when left out): a 422 on `method` for one it does not offer.",
                 "security": [
                     {
                         "customer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "plan_id",
+                        "in": "query",
+                        "description": "For a service without a plan (`picks_plan`): the plan to renew it on, one of `GET …/renewal-plans`. For a service with its own plan it may be left out; sent, it must be that plan (a 422 on `plan_id` otherwise: the service got a plan since the page was drawn).",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "gb",
+                        "in": "query",
+                        "description": "For a service without a plan, instead of `plan_id` while the builder is offered for it: the GB of a package the customer builds, within the bounds of `GET /custom-services`. With `days`.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "days",
+                        "in": "query",
+                        "description": "With `gb`: the days of that package, within the bounds of `GET /custom-services`.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "method",
+                        "in": "query",
+                        "description": "The renewal method to preview by, one of the shop's (`methods`); left out, the first of them.",
+                        "schema": {
+                            "$ref": "#/components/schemas/RenewalMethod"
+                        }
                     }
                 ],
                 "responses": {
@@ -8520,7 +8871,7 @@
                 }
             },
             "post": {
-                "summary": "Renew a service, paid with `method_id`, as the GET previews it. The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key`, it returns the renewal that key made, as it is now.",
+                "summary": "Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now.",
                 "security": [
                     {
                         "customer": []
@@ -8561,6 +8912,42 @@
                 }
             }
         },
+        "/api/store/v1/{store}/subscriptions/{id}/renewal-plans": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                },
+                {
+                    "$ref": "#/components/parameters/Id"
+                }
+            ],
+            "get": {
+                "summary": "The plans a service can be renewed on now, each at the customer's renewal price today. For a service without a plan (added by its link, `claimed_at`, or built) that is no test account: the plans on sale that are sold on its server and give a renewal something, in the catalogue's order, for the customer to pick one (`plan_id` of `…/renewal`); the renewal makes it the service's plan. For any other service: its own plan. Empty — and `custom_services` false — while the service cannot be renewed now: not at all, not yet (its `renewal_window` closed), or a renewal of it under way (as `…/renewal` would refuse it). `custom_services` says whether a service without a plan may be renewed with a package the customer builds instead (`gb` and `days` of `…/renewal`).",
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreRenewalPlansResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/store/v1/{store}/subscriptions/{id}/extras": {
             "parameters": [
                 {
@@ -8571,7 +8958,7 @@
                 }
             ],
             "get": {
-                "summary": "The extra traffic and time a service can buy now. As the bot's «🔋 حجم اضافه» and «⏳ زمان اضافه» offer them, at the plan's own prices or else the shop's: each kind's preset amounts with their prices and, when there is a price per GB or per day, any amount within `custom`. A kind is null when none can be bought: the shop does not sell it, or the service cannot take it. (`StoreSubscription.extras` gives the same answer as one flag per kind; a refused POST explains why.)",
+                "summary": "The extra traffic, time and devices a service can buy now. As the bot's «🔋 حجم اضافه», «⏳ زمان اضافه» and «👥 کاربر اضافه» offer them, at the plan's own prices or else the shop's: each kind's preset amounts with their prices and, when there is a price per GB, day or device, any amount within `custom`. Devices are priced for 30 days and charged for the days left of the period in use (`days`), which they last; their prices here are already that share. A kind is null when none can be bought: the shop does not sell it, or the service cannot take it. (`StoreSubscription.extras` gives the same answer as one flag per kind; a refused POST explains why.)",
                 "security": [
                     {
                         "customer": []
@@ -8699,6 +9086,57 @@
                 }
             }
         },
+        "/api/store/v1/{store}/subscriptions/{id}/extra-devices": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                },
+                {
+                    "$ref": "#/components/parameters/Id"
+                }
+            ],
+            "post": {
+                "summary": "Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422 for five unpaid orders, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.",
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/IdempotencyKey"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreExtraDevicesRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "The checkout's outcome",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreCheckoutResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/store/v1/{store}/payment-methods": {
             "parameters": [
                 {
@@ -8717,7 +9155,7 @@
                         "name": "for",
                         "in": "query",
                         "required": true,
-                        "description": "The kind of order: a purchase, a renewal, a wallet top-up, or a service's extra traffic or time. Anything else is a 422 on `for`.",
+                        "description": "The kind of order: a purchase, a renewal, a wallet top-up, or a service's extra traffic, time or devices. Anything else is a 422 on `for`.",
                         "schema": {
                             "type": "string",
                             "enum": [
@@ -8725,7 +9163,8 @@
                                 "renewal",
                                 "wallet_topup",
                                 "extra_traffic",
-                                "extra_time"
+                                "extra_time",
+                                "extra_devices"
                             ]
                         }
                     }
@@ -8804,7 +9243,7 @@
                 }
             },
             "post": {
-                "summary": "Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.",
+                "summary": "Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.",
                 "security": [
                     {
                         "customer": []
@@ -11697,7 +12136,7 @@
             ],
             "post": {
                 "x-staff": "refunds",
-                "summary": "Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service, once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a renewal's or an extra's service switched off): then nothing is refunded. The service's own refusals (busy, too many panel operations) come as they are.",
+                "summary": "Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -11744,7 +12183,7 @@
             ],
             "get": {
                 "x-staff": true,
-                "summary": "All the shop's services: sold, renewed or given, and the free test accounts (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.",
+                "summary": "All the shop's services: sold, renewed or given, the free test accounts, and those customers added by their link (`kind` tells them apart). Newest first, or sorted by `sort` and `dir`.",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -12110,6 +12549,97 @@
                 "responses": {
                     "204": {
                         "$ref": "#/components/responses/NoContent"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StaffRefused"
+                    }
+                },
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ]
+            }
+        },
+        "/api/store/v1/{store}/admin/subscriptions/{id}/transfer": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                },
+                {
+                    "$ref": "#/components/parameters/Id"
+                }
+            ],
+            "get": {
+                "x-staff": "delete",
+                "summary": "«انتقال سرویس», before it is done: the shop's customer with this numeric Telegram id who would receive the service, so the form shows them before `POST`. The same refusals as `POST`, nothing changed.",
+                "responses": {
+                    "200": {
+                        "description": "Who would receive the service",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscriptionTransferRecipientResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StaffRefused"
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "telegram_id",
+                        "in": "query",
+                        "required": true,
+                        "description": "The recipient's numeric Telegram id (Persian digits are read too).",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ]
+            },
+            "post": {
+                "x-staff": "delete",
+                "summary": "Hand a service to another customer of the shop («انتقال سرویس»), found by their numeric Telegram id — support may whatever `transfer_enabled` says. The service keeps its link, term and traffic; its «تمدید خودکار» goes off; both customers are told in the bot — the new one, where its panel can change the link, that the previous one keeps it until they do; a renewal or an extra of it the previous customer left unpaid is cancelled, noted «سرویس این سفارش به حساب دیگری منتقل شد» (one whose receipt waits for review stays, and fails at its delivery), and the previous customer's message names them; the report group's «خریدها» topic hears of it; and its client on the panel takes the new customer's Telegram id and comment, its name unchanged (a panel that fails that is logged, and the transfer stands). A 422 on `status` for a free test account, a service gone from its panel, or one being changed on its panel right then (a delivery under way: try again in a moment); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the service's own customer, a banned account, or the admin themselves. A 403 for a shop admin's own service.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubscriptionTransferRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Transferred; the service, its new customer on it",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscriptionResponse"
+                                }
+                            }
+                        }
                     },
                     "default": {
                         "$ref": "#/components/responses/Error"
@@ -12863,7 +13393,7 @@
             "customer": {
                 "type": "http",
                 "scheme": "bearer",
-                "description": "A website customer's session: `Authorization: Bearer <token>`, with the token from their sign-in (64 hex characters), one per device. Once the session ends, every request with its token is a 401 with `WWW-Authenticate: Bearer`, and the customer signs in again. A session ends when the customer signs that device out (`POST /auth/logout`) or ends it from another device (`DELETE /me/sessions/{id}`); when their password is changed (`PUT /me/password`, or set by a merge: every session except the one that changed it) or reset (`POST /auth/password/reset` or its second step: every session); when support signs them out of every device from a panel; when a 21st session opens (the oldest ends: at most 20 per customer); after 30 days unused; and 180 days after the sign-in. A banned customer's token gets a 403. Changing how the account signs in also needs a recent sign-in: within 15 minutes, or a way in proven again since (`POST /me/reauthenticate`). Otherwise the answer is a 403 whose `WWW-Authenticate` says so (`Bearer error=\"insufficient_user_authentication\", max_age=900`)."
+                "description": "A website customer's session: `Authorization: Bearer <token>`, with the token from their sign-in (64 hex characters), one per device. Once the session ends, every request with its token is a 401 with `WWW-Authenticate: Bearer`, and the customer signs in again. A session ends when the customer signs that device out (`POST /auth/logout`) or ends it from another device (`DELETE /me/sessions/{id}`); when their password is changed (`PUT /me/password`, or set by a merge: every session except the one that changed it) or reset (`POST /auth/password/reset` or its second step: every session); when support signs them out of every device from a panel; when a 21st session opens (the oldest ends: at most 20 per customer); after 30 days unused; and 180 days after the sign-in. A banned customer's token gets a 403. Changing how the account signs in, and handing a service to another customer (`POST /subscriptions/{id}/transfer`), also need a recent sign-in: within 15 minutes, or a way in proven again since (`POST /me/reauthenticate`). Otherwise the answer is a 403 whose `WWW-Authenticate` says so (`Bearer error=\"insufficient_user_authentication\", max_age=900`)."
             }
         },
         "parameters": {
@@ -13068,7 +13598,7 @@
                 }
             },
             "SignInAgain": {
-                "description": "The session's sign-in is too old to change how the account signs in. The message is «برای این کار دوباره وارد شوید.»; proving a way in again (`POST /me/reauthenticate`) allows it for 15 minutes. (A banned customer's 403 says so in its message, without this header.)",
+                "description": "The session's sign-in is too old to change how the account signs in, or to hand a service to another customer. The message is «برای این کار دوباره وارد شوید.»; proving a way in again (`POST /me/reauthenticate`) allows it for 15 minutes. (A banned customer's 403 says so in its message, without this header.)",
                 "headers": {
                     "WWW-Authenticate": {
                         "description": "`Bearer error=\"insufficient_user_authentication\", max_age=900` (RFC 9470): the sign-in may be at most this many seconds old.",
@@ -15259,7 +15789,7 @@
                 "description": "Which price a purchase or renewal was made at: `regular`, the plan's price (also used for every other order type); `first_purchase`, its first-purchase price («قیمت خرید اول», for a customer who had bought no service); `agent`, its agent price («قیمت نماینده», for an agent or a member of a group with agent prices); or `gift`, free (a prize, or a service from a gift code or referral reward)."
             },
             "OrderType": {
-                "description": "What an order buys: a plan (`purchase`), a service's `renewal`, a `wallet_topup`, `traffic` for an agent's bot (main bot only), or `extra_traffic` or `extra_time` for an existing service.",
+                "description": "What an order buys: a plan (`purchase`), a service's `renewal`, a `wallet_topup`, `traffic` for an agent's bot (main bot only), or `extra_traffic`, `extra_time` or `extra_devices` for an existing service.",
                 "type": "string",
                 "enum": [
                     "purchase",
@@ -15267,7 +15797,8 @@
                     "wallet_topup",
                     "traffic",
                     "extra_traffic",
-                    "extra_time"
+                    "extra_time",
+                    "extra_devices"
                 ]
             },
             "RecentOrder": {
@@ -15297,7 +15828,8 @@
                     },
                     "plan": {
                         "type": "string",
-                        "nullable": true
+                        "nullable": true,
+                        "description": "Its plan's name — a service the customer built in words, «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز» —; null for an order of neither."
                     },
                     "user": {
                         "$ref": "#/components/schemas/UserRef"
@@ -15798,7 +16330,7 @@
                     "description": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid), or a refund's note (also in `refund_note`)."
+                        "description": "The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), or a refund's note (also in `refund_note`)."
                     },
                     "user": {
                         "$ref": "#/components/schemas/UserRef"
@@ -15815,6 +16347,7 @@
                             "subscription_id",
                             "traffic_bytes",
                             "days",
+                            "devices",
                             "notes",
                             "discount_amount",
                             "discounts",
@@ -15832,7 +16365,8 @@
                             },
                             "plan": {
                                 "type": "string",
-                                "nullable": true
+                                "nullable": true,
+                                "description": "What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order."
                             },
                             "server": {
                                 "type": "string",
@@ -15845,12 +16379,17 @@
                             "traffic_bytes": {
                                 "type": "integer",
                                 "nullable": true,
-                                "description": "The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise."
+                                "description": "The traffic it adds, in bytes: an agent's traffic, a service's extra traffic, or a built service's traffic; null otherwise."
                             },
                             "days": {
                                 "type": "integer",
                                 "nullable": true,
-                                "description": "The days it adds to a service (extra time); null otherwise."
+                                "description": "The days it adds to a service (extra time), or a built service's term; null otherwise."
+                            },
+                            "devices": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "The devices it adds to a service's IP limit (extra devices), or a built service's limit; null otherwise."
                             },
                             "notes": {
                                 "type": "string",
@@ -16087,10 +16626,13 @@
                     "discount_code",
                     "user",
                     "plan",
+                    "package_name",
+                    "renewal_method",
                     "server",
                     "subscription",
                     "traffic_bytes",
                     "days",
+                    "devices",
                     "notes",
                     "payments",
                     "paid_at",
@@ -16146,6 +16688,18 @@
                         "nullable": true,
                         "description": "The plan of a purchase or renewal; for extras, the service's plan."
                     },
+                    "package_name": {
+                        "$ref": "#/components/schemas/OrderPackageName"
+                    },
+                    "renewal_method": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RenewalMethod"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "How a renewal adds its package (a renewal from before renewal methods, `extend`); null for any other order."
+                    },
                     "server": {
                         "allOf": [
                             {
@@ -16180,12 +16734,17 @@
                     "traffic_bytes": {
                         "type": "integer",
                         "nullable": true,
-                        "description": "The traffic it adds, in bytes: an agent's traffic or a service's extra traffic; null otherwise."
+                        "description": "The traffic it adds, in bytes: an agent's traffic, a service's extra traffic, or a built service's traffic; null otherwise."
                     },
                     "days": {
                         "type": "integer",
                         "nullable": true,
-                        "description": "The days it adds to a service (extra time); null otherwise."
+                        "description": "The days it adds to a service (extra time), or a built service's term; null otherwise."
+                    },
+                    "devices": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "The devices it adds to a service's IP limit (extra devices), or a built service's limit; null otherwise."
                     },
                     "notes": {
                         "type": "string",
@@ -16391,6 +16950,7 @@
                     "name",
                     "link",
                     "is_test",
+                    "claimed_at",
                     "user",
                     "plan",
                     "server",
@@ -16400,6 +16960,7 @@
                     "duration_hours",
                     "auto_renew",
                     "next_period",
+                    "next_devices",
                     "starts_at",
                     "expires_at",
                     "expiring_soon",
@@ -16429,6 +16990,12 @@
                         "type": "boolean",
                         "description": "A free test account («اکانت تست»): no plan, never renewed, never counted as ending soon (`expiring_soon`); removed by the tests' own rule (`removes_at`)."
                     },
+                    "claimed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the customer added it by sending its link («افزودن سرویس با لینک», `claim_enabled`): a client made by hand on its panel. Null for any other service. Such a service has no plan until a renewal on one the customer picks, sold on its server (a renewal with a package built leaves it without)."
+                    },
                     "user": {
                         "$ref": "#/components/schemas/UserRef"
                     },
@@ -16439,7 +17006,7 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "Null for a test account, or once the plan is deleted."
+                        "description": "Null for a service without a plan — a test account, a service added by its link (`claimed_at`) or built by the customer («سرویس دلخواه»), until a renewal on a plan; one renewed with a package built stays so — and once the plan is deleted."
                     },
                     "server": {
                         "$ref": "#/components/schemas/NamedRef"
@@ -16480,7 +17047,7 @@
                     "next_period": {
                         "type": "object",
                         "nullable": true,
-                        "description": "A renewal queued after the current period (unused traffic of the current period is not carried over): when it starts, and the most traffic left then, in bytes.",
+                        "description": "A renewal queued after the current period (unused traffic of the current period is not carried over): when it starts, and the most traffic left then, in bytes. Null while no traffic cap waits for it — a renewal may still have queued its device limit alone (`next_devices`).",
                         "additionalProperties": false,
                         "required": [
                             "starts_at",
@@ -16495,6 +17062,15 @@
                                 "type": "integer"
                             }
                         }
+                    },
+                    "next_devices": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/NextDevices"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "A renewal's device limit queued after the current period: a running service renewed by `extend` or `reset_traffic` keeps the devices it has (extra devices bought included) until the period in use ends, and has the renewal's from then. Null while the limit stays as `ip_limit` says."
                     },
                     "starts_at": {
                         "type": "string",
@@ -16548,6 +17124,7 @@
                             "disable",
                             "enable",
                             "move",
+                            "transfer",
                             "delete",
                             "extend"
                         ],
@@ -16563,6 +17140,10 @@
                             },
                             "move": {
                                 "type": "boolean"
+                            },
+                            "transfer": {
+                                "type": "boolean",
+                                "description": "Handing it to another customer («انتقال سرویس»): anything but a free test account or a service gone from its panel."
                             },
                             "delete": {
                                 "type": "boolean"
@@ -16623,7 +17204,7 @@
                 }
             },
             "SubscriptionDeleteRequest": {
-                "description": "Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable.",
+                "description": "Delete a service from its panel and from the shop, permanently. The customer is notified only if the service was still active; the note goes with that message. `leave_panel` deletes it without contacting the panel (when it is unreachable); the client stays there. In an agent's shop this is allowed only while that panel is unreachable; the owner in the main shop may always (not the website's admins, who need the panel out of reach as any other shop's), which is how a service added by its link to the wrong customer (`SubscriptionRow.claimed_at`) is taken back for the right one to send its link again.",
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
@@ -16635,12 +17216,43 @@
                     }
                 }
             },
+            "SubscriptionTransferRequest": {
+                "description": "«انتقال سرویس»: whom to hand the service to — a customer of the shop, by their numeric Telegram id; they must have started the bot once.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "telegram_id"
+                ],
+                "properties": {
+                    "telegram_id": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "Their numeric Telegram id: a number, or its digits as typed."
+                    }
+                }
+            },
+            "SubscriptionTransferRecipientResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "recipient"
+                ],
+                "properties": {
+                    "recipient": {
+                        "$ref": "#/components/schemas/UserRef"
+                    }
+                }
+            },
             "SubscriptionKind": {
-                "description": "The services list's `kind` filter: the free test accounts (`test`), or every other service — sold, renewed or given (`regular`).",
+                "description": "The services list's `kind` filter: the free test accounts (`test`), the services customers added by their link (`claimed`, «افزودن سرویس با لینک»: `SubscriptionRow.claimed_at` set), or every other service — sold, renewed or given (`regular`: neither a test nor a claimed one).",
                 "type": "string",
                 "enum": [
                     "test",
-                    "regular"
+                    "regular",
+                    "claimed"
                 ]
             },
             "SubscriptionSort": {
@@ -19922,7 +20534,7 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "The plan's own prices for extra traffic and time; null to use the shop's (the bot settings' `extra_…`)."
+                        "description": "The plan's own prices for extra traffic, time and devices; null to use the shop's (the bot settings' `extra_…`)."
                     },
                     "servers": {
                         "type": "array",
@@ -20208,7 +20820,7 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "The plan's own prices for extra traffic and time; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one."
+                        "description": "The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one."
                     },
                     "category_id": {
                         "allOf": [
@@ -22274,14 +22886,15 @@
                     }
                 }
             },
-            "CashbackOrderType": {
-                "description": "An order type a cashback rule can apply to: things a customer buys for themselves.",
+            "OwnOrderType": {
+                "description": "An order type a customer buys for themselves — what a discount and a cashback rule can apply to, and what loyalty and the nightly draw count: never a wallet top-up or an agent's traffic.",
                 "type": "string",
                 "enum": [
                     "purchase",
                     "renewal",
                     "extra_traffic",
-                    "extra_time"
+                    "extra_time",
+                    "extra_devices"
                 ]
             },
             "CashbackRuleRow": {
@@ -22306,7 +22919,7 @@
                     "order_types": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/components/schemas/CashbackOrderType"
+                            "$ref": "#/components/schemas/OwnOrderType"
                         }
                     },
                     "customer_group": {
@@ -22395,7 +23008,7 @@
                     "order_types": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/components/schemas/CashbackOrderType"
+                            "$ref": "#/components/schemas/OwnOrderType"
                         },
                         "description": "At least one."
                     },
@@ -22560,16 +23173,6 @@
                     }
                 }
             },
-            "DiscountKind": {
-                "description": "The order types a discount can apply to: things a customer buys for themselves, never a wallet top-up or an agent's traffic.",
-                "type": "string",
-                "enum": [
-                    "purchase",
-                    "renewal",
-                    "extra_traffic",
-                    "extra_time"
-                ]
-            },
             "DiscountType": {
                 "description": "What a discount code takes off: a `percent` of the amount (capped at `max_discount` Toman when set), a `fixed` number of Toman (never more than the amount), or the whole amount (`free`).",
                 "type": "string",
@@ -22647,6 +23250,11 @@
                     }
                 }
             },
+            "OrderPackageName": {
+                "description": "What a purchase or a renewal buys, in words — the one wording the bot and the report group use too: its plan's name, or a service the customer built («سرویس دلخواه») as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز». Extra traffic, time or devices: its service's plan's name (null for a service without a plan). Null for any other order (a wallet top-up, an agent's traffic).",
+                "type": "string",
+                "nullable": true
+            },
             "DiscountCodeRow": {
                 "description": "A discount code («کد تخفیف») a customer types at checkout, in the bot or on the website. Stored and matched in upper case.",
                 "type": "object",
@@ -22706,7 +23314,7 @@
                         "type": "array",
                         "nullable": true,
                         "items": {
-                            "$ref": "#/components/schemas/DiscountKind"
+                            "$ref": "#/components/schemas/OwnOrderType"
                         },
                         "description": "The order types it applies to; null for every type a discount can apply to."
                     },
@@ -22852,7 +23460,7 @@
                         "type": "array",
                         "nullable": true,
                         "items": {
-                            "$ref": "#/components/schemas/DiscountKind"
+                            "$ref": "#/components/schemas/OwnOrderType"
                         },
                         "description": "At least one; null (or all of them) for every type."
                     },
@@ -22951,7 +23559,7 @@
                         "type": "array",
                         "nullable": true,
                         "items": {
-                            "$ref": "#/components/schemas/DiscountKind"
+                            "$ref": "#/components/schemas/OwnOrderType"
                         },
                         "description": "Null for every type a discount can apply to."
                     },
@@ -23038,7 +23646,7 @@
                         "type": "array",
                         "nullable": true,
                         "items": {
-                            "$ref": "#/components/schemas/DiscountKind"
+                            "$ref": "#/components/schemas/OwnOrderType"
                         },
                         "description": "At least one; null (or all of them) for every type."
                     },
@@ -23088,6 +23696,10 @@
                     "extra_time_options",
                     "extra_time_min",
                     "extra_time_max",
+                    "extra_devices_price",
+                    "extra_devices_options",
+                    "extra_devices_min",
+                    "extra_devices_max",
                     "expiry_reminder",
                     "expiry_reminder_days",
                     "traffic_reminder",
@@ -23102,6 +23714,17 @@
                     "test_cleanup",
                     "test_cleanup_hours",
                     "test_unused_days",
+                    "renew_window_days",
+                    "renew_window_percent",
+                    "renew_extend",
+                    "renew_reset_traffic",
+                    "renew_reset_time",
+                    "renew_default_method",
+                    "transfer_enabled",
+                    "name_pattern",
+                    "test_name_pattern",
+                    "name_random",
+                    "name_custom",
                     "referral_enabled",
                     "referral_rate",
                     "referral_renewal_rate",
@@ -23175,7 +23798,35 @@
                     },
                     "carry_traffic": {
                         "type": "boolean",
-                        "description": "«تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends)."
+                        "description": "«تمدید سرویس»: whether a period's unused traffic is added to the renewed period (otherwise it expires when the period ends) — by the renewal method `extend` («تمدید پلن فعلی»)."
+                    },
+                    "renew_window_days": {
+                        "type": "integer",
+                        "description": "«تمدید سرویس»: a customer may renew a running service only within this many days of its deadline (or with at most `renew_window_percent` of its traffic left, or once it ended); 0 — no such rule, and with `renew_window_percent` 0 too, any time. A service with no deadline yet (waiting for its first connection) or none at all is let in by its traffic alone. Automatic renewal goes by its own days."
+                    },
+                    "renew_window_percent": {
+                        "type": "integer",
+                        "description": "A customer may renew a running service once at most this percent of its traffic is left (beside `renew_window_days`); 0 — however much is left."
+                    },
+                    "renew_extend": {
+                        "type": "boolean",
+                        "description": "Renewal method «تمدید پلن فعلی» offered: the term on top of what is left, the traffic as `carry_traffic` says."
+                    },
+                    "renew_reset_traffic": {
+                        "type": "boolean",
+                        "description": "Renewal method «ریست حجم + افزایش روز» offered: the term on top of what is left, the traffic counted afresh (what was left is lost)."
+                    },
+                    "renew_reset_time": {
+                        "type": "boolean",
+                        "description": "Renewal method «ریست زمان + انتقال حجم» offered: the term starts afresh (what was left of it is lost), the traffic left carries over. With more than one method on, the customer picks; with none on, `extend` is what renews."
+                    },
+                    "renew_default_method": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RenewalMethod"
+                            }
+                        ],
+                        "description": "The method automatic renewal uses (the first one offered while this one is not). By `reset_time` it waits for the last half hour before the end, so the days left are not lost; a wallet short of it is still told `auto_renew_days` ahead."
                     },
                     "auto_renew_days": {
                         "type": "integer",
@@ -23187,7 +23838,7 @@
                     },
                     "extras_enabled": {
                         "type": "boolean",
-                        "description": "«حجم و زمان اضافه»: whether customers can buy extra traffic and time for their services, at these prices or a plan's own (`PlanRow.extras`). When off, none is sold."
+                        "description": "«حجم، زمان و کاربر اضافه»: whether customers can buy extra traffic, time and devices («کاربر اضافه») for their services, at these prices or a plan's own (`PlanRow.extras`). When off, none is sold."
                     },
                     "extra_traffic_price": {
                         "type": "string",
@@ -23228,6 +23879,26 @@
                     "extra_time_max": {
                         "type": "integer",
                         "description": "The most custom days."
+                    },
+                    "extra_devices_price": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The shop's price per extra device (the service's IP limit) for 30 days, in Toman, charged for the days left of a service's period in use, which they last; null when only the preset counts with their own prices are sold (no custom count)."
+                    },
+                    "extra_devices_options": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExtraOption"
+                        },
+                        "description": "The device counts offered as buttons, fewest first."
+                    },
+                    "extra_devices_min": {
+                        "type": "integer",
+                        "description": "The fewest custom devices (needs a price per device)."
+                    },
+                    "extra_devices_max": {
+                        "type": "integer",
+                        "description": "The most custom devices."
                     },
                     "expiry_reminder": {
                         "type": "boolean",
@@ -23282,6 +23953,89 @@
                     "test_unused_days": {
                         "type": "integer",
                         "description": "While `test_cleanup` is on, after how many days a test that never connected is removed (its hours wait for the first connection); 0 never."
+                    },
+                    "claim_enabled": {
+                        "type": "boolean",
+                        "description": "«افزودن سرویس با لینک», main shop only, always present there (an agent's shop has no such switch, nor the `service_claims` group): customers can add a client made by hand on a panel to their «سرویس‌های من» by sending the bot (or the website) its subscription link or one of its configs. The first to send it gets it, and each claim is reported in the report group's «خریدها» topic; a wrong one is fixed by deleting the service from the shop only (`leave_panel`), so the right customer can send it again. A claimed service (`SubscriptionRow.claimed_at`) has no plan until its first renewal, when the customer picks one sold on its server. Off by default."
+                    },
+                    "transfer_enabled": {
+                        "type": "boolean",
+                        "description": "«انتقال سرویس»: customers may hand one of their services to another customer of the shop by their Telegram id (support transfers from the panels whatever this says). Off by default."
+                    },
+                    "name_pattern": {
+                        "type": "string",
+                        "description": "«نام کاربری سرویس»: the pattern a sold service's client is named by on its panel, of the variables `BotSettingsResponse.name_variables` lists and the characters a panel takes (letters, digits, `_ - . @`); `{username}_{seq}` by default."
+                    },
+                    "test_name_pattern": {
+                        "type": "string",
+                        "description": "The pattern a free test's client is named by; `test_{username}_{seq}` by default."
+                    },
+                    "name_random": {
+                        "type": "boolean",
+                        "description": "A buyer may take a random name for their new service instead of the pattern."
+                    },
+                    "name_custom": {
+                        "type": "boolean",
+                        "description": "A buyer may type the name of their new service (letters, digits, `_` and `-`, 3 to 32) instead of the pattern."
+                    },
+                    "custom_enabled": {
+                        "type": "boolean",
+                        "description": "«سرویس دلخواه», main shop only, always present there: customers build a service of the traffic and days they choose, each priced by its tiers, on `custom_servers`. Off by default."
+                    },
+                    "custom_traffic_tiers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PriceTier"
+                        },
+                        "description": "The price of a GB by tiers, the smallest `from` first: a built service's GB are priced whole at the tier they fall into."
+                    },
+                    "custom_traffic_min": {
+                        "type": "integer",
+                        "description": "The least GB a customer may build."
+                    },
+                    "custom_traffic_max": {
+                        "type": "integer",
+                        "description": "The most GB a customer may build."
+                    },
+                    "custom_traffic_options": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "GB amounts offered as buttons, smallest first."
+                    },
+                    "custom_days_tiers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PriceTier"
+                        },
+                        "description": "The price of a day by tiers, the smallest `from` first."
+                    },
+                    "custom_days_min": {
+                        "type": "integer",
+                        "description": "The least days a customer may build."
+                    },
+                    "custom_days_max": {
+                        "type": "integer",
+                        "description": "The most days a customer may build."
+                    },
+                    "custom_days_options": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "Day counts offered as buttons, smallest first."
+                    },
+                    "custom_devices": {
+                        "type": "integer",
+                        "description": "Devices at once on a built service; 0 — unlimited."
+                    },
+                    "custom_servers": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "The servers a customer may build on, by id."
                     },
                     "referral_enabled": {
                         "type": "boolean",
@@ -23483,6 +24237,10 @@
                     "reminders",
                     "expired_services",
                     "test_accounts",
+                    "service_claims",
+                    "service_transfers",
+                    "client_names",
+                    "custom_services",
                     "referral",
                     "reports",
                     "qr",
@@ -23498,7 +24256,8 @@
                 "additionalProperties": false,
                 "required": [
                     "settings",
-                    "qr_background"
+                    "qr_background",
+                    "name_variables"
                 ],
                 "properties": {
                     "settings": {
@@ -23506,6 +24265,33 @@
                     },
                     "qr_background": {
                         "$ref": "#/components/schemas/QrBackgroundInfo"
+                    },
+                    "name_variables": {
+                        "type": "array",
+                        "description": "«نام کاربری سرویس»: the variables `name_pattern` and `test_name_pattern` may hold, in the order a hint lists them. A pattern must hold `n` or `random`, or `seq` beside `username`, `tg_id` or `user_id`, so no two services are named alike.",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                                "name",
+                                "description",
+                                "example"
+                            ],
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "Written in braces in a pattern: `{username}`."
+                                },
+                                "description": {
+                                    "type": "string",
+                                    "description": "What it stands for, in Persian."
+                                },
+                                "example": {
+                                    "type": "string",
+                                    "description": "Its value for a sample customer (@amir's third service, the shop's 128th; `date` today on the shop's clock), for the name a pattern would give as it is typed."
+                                }
+                            }
+                        }
                     }
                 }
             },
@@ -23576,6 +24362,18 @@
                     },
                     {
                         "$ref": "#/components/schemas/BotTestAccountsSettingsRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BotServiceClaimsSettingsRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BotServiceTransfersSettingsRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BotClientNamesSettingsRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BotCustomServicesSettingsRequest"
                     },
                     {
                         "$ref": "#/components/schemas/BotReferralSettingsRequest"
@@ -23824,6 +24622,200 @@
                     }
                 }
             },
+            "BotServiceClaimsSettingsRequest": {
+                "description": "«افزودن سرویس با لینک»: the switch (`BotSettingsData.claim_enabled`); a 404 in an agent's shop, which has no such group.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "claim_enabled"
+                ],
+                "properties": {
+                    "claim_enabled": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "BotServiceTransfersSettingsRequest": {
+                "description": "«انتقال سرویس»: the customers' switch (`BotSettingsData.transfer_enabled`).",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "transfer_enabled"
+                ],
+                "properties": {
+                    "transfer_enabled": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "BotClientNamesSettingsRequest": {
+                "description": "«نام کاربری سرویس»: the patterns and the buyers' choices. A pattern left blank is its default; one with an unknown variable, another character, or neither `{n}` nor `{random}` nor `{seq}` beside `{username}`, `{tg_id}` or `{user_id}` (`{seq}` alone names every customer's first service alike) is refused under its field.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "name_random",
+                    "name_custom"
+                ],
+                "properties": {
+                    "name_pattern": {
+                        "type": "string",
+                        "description": "At most 48 characters."
+                    },
+                    "test_name_pattern": {
+                        "type": "string",
+                        "description": "At most 48 characters."
+                    },
+                    "name_random": {
+                        "type": "boolean"
+                    },
+                    "name_custom": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "BotCustomServicesSettingsRequest": {
+                "description": "«سرویس دلخواه»: the switch, the tiers, the bounds, the buttons, the devices and the servers; a 404 in an agent's shop, which has no such group. Every refusal is returned at once, under its field.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "custom_enabled",
+                    "custom_traffic_min",
+                    "custom_traffic_max",
+                    "custom_days_min",
+                    "custom_days_max",
+                    "custom_devices"
+                ],
+                "properties": {
+                    "custom_enabled": {
+                        "type": "boolean"
+                    },
+                    "custom_traffic_tiers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PriceTierInput"
+                        },
+                        "description": "`from` 1 to 10000 GB, each once, at most 10; left out for none."
+                    },
+                    "custom_traffic_min": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "1 to 10000 GB."
+                    },
+                    "custom_traffic_max": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "`custom_traffic_min` to 10000 GB."
+                    },
+                    "custom_traffic_options": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/NumbersInput"
+                            }
+                        ],
+                        "description": "1 to 10000 GB, at most 8."
+                    },
+                    "custom_days_tiers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PriceTierInput"
+                        },
+                        "description": "`from` 1 to 365 days, each once, at most 10; left out for none."
+                    },
+                    "custom_days_min": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "1 to 365 days."
+                    },
+                    "custom_days_max": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "`custom_days_min` to 365 days."
+                    },
+                    "custom_days_options": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/NumbersInput"
+                            }
+                        ],
+                        "description": "1 to 365 days, at most 8."
+                    },
+                    "custom_devices": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "0 to 100; 0 — unlimited."
+                    },
+                    "custom_servers": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/NumbersInput"
+                            }
+                        ],
+                        "description": "Server ids, at most 50."
+                    }
+                }
+            },
+            "PriceTier": {
+                "description": "A tier of a price: from `from` units on, `price` Toman a unit.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "from",
+                    "price"
+                ],
+                "properties": {
+                    "from": {
+                        "type": "integer"
+                    },
+                    "price": {
+                        "type": "string"
+                    }
+                }
+            },
+            "PriceTierInput": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "from": {
+                        "$ref": "#/components/schemas/WholeNumberInput"
+                    },
+                    "price": {
+                        "$ref": "#/components/schemas/AmountInput"
+                    }
+                }
+            },
+            "RenewalMethod": {
+                "description": "How a renewal adds its package: `extend` «تمدید پلن فعلی» (the term on top of what is left; the traffic as the shop carries unused traffic or not), `reset_traffic` «ریست حجم + افزایش روز» (the term on top; the traffic counted afresh), `reset_time` «ریست زمان + انتقال حجم» (the term afresh; the traffic left carried over).",
+                "type": "string",
+                "enum": [
+                    "extend",
+                    "reset_traffic",
+                    "reset_time"
+                ]
+            },
+            "ClientNameMode": {
+                "description": "How a buyer has their new service named: `sequential` by the shop's pattern, `random`, or `custom` (the name they type) — the latter two while the shop offers them.",
+                "type": "string",
+                "enum": [
+                    "sequential",
+                    "random",
+                    "custom"
+                ]
+            },
             "BotGeneralSettingsRequest": {
                 "type": "object",
                 "additionalProperties": false,
@@ -23885,11 +24877,51 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
-                    "carry_traffic"
+                    "carry_traffic",
+                    "renew_window_days",
+                    "renew_window_percent",
+                    "renew_extend",
+                    "renew_reset_traffic",
+                    "renew_reset_time",
+                    "renew_default_method"
                 ],
                 "properties": {
                     "carry_traffic": {
                         "type": "boolean"
+                    },
+                    "renew_window_days": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "0 to 365; 0 — any time."
+                    },
+                    "renew_window_percent": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "0 to 100; 0 — off."
+                    },
+                    "renew_extend": {
+                        "type": "boolean",
+                        "description": "At least one method must be on: a save with none is a 422 on `renew_extend`."
+                    },
+                    "renew_reset_traffic": {
+                        "type": "boolean"
+                    },
+                    "renew_reset_time": {
+                        "type": "boolean"
+                    },
+                    "renew_default_method": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RenewalMethod"
+                            }
+                        ],
+                        "description": "One of the methods on (a 422 otherwise)."
                     }
                 }
             },
@@ -23915,7 +24947,7 @@
                 }
             },
             "BotExtrasSettingsRequest": {
-                "description": "«حجم و زمان اضافه»: the switch and the shop's price list (ExtraPricesRequest's fields, each prefixed `extra_`).",
+                "description": "«حجم، زمان و کاربر اضافه»: the switch and the shop's price list (ExtraPricesRequest's fields, each prefixed `extra_`).",
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
@@ -23923,7 +24955,9 @@
                     "extra_traffic_min",
                     "extra_traffic_max",
                     "extra_time_min",
-                    "extra_time_max"
+                    "extra_time_max",
+                    "extra_devices_min",
+                    "extra_devices_max"
                 ],
                 "properties": {
                     "extras_enabled": {
@@ -23992,11 +25026,43 @@
                             }
                         ],
                         "description": "`extra_time_min` to 365 days."
+                    },
+                    "extra_devices_price": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "Whole Toman per device for 30 days, above zero. Blank, null or left out for none: only the preset counts with their own prices are sold."
+                    },
+                    "extra_devices_options": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExtraOptionInput"
+                        },
+                        "description": "Device counts, 1 to 20, each once, at most 8. Left out for none."
+                    },
+                    "extra_devices_min": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "1 to 20 devices."
+                    },
+                    "extra_devices_max": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "`extra_devices_min` to 20 devices."
                     }
                 }
             },
             "ExtraOption": {
-                "description": "An amount of extra traffic (GB) or time (days) offered as a button, at its own price or at the price per GB or day.",
+                "description": "An amount of extra traffic (GB), time (days) or devices offered as a button, at its own price or at the price per GB, day or device (a device's prices are for 30 days, prorated when sold).",
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
@@ -24010,7 +25076,7 @@
                     "price": {
                         "type": "string",
                         "nullable": true,
-                        "description": "Toman; null to charge the price per GB or day times the quantity."
+                        "description": "Toman; null to charge the price per GB, day or device times the quantity."
                     }
                 }
             },
@@ -24030,7 +25096,7 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "GB or days."
+                        "description": "GB, days or devices."
                     },
                     "price": {
                         "allOf": [
@@ -24039,12 +25105,12 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "Whole Toman, above zero. Blank or null to use the price per GB or day (which must then be set)."
+                        "description": "Whole Toman, above zero. Blank or null to use the price per GB, day or device (which must then be set)."
                     }
                 }
             },
             "ExtraPrices": {
-                "description": "A plan's own price list for extra traffic and time (the shop's list is BotSettingsData's `extra_…` fields). For each kind: the unit price, the preset amounts, and the smallest and largest custom amount.",
+                "description": "A plan's own price list for extra traffic, time and devices (the shop's list is BotSettingsData's `extra_…` fields). For each kind: the unit price, the preset amounts, and the smallest and largest custom amount. A device's prices are for 30 days, charged for the days a service has left.",
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
@@ -24055,7 +25121,11 @@
                     "time_price",
                     "time_options",
                     "time_min",
-                    "time_max"
+                    "time_max",
+                    "devices_price",
+                    "devices_options",
+                    "devices_min",
+                    "devices_max"
                 ],
                 "properties": {
                     "traffic_price": {
@@ -24092,6 +25162,24 @@
                         "type": "integer"
                     },
                     "time_max": {
+                        "type": "integer"
+                    },
+                    "devices_price": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "Toman per device for 30 days; null when only the preset counts with their own prices are sold (no custom count)."
+                    },
+                    "devices_options": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExtraOption"
+                        },
+                        "description": "Fewest devices first."
+                    },
+                    "devices_min": {
+                        "type": "integer"
+                    },
+                    "devices_max": {
                         "type": "integer"
                     }
                 }
@@ -24170,6 +25258,38 @@
                             }
                         ],
                         "description": "`time_min` to 365 days."
+                    },
+                    "devices_price": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "Whole Toman per device for 30 days, above zero. Blank, null or left out for none."
+                    },
+                    "devices_options": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExtraOptionInput"
+                        },
+                        "description": "Device counts, 1 to 20, each once, at most 8. Left out for none."
+                    },
+                    "devices_min": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "1 to 20 devices; left out, 1 (a list sent as before 0.4.0 sold devices)."
+                    },
+                    "devices_max": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "`devices_min` to 20 devices; left out, 5."
                     }
                 }
             },
@@ -26139,7 +27259,7 @@
                 }
             },
             "StaffGrant": {
-                "description": "What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).",
+                "description": "What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `extend` (add days and traffic to a service), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).",
                 "type": "string",
                 "enum": [
                     "catalog",
@@ -26330,7 +27450,11 @@
                         "required": [
                             "name",
                             "bot",
-                            "taking_orders"
+                            "taking_orders",
+                            "service_claims",
+                            "service_transfers",
+                            "custom_services",
+                            "name_modes"
                         ],
                         "properties": {
                             "name": {
@@ -26340,6 +27464,25 @@
                             "taking_orders": {
                                 "type": "boolean",
                                 "description": "Whether the shop takes orders now (its bot is switched on). When false, purchases, renewals, top-ups and receipts are refused (503); the catalogue can still be read and customers can still sign in."
+                            },
+                            "service_claims": {
+                                "type": "boolean",
+                                "description": "Whether a customer can add a service to their account by its link now (`POST /subscriptions/claim`, «افزودن سرویس با لینک»): the main shop's alone, while its admin switches it on (off by default). Always false in an agent's shop."
+                            },
+                            "service_transfers": {
+                                "type": "boolean",
+                                "description": "Whether a customer can hand one of their services to another customer of the shop now (`POST /subscriptions/{id}/transfer`, «انتقال سرویس»): while the shop's admin switches it on (off by default), in any shop."
+                            },
+                            "custom_services": {
+                                "type": "boolean",
+                                "description": "Whether a customer can build a service of the traffic and days they choose now («سرویس دلخواه», `GET /custom-services`): the main shop's alone, while its admin switches it on (off by default), both price lists sell and one of its servers can take a new client. Always false in an agent's shop."
+                            },
+                            "name_modes": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/components/schemas/ClientNameMode"
+                                },
+                                "description": "The ways a buyer may name their new service (`name_mode` of `POST /orders`), `sequential` (the shop's pattern) first and always; `random` and `custom` while the shop's admin offers them. Just `sequential`: ask nothing."
                             },
                             "bot": {
                                 "type": "object",
@@ -27809,6 +28952,7 @@
                     "name",
                     "status",
                     "is_test",
+                    "claimed_at",
                     "plan",
                     "server",
                     "link",
@@ -27818,9 +28962,13 @@
                     "removes_at",
                     "auto_renew",
                     "renewable",
+                    "picks_plan",
+                    "renewal_window",
+                    "devices",
                     "extras",
                     "link_rotation",
                     "next_period",
+                    "next_devices",
                     "presence",
                     "synced_at",
                     "created_at"
@@ -27840,6 +28988,12 @@
                         "type": "boolean",
                         "description": "A free test account («اکانت تست»), taken in the bot: it has no plan and can be neither renewed nor bought extras (`extras`); the shop may remove it some time after it ends, or some days after it was made while never connected (`removes_at`)."
                     },
+                    "claimed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the customer added it to their account by its link (`POST /subscriptions/claim`, or in the bot): a service support made on the panel by hand, not sold by the shop. It has no plan until a renewal on a plan the customer picks (`GET …/renewal-plans`; a renewal with a package built leaves it without). Null for every other service."
+                    },
                     "plan": {
                         "allOf": [
                             {
@@ -27847,7 +29001,7 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "The plan it was sold or last renewed on; null for a test account, or once that plan is deleted."
+                        "description": "The plan it was sold or last renewed on; null for a service without one — a test account, a service added by its link (`claimed_at`) or built by the customer (`POST /custom-services/orders`), until a renewal on a plan (a renewal with a package built leaves it null) — or once that plan is deleted."
                     },
                     "server": {
                         "allOf": [
@@ -27900,27 +29054,72 @@
                             },
                             "days_before": {
                                 "type": "integer",
-                                "description": "How many days before its end it is renewed when the switch is on. A shop-wide setting, 1 to 30."
+                                "description": "How many days before its end it is renewed when the switch is on — or, where the shop renews automatically by «ریست زمان» (which throws away the term left), how many days before its end a wallet short of the price is told, the renewal itself made shortly before the end. A shop-wide setting, 1 to 30."
                             }
                         }
                     },
                     "renewable": {
                         "type": "boolean",
-                        "description": "The customer can renew it now on its plan: it is active or ended, its plan still exists and the renewal adds something, and in an agent's shop the agent's traffic covers it."
+                        "description": "The customer can renew it now on its own plan: it is active or ended, its plan still exists and the renewal adds something (in an agent's shop, covered by the agent's traffic). False for a service without a plan, which `picks_plan` covers. Whether the shop lets it be renewed yet is `renewal_window`."
+                    },
+                    "picks_plan": {
+                        "type": "boolean",
+                        "description": "The customer can renew it now on what they pick: it has no plan and is no test account (added by its link, `claimed_at`, or built), it is active or ended, and a plan on sale is sold on its server or the shop's builder is offered. List the choices with `GET …/renewal-plans` and send the plan picked as `plan_id` to `…/renewal` — that renewal makes it the service's plan, after which `renewable` is what holds —, or a package built as `gb` and `days`, after which it still picks."
+                    },
+                    "renewal_window": {
+                        "type": "object",
+                        "description": "Whether the shop lets the customer renew it yet («آستانه مجاز تمدید»), beside `renewable` or `picks_plan`. A shop may hold a running service back until its end date is a few days away, or until little of its traffic is left; an ended service may always be renewed. While closed, the renewal's preview and the renewal are a 422 on `status` saying from when, and the fields say what opens it — any that is set, whichever comes first. Auto-renewal goes by its own days.",
+                        "additionalProperties": false,
+                        "required": [
+                            "open",
+                            "opens_at",
+                            "days_before",
+                            "traffic_percent"
+                        ],
+                        "properties": {
+                            "open": {
+                                "type": "boolean",
+                                "description": "It may be renewed now (as far as the window goes)."
+                            },
+                            "opens_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true,
+                                "description": "While closed: the moment its end date comes within the window (that end date less the window's days); null otherwise."
+                            },
+                            "days_before": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "While closed and its clock waits for its first connection (no end date yet): it opens this many days before the end date it will have; null otherwise."
+                            },
+                            "traffic_percent": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "While closed: it opens once at most this percent of its traffic is left; null otherwise (unlimited traffic, or the shop holds nothing back by traffic). With no field set, only its end opens it."
+                            }
+                        }
+                    },
+                    "devices": {
+                        "type": "integer",
+                        "description": "How many devices may use it at once (its IP limit, raised by extra devices); 0 for no limit."
                     },
                     "extras": {
                         "type": "object",
-                        "description": "Whether extra traffic and extra time can be bought for it now (`GET …/extras` gives the amounts and prices). Both need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). In an agent's shop, traffic also needs the agent's bot to have traffic left to sell.",
+                        "description": "Whether extra traffic, extra time and extra devices («کاربر اضافه») can be bought for it now (`GET …/extras` gives the amounts and prices). All need the shop to sell them (at its prices or the plan's) and the service to be active or ended (not switched off by support, nor gone from its panel) and not a free test account. Traffic needs a quota and time not run out (a service whose traffic ran out runs again with it). Time needs a term and traffic not run out (a service whose time ran out starts again from its next connection). Devices need a device limit (an unlimited one takes none), neither time nor traffic run out (a renewal then would replace the period they are for at once), and a server whose panel enforces the limit. In an agent's shop, traffic also needs the agent's bot to have traffic left to sell.",
                         "additionalProperties": false,
                         "required": [
                             "traffic",
-                            "time"
+                            "time",
+                            "devices"
                         ],
                         "properties": {
                             "traffic": {
                                 "type": "boolean"
                             },
                             "time": {
+                                "type": "boolean"
+                            },
+                            "devices": {
                                 "type": "boolean"
                             }
                         }
@@ -27936,7 +29135,16 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "Null while no renewal is queued after the current period."
+                        "description": "A renewal's traffic queued after the current period. Null while none waits for the period's end: nothing renewed ahead, or a renewal whose traffic counted at once (the shop carries unused traffic over, `reset_traffic`, or unlimited traffic) — its device limit may still wait (`next_devices`)."
+                    },
+                    "next_devices": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/NextDevices"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "A renewal's device limit queued after the current period: a running service renewed by `extend` or `reset_traffic` keeps the devices it has (extra devices bought included) until the period in use ends, and has the renewal's from then. Null while the limit stays as `devices` says."
                     },
                     "presence": {
                         "type": "object",
@@ -28053,6 +29261,25 @@
                     }
                 }
             },
+            "NextDevices": {
+                "description": "A device limit a renewal queued after the current period: from when (the current period's end) and how many devices at once then.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "from",
+                    "devices"
+                ],
+                "properties": {
+                    "from": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "devices": {
+                        "type": "integer",
+                        "description": "0 for no limit."
+                    }
+                }
+            },
             "StoreSubscriptionsResponse": {
                 "type": "object",
                 "additionalProperties": false,
@@ -28084,6 +29311,36 @@
                     }
                 }
             },
+            "StoreTransferRecipientResponse": {
+                "description": "«انتقال سرویس»: who the service goes (or went) to — their Telegram name and handle, nothing else of their account.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "recipient"
+                ],
+                "properties": {
+                    "recipient": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "name",
+                            "username"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Their name in Telegram; null when they show none."
+                            },
+                            "username": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Their Telegram handle, without the @; null when they have none."
+                            }
+                        }
+                    }
+                }
+            },
             "StoreSubscriptionRequest": {
                 "type": "object",
                 "additionalProperties": false,
@@ -28094,6 +29351,21 @@
                     "auto_renew": {
                         "type": "boolean",
                         "description": "Auto-renewal («تمدید خودکار») on or off."
+                    }
+                }
+            },
+            "StoreClaimRequest": {
+                "description": "A service's link, as the customer sent it, to add the service to their account.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "link"
+                ],
+                "properties": {
+                    "link": {
+                        "type": "string",
+                        "maxLength": 2000,
+                        "description": "A subscription link or one of the service's configs, alone or among other words (its links are read together, five at most)."
                     }
                 }
             },
@@ -28157,7 +29429,7 @@
                     "note": {
                         "type": "string",
                         "nullable": true,
-                        "description": "Support's note on its latest decision (a rejection's reason, or a cancellation or refund note), as the bot shows it to the customer; null if none."
+                        "description": "The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer); null if none."
                     }
                 }
             },
@@ -28177,10 +29449,12 @@
                     "created_at",
                     "fulfilled_at",
                     "plan",
+                    "package_name",
                     "server",
                     "subscription",
                     "traffic_bytes",
                     "days",
+                    "devices",
                     "payments"
                 ],
                 "properties": {
@@ -28236,7 +29510,10 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, or once the plan is deleted."
+                        "description": "The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, a service the customer built, or once the plan is deleted."
+                    },
+                    "package_name": {
+                        "$ref": "#/components/schemas/OrderPackageName"
                     },
                     "server": {
                         "allOf": [
@@ -28259,12 +29536,17 @@
                     "traffic_bytes": {
                         "type": "integer",
                         "nullable": true,
-                        "description": "The traffic it adds, in bytes: a service's extra traffic, or an agent's traffic for their bot (`traffic` orders); null otherwise."
+                        "description": "The traffic it adds, in bytes: a service's extra traffic, a built service's traffic, or an agent's traffic for their bot (`traffic` orders); null otherwise."
                     },
                     "days": {
                         "type": "integer",
                         "nullable": true,
-                        "description": "The extra days it adds to its service; null otherwise."
+                        "description": "The extra days it adds to its service, or a built service's term; null otherwise."
+                    },
+                    "devices": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "The devices it adds to its service's IP limit (extra devices), or a built service's limit; null otherwise."
                     },
                     "payments": {
                         "type": "array",
@@ -28371,12 +29653,30 @@
                         "type": "integer",
                         "description": "A payment method for purchases (`GET /payment-methods?for=purchase`)."
                     },
+                    "name_mode": {
+                        "$ref": "#/components/schemas/StoreNameModeInput"
+                    },
+                    "client_name": {
+                        "$ref": "#/components/schemas/StoreClientNameInput"
+                    },
                     "discount_code": {
                         "type": "string",
                         "nullable": true,
                         "description": "A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now."
                     }
                 }
+            },
+            "StoreNameModeInput": {
+                "description": "How the new service is named on its panel: `sequential` (left out: the default) by the shop's pattern; `random`, a name drawn now; `custom`, `client_name`. Only a way `shop.name_modes` of `GET /` offers; another is a 422 on `name_mode`. A random name is worked out from the `Idempotency-Key`, so two requests sent with one key at once ask the same; a request repeated with its key asks the name its order was made with, and is not refused for what took that name since.",
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/ClientNameMode"
+                    }
+                ]
+            },
+            "StoreClientNameInput": {
+                "description": "For `custom`: the name the customer typed, 3 to 32 English letters, digits, `_` and `-`. A 422 on `client_name` for another character or length, for one that server's panel does not take (a PasarGuard server: two of `_` and `-` side by side), or for a name a service on that server already has. Should a service (or a client made by hand on the panel) take it before the order is delivered, the service is named by the shop's pattern instead. Ignored for the other ways.",
+                "type": "string"
             },
             "StoreDiscountCheckRequest": {
                 "description": "A discount code and what the customer wants to buy with it, named as in the checkout's own request.",
@@ -28392,11 +29692,11 @@
                         "description": "As the customer typed it (any case, Persian digits accepted)."
                     },
                     "for": {
-                        "$ref": "#/components/schemas/DiscountKind"
+                        "$ref": "#/components/schemas/OwnOrderType"
                     },
                     "plan_id": {
                         "type": "integer",
-                        "description": "For a purchase: a plan on sale now (`GET /plans`)."
+                        "description": "For a purchase: a plan on sale now (`GET /plans`). For a renewal of a service without a plan: the plan picked (`GET …/renewal-plans`)."
                     },
                     "server_id": {
                         "type": "integer",
@@ -28406,13 +29706,21 @@
                         "type": "integer",
                         "description": "For a renewal or extra: the customer's service."
                     },
+                    "method": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RenewalMethod"
+                            }
+                        ],
+                        "description": "For a renewal: the renewal method, as the renewal would send it (a 422 on `method` for one the shop does not offer)."
+                    },
                     "gb": {
                         "allOf": [
                             {
                                 "$ref": "#/components/schemas/WholeNumberInput"
                             }
                         ],
-                        "description": "For extra traffic: how many GB."
+                        "description": "For extra traffic: how many GB. For a renewal with a package built (instead of `plan_id`): its GB."
                     },
                     "days": {
                         "allOf": [
@@ -28420,7 +29728,42 @@
                                 "$ref": "#/components/schemas/WholeNumberInput"
                             }
                         ],
-                        "description": "For extra time: how many days."
+                        "description": "For extra time: how many days. For a renewal with a package built: its days."
+                    },
+                    "devices": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "For extra devices: how many."
+                    }
+                }
+            },
+            "StoreQuote": {
+                "description": "A price before anything is ordered, as the order would be made at it: the base, each discount taken off it, and what is left to pay.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "base",
+                    "discounts",
+                    "amount"
+                ],
+                "properties": {
+                    "base": {
+                        "type": "string",
+                        "description": "Toman before discounts: the customer's price for what they mean to buy — a plan's price, first-purchase price or agent price; an extra amount's cost; a built service's two prices added."
+                    },
+                    "discounts": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DiscountLine"
+                        },
+                        "description": "The automatic discount, if any, then the code."
+                    },
+                    "amount": {
+                        "type": "string",
+                        "description": "Toman left to pay, never below zero; 0 means free."
                     }
                 }
             },
@@ -28432,17 +29775,185 @@
                 ],
                 "properties": {
                     "quote": {
+                        "$ref": "#/components/schemas/StoreQuote"
+                    }
+                }
+            },
+            "StoreCustomServicesResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "custom_services"
+                ],
+                "properties": {
+                    "custom_services": {
+                        "$ref": "#/components/schemas/StoreCustomServices"
+                    }
+                }
+            },
+            "StoreCustomServices": {
+                "description": "«سرویس دلخواه» as a customer meets it: each quantity's tiers, bounds and buttons, the devices and the servers. While nothing is `offered`, each quantity's `tiers` and `options` are empty.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "offered",
+                    "traffic",
+                    "days",
+                    "devices",
+                    "servers"
+                ],
+                "properties": {
+                    "offered": {
+                        "type": "boolean",
+                        "description": "Whether a service may be built now (`shop.custom_services` of `GET /`)."
+                    },
+                    "traffic": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/StoreCustomQuantity"
+                            }
+                        ],
+                        "description": "The GB: `from` and the bounds in GB, a tier's `price` per GB."
+                    },
+                    "days": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/StoreCustomQuantity"
+                            }
+                        ],
+                        "description": "The days: `from` and the bounds in days, a tier's `price` per day."
+                    },
+                    "devices": {
+                        "type": "integer",
+                        "description": "Devices at once on a built service; 0 — unlimited."
+                    },
+                    "servers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/NamedRef"
+                        },
+                        "description": "The servers a service may be built on now, in order; empty while nothing is offered."
+                    }
+                }
+            },
+            "StoreCustomQuantity": {
+                "description": "One quantity of a built service. Any whole amount from `min` to `max` may be chosen; it is priced whole at the `price` of the last tier whose `from` it reaches (50 with tiers from 1 at 3000 and from 50 at 2500 costs 50 × 2500). The tiers start at `min`: none prices an amount outside the bounds.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "tiers",
+                    "min",
+                    "max",
+                    "options"
+                ],
+                "properties": {
+                    "tiers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PriceTier"
+                        },
+                        "description": "The smallest `from` first; empty while it is not priced, or nothing is offered."
+                    },
+                    "min": {
+                        "type": "integer"
+                    },
+                    "max": {
+                        "type": "integer"
+                    },
+                    "options": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "The amounts offered as buttons, smallest first, each within the bounds; empty while nothing is offered."
+                    }
+                }
+            },
+            "StoreCustomQuoteRequest": {
+                "description": "A service the customer would build.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "gb",
+                    "days"
+                ],
+                "properties": {
+                    "gb": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "How many GB, within the bounds of `GET /custom-services`."
+                    },
+                    "days": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "How many days, within the bounds of `GET /custom-services`."
+                    },
+                    "server_id": {
+                        "type": "integer",
+                        "description": "One of `servers` of `GET /custom-services`, once picked: a code limited to certain servers holds only then."
+                    },
+                    "discount_code": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "A discount code to check with it (any case, Persian digits accepted). Blank, null or left out for none."
+                    }
+                }
+            },
+            "StoreCustomQuoteResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "quote"
+                ],
+                "properties": {
+                    "quote": {
+                        "description": "What the service would give and cost: its GB, days and devices, each quantity's price, and the price as a `StoreQuote` (`base` is the two prices added).",
                         "type": "object",
                         "additionalProperties": false,
                         "required": [
+                            "gb",
+                            "days",
+                            "devices",
+                            "server_id",
+                            "traffic_price",
+                            "days_price",
                             "base",
                             "discounts",
                             "amount"
                         ],
                         "properties": {
+                            "gb": {
+                                "type": "integer"
+                            },
+                            "days": {
+                                "type": "integer"
+                            },
+                            "devices": {
+                                "type": "integer",
+                                "description": "Devices at once on the service; 0 — unlimited."
+                            },
+                            "server_id": {
+                                "type": "integer",
+                                "nullable": true,
+                                "description": "The server named; null for none."
+                            },
+                            "traffic_price": {
+                                "type": "string",
+                                "description": "Toman: the GB at their tier's rate."
+                            },
+                            "days_price": {
+                                "type": "string",
+                                "description": "Toman: the days at their tier's rate."
+                            },
                             "base": {
                                 "type": "string",
-                                "description": "Toman before discounts: the customer's price for the plan (its price, first-purchase price or agent price), or the cost of the extra amount."
+                                "description": "Toman before discounts: the customer's price for what they mean to buy — a plan's price, first-purchase price or agent price; an extra amount's cost; a built service's two prices added."
                             },
                             "discounts": {
                                 "type": "array",
@@ -28459,8 +29970,55 @@
                     }
                 }
             },
+            "StoreCustomOrderRequest": {
+                "description": "A service the customer builds, the server to build it on, how to name it, and the payment method.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "gb",
+                    "days",
+                    "method_id"
+                ],
+                "properties": {
+                    "gb": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "How many GB, within the bounds of `GET /custom-services`."
+                    },
+                    "days": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "How many days, within the bounds of `GET /custom-services`."
+                    },
+                    "server_id": {
+                        "type": "integer",
+                        "description": "One of `servers` of `GET /custom-services`; it may be left out while there is only one."
+                    },
+                    "method_id": {
+                        "type": "integer",
+                        "description": "A payment method for purchases (`GET /payment-methods?for=purchase`)."
+                    },
+                    "name_mode": {
+                        "$ref": "#/components/schemas/StoreNameModeInput"
+                    },
+                    "client_name": {
+                        "$ref": "#/components/schemas/StoreClientNameInput"
+                    },
+                    "discount_code": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now."
+                    }
+                }
+            },
             "StoreRenewalRequest": {
-                "description": "A service's renewal: the payment method.",
+                "description": "A service's renewal: the payment method, the plan (or a package built) for a service without one, and the renewal method.",
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
@@ -28470,6 +30028,34 @@
                     "method_id": {
                         "type": "integer",
                         "description": "A payment method for renewals (`GET /payment-methods?for=renewal`)."
+                    },
+                    "method": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RenewalMethod"
+                            }
+                        ],
+                        "description": "How the renewal adds its plan, one of the preview's `methods`; left out, the first of them. One the shop does not offer is a 422 on `method`. With an `Idempotency-Key`, a retry by another method than the key's order is a 422 on `idempotency_key`."
+                    },
+                    "plan_id": {
+                        "type": "integer",
+                        "description": "For a service without a plan (`picks_plan`): the plan to renew it on, one of `GET …/renewal-plans` (a 422 on `plan_id` when missing or not among them); it becomes the service's plan. For a service with its own plan it may be left out; sent, it must be that plan (a 422 on `plan_id` otherwise), so a page drawn before the service's first renewal never pays for a plan it did not show. With an `Idempotency-Key`, a retry naming another plan than the key's order is a 422 on `idempotency_key`."
+                    },
+                    "gb": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "For a service without a plan, instead of `plan_id` while the builder is offered for it (`custom_services` of `GET …/renewal-plans`): the GB of a package the customer builds, within the bounds of `GET /custom-services`, with `days`. The renewal is priced by the builder's tiers, gives the builder's devices, and leaves the service without a plan. A 422 on `status` while the builder is not offered; on `gb` or `days` as the builder refuses them, or for a service renewed on its own plan; on `plan_id` sent with them."
+                    },
+                    "days": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "With `gb`: the days of that package, within the bounds of `GET /custom-services`."
                     },
                     "discount_code": {
                         "type": "string",
@@ -28534,6 +30120,34 @@
                     }
                 }
             },
+            "StoreExtraDevicesRequest": {
+                "description": "Extra devices for a service: how many, and the payment method.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "devices",
+                    "method_id"
+                ],
+                "properties": {
+                    "devices": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "Whole devices, as `GET …/extras` offers: one of its amounts, or within its `custom` range."
+                    },
+                    "method_id": {
+                        "type": "integer",
+                        "description": "A payment method for extra devices (`GET /payment-methods?for=extra_devices`)."
+                    },
+                    "discount_code": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now."
+                    }
+                }
+            },
             "StoreExtrasResponse": {
                 "type": "object",
                 "additionalProperties": false,
@@ -28546,7 +30160,8 @@
                         "additionalProperties": false,
                         "required": [
                             "traffic",
-                            "time"
+                            "time",
+                            "devices"
                         ],
                         "properties": {
                             "traffic": {
@@ -28566,25 +30181,35 @@
                                 ],
                                 "nullable": true,
                                 "description": "Extra time in days; null when none can be bought now."
+                            },
+                            "devices": {
+                                "allOf": [
+                                    {
+                                        "$ref": "#/components/schemas/StoreExtraOffer"
+                                    }
+                                ],
+                                "nullable": true,
+                                "description": "Extra devices (the IP limit); null when none can be bought now. Their prices are for the days left of the period in use (`days`), which they last."
                             }
                         }
                     }
                 }
             },
             "StoreExtraOffer": {
-                "description": "What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`.",
+                "description": "What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`. Devices are priced for 30 days and charged for the days left of the period in use (`days`), which they last: every price here is already that share, rounded up to whole Toman.",
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
                     "price",
                     "options",
-                    "custom"
+                    "custom",
+                    "days"
                 ],
                 "properties": {
                     "price": {
                         "type": "string",
                         "nullable": true,
-                        "description": "Toman per GB or per day; null when only the preset amounts are sold."
+                        "description": "Toman per GB, per day or per device (for the days left of the period in use); null when only the preset amounts are sold. A custom count of devices is prorated as a whole, so it may cost a few Toman less than this times the count."
                     },
                     "options": {
                         "type": "array",
@@ -28599,7 +30224,7 @@
                             "properties": {
                                 "quantity": {
                                     "type": "integer",
-                                    "description": "GB or days."
+                                    "description": "GB, days or devices."
                                 },
                                 "price": {
                                     "type": "string",
@@ -28625,6 +30250,11 @@
                                 "type": "integer"
                             }
                         }
+                    },
+                    "days": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "For devices: the days their prices are charged for, which they last — what is left of the period in use (whole days, at least 1) until its end date, or until a renewal bought before then begins; its whole term while it waits for its first connection; or 30 for one that never ends. Null for traffic and time."
                     }
                 }
             },
@@ -28671,7 +30301,7 @@
                 }
             },
             "StoreCheckout": {
-                "description": "The outcome of a checkout (a purchase, renewal, extra traffic or time, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409).",
+                "description": "The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409).",
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
@@ -28736,7 +30366,7 @@
                             }
                         ],
                         "nullable": true,
-                        "description": "Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise."
+                        "description": "Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise, and on a repeated request once the service is no longer the customer's (handed to another customer)."
                     }
                 }
             },
@@ -28753,28 +30383,50 @@
                 }
             },
             "StoreRenewal": {
-                "description": "A preview of a service's renewal: on its own plan, at that plan's price today, and the service as the renewal would leave it. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid.",
+                "description": "A preview of a service's renewal: on its own plan (or, for a service without one, the plan picked — or the package built, `custom`), at its price today, by a renewal method among those the shop offers, and the service as the renewal would leave it by that method. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid.",
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
+                    "method",
+                    "methods",
                     "plan",
+                    "custom",
                     "price",
                     "discounts",
                     "after"
                 ],
                 "properties": {
+                    "method": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RenewalMethod"
+                            }
+                        ],
+                        "description": "The method this preview — and `after` — is by: the one asked for (`method`), else the first the shop offers."
+                    },
+                    "methods": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RenewalMethod"
+                        },
+                        "minItems": 1,
+                        "description": "The methods the shop offers, in this order; the price is the same by each. With more than one, let the customer pick and send it as `method` to the preview and the renewal; with one, there is nothing to pick."
+                    },
                     "plan": {
                         "type": "object",
-                        "description": "The service's own plan, which the renewal uses: what a renewal gives.",
+                        "nullable": true,
+                        "description": "The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices). Null for a package built (`custom`).",
                         "additionalProperties": false,
                         "required": [
                             "id",
                             "name",
+                            "description",
+                            "checkout_note",
                             "price",
                             "traffic_gb",
                             "duration_days",
                             "duration_hours",
-                            "checkout_note"
+                            "devices"
                         ],
                         "properties": {
                             "id": {
@@ -28782,6 +30434,15 @@
                             },
                             "name": {
                                 "type": "string"
+                            },
+                            "description": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "checkout_note": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "A note to show at checkout, as plain text; null for none."
                             },
                             "price": {
                                 "type": "string",
@@ -28799,16 +30460,48 @@
                                 "type": "integer",
                                 "description": "Hours; 0 never ends."
                             },
-                            "checkout_note": {
+                            "devices": {
+                                "type": "integer",
+                                "description": "Devices at once the renewal gives; 0 for no limit — whatever the service has now, extra devices bought included. A running service renewed by `extend` or `reset_traffic` keeps its devices until the period in use ends, and has these from then; any other has them at once (one still waiting for its first connection with the extra devices bought for it on top)."
+                            }
+                        }
+                    },
+                    "custom": {
+                        "type": "object",
+                        "nullable": true,
+                        "description": "The package a service without a plan is renewed with instead (`gb` and `days`): what it gives — its GB, its days and the builder's devices — and each quantity's price by the builder's tiers (`GET /custom-services`). Null for a renewal on a plan.",
+                        "additionalProperties": false,
+                        "required": [
+                            "gb",
+                            "days",
+                            "devices",
+                            "traffic_price",
+                            "days_price"
+                        ],
+                        "properties": {
+                            "gb": {
+                                "type": "integer"
+                            },
+                            "days": {
+                                "type": "integer"
+                            },
+                            "devices": {
+                                "type": "integer",
+                                "description": "Devices at once it gives; 0 — unlimited. From when, as a plan's `devices`."
+                            },
+                            "traffic_price": {
                                 "type": "string",
-                                "nullable": true,
-                                "description": "A note to show at checkout, as plain text; null for none."
+                                "description": "Toman: the GB at their tier's rate."
+                            },
+                            "days_price": {
+                                "type": "string",
+                                "description": "Toman: the days at their tier's rate."
                             }
                         }
                     },
                     "price": {
                         "type": "string",
-                        "description": "What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`)."
+                        "description": "What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`)."
                     },
                     "discounts": {
                         "type": "array",
@@ -28819,12 +30512,13 @@
                     },
                     "after": {
                         "type": "object",
-                        "description": "The service as the renewal would leave it, in StoreSubscription's shapes. Remaining days always carry over; a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`).",
+                        "description": "The service as the renewal would leave it by `method`, in StoreSubscription's shapes. By `extend` remaining days carry over, and a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`); by `reset_traffic` remaining days carry over and the traffic starts afresh; by `reset_time` the term starts afresh and the traffic left carries over.",
                         "additionalProperties": false,
                         "required": [
                             "term",
                             "traffic",
-                            "next_period"
+                            "next_period",
+                            "next_devices"
                         ],
                         "properties": {
                             "term": {
@@ -28841,6 +30535,15 @@
                                 ],
                                 "nullable": true,
                                 "description": "The current period, whose unused traffic expires when it ends; null when nothing expires."
+                            },
+                            "next_devices": {
+                                "allOf": [
+                                    {
+                                        "$ref": "#/components/schemas/NextDevices"
+                                    }
+                                ],
+                                "nullable": true,
+                                "description": "The renewal's device limit, when it waits for the current period's end; null when the service has it at once, or it is the one it has."
                             }
                         }
                     }
@@ -28855,6 +30558,94 @@
                 "properties": {
                     "renewal": {
                         "$ref": "#/components/schemas/StoreRenewal"
+                    }
+                }
+            },
+            "StoreRenewalPlan": {
+                "description": "A plan a service can be renewed on: what a renewal on it gives, its price, and what the renewal costs the customer today.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "name",
+                    "description",
+                    "checkout_note",
+                    "price",
+                    "renewal_price",
+                    "discounts",
+                    "traffic_gb",
+                    "duration_days",
+                    "duration_hours",
+                    "devices"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "The `plan_id` to renew on (`…/renewal`)."
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "checkout_note": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "A note to show at checkout, as plain text the site must escape; null for none."
+                    },
+                    "price": {
+                        "type": "string",
+                        "description": "The plan's price, in Toman."
+                    },
+                    "renewal_price": {
+                        "type": "string",
+                        "description": "What renewing on it costs the customer today, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying. The preview (`GET …/renewal?plan_id=`) says the same."
+                    },
+                    "discounts": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DiscountLine"
+                        },
+                        "description": "The automatic discount in `renewal_price`: none, or one."
+                    },
+                    "traffic_gb": {
+                        "type": "number",
+                        "description": "Gigabytes a renewal adds, decimals allowed; 0 for unlimited."
+                    },
+                    "duration_days": {
+                        "type": "integer",
+                        "description": "Whole days, rounded up; 0 never ends. `duration_hours` is exact."
+                    },
+                    "duration_hours": {
+                        "type": "integer",
+                        "description": "Hours; 0 never ends."
+                    },
+                    "devices": {
+                        "type": "integer",
+                        "description": "Devices at once once renewed on it; 0 for no limit."
+                    }
+                }
+            },
+            "StoreRenewalPlansResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "plans",
+                    "custom_services"
+                ],
+                "properties": {
+                    "plans": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StoreRenewalPlan"
+                        },
+                        "description": "In the catalogue's order; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way."
+                    },
+                    "custom_services": {
+                        "type": "boolean",
+                        "description": "Whether the service may be renewed instead with a package the customer builds («🛠 تمدید با سرویس دلخواه»): it has no plan, is no test account, may be renewed now (as `plans`), and the shop's builder is offered (`shop.custom_services` of `GET /`). Then send `gb` and `days` — within the bounds and tiers of `GET /custom-services` — to `…/renewal` in place of `plan_id`."
                     }
                 }
             },
@@ -29133,7 +30924,7 @@
                 }
             },
             "StoreNoticeType": {
-                "description": "The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. Services: switched off, back on, deleted, moved (with its new link), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»).",
+                "description": "The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»).",
                 "type": "string",
                 "enum": [
                     "payment_settled",
@@ -29146,6 +30937,8 @@
                     "service_enabled",
                     "service_deleted",
                     "service_moved",
+                    "service_transferred",
+                    "service_received",
                     "service_granted",
                     "expiry_reminder",
                     "traffic_reminder",

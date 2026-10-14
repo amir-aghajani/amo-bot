@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Catalog\Models;
 
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
+use App\Modules\Catalog\DTO\Package;
 use App\Support\Money;
 use App\Support\Traffic;
 use Illuminate\Database\Eloquent\Builder;
@@ -33,7 +34,7 @@ use Illuminate\Support\Carbon;
  *                               one's days × 24; 0 = no time limit
  * @property float $traffic_gb 0 = unlimited
  * @property int $ip_limit 0 = unlimited
- * @property array<string, mixed>|null $extras Its own prices of the extra traffic and time its services may buy
+ * @property array<string, mixed>|null $extras Its own prices of the extra traffic, time and devices its services buy
  *                                             (Subscriptions\Services\ExtrasSettings::planPrices()); null — the shop's
  * @property string|null $button_style Its button's colour in the bot's plan list, one of Telegram's
  *                                     (KeyboardLayout::STYLES); null — the client's own
@@ -112,6 +113,12 @@ class Plan extends Model
     public function trafficBytes(): int
     {
         return Traffic::bytesOfGb($this->traffic_gb);
+    }
+
+    /** What the plan gives a service: its term, traffic and devices. */
+    public function package(): Package
+    {
+        return new Package($this->duration_hours, $this->trafficBytes(), $this->ip_limit);
     }
 
     /**

@@ -15,7 +15,8 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Starts the renewed periods that are due (every 10 minutes, each shop): once a queued period's `period_ends_at` has
- * passed, what remains is capped at the renewed traffic (ProvisioningService::startNextPeriod()). A panel out of reach
+ * passed, what remains is capped at the renewed traffic and the device limit becomes the renewal's — a period queued
+ * for its devices alone (unused traffic carried) too (ProvisioningService::startNextPeriod()). A panel out of reach
  * or in backoff, or a service another change holds, is tried again on a later run — the customer keeps what they had
  * meanwhile. A service deleted since the run read it is skipped; one that breaks is logged and stops no other.
  */

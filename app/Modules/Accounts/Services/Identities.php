@@ -17,6 +17,7 @@ use App\Modules\Accounts\Mail\EmailRemoved;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Notifications\Services\CustomerNotifier;
+use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Telegram\Api\TelegramUnreachableException;
 use App\Modules\Users\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,8 +31,10 @@ use Psr\Http\Message\ServerRequestInterface;
  * shop holds it — offered as a merge (MergeOffers).
  *
  * Every write is one conditional UPDATE on the slot it fills or empties, so two requests at once never leave an account
- * with no way in, nor a way in on two accounts. The customer is notified of every change on every channel they have.
- * The routes ask a recent sign-in of the session (Http\RecentSignInMiddleware).
+ * with no way in, nor a way in on two accounts. The customer is notified of every change on every channel they have, and
+ * a Telegram account linked or taken off is what their services' clients on the panels name from then on
+ * (ProvisioningService::relabelServicesOf()). The routes ask a recent sign-in of the session
+ * (Http\RecentSignInMiddleware).
  */
 final class Identities
 {
@@ -43,6 +46,7 @@ final class Identities
         private readonly CustomerNotifier $notifier,
         private readonly Mailer $mailer,
         private readonly Bots $bots,
+        private readonly ProvisioningService $provisioning,
     ) {}
 
     /**
@@ -178,6 +182,9 @@ final class Identities
         if ($kind === WayIn::Email && $address !== null) {
             $this->tellAddress($user, $address);
         }
+        if ($kind === WayIn::Telegram) {
+            $this->provisioning->relabelServicesOf($user);
+        }
 
         return $user;
     }
@@ -200,6 +207,9 @@ final class Identities
             }
             if ($this->fill($user, $kind, $decided, $try)) {
                 $this->notifier->wayInAdded($user->refresh(), $kind->label());
+                if ($kind === WayIn::Telegram) {
+                    $this->provisioning->relabelServicesOf($user);
+                }
 
                 return $user;
             }

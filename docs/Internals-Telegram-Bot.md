@@ -11,7 +11,7 @@ Everything lives in `app/Modules/Telegram`, the routes in `routes/bot.php`.
 |---|---|
 | `Update/` | `Dispatcher` (the router), `Update` (a raw update, read), `CallbackData`, `ReceivedUpdates`, `AgentWebhookBudget` |
 | `Session/`, `Context.php` | A chat's conversation state, and what a handler gets for one update |
-| `Handlers/` | One handler per feature, and the shared pieces: `CheckoutScreen`, `CustomerServices` |
+| `Handlers/` | One handler per feature, and the shared pieces: `CheckoutScreen`, `Checkouts`, `CustomerServices`, `TypedAmounts` |
 | `Keyboard/` | The admin's main menu (`MainMenu`, `KeyboardLayout(s)`), the shared `Buttons`, the keyboard builders |
 | `Texts/` | `BotText` and `TextCatalog` (every reworded text), `BotTexts` (the admin's wording, rendered), `TelegramHtml`, `WebText` |
 | `Gates/`, `Channels/` | The checks before any handler: master switch, phone, required channels |
@@ -42,15 +42,18 @@ served in its bot's shop (`CurrentBot::run()`), then the reports that bot's grou
    agent's webhook can be posted anything).
 4. **Resolves the customer** (`UserResolver`), refuses a banned one, runs the **gates** in order, then the first route
    that matches: a command, a reply-keyboard label, a contact card, a callback prefix (longest wins), the conversation
-   state (longest prefix), else the fallback (the menu).
+   state (longest prefix), a text pattern (a link to a service, `ServiceClaimHandler` — after the state, so a link
+   written in a ticket stays the ticket's; it looks only for configs and web addresses on a host the shop's
+   subscription links are on, so a channel's post forwarded asks no panel), else the fallback (the menu).
 
-A route marked **navigation** (commands, labels, the menu's `menu:*` taps, the fallback, every ticket tap) clears the
-flow the chat was in, so what the customer types next is never taken as an old step's answer. An **admin-only** route
-(`/broadcast`, `/emoji`) answers anyone else nothing at all.
+A route marked **navigation** (commands, labels, the menu's `menu:*` taps, the `claim:` tap, a text pattern, the
+fallback, every ticket tap) clears the flow the chat was in, so what the customer types next is never taken as an old step's answer. An
+**admin-only** route (`/broadcast`, `/emoji`) answers anyone else nothing at all.
 
 Telegram takes one answer per tap: `Context::answer()` sends only the first, and the dispatcher stops the spinner of a
-tap nobody answered. A handler that throws is logged and the customer told — on the button while the tap is unanswered,
-else in a message.
+tap nobody answered. A popup only shows for a tap, so a refusal that may answer something typed as well goes through
+`Context::alert()`: a popup on the button, or — for a message — a message of its own, the step over. A handler that
+throws is logged and the customer told — on the button while the tap is unanswered, else in a message.
 
 ### Conversation state
 
@@ -66,7 +69,8 @@ at the same moment only one acts. The dispatcher saves the session once, after t
 `Update\CallbackData` is the one format: a prefix and `:`-separated arguments, 64 bytes at most (`plan:12:srv:3`).
 Every prefix is a constant on its handler, with static builders (`PurchaseHandler::planCallback()`,
 `SubscriptionHandler::serviceCallback()`); handlers read arguments with `$ctx->update->callbackArgs(PREFIX)` and never
-build or split the string by hand.
+build or split the string by hand. An enum's case goes in as its place among the cases (`CallbackData::place()`, read
+back with `caseAt()`): short whatever its value, so a new case is only ever added at the end.
 
 ## Every bot is its own shop
 
@@ -92,13 +96,24 @@ handler: the bot only renders.
   way to pay; `buy()` runs the shop's checkout (`Payments\Services\Checkout`, the website's too) and renders the outcome.
   **Nothing is ordered until a way to pay is picked**, so a checkout left alone costs nothing. A wallet payment claims
   the checkout state first, so a double tap pays once. A discount code typed (`DiscountCodeHandler`) is kept in the
-  session for that checkout only and judged again as it is paid (`priceToPay()`); handlers whose checkout takes a code
-  implement `DiscountableCheckout`.
+  session for that checkout only and judged again as it is paid; `pay()` is that pay step for every discountable
+  checkout (a purchase, a built service, a renewal, an extra): the way to pay still offered, the price with the kept
+  code, the order paid. A purchase's checkout says its service's name, with a button per way the shop lets buyers name
+  it (`ClientNameHandler`, which judges the name on the server the checkout names); the name drawn or typed is kept the
+  same way (`keepName()`) and handed to the order (`requestedName()`) — «پرداخت دوباره» keeps its order's
+  (`keepOrderName()`), so paying finds it.
+- **`Checkouts`** draws a checkout again from its callback data (`plan:…`, `renew:…`, `extra:…`, `custom:…`, each
+  handler implementing `RedrawableCheckout`, which also says the server a purchase's checkout names) for the steps
+  under it — a discount code, a name — and runs their one "typed for a checkout" step: what was typed taken and the
+  checkout redrawn, or the refusal said with «بازگشت» to it.
+- **`TypedAmounts`** reads a number typed at a step that awaits one (GB, days, devices, Toman) and refuses one its
+  step does not take, saying what may be typed.
 - **`CustomerServices`** is the one rule for which service a customer's button may open: their own, not gone from its
   panel.
 - **Tickets**: `TicketHandler` draws the screens, `TicketMessageHandler` takes what the customer writes. After a message
   the chat stays on the ticket, like a chat, until the customer goes elsewhere, `REPLY_SECONDS` pass, or a notice of
-  another ticket arrives (`leaveOtherTicket()`).
+  another ticket arrives (`leaveOtherTicket()`). A message sent once that time passed is no longer the ticket's: it is
+  routed as one sent at no step (`Dispatcher::atNoStep()`) — the text pattern it matches, or the fallback.
 - **Pictures** (a receipt, a ticket's picture) are a photo or a file judged by its bytes: `Update::picture()` with
   `CustomerPictures::isPicture()`.
 - **Free tests**: `TestAccountHandler::home()` draws the test screen for the menu, `/free` and the `?start=usertest`
@@ -106,8 +121,10 @@ handler: the bot only renders.
   `test:{server}` takes one through `Subscriptions\Services\TestAccounts` and sends it with `ServiceCard`
   (`TestDelivered`). Every refusal is a text of its own, and a refused tap redraws the screen through `home()`, as it
   judges now — the servers still giving a test, or why none. A test made whose card Telegram refused still counts: the
-  customer gets `TestUnsent` with the same «📊 مشاهده سرویس» button. A test's service screen has no renewal button,
-  since it has no plan.
+  customer gets `TestUnsent` with the same «📊 مشاهده سرویس» button. A test's service screen has no renewal button:
+  a test is never renewed (a service without a plan that is no test — added by its link, or built — renews on a plan
+  it picks, `RenewalHandler`'s picker, or with a package built: `CustomServiceHandler`'s `custom:r:…` steps, which
+  hand the checkout back to `RenewalHandler::checkout()`).
 
 Adding a screen: a handler with its prefix constant and builders, its line in `routes/bot.php` (with `navigation: true`
 when it should leave the flow), its texts as `BotText` cases, and a feature test on `BotTestCase`.

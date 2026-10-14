@@ -7,6 +7,7 @@ namespace App\Modules\Telegram\Reports;
 use App\Core\Database\Lease;
 use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyRequest;
+use App\Modules\Auth\Actor;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Discounts\DTO\DiscountLine;
@@ -24,6 +25,7 @@ use App\Modules\Reviews\Models\Review;
 use App\Modules\Rewards\Models\LotteryDraw;
 use App\Modules\Rewards\Models\LotteryWinner;
 use App\Modules\Subscriptions\Enums\ExtraKind;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Support\Enums\TicketAuthor;
 use App\Modules\Support\Models\Ticket;
@@ -220,7 +222,7 @@ final class ShopReports
         match ($order->type) {
             OrderType::Purchase => $this->report($order->shop(), Topic::Purchases, static fn(): array => ['text' => self::purchaseText($order)]),
             OrderType::Renewal => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::renewalText($order)]),
-            OrderType::ExtraTraffic, OrderType::ExtraTime => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::extraText($order)]),
+            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::extraText($order)]),
             OrderType::WalletTopUp => $this->report($order->shop(), Topic::Wallet, static fn(): array => ['text' => self::topUpText($order)]),
             // An agent bought traffic for their bot: the main bot's group, under the agency.
             OrderType::Traffic => $this->report(Bot::MAIN, Topic::Agency, static fn(): array => ['text' => self::trafficText($order)]),
@@ -231,6 +233,57 @@ final class ShopReports
             'reply_ref' => self::DELIVERY_REF . $order->id,
             'clears_buttons' => true,
         ] : null);
+    }
+
+    /**
+     * A customer added a service to their account by sending its link (ServiceClaims): who, which client and where — so
+     * a service claimed by the wrong customer is noticed, and support removes it from the shop for the right one.
+     */
+    public function serviceClaimed(Subscription $subscription): void
+    {
+        $this->report($subscription->shop(), Topic::Purchases, static fn(): array => ['text' => implode("\n", [
+            sprintf('🔗 <b>سرویس با لینک به حساب مشتری اضافه شد</b> · اشتراک #%d', $subscription->id),
+            '👤 ' . self::customer($subscription->user),
+            ...self::heldService($subscription),
+        ])]);
+    }
+
+    /**
+     * A service changed hands (ServiceTransfers): from whom to whom, which client and where, and who did it — its customer,
+     * or support by name — in «خریدها», the topic of who holds which service, so a transfer nobody expected is noticed.
+     */
+    public function serviceTransferred(Subscription $subscription, User $from, Actor $by): void
+    {
+        $this->report($subscription->shop(), Topic::Purchases, static fn(): array => ['text' => implode("\n", [
+            sprintf('🔁 <b>سرویس به مشتری دیگری منتقل شد</b> · اشتراک #%d', $subscription->id),
+            '👤 از: ' . self::customer($from),
+            '👤 به: ' . self::customer($subscription->user),
+            ...self::heldService($subscription),
+            $by->isCustomer() ? '✋ به درخواست خود مشتری' : '🎧 توسط پشتیبانی: ' . self::name($by->reviewer ?? 'پشتیبانی'),
+        ])]);
+    }
+
+    /**
+     * Which service a report of its new owner is about (serviceClaimed(), serviceTransferred()): its client's name and its
+     * location.
+     *
+     * @return list<string>
+     */
+    private static function heldService(Subscription $subscription): array
+    {
+        return [self::service($subscription), self::location($subscription->server)];
+    }
+
+    /** The line naming a service — «🔖 سرویس: <code>amir_1</code>» —, with `$more` after it («· یک‌ماهه · آلمان»). */
+    private static function service(Subscription $subscription, string ...$more): string
+    {
+        return implode(' · ', ['🔖 سرویس: <code>' . htmlspecialchars($subscription->remote_name) . '</code>', ...$more]);
+    }
+
+    /** The line naming where a service is: «📍 لوکیشن: آلمان». */
+    private static function location(?Server $server): string
+    {
+        return '📍 لوکیشن: ' . self::name($server->name ?? '—');
     }
 
     /**
@@ -280,7 +333,7 @@ final class ShopReports
                 '📌 موضوع: ' . self::field($ticket->subject),
             ];
             if ($ticket->subscription !== null) {
-                $lines[] = '🔖 سرویس: <code>' . htmlspecialchars($ticket->subscription->remote_name) . '</code>';
+                $lines[] = self::service($ticket->subscription);
             }
             $lines[] = '📨 ' . $message->channel->source();
 
@@ -519,32 +572,35 @@ final class ShopReports
         $lines = [
             sprintf('🛍️ <b>خرید جدید</b> · سفارش #%d', $order->id),
             '👤 ' . self::customer($order->user),
-            '📦 پلن: ' . self::name($order->plan->name ?? '—'),
-            '📍 لوکیشن: ' . self::name(($subscription->server ?? $order->server)->name ?? '—'),
+            // A service the customer built has no plan: its GB and days say what it is.
+            ($order->isBuilt() ? '📦 ' : '📦 پلن: ') . self::name($order->packageName() ?? '—'),
+            self::location($subscription->server ?? $order->server),
         ];
         if ($subscription !== null) {
-            $lines[] = '🔖 سرویس: <code>' . htmlspecialchars($subscription->remote_name) . '</code>';
+            $lines[] = self::service($subscription);
         }
 
         return implode("\n", [...$lines, ...self::takings($order)]);
     }
 
+    /** A renewal: the service renewed, its new end — and its method, unless the usual «تمدید پلن فعلی». */
     private static function renewalText(Order $order): string
     {
         $subscription = self::subscriptionOf($order);
+        $method = $order->renewal_method;
         $lines = [
-            sprintf('♻️ <b>تمدید سرویس</b> · سفارش #%d', $order->id),
+            sprintf('♻️ <b>تمدید سرویس</b> · سفارش #%d', $order->id) . ($method === null || $method === RenewalMethod::Extend ? '' : ' · ' . $method->label()),
             '👤 ' . self::customer($order->user),
         ];
         if ($subscription !== null) {
-            $lines[] = sprintf('🔖 سرویس: <code>%s</code> · %s · %s', htmlspecialchars($subscription->remote_name), self::name($order->plan->name ?? $subscription->plan->name ?? '—'), self::name($subscription->server->name));
+            $lines[] = self::service($subscription, self::name($order->packageName() ?? $subscription->plan->name ?? '—'), self::name($subscription->server->name));
             $lines[] = '📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours);
         }
 
         return implode("\n", [...$lines, ...self::takings($order)]);
     }
 
-    /** Extra traffic or time a customer bought for a service: what, onto which service, and the service as it now stands. */
+    /** Extra traffic, time or devices bought for a service: what, onto which service, and the service now. */
     private static function extraText(Order $order): string
     {
         $subscription = self::subscriptionOf($order);
@@ -553,13 +609,16 @@ final class ShopReports
             '👤 ' . self::customer($order->user),
         ];
         if ($subscription !== null) {
-            $lines[] = sprintf('🔖 سرویس: <code>%s</code> · %s', htmlspecialchars($subscription->remote_name), self::name($subscription->server->name));
+            $lines[] = self::service($subscription, self::name($subscription->server->name));
         }
         $lines[] = '➕ ' . self::quantity($order);
         if ($subscription !== null) {
             $remaining = $subscription->remainingBytes();
             $lines[] = '📥 حجم باقی‌مانده: ' . ($remaining === null ? Messages::UNLIMITED : Messages::bytes($remaining));
             $lines[] = '📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours);
+            if ($order->type === OrderType::ExtraDevices) {
+                $lines[] = '👥 تعداد کاربر: ' . Messages::devices($subscription->ip_limit);
+            }
         }
 
         return implode("\n", [...$lines, ...self::takings($order, pricing: false)]);
@@ -576,7 +635,7 @@ final class ShopReports
         return [self::paid($order, $payment) . ($pricing ? self::pricing($order) : ''), ...self::discounts($order), ...self::commission($payment)];
     }
 
-    /** How much an order of extra traffic or time brings, in words: «۱۰ گیگابایت», «۷ روز». */
+    /** How much an order of extra traffic, time or devices brings, in words: «۱۰ گیگابایت», «۷ روز», «۲ کاربر». */
     private static function quantity(Order $order): string
     {
         $kind = ExtraKind::of($order->type) ?? throw new \LogicException("Order #{$order->id} buys no extra.");
@@ -586,7 +645,11 @@ final class ShopReports
 
     private static function extraIcon(Order $order): string
     {
-        return $order->type === OrderType::ExtraTraffic ? '🔋' : '⏳';
+        return match ($order->type) {
+            OrderType::ExtraTraffic => '🔋',
+            OrderType::ExtraDevices => '👥',
+            default => '⏳',
+        };
     }
 
     private static function trafficText(Order $order): string
@@ -665,9 +728,9 @@ final class ShopReports
     private static function purpose(Order $order): string
     {
         return match ($order->type) {
-            OrderType::Purchase => sprintf('📦 خرید %s · %s · سفارش #%d', self::name($order->plan->name ?? '—'), self::name($order->server->name ?? '—'), $order->id),
+            OrderType::Purchase => sprintf('📦 خرید %s · %s · سفارش #%d', self::name($order->packageName() ?? '—'), self::name($order->server->name ?? '—'), $order->id),
             OrderType::Renewal => sprintf('♻️ تمدید <code>%s</code> · سفارش #%d', htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
-            OrderType::ExtraTraffic, OrderType::ExtraTime => sprintf('%s %s %s برای <code>%s</code> · سفارش #%d', self::extraIcon($order), $order->type->label(), self::quantity($order), htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
+            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => sprintf('%s %s %s برای <code>%s</code> · سفارش #%d', self::extraIcon($order), $order->type->label(), self::quantity($order), htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
             OrderType::WalletTopUp => sprintf('💰 شارژ کیف پول · سفارش #%d', $order->id),
             OrderType::Traffic => sprintf('💾 خرید حجم نمایندگی (%s) · سفارش #%d', Messages::bytes((int) $order->traffic_bytes), $order->id),
         };
@@ -683,7 +746,7 @@ final class ShopReports
         if ($user->telegram_id === null) {
             return sprintf('%s · %s · <code>#%d</code>', $name, $user->email !== null ? htmlspecialchars($user->email) : 'بدون ایمیل', $user->id);
         }
-        $handle = $user->username !== null && $user->username !== '' ? '@' . htmlspecialchars($user->username) : 'بدون نام کاربری';
+        $handle = $user->handle() === null ? 'بدون نام کاربری' : '@' . htmlspecialchars($user->handle());
 
         return sprintf('<a href="tg://user?id=%d">%s</a> · %s · <code>%d</code>', $user->telegram_id, $name, $handle, $user->telegram_id);
     }

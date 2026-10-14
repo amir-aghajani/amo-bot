@@ -7,11 +7,11 @@ sales are under «تخفیف و جوایز» in either panel; every shop runs it
 
 ## How they stack
 
-What a purchase, a renewal, extra traffic or extra time costs a customer is worked out the same way in the bot, on the
-website and for an automatic renewal:
+What a purchase, a renewal, extra traffic, extra time or extra devices cost a customer is worked out the same way in the
+bot, on the website and for an automatic renewal:
 
 1. **The price** — the plan's price for this customer: its first-purchase price while they have bought nothing, an agent's
-   price for an agent ([plans](Plans.md)); extra traffic and time, the amount's own price.
+   price for an agent ([plans](Plans.md)); extra traffic, time and devices, the amount's own price.
 2. **The automatic discount** — of a sale running on that plan, the customer's own discount and their loyalty tier's
    discount, only the largest is taken. They are never added together.
 3. **The code** — a code the customer typed applies to what step 2 left.
@@ -46,14 +46,16 @@ One nobody used is deleted from its row's menu.
   - «درصدی» — «درصد تخفیف» (1 to 100) of the amount, held to «سقف تخفیف (تومان)» when one is given;
   - «مبلغ ثابت» — «مبلغ تخفیف (تومان)» off the amount, never more than the amount itself;
   - «رایگان» — the whole amount: the order is free.
-- «برای چه سفارش‌هایی» — every kind of order, or the ones ticked: «خرید», «تمدید», «حجم اضافه», «زمان اضافه».
+- «برای چه سفارش‌هایی» — every kind of order, or the ones ticked: «خرید», «تمدید», «حجم اضافه», «زمان اضافه»,
+  «کاربر اضافه».
 - «شروع» and «پایان» — a day and an hour each, in the shop's time zone (`APP_TIMEZONE`); empty, from now and without end.
   A code that should end at a given hour of a given day — an "hourly" code — is one whose «پایان» says so: from that
   moment it is refused.
 - «سقف کل استفاده» — how many orders may be made with it in all; empty, without limit.
 - «سقف استفاده هر مشتری» — how many by one customer; 1 makes it once a customer.
 - «محدودیت‌های بیشتر», folded:
-  - «پلن‌ها» — every plan, or the ones ticked. A renewal's and extra traffic's or time's plan is their service's.
+  - «پلن‌ها» — every plan, or the ones ticked. A renewal's and extra traffic's, time's or devices' plan is their
+    service's.
   - «سرورها» — every server, or the ones ticked. A purchase's server is the one the customer picks; a renewal's and an
     extra's is their service's.
   - «حداقل مبلغ سفارش (تومان)» — the least an order must come to, after the automatic discount, for the code to hold.
@@ -97,7 +99,8 @@ back, not a second one, and is not counted twice against the code.
 
 - «نام» — what the customer sees beside the price, 64 characters at most: «فروش ویژه نوروز».
 - «درصد تخفیف» — 1 to 100.
-- «برای چه سفارش‌هایی» — every kind of order, or the ones ticked (a purchase, a renewal, extra traffic, extra time).
+- «برای چه سفارش‌هایی» — every kind of order, or the ones ticked (a purchase, a renewal, extra traffic, extra time,
+  extra devices).
 - «پلن‌ها» — every plan, or the ones ticked; a renewal's and an extra's plan is their service's.
 - «شروع» and «پایان» — as a code's.
 - «فعال».

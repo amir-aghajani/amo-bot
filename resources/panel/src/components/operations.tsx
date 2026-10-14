@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useMutation, type QueryKey } from '@tanstack/react-query'
 import { Info, type LucideIcon } from 'lucide-react'
 import { Callout } from '@/components/callout'
@@ -13,9 +13,10 @@ import { cn } from '@/lib/utils'
 /*
  * A detail dialog's operations (an order's, a payment's, a service's): a button for each one the subject's state allows
  * (its row's `actions`, the server's rules). An operation that is worded or takes something away first opens a strip
- * for a second look (its warning, the note the customer reads, back / confirm); one that needs more than a note shows
- * the dialog's own form on the strip. A refusal shows the API's message. When the live updates bring a state that no
- * longer allows the operation waiting on the strip, it is withdrawn with a word.
+ * for a second look (its warning, the note the customer reads, back / confirm, and a second way through where the
+ * subject offers one); one that needs more than a note shows the dialog's own form on the strip. A refusal shows the
+ * API's message. When the live updates bring a state that no longer allows the operation waiting on the strip, it is
+ * withdrawn with a word.
  *
  * The focus never falls to the document: an operation running keeps it (buttons are held, not disabled), and when a
  * run, a strip or an operation ends and takes the focused control with it, the focus goes to the chosen operation (or
@@ -37,7 +38,20 @@ export interface OperationSpec {
   form?: true
 }
 
-/** One run: the note typed on the strip, and `force` — run without what failed last time (a panel that did not answer a delete). */
+/**
+ * A second way through an operation's strip, under its buttons: run it with `force` — without what it would otherwise
+ * touch (a claimed service's delete that leaves its client on the panel).
+ */
+export interface OperationAlternative {
+  label: string
+  /** What choosing it means, beside its button. */
+  hint: ReactNode
+}
+
+/**
+ * One run: the note typed on the strip, and `force` — run without what it would otherwise touch: what failed last time
+ * (a panel that did not answer a delete), or with nothing failed, by the strip's alternative (OperationAlternative).
+ */
 interface Run<A> {
   action: A
   note?: string
@@ -93,13 +107,15 @@ interface Operations<A extends string> {
   focus: FocusRequest | null
   /** The operation in flight. */
   running: A | null
+  /** The run in flight is forced (`force`): a strip's alternative, not its confirm. */
+  forced: boolean
   /** Close the strip (back, or done with it while the dialog stays open). */
   close: () => void
   /** A press: an operation that needs a word or a second look opens its strip; the rest run at once. */
   choose: (action: A) => void
   /** The strip's confirm. */
   confirm: () => void
-  /** Run one directly (`force`, after the dialog's own question). */
+  /** Run one directly: `force`, after the dialog's own question or by the strip's alternative. */
   run: (run: Run<A>) => void
 }
 
@@ -150,6 +166,7 @@ export function useOperations<A extends string, R>({ specs, allowed, perform, in
     movedOn: refusal?.movedOn ?? false,
     focus,
     running: mutation.isPending ? (mutation.variables?.action ?? null) : null,
+    forced: mutation.isPending && mutation.variables?.force === true,
     close: () => {
       setWaiting(null)
       setRefusal(null)
@@ -183,6 +200,8 @@ interface OperationsSectionProps<A extends string> {
   subject: string
   /** The form on the strip of an operation with `form`: it runs the operation and closes the strip (`ops.close`). */
   form?: (action: A) => ReactNode
+  /** A second way through an operation's strip, where the subject offers one (OperationAlternative); null for none. */
+  alternative?: (action: A) => OperationAlternative | null
   /** Shown instead of the strip and the buttons while the dialog asks a question of its own (the delete's). */
   override?: ReactNode
 }
@@ -192,7 +211,7 @@ interface OperationsSectionProps<A extends string> {
  * subject moved on, a withdrawal, or another refusal when no strip is open), then the buttons, the strip, or the
  * dialog's own question. Nothing for a subject that is gone (the dialog says so above its facts).
  */
-export function OperationsSection<A extends string>({ ops, specs, subject, form, override }: OperationsSectionProps<A>) {
+export function OperationsSection<A extends string>({ ops, specs, subject, form, alternative, override }: OperationsSectionProps<A>) {
   const gone = useSubjectGone()
   const root = useRef<HTMLElement>(null)
   useOperationsFocus(root, ops)
@@ -220,7 +239,7 @@ export function OperationsSection<A extends string>({ ops, specs, subject, form,
       )}
       {override ??
         (ops.pending !== null ? (
-          <OperationStrip spec={specs[ops.pending]} ops={ops} error={onStrip && !ops.movedOn ? ops.error : null}>
+          <OperationStrip action={ops.pending} spec={specs[ops.pending]} ops={ops} error={onStrip && !ops.movedOn ? ops.error : null} alternative={alternative?.(ops.pending) ?? null}>
             {specs[ops.pending].form && form?.(ops.pending)}
           </OperationStrip>
         ) : (
@@ -286,12 +305,25 @@ function OperationButtons<A extends string>({ specs, ops }: { specs: Record<A, O
   )
 }
 
+interface OperationStripProps<A extends string> {
+  action: A
+  spec: OperationSpec
+  ops: Operations<A>
+  error: string | null
+  alternative: OperationAlternative | null
+  children?: ReactNode
+}
+
 /**
  * The second look before a worded or destructive operation: the warning, the note, the refusal of what was sent, back /
- * confirm — or, for an operation with `form`, the dialog's form (`children`), which has its own buttons.
+ * confirm, and under them the subject's alternative if it has one — or, for an operation with `form`, the dialog's form
+ * (`children`), which has its own buttons.
  */
-function OperationStrip<A extends string>({ spec, ops, error, children }: { spec: OperationSpec; ops: Operations<A>; error: string | null; children?: ReactNode }) {
+function OperationStrip<A extends string>({ action, spec, ops, error, alternative, children }: OperationStripProps<A>) {
   const Icon = spec.icon
+  const running = ops.running !== null
+  // The alternative's hint, read with its button.
+  const hint = useId()
 
   return (
     <div className={cn('grid gap-3 rounded-xl border p-4', spec.tone === 'danger' ? 'border-danger-line/70 bg-danger-soft/35' : 'border-border bg-fill')}>
@@ -310,11 +342,31 @@ function OperationStrip<A extends string>({ spec, ops, error, children }: { spec
             confirmLabel={spec.label}
             icon={spec.icon}
             destructive={spec.tone === 'danger'}
-            busy={ops.running !== null}
+            busy={running && !ops.forced}
+            waiting={running && ops.forced}
             focusCancel={!spec.note}
             onCancel={ops.close}
             onConfirm={ops.confirm}
           />
+          {alternative && (
+            <div className="grid gap-2 border-t border-border pt-3 sm:flex sm:items-center sm:justify-between">
+              <p id={hint} className="text-footnote text-muted-foreground">
+                {alternative.hint}
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                // A long choice wraps on a phone rather than push the dialog wider than the screen.
+                className="h-auto min-h-7 max-w-full shrink justify-self-end py-1 text-center whitespace-normal"
+                busy={running && ops.forced}
+                aria-disabled={running}
+                aria-describedby={hint}
+                onClick={() => ops.run({ action, note: spec.note ? ops.note : undefined, force: true })}
+              >
+                {alternative.label}
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -220,7 +220,7 @@ final class ReceiptReview implements GroupHandler
         $chatId = (int) $update->chatId();
         $messageId = (int) $update->messageId();
 
-        $mention = $admin->username !== null && $admin->username !== '' ? ' @' . $admin->username : '';
+        $mention = $admin->handle() === null ? '' : ' @' . $admin->handle();
         $text = sprintf(self::PROMPT, $payment->id, $mention);
         $promptId = $this->groupButtons->say($chatId, $messageId, GroupButtons::threadOf($update->message() ?? []), $text, [
             'force_reply' => true,

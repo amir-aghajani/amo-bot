@@ -14,7 +14,6 @@ use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Models\Order;
-use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Providers\Exceptions\PanelFailedException;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Models\Server;
@@ -207,11 +206,10 @@ final class SubscriptionActions
 
     /**
      * Take back what a refunded renewal or extra gave the service (ProvisioningService::undo(), once), under the
-     * panel-work limit; a panel that fails it is a 502 worded for the reader. False when its panel no longer has the
-     * client: there was nothing to take back.
+     * panel-work limit; a panel that fails it is a 502 worded for the reader. False when nothing was taken back: nothing
+     * of it left on the service, or its panel no longer has the client.
      *
      * @throws PanelFailedException|ServiceBusyException|TooManyAttemptsException
-     * @throws RefundRefusedException while the service is switched off
      * @throws ModelNotFoundException when the service is gone meanwhile
      */
     public function takeBack(Order $order, Subscription $subscription, Actor $actor): bool
@@ -228,6 +226,7 @@ final class SubscriptionActions
      *   traffic (it has a quota);
      * - disable, move: an active one;
      * - enable: one switched off here — an ended one needs a renewal, not a switch;
+     * - transfer: one that may change hands (ServiceTransfers::transferable(): no free test, its client still on its panel);
      * - delete: anything, including one whose client is gone from the panel.
      *
      * @return array<string, bool> By SubscriptionAction value
@@ -241,6 +240,7 @@ final class SubscriptionActions
                 SubscriptionAction::Extend => $subscription->isActive() && ($subscription->hasTerm() || $subscription->traffic_limit_bytes > 0),
                 SubscriptionAction::Disable, SubscriptionAction::Move => $subscription->isActive(),
                 SubscriptionAction::Enable => $subscription->status === SubscriptionStatus::Disabled,
+                SubscriptionAction::Transfer => ServiceTransfers::transferable($subscription),
                 SubscriptionAction::Delete => true,
             };
         }

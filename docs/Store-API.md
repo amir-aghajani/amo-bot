@@ -40,7 +40,7 @@ recognising), [signing in](Store-API-Sign-In.md), [the account](Store-API-Accoun
 | Access | What |
 |---|---|
 | **Public** (the store key alone) | the shop (`GET /`), what it sells (`GET /plans`, `GET /plans/{id}` — a signed-in customer's token optional, read as theirs: [read signed in](Store-API-Shop.md#read-signed-in)), how its servers stand (`GET /status`), the reviews it shows and a review written, while the website takes them (`/reviews` — a signed-in customer's token optional, a guest's review behind the captcha), every way to sign in (`/auth/*`, but `POST /auth/logout`), and the website's captcha (`/captcha/*`) |
-| **A customer's own** (their bearer token) | their account (`/me/*`), their services (`/subscriptions/*`), buying (`/payment-methods`, `/orders`, renewals, extra traffic and time, wallet top-ups, receipts), their orders and payments, the wallet and its ledger, the referral program, every notice the shop sent them, and their support tickets (`/tickets/*`) |
+| **A customer's own** (their bearer token) | their account (`/me/*`), their services (`/subscriptions/*`), buying (`/payment-methods`, `/orders`, renewals, extra traffic, time and devices, wallet top-ups, receipts), their orders and payments, the wallet and its ledger, the referral program, every notice the shop sent them, and their support tickets (`/tickets/*`) |
 | **The shop's admins** (an admin's bearer token, while the website lets them in) | the shop's daily work as its panels do it — receipts and payments, orders, services, customers, tickets, reviews, plans, referrals, broadcasts — under `/admin/*` ([the shop's admins](Store-API-Admins.md)) |
 
 Not covered: the site's own content (blog, FAQ, app downloads) and online card gateways (the shop takes its wallet and
@@ -141,8 +141,8 @@ and `POST /reviews`, whose pace is counted by address too. If you must proxy the
   Iran's time.
 - **What a customer types** may use Persian or Arabic digits: emailed codes (six digits and nothing else — take out a
   space or a dash before sending), authenticator codes (spaces and dashes are fine there), the top-up amount (which takes
-  thousands separators and «تومان» too), an amount of extra traffic or time (whole GB or days). Send ids as JSON numbers
-  and switches as JSON booleans.
+  thousands separators and «تومان» too), an amount of extra traffic, time or devices (whole GB, days or devices). Send
+  ids as JSON numbers and switches as JSON booleans.
 - **Lengths** on these pages are characters as the shop counts them — Unicode code points: `😀` is one (a password's
   most, 72, is bytes). JavaScript's `.length` counts UTF-16 units, `😀` two: count a field with `[...text].length`.
   Only what the bot sends is measured Telegram's way, in UTF-16 units — why a `ticket_answered` notice may be cut
@@ -366,7 +366,7 @@ a site may want to tell apart, or explain better.
 | 403 | `برای نوشتن نظر، اول وارد حساب خود شوید.` | `POST /reviews` from a guest while the website asks no captcha: sign in first |
 | 503 | `این فروشگاه الان نظر تازه‌ای نمی‌گیرد؛ کمی بعد دوباره امتحان کنید.` | `POST /reviews` while 200 reviews wait on support: later |
 | 429 | `نظر زیادی ثبت شده است؛ …` | `POST /reviews`: 20 reviews an hour from the network (IPv6 by its /48), 3 a day from the customer, or 20 an hour from every guest together |
-| 503 | `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.` | an order, a renewal, extra traffic or time, a top-up or a receipt while the shop takes no orders (`GET /`'s `shop.taking_orders` false) |
+| 503 | `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.` | an order, a renewal, extra traffic, time or devices, a top-up or a receipt while the shop takes no orders (`GET /`'s `shop.taking_orders` false) |
 | 422 | `موجودی کیف پول کافی نیست؛ ۷۰٬۰۰۰ تومان کم است.` | the wallet short (`errors.method_id`; the amount varies) |
 | 409 | `این سفارش همین حالا جای دیگری پرداخت یا بسته شد؛ وضعیت آن را در سفارش‌ها ببینید.` | a checkout overtaken by another payment or a cancellation in the same moment |
 | 409 | `این سفارش لغو شده است؛ پرداخت نشد یا پشتیبانی آن را لغو کرد. برای خرید دوباره از نو شروع کنید.` | an ordering request made again with its key, its order cancelled since — by support, or unpaid in its time: a new attempt, a new key |
@@ -376,11 +376,13 @@ a site may want to tell apart, or explain better.
 | 422 | `این Idempotency-Key پیش‌تر برای سفارش دیگری به کار رفته است.` | `errors.idempotency_key`: the key came to an order of something else |
 | 422 | `این Idempotency-Key پیش‌تر با روش پرداخت دیگری به کار رفته است؛ برای پرداخت به روش دیگر کلید تازه‌ای بسازید.` | `errors.idempotency_key`: the key was first sent with another `method_id` — another way to pay is a new attempt |
 | 422 | `تمدید این سرویس در حال حاضر ممکن نیست؛ با پشتیبانی در تماس باشید.` | a renewal not possible now (`errors.status`) |
-| 422 | `این سرویس فعال نیست؛ با پشتیبانی در تماس باشید.` | extra traffic or time for a service switched off by support or gone from its server (`errors.status`; the service's other refusals: [extra traffic and time](Store-API-Buying.md#extra-traffic-and-time)) |
+| 422 | `یک پلن برای تمدید این سرویس انتخاب کنید.` / `این پلن برای تمدید این سرویس در دسترس نیست.` | the renewal of a service without a plan: none picked, or one not in `GET /subscriptions/{id}/renewal-plans` (`errors.plan_id`) |
+| 422 / 409 / 502 | `سرویسی با این لینک روی سرورهای فروشگاه پیدا نشد.`, `این سرویس در حساب مشتری دیگری است؛ …` and the like | `POST /subscriptions/claim` refused (`errors.link`; [adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)) |
+| 422 | `این سرویس فعال نیست؛ با پشتیبانی در تماس باشید.` | extra traffic, time or devices for a service switched off by support or gone from its server (`errors.status`; the service's other refusals: [extra traffic, time and devices](Store-API-Buying.md#extra-traffic-time-and-devices)) |
 | 422 | `این فروشگاه برای این سرویس حجم اضافه نمی‌فروشد.` / `… زمان اضافه نمی‌فروشد.` | none of it sold for that service now (`errors.gb`, `errors.days`): its `extras` flag is false |
-| 422 | `این مقدار فروخته نمی‌شود؛ …` | an amount of extra traffic or time not on offer (`errors.gb`, `errors.days`) — the rest of the message says what is: read `GET /subscriptions/{id}/extras` again |
+| 422 | `این مقدار فروخته نمی‌شود؛ …` | an amount of extra traffic, time or devices not on offer (`errors.gb`, `errors.days`, `errors.devices`) — the rest of the message says what is: read `GET /subscriptions/{id}/extras` again |
 | 422 | `رسید این پرداخت رسیده و در انتظار بررسی است.` | a second receipt for one payment (`errors.status`) |
-| 429 | `درخواست پرداخت زیادی فرستاده‌اید؛ …` / `اطلاعات سرویس را زیاد به‌روز کرده‌اید؛ …` / `لینک سرویس را زیاد عوض کرده‌اید؛ …` | a customer's own caps: ordering requests, a service read now, new links |
+| 429 | `درخواست پرداخت زیادی فرستاده‌اید؛ …` / `اطلاعات سرویس را زیاد به‌روز کرده‌اید؛ …` / `لینک سرویس را زیاد عوض کرده‌اید؛ …` / `تلاش برای افزودن سرویس زیاد بود؛ …` | a customer's own caps: ordering requests, a service read now, new links, links sent to add a service |
 | 429 | `تصویر زیادی فرستاده‌اید؛ …` | 10 pictures uploaded in an hour — receipts and tickets' pictures together, one budget |
 | 503 | `فضای ذخیره سرور پر شده و فعلا تصویری پذیرفته نمی‌شود؛ کمی بعد دوباره امتحان کنید.` | a receipt or a ticket's picture while the server's disk is too full: try again later |
 | 503 | `امروز بیش از این تصویری پذیرفته نمی‌شود؛ چند ساعت دیگر دوباره بفرستید.` | a receipt or a ticket's picture once the shop took 1 GB of pictures in a day: try again in a few hours |

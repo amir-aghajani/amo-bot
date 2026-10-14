@@ -71,6 +71,19 @@ final class Money
         return self::normalize(bcdiv(bcmul(self::normalize($amount), (string) $percent, self::SCALE), '100', 0));
     }
 
+    /**
+     * `$part` of `$whole` of an amount — a price set for a period, charged for part of it —, in whole Toman rounded up.
+     *
+     * @return numeric-string
+     */
+    public static function shareOf(string|float|int $amount, int $part, int $whole): string
+    {
+        $scaled = bcmul(self::normalize($amount), (string) $part, self::SCALE);
+        $share = bcdiv($scaled, (string) $whole, 0);
+
+        return self::normalize(bccomp(bcmul($share, (string) $whole, self::SCALE), $scaled, self::SCALE) < 0 ? bcadd($share, '1', 0) : $share);
+    }
+
     /** Persian display form: "۱۲۰٬۰۰۰ تومان". Toman has no fraction, so none is shown. */
     public static function format(string|float|int $amount): string
     {

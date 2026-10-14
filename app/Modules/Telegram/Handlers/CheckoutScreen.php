@@ -20,6 +20,8 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentMethods;
+use App\Modules\Subscriptions\Enums\ClientNameMode;
+use App\Modules\Subscriptions\Services\ClientNameSettings;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
@@ -32,14 +34,20 @@ use App\Modules\Telegram\Texts\Html;
 use App\Support\Money;
 
 /**
- * The bot's checkout screen, shared by every purchase in the bot (a plan, a renewal, extra traffic or time, a wallet
- * top-up, an agent's traffic). show() draws what is being bought with a button per way to pay; buy() runs the shop's
- * one checkout (Payments\Services\Checkout, the website's too) and renders the outcome. Nothing is ordered until a way
- * to pay is picked, and an unpaid order expires on its own.
+ * The bot's checkout screen, shared by every purchase in the bot (a plan, a renewal, extra traffic, time or devices, a
+ * wallet top-up, an agent's traffic). show() draws what is being bought with a button per way to pay; buy() runs the
+ * shop's one checkout (Payments\Services\Checkout, the website's too) and renders the outcome — through pay() at a
+ * discountable checkout, the one pay step of them all. Nothing is ordered until a way to pay is picked, and an unpaid
+ * order expires on its own.
  *
  * A checkout that may be discounted lists its discounts under its text and offers «🏷 کد تخفیف دارم»
  * (DiscountCodeHandler). The code typed is kept in the chat's session for that checkout alone (keepCode()) and is
  * judged again when it is paid: one used up meanwhile is dropped and nothing is ordered.
+ *
+ * A purchase's checkout says what its service will be called and, while the shop lets buyers choose
+ * (ClientNameSettings::modes()), offers «🔢 ترتیبی», «🎲 رندوم» and «✏️ دلخواه» (ClientNameHandler). The name drawn or
+ * typed is kept for that checkout alone (keepName()), and its order is made with it (requestedName()); «پرداخت دوباره»
+ * keeps its order's (keepOrderName()).
  */
 final class CheckoutScreen
 {
@@ -49,6 +57,16 @@ final class CheckoutScreen
     /** The session fact holding the discount code kept for one checkout: `{at: its callback data, code}`. */
     private const CODE = '_discount_code';
 
+    /** The session fact holding the client name kept for one purchase's checkout: `{at: its callback data, mode, name}`. */
+    private const NAME = '_client_name';
+
+    /** Each way to name a service, and its button. */
+    private const NAME_BUTTONS = [
+        ClientNameMode::Sequential->value => BotText::CheckoutNameSequential,
+        ClientNameMode::Random->value => BotText::CheckoutNameRandom,
+        ClientNameMode::Custom->value => BotText::CheckoutNameCustom,
+    ];
+
     public function __construct(
         private readonly PaymentMethods $methods,
         private readonly Checkout $checkout,
@@ -56,24 +74,48 @@ final class CheckoutScreen
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
         private readonly DiscountCodes $codes,
+        private readonly ClientNameSettings $names,
     ) {}
 
-    /** The discount code kept for the checkout `$checkout` (its callback data); null for none. */
-    public function code(Context $ctx, string $checkout): ?string
+    /**
+     * The client name kept for the purchase's checkout `$checkout` (its callback data), while the shop still offers the
+     * way it was drawn or typed by; null for the shop's pattern.
+     */
+    public function requestedName(Context $ctx, string $checkout): ?string
     {
-        $kept = $ctx->session->get(self::CODE);
+        $kept = $this->kept($ctx, self::NAME, $checkout);
+        $mode = ClientNameMode::tryFrom((string) ($kept['mode'] ?? ''));
 
-        return is_array($kept) && ($kept['at'] ?? null) === $checkout && is_string($kept['code'] ?? null) ? $kept['code'] : null;
+        return $mode !== null && is_string($kept['name'] ?? null) && in_array($mode, $this->names->modes(), true) ? $kept['name'] : null;
+    }
+
+    /** Keep the name `$mode` gave (drawn or typed) for the checkout `$checkout`, or (null) drop the kept name. */
+    public function keepName(Context $ctx, string $checkout, ?ClientNameMode $mode, ?string $name = null): void
+    {
+        $this->keep($ctx, self::NAME, $checkout, $mode !== null && $name !== null ? ['mode' => $mode->value, 'name' => $name] : null);
+    }
+
+    /**
+     * Keep the name an unpaid purchase asked for (`$name`, null for the shop's pattern) for its checkout `$checkout` —
+     * «پرداخت دوباره» draws it so, and paying finds that very order. The name is kept as one typed while the shop takes
+     * typed names, else as one drawn while it draws them; once it names by its pattern alone, by the pattern, as any
+     * checkout drawn since.
+     */
+    public function keepOrderName(Context $ctx, string $checkout, ?string $name): void
+    {
+        $modes = $this->names->modes();
+        $mode = match (true) {
+            in_array(ClientNameMode::Custom, $modes, true) => ClientNameMode::Custom,
+            in_array(ClientNameMode::Random, $modes, true) => ClientNameMode::Random,
+            default => null,
+        };
+        $this->keepName($ctx, $checkout, $mode, $name);
     }
 
     /** Keep `$code` for the checkout `$checkout`, or (null) drop the kept code — any other checkout's goes too. */
     public function keepCode(Context $ctx, string $checkout, ?string $code): void
     {
-        if ($code !== null) {
-            $ctx->session->put(self::CODE, ['at' => $checkout, 'code' => $code]);
-        } elseif ($ctx->session->get(self::CODE) !== null) {
-            $ctx->session->put(self::CODE, null);
-        }
+        $this->keep($ctx, self::CODE, $checkout, $code === null ? null : ['code' => $code]);
     }
 
     /**
@@ -103,23 +145,6 @@ final class CheckoutScreen
             $this->keepCode($ctx, $checkout, null);
 
             return [$price(null), $e->getMessage()];
-        }
-    }
-
-    /**
-     * What the checkout costs as it is paid, with the kept code; null after telling the customer the code no longer
-     * holds (codeLost()) — nothing is ordered then.
-     *
-     * @param \Closure(?string): Quote $price
-     */
-    public function priceToPay(Context $ctx, string $checkout, \Closure $price): ?Quote
-    {
-        try {
-            return $price($this->code($ctx, $checkout));
-        } catch (DiscountCodeRefusedException $e) {
-            $this->codeLost($ctx, $checkout, $e->getMessage());
-
-            return null;
         }
     }
 
@@ -155,12 +180,15 @@ final class CheckoutScreen
      * callback), the row `$instead` (other things to buy) and «بازگشت» to `$back`. Something `$free` gets one «🎁 دریافت
      * رایگان» button instead, through the first way to pay: the checkout settles a free order whichever is picked. With a
      * `$quote` and its `$checkout` callback, «🏷 کد تخفیف دارم» — or «❌ حذف کد تخفیف» while a code is applied — is
-     * offered while the shop has codes and something is left to pay. Showing it leaves whatever flow the chat was in.
+     * offered while the shop has codes and something is left to pay. A purchase's checkout says its service's name under
+     * the text, with a button per way the shop lets buyers name it (nameRow()). The row `$choices` (a renewal's methods,
+     * each redrawing the checkout) comes above `$instead`. Showing it leaves whatever flow the chat was in.
      *
      * @param \Closure(PaymentMethod): string $pay
      * @param list<array<string, mixed>> $instead
+     * @param list<array<string, mixed>> $choices
      */
-    public function show(Context $ctx, string $text, OrderType $type, \Closure $pay, string $back, array $instead = [], bool $free = false, ?Quote $quote = null, ?string $checkout = null): void
+    public function show(Context $ctx, string $text, OrderType $type, \Closure $pay, string $back, array $instead = [], bool $free = false, ?Quote $quote = null, ?string $checkout = null, array $choices = []): void
     {
         $ctx->session->enter(self::STATE);
 
@@ -178,9 +206,42 @@ final class CheckoutScreen
                 ? InlineKeyboard::callback($this->texts->get(BotText::DiscountCodeRemove), DiscountCodeHandler::removeCallback($checkout))
                 : InlineKeyboard::callback($this->texts->get(BotText::DiscountCodeButton), DiscountCodeHandler::askCallback($checkout)));
         }
-        $keyboard->row(...$instead)->row($this->buttons->back($back));
+        if ($type === OrderType::Purchase && $checkout !== null && $methods !== []) {
+            $named = $this->nameRow($ctx, $checkout);
+            if ($named !== null) {
+                [$line, $buttons] = $named;
+                $text = BotTexts::paragraphs($text, $line);
+                $keyboard->row(...$buttons);
+            }
+        }
+        $keyboard->row(...$methods === [] ? [] : $choices)->row(...$instead)->row($this->buttons->back($back));
 
         $ctx->edit($methods === [] ? BotTexts::paragraphs($text, $this->texts->get(BotText::CheckoutNoGateway)) : $text, ['reply_markup' => $keyboard->build()]);
+    }
+
+    /**
+     * A way to pay picked at a discountable checkout (`$checkout`, its callback data): the way `$methodId` while it still
+     * pays `$type` — else the checkout drawn again by `$redraw`, with the ways that are left —, the price as it is paid
+     * with the code kept for it (priceToPay(); for `$codeFor` when kept for another, a renewal's whatever its method), and
+     * what `$open` orders at it paid (buy()).
+     *
+     * @param \Closure(?string): Quote $price
+     * @param \Closure(?OrderKey, Quote): Order $open
+     * @param \Closure(): void $redraw
+     */
+    public function pay(Context $ctx, int $methodId, OrderType $type, string $checkout, \Closure $price, \Closure $open, \Closure $redraw, ?string $codeFor = null): void
+    {
+        $method = $this->methods->payable($methodId, $type);
+        if ($method === null) {
+            // Switched off since the checkout was drawn.
+            $redraw();
+
+            return;
+        }
+        $quote = $this->priceToPay($ctx, $codeFor ?? $checkout, $checkout, $price);
+        if ($quote !== null) {
+            $this->buy($ctx, $method, $quote->amount(), static fn(?OrderKey $key): Order => $open($key, $quote), $checkout);
+        }
     }
 
     /**
@@ -202,9 +263,10 @@ final class CheckoutScreen
 
             return;
         }
-        // Paid: the code served its checkout.
+        // Paid: the code and the name served their checkout.
         if (in_array($result->outcome, [CheckoutOutcome::Settled, CheckoutOutcome::Processing], true)) {
             $this->keepCode($ctx, $checkout, null);
+            $this->keepName($ctx, $checkout, null);
         }
 
         match ($result->outcome) {
@@ -222,11 +284,86 @@ final class CheckoutScreen
         };
     }
 
+    /**
+     * A purchase's name under its checkout — the one kept for it (requestedName()), else «ترتیبی» — and a button per way
+     * the shop lets buyers name a service; null while the shop's pattern is the only one.
+     *
+     * @return array{Html, list<array<string, mixed>>}|null
+     */
+    private function nameRow(Context $ctx, string $checkout): ?array
+    {
+        $modes = $this->names->modes();
+        if (count($modes) < 2) {
+            return null;
+        }
+        $name = $this->requestedName($ctx, $checkout);
+        $line = $name === null ? $this->texts->part(BotText::CheckoutNamePattern) : $this->texts->part(BotText::CheckoutName, ['client' => $name]);
+
+        return [$line, array_map(fn(ClientNameMode $mode): array => InlineKeyboard::callback(
+            $this->texts->get(self::NAME_BUTTONS[$mode->value]),
+            ClientNameHandler::modeCallback($mode, $checkout),
+        ), $modes)];
+    }
+
+    /** The discount code kept for the checkout `$checkout` (its callback data); null for none. */
+    private function code(Context $ctx, string $checkout): ?string
+    {
+        $code = $this->kept($ctx, self::CODE, $checkout)['code'] ?? null;
+
+        return is_string($code) ? $code : null;
+    }
+
+    /**
+     * What the checkout `$checkout` costs as it is paid, with the code kept for `$codeFor` (the checkout itself, or a
+     * renewal's whatever its method); null after telling the customer the code no longer holds (codeLost(), «بازگشت» to
+     * `$checkout` as it was drawn) — nothing is ordered then.
+     *
+     * @param \Closure(?string): Quote $price
+     */
+    private function priceToPay(Context $ctx, string $codeFor, string $checkout, \Closure $price): ?Quote
+    {
+        try {
+            return $price($this->code($ctx, $codeFor));
+        } catch (DiscountCodeRefusedException $e) {
+            $this->codeLost($ctx, $checkout, $e->getMessage());
+
+            return null;
+        }
+    }
+
     /** The kept discount code no longer holds as the checkout is paid: dropped, why said, «بازگشت» to the checkout without it. */
-    public function codeLost(Context $ctx, string $checkout, string $reason): void
+    private function codeLost(Context $ctx, string $checkout, string $reason): void
     {
         $this->keepCode($ctx, $checkout, null);
         $ctx->edit($this->texts->render(BotText::DiscountCodeLost, ['reason' => $reason]), ['reply_markup' => $this->buttons->backOnly($checkout)]);
+    }
+
+    /**
+     * The session fact `$fact` (`{at: a checkout's callback data, …}`) while it is kept for the checkout `$checkout`; null
+     * for none, or another checkout's.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function kept(Context $ctx, string $fact, string $checkout): ?array
+    {
+        $kept = $ctx->session->get($fact);
+
+        return is_array($kept) && ($kept['at'] ?? null) === $checkout ? $kept : null;
+    }
+
+    /**
+     * Keep `$values` as the session fact `$fact` for the checkout `$checkout` alone, or (null) drop it — any other
+     * checkout's goes too.
+     *
+     * @param array<string, string>|null $values
+     */
+    private function keep(Context $ctx, string $fact, string $checkout, ?array $values): void
+    {
+        if ($values !== null) {
+            $ctx->session->put($fact, ['at' => $checkout] + $values);
+        } elseif ($ctx->session->get($fact) !== null) {
+            $ctx->session->put($fact, null);
+        }
     }
 
     /** The wallet's payment was refused, with the gateway's reason when it gave one. */
@@ -267,7 +404,7 @@ final class CheckoutScreen
         $this->card->sendSettled($ctx->chatId(), $order, match ($order->type) {
             OrderType::Traffic => ['reply_markup' => $this->buttons->backOnly(MainMenu::AGENCY)],
             OrderType::WalletTopUp => ['reply_markup' => $this->buttons->backOnly(MainMenu::WALLET)],
-            OrderType::Renewal, OrderType::ExtraTraffic, OrderType::ExtraTime => ['reply_markup' => $this->buttons->serviceOnly((int) $order->subscription_id)],
+            OrderType::Renewal, OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => ['reply_markup' => $this->buttons->serviceOnly((int) $order->subscription_id)],
             OrderType::Purchase => [],
         });
     }

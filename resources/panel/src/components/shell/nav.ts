@@ -26,6 +26,7 @@ import {
   TicketPercent,
   UserPlus,
   Users,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react'
 import { useLocation } from 'react-router'
@@ -51,6 +52,8 @@ export interface NavItem {
   end?: boolean
   /** The queue whose count rides beside the entry (components/shell/queue-badge): what waits on a human there. */
   badge?: keyof QueueCounts
+  /** The main shop's alone: an agent's shop — in either panel — has no such page (`navOfShop()`). */
+  mainShop?: true
 }
 
 export interface NavGroup {
@@ -71,6 +74,8 @@ export interface NavSection<T extends string = string> {
   title: string
   /** The section's address — a page's first one is the page's own (`/users`), the settings' all have a segment. */
   to: string
+  /** The main shop's alone: an agent's shop — in either panel — has no such section (`sectionsOfShop()`). */
+  mainShop?: true
 }
 
 /** A heading of a column of sections — a sectioned page, or one page of the settings — with its sections under it. */
@@ -116,6 +121,7 @@ export const SHOP_GROUP: NavGroup = {
   items: [
     { id: 'plans', title: 'پلن‌ها', to: '/plans', icon: Package },
     { id: 'tests', title: 'اکانت تست', to: '/tests', icon: FlaskConical },
+    { id: 'custom-services', title: 'سرویس دلخواه', to: '/custom-services', icon: Wrench, mainShop: true },
     { id: 'categories', title: 'دسته‌بندی‌ها', to: '/categories', icon: Tags },
     { id: 'payment-methods', title: 'روش‌های پرداخت', to: '/payment-methods', icon: Banknote },
   ],
@@ -204,20 +210,24 @@ export const REFERRAL_SECTIONS: NavSection<'referrers' | 'invitees' | 'commissio
 export const BROADCAST_MESSAGES: NavSection<'messages'> = { value: 'messages', title: 'پیام همگانی', to: '/broadcasts' }
 
 /**
- * The bot settings' sections — a subject each (the renewal one holds two groups: its rule and «تمدید خودکار»). The gift
- * codes' switch, the lucky wheel's rules, cashback's switch, the nightly draw's rules and the test accounts' rules are
- * groups of the bot settings too, set on their own pages.
+ * The bot settings' sections — a subject each (the renewal one holds two groups: its rule and «تمدید خودکار»); services
+ * added by their link («افزودن سرویس با لینک») are the main shop's alone. The gift codes' switch, the lucky wheel's rules,
+ * cashback's switch, the nightly draw's rules and the test accounts' rules are groups of the bot settings too, set on
+ * their own pages.
  */
-export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts' | 'test_accounts'>
+export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts' | 'test_accounts' | 'custom_services'>
 
 export const BOT_SETTINGS_SECTIONS: NavSection<BotSettingsSection>[] = [
   { value: 'general', title: 'عمومی', to: '/bot-settings/general' },
+  { value: 'client_names', title: 'نام کاربری سرویس', to: '/bot-settings/client-names' },
   { value: 'channels', title: 'کانال‌ها', to: '/bot-settings/channels' },
   { value: 'wallet', title: 'کیف پول', to: '/bot-settings/wallet' },
   { value: 'renewal', title: 'تمدید سرویس', to: '/bot-settings/renewal' },
-  { value: 'extras', title: 'حجم و زمان اضافه', to: '/bot-settings/extras' },
+  { value: 'extras', title: 'خرید اضافه', to: '/bot-settings/extras' },
   { value: 'reminders', title: 'یادآوری', to: '/bot-settings/reminders' },
   { value: 'expired_services', title: 'سرویس‌های منقضی‌شده', to: '/bot-settings/expired-services' },
+  { value: 'service_claims', title: 'افزودن سرویس با لینک', to: '/bot-settings/service-claims', mainShop: true },
+  { value: 'service_transfers', title: 'انتقال سرویس', to: '/bot-settings/service-transfers' },
   { value: 'referral', title: 'زیرمجموعه‌گیری', to: '/bot-settings/referral' },
   { value: 'reports', title: 'گروه گزارش‌ها', to: '/bot-settings/reports' },
   { value: 'qr', title: 'کد QR', to: '/bot-settings/qr' },
@@ -255,6 +265,23 @@ export function panelSettings(sections: NavSection[]): NavSectionGroup {
 }
 
 /* Reading a panel's tree. */
+
+/** The sections the shop on screen has: all of them in the main shop, all but the main shop's own (`mainShop`) in an agent's. */
+export function sectionsOfShop<T extends string>(sections: NavSection<T>[], main: boolean): NavSection<T>[] {
+  return main ? sections : sections.filter((section) => !section.mainShop)
+}
+
+/** A panel's tree as the shop on screen has it (the shell draws this one): every column without what that shop lacks. */
+export function navOfShop(nav: PanelNav, main: boolean): PanelNav {
+  if (main) return nav
+
+  return {
+    ...nav,
+    menu: nav.menu.filter((entry) => isGroup(entry) || !entry.mainShop).map((entry) => (isGroup(entry) ? { ...entry, items: entry.items.filter((item) => !item.mainShop) } : entry)),
+    sections: Object.fromEntries(Object.entries(nav.sections).map(([id, sections]) => [id, sections && sectionsOfShop(sections, main)])),
+    settings: { ...nav.settings, groups: nav.settings.groups.map((group) => ({ ...group, sections: sectionsOfShop(group.sections, main) })) },
+  }
+}
 
 export function isNavItemActive(item: Pick<NavItem, 'to' | 'end'>, pathname: string): boolean {
   return item.end ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + '/')

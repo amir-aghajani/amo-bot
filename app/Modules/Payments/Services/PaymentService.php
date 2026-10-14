@@ -73,10 +73,14 @@ final class PaymentService
      * transfer waits for its receipt: the order's open payment with that card is reused, else a new one is made.
      *
      * @return array{payment: Payment, initiation: PaymentInitiation}
-     * @throws OrderNotPayableException the order is not open any more; nothing was written
+     * @throws OrderNotPayableException the order is not open any more, or is for a service handed to another customer
+     *                                  since (Order::serviceChangedHands()); nothing was written
      */
     public function createForOrder(Order $order, PaymentMethod $method): array
     {
+        if ($order->serviceChangedHands()) {
+            throw new OrderNotPayableException($order);
+        }
         // A free order is settled by the wallet row even when it is switched off: it takes nothing.
         $free = $method->isWallet() && !Money::isPositive($order->amount);
         if ((!$method->enabled && !$free) || !PaymentMethods::pays($method, $order->type)) {
@@ -206,10 +210,10 @@ final class PaymentService
 
     /**
      * Cancels, quietly, an order the customer walked away from — it and its payments untouched since `$idleSince` — with
-     * its unpaid payments (ExpireOrdersTask); never while a receipt of it waits for support. Under locks on the order and
-     * its payments, so a receipt arriving at the same moment either comes first or finds it cancelled. Uploaded receipts
-     * of those payments are deleted after the commit. `$note` says why (an expired code hold, or unpaid in time). True
-     * when this call cancelled it.
+     * its unpaid payments (ExpireOrdersTask; a service's previous owner at once, ServiceTransfers); never while a receipt
+     * of it waits for support. Under locks on the order and its payments, so a receipt arriving at the same moment either
+     * comes first or finds it cancelled. Uploaded receipts of those payments are deleted after the commit. `$note` says
+     * why (an expired code hold, unpaid in time, the service handed on). True when this call cancelled it.
      */
     public function expire(Order $order, \DateTimeInterface $idleSince, string $note = OrderService::NOTE_EXPIRED): bool
     {

@@ -30,7 +30,7 @@ final class StoreApiTest extends HttpTestCase
         $website = $this->website();
 
         self::assertSame([
-            'shop' => ['name' => 'آب‌سردکن', 'bot' => ['username' => 'amo_shop_bot', 'url' => 'https://t.me/amo_shop_bot'], 'taking_orders' => true],
+            'shop' => ['name' => 'آب‌سردکن', 'bot' => ['username' => 'amo_shop_bot', 'url' => 'https://t.me/amo_shop_bot'], 'taking_orders' => true, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential']],
             'support' => ['url' => 'https://t.me/amo_support'],
             'sign_in' => ['telegram' => ['client_id' => self::WEBSITE_CLIENT_ID, 'redirect' => false], 'google' => null, 'email' => false],
             'captcha' => null,
@@ -78,7 +78,7 @@ final class StoreApiTest extends HttpTestCase
 
         $shop = $this->decode($this->get($this->storeApi($website)));
 
-        self::assertSame(['name' => 'فروشگاه نماینده', 'bot' => ['username' => 'agent_shop_bot', 'url' => 'https://t.me/agent_shop_bot'], 'taking_orders' => true], $shop['shop']);
+        self::assertSame(['name' => 'فروشگاه نماینده', 'bot' => ['username' => 'agent_shop_bot', 'url' => 'https://t.me/agent_shop_bot'], 'taking_orders' => true, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential']], $shop['shop']);
         self::assertNull($shop['support'], 'no contact set in their shop');
     }
 

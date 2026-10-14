@@ -93,7 +93,7 @@ final class MessagesTest extends TestCase
 
     public function testADeviceCountReadsWithItsUnitAndZeroIsUnlimited(): void
     {
-        self::assertSame('۲ دستگاه', Messages::devices(2));
+        self::assertSame('۲ کاربر', Messages::devices(2), 'one word for the device limit: a plan, a service, «کاربر اضافه»');
         self::assertSame(Messages::UNLIMITED, Messages::devices(0));
     }
 

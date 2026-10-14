@@ -51,7 +51,8 @@ through their own `open*()`.
 `Orders\Services\Pricing` is the only place a price is worked out — the bot, the website and automatic renewal all ask it:
 
 1. **The base** — the plan's price for this customer (`Buyer`): its price, its first-purchase price while they have bought
-   nothing, its agent price for an agent or a «همکار» group, whichever is lowest; an extra's price as offered.
+   nothing, its agent price for an agent or a «همکار» group, whichever is lowest; an extra's price as offered; a service
+   the customer builds, its GB and its days each priced whole at its tier's rate, the two added (`custom()`, below).
 2. **The automatic discount** — the largest of a running sale, the customer's own percent and their tier's
    (`AutomaticDiscounts::best()`). Never added together — the owner's decision: one automatic discount, then a code.
 3. **The code** — applied to what step 2 left (`DiscountCodes::apply()`).
@@ -60,6 +61,37 @@ Whole Toman, never below zero; an order at zero is "free" and the shop's wallet 
 picked. Wallet top-ups and agents' traffic are never discounted (`OrderType::FOR_THEMSELVES` lists the kinds a discount,
 loyalty, cashback and the draw care about). The resulting `Quote` is written onto the order (`pricing`, `discounts`,
 `discount_amount`, `discount_code_id`), so an order keeps the price it was made at whatever changes later.
+
+**A service the customer builds** («سرویس دلخواه», [Custom services](Custom-Services.md)) is a purchase without a plan.
+`Catalog\Services\CustomServices` is its whole rule: offered in the main shop alone while switched on, both tier lists
+sell and one of its servers can take a client (`ServerSelector::wholeServer()`); each quantity (`Enums\CustomQuantity`:
+traffic, days — one set of methods for both: `tiers()`, `bounds()`, `options()`, `allowed()`, `price()`) within its
+bounds — the least never below the first tier, so whatever is in bounds is priced — at `DTO\PriceTiers::priceOf()`, the
+whole quantity at its tier's rate (`quote()` → `DTO\CustomPrice`). `Pricing::custom()` takes that as the base and treats
+it as an extra of a plan-less service is treated: `AutomaticDiscounts::best(null, Purchase, …)` (a sale of every plan
+only) and a code judged for `CodeTarget(Purchase, null, server)`. `OrderService::openCustomPurchase()` makes the order —
+`plan_id` null, `server_id`, `traffic_bytes`, `days`, `client_name` in its shape, so the open one of the same is found
+and a key's order must match; `devices` (the builder's) beside it, a setting rather than what the customer asked for, so
+an admin changing it neither turns a request made again into another one nor leaves the open order behind (it takes the
+devices now); `Order::package()` hands delivery its own GB, days and devices, and `ProvisioningService::provision()`
+makes it on the server whole (`ServerSelector::builtOn()`). `Order::packageName()` is the one wording of what an order
+buys wherever a plan's name is printed (the report group, the panels' payments and dashboard): the plan's name, or
+«سرویس دلخواه · ۵۰ گیگ · ۳۰ روز». The bot's flow is `Telegram\Handlers\CustomServiceHandler`, the website's
+`Store\Api\CustomServicesController` over `CustomerCheckout::customQuote()` and `buildService()` — a purchase named as a
+plan's is (`CheckoutScreen::requestedName()`, `CustomerCheckout::clientName()`).
+
+A service without a plan (`CustomerRenewal::picksPlan()`: built, or added by its link) renews on a plan its customer
+picks or, while `CustomerRenewal::buildable()`, with a package built. `Pricing::renewal()` takes either what it renews
+with — a `Plan` (its renewal price: an agent's, never a first purchase's) or a `CustomPrice` — and prices a package as
+`custom()` does, but as a `Renewal`: `best(null, Renewal, …)` and `CodeTarget(Renewal, null, the service's server)`
+(`Pricing::built()` is the path both share). `OrderService::openCustomRenewal()` is `openRenewal()`'s twin — `plan_id`
+null, `traffic_bytes`, `days`, `renewal_method` in its shape, `devices` beside it —, both through `openRenewalOf()`: the
+service's row locked and `renewalUnderWay()` asked in the order's transaction (its owner's renewals only: one a previous
+owner left is never delivered onto it, so it holds nothing — `AutoRenewal::claim()` counts the same way). A checkout
+orders what its preview shows
+with `openPreviewed()`, which picks the twin by what the `DTO\RenewalPreview` renews with.
+`ProvisioningService::renew()` adds `Order::package()` and writes no plan onto the service, so it keeps picking;
+`AutoRenewal` never offers it.
 
 **"Has bought" has two readings, each in one place on `Order`.** `boughtBy()` — a purchase ever paid, a free plan
 included, never a service given free — decides first-purchase prices and first-purchase codes (the owner's earlier
@@ -80,12 +112,24 @@ to one customer. Wrong codes are rate-limited per customer (`DiscountCodes::trie
 ## Orders and the checkout
 
 `OrderService::open()` finds the customer's payable order of the same shape at the same price and code, or makes one,
-under a lock on the customer's row — two taps make one order. The website sends an `Idempotency-Key` with every ordering
-request: the order a key came to answers the same request made again, whatever happened to it since (paid, delivered,
-cancelled, a new price), and the key remembers its payment method so a repeat is never paid another way. Two requests
-with one key at once are settled by the `request_keys` unique row and the order's compare-and-swap; the loser describes
-the winner's result (`Checkout::standing()`). A keyed request makes no new order while the customer has
-`OrderService::UNPAID_MAX` unpaid ones (each may hold a receipt picture on the host).
+under a lock on the customer's row — two taps make one order. The shape is what the order buys: the plan and its server
+or its service, an amount, a built package (its GB and days), a client name, a renewal's method (`renewal_method`: a
+renewal by another method is another order; an automatic renewal's is the admin's default,
+`OrderService::createRenewal()`). An extra's is its service and what it adds; the service's plan rides beside it (shown
+as the order's plan), so a request made again after the service got a plan is still the same one. A renewal or an extra
+is opened under its service's row lock while the service is still the customer's (`OrderService::holding()`: refused as
+`ServiceTransfers::MOVED_ON`, or `SERVICE_GONE` once its row is gone), so a transfer at the same moment sees the order
+(its open-order check runs under the same lock) and a screen drawn before a transfer orders nothing. Support's transfer cancels the giver's
+unpaid ones (`ServiceTransfers::cancelLeftOrders()`, through `PaymentService::expire()`); one it left open — its receipt
+in review — is neither paid (`PaymentService::createForOrder()`) nor delivered (`OrderService::carryOut()`, and again
+under the service's hold for a delivery under way as it is handed on, `ProvisioningService::renew()`/`addExtra()`;
+`ServiceChangedHandsException`: it fails for support to refund, as a first purchase paid second does) —
+`Order::serviceChangedHands()`. The website sends an `Idempotency-Key` with every ordering request: the order a key came
+to answers the same request made again, whatever happened to it since (paid, delivered, cancelled, a new price), and the
+key remembers its payment method so a repeat is never paid another way. Two requests with one key at once are settled by
+the `request_keys` unique row and the order's compare-and-swap; the loser describes the winner's result
+(`Checkout::standing()`). A keyed request makes no new order while the customer has `OrderService::UNPAID_MAX` unpaid
+ones (each may hold a receipt picture on the host).
 
 Statuses (`OrderStatus`): pending → paid → processing → fulfilled | failed, or cancelled unpaid, or refunded. The
 reading lists live on `Order`: `SOLD` (a sale), `KEPT` (paid and not given back — a sale or a failed delivery), and the
@@ -121,9 +165,14 @@ top-up back out of the wallet — refused once spent or sold. Taking back is the
 services screen's own delete (`SubscriptionActions::delete()`, no message of its own), refused while another paid or
 open order (`Order::OPEN`, `Order::KEPT`) holds it. A renewal's or an extra's gift is undone by
 `ProvisioningService::undo()` (`ServiceTerms::takeBack()`): a renewal's term and traffic as `given_hours` and
-`given_bytes` kept them at delivery, an extra's `days` or `traffic_bytes`; once — `taken_back_at` is written with the
-row and checked under the service's hold —, and refused, under that hold, while the service is switched off. Only a
-delivered order is taken back from. A refusal, or a panel that fails, leaves the payment unrefunded:
+`given_bytes` kept them at delivery and its device limit put back (`given_ip_limit`, `ip_limit_was`,
+`ip_limit_queued`, `ip_limit_reset_was`: `ServiceTerms::limitPutBack()`), an extra's `days`, `traffic_bytes` or
+`devices` — as far as the service still has them: what a later renewal started afresh, and what only the last renewal
+standing undoes, is handed on to it ([the take-back](Internals-Services.md#renewals-extras-and-reminders)); once —
+`taken_back_at` is written with the row and checked under the service's hold —, its client switched on or off as the
+panel had it. Only a delivered order is taken back from, and never from a service another customer has now
+(`RefundRefusedException::serviceChangedHands()`, asked first and again under the hold: a transfer since; a merge
+moves the orders with the services). A refusal, or a panel that fails, leaves the payment unrefunded:
 `PaymentActions::refund()` asks it before `PaymentService::refund()`, and hands that the order's state it judged by
 (`$seen`) — an order delivered in between is refused under the order's lock, to be refunded again (and taken back).
 
@@ -196,4 +245,4 @@ The feature tests are named after what they cover (`PaymentSettlementTest`, `Dis
 `ReferralGiftsTest`, `Admin*ApiTest` for each screen). Build rows with the `Tests\Support\Fixtures` helpers — `plan()`,
 `sellingServer()`, `buy()` (paid from the wallet), `paidByCard()`, `wallet()`, `agent()`, `agentBot()`, `traffic()`,
 `discountCode()`, `sale()`, `loyaltyTier()`, `cashbackOn()`, `giftCode()`, `wheelOn()`, `lotteryOn()`,
-`referralProgram()` — and see [Testing](Testing.md) for the fakes (a fake panel, a fake Telegram).
+`referralProgram()`, `customServicesOn()` — and see [Testing](Testing.md) for the fakes (a fake panel, a fake Telegram).

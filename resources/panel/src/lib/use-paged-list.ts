@@ -4,8 +4,8 @@ import { useLocation, useNavigate } from 'react-router'
 import { useSectionShown } from '@/components/sectioned-page'
 import type { PageMeta, SortDirection } from '@/lib/api-types'
 
-/** How long typing pauses before the search reaches the list (and its address). */
-const SEARCH_DELAY_MS = 300
+/** How long typing pauses before a search goes: a list's (and its address), a customer looked up by what is typed. */
+export const SEARCH_DELAY_MS = 300
 
 /** The order a sorted list is read in: one of its API's `sort` keys, and which way. */
 export interface ListOrder<S extends string = string> {

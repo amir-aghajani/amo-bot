@@ -8,7 +8,7 @@ import { FormActions } from '@/components/form-footer'
 import { SwitchRow } from '@/components/switch-row'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
-import type { DiscountKind, SaleRequest, SaleRow } from '@/lib/api-types'
+import type { OwnOrderType, SaleRequest, SaleRow } from '@/lib/api-types'
 import { useForm } from '@/lib/use-form'
 
 interface SaleFormProps {
@@ -22,7 +22,7 @@ interface SaleFormProps {
 interface Draft {
   name: string
   percent: string
-  order_types: DiscountKind[] | null
+  order_types: OwnOrderType[] | null
   plan_ids: number[] | null
   starts: WindowEnd
   ends: WindowEnd

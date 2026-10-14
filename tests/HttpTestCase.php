@@ -360,6 +360,17 @@ abstract class HttpTestCase extends DatabaseTestCase
         return "{$e->getMessage()} — {$where}{$cause->getMessage()}";
     }
 
+    /**
+     * The answer refused the request with `$words` alone under `$field` — a 422 unless another status is given; a failure
+     * says `$message` (the case), then the answer.
+     */
+    protected function assertRefusedUnder(string $field, string $words, ResponseInterface $response, int $status = 422, string $message = ''): void
+    {
+        $body = (string) $response->getBody();
+
+        self::assertSame([$status, [$words]], [$response->getStatusCode(), $this->decode($response)['errors'][$field] ?? null], $message === '' ? $body : "{$message}: {$body}");
+    }
+
     /** @return array<string, mixed> */
     protected function decode(ResponseInterface $response): array
     {

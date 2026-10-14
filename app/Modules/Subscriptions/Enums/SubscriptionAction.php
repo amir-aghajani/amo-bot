@@ -11,6 +11,7 @@ enum SubscriptionAction: string
     case Disable = 'disable';
     case Enable = 'enable';
     case Move = 'move';
+    case Transfer = 'transfer';
     case Delete = 'delete';
     case Extend = 'extend';
 }

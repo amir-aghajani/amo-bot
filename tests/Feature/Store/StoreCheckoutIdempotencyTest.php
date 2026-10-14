@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Store;
 
 use App\Modules\Accounts\Services\AccountMerger;
+use App\Modules\Auth\Actor;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
@@ -18,6 +19,8 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Store\Exceptions\CheckoutRefusedException;
 use App\Modules\Store\Http\IdempotencyKey;
 use App\Modules\Store\Models\Website;
+use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Users\Models\User;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Events\TransactionCommitted;
@@ -86,6 +89,20 @@ final class StoreCheckoutIdempotencyTest extends HttpTestCase
 
         self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
         self::assertSame(['settled', $first['order']['id']], [$this->decode($again)['checkout']['outcome'], $this->decode($again)['checkout']['order']['id']]);
+    }
+
+    public function testAKeyMadeAgainOnceItsServiceWasHandedOnIsAnsweredByItsOrderWithoutTheService(): void
+    {
+        $first = $this->decode($this->purchase($this->walletMethod()))['checkout'];
+        $this->transfersOn();
+        $sara = $this->customer(['telegram_id' => 7070, 'username' => 'sara']);
+        $this->service(ServiceTransfers::class)->transfer(Subscription::query()->findOrFail($first['subscription']['id']), $sara, Actor::customer($this->customer));
+
+        $again = $this->purchase($this->walletMethod());
+
+        self::assertSame(200, $again->getStatusCode(), (string) $again->getBody());
+        $checkout = $this->decode($again)['checkout'];
+        self::assertSame(['settled', $first['order']['id'], null], [$checkout['outcome'], $checkout['order']['id'], $checkout['subscription']], 'their order, not Sara\'s service');
     }
 
     public function testACardTransferMadeAgainIsTheSamePaymentToTheSameCard(): void

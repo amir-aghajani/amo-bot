@@ -14,6 +14,7 @@ use App\Modules\Referrals\Services\ReferralService;
 use App\Modules\Referrals\Services\ReferralSettings;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
+use App\Modules\Subscriptions\Services\ServiceClaims;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
@@ -61,7 +62,9 @@ final class MenuHandler implements Handler
         private readonly GiftCodeHandler $giftScreens,
         private readonly WheelHandler $wheelScreens,
         private readonly TestAccountHandler $testScreens,
+        private readonly CustomServiceHandler $customScreens,
         private readonly Loyalty $loyalty,
+        private readonly ServiceClaims $claims,
     ) {}
 
     /** The plan list of a category, or of the uncategorised plans ("سایر پلن‌ها") for null. */
@@ -122,15 +125,19 @@ final class MenuHandler implements Handler
         $ctx->edit($text, $this->menu->isInline() ? ['reply_markup' => $this->menu->markup($ctx->user)] : []);
     }
 
-    /** «خرید اشتراک»: the categories when the shop has any, otherwise straight to the plans. */
+    /**
+     * «خرید اشتراک»: the categories when the shop has any, otherwise straight to the plans — and under them, while the
+     * custom builder is offered, «🛠 ساخت سرویس دلخواه» (CustomServiceHandler), even with no plan on sale.
+     */
     private function plans(Context $ctx): void
     {
         $groups = $this->categories->groups();
+        $custom = $this->customScreens->button();
         if (!self::isGrouped($groups)) {
             if ($groups === []) {
-                $this->menu->screen($ctx, $this->texts->get(BotText::PlansEmpty));
+                $this->menu->screen($ctx, $this->texts->get(BotText::PlansEmpty), $custom === [] ? null : InlineKeyboard::make()->row(...$custom));
             } else {
-                $this->planList($ctx, $groups[0]['plans'], null, grouped: false);
+                $this->planList($ctx, $groups[0]['plans'], null, grouped: false, below: $custom);
             }
 
             return;
@@ -142,7 +149,7 @@ final class MenuHandler implements Handler
             $buttons[] = InlineKeyboard::callback($category->name ?? $this->texts->get(BotText::CategoryOther), self::categoryCallback($category?->id));
         }
 
-        $this->menu->screen($ctx, $this->texts->get(BotText::CategoriesTitle), InlineKeyboard::make()->grid($buttons, 1));
+        $this->menu->screen($ctx, $this->texts->get(BotText::CategoriesTitle), InlineKeyboard::make()->grid($buttons, 1)->row(...$custom));
     }
 
     /** `cat:{id}` — the plans of one category (0 = the uncategorised ones), with a way back to the categories. */
@@ -170,11 +177,13 @@ final class MenuHandler implements Handler
 
     /**
      * The plans to pick from — a category's (with «بازگشت» to the categories) or the whole shop's — each at the
-     * customer's price (Pricing::offers(), asked once for the list), in the plan's own button colour and row.
+     * customer's price (Pricing::offers(), asked once for the list), in the plan's own button colour and row, then the row
+     * `$below`.
      *
      * @param Collection<int, Plan> $plans
+     * @param list<array<string, mixed>> $below
      */
-    private function planList(Context $ctx, Collection $plans, ?PlanCategory $category, bool $grouped): void
+    private function planList(Context $ctx, Collection $plans, ?PlanCategory $category, bool $grouped, array $below = []): void
     {
         $prices = $this->pricing->offers($ctx->user, ...$plans->all());
         $buttons = [];
@@ -187,7 +196,7 @@ final class MenuHandler implements Handler
             ]);
             $buttons[] = [InlineKeyboard::callback($label, PurchaseHandler::planCallback($plan->id), KeyboardLayout::style($plan->button_style)), $plan->button_row];
         }
-        $keyboard = InlineKeyboard::make()->flow($buttons);
+        $keyboard = InlineKeyboard::make()->flow($buttons)->row(...$below);
 
         $title = $category !== null
             ? $this->texts->render(BotText::CategoryPlans, ['category' => $category->name])
@@ -215,7 +224,11 @@ final class MenuHandler implements Handler
         return false;
     }
 
-    /** «سرویس‌های من»: the customer's active services, newest first, a page at a time, each opening its screen. */
+    /**
+     * «سرویس‌های من»: the customer's active services, newest first, a page at a time, each opening its screen — and,
+     * while the shop takes services by their link, «➕ افزودن سرویس» under them, or under the word that there are none
+     * (ServiceClaimHandler).
+     */
     private function subscriptions(Context $ctx, int $page): void
     {
         $this->servicePage(
@@ -226,12 +239,13 @@ final class MenuHandler implements Handler
             BotText::SubscriptionsEmpty,
             static fn(Subscription $subscription): string => SubscriptionHandler::serviceCallback($subscription->id),
             self::subscriptionsCallback(...),
+            $this->claims->offered() ? [InlineKeyboard::callback($this->texts->get(BotText::ClaimButton), ServiceClaimHandler::PREFIX, 'primary')] : [],
         );
     }
 
     /**
      * The menu's «تمدید سرویس»: the services the customer may renew — ended ones too, which «سرویس‌های من» leaves out —,
-     * a page at a time, each opening its renewal's checkout.
+     * a page at a time, each opening its renewal's checkout (one without a plan, the plans to pick first).
      */
     private function renewals(Context $ctx, int $page): void
     {
@@ -248,17 +262,18 @@ final class MenuHandler implements Handler
 
     /**
      * A page of the customer's services: a button per service under its panel name, «بعدی» / «قبلی» and the page number
-     * when there is more than one page, and a red «بازگشت».
+     * when there is more than one page, the row `$below` (on the empty screen too), and a red «بازگشت».
      *
      * @param Builder<Subscription> $services
      * @param \Closure(Subscription, int): string $open What a service's button opens, from the page it is on
      * @param \Closure(int): string $at The list at another page
+     * @param list<array<string, mixed>> $below
      */
-    private function servicePage(Context $ctx, Builder $services, int $page, BotText $title, BotText $empty, \Closure $open, \Closure $at): void
+    private function servicePage(Context $ctx, Builder $services, int $page, BotText $title, BotText $empty, \Closure $open, \Closure $at, array $below = []): void
     {
         $total = (clone $services)->count();
         if ($total === 0) {
-            $this->menu->screen($ctx, $this->texts->get($empty), backStyle: 'danger');
+            $this->menu->screen($ctx, $this->texts->get($empty), $below === [] ? null : InlineKeyboard::make()->row(...$below), backStyle: 'danger');
 
             return;
         }
@@ -277,6 +292,7 @@ final class MenuHandler implements Handler
             $keyboard->row(...$this->buttons->pages($page, $pages, $at));
             $text .= $this->texts->part(BotText::SubscriptionsPage, ['page' => Persian::digits($page), 'pages' => Persian::digits($pages)]);
         }
+        $keyboard->row(...$below);
 
         $this->menu->screen($ctx, $text, $keyboard, backStyle: 'danger');
     }

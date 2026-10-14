@@ -8,6 +8,7 @@ use App\Core\Forms\Fields\Field;
 use App\Core\Forms\Fields\Number;
 use App\Core\Forms\Fields\Toggle;
 use App\Core\Forms\Form;
+use App\Modules\Catalog\DTO\Package;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Settings\DeclaresSettings;
 use App\Modules\Settings\Services\Settings;
@@ -18,20 +19,16 @@ use App\Modules\Subscriptions\Forms\ExtraOptions;
 use App\Modules\Subscriptions\Forms\UnitPrice;
 
 /**
- * «حجم و زمان اضافه» settings (the `extras` group of each shop's bot settings): the switch — off by default, and off
- * nothing is sold whatever a plan says — and the shop's price list, which a plan may replace with its own
+ * «حجم، زمان و کاربر اضافه» settings (the `extras` group of each shop's bot settings): the switch — off by default,
+ * and off nothing is sold whatever a plan says — and the shop's price list, which a plan may replace with its own
  * (`plans.extras`, PlanService). A price list has the same fields wherever it is kept: per kind the unit price (blank
  * for none), the amounts offered as buttons (each at its own price or the unit price), and the least and most a
- * customer may type.
+ * customer may type. A device's prices are for 30 days (DTO\ExtraOffer::PERIOD_DAYS), prorated when sold.
  */
 final class ExtrasSettings implements DeclaresSettings
 {
-    /** The most one extra may bring: GB of traffic, days of time. */
-    public const MAX_GB = 10_000;
-    public const MAX_DAYS = 365;
-
-    /** The most a unit, or an amount offered, may cost — Toman. */
-    public const PRICE_MAX = 100_000_000;
+    /** The most devices one extra may bring; its GB and days are a sale's by the unit (Catalog\DTO\Package::MAX_GB, MAX_DAYS), its prices too (PRICE_MAX). */
+    public const MAX_DEVICES = 20;
 
     /** Prefixes of the shop's price list fields: the bot settings screen is one flat map of every group's fields. */
     private const NAMES = 'extra_';
@@ -78,7 +75,7 @@ final class ExtrasSettings implements DeclaresSettings
     /** The fields of a price list, every name and key after its prefix. */
     private static function priceForm(string $names, string $keys): Form
     {
-        return new Form('extra_prices', [...array_values(self::fields(ExtraKind::Traffic, $names, $keys)), ...array_values(self::fields(ExtraKind::Time, $names, $keys))]);
+        return new Form('extra_prices', array_merge(...array_map(static fn(ExtraKind $kind): array => array_values(self::fields($kind, $names, $keys)), ExtraKind::cases())));
     }
 
     /**
@@ -98,7 +95,7 @@ final class ExtrasSettings implements DeclaresSettings
             return new ExtraOffer($price->cast($kept($price)), $offered, $min->cast($kept($min)), $max->cast($kept($max)));
         };
 
-        return new ExtraPrices($offer(ExtraKind::Traffic), $offer(ExtraKind::Time));
+        return new ExtraPrices($offer(ExtraKind::Traffic), $offer(ExtraKind::Time), $offer(ExtraKind::Devices));
     }
 
     /**
@@ -111,15 +108,16 @@ final class ExtrasSettings implements DeclaresSettings
         $name = static fn(string $field): string => "{$names}{$kind->value}_{$field}";
         $key = static fn(string $field): string => "{$keys}{$kind->value}_{$field}";
         [$priceLabel, $optionsLabel, $minLabel, $maxLabel, $most, $defaultMax] = match ($kind) {
-            ExtraKind::Traffic => ['قیمت هر گیگابایت', 'حجم‌های پیشنهادی', 'کمترین حجم دلخواه', 'بیشترین حجم دلخواه', self::MAX_GB, 100],
-            ExtraKind::Time => ['قیمت هر روز', 'زمان‌های پیشنهادی', 'کمترین زمان دلخواه', 'بیشترین زمان دلخواه', self::MAX_DAYS, 30],
+            ExtraKind::Traffic => ['قیمت هر گیگابایت', 'حجم‌های پیشنهادی', 'کمترین حجم دلخواه', 'بیشترین حجم دلخواه', Package::MAX_GB, 100],
+            ExtraKind::Time => ['قیمت هر روز', 'زمان‌های پیشنهادی', 'کمترین زمان دلخواه', 'بیشترین زمان دلخواه', Package::MAX_DAYS, 30],
+            ExtraKind::Devices => ['قیمت هر کاربر برای 30 روز', 'تعدادهای پیشنهادی', 'کمترین تعداد دلخواه', 'بیشترین تعداد دلخواه', self::MAX_DEVICES, 5],
         };
-        $price = new UnitPrice($name('price'), $key('price'), $priceLabel, self::PRICE_MAX);
+        $price = new UnitPrice($name('price'), $key('price'), $priceLabel, Package::PRICE_MAX);
         $least = new Number($name('min'), $key('min'), default: 1, label: $minLabel, min: 1, max: $most, unit: $kind->unit());
 
         return [
             'price' => $price,
-            'options' => new ExtraOptions($name('options'), $key('options'), $optionsLabel, $most, $kind->unit(), $price, self::PRICE_MAX),
+            'options' => new ExtraOptions($name('options'), $key('options'), $optionsLabel, $most, $kind->unit(), $price, Package::PRICE_MAX),
             'min' => $least,
             'max' => new Number($name('max'), $key('max'), default: $defaultMax, label: $maxLabel, min: 1, max: $most, unit: $kind->unit(), atLeast: $least),
         ];

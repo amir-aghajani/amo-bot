@@ -28,15 +28,16 @@ final class LayersTest extends TestCase
         // A merge offer counts the other account's services (Subscriptions).
         'Accounts' => ['Auth', 'Bots', 'Notifications', 'Subscriptions', 'Telegram', 'Users'],
         'Admin' => ['Accounts', 'Agency', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Store', 'Subscriptions', 'Support', 'Telegram', 'Users'],
-        // An agent's shop opens with a wallet of its own (Payments' built-in method); a plan's traffic, drawn from the agent's pool (Catalog).
-        'Agency' => ['Auth', 'Bots', 'Catalog', 'Notifications', 'Orders', 'Payments', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
+        // An agent's shop opens with a wallet of its own (Payments' built-in method); an order's traffic, drawn from the agent's pool (Orders).
+        'Agency' => ['Auth', 'Bots', 'Notifications', 'Orders', 'Payments', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
         // An actor may be a customer — one of the shop's admins —, named by who reads the decision (Users).
         'Auth' => ['Bots', 'Users'],
         // A bot's agent, its traffic and what it sold (Bot::stats()); a token's bot id (Telegram's BotToken).
         'Bots' => ['Agency', 'Orders', 'Subscriptions', 'Telegram', 'Users'],
         // A plan sold or in use is not deleted: its orders and services counted (Orders, Subscriptions); its button in the
-        // bot's plan list is drawn in one of the bot's colours (Telegram's KeyboardLayout::STYLES).
-        'Catalog' => ['Bots', 'Orders', 'Providers', 'Subscriptions', 'Telegram'],
+        // bot's plan list is drawn in one of the bot's colours (Telegram's KeyboardLayout::STYLES); the custom builder's
+        // price list is a bot setting (Settings).
+        'Catalog' => ['Bots', 'Orders', 'Providers', 'Settings', 'Subscriptions', 'Telegram'],
         // A customer's loyalty tier is by what they spent: their orders (Orders). A code holds for the plans and the servers
         // named (Catalog, Providers), for a customer who bought nothing (Orders), its uses its orders; its hold is a bot
         // setting (Settings); a customer's own discount is set under whoever set it (Auth's Actor).

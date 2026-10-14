@@ -6,6 +6,7 @@ namespace Tests;
 
 use App\Core\Database\ChangeFeed;
 use App\Core\Database\Schema;
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Settings\Services\Settings;
@@ -109,6 +110,23 @@ abstract class DatabaseTestCase extends TestCase
                 Order::query()->whereKey($read->id)->update(['status' => OrderStatus::Cancelled->value]);
             }
         }, $work);
+    }
+
+    /**
+     * What `$work` was refused with, under each field — the words of its ValidationException; the test stops here when
+     * it was not refused.
+     *
+     * @return array<string, list<string>>
+     */
+    protected function refusedWith(\Closure $work): array
+    {
+        try {
+            $work();
+        } catch (ValidationException $e) {
+            return $e->errors();
+        }
+
+        self::fail('Nothing was refused.');
     }
 
     /** The events the app's models and its connection go through (one dispatcher for both). */

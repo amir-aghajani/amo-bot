@@ -12,8 +12,8 @@ interface WithBotSettingsProps {
 }
 
 /**
- * Draws a bot-settings card that lives on a page of its own (cashback, discount codes, gift codes, the draw, the wheel)
- * once the settings are read: a placeholder meanwhile, the failure with a retry in its place.
+ * Draws a bot-settings card that lives on a page of its own (cashback, discount codes, gift codes, the draw, the wheel,
+ * the custom builder) once the settings are read: a placeholder meanwhile, the failure with a retry in its place.
  */
 export function WithBotSettings({ what, children }: WithBotSettingsProps) {
   const { data, error, refetch, isRefetching } = useQuery(botSettingsQuery)

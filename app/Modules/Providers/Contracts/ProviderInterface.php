@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Providers\Contracts;
 
 use App\Modules\Providers\DTO\ClientInfo;
+use App\Modules\Providers\DTO\ClientLink;
 use App\Modules\Providers\DTO\ClientSpec;
 use App\Modules\Providers\DTO\InboundInfo;
 use App\Modules\Providers\DTO\PanelStatus;
@@ -17,9 +18,10 @@ use App\Modules\Providers\Exceptions\UnsupportedOperationException;
  * server's panel: its connector builds it (PanelDriver::connect()) and ProviderRegistry::forServer() reuses it a while,
  * so a session or token it signed in for serves the calls that follow.
  *
- * Clients are addressed by their panel-wide name (ClientSpec::$name), inbounds by the opaque key the connector reports
- * (InboundInfo::$key). The customer gets the subscription link the panel serves for the client
- * (ClientInfo::$subscriptionUrl) and nothing else, so there are no per-inbound config links here.
+ * Clients are addressed by their panel-wide name (ClientSpec::$name; what the panel takes as one is
+ * Capabilities::$names), inbounds by the opaque key the connector reports (InboundInfo::$key). The customer gets the
+ * subscription link the panel serves for the client (ClientInfo::$subscriptionUrl) and nothing else, so there are no
+ * per-inbound config links here.
  *
  * Every method throws a ProviderException (or a subclass) on failure; a missing client is a NotFoundException where a
  * return value cannot say so. Whatever a panel cannot answer is a null on the DTO, or UnsupportedOperationException.
@@ -66,8 +68,8 @@ interface ProviderInterface
     public function createClient(array $inboundKeys, ClientSpec $spec): ClientInfo;
 
     /**
-     * Replace the limits and expiry of the client `$spec->name`, switched on; the panel keeps its credentials. Returns
-     * the client as the panel has it afterwards, its counters included.
+     * Replace the limits and expiry of the client `$spec->name`, switched on or off as `$spec->enabled` says; the panel
+     * keeps its credentials. Returns the client as the panel has it afterwards, its counters included.
      *
      * @throws NotFoundException
      * @throws ProviderException
@@ -85,7 +87,7 @@ interface ProviderInterface
     public function rotateClientCredentials(string $name): ClientInfo;
 
     /**
-     * Switch the client off or back on (a client is made and updated switched on).
+     * Switch the client off or back on (a client is made switched on, and updated as its spec says).
      *
      * @throws NotFoundException
      * @throws ProviderException
@@ -118,6 +120,14 @@ interface ProviderInterface
      * @throws ProviderException
      */
     public function listClients(): array;
+
+    /**
+     * The client a link the panel gave out is for — its subscription link, or one of its configs — as findClient()
+     * answers it; null when none of the panel's clients has it. What a customer claims a service by (ServiceClaims).
+     *
+     * @throws ProviderException
+     */
+    public function findClientByLink(ClientLink $link): ?ClientInfo;
 
     /**
      * Set the client's counters to zero.

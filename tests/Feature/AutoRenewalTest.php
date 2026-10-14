@@ -17,6 +17,7 @@ use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
@@ -83,6 +84,119 @@ final class AutoRenewalTest extends BotTestCase
         $this->renewNow();
 
         self::assertSame(1, Order::query()->count(), 'the new deadline is out of the window: not again');
+        self::assertSame([], $this->calls());
+    }
+
+    public function testItRenewsByTheAdminsDefaultMethodWhateverTheCustomersWindow(): void
+    {
+        // A reset of the traffic by default; the customer could not renew it by hand for days yet.
+        $this->botSettings('renewal', ['renew_extend' => true, 'renew_reset_traffic' => true, 'renew_default_method' => 'reset_traffic', 'renew_window_days' => 1]);
+        $subscription = $this->due('ali_1', ['download_bytes' => Traffic::bytesOfGb(20)]);
+        $this->wallet($this->ali, '300000');
+
+        $this->renewNow();
+
+        $order = Order::query()->sole();
+        self::assertSame([OrderStatus::Fulfilled, RenewalMethod::ResetTraffic], [$order->status, $order->renewal_method]);
+        $subscription->refresh();
+        self::assertSame([30 * Traffic::GIGABYTE, 0, '2026-10-21 12:00:00', null], [$subscription->traffic_limit_bytes, $subscription->usedBytes(), $subscription->expires_at?->format('Y-m-d H:i:s'), $subscription->next_period_bytes], 'the days on top, the traffic counted afresh');
+    }
+
+    /** @return iterable<string, array{RenewalMethod, list<string>, string}> */
+    public static function twoDayPlanRenewals(): iterable
+    {
+        // Each renewal at the window's start: the plan's two days on top of the deadline.
+        $ahead = [['2026-09-20 12:00:00', '2026-09-21 12:00:00', '2026-09-23 12:00:00'], '2026-09-27 12:00:00'];
+        yield 'extend' => [RenewalMethod::Extend, ...$ahead];
+        yield 'reset traffic' => [RenewalMethod::ResetTraffic, ...$ahead];
+        // The term starts afresh: at the last run before each deadline, half an hour of the paid term lost.
+        yield 'reset time' => [RenewalMethod::ResetTime, ['2026-09-21 11:30:00', '2026-09-23 11:00:00'], '2026-09-25 11:00:00'];
+    }
+
+    /** @param list<string> $renewedAt */
+    #[DataProvider('twoDayPlanRenewals')]
+    public function testATermAsLongAsTheWindowIsRenewedOncePerDeadlineByEachMethod(RenewalMethod $method, array $renewedAt, string $deadline): void
+    {
+        // Two days renewed two days ahead: every deadline a renewal leaves is within the window at once.
+        $this->botSettings('renewal', ['renew_extend' => true, 'renew_reset_traffic' => true, 'renew_reset_time' => true, 'renew_default_method' => $method->value]);
+        $this->plan->forceFill(['duration_hours' => 48])->save();
+        $subscription = $this->due('ali_1');
+        $this->wallet($this->ali, '1000000');
+
+        // A run every half hour, four days long.
+        for ($run = 0; $run < 4 * 48; $run++) {
+            $this->renewNow();
+            Carbon::setTestNow(now()->addMinutes(AutoRenewTask::INTERVAL_MINUTES));
+        }
+
+        self::assertSame($renewedAt, Order::query()->oldest('id')->get()->map(static fn(Order $order): string => (string) $order->created_at?->format('Y-m-d H:i:s'))->all());
+        self::assertSame([OrderStatus::Fulfilled], Order::query()->distinct()->pluck('status')->all());
+        self::assertSame($deadline, $subscription->refresh()->expires_at?->format('Y-m-d H:i:s'));
+        self::assertSame(Money::subtract('1000000', Money::times('120000', count($renewedAt))), $this->ali->balance(), 'each renewal charged once');
+    }
+
+    public function testByResetTimeItWaitsForTheLastRunWithItsPanelUnaskedButAShortWalletIsToldAtTheWindowsStart(): void
+    {
+        $this->botSettings('renewal', ['renew_extend' => true, 'renew_reset_time' => true, 'renew_default_method' => 'reset_time']);
+        $subscription = $this->due('ali_1');
+        $this->wallet($this->ali, '50000');
+        $asked = 0;
+        FakeProvider::$onCall = static function () use (&$asked): void {
+            $asked++;
+        };
+
+        $this->renewNow();
+
+        self::assertSame([$this->short($subscription->refresh(), '50000')], $this->said(), 'a day ahead, as by any method');
+        self::assertSame(1, $asked, 'the panel\'s deadline read first');
+
+        $this->wallet($this->ali, '150000');
+        $this->telegram()->reset();
+        $asked = 0;
+        Carbon::setTestNow('2026-09-21 11:00:00');
+        $this->renewNow();
+
+        self::assertSame([0, 0], [Order::query()->count(), $asked], 'an hour before its end: not yet, nothing asked');
+        self::assertSame([], $this->calls());
+
+        Carbon::setTestNow('2026-09-21 11:30:00');
+        $this->renewNow();
+
+        self::assertSame([OrderStatus::Fulfilled, RenewalMethod::ResetTime], [Order::query()->sole()->status, Order::query()->sole()->renewal_method]);
+        self::assertSame('2026-10-21 11:30:00', $subscription->refresh()->expires_at?->format('Y-m-d H:i:s'), 'the plan\'s month from now: half an hour of the old term lost');
+        self::assertCount(1, $this->said());
+        self::assertStringStartsWith((string) strtok(self::text(BotText::AutoRenewed, ['client' => 'ali_1']), "\n"), $this->said()[0] ?? '', 'told it was renewed');
+    }
+
+    /** @return iterable<string, array{RenewalMethod}> */
+    public static function methods(): iterable
+    {
+        foreach (RenewalMethod::cases() as $method) {
+            yield $method->value => [$method];
+        }
+    }
+
+    #[DataProvider('methods')]
+    public function testADeadlineThePanelKeptAfterItsRenewalIsNotRenewedAgain(RenewalMethod $method): void
+    {
+        $this->botSettings('renewal', ['renew_extend' => true, 'renew_reset_traffic' => true, 'renew_reset_time' => true, 'renew_default_method' => $method->value]);
+        $subscription = $this->due('ali_1', ['expires_at' => now()->addMinutes(20)]);
+        $this->wallet($this->ali, '1000000');
+        $before = FakeProvider::$clients[$this->server->id]['ali_1'];
+
+        $this->renewNow();
+        self::assertSame(OrderStatus::Fulfilled, Order::query()->sole()->status);
+
+        // The panel answers with the deadline it had — the new one did not hold there —, and the sync brings it.
+        FakeProvider::put($this->server, $before);
+        Carbon::setTestNow(now()->addMinutes(10));
+        $this->service(SyncSubscriptionsTask::class)->run();
+        $this->telegram()->reset();
+        $this->renewNow();
+
+        self::assertSame('2026-09-20 12:20:00', $subscription->refresh()->expires_at?->format('Y-m-d H:i:s'), 'read from the panel');
+        self::assertSame(1, Order::query()->count(), 'renewed once for this deadline');
+        self::assertSame('880000.00', $this->ali->balance());
         self::assertSame([], $this->calls());
     }
 
@@ -358,6 +472,16 @@ final class AutoRenewalTest extends BotTestCase
         self::assertSame([], $this->calls());
     }
 
+    public function testByAResetOfTheTimeTheSwitchSaysItRenewsShortlyBeforeTheEnd(): void
+    {
+        $this->botSettings('renewal', ['renew_extend' => true, 'renew_reset_time' => true, 'renew_default_method' => 'reset_time']);
+        $subscription = $this->due('ali_1', ['auto_renew' => false]);
+
+        $this->send($this->tap(SubscriptionHandler::serviceCallback($subscription->id, 'autorenew')));
+
+        self::assertStringContainsString('کمی پیش از پایان سرویس', $this->popup(), 'not days ahead: a reset throws the term left away');
+    }
+
     public function testTheCustomerTurnsTheSwitchOnAndOffFromTheServiceScreen(): void
     {
         $subscription = $this->due('ali_1', ['auto_renew' => false]);
@@ -367,7 +491,8 @@ final class AutoRenewalTest extends BotTestCase
 
         self::assertTrue($subscription->refresh()->auto_renew);
         self::assertSame(['answerCallbackQuery', 'editMessageReplyMarkup'], $this->calls(), 'only the buttons are redrawn');
-        self::assertSame(self::text(BotText::AutoRenewEnabled, ['days' => Persian::digits(2), 'amount' => Money::format('120000')]), $this->popup(), 'when, and what the wallet pays');
+        self::assertSame(self::text(BotText::AutoRenewEnabled, ['renews' => Messages::autoRenews(RenewalMethod::Extend, 2), 'days' => Persian::digits(2), 'amount' => Money::format('120000')]), $this->popup(), 'when, and what the wallet pays');
+        self::assertStringContainsString('۲ روز پیش از پایان سرویس', $this->popup());
         self::assertSame('true', $this->params(0)['show_alert']);
         self::assertContains(['text' => self::text(BotText::ServiceAutoRenewOn), 'callback_data' => $switch, 'style' => 'success'], array_merge(...$this->inlineKeyboard(1)));
 

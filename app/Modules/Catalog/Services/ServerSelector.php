@@ -116,14 +116,27 @@ final class ServerSelector
     }
 
     /**
-     * What a free test account on the server gets — every inbound the server sells, or an empty list on a panel without
-     * inbounds — while it can take a client now; null while it cannot.
+     * What a service sold on the server as a whole gets — a free test, one the customer built —: every inbound the server
+     * sells, or an empty list on a panel without inbounds, while it can take a client now; null while it cannot.
      *
      * @return Collection<int, ServerInbound>|null
      */
-    public function testInbounds(Server $server): ?Collection
+    public function wholeServer(Server $server): ?Collection
     {
         return $this->readiness->problem($server) === null ? $this->inbounds($server, null) : null;
+    }
+
+    /**
+     * Where a service the customer built goes: the server they picked, whole (wholeServer()).
+     *
+     * @return array{server: Server, inbounds: Collection<int, ServerInbound>}
+     * @throws NoServerAvailableException saying why it cannot take one now
+     */
+    public function builtOn(Server $server): array
+    {
+        $inbounds = $this->wholeServer($server);
+
+        return $inbounds !== null ? ['server' => $server, 'inbounds' => $inbounds] : throw new NoServerAvailableException(sprintf('«%s»: %s', $server->name, $this->problem($server) ?? self::NO_INBOUND));
     }
 
     /**

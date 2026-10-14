@@ -8,9 +8,7 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotSettingsData, BotTestAccountsSettingsRequest } from '@/lib/api-types'
 import { formatNumber, wholeNumberOf } from '@/lib/format'
-
-/** The longest an ended test may be kept, in hours (30 days): the server's bound. */
-const CLEANUP_HOURS_MAX = 720
+import { TEST_ACCOUNT_SETTINGS } from '@/lib/limits'
 
 /**
  * The `test_accounts` bot-settings group: the switch, the quota — tests a customer, over how many days, the shop's cap a
@@ -50,7 +48,7 @@ export function TestSettingsCard({ settings }: { settings: BotSettingsData }) {
 
       <FormPart icon={Gauge} title="سهمیه" about="مدیرهای ربات سهمیه ندارند و هر چند بار که بخواهند اکانت تست می‌گیرند.">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="test_per_user" label="تعداد اکانت تست هر مشتری" error={error('test_per_user')} hint="بین 1 تا 100">
+          <Field id="test_per_user" label="تعداد اکانت تست هر مشتری" error={error('test_per_user')} hint={`بین 1 تا ${TEST_ACCOUNT_SETTINGS.PER_USER_MAX}`}>
             <Input dir="ltr" inputMode="numeric" value={values.test_per_user} onChange={(e) => set('test_per_user', e.target.value)} />
           </Field>
           <Field
@@ -92,7 +90,7 @@ export function TestSettingsCard({ settings }: { settings: BotSettingsData }) {
           error={error('test_cleanup')}
         />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="test_cleanup_hours" label="فاصله حذف (ساعت)" error={error('test_cleanup_hours')} hint={removalHint(hours, CLEANUP_HOURS_MAX)}>
+          <Field id="test_cleanup_hours" label="فاصله حذف (ساعت)" error={error('test_cleanup_hours')} hint={removalHint(hours, TEST_ACCOUNT_SETTINGS.CLEANUP_HOURS_MAX)}>
             <Input dir="ltr" inputMode="numeric" value={values.test_cleanup_hours} onChange={(e) => set('test_cleanup_hours', e.target.value)} disabled={keeps} />
           </Field>
           <Field

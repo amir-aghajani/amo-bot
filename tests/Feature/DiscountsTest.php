@@ -341,7 +341,7 @@ final class DiscountsTest extends DatabaseTestCase
 
         $preview = $this->service(CustomerRenewal::class)->preview($subscription->refresh());
 
-        self::assertSame('90000.00', $preview?->price);
+        self::assertSame('90000.00', $preview?->quote->amount());
         self::assertSame(DiscountSource::Personal, $preview->quote->automatic?->source);
     }
 

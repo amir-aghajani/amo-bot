@@ -21,14 +21,15 @@ less than a day before its end the bot and the panels give its hour too, and the
 | «حذف‌شده» | Gone from their panel, found so by a sync or a read — nothing but delete is offered |
 
 - **Filters**: «سرور» (a server's page links here, with its active services), «نوع» — «همه», «اکانت تست» for the
-  free tests, «سرویس عادی» for every other service, sold or given ([below](#test-services)) —, and a customer, from
-  their page. Search by a service's number (`#12` is service 12 alone), its name on the panel, a piece of its link, or
-  the customer.
+  free tests ([below](#test-services)), «سرویس عادی» for the services sold or given, neither a test nor added by their
+  link, and in the main shop alone «افزوده‌شده با لینک» for the services customers added by their link
+  ([below](#services-added-by-their-link)) —, and a customer, from their page. Search by a service's number (`#12` is
+  service 12 alone), its name on the panel, a piece of its link, or the customer.
 - **Sorting**: newest first, or by «پایان» (soonest first; the ones that never end, or have not started, last) or
   «مصرف» from their headers.
-- **A row**: the service's name with its plan (a free test's «تست» badge), the customer, the server, the traffic used
-  («X از Y», amber at 80%, red when used up) and its end («۵ روز مانده», amber within three days), its status, and
-  «جزئیات».
+- **A row**: the service's name with its plan (a free test's «تست» badge, or a «با لینک» badge beside the plan of one
+  added by its link), the customer, the server, the traffic used («X از Y», amber at 80%, red when used up) and its end
+  («۵ روز مانده», amber within three days), its status, and «جزئیات».
 
 Tick services to [move them](#moving-services) together: the selection stays while you page and sort, and goes with
 another tab, server, customer or search.
@@ -36,9 +37,9 @@ another tab, server, customer or search.
 ## A service's dialog
 
 The link, with «کپی» (a link that no longer works — the client gone from its panel — is shown for what it was, said
-dead); the customer, the plan, the server, the traffic, the end and the term, the devices, when it was first used and
-bought, whether «تمدید خودکار» is on, the next period when a renewal is queued («دوره بعدی»), and when the panel was last
-asked. While the shop is to remove it by itself — an ended service while [the automatic removal](#what-runs-by-itself)
+dead); the customer, the plan, the server, the traffic, the end and the term, the devices (and the limit a renewal
+queued, from when it holds), when it was first used and bought, whether «تمدید خودکار» is on, the next period when a
+renewal is queued («دوره بعدی»), and when the panel was last asked. While the shop is to remove it by itself — an ended service while [the automatic removal](#what-runs-by-itself)
 is on, a free test by its rules —, «حذف خودکار» says when, with the time left; «در نوبت حذف» once that moment passed,
 until the next run takes it. Then what may be done with it now:
 
@@ -49,6 +50,7 @@ until the next run takes it. Then what may be done with it now:
 | «غیرفعال کردن» | An active service | Asks for an optional note; the client is switched off on its panel | Told, with your note |
 | «فعال کردن دوباره» | A service switched off here (an ended one needs a renewal) | The client switched on again | Told |
 | «انتقال به سرور دیگر» | An active service | [Below](#moving-services) | Gets the new link |
+| «انتقال به مشتری دیگر» | Anything but a free test or a service gone from its panel | [Below](#handing-a-service-to-another-customer) | Both told: it left the one, it is the other's |
 | «حذف سرویس» | Always | Asks for an optional note; the client off its panel and the service off the shop — no trace; the orders that sold it keep their record | Told when it was still active; an ended or switched-off one goes quietly |
 
 A change made on a panel holds the service while it runs: another change of the same service waits a few seconds, then
@@ -91,6 +93,41 @@ the delete, the new client is taken back and the service stays where it was.
 
 While it runs, the dialog's one button is «توقف بعد از این سرویس», and closing the tab asks first.
 
+### Handing a service to another customer
+
+«انتقال به مشتری دیگر» gives the service to another customer of the shop — one who moved to a new Telegram account, a
+friend they bought it for. Type their numeric Telegram id («شناسه عددی تلگرام مشتری جدید»): the customer it names in
+this shop is shown as you type — they must have started the bot once —, and the strip's «انتقال به مشتری دیگر» hands the
+service over. You may always, whatever the customers' own switch says ([Bot settings](Bot-Settings.md#service-transfers):
+with it on, customers do it themselves in the bot and on the website).
+
+- **The service stays as it is** — its link, end, traffic, plan and server — and is the new customer's from then on: in
+  their «سرویس‌های من», renewed and reminded for them. Its «تمدید خودکار» goes off: the new customer switches it on if
+  their wallet should pay.
+- **The link goes with it**, so the previous customer's devices stay connected until the new one taps «تغییر لینک» on
+  its screen: the new customer's message says so, where its server can change a link.
+- **Both customers are told** in the bot: the previous one that support moved it to another account (and which of their
+  unpaid orders were cancelled with it, below), the new one what it is, with «📊 مشاهده سرویس».
+- **The report group's «خریدها»** hears of every transfer: from whom, to whom, and who did it.
+- **On its panel** the client takes the new customer's Telegram id and comment — as a service added by its link does
+  ([below](#services-added-by-their-link)); its name there stays — by the default pattern the previous customer's
+  username and a number (`ali_1`), with `{tg_id}` their id ([Bot settings](Bot-Settings.md#service-usernames)): a
+  client is never renamed —, and one switched off stays off. A panel that does not
+  answer leaves them as they were (logged) and the service changes hands all the same; its next change on the panel
+  writes them.
+- **Refused**: a free test, a service gone from its panel, an id that names no customer of this shop, the service's own
+  customer, a banned account — and, on a shop's website, an admin's own service or one handed to themselves.
+- **A customer's own transfer** ([Bot settings](Bot-Settings.md#service-transfers)) also waits while an order of it they
+  made is open. One whose delivery failed sends them to you: retry it, or give the money back
+  ([refunds](Orders-And-Payments.md#refunds)), and they may transfer it.
+- The orders that sold or renewed it stay their buyer's. A renewal or an extra of it the previous customer left unpaid
+  is cancelled with the transfer — it is no longer theirs to pay for —, unless its receipt waits for your review: that
+  one stays, and approved, it is not delivered onto the new customer's service: it fails, its note asking you to give
+  the money back ([refunds](Orders-And-Payments.md#refunds)). So does one paid but not yet sent to the panel as you
+  hand it on; while one is being sent to it right then, the transfer waits for it: «این سرویس همین حالا روی سرور در
+  حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید.» Nor does a refund of what the previous customer bought take anything
+  from the new one: it is refused until you take the service back by hand.
+
 ### When the panel fails a delete
 
 A panel that fails «حذف سرویس» asks whether to delete the service from the shop alone: «حذف فقط از فروشگاه» deletes it
@@ -101,14 +138,30 @@ here and leaves its client on the panel — **it keeps working until you remove 
 A free test a customer took in the bot ([Test accounts](Test-Accounts.md)) is a service like the others, marked «تست»
 where a service shows its plan — in the list and on the customer's page —; its dialog's «پلن» reads «اکانت تست رایگان».
 It has no plan, so it is never renewed — by the customer or by «تمدید خودکار», which its dialog does not show —, buys no
-extra traffic or time, is not reminded of its end, and a server's «افزودن زمان و حجم» and the mass gift pass it by. It
-is never among «رو به انقضا» — here or on the dashboard, whose «اشتراک‌های فعال» leaves it out too — and its end is never
-amber; it still takes room in its server's «ظرفیت».
+extra traffic, time or devices, is not reminded of its end, and a server's «افزودن زمان و حجم» and the mass gift pass it
+by. It is never among «رو به انقضا» — here or on the dashboard, whose «اشتراک‌های فعال» leaves it out too — and its end
+is never amber; it still takes room in its server's «ظرفیت».
 
 Every operation above still works on it: read it, give it days and traffic (it runs again until it ends again), switch
-it off or on, move it (if the target has its name, the new one still starts with `test_`), delete it. A test deleted
+it off or on, move it (if the target has its name, the new one follows the shop's test pattern — `test_…` by default,
+[Bot settings](Bot-Settings.md#service-usernames)), delete it. A test deleted
 here still counts in its customer's quota. The tests that ended, and those never connected, are removed by themselves
 ([below](#what-runs-by-itself)).
+
+## Services added by their link
+
+A client you made by hand on a panel becomes a customer's service when they send its link to the bot or the website
+([Services added by their link](Service-Claims.md)). It is a service like the others, kept as its panel had it — its
+client there takes the customer's Telegram id and comment, as a [transferred](#handing-a-service-to-another-customer)
+one does — and filed under «نوع › افزوده‌شده با لینک»; its dialog says when it was added. It has no plan until its
+first renewal, when the customer picks one sold on its server; from then on it renews on that plan. Without one —
+before then, or once its plan is deleted — the dialog's «پلن» reads «بدون پلن» and says the customer picks one when
+renewing.
+
+Every operation works on it. Its delete confirmation has one more choice, «حذف فقط از فروشگاه (کلاینت روی پنل
+می‌ماند)»: what puts right a service added to the wrong account — the client keeps working on its panel, and the right
+customer sends the link again. As with «حذف سرویس», the customer of a running service is told it was deleted, with your
+note.
 
 ## Agents' shops
 
@@ -127,27 +180,38 @@ Working an agent's shop — the agent in their panel, or you with their shop ope
 ## The shop's admins on its website
 
 The bot's admins may work the services from the shop's website while it lets them in ([Website](Website.md#the-shops-admins)):
-read one from its panel, switch it off or on, move it — and, when the website grants it, give it days and traffic or
-delete it. They are held to an agent's shop's rules in every shop, the main one too: a client left on its panel only
-while the panel does not answer, 60 panel operations a minute (theirs together, in an agent's shop with the agent's
-own), a failure in a short word. And **an admin never changes their own service** — another admin, or you, does.
+read one from its panel, switch it off or on, move it — and, when the website grants it, give it days and traffic, or
+delete it or hand it to another customer (the delete's grant). They are held to an agent's shop's rules in every shop,
+the main one too: a client left on its panel only while the panel does not answer, 60 panel operations a minute (theirs
+together, in an agent's shop with the agent's own), a failure in a short word. And **an admin never changes their own
+service**, nor takes a customer's — another admin, or you, does.
 
 ## What runs by itself
 
-- **The sync**, every 15 minutes: the running services read from their panels; a panel whose last contact failed is
-  left alone ten minutes ([Servers](Servers.md#health)).
+- **The sync**, every 15 minutes: the running services read from their panels — their usage, and what you changed
+  there by hand: traffic, end, and on 3X-UI the device limit, which the next extra then builds on (a renewal brings its
+  plan's); a panel whose last contact failed is left alone ten minutes ([Servers](Servers.md#health)).
 - **Renewal** — the customer renews a service on its own plan at its price today, in the bot or on the website, an ended
-  one too: the days left always carry over, the traffic left by the shop's rule ([Bot settings](Bot-Settings.md#renewal)).
-- **«حجم و زمان اضافه»** — the customer buys more traffic or more days for a service, each on its own, in the bot or on
-  the website, at its plan's prices or the shop's (off until you turn it on,
-  [Bot settings](Bot-Settings.md#extra-traffic-and-time)). Traffic brings a service whose traffic ran out back. Days for one
-  whose time ran out start its term again from its next connection. One ended on both counts needs a renewal.
+  one too — a running one, once it nears its end if the shop holds it back till then («آستانه مجاز تمدید») —, by one of
+  the shop's renewal methods: the days left carried over and the traffic left by the shop's rule («تمدید پلن فعلی»), the
+  traffic counted afresh («ریست حجم + افزایش روز»), or the term started again with the traffic carried («ریست زمان +
+  انتقال حجم») ([Bot settings](Bot-Settings.md#renewal)). Each brings its plan's device limit, the extra devices bought
+  for the period before gone with it ([Plans](Plans.md#devices-and-renewals)).
+- **«حجم، زمان و کاربر اضافه»** — the customer buys more traffic, more days or more devices for a service, each on its
+  own, in the bot or on the website, at its plan's prices or the shop's (off until you turn it on,
+  [Bot settings](Bot-Settings.md#extra-traffic-time-and-devices)). Traffic brings a service whose traffic ran out back. Days for one
+  whose time ran out start its term again from its next connection. Devices last until the period in use ends. One
+  ended on both counts needs a renewal.
 - **«تمدید خودکار»** — the customer's switch: the wallet renews the service days before its end; a wallet short of it is
   told once a window and tried again until it can pay. Not on a plan whose term is shorter than those days — an hourly
-  plan's: a renewal adds the plan's term, and a shorter one would leave the service due again at once. A service bought
+  plan's: a renewal adds the plan's term, and a shorter one would leave the service due again at once —, and never for
+  a service without a plan (added by its link, or built: [Custom services](Custom-Services.md#renewing-a-built-service))
+  until a renewal on a plan gives it one. A service bought
   at a first-purchase price renews at the plan's price, as any; an agent's or a colleague's at the plan's agent price.
-- **The next period** — with the traffic not carried, a renewal queues the next period; when the paid one ends, what is
-  left of the old traffic goes and the new period's begins.
+- **The next period** — a running service renewed before its end goes on with the paid period: when it ends, the plan's
+  device limit takes over and — with the traffic not carried — what is left of the old traffic goes and the new
+  period's begins. The dialog's «دوره بعدی» shows the traffic part; «کاربر هم‌زمان» says from when the plan's device
+  limit holds («از …: ۱ کاربر») while it differs from the one now — also for a renewal whose traffic counted at once.
 - **«یادآوری»** — a service near its end, or near its traffic's end, is told once while it stays there (both off until
   switched on, [Bot settings](Bot-Settings.md#reminders)). A free test never is.
 - **The automatic removal**, every 15 minutes after the sync, in every shop that has ended services or tests — a
@@ -171,6 +235,8 @@ own), a failure in a short word. And **an admin never changes their own service*
   purchase gets a new link to add to their app. Set «فاصله حذف» with that in mind — long enough for a customer to come
   back and renew.
 - **A client left on its panel keeps working** until you remove it there.
+- **A service handed on keeps its link**: devices the previous customer added it to still connect. The new customer
+  cuts them off with «تغییر لینک» on the service's screen in the bot, where its panel can.
 - **«غیرفعال» is yours, «منقضی‌شده» the panel's**: a switched-off service is switched on here; an ended one is renewed.
 - **The subscriptions list shows the open shop's services**: an agent's customers' services on your servers are in their
   shop.

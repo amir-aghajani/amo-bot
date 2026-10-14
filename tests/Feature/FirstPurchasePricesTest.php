@@ -239,7 +239,7 @@ final class FirstPurchasePricesTest extends DatabaseTestCase
 
         self::assertTrue($service->auto_renew, 'a new service of it starts with «تمدید خودکار» as the shop set it');
         self::assertTrue($this->service(AutoRenewal::class)->offeredFor($service));
-        self::assertSame('150000.00', $this->service(CustomerRenewal::class)->preview($service)?->price, 'its customer renews it at the plan\'s price');
+        self::assertSame('150000.00', $this->service(CustomerRenewal::class)->preview($service)?->quote->amount(), 'its customer renews it at the plan\'s price');
 
         // Its end within the days: renewed by itself, at the price.
         $this->wallet($this->ali, '500000.00');

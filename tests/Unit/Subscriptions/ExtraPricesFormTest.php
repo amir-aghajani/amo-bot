@@ -12,9 +12,10 @@ use App\Modules\Subscriptions\Services\ExtrasSettings;
 use Tests\TestCase;
 
 /**
- * A «حجم و زمان اضافه» price list (the shop's or a plan's) as the admin types it: per kind the unit price, the amounts
- * offered (each at its own price or the unit price), the least and most typed; every refusal at once under its field; a
- * stored list the form would refuse reads as nothing sold.
+ * A «حجم، زمان و کاربر اضافه» price list (the shop's or a plan's) as the admin types it: per kind — traffic, time,
+ * devices — the unit price, the amounts offered (each at its own price or the unit price), the least and most typed;
+ * every refusal at once under its field; a stored list the form would refuse, or one kept before devices were sold,
+ * reads as nothing sold of what it lacks.
  */
 final class ExtraPricesFormTest extends TestCase
 {
@@ -36,6 +37,10 @@ final class ExtraPricesFormTest extends TestCase
             'time_options' => [['quantity' => 30, 'price' => '۹۰٬۰۰۰ تومان'], ['quantity' => '7', 'price' => '25000']],
             'time_min' => 1,
             'time_max' => 30,
+            'devices_price' => '۳۰٬۰۰۰',
+            'devices_options' => [['quantity' => '۲', 'price' => '50000'], ['quantity' => 1, 'price' => '']],
+            'devices_min' => '1',
+            'devices_max' => '۵',
         ], self::nothingKept());
 
         self::assertSame([
@@ -47,6 +52,10 @@ final class ExtraPricesFormTest extends TestCase
             'time_options' => [['quantity' => 7, 'price' => '25000.00'], ['quantity' => 30, 'price' => '90000.00']],
             'time_min' => 1,
             'time_max' => 30,
+            'devices_price' => '30000.00',
+            'devices_options' => [['quantity' => 1, 'price' => null], ['quantity' => 2, 'price' => '50000.00']],
+            'devices_min' => 1,
+            'devices_max' => 5,
         ], $kept, 'Persian digits and separators, a row left blank is nothing, the smallest first; blank — no unit price');
     }
 
@@ -61,9 +70,15 @@ final class ExtraPricesFormTest extends TestCase
             'time_options' => [['quantity' => 7, 'price' => ''], ['quantity' => 30, 'price' => '120000']],
             'time_min' => 1,
             'time_max' => 400,
+            'devices_price' => '',
+            'devices_options' => [['quantity' => 21, 'price' => '10000']],
+            'devices_min' => 3,
+            'devices_max' => 2,
         ]);
 
         self::assertSame([
+            'devices_max' => ['بیشترین تعداد دلخواه نمی‌تواند از کمترین تعداد دلخواه کمتر باشد.'],
+            'devices_options' => ['تعدادهای پیشنهادی باید بین 1 تا 20 کاربر باشند.'],
             'time_max' => ['بیشترین زمان دلخواه باید عددی بین 1 تا 365 روز باشد.'],
             'time_options' => ['۷ روز قیمت ندارد؛ قیمت آن، یا قیمت هر روز را بنویسید.'],
             'traffic_max' => ['بیشترین حجم دلخواه نمی‌تواند از کمترین حجم دلخواه کمتر باشد.'],
@@ -74,7 +89,7 @@ final class ExtraPricesFormTest extends TestCase
 
     public function testTheAmountsOfferedAreHeldToTheirBoundsTheirPricesAndTheirNumber(): void
     {
-        $form = ['traffic_price' => '1000', 'traffic_min' => 1, 'traffic_max' => 100, 'time_price' => '1000', 'time_min' => 1, 'time_max' => 30];
+        $form = ['traffic_price' => '1000', 'traffic_min' => 1, 'traffic_max' => 100, 'time_price' => '1000', 'time_min' => 1, 'time_max' => 30, 'devices_min' => 1, 'devices_max' => 5];
         $options = static fn(array $rows): array => self::refused($form + ['traffic_options' => $rows, 'time_options' => []]);
 
         self::assertSame(['traffic_options' => ['حجم‌های پیشنهادی باید بین 1 تا 10000 گیگابایت باشند.']], $options([['quantity' => 10001, 'price' => '']]));
@@ -107,6 +122,8 @@ final class ExtraPricesFormTest extends TestCase
         self::assertFalse($prices->traffic->sells());
         self::assertSame(['1500.00', [], 1, 30], [$prices->time->price, $prices->time->options, $prices->time->min, $prices->time->max], 'each field on its own: the rest stands');
         self::assertSame('15000.00', $prices->time->priceOf(10));
+        self::assertFalse($prices->devices->sells(), 'a list kept before devices were sold sells none');
+        self::assertSame([1, 5], [$prices->devices->min, $prices->devices->max], 'its bounds at their defaults');
 
         self::assertNull(ExtrasSettings::planPrices((new Plan())->forceFill(['extras' => null])), "no list of its own: the shop's");
     }

@@ -60,7 +60,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testDaysAndTrafficGoOnTopOfARunningServiceAndItsCustomerIsTold(): void
     {
-        $subscription = $this->mirrored('ali_1', ['expires_at' => now()->addDays(10), 'download_bytes' => 20 * Traffic::GIGABYTE]);
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['expires_at' => now()->addDays(10), 'download_bytes' => 20 * Traffic::GIGABYTE]));
         $logs = $this->logs();
 
         $response = $this->extend($subscription, ['days' => '۳', 'traffic_gb' => '10', 'note' => 'جبران قطعی دیروز']);
@@ -87,7 +87,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testAServiceWaitingForItsFirstConnectionGetsALongerTerm(): void
     {
-        $subscription = $this->mirrored('ali_1', ['starts_at' => null, 'expires_at' => null]);
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['starts_at' => null, 'expires_at' => null]));
 
         $row = $this->decode($this->extend($subscription, ['days' => 5]))['subscription'];
 
@@ -106,7 +106,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testEachAmountAloneLeavesTheOtherAsItWasAndAQueuedPeriodMovesWithTheDays(): void
     {
-        $subscription = $this->mirrored('ali_1', ['expires_at' => now()->addDays(10), 'period_ends_at' => now()->addDays(10), 'next_period_bytes' => 30 * Traffic::GIGABYTE]);
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['expires_at' => now()->addDays(10), 'period_ends_at' => now()->addDays(10), 'next_period_bytes' => 30 * Traffic::GIGABYTE]));
 
         $row = $this->decode($this->extend($subscription, ['traffic_gb' => '۲٫۵']))['subscription'];
 
@@ -123,9 +123,9 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testWhatTheServiceCannotTakeIsRefusedUnderItsField(): void
     {
-        $endless = $this->mirrored('ali_1', ['duration_hours' => 0, 'expires_at' => null]);
-        $unlimited = $this->mirrored('ali_2', ['traffic_limit_bytes' => 0]);
-        $neither = $this->mirrored('ali_3', ['duration_hours' => 0, 'expires_at' => null, 'traffic_limit_bytes' => 0]);
+        $endless = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['duration_hours' => 0, 'expires_at' => null]));
+        $unlimited = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_2', ['traffic_limit_bytes' => 0]));
+        $neither = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_3', ['duration_hours' => 0, 'expires_at' => null, 'traffic_limit_bytes' => 0]));
 
         self::assertSame(['days' => ['این سرویس تاریخ پایان ندارد؛ روزی به آن اضافه نمی‌شود.']], $this->errors($endless, ['days' => 3, 'traffic_gb' => 5]));
         self::assertSame(['traffic_gb' => ['حجم این سرویس نامحدود است؛ حجمی به آن اضافه نمی‌شود.']], $this->errors($unlimited, ['days' => 3, 'traffic_gb' => 5]));
@@ -138,7 +138,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testWhatTheAdminTypesIsCheckedBeforeThePanelIsTouched(): void
     {
-        $subscription = $this->mirrored('ali_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
         $calls = $this->panelCalls();
 
         self::assertSame(['grant' => ['زمان یا حجمی برای افزودن وارد کنید.']], $this->errors($subscription, ['days' => '', 'traffic_gb' => '0']));
@@ -154,8 +154,8 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testOnlyAnActiveServiceIsExtended(): void
     {
-        $expired = $this->mirrored('ali_1', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subDay()]);
-        $disabled = $this->mirrored('ali_2', ['status' => SubscriptionStatus::Disabled, 'disabled_at' => now()]);
+        $expired = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['status' => SubscriptionStatus::Expired, 'expires_at' => now()->subDay()]));
+        $disabled = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_2', ['status' => SubscriptionStatus::Disabled, 'disabled_at' => now()]));
 
         // Each refused in the words of what it came to.
         $refusals = [
@@ -194,7 +194,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testAServiceAnotherChangeHoldsIsBusyAndNothingHappens(): void
     {
-        $subscription = $this->mirrored('ali_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
         self::assertNotNull(Lease::take($subscription, 60), 'a renewal, a grant or a move is working on it');
 
         $response = $this->extend($subscription, ['days' => 3]);
@@ -208,7 +208,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testAPanelThatFailsIsNamedInTheAdminsWordsAndNothingIsKept(): void
     {
-        $subscription = $this->mirrored('ali_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
         FakeProvider::$refusing = [$this->server->id => ['updateClient']];
 
         $response = $this->extend($subscription, ['days' => 3, 'traffic_gb' => 5]);
@@ -228,7 +228,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
 
     public function testTheCustomerIsNotToldWhenTheAdminKeepsItQuiet(): void
     {
-        $subscription = $this->mirrored('ali_1');
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
 
         self::assertSame(200, $this->extend($subscription, ['days' => 3, 'note' => 'برای تست', 'notify' => false])->getStatusCode());
 
@@ -355,7 +355,7 @@ final class SubscriptionExtensionTest extends HttpTestCase
     {
         $bot = $this->agentBot(traffic: 20);
         $theirs = $this->agentsService($bot);
-        $mine = $this->mirrored('ali_1');
+        $mine = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
         $this->loginAsAgent($bot);
 
         self::assertSame(404, $this->postJson("/api/agent/subscriptions/{$mine->id}/extend", ['days' => 3])->getStatusCode());
@@ -364,26 +364,10 @@ final class SubscriptionExtensionTest extends HttpTestCase
         self::assertSame(Traffic::bytesOfGb(20), $bot->trafficBalance());
     }
 
-    /**
-     * A subscription of Ali's whose client is on the fake panel as the row has it.
-     *
-     * @param array<string, mixed> $overrides
-     */
-    private function mirrored(string $name, array $overrides = []): Subscription
-    {
-        $subscription = $this->subscription($this->ali, $this->plan, $this->server, $name, $overrides);
-        FakeProvider::mirror($subscription);
-
-        return $subscription;
-    }
-
     /** A running service of the agent's bot — its customer, its plan (30 days, 30 GB) — on the shop's server. */
     private function agentsService(Bot $bot): Subscription
     {
-        $subscription = CurrentBot::run($bot, fn(): Subscription => $this->subscription($this->customer(['telegram_id' => 2001, 'username' => 'reza']), $this->plan(['name' => 'پلن نماینده']), $this->server, 'reza_1'));
-        FakeProvider::mirror($subscription);
-
-        return $subscription;
+        return $this->mirrored(CurrentBot::run($bot, fn(): Subscription => $this->subscription($this->customer(['telegram_id' => 2001, 'username' => 'reza']), $this->plan(['name' => 'پلن نماینده']), $this->server, 'reza_1')));
     }
 
     /** @param array<string, mixed> $body */

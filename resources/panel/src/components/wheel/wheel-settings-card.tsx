@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotSettingsData, BotWheelSettingsRequest } from '@/lib/api-types'
 import { formatDuration, formatMoney, wholeOf } from '@/lib/format'
+import { WHEEL_SETTINGS } from '@/lib/limits'
 
 /** The `wheel` bot-settings group: the switch, the wait between spins, buyers only, and a spin's cost. */
 export function WheelSettingsCard({ settings }: { settings: BotSettingsData }) {
@@ -36,7 +37,7 @@ export function WheelSettingsCard({ settings }: { settings: BotSettingsData }) {
           id="wheel_cooldown"
           label="فاصله دو چرخش (ساعت)"
           error={error('wheel_cooldown_hours')}
-          hint={hours !== null && Number(hours) > 0 ? `هر مشتری هر ${formatDuration(Number(hours))} یک بار.` : 'بین 1 تا 720 ساعت'}
+          hint={hours !== null && Number(hours) > 0 ? `هر مشتری هر ${formatDuration(Number(hours))} یک بار.` : `بین 1 تا ${WHEEL_SETTINGS.COOLDOWN_HOURS_MAX} ساعت`}
         >
           <Input dir="ltr" inputMode="numeric" value={values.wheel_cooldown_hours} onChange={(e) => set('wheel_cooldown_hours', e.target.value)} />
         </Field>

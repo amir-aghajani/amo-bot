@@ -70,6 +70,16 @@ final readonly class Quote
     }
 
     /**
+     * As the APIs answer a price before anything is ordered: the base, each discount line, what is left to pay.
+     *
+     * @return array{base: string, discounts: list<array{source: string, label: string, amount: string, percent: int|null}>, amount: string}
+     */
+    public function present(): array
+    {
+        return ['base' => $this->base, 'discounts' => DiscountLine::presentAll($this->lines()), 'amount' => $this->amount()];
+    }
+
+    /**
      * What an order made at this quote keeps.
      *
      * @return array{amount: string, pricing: OrderPricing, discount_amount: string, discounts: list<array<string, mixed>>|null, discount_code_id: int|null}

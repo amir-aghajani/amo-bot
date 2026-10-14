@@ -10,14 +10,17 @@ use App\Core\Exceptions\ValidationException;
 use App\Core\Support\Sleeper;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Catalog\Services\ServerSelector;
+use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Orders\Exceptions\ServiceChangedHandsException;
 use App\Modules\Orders\Models\Order;
-use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Providers\Contracts\ProviderInterface;
 use App\Modules\Providers\DTO\ClientInfo;
+use App\Modules\Providers\DTO\ClientLink;
 use App\Modules\Providers\DTO\ClientSpec;
 use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Exceptions\NotFoundException;
+use App\Modules\Providers\Exceptions\PanelApiException;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 use App\Modules\Providers\Models\Server;
@@ -27,6 +30,7 @@ use App\Modules\Providers\Services\ServerHealth;
 use App\Modules\Providers\Support\PanelConnection;
 use App\Modules\Subscriptions\DTO\TestTerms;
 use App\Modules\Subscriptions\Enums\ExtraKind;
+use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Exceptions\ExtraUnavailableException;
 use App\Modules\Subscriptions\Exceptions\MoveException;
@@ -39,12 +43,13 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Psr\Log\LoggerInterface;
 
 /**
- * Every change of a service on its panel — created for a purchase or as a free test, renewed, given days and traffic,
- * sold extras, started on a queued period, re-linked, switched, moved, deleted — and every read back.
+ * Every change of a service on its panel — created for a purchase or as a free test, claimed by its link, renewed, given
+ * days and traffic, sold extras, started on a queued period, re-linked, switched, moved, deleted — and every read back.
  *
  * The panel is the truth about a client: its answers reach the row through one mapping (values()), stamped with when
  * the panel was asked. Three rules keep concurrent work safe:
@@ -71,6 +76,9 @@ final class ProvisioningService
     private const WAIT_TRIES = 20;
     private const WAIT_MICROSECONDS = 250_000;
 
+    /** Names a new client is tried under while its panel has a client by each already (named()). */
+    private const NAME_TRIES = 10;
+
     /** Why rotateLink() refuses: the service does not run, or its panel cannot rotate. */
     public const ROTATE_INACTIVE = 'لینک فقط برای سرویس فعال عوض می‌شود.';
     public const ROTATE_UNSUPPORTED = 'سرور این سرویس تغییر لینک را پشتیبانی نمی‌کند.';
@@ -81,6 +89,7 @@ final class ProvisioningService
         private readonly ServerSelector $selector,
         private readonly ClientNaming $naming,
         private readonly RenewalSettings $renewal,
+        private readonly CustomerExtras $extras,
         private readonly Sleeper $sleeper,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
@@ -99,34 +108,40 @@ final class ProvisioningService
     }
 
     /**
-     * Create the client for a paid purchase and its service row. `$complete` (the order's completion) runs in the
-     * transaction that writes the row; if that transaction fails, the client is deleted from the panel again so a retry
-     * leaves nothing behind.
+     * Create the client for a paid purchase and its service row — of its plan, on every inbound the plan sells on the
+     * server chosen, or one the customer built (Order::package()), on every inbound its server sells —, named as
+     * ClientNaming::forPurchase() says, or the pattern's next while its panel has a client by that name (named()).
+     * `$complete` (the order's completion) runs in the transaction that writes the row; if that transaction fails, the
+     * client is deleted from the panel again so a retry leaves nothing behind.
      *
      * @param \Closure(Subscription): void $complete
-     * @throws NoServerAvailableException when the plan cannot be delivered now, or the panel gave no link
+     * @throws NoServerAvailableException when it cannot be delivered now, or the panel gave no link
      * @throws ProviderException
      */
     public function provision(Order $order, \Closure $complete): Subscription
     {
-        $plan = $order->plan ?? throw new \LogicException("Order #{$order->id} has no plan to provision.");
+        $package = $order->package() ?? throw new \LogicException("Order #{$order->id} has nothing to provision.");
+        $plan = $order->plan;
         $user = $order->user;
-        ['server' => $server, 'inbounds' => $inbounds] = $this->selector->resolve($plan, $order->server_id);
+        ['server' => $server, 'inbounds' => $inbounds] = $plan !== null
+            ? $this->selector->resolve($plan, $order->server_id)
+            : $this->selector->builtOn($order->server ?? throw new \LogicException("Built order #{$order->id} has no server."));
 
-        // One client on every inbound the plan sells there; its term starts at the first connection.
-        $spec = $this->spec($user, $this->naming->next($user, $server), $plan->trafficBytes(), ServiceTerms::termOf($plan->duration_hours), $plan->ip_limit);
-        $subscription = $this->create($server, $inbounds, $spec, [
+        // Its term starts at the first connection.
+        $create = fn(string $name): Subscription => $this->create($server, $inbounds, $this->spec($user, $name, $package->bytes, ServiceTerms::termOf($package->hours), $package->ipLimit), [
             'user_id' => $user->id,
-            'plan_id' => $plan->id,
-            'duration_hours' => $plan->duration_hours,
+            'plan_id' => $plan?->id,
+            'duration_hours' => $package->hours,
             // «تمدید خودکار» starts as the admin set it for new services, on a plan that can renew itself at all.
-            'auto_renew' => $this->renewal->autoRenewByDefault() && $this->renewal->autoRenews($plan),
+            'auto_renew' => $plan !== null && $this->renewal->autoRenewByDefault() && $this->renewal->autoRenews($plan),
         ], static function (Subscription $subscription) use ($order, $complete): void {
             $order->forceFill(['subscription_id' => $subscription->id])->save();
             // Whoever words the delivery reads the service off this order.
             $order->setRelation('subscription', $subscription);
             $complete($subscription);
         });
+        $onPanel = $this->hasClient($server);
+        $subscription = $this->named($this->naming->forPurchase($order, $server, $onPanel), $create, $onPanel, fn(): string => $this->naming->next($user, $server));
 
         $this->logger->info('Provisioned subscription {id} for user {user} on {server}', ['id' => $subscription->id, 'user' => $user->id, 'server' => $server->name]);
 
@@ -134,9 +149,46 @@ final class ProvisioningService
     }
 
     /**
-     * Create a free test account's client — on every inbound the server sells, named "test_…" — and its service row: no
-     * plan, marked a test, its term as the server's test terms say (from the first connection, or from now). `$issued`
-     * runs in the transaction that writes the row; if that transaction fails, the client is deleted from the panel again.
+     * Make a new client named `$name` through `$create` — and, while its panel refuses it for a client there by that name
+     * already (`$onPanel`, asked only then), under `$next`'s name instead, NAME_TRIES names in all: the shop knows the
+     * names of the services it keeps (ClientNaming skips those), not of a client made on the panel by hand, nor of
+     * another order's asking the same name delivered at the same moment. A buyer's own name, and the name a moved
+     * service keeps, give way to the pattern so.
+     *
+     * @template T
+     * @param \Closure(string): T $create
+     * @param \Closure(string): bool $onPanel
+     * @param \Closure(): string $next
+     * @return T
+     * @throws PanelApiException when the panel refuses it for another reason, or the names run out
+     * @throws NoServerAvailableException|ProviderException|ServiceBusyException
+     */
+    private function named(string $name, \Closure $create, \Closure $onPanel, \Closure $next): mixed
+    {
+        for ($try = 1; ; $try++) {
+            try {
+                return $create($name);
+            } catch (PanelApiException $e) {
+                if ($try >= self::NAME_TRIES || !$onPanel($name)) {
+                    throw $e;
+                }
+                $this->logger->info('Client name {name} is taken on its panel by a client the shop does not keep; the next is tried', ['name' => $name]);
+                $name = $next();
+            }
+        }
+    }
+
+    /** @return \Closure(string): bool Whether the server's panel has a client by that name (one findClient()). */
+    private function hasClient(Server $server): \Closure
+    {
+        return fn(string $name): bool => $this->onPanel($server, static fn(ProviderInterface $panel): bool => $panel->findClient($name) !== null);
+    }
+
+    /**
+     * Create a free test account's client — on every inbound the server sells, named by the test pattern (named()) — and
+     * its row: no plan, marked a test, its term as the server's test terms say (from the first connection, or from now).
+     * `$issued` runs in the transaction that writes the row; if that transaction fails, the client is deleted from the
+     * panel again.
      *
      * @param Collection<int, ServerInbound> $inbounds
      * @param \Closure(Subscription): void $issued
@@ -145,8 +197,9 @@ final class ProvisioningService
      */
     public function provisionTest(User $user, Server $server, Collection $inbounds, TestTerms $terms, \Closure $issued): Subscription
     {
-        $spec = $this->spec($user, $this->naming->next($user, $server, test: true), $terms->bytes, $terms->expiry(), 0);
-        $subscription = $this->create($server, $inbounds, $spec, ['user_id' => $user->id, 'is_test' => true, 'duration_hours' => $terms->hours], $issued);
+        $next = fn(): string => $this->naming->next($user, $server, test: true);
+        $create = fn(string $name): Subscription => $this->create($server, $inbounds, $this->spec($user, $name, $terms->bytes, $terms->expiry(), 0), ['user_id' => $user->id, 'is_test' => true, 'duration_hours' => $terms->hours], $issued);
+        $subscription = $this->named($next(), $create, $this->hasClient($server), $next);
 
         $this->logger->info('Made test account {id} for user {user} on {server}', ['id' => $subscription->id, 'user' => $user->id, 'server' => $server->name]);
 
@@ -154,11 +207,76 @@ final class ProvisioningService
     }
 
     /**
-     * Apply the renewal order's plan to its service (ServiceTerms::renewal()), from what the panel says right now — the
-     * traffic left and the deadline are the panel's. `$complete` runs in the transaction that writes the row.
+     * The client a link the customer sent is for on the server's panel (ProviderInterface::findClientByLink()), the
+     * contact recorded on the server; null when the panel has none.
+     *
+     * @throws ProviderException
+     */
+    public function findByLink(Server $server, ClientLink $link): ?ClientInfo
+    {
+        return $this->onPanel($server, static fn(ProviderInterface $panel): ?ClientInfo => $panel->findClientByLink($link));
+    }
+
+    /**
+     * Keep a client the shop did not make as the customer's service — one they claimed by its link (ServiceClaims): its
+     * row as the panel answered (`$client`, asked at `$observedAt`) through values(), marked claimed, the customer's as
+     * any new owner's (newOwner()), its IP limit the panel's, and no plan unless `$carried` brings one (a stale record of
+     * the customer's: its plan and «تمدید خودکار»).
+     * - Ended by time or traffic, it comes ended, to renew — whether or not the panel switched it off (3x-ui switches a
+     *   client off by itself once it is used up) —, and its removal (ServiceCleanup) counts from the claim, not from an
+     *   end long past.
+     * - Switched off on the panel while it still runs, it is kept switched off, as support's switch says.
+     * - A deadline still ahead is its term, counted from now: the hours left to it. When its clock started the panel
+     *   does not say: `starts_at` stays unknown (null), never the claim.
+     * `$claimed` runs in the transaction that writes the row; a client the shop keeps already fails on the row's unique key.
+     *
+     * @param \Closure(Subscription): void $claimed
+     * @param array{plan_id?: int|null, auto_renew?: bool, is_test?: bool} $carried
+     * @throws UniqueConstraintViolationException when the shop keeps the client already
+     */
+    public function adopt(User $user, Server $server, ClientInfo $client, Carbon $observedAt, \Closure $claimed, array $carried = []): Subscription
+    {
+        $link = $client->subscriptionUrl ?? throw new \LogicException("Client {$client->name} on {$server->name} has no subscription link to keep.");
+        $deadline = $client->expiry->deadline();
+        $hoursLeft = $deadline !== null && $deadline->getTimestamp() > $observedAt->getTimestamp() ? (int) ceil(($deadline->getTimestamp() - $observedAt->getTimestamp()) / ServiceTerms::HOUR) : 0;
+
+        $subscription = $this->db->transaction(static function () use ($user, $server, $client, $link, $observedAt, $claimed, $carried, $hoursLeft): Subscription {
+            $subscription = new Subscription($carried + self::newOwner($user) + [
+                'server_id' => $server->id,
+                'remote_name' => $client->name,
+                'subscription_url' => $link,
+                'status' => SubscriptionStatus::Active,
+                'ip_limit' => $client->ipLimit ?? 0,
+                'duration_hours' => $hoursLeft,
+                'claimed_at' => $observedAt,
+                // What endedAt() keeps for one that comes ended.
+                'ended_at' => $observedAt,
+            ]);
+            $values = ['starts_at' => null] + self::values($subscription, $client, $observedAt);
+            if (!$client->enabled && $values['status'] === SubscriptionStatus::Active) {
+                $values = ['status' => SubscriptionStatus::Disabled, 'disabled_at' => $observedAt] + $values;
+            }
+            $subscription->fill($values)->save();
+            $claimed($subscription);
+
+            return $subscription;
+        });
+
+        $this->logger->info('User {user} claimed client {name} on {server} as subscription {id}', ['user' => $user->id, 'name' => $client->name, 'server' => $server->name, 'id' => $subscription->id]);
+
+        return $subscription;
+    }
+
+    /**
+     * Apply the renewal order's package — its plan's, or the one it was built with — to its service by the order's method
+     * (ServiceTerms::renewal()), from what the panel says right now — the traffic left and the deadline are the panel's.
+     * What it gives is kept on the order (ServiceTerms::given()) in the transaction that writes the row, with
+     * `$complete`. A service handed to another customer since the order was claimed for delivery gets nothing: a
+     * transfer holds the service as this does (ServiceTransfers::transfer()), so the owner read under the hold stands.
      *
      * @param \Closure(Subscription): void $complete
      * @throws NotFoundException when the panel no longer has the client: there is nothing to renew
+     * @throws ServiceChangedHandsException
      * @throws ProviderException|ServiceBusyException
      */
     public function renew(Order $order, \Closure $complete): Subscription
@@ -166,13 +284,17 @@ final class ProvisioningService
         $subscription = $order->subscription ?? throw new \LogicException("Renewal order #{$order->id} has no subscription.");
 
         return $this->holding($subscription, function (Lease $lease) use ($order, $subscription, $complete): Subscription {
-            $plan = $order->plan ?? $subscription->plan ?? throw new \LogicException("Renewal order #{$order->id} has no plan.");
+            self::stillTheirs($order, $subscription);
+            $package = $order->package() ?? $subscription->plan?->package() ?? throw new \LogicException("Renewal order #{$order->id} has nothing to give.");
             $this->read($subscription, $lease);
 
-            $terms = ServiceTerms::renewal($subscription, $plan, $this->renewal->carriesTraffic());
-            // What it gives is kept on the order with its completion: a refund takes back that much.
-            $given = ['given_hours' => $plan->duration_hours, 'given_bytes' => $plan->trafficBytes()];
-            $this->applyTerms($subscription, $terms, $lease, ['plan_id' => $plan->id, 'status' => SubscriptionStatus::Active, 'ip_limit' => $terms->ipLimit, 'disabled_at' => null] + $terms->columns(), static function (Subscription $renewed) use ($order, $given, $complete): void {
+            $terms = ServiceTerms::renewal($subscription, $package, $this->renewal->carriesTraffic(), $order->renewal_method ?? RenewalMethod::Extend, CustomerExtras::devicesBought($subscription));
+            // What it gives — less than nothing for a reset that replaced more — is kept on the order with its completion,
+            // and what a package without a term or a quota replaced: its refund undoes exactly that.
+            $given = $terms->given($subscription) + ['gave_plan' => $subscription->plan_id === null && $order->plan_id !== null];
+            $own = ($order->plan_id !== null ? ['plan_id' => $order->plan_id] : []) + ['status' => SubscriptionStatus::Active, 'disabled_at' => null];
+            // Renewed, it runs: its client switched on.
+            $this->applyTerms($subscription, $terms, $lease, $own + $terms->columns(), enabled: true, complete: static function (Subscription $renewed) use ($order, $given, $complete): void {
                 $order->forceFill($given)->save();
                 $complete($renewed);
             });
@@ -182,40 +304,49 @@ final class ProvisioningService
     }
 
     /**
-     * Undo what a refunded renewal or extra gave its service (ServiceTerms::takeBack()), from what the panel says
-     * right now: a renewal's term and traffic as delivered (`given_hours`, `given_bytes`; its plan's as it is now for one
-     * delivered before they were kept), an extra's days or traffic. Once: the order is marked taken back in the
-     * transaction that writes the row, and checked under the service's hold, so a second refund of it takes nothing. A
-     * service switched off is refused under the hold too, since the panel's update would switch it on. True when it was
-     * taken back, now or before; false when the panel no longer has the client — nothing to take back.
+     * Undo what a refunded renewal or extra gave its service (ServiceTerms::takeBack()), from what the panel says right
+     * now, as far as the service still has it — and give back what a reset replaced beyond what it gave, and a term or a
+     * quota a renewal ended (undone()). Once: the order is marked taken back — with what it hands on to the orders after
+     * it — in the transaction that writes the row, and read again under the service's hold, so a second refund of it
+     * takes nothing and one handed something by another refund meanwhile takes that too. Its client stays switched on or
+     * off as the panel has it, and the panel is not asked when nothing changes. True when something was taken back, now
+     * or before; false when nothing was — nothing of it left on the service, or the panel no longer has the client.
      *
-     * @throws RefundRefusedException the service is switched off
      * @throws ProviderException|ServiceBusyException
+     * @throws ServiceChangedHandsException when the service went to another customer: nothing of theirs is taken
      * @throws ModelNotFoundException when the service is gone
      */
     public function undo(Order $order, Subscription $subscription): bool
     {
         return $this->holding($subscription, function (Lease $lease) use ($order, $subscription): bool {
-            if (Order::query()->whereKey($order->id)->whereNotNull('taken_back_at')->exists()) {
+            // As it stands under the hold: taken back meanwhile, or handed something by another refund since it was read.
+            $order->refresh();
+            if ($order->taken_back_at !== null) {
                 return true;
             }
-            if ($subscription->status === SubscriptionStatus::Disabled) {
-                throw RefundRefusedException::serviceDisabled();
-            }
-            if ($this->read($subscription, $lease, required: false) === null) {
+            self::stillTheirs($order, $subscription);
+            $client = $this->read($subscription, $lease, required: false);
+            if ($client === null) {
                 return false;
             }
 
-            $renewal = $order->type === OrderType::Renewal;
-            $terms = ServiceTerms::takeBack(
-                $subscription,
-                $renewal ? $order->given_hours ?? $order->plan->duration_hours ?? 0 : (int) $order->days * ServiceTerms::HOURS_A_DAY,
-                $renewal ? $order->given_bytes ?? $order->plan?->trafficBytes() ?? 0 : (int) $order->traffic_bytes,
-                $renewal,
-            );
-            $this->applyTerms($subscription, $terms, $lease, $terms->columns(), static function () use ($order): void {
+            // The renewals after it, and the extra days after it that started a new term (ServiceTerms::extra()).
+            $later = self::standingAfter($order, $subscription, [OrderType::Renewal, OrderType::ExtraTime])->get()
+                ->filter(static fn(Order $after): bool => $after->type === OrderType::Renewal || $after->reset_term)->values();
+            [$terms, $own] = self::undone($order, $subscription, $later);
+            $complete = static function () use ($order, $later): void {
                 $order->forceFill(['taken_back_at' => now()])->save();
-            });
+                foreach ($later as $after) {
+                    $after->save(); // what it was handed, if anything
+                }
+            };
+            if ($own === [] && !$terms->changes($subscription)) {
+                $this->db->transaction($complete);
+
+                return false;
+            }
+
+            $this->applyTerms($subscription, $terms, $lease, $own + $terms->columns(), enabled: $client->enabled, complete: $complete);
             $this->logger->info('Subscription {id} gave back what refunded order {order} gave it', ['id' => $subscription->id, 'order' => $order->id]);
 
             return true;
@@ -223,9 +354,201 @@ final class ProvisioningService
     }
 
     /**
+     * What a refund of `$order` takes back from the service as its row has it now — the terms, and the plan (`$own`) —,
+     * with what it hands on written onto `$later` (the renewals delivered after it and still standing, and the extra
+     * days after it that started a new term, in that order; unsaved):
+     * - a renewal's term and traffic as delivered (`given_hours`, `given_bytes`: less than nothing for a reset that
+     *   replaced more than it gave, given back; its plan's as it is now for one delivered before they were kept), an
+     *   extra's days (`given_hours` once they started a new term), traffic or devices;
+     * - but nothing of a part a later order started afresh — the term (`reset_term`: a renewal's, or extra days for a
+     *   service whose time ran out), the traffic count (`reset_traffic`), the device limit (`reset_ip_limit`, or the
+     *   next period begun: ServiceTerms::devicesGone()) —: that part is handed on to the first such order, added to what
+     *   it gave (devices: taken off the limit it replaced, while that counted them), so its own refund takes it with its
+     *   own;
+     * - what only the last renewal standing undoes goes back once none delivered after it stands, and is handed on to
+     *   the next one until then, in place of what that one would undo of it: the plan, a term or a quota it gave a
+     *   service that had none (`gave_plan`, `gave_term`, `gave_quota`: no plan again, never ending, unlimited); the term
+     *   or the quota a package without one replaced (`term_was`, `expires_was`, `quota_was`: back whole, less what was
+     *   handed on to it, the extras delivered after it and still standing on top — extrasAfter(), their refunds take
+     *   them later —; handed on, with what was handed on to it less the extras between the two); and the device limit
+     *   it set at once (limitPutBack(), with the moment the limit had last gone back to a package's), which the next one
+     *   set at once replaced (its `ip_limit_was`, `ip_limit_reset_was`) — and, set at once, only while no period queued
+     *   since began; one it queued behind the period in use goes back while no other was queued after it, else the one
+     *   after replaces what it did.
+     *
+     * @param Collection<int, Order> $later
+     * @return array{ServiceTerms, array<string, mixed>}
+     */
+    private static function undone(Order $order, Subscription $subscription, Collection $later): array
+    {
+        $renewal = $order->type === OrderType::Renewal;
+        $hours = $order->given_hours ?? ($renewal ? $order->plan->duration_hours ?? 0 : (int) $order->days * ServiceTerms::HOURS_A_DAY);
+        $bytes = $order->given_bytes ?? ($renewal ? $order->plan?->trafficBytes() ?? 0 : (int) $order->traffic_bytes);
+        $devices = $renewal ? 0 : (int) $order->devices;
+        $renewals = $later->filter(static fn(Order $after): bool => $after->type === OrderType::Renewal)->values();
+        $next = $renewal ? $renewals->first() : null;
+        $last = $renewal && $next === null;
+        // A term or a quota it ended goes back whole (or to the next renewal), never to an order that restarted it.
+        $keepsTerm = $order->term_was !== null;
+        $keepsQuota = $order->quota_was !== null;
+        $term = $keepsTerm ? null : $later->first(static fn(Order $after): bool => $after->reset_term);
+        $traffic = $keepsQuota ? null : $later->first(static fn(Order $after): bool => $after->reset_traffic);
+        $term?->forceFill(['given_hours' => (int) $term->given_hours + $hours]);
+        $traffic?->forceFill(['given_bytes' => (int) $traffic->given_bytes + $bytes]);
+
+        if ($next !== null) {
+            $between = $keepsTerm || $keepsQuota ? self::extrasAfter($order, $subscription, until: $next) : [0, 0];
+            $next->forceFill(['gave_plan' => $next->gave_plan || $order->gave_plan] + match (true) {
+                $order->gave_term => ['gave_term' => true, 'term_was' => null, 'expires_was' => null],
+                $keepsTerm => ['gave_term' => false, 'term_was' => $order->term_was, 'expires_was' => $order->expires_was, 'reset_term' => true, 'given_hours' => $hours - $between[0]],
+                default => [],
+            } + match (true) {
+                $order->gave_quota => ['gave_quota' => true, 'quota_was' => null],
+                $keepsQuota => ['gave_quota' => false, 'quota_was' => $order->quota_was, 'reset_traffic' => true, 'given_bytes' => $bytes - $between[1]],
+                default => [],
+            });
+        }
+        $row = $subscription;
+        [$extraHours, $extraBytes] = [0, 0];
+        if ($last && ($keepsTerm || $keepsQuota)) {
+            [$extraHours, $extraBytes] = self::extrasAfter($order, $subscription);
+            $row = (clone $subscription)->forceFill(
+                ($keepsTerm ? ['expires_at' => $order->expires_was, 'duration_hours' => $order->term_was] : [])
+                + ($keepsQuota ? ['traffic_limit_bytes' => $subscription->usedBytes() + (int) $order->quota_was] : []),
+            );
+        }
+        $takenHours = match (true) {
+            $keepsTerm => $last ? $hours - $extraHours : 0,
+            $term !== null => 0,
+            default => $hours,
+        };
+        $takenBytes = match (true) {
+            $keepsQuota => $last ? $bytes - $extraBytes : 0,
+            $traffic !== null => 0,
+            default => $bytes,
+        };
+        $terms = ServiceTerms::takeBack($row, $takenHours, $takenBytes, $renewal, $devices, $order->fulfilled_at, noTerm: $last && $order->gave_term, noQuota: $last && $order->gave_quota);
+
+        if ($devices > 0 && ServiceTerms::devicesGone($subscription, $order->fulfilled_at)) {
+            // Gone with the limit a later renewal put back at once: off the limit it replaced, which counted them.
+            $reset = $renewals->first(static fn(Order $after): bool => $after->reset_ip_limit && ($after->ip_limit_reset_was === null || $after->ip_limit_reset_was->lte($order->fulfilled_at)));
+            if ($reset?->ip_limit_was !== null) {
+                $reset->forceFill(['ip_limit_was' => ServiceTerms::lessDevices($reset->ip_limit_was, $devices)]);
+            }
+        }
+        if ($renewal && $order->given_ip_limit !== null) {
+            $terms = self::limitBack($order, $subscription, $renewals, $terms);
+        }
+
+        // The renewal that gave the service its plan: refunded, it has none again.
+        $own = $last && $order->gave_plan && $subscription->plan_id !== null && (int) $subscription->plan_id === (int) $order->plan_id ? ['plan_id' => null, 'auto_renew' => false] : [];
+
+        return [$terms, $own];
+    }
+
+    /**
+     * `$terms` with the device limit the refunded renewal `$order` gave put back, or handed on to the renewal after it
+     * that replaced it (undone()).
+     *
+     * @param Collection<int, Order> $later
+     */
+    private static function limitBack(Order $order, Subscription $subscription, Collection $later, ServiceTerms $terms): ServiceTerms
+    {
+        $given = (int) $order->given_ip_limit;
+        if ($order->ip_limit_queued) {
+            $after = $later->first(static fn(Order $after): bool => $after->given_ip_limit !== null);
+            if ($after === null) {
+                return $terms->limitPutBack($given, $order->ip_limit_was, queued: true);
+            }
+            if ($after->ip_limit_queued && $after->ip_limit_was === $given) {
+                $after->forceFill(['ip_limit_was' => $order->ip_limit_was]);
+            }
+
+            return $terms;
+        }
+
+        $after = $later->first(static fn(Order $after): bool => $after->given_ip_limit !== null && !$after->ip_limit_queued);
+        if ($after === null) {
+            // Still the service's while no period queued since began (its limit put back to a package's then).
+            $since = $subscription->ip_limit_reset_at;
+
+            return $since === null || $since->lte($order->fulfilled_at) ? $terms->limitPutBack($given, $order->ip_limit_was, queued: false, reset: $order->reset_ip_limit, resetWas: $order->ip_limit_reset_was) : $terms;
+        }
+        // The next set at once replaced it — unless a period that began between them had replaced it first.
+        if ($after->ip_limit_was !== null && $order->ip_limit_was !== null && ($after->ip_limit_reset_was === null || $after->ip_limit_reset_was->lte($order->fulfilled_at))) {
+            $after->forceFill([
+                'ip_limit_was' => ServiceTerms::limitUndone($after->ip_limit_was, $given, $order->ip_limit_was),
+                'ip_limit_reset_was' => $order->ip_limit_reset_was,
+                'reset_ip_limit' => $after->reset_ip_limit || $order->reset_ip_limit,
+            ]);
+        }
+
+        return $terms;
+    }
+
+    /**
+     * The service's orders of `$types` that stand delivered (not taken back) after `$order` — and before `$until`, when
+     * given —, in the order they were delivered (by `fulfilled_at`, then id).
+     *
+     * @param list<OrderType> $types
+     * @return Builder<Order>
+     */
+    private static function standingAfter(Order $order, Subscription $subscription, array $types, ?Order $until = null): Builder
+    {
+        $query = Order::query()
+            ->where('subscription_id', $subscription->id)
+            ->whereIn('type', array_map(static fn(OrderType $type): string => $type->value, $types))
+            ->where('status', OrderStatus::Fulfilled->value)
+            ->whereNull('taken_back_at')
+            ->where(static fn(Builder $later) => $later
+                ->where('fulfilled_at', '>', $order->fulfilled_at)
+                ->orWhere(static fn(Builder $tie) => $tie->where('fulfilled_at', $order->fulfilled_at)->where('id', '>', $order->id)));
+        if ($until !== null) {
+            $query->where(static fn(Builder $earlier) => $earlier
+                ->where('fulfilled_at', '<', $until->fulfilled_at)
+                ->orWhere(static fn(Builder $tie) => $tie->where('fulfilled_at', $until->fulfilled_at)->where('id', '<', $until->id)));
+        }
+
+        return $query->orderBy('fulfilled_at')->orderBy('id');
+    }
+
+    /**
+     * The hours and bytes the extra days and traffic delivered after `$order` (and before `$until`) and still standing
+     * gave, as their refunds take them back: a term or a quota put back whole as it was before `$order` keeps them on top,
+     * so each of those refunds still finds its own.
+     *
+     * @return array{int, int}
+     */
+    private static function extrasAfter(Order $order, Subscription $subscription, ?Order $until = null): array
+    {
+        $extras = self::standingAfter($order, $subscription, [OrderType::ExtraTime, OrderType::ExtraTraffic], $until)->get();
+
+        return [
+            (int) $extras->sum(static fn(Order $extra): int => $extra->type === OrderType::ExtraTime ? $extra->given_hours ?? (int) $extra->days * ServiceTerms::HOURS_A_DAY : 0),
+            (int) $extras->sum(static fn(Order $extra): int => $extra->type === OrderType::ExtraTraffic ? (int) $extra->traffic_bytes : 0),
+        ];
+    }
+
+    /**
+     * Refuse to deliver or take back `$order` once its service is another customer's: asked of the row as the service's
+     * hold read it again — a transfer holds the service too, so it lands before or after the change, never during it.
+     *
+     * @throws ServiceChangedHandsException
+     */
+    private static function stillTheirs(Order $order, Subscription $subscription): void
+    {
+        if ((int) $subscription->user_id !== (int) $order->user_id) {
+            throw new ServiceChangedHandsException();
+        }
+    }
+
+    /**
      * Start the period a renewal was queued behind, once `period_ends_at` has passed: what remains is capped at the
-     * renewed traffic and counted afresh (ServiceTerms::nextPeriod()), by the panel's counters now. A client the panel
-     * no longer has, or a service that used everything, has nothing to cap: the queued period is just dropped.
+     * renewed traffic and counted afresh, by the panel's counters now, and the device limit becomes the renewal's
+     * (ServiceTerms::nextPeriod(), periodOver()). The panel is asked only when it has something to change: a cap, or a
+     * limit it keeps (a period queued for its devices alone on a panel without IP limits is the row's alone). A client the
+     * panel no longer has, or a service that used everything with its limit unchanged, has nothing to send: the queued
+     * period is just over. One moved on since — days given — waits for its new end.
      *
      * @throws ProviderException|ServiceBusyException
      * @throws ModelNotFoundException when the service is gone
@@ -233,27 +556,29 @@ final class ProvisioningService
     public function startNextPeriod(Subscription $subscription): void
     {
         $this->holding($subscription, function (Lease $lease) use ($subscription): void {
-            if ($subscription->period_ends_at === null || $subscription->next_period_bytes === null) {
-                return; // started meanwhile
+            if ($subscription->period_ends_at === null || $subscription->period_ends_at->isFuture()) {
+                return; // started meanwhile, or moved on
             }
 
-            $client = $this->read($subscription, $lease, required: false);
+            $limit = $subscription->next_period_ip_limit ?? $subscription->ip_limit;
+            $asks = $subscription->next_period_bytes !== null || ($limit !== $subscription->ip_limit && $this->providers->capabilities($subscription->server->driver)->ipLimit);
+            $client = $asks ? $this->read($subscription, $lease, required: false) : null;
+            $over = ServiceTerms::periodOver($subscription);
             $terms = $client !== null ? ServiceTerms::nextPeriod($subscription) : null;
-            $over = ['period_ends_at' => null, 'next_period_bytes' => null];
-            if ($terms === null) {
+            if ($client === null || $terms === null) {
                 $lease->write($over);
 
                 return;
             }
 
-            $this->applyTerms($subscription, $terms, $lease, $over);
-            $this->logger->info('Subscription {id} began its renewed period with {bytes} bytes', ['id' => $subscription->id, 'bytes' => $terms->totalBytes]);
+            $this->applyTerms($subscription, $terms, $lease, $over, enabled: $client->enabled);
+            $this->logger->info('Subscription {id} began its renewed period with {bytes} bytes and {devices} devices', ['id' => $subscription->id, 'bytes' => $terms->totalBytes, 'devices' => $terms->ipLimit]);
         });
     }
 
     /**
      * Add days and traffic to a service — its share of a grant, or support's extension — worked out from the row as the
-     * panel last reported it (ServiceTerms::grant()).
+     * panel last reported it (ServiceTerms::grant()). Its client is switched on, unless support switched the service off.
      *
      * @throws ProviderException|ServiceBusyException
      */
@@ -261,19 +586,20 @@ final class ProvisioningService
     {
         $this->holding($subscription, function (Lease $lease) use ($subscription, $days, $bytes): void {
             $terms = ServiceTerms::grant($subscription, $days, $bytes);
-            $this->applyTerms($subscription, $terms, $lease, $terms->columns());
+            $this->applyTerms($subscription, $terms, $lease, $terms->columns(), enabled: $subscription->status !== SubscriptionStatus::Disabled);
         });
     }
 
     /**
-     * Deliver the extra traffic or time an order bought onto its service (ServiceTerms::extra()), from what the panel
-     * says right now. The service must still be able to take it by the panel's numbers (CustomerExtras::problem()):
-     * switched off by support since, or ended on the other count, the order fails with the reason. `$complete` runs in
-     * the transaction that writes the row.
+     * Deliver the extra traffic, time or devices an order bought onto its service (ServiceTerms::extra()), from what
+     * the panel says right now, its client switched on (an ended service runs again). The service must still be able to
+     * take it by the panel's numbers (CustomerExtras::refusal()): switched off by support since, or ended on the other
+     * count, the order fails with the reason; handed to another customer since, it gets nothing. `$complete` runs in the
+     * transaction that writes the row — with, for days that started a new term, that restart kept on the order.
      *
      * @param \Closure(Subscription): void $complete
      * @throws NotFoundException when the panel no longer has the client
-     * @throws ExtraUnavailableException
+     * @throws ExtraUnavailableException|ServiceChangedHandsException
      * @throws ProviderException|ServiceBusyException
      */
     public function addExtra(Order $order, \Closure $complete): Subscription
@@ -282,14 +608,23 @@ final class ProvisioningService
         $kind = ExtraKind::of($order->type) ?? throw new \LogicException("Order #{$order->id} buys no extra.");
 
         return $this->holding($subscription, function (Lease $lease) use ($order, $subscription, $kind, $complete): Subscription {
+            self::stillTheirs($order, $subscription);
             $this->read($subscription, $lease);
-            $problem = CustomerExtras::problem($subscription, $kind);
+            $problem = $this->extras->refusal($subscription, $kind);
             if ($problem !== null) {
                 throw new ExtraUnavailableException($problem);
             }
 
-            $terms = ServiceTerms::extra($subscription, (int) $order->days, (int) $order->traffic_bytes);
-            $this->applyTerms($subscription, $terms, $lease, $terms->columns(), $complete);
+            $terms = ServiceTerms::extra($subscription, (int) $order->days, (int) $order->traffic_bytes, (int) $order->devices);
+            // Days that start a new term are kept on the order as a renewal's restart is: an earlier order's refund
+            // takes nothing of that term, and hands its hours on to this one's (undone()).
+            $given = $terms->restartsTerm ? ['given_hours' => $terms->givenHours, 'reset_term' => true] : [];
+            $this->applyTerms($subscription, $terms, $lease, $terms->columns(), enabled: true, complete: static function (Subscription $extended) use ($order, $given, $complete): void {
+                if ($given !== []) {
+                    $order->forceFill($given)->save();
+                }
+                $complete($extended);
+            });
             $this->logger->info('Subscription {id} got {extra} from order {order}', ['id' => $subscription->id, 'extra' => $kind->words($kind->quantityOf($order)), 'order' => $order->id]);
 
             return $subscription;
@@ -408,6 +743,83 @@ final class ProvisioningService
     }
 
     /**
+     * The columns a service takes with a new owner, whichever way it changes hands — handed on (ServiceTransfers) or
+     * added to their account by its link (adopt()): theirs, «تمدید خودکار» off (their wallet is theirs to commit), and
+     * nothing stamped as told (the reminders, the short wallet's notice: they have heard nothing yet). Written in the
+     * transaction that changes the owner, with its report; relabel() follows the commit.
+     *
+     * @return array{user_id: int, auto_renew: false, renewal_notified_at: null, expiry_reminded_at: null, traffic_reminded_at: null}
+     */
+    public static function newOwner(User $owner): array
+    {
+        return ['user_id' => $owner->id, 'auto_renew' => false, 'renewal_notified_at' => null, 'expiry_reminded_at' => null, 'traffic_reminded_at' => null];
+    }
+
+    /**
+     * Once the service has a new owner (newOwner(), or its customer's account merged into another): its client on the
+     * panel takes their Telegram id and comment (ClientNaming::comment()), everything else as the panel has it — read,
+     * then updated with the same quota, term and IP limit, switched on or off as it was. A client gone from its panel
+     * marks the row deleted.
+     *
+     * Never fails the change of owner, which is committed already: a panel in backoff (not asked, so nobody waits out
+     * its timeout), a panel that fails it, another change holding the service too long, or the service deleted
+     * meanwhile is logged — the next change of the service on its panel writes them all the same, since every spec()
+     * reads the service's customer.
+     */
+    public function relabel(Subscription $subscription): void
+    {
+        if ($subscription->server->isBackingOff()) {
+            $this->notRelabelled($subscription, 'its panel is in backoff');
+
+            return;
+        }
+
+        try {
+            $this->holding($subscription, function (Lease $lease) use ($subscription): void {
+                $client = $this->read($subscription, $lease, required: false);
+                if ($client === null) {
+                    return;
+                }
+
+                $observed = now();
+                $spec = $this->spec($subscription->user, $subscription->remote_name, $client->totalBytes, $client->expiry, $subscription->ip_limit, $client->enabled);
+                $updated = $this->held($lease, $subscription->server, static fn(ProviderInterface $panel): ClientInfo => $panel->updateClient($spec));
+                $this->record($subscription, $updated, $observed, $lease);
+                $this->logger->info('Subscription {id} ({name}) now names user {user} on {server}', ['id' => $subscription->id, 'name' => $subscription->remote_name, 'user' => $subscription->user_id, 'server' => $subscription->server->name]);
+            });
+        } catch (ProviderException|ServiceBusyException|ModelNotFoundException $e) {
+            $this->notRelabelled($subscription, $e->getMessage());
+        }
+    }
+
+    /**
+     * relabel() each of the customer's services still on a panel — only those of `$ids` when given —, oldest first: once
+     * their clients should name them otherwise (another account merged into theirs, a Telegram account linked or taken
+     * off).
+     *
+     * @param list<int>|null $ids
+     */
+    public function relabelServicesOf(User $owner, ?array $ids = null): void
+    {
+        $services = Subscription::acrossShops()->where('user_id', $owner->id)->where('status', '!=', SubscriptionStatus::Deleted->value)
+            ->when($ids !== null, static fn(Builder $query) => $query->whereKey($ids))->orderBy('id')->get();
+        foreach ($services as $service) {
+            $this->relabel($service->setRelation('user', $owner));
+        }
+    }
+
+    /** A relabel() that did not reach the panel, logged: the change of owner stands. */
+    private function notRelabelled(Subscription $subscription, string $why): void
+    {
+        $this->logger->warning('Subscription {id} ({name}) has a new owner, but its client on {server} does not name them yet: {message}', [
+            'id' => $subscription->id,
+            'name' => $subscription->remote_name,
+            'server' => $subscription->server->name,
+            'message' => $why,
+        ]);
+    }
+
+    /**
      * Switch the client off (or back on) on the panel, then the row: active → disabled (stamped), disabled → active.
      * False when the service is no longer in the state the switch is for (someone just did it).
      *
@@ -430,10 +842,11 @@ final class ProvisioningService
 
     /**
      * Move the service to another server: a new client there with what is left (the remaining traffic as its quota, the
-     * same deadline, or the same pending term), then the old client deleted and the row pointed at the new one. The old
-     * panel is read first so what is left is current. With `$leavePrevious` (that panel is out of reach) it is not
-     * contacted: the row's last numbers are carried over and the old client stays there for the admin to delete. A
-     * delete the old panel refuses takes the new client back — nothing moved.
+     * same deadline, or the same pending term) — under the name ClientNaming::nameOn() gives it, or the customer's next
+     * while the target's panel has a client by that name already (named()) —, then the old client deleted and the row
+     * pointed at the new one. The old panel is read first so what is left is current. With `$leavePrevious` (that panel
+     * is out of reach) it is not contacted: the row's last numbers are carried over and the old client stays there for
+     * the admin to delete. A delete the old panel refuses takes the new client back — nothing moved.
      *
      * @throws NoServerAvailableException when the target cannot take the service
      * @throws MoveException naming the step that failed
@@ -460,16 +873,23 @@ final class ProvisioningService
                 throw MoveException::service("سرویس {$subscription->remote_name} دیگر فعال نیست؛ چیزی برای انتقال نمانده.");
             }
 
-            // The new client on the target.
-            $spec = $this->spec($subscription->user, $this->naming->nameOn($subscription, $target), $subscription->remainingBytes() ?? 0, ServiceTerms::expiryOf($subscription), $subscription->ip_limit);
+            // The new client on the target: by the name ClientNaming::nameOn() gives it — or, while the target's panel has
+            // a client by that name made by hand, the customer's next (named()).
+            $keys = $inbounds->pluck('remote_key')->values()->all();
+            $spec = fn(string $name): ClientSpec => $this->spec($subscription->user, $name, $subscription->remainingBytes() ?? 0, ServiceTerms::expiryOf($subscription), $subscription->ip_limit);
             $observed = now();
             try {
-                $client = $this->held($lease, $target, static fn(ProviderInterface $panel): ClientInfo => $panel->createClient($inbounds->pluck('remote_key')->values()->all(), $spec));
+                $client = $this->named(
+                    $this->naming->nameOn($subscription, $target),
+                    fn(string $name): ClientInfo => $this->held($lease, $target, static fn(ProviderInterface $panel): ClientInfo => $panel->createClient($keys, $spec($name))),
+                    fn(string $name): bool => $this->held($lease, $target, static fn(ProviderInterface $panel): bool => $panel->findClient($name) !== null),
+                    fn(): string => $this->naming->next($subscription->user, $target, $subscription->is_test),
+                );
             } catch (ProviderException $e) {
                 throw MoveException::targetServer($target, $e);
             }
             if ($client->subscriptionUrl === null) {
-                $this->takeBack($target, $spec->name);
+                $this->takeBack($target, $client->name);
 
                 throw MoveException::targetServer($target, 'برای کلاینت لینک اشتراک نساخت؛ سرور اشتراک پنلش را بررسی کنید.');
             }
@@ -481,7 +901,7 @@ final class ProvisioningService
                 } catch (NotFoundException) {
                     // Gone from the old panel already.
                 } catch (ProviderException|ServiceBusyException $e) {
-                    $this->takeBack($target, $spec->name);
+                    $this->takeBack($target, $client->name);
 
                     throw $e instanceof ProviderException ? MoveException::previousServer($source, $e) : $e;
                 }
@@ -491,7 +911,7 @@ final class ProvisioningService
                 $this->record($subscription, $client, $observed, $lease, ['server_id' => $target->id, 'remote_name' => $client->name]);
             } catch (ModelNotFoundException $e) {
                 // The service was deleted while it moved: its new client is nobody's.
-                $this->takeBack($target, $spec->name);
+                $this->takeBack($target, $client->name);
 
                 throw $e;
             }
@@ -514,6 +934,7 @@ final class ProvisioningService
      * removed the row.
      *
      * @throws ProviderException|ServiceBusyException
+     * @throws ModelNotFoundException when the service is gone
      */
     public function delete(Subscription $subscription, bool $leavePanel = false): bool
     {
@@ -625,21 +1046,21 @@ final class ProvisioningService
     }
 
     /**
-     * Send the terms to the held service's client (resetting its counters first when the terms start afresh) and record
-     * the panel's answer together with what the change decides itself (`$own`). With `$complete`, the row and the
-     * order's completion are written in one transaction.
+     * Send the terms to the held service's client (resetting its counters first when the terms start afresh), switched
+     * on or off as `$enabled` says, and record the panel's answer together with what the change decides itself
+     * (`$own`). With `$complete`, the row and the order's completion are written in one transaction.
      *
      * @param array<string, mixed> $own
      * @param (\Closure(Subscription): void)|null $complete
      * @throws ProviderException|ServiceBusyException
      */
-    private function applyTerms(Subscription $subscription, ServiceTerms $terms, Lease $lease, array $own, ?\Closure $complete = null): void
+    private function applyTerms(Subscription $subscription, ServiceTerms $terms, Lease $lease, array $own, bool $enabled, ?\Closure $complete = null): void
     {
         $observed = now();
         if ($terms->resetCounters) {
             $this->held($lease, $subscription->server, static fn(ProviderInterface $panel) => $panel->resetClientTraffic($subscription->remote_name));
         }
-        $spec = $this->spec($subscription->user, $subscription->remote_name, $terms->totalBytes, $terms->expiry, $terms->ipLimit);
+        $spec = $this->spec($subscription->user, $subscription->remote_name, $terms->totalBytes, $terms->expiry, $terms->ipLimit, $enabled);
         $client = $this->held($lease, $subscription->server, static fn(ProviderInterface $panel): ClientInfo => $panel->updateClient($spec));
 
         if ($complete === null) {
@@ -760,9 +1181,11 @@ final class ProvisioningService
     }
 
     /**
-     * The columns that mirror the panel: counters, quota, link, and the term — the deadline once the panel started the
-     * clock, the term still waiting for the first connection, or none. A deadline the panel moved (an extension made
-     * there) moves a queued renewal period with it.
+     * The columns that mirror the panel: counters, quota, device limit (where the panel keeps one), link, and the term —
+     * the deadline once the panel started the clock, the term still waiting for the first connection, or none. A
+     * deadline the panel moved (an extension made there) moves a queued renewal period with it; a device limit changed
+     * there is the service's from then on, so the next extra builds on it rather than putting the old back (a renewal
+     * brings its package's).
      *
      * @return array<string, mixed>
      */
@@ -776,7 +1199,7 @@ final class ProvisioningService
             // that stopped serving links leaves the last one known.
             'subscription_url' => $client->subscriptionUrl ?? $row->subscription_url,
             'last_synced_at' => $observedAt,
-        ];
+        ] + ($client->ipLimit !== null ? ['ip_limit' => $client->ipLimit] : []);
 
         $deadline = $client->expiry->deadline();
         if ($deadline === null) {
@@ -892,7 +1315,7 @@ final class ProvisioningService
     }
 
     /** The client a customer's service is on its panel: their Telegram id and comment, and what it is given. */
-    private function spec(User $user, string $name, int $totalBytes, Expiry $expiry, int $ipLimit): ClientSpec
+    private function spec(User $user, string $name, int $totalBytes, Expiry $expiry, int $ipLimit, bool $enabled = true): ClientSpec
     {
         return new ClientSpec(
             name: $name,
@@ -901,6 +1324,7 @@ final class ProvisioningService
             ipLimit: $ipLimit,
             telegramId: $user->telegram_id,
             comment: $this->naming->comment($user),
+            enabled: $enabled,
         );
     }
 }

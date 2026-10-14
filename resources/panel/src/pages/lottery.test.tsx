@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { BotSettingsResponse, BotSettingsSaved, LotteryDrawRow, LotteryDrawsResponse } from '@/lib/api-types'
+import type { BotSettingsSaved, LotteryDrawRow, LotteryDrawsResponse } from '@/lib/api-types'
 import { LotteryPage } from '@/pages/lottery'
 import { AGENT_SHOP, OWNER, signedIn, until } from '@/test/render'
-import { botSettingsRow } from '@/test/rows'
+import { botSettingsResponse, botSettingsRow } from '@/test/rows'
 import { json, server } from '@/test/server'
 
 /*
@@ -11,8 +11,6 @@ import { json, server } from '@/test/server'
  * kind, what was typed for another kind no change —, and the draws, the newest first, each with its prize and its
  * winners, or why it had none.
  */
-
-const QR_BACKGROUND = { custom: false, mime: 'image/jpeg', width: 1024, height: 1024, size: 1, updated_at: 1, max_bytes: 5_000_000 }
 
 const DRAW: LotteryDrawRow = {
   id: 2,
@@ -25,7 +23,7 @@ const DRAW: LotteryDrawRow = {
 
 function open(draws: LotteryDrawRow[] = [DRAW], session = OWNER) {
   server().on('GET', '/api/admin/lottery/draws', json({ draws, meta: { page: 1, per_page: 25, total: draws.length, last_page: 1 } } satisfies LotteryDrawsResponse))
-  server().on('GET', '/api/admin/bot/settings', json({ settings: botSettingsRow(), qr_background: QR_BACKGROUND } satisfies BotSettingsResponse))
+  server().on('GET', '/api/admin/bot/settings', json(botSettingsResponse()))
   render(<LotteryPage />, { wrapper: signedIn({ session, at: '/lottery' }).wrapper })
 }
 

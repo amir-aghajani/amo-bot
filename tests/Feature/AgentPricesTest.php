@@ -140,7 +140,7 @@ final class AgentPricesTest extends DatabaseTestCase
         $this->botSettings('auto_renew', ['auto_renew_days' => 2, 'auto_renew_default' => true]);
         $service = $this->buy($this->colleague, $this->plan, $this->server)->subscription ?? self::fail('nothing delivered');
 
-        self::assertSame('100000.00', $this->service(CustomerRenewal::class)->preview($service)?->price, 'renewed by its customer at the agent price');
+        self::assertSame('100000.00', $this->service(CustomerRenewal::class)->preview($service)?->quote->amount(), 'renewed by its customer at the agent price');
 
         $this->wallet($this->colleague, '500000.00');
         $service->forceFill(['starts_at' => now()->subDays(29), 'expires_at' => now()->addDay()])->save();
@@ -152,7 +152,7 @@ final class AgentPricesTest extends DatabaseTestCase
         self::assertSame('400000.00', $this->colleague->balance());
 
         $this->colleague->groups()->detach();
-        self::assertSame('150000.00', $this->service(CustomerRenewal::class)->preview($service->refresh())?->price, 'out of the group: the plan\'s price');
+        self::assertSame('150000.00', $this->service(CustomerRenewal::class)->preview($service->refresh())?->quote->amount(), 'out of the group: the plan\'s price');
     }
 
     public function testAnAgentsShopMarksItsOwnColleagues(): void

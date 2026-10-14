@@ -2,7 +2,7 @@ import type { QueryKey } from '@tanstack/react-query'
 import { useQuery } from '@tanstack/react-query'
 import { Shuffle } from 'lucide-react'
 import { toast } from 'sonner'
-import { CheckList } from '@/components/check-list'
+import { CheckList, optionsRead } from '@/components/check-list'
 import { Disclosure } from '@/components/disclosure'
 import { OrderKindsField, PlansField } from '@/components/discounts/targets'
 import { windowEnd, windowRequest, type WindowEnd } from '@/components/discounts/window'
@@ -14,7 +14,7 @@ import { SwitchRow } from '@/components/switch-row'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
-import type { DiscountCodeRequest, DiscountCodeRow, DiscountKind, DiscountType } from '@/lib/api-types'
+import type { DiscountCodeRequest, DiscountCodeRow, DiscountType, OwnOrderType } from '@/lib/api-types'
 import { formatMoney, formatNumber, wholeOf } from '@/lib/format'
 import { planOptionsQuery } from '@/lib/queries'
 import { DISCOUNT_TYPE } from '@/lib/statuses'
@@ -36,7 +36,7 @@ interface Draft {
   value: string
   max_discount: string
   min_amount: string
-  order_types: DiscountKind[] | null
+  order_types: OwnOrderType[] | null
   plan_ids: number[] | null
   server_ids: number[] | null
   first_purchase_only: boolean
@@ -198,8 +198,9 @@ export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps
             options={(options.data?.servers ?? []).map((server) => ({ value: server.id, label: server.name, hint: server.is_active ? undefined : 'غیرفعال' }))}
             value={values.server_ids}
             onChange={(ids) => set('server_ids', ids)}
-            hint="برای خرید، سروری که مشتری انتخاب می‌کند؛ برای تمدید و حجم و زمان اضافه، سرور سرویس."
+            hint="برای خرید، سروری که مشتری انتخاب می‌کند؛ برای تمدید و حجم، زمان و کاربر اضافه، سرور سرویس."
             error={error('server_ids')}
+            {...optionsRead(options, 'سرورها')}
           />
           <Field id="code_min" label="حداقل مبلغ سفارش (تومان)" optional error={error('min_amount')} hint="مبلغ سفارش بعد از تخفیف خودکار؛ خالی یعنی هر مبلغی.">
             <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values.min_amount} onChange={(e) => set('min_amount', e.target.value)} className="sm:max-w-48" />

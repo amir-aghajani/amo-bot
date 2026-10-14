@@ -46,13 +46,13 @@ const ACTIONS: Record<Action, OperationSpec> = {
     done: 'به کیف پول بازپرداخت شد',
     // A purchase's: its service goes with it (refused while its panel fails, or another order holds the service).
     confirm:
-      'مبلغ به کیف پول مشتری برمی‌گردد و سرویسی که با این خرید ساخته شده از پنل و فروشگاه حذف می‌شود. اگر پنل جواب ندهد یا سفارش دیگری (تمدید، حجم یا زمان اضافه) روی سرویس باشد، بازپرداخت انجام نمی‌شود.',
+      'مبلغ به کیف پول مشتری برمی‌گردد و سرویسی که با این خرید ساخته شده از پنل و فروشگاه حذف می‌شود. اگر پنل جواب ندهد یا سفارش دیگری (تمدید، حجم، زمان یا کاربر اضافه) روی سرویس باشد، بازپرداخت انجام نمی‌شود.',
     // Its wallet line carries it: held to a ledger line's note.
     note: { label: 'توضیح', placeholder: 'اختیاری؛ در تراکنش کیف پول مشتری ثبت می‌شود', max: LEDGER_NOTE_MAX },
   },
 }
 
-/** What approving a payment brings, by what it paid for: the service, the wallet's charge, the agent's traffic, a service's extra traffic or time. */
+/** What approving a payment brings, by what it paid for: the service, the wallet's charge, the agent's traffic, a service's extra traffic, time or devices. */
 const BRINGS: Record<OrderType, { does: string; done: string }> = {
   purchase: { does: 'تحویل', done: 'تحویل داده شد' },
   renewal: { does: 'تحویل', done: 'تحویل داده شد' },
@@ -60,6 +60,7 @@ const BRINGS: Record<OrderType, { does: string; done: string }> = {
   traffic: { does: 'افزودن حجم', done: 'حجم به ربات نماینده اضافه شد' },
   extra_traffic: { does: 'افزودن حجم', done: 'حجم به سرویس اضافه شد' },
   extra_time: { does: 'افزودن زمان', done: 'زمان به سرویس اضافه شد' },
+  extra_devices: { does: 'افزودن کاربر', done: 'کاربر به سرویس اضافه شد' },
 }
 
 /** Approving, worded by what it brings — and, without a receipt to approve, as the admin's own call («تایید دستی»). */
@@ -85,8 +86,11 @@ function refundOf(payment: PaymentRow): OperationSpec {
         confirm: 'مبلغ به کیف پول نماینده برمی‌گردد و حجمی که با آن خریده بود از حجم رباتش کم می‌شود؛ اگر از آن حجم فروخته باشد، بازپرداخت انجام نمی‌شود.',
       }
     case 'extra_traffic':
+      return { ...ACTIONS.refund, confirm: takesBack('حجمی که به سرویس اضافه شده') }
     case 'extra_time':
-      return { ...ACTIONS.refund, confirm: takesBack(`${payment.order.type === 'extra_traffic' ? 'حجمی' : 'زمانی'} که به سرویس اضافه شده`) }
+      return { ...ACTIONS.refund, confirm: takesBack('زمانی که به سرویس اضافه شده') }
+    case 'extra_devices':
+      return { ...ACTIONS.refund, confirm: takesBack('کاربرهایی که به سرویس اضافه شده') }
     case 'wallet_topup':
       return {
         ...ACTIONS.refund,

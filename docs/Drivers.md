@@ -80,17 +80,26 @@ folder but its registration and its request shape.
      `username`, `password`, `totp_secret` …), or `meta.<name>` for one that has none — a connector needs no column of
      its own. The server's own fields (its name, capacity, notes and switch) are `ServerService`'s, around yours;
    - `capabilities()` — a `DTO\Capabilities`: `inbounds` (clients sit on inbounds the owner picks; without, a server is
-     sold whole) and `linkRotation` (a client's credentials, and so its link, can be renewed — else no «تغییر لینک»).
-     What a connector does not claim, the shop does not offer;
+     sold whole), `linkRotation` (a client's credentials, and so its link, can be renewed — else no «تغییر لینک») and
+     `ipLimit` (the panel holds a client to `ClientSpec::$ipLimit` — else no «کاربر اضافه» is sold on it), and `names`
+     (a `DTO\ClientNameRule`: the length, characters and separators the panel takes in a client's name — any by default;
+     the shop makes its own names fit it and refuses a typed one it would not take). What a connector does not claim,
+     the shop does not offer;
    - `connect(Server, PanelHttp)` — the client of one server's panel, built on `PanelConnection::of($server)` and
      `PanelCredentials::of($server)`. `ProviderRegistry::forServer()` keeps it five minutes while the server's connection
      stays the same, so a session or token it signed in for serves the calls that follow.
 2. **The client** — `<Name>Provider.php`, implementing `Providers\Contracts\ProviderInterface`: `testConnection()`,
    `status()`, `listInbounds()`, `servesSubscriptions()`, `createClient()`, `updateClient()`, `rotateClientCredentials()`,
-   `setClientEnabled()`, `deleteClient()`, `findClient()`, `listClients()`, `resetClientTraffic()`. Clients go in as a
-   `ClientSpec` (name, quota, an `Expiry` — counted from the first connection, fixed, or never —, an IP limit, the
-   Telegram id or none, a comment) and come out as a `ClientInfo` (name, enabled, counters, quota, expiry, the
-   subscription link, presence); inbounds are `InboundInfo` with an opaque `key` your connector understands. What a
+   `setClientEnabled()`, `deleteClient()`, `findClient()`, `listClients()`, `findClientByLink()`,
+   `resetClientTraffic()`. Clients go in as a `ClientSpec` (name, quota, an `Expiry` — counted from the first
+   connection, fixed, or never —, an IP limit, the Telegram id or none, a comment, and `enabled`: `createClient()`
+   always makes it on, `updateClient()` leaves it on or off as that says) and come out as a `ClientInfo` (name,
+   enabled, counters, quota, expiry, the subscription link, presence, the IP limit the panel keeps or none — the sync
+   copies it onto the service);
+   `findClientByLink()` says whose a `DTO\ClientLink` is — a subscription link's tokens, or a config's credentials — for
+   a customer claiming a client made by hand ([Services added by their link](Service-Claims.md)): match whatever your
+   panel's links carry, and never trust a token you cannot verify (PasarGuard's are shown to the panel's own subscription
+   route); inbounds are `InboundInfo` with an opaque `key` your connector understands. What a
    panel cannot answer is a `null` on the DTO, or an `UnsupportedOperationException` (`status()`, `listClients()` —
    the sync then asks client by client —, `rotateClientCredentials()`). Talk to the panel through `Support\PanelHttp`,
    the shop's one outgoing client with the connection's TLS rule and timeouts, no redirects followed; it also reads an
@@ -133,7 +142,9 @@ The two that exist:
 - **PasarGuard** (`Drivers/PasarGuard`, 3.1+): `PasarGuardClient` (an API key, 5.1+, or an admin's username and
   password traded for a token it keeps) and `PasarGuardProvider`. Its **groups** are what a server sells (a user reaches
   inbounds only through groups), a term from the first connection is its *on hold*, and it has no per-user IP limit, so
-  a plan's device count is not enforced there.
+  a plan's device count is not enforced there. A username is 3 to 128 letters, digits and `_ - . @`, never two of
+  those side by side; a user kept switched off by an update is `disabled` with its term (one still on hold keeps its
+  duration for the switch back on).
 
 ## A payment gateway
 
