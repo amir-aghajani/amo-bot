@@ -15,9 +15,11 @@ use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\DTO\CardTransfer;
+use App\Modules\Payments\DTO\PayLink;
 use App\Modules\Payments\DTO\Shortfall;
 use App\Modules\Payments\Enums\CheckoutOutcome;
 use App\Modules\Payments\Exceptions\MethodUnavailableException;
+use App\Modules\Payments\Exceptions\PaymentHeldException;
 use App\Modules\Payments\Exceptions\ReceiptInReviewException;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
@@ -37,6 +39,7 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
 use App\Support\Money;
+use App\Support\Persian;
 
 /**
  * The bot's checkout screen, shared by every purchase in the bot (a plan, a renewal, extra traffic, time or devices, a
@@ -266,7 +269,10 @@ final class CheckoutScreen
      * drawn again by `$redraw`, with the ways that are left.
      *
      * The wallet (and a free order) claims the checkout state first, so a second tap — or a tap on a checkout the chat
-     * left — charges nothing. A card needs no such guard: the same card finds the same payment.
+     * left — charges nothing. A card needs no such guard: the same card finds the same payment. Nor does an online
+     * gateway: a tap finds the same page while it takes money a few minutes yet (PaymentService::LINK_SPARE_MINUTES),
+     * else a new one, and two taps at once both show the one page the shop keeps (OnlineInvoices::open()). An order whose
+     * online payment is held for support is paid no other way meanwhile: the customer is sent to support (held()).
      *
      * @param \Closure(?OrderKey): Order $open
      * @param \Closure(): void $redraw
@@ -283,6 +289,10 @@ final class CheckoutScreen
         } catch (ReceiptInReviewException $e) {
             // One receipt at a time: nothing ordered while their last is with support.
             $ctx->edit($this->texts->render(BotText::ReceiptInReview, ['order' => $e->inReview->order_id]), ['reply_markup' => $this->buttons->backOnly($checkout)]);
+
+            return;
+        } catch (PaymentHeldException) {
+            $this->held($ctx, $checkout);
 
             return;
         } catch (MethodUnavailableException) {
@@ -308,6 +318,7 @@ final class CheckoutScreen
             // request made again with its key; the bot sends none.)
             CheckoutOutcome::Closed, CheckoutOutcome::Cancelled => $ctx->edit($this->texts->get(BotText::OrderNotPending), ['reply_markup' => $this->buttons->backOnly($checkout)]),
             CheckoutOutcome::Transfer => $this->transfer($ctx, $result->payment(), $result->card(), $checkout),
+            CheckoutOutcome::Link => $this->link($ctx, $result->payment(), $result->payLink(), $checkout),
             // Settled by the wallet: the outcome arrives as a fresh message, like the notification it is.
             CheckoutOutcome::Settled => $result->order()->status === OrderStatus::Fulfilled
                 ? $this->delivered($ctx, $result->order())
@@ -410,12 +421,27 @@ final class CheckoutScreen
         }
     }
 
-    /** The wallet's payment was refused, with the gateway's reason when it gave one. */
+    /**
+     * The payment was refused — the wallet's, or an online gateway's that would not open it —, its note the reason: the
+     * customer's words (an online gateway's own reason is the owner's, in the log). The order stays open.
+     */
     private function failed(Context $ctx, ?string $reason, string $checkout): void
     {
         $ctx->replace($this->texts->render(BotText::PayFailed, [
             'reason' => $reason ?? $this->texts->part(BotText::ServiceUnknown),
         ]), ['reply_markup' => $this->buttons->backOnly($checkout)]);
+    }
+
+    /**
+     * The order's online payment is held for support (Payments\Exceptions\PaymentHeldException): nothing is paid, and the
+     * customer is told not to pay again but to write to support (PayOnlineHeld, as «بررسی پرداخت» tells them), with the
+     * button to support's chat and «بازگشت».
+     */
+    private function held(Context $ctx, string $checkout): void
+    {
+        $ctx->edit($this->texts->message(BotText::PayOnlineHeld), [
+            'reply_markup' => InlineKeyboard::make()->row(...$this->buttons->supportChat())->row($this->buttons->back($checkout))->build(),
+        ]);
     }
 
     /** Paid, but another process is delivering the order right now: say so, with what it brings once delivered. */
@@ -429,10 +455,9 @@ final class CheckoutScreen
 
     /**
      * The card to transfer to — its number, holder and bank (when the owner named it) —, with buttons that copy its number
-     * and the amount (digits a banking app takes); the chat now waits for the receipt (ReceiptHandler). While the shop
-     * protects it (PaymentSettings::protectsCard()), it comes as a message of its own in place of the checkout — Telegram
-     * protects a message only as it is sent (Context::resend()) —, which cannot be forwarded or saved. A payment shown no
-     * card, taken in support's private chat (PaymentCards::toSupport()), gets the way there instead (toSupport()).
+     * and the amount (digits a banking app takes); the chat now waits for the receipt (ReceiptHandler). It is protected
+     * while the shop protects cards (showCard()). A payment shown no card, taken in support's private chat
+     * (PaymentCards::toSupport()), gets the way there instead (toSupport()).
      */
     private function transfer(Context $ctx, Payment $payment, CardTransfer $transfer, string $checkout): void
     {
@@ -445,21 +470,88 @@ final class CheckoutScreen
 
         $ctx->session->enter(ReceiptHandler::stateFor($payment));
         $digits = Money::digits($payment->amount);
-        $bank = trim((string) $transfer->bank);
         $instructions = trim($this->texts->render(BotText::CardInstructions, [
             'amount' => Money::format($payment->amount),
             'amount_digits' => $digits,
             'card' => $number,
             'holder' => (string) $transfer->holder,
-            'bank' => $bank === '' ? '' : $this->texts->part(BotText::CardBank, ['bank_name' => $bank]),
+            'bank' => $this->bank($transfer),
             'instructions' => $transfer->instructions,
         ]));
-        // Reading order: the card's number first, on the right.
-        $keyboard = InlineKeyboard::make()
-            ->row(InlineKeyboard::copy($this->texts->get(BotText::CardCopyAmount), $digits), InlineKeyboard::copy($this->texts->get(BotText::CardCopyNumber), $number))
-            ->row($this->buttons->back($checkout));
-        $text = BotTexts::paragraphs($instructions, $this->texts->part(BotText::PayInstructionsSuffix));
+        $keyboard = InlineKeyboard::make()->row(...$this->copyRow($digits, $number))->row($this->buttons->back($checkout));
 
+        $this->showCard($ctx, BotTexts::paragraphs($instructions, $this->texts->part(BotText::PayInstructionsSuffix)), $keyboard);
+    }
+
+    /**
+     * An online gateway's page to pay on (PayOnline): the order's number, the exact sum the page asks (a gateway may add a
+     * few Toman to the order's, and its fee when the customer pays it), until when it takes money and what comes once
+     * paid, with «💳 پرداخت» to the page, «🔄 بررسی پرداخت» (OnlinePaymentHandler) and «بازگشت» to the checkout. Nothing
+     * is awaited in the chat: the gateway's word settles it, and the notice of it comes as any settled payment's. A
+     * gateway that gave a card to show in the bot gets it under the page (PayOnlineCard: its holder and bank when the
+     * gateway named them) with the copy buttons, protected as a card transfer is (showCard()).
+     */
+    private function link(Context $ctx, Payment $payment, PayLink $link, string $checkout): void
+    {
+        $ctx->session->clear();
+        $text = $this->texts->render(BotText::PayOnline, [
+            'order' => $payment->order_id,
+            'amount' => Money::format($link->amount),
+            'gateway_fee' => $link->fee === null ? '' : $this->texts->part(BotText::PayOnlineFee, ['fee' => Money::format($link->fee)]),
+            'deadline' => $link->expiresAt === null ? '' : $this->texts->part(BotText::PayOnlineDeadline, ['until' => Persian::date($link->expiresAt, withTime: true)]),
+            'outcome' => $this->texts->part(ReceiptHandler::outcome($payment->order->type)),
+        ]);
+        $keyboard = InlineKeyboard::make()->row(InlineKeyboard::url($this->texts->get(BotText::PayOnlineButton), $link->url));
+        // A card only with its number.
+        $transfer = (string) $link->card?->card === '' ? null : $link->card;
+        if ($transfer !== null) {
+            $card = (string) $transfer->card;
+            $digits = Money::digits($link->amount);
+            $holder = trim((string) $transfer->holder);
+            $text = BotTexts::paragraphs($text, $this->texts->part(BotText::PayOnlineCard, [
+                'card' => $card,
+                'card_holder' => $holder === '' ? '' : $this->texts->part(BotText::PayOnlineCardHolder, ['holder' => $holder]),
+                'bank' => $this->bank($transfer),
+                'amount_digits' => $digits,
+            ]));
+            $keyboard->row(...$this->copyRow($digits, $card));
+        }
+        $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::PayOnlineCheck), OnlinePaymentHandler::checkCallback($payment)))
+            ->row($this->buttons->back($checkout));
+
+        if ($transfer === null) {
+            $ctx->edit($text, ['reply_markup' => $keyboard->build()]);
+        } else {
+            $this->showCard($ctx, $text, $keyboard);
+        }
+    }
+
+    /** The card's bank line (CardBank) when its owner or its gateway named one; empty otherwise. */
+    private function bank(CardTransfer $transfer): Html|string
+    {
+        $bank = trim((string) $transfer->bank);
+
+        return $bank === '' ? '' : $this->texts->part(BotText::CardBank, ['bank_name' => $bank]);
+    }
+
+    /**
+     * The buttons copying a card's number and the sum to transfer to it (digits a banking app takes) — in reading order,
+     * the number first, on the right.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function copyRow(string $digits, string $card): array
+    {
+        return [InlineKeyboard::copy($this->texts->get(BotText::CardCopyAmount), $digits), InlineKeyboard::copy($this->texts->get(BotText::CardCopyNumber), $card)];
+    }
+
+    /**
+     * A message showing a card, in place of the checkout. While the shop protects cards (PaymentSettings::protectsCard())
+     * it comes as a message of its own, which cannot be forwarded or saved — Telegram protects a message only as it is
+     * sent (Context::resend()) —; else it is edited in.
+     */
+    private function showCard(Context $ctx, string $text, InlineKeyboard $keyboard): void
+    {
         if ($this->cardSettings->protectsCard()) {
             $ctx->resend($text, ['reply_markup' => $keyboard->build(), 'protect_content' => true]);
         } else {

@@ -11,6 +11,7 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
 use App\Modules\Payments\Drivers\Wallet\WalletGateway;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Services\OnlinePayments;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,7 +28,11 @@ use Illuminate\Support\Carbon;
  * @property int|null $card_id The card a card transfer was shown (PaymentCard) — the same one every time it is shown; null for one taken in support's private chat (TO_SUPPORT)
  * @property PaymentStatus $status
  * @property string $amount
- * @property string|null $reference
+ * @property string|null $reference The gateway's id of it: an online gateway's invoice, once opened; what settled it
+ * @property string|null $link An online gateway's page the customer pays it on (GatewayKind::Online), once opened
+ * @property Carbon|null $link_expires_at Until when that page takes money: set with `link` — the gateway's end, or the time the shop keeps its page when the gateway gives none (Services\OnlineInvoices)
+ * @property array<string, mixed>|null $invoice The online gateway's own details of its invoice, as its gateway keeps them — and the shop's marks: `to_wallet` (wentToWallet()), `held` (Services\OnlinePayments::isHeld()), `money_in` (Services\OnlinePayments::hasMoneyIn())
+ * @property Carbon|null $checked_at When the shop last asked the online gateway about it (Services\OnlinePayments)
  * @property string|null $receipt_file_id The receipt's Telegram file id — Telegram keeps the picture (Services\Receipts)
  * @property string|null $receipt_path The receipt uploaded from the website: its name in the uploads folder (Services\Receipts)
  * @property string|null $receipt_name Its file name, when the picture was sent as a file
@@ -62,6 +67,10 @@ class Payment extends Model
         'status',
         'amount',
         'reference',
+        'link',
+        'link_expires_at',
+        'invoice',
+        'checked_at',
         'receipt_file_id',
         'receipt_path',
         'receipt_name',
@@ -80,6 +89,9 @@ class Payment extends Model
         'receipt_message_id' => 'integer',
         'receipt_at' => 'datetime',
         'paid_at' => 'datetime',
+        'link_expires_at' => 'datetime',
+        'invoice' => 'array',
+        'checked_at' => 'datetime',
     ];
 
     /**
@@ -107,7 +119,7 @@ class Payment extends Model
     }
 
     /**
-     * Payments whose money may be with support out of the shop's sight (isWithSupport()), as a condition on `$payments`.
+     * Payments whose money may be with support (isWithSupport()), as a condition on `$payments`.
      *
      * @param Builder<self> $payments
      * @return Builder<self>
@@ -119,7 +131,10 @@ class Payment extends Model
             ->orWhere(static fn(Builder $chat) => $chat
                 ->where('status', PaymentStatus::Pending->value)
                 ->whereNull('card_id')
-                ->whereRelation('method', 'driver', ManualGateway::key())));
+                ->whereRelation('method', 'driver', ManualGateway::key()))
+            ->orWhere(static fn(Builder $held) => $held
+                ->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::Failed->value])
+                ->whereNotNull('invoice->held')));
     }
 
     public function isPaid(): bool
@@ -128,15 +143,23 @@ class Payment extends Model
     }
 
     /**
-     * Whether its money may be with support while the shop cannot see it: a receipt waiting for review, or a card transfer
-     * the shop took in support's private chat — shown no card (Services\PaymentCards::toSupport()), still pending — whose
-     * receipt went there, whether or not the shop still sends card payments there. Support decides it: it never expires
+     * Whether its money may be with support: a receipt waiting for review; a card transfer the shop took in support's
+     * private chat — shown no card (Services\PaymentCards::toSupport()), still pending — whose receipt went there, whether
+     * or not the shop still sends card payments there; or an online payment held for support and still waiting
+     * (Services\OnlinePayments::awaitsSupport()). Support decides it: its order never expires
      * (Services\PaymentService::expire()). Reads its method.
      */
     public function isWithSupport(): bool
     {
         return $this->status === PaymentStatus::AwaitingReview
-            || ($this->status === PaymentStatus::Pending && $this->card_id === null && $this->method->driver === ManualGateway::key());
+            || ($this->status === PaymentStatus::Pending && $this->card_id === null && $this->method->driver === ManualGateway::key())
+            || OnlinePayments::awaitsSupport($this);
+    }
+
+    /** An online gateway's payment, unpaid, whose page still takes money: the customer may be paying it right now. */
+    public function hasOpenPage(): bool
+    {
+        return $this->status === PaymentStatus::Pending && $this->link !== null && $this->link_expires_at->isFuture();
     }
 
     /** Paid from the customer's wallet: money spent, not money that came in. */
@@ -149,6 +172,15 @@ class Payment extends Model
     public function wasAutoApproved(): bool
     {
         return $this->isPaid() && $this->receipt_at !== null && $this->reviewer === null;
+    }
+
+    /**
+     * Paid on its online gateway after its order had closed: its money went to the customer's wallet, and it paid nothing
+     * of the order (Services\PaymentService::settleOnline() marks its invoice `to_wallet`).
+     */
+    public function wentToWallet(): bool
+    {
+        return $this->isPaid() && ($this->invoice['to_wallet'] ?? false) === true;
     }
 
     /** @return BelongsTo<Order, $this> */

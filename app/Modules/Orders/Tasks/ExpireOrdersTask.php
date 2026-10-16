@@ -13,8 +13,9 @@ use App\Modules\Payments\Services\PaymentService;
 /**
  * Drops unpaid orders nobody touched for EXPIRE_HOURS, quietly (PaymentService::expire()); an order made with a discount
  * code goes sooner, once the code's hold is over (DiscountSettings::holdMinutes()), which frees its use. An order whose
- * money may be with support — a receipt in review, a card transfer taken in support's private chat — is never dropped
- * (Order::expirable()): support decides it. Also forgets request keys older than RequestKey::KEEP_DAYS. Runs every
+ * money may be with support — a receipt in review, a card transfer taken in support's private chat (Order::expirable()),
+ * an online payment held for support — is never dropped: support decides it; nor one whose online gateway's page still
+ * takes money (PaymentService::expire()). Also forgets request keys older than RequestKey::KEEP_DAYS. Runs every
  * INTERVAL_MINUTES in every shop.
  */
 final class ExpireOrdersTask implements Task

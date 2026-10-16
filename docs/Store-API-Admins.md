@@ -16,7 +16,7 @@ GET {base}/admin/payments?status=awaiting_review      the panels' GET /api/{pane
 | Area | What the shop's admins do there |
 |---|---|
 | The dashboard, the queues, the change feed | `GET /admin/dashboard` (its `agency_standing` always null: an agent's terms with the main shop are the agent's own), `/admin/queues`, `/admin/changes` (poll it to follow the shop live) |
-| Payments | the list and a payment, its receipt; approve, reject, cancel, remind, retry — refund with the `refunds` grant, reject receipts in bulk with `payments` |
+| Payments | the list and a payment, its receipt; approve, reject, cancel, remind, retry, ask an online payment's gateway (`POST /admin/payments/{id}/check`) — refund with the `refunds` grant, reject receipts in bulk with `payments` |
 | Orders | the list and an order; retry a delivery, cancel an unpaid order |
 | Services | the list and a service; read it from its panel, switch it off or on, move it — days and traffic with `extend`, delete or hand to another customer with `delete` |
 | Customers | the list (by role too) and a customer's page, their wallet's ledger, their groups, a ban — the wallet changed with `wallet`; an order made for them by hand with `manual_orders`; two-factor sign-in turned off and every device signed out with `account_security` |

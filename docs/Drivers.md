@@ -8,7 +8,7 @@ description, with no code of their own but where a family says so below.
 | Family | The interface | Registry (`bootstrap/container.php`) | Lives in | Today | Panel code for a new one |
 |---|---|---|---|---|---|
 | VPN panels | `Providers\Contracts\PanelDriver` (and its client, `ProviderInterface`) | `panel.drivers` | `app/Modules/Providers/Drivers/<Name>/` | `3x-ui`, `pasarguard` | none |
-| Payment gateways | `Payments\Contracts\GatewayDriver` (and its gateway, `GatewayInterface`) | `payment.drivers` | `app/Modules/Payments/Drivers/<Name>/` | `wallet`, `manual` (card to card) | an icon |
+| Payment gateways | `Payments\Contracts\GatewayDriver` (and its gateway, `GatewayInterface`) | `payment.drivers` | `app/Modules/Payments/Drivers/<Name>/` | `wallet`, `outside` (paid outside the shop), `manual` (card to card), `cubepay`, `zarinpal`, `atlaspay`, `abangateway` | an icon |
 | Databases | `Core\Database\Drivers\DatabaseDriver` | `database.drivers` | `app/Core/Database/Drivers/` | `mysql`, `sqlite` | none |
 | Mail | `Core\Mail\MailDriver` | `mail.drivers` | `app/Core/Mail/Drivers/` | `smtp`, `native`, `resend` | none |
 | Captchas | `Core\Captcha\CaptchaDriver` | `captcha.drivers` | `app/Core/Captcha/Drivers/` | `turnstile`, `altcha` | none |
@@ -156,10 +156,12 @@ driver, the label the checkout's button shows, and the driver's settings in the 
 1. **The driver** — `app/Modules/Payments/Drivers/<Name>/<Name>Driver.php`, implementing `GatewayDriver`:
    - `key()` — what `payment_methods.driver` holds;
    - `describe()` — the label and description the «افزودن روش پرداخت» picker shows, notes, and the form of a method's
-     settings (each field kept in the row's `config` under its key; a secret a `Secret`, which a blank field keeps). Its
-     traits: `GatewayDriver::KIND` — a `Enums\GatewayKind`: `instant` (it settles the moment the customer confirms, as
-     the wallet does) or `manual` (the customer pays outside the shop and a receipt is accepted, as a card transfer is)
-     — and `GatewayDriver::BUILTIN` (`true` only for a driver that is part of every shop: never added, never deleted);
+     settings (each field kept in the row's `config` under its key; a secret a `Secret`, which a blank field keeps and
+     the row keeps encrypted with `APP_KEY` — `Payments\MethodSettings` —, handed to the driver readable). Its traits:
+     `GatewayDriver::KIND` — a `Enums\GatewayKind`: `instant` (it settles the moment the customer confirms, as the
+     wallet does), `manual` (the customer pays outside the shop and a receipt is accepted, as a card transfer is) or
+     `online` (the customer pays on the gateway's page and the gateway says so, as CubePay's do — below) — and
+     `GatewayDriver::BUILTIN` (`true` only for a driver that is part of every shop: never added, never deleted);
    - `summary(settings)` — the one line the methods list shows about it from its settings, or `null` (the wallet; card
      to card, whose cards are rows of their own — the list shows them, and each payment the card it was shown);
    - `gateway(settings)` — the gateway of one method row, implementing `GatewayInterface`: `initiate($payment)` says what
@@ -170,20 +172,64 @@ driver, the label the checkout's button shows, and the driver's settings in the 
 2. **Register it** in `bootstrap/container.php`: add `$c->get(<Name>Driver::class)` to `payment.drivers`.
 3. **Describe it** in `resources/api/openapi.yaml`: a `<Name>MethodRow` (with its `<Name>GatewayConfig`) in
    `PaymentMethodRow`'s `oneOf`, a `<Name>MethodRequest` in `PaymentMethodUpdateRequest`'s, and — unless it is built
-   in — a `<Name>MethodCreateRequest` in `PaymentMethodCreateRequest`'s. Then `pnpm api:types`.
+   in — a `<Name>MethodCreateRequest` in `PaymentMethodCreateRequest`'s. A form whose fields are all optional on an
+   edit (secrets kept when blank, as AtlasPay's key is) would also fit the wallet's update: its `<Name>MethodRequest`
+   says `not: { $ref: '#/components/schemas/WalletMethodRequest' }`, so the `oneOf` stays one — a form with a field
+   every save sends (CubePay's `fee_fixed`) needs none. Then `pnpm api:types`.
 4. **The panels**: give it an entry in `GATEWAYS` (`resources/panel/src/components/payments/gateways/index.tsx`) — its
    icon and, if the list should say something beside its summary, a `Note`; the type checker asks for it once the row
-   type exists. The picker and the method's form (`gateways/method-form.tsx`) are drawn from the description.
+   type exists. The picker and the method's form (`gateways/method-form.tsx`) are drawn from the description — a
+   required secret offers no «پاک کردن مقدار ذخیره‌شده».
 5. **Tests**: a unit test like `tests/Unit/Payments/ManualDriverTest.php` — its description and traits, its form's
    refusals at once, a kept setting the form would refuse read back as its default, its summary, and its gateway's
    `initiate()` and `settle()`; `DriverFormsTest` holds the create and update requests and the row to its form by
    itself; a case in `tests/Feature/AdminPaymentMethodsApiTest.php` for adding and editing one through the panels' API.
 
-A driver of one of the two kinds — another instant way, another transfer to confirm — fits the checkout as it is: the
-bot and the website both render "settled" and "pay to this card". A gateway of another kind — an online gateway that
-sends the customer to a bank's page and is told the outcome — needs more than a driver: a kind of its own, a next step
-of its own (`PaymentInitiation`), the bot's and the website's checkouts to render it, and an address the gateway calls
-back. It is on the [Roadmap](Roadmap.md).
+A driver of one of the three kinds fits the checkout as it is: the bot and the website render "settled", "pay to this
+card" and "pay on this page" alike.
+
+### An online gateway
+
+The customer pays on the gateway's page — CubePay's (`Drivers\CubePay`), Zarinpal's (`Drivers\Zarinpal`), AtlasPay's
+mini app in Telegram (`Drivers\AtlasPay`), AbanGateway's (`Drivers\Aban`), the four in the box — and the gateway says
+what came of it. Its gateway implements `Contracts\OnlineGateway` (the kind `online`):
+
+- `open($payment, $request)` opens the payment on the gateway — the payment's id there (`$request->orderId`, the same
+  every time for one payment, never another installation's), the amount in whole Toman, the address it calls back, a
+  line saying what it pays, the customer's Telegram id and username — and answers an `OnlineInvoice`: the page, until
+  when it takes money (`OnlineInvoice::until()` reads the gateway's end, else a time of the driver's own; `null` for
+  none: the shop keeps the page an hour), the gateway's id of it, and the details it will read back (kept on the
+  payment as `invoice`). The shop opens a payment once (`Services\OnlineInvoices`), outside any transaction, and keeps
+  **one page a payment**: what `open()` answered is kept only while the payment has none yet, so of two opened at the
+  same moment both show the one kept — the other's invoice is left unused at the gateway, and `open()` never needs to
+  answer the same page twice. Tapped again while its page has a few minutes left, the same page is shown, else a new
+  payment is opened;
+- `check($payment)` asks the gateway what came of it — `OnlineVerdict::paid()` (with its reference), `waiting()` or
+  `closed()` — never believing what a callback said. `waiting(moneyIn: true)` says the gateway took money on it that
+  it has not settled yet (a receipt in review, a sum paid in part): the shop marks the payment (`invoice.money_in`) and
+  asks about it past the usual two hours, up to 48 after its page closed — then it holds it for support;
+- `initiate($payment)` reads what `open()` kept and calls nothing: `PaymentInitiation::link()` with a `PayLink` — the
+  page, until when, the exact sum it asks (a gateway may add a few Toman of its own) and, if the gateway gave one to
+  show in the bot, a card; `settle()` answers yes with the payment's reference (the gateway said paid before it runs).
+
+Both calls talk to the gateway: throw `GatewayUnavailableException` with what it said as the detail (the log's; the
+customer reads the exception's own words) when it is out of reach or refuses — with `held: true` when its answer does
+not fit the payment (another order or amount than asked). The shop then **holds the payment for support**
+(`OnlinePayments::isHeld()`): asked about no more, the report group's «خطاها» told once, and — while it still waits,
+pending or failed with its page — its order neither expiring nor paid another way (`Checkout::pay()` throws
+`PaymentHeldException`). Everything else is the shop's (`Services\OnlinePayments`, `PaymentService::settleOnline()`):
+the asks about one payment taking turns — a lock file per payment, the payment read afresh once it is its turn, so
+`check()` and what the shop does with its answer are one step and two at once never settle what the other holds —,
+the callback address `/payments/callback/{payment}/{secret}` — a secret of the payment's own; a call there only makes
+the shop ask the gateway, a few times a minute at most for one payment, and one past that is answered from the payment
+as it stands —, the scheduler asking about every one not paid yet now and then (`Tasks\OnlinePaymentsTask`) until two
+hours after its page closed — a gateway may take money late —, the bot's and the website's «check» for the customer
+and the panels' for support; a paid one settles its order once and tells the customer once, and money the gateway took
+after its order closed goes to the customer's wallet. A test puts a fake of the gateway's API under the shop's outgoing
+client, as `Tests\Support\FakeCubePay`, `FakeZarinpal`, `FakeAtlasPay` and `FakeAban` do. A gateway that sends the
+customer's browser back to that address (Zarinpal, AbanGateway) gets the browser a page of what came of it
+(`Controllers\ReturnPage`, the one page PHP answers, with a policy that runs no script) — its server calls are
+answered JSON.
 
 ## A database driver
 

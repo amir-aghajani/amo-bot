@@ -94,7 +94,7 @@ app/
     Installer      the web installer's API (/api/install)
     Notifications  what the shop tells a customer: kept for their website, sent to Telegram or by email
     Orders         the order's lifecycle
-    Payments       gateways (wallet, card-to-card), the checkout, the settlement
+    Payments       gateways (wallet, card-to-card, CubePay, Zarinpal, AtlasPay, AbanGateway), the checkout, the settlement
     Providers      the VPN panels: the contract, 3x-ui and PasarGuard, servers and inbounds
     Referrals      invite links and commissions
     Reviews        customers' reviews of the shop: written on its website, decided by support

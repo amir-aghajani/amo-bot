@@ -105,6 +105,8 @@ function DriverField({ id, field, draft, set, error, stored, movedHint }: Driver
           error={error}
           hint={movedHint ? (field.moved ?? hint) : hint}
           optional={!field.required}
+          // One the form cannot go without (an online gateway's token) is typed anew, never emptied: the server refuses that.
+          clearable={!field.required}
         />
       )
     }

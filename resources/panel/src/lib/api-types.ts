@@ -141,7 +141,7 @@ export interface DriverDescription {
   /** Short notes under the description, such as required versions and caveats. */
   notes: string[]
   fields: FieldDescription[]
-  /** Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet, or `manual`, a card transfer whose receipt a person approves) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. */
+  /** Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. */
   traits: Record<string, string | number | boolean | (string | number | boolean)[] | null>
 }
 
@@ -804,25 +804,27 @@ export interface UpdateStartRequest {
 
 export type PaymentStatus = 'pending' | 'awaiting_review' | 'paid' | 'failed' | 'cancelled' | 'refunded'
 
-/** How a gateway settles: `instant` (at once, like the wallet), or `manual` (once a person, or the method's automatic approval window, accepts the receipt of a card transfer). */
-export type GatewayKind = 'instant' | 'manual'
+/** How a gateway settles: `instant` (at once, like the wallet), `manual` (once a person, or the method's automatic approval window, accepts the receipt of a card transfer), or `online` (the customer pays on the gateway's own page, and the shop asks the gateway what came of it). */
+export type GatewayKind = 'instant' | 'manual' | 'online'
 
 /** A payment, as a row of the payments screen. */
 export interface PaymentRow {
   id: number
   status: PaymentStatus
   amount: string
-  /** Driver key ("manual", "wallet", or "outside": money support took outside the shop for an order it made). */
+  /** Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made). */
   gateway: string
+  /** The driver's name («کارت به کارت», «کیف پول», «CubePay»); null when the driver is no longer installed. */
+  gateway_label: string | null
   /** How the driver settles; null when the driver is no longer installed. */
   kind: GatewayKind | null
   /** The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. */
   method: string
-  /** What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); null for a method without one (the wallet). */
+  /** What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line (`PaymentMethodRow.summary`: an online gateway's fee passed on to customers, or its test mode); null when its method has none (the wallet, an online method with neither). */
   summary: string | null
-  /** The gateway's own id for the payment (the wallet's ledger line); null when it has none (a card transfer). */
+  /** The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id. Null when it has none (a card transfer, an online payment its gateway would not open). */
   reference: string | null
-  /** The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), or a refund's note (also in `refund_note`). */
+  /** The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, an online gateway's page closed unpaid — «مهلت پرداخت در درگاه تمام شد» —, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), a refund's note (also in `refund_note`), or on a payment `to_wallet` that its money went to the wallet. */
   description: string | null
   user: UserRef
   order: {
@@ -859,6 +861,14 @@ export interface PaymentRow {
   reviewer: string | null
   refund_note: string | null
   paid_at: string | null
+  /** An online payment's page on its gateway: until when it takes money — the gateway's own end, or the time the shop keeps its page when the gateway gives none. Null for any other payment, and for one its gateway would not open. */
+  link_expires_at: string | null
+  /** An online payment: when the shop last asked its gateway what came of it — its callback, the customer's question, «استعلام از درگاه» (`POST …/check`), or the scheduler every few minutes while it is open. Null until asked. */
+  checked_at: string | null
+  /** Paid after its order had closed (paid another way, cancelled or expired): the online gateway took the money when the order no longer waited for it, so it went to the customer's wallet («پرداخت آنلاین #12 پس از بسته شدن سفارش #7») and `description` says so. It paid nothing of the order: it is neither retried nor refunded here. */
+  to_wallet: boolean
+  /** An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) — or kept money on it unsettled for two days. `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. */
+  held: boolean
   created_at: string
   /** Which operations its current state allows (the server decides). */
   actions: {
@@ -868,6 +878,8 @@ export interface PaymentRow {
     remind: boolean
     retry: boolean
     refund: boolean
+    /** Ask its online gateway what came of it (`POST …/check`): an online payment opened on its gateway and not paid — pending, its page closed, or cancelled. */
+    check: boolean
   }
 }
 
@@ -902,6 +914,14 @@ export type Delivery = 'told' | 'emailed' | 'turned_away' | 'unreachable' | 'ref
 export interface ReminderResponse {
   payment: PaymentRow
   delivery: Delivery
+}
+
+/** What an online gateway said of a payment: `paid` (the money came in — the payment is paid, into its order or, the order closed, the wallet), `waiting` (nothing yet, and its page still takes money), `closed` (its page closed with nothing paid: the payment failed). */
+export type OnlineState = 'paid' | 'waiting' | 'closed'
+
+export interface PaymentCheckResponse {
+  payment: PaymentRow
+  state: OnlineState
 }
 
 /** Which receipts waiting for review to reject: the payments `ids` names, or `all` of them. One of the two; with `note`, support's note to each customer (at most 300 characters; blank for none). */
@@ -984,11 +1004,15 @@ export interface OrderPayment {
   id: number
   status: PaymentStatus
   amount: string
-  /** Driver key ("manual", "wallet", or "outside": money support took outside the shop for an order it made). */
+  /** Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made). */
   gateway: string
   /** The payment method's label. A method with payments is never deleted. */
   method: string
   paid_at: string | null
+  /** Paid on its online gateway after the order had closed: its money went to the customer's wallet, and it paid nothing of the order (`PaymentRow.to_wallet`). */
+  to_wallet: boolean
+  /** An online payment held for support: its gateway took money on it that does not fit, or kept it unsettled (`PaymentRow.held`). */
+  held: boolean
   created_at: string
 }
 
@@ -2484,7 +2508,7 @@ export interface PaymentDriversResponse {
 }
 
 /** A payment method, in checkout order, as its driver describes it. `config` holds the driver's form values as stored (one closed shape per driver). Never «خارج از فروشگاه», support's alone. */
-export type PaymentMethodRow = ManualMethodRow | WalletMethodRow | UnregisteredMethodRow
+export type PaymentMethodRow = ManualMethodRow | WalletMethodRow | CubePayMethodRow | ZarinpalMethodRow | AtlasPayMethodRow | AbanMethodRow | UnregisteredMethodRow
 
 /** The wallet, the built-in method. */
 export interface WalletMethodRow {
@@ -2495,7 +2519,7 @@ export interface WalletMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
   summary: string | null
   /** Nothing to configure. */
   config: Record<string, never>
@@ -2522,7 +2546,7 @@ export interface ManualMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
   summary: string | null
   config: ManualGatewayConfig
   /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
@@ -2543,6 +2567,110 @@ export interface ManualMethodRow {
   to_support: boolean
 }
 
+/** A CubePay method (cubevps.ir), an online gateway: the customer pays on CubePay's page — a card transfer or crypto, as the merchant set it up at CubePay — and CubePay confirms it, with no receipt and no review. */
+export interface CubePayMethodRow {
+  id: number
+  driver: 'cubepay'
+  driver_label: string
+  kind: GatewayKind
+  builtin: boolean
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
+  label: string
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  summary: string | null
+  config: CubePayGatewayConfig
+  /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
+  min_amount: string | null
+  /** The most amount to pay it is offered for, in Toman; null for no most. */
+  max_amount: string | null
+  enabled: boolean
+  sort: number
+  counts: {
+    /** The number of payments made with it. A method with payments cannot be deleted. */
+    payments: number
+  }
+  created_at: string
+  updated_at: string
+}
+
+/** A Zarinpal method (zarinpal.com), an online gateway: the customer pays with any bank card on Zarinpal's page and is sent back to the shop; Zarinpal confirms it, with no receipt and no review. */
+export interface ZarinpalMethodRow {
+  id: number
+  driver: 'zarinpal'
+  driver_label: string
+  kind: GatewayKind
+  builtin: boolean
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
+  label: string
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  summary: string | null
+  config: ZarinpalGatewayConfig
+  /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
+  min_amount: string | null
+  /** The most amount to pay it is offered for, in Toman; null for no most. */
+  max_amount: string | null
+  enabled: boolean
+  sort: number
+  counts: {
+    /** The number of payments made with it. A method with payments cannot be deleted. */
+    payments: number
+  }
+  created_at: string
+  updated_at: string
+}
+
+/** An AtlasPay method (atlaspay.space), an online gateway: the customer pays by card transfer in AtlasPay's mini app in Telegram, and AtlasPay confirms it from the bank's text message, with no receipt and no review — one paid short, the customer having accepted paying less, is held for support. */
+export interface AtlasPayMethodRow {
+  id: number
+  driver: 'atlaspay'
+  driver_label: string
+  kind: GatewayKind
+  builtin: boolean
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
+  label: string
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  summary: string | null
+  config: AtlasPayGatewayConfig
+  /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
+  min_amount: string | null
+  /** The most amount to pay it is offered for, in Toman; null for no most. */
+  max_amount: string | null
+  enabled: boolean
+  sort: number
+  counts: {
+    /** The number of payments made with it. A method with payments cannot be deleted. */
+    payments: number
+  }
+  created_at: string
+  updated_at: string
+}
+
+/** An AbanGateway method (abangateway.ir), an online gateway: the customer transfers the exact sum its page asks to the merchant's own card, and AbanGateway confirms it from the bank's text message, with no receipt and no review. */
+export interface AbanMethodRow {
+  id: number
+  driver: 'abangateway'
+  driver_label: string
+  kind: GatewayKind
+  builtin: boolean
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
+  label: string
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  summary: string | null
+  config: AbanGatewayConfig
+  /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
+  min_amount: string | null
+  /** The most amount to pay it is offered for, in Toman; null for no most. */
+  max_amount: string | null
+  enabled: boolean
+  sort: number
+  counts: {
+    /** The number of payments made with it. A method with payments cannot be deleted. */
+    payments: number
+  }
+  created_at: string
+  updated_at: string
+}
+
 /** A method whose driver is no longer installed. No checkout offers it, even when switched on; it can only be switched off or deleted. */
 export interface UnregisteredMethodRow {
   id: number
@@ -2553,7 +2681,7 @@ export interface UnregisteredMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
   summary: string | null
   /** Not shown, since without the driver it is unknown which settings are secrets. */
   config: Record<string, never>
@@ -2576,6 +2704,34 @@ export interface ManualGatewayConfig {
   instructions: string
   /** Minutes a receipt sent in the bot may wait for review before it is approved automatically; 0 for manual approval only. */
   auto_approve_after: number
+}
+
+/** A CubePay method's settings (`CubePayMethodRow.config`): the merchant's API token, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and the fee passed on to customers: a percent of the amount and a fixed sum on every payment. */
+export interface CubePayGatewayConfig {
+  token: SecretState
+  /** The percent of the amount added to every payment as the fee the customer pays ("3.1"); "" for none. */
+  fee_percent: string
+  /** Toman added to every payment as the fee the customer pays; 0 for none. */
+  fee_fixed: number
+}
+
+/** A Zarinpal method's settings (`ZarinpalMethodRow.config`): the merchant's code, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and whether it runs on Zarinpal's sandbox (no real money). */
+export interface ZarinpalGatewayConfig {
+  merchant_id: SecretState
+  /** Zarinpal's test service: any code is taken and no money moves, while a payment there still delivers its order. */
+  sandbox: boolean
+}
+
+/** An AtlasPay method's settings (`AtlasPayMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it. */
+export interface AtlasPayGatewayConfig {
+  api_key: SecretState
+}
+
+/** An AbanGateway method's settings (`AbanMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and whether the bot and the site show the card under the page. */
+export interface AbanGatewayConfig {
+  api_key: SecretState
+  /** The card, its holder and the exact sum shown with copy buttons under the page, for a sum up to 10,000,000 Toman — the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts. */
+  show_card: boolean
 }
 
 /** A card of a card-to-card method. */
@@ -2650,6 +2806,78 @@ export interface WalletMethodRequest {
   max_amount?: AmountInput | null
 }
 
+/** A CubePay method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API token from CubePay's bot (@cubepy_bot, «🔗 پنل من») — `token` (blank keeps the kept one) or `clear_token` —, and the fee passed on to customers (`fee_percent`, `fee_fixed`). It always names `fee_fixed`, as the panels' form does with every save: that tells it from the wallet's form. */
+export interface CubePayMethodRequest {
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label?: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The API token as CubePay's bot shows it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `token`). */
+  token?: string
+  /** True empties the kept token, which is refused: a CubePay method cannot go without one (type another instead). */
+  clear_token?: boolean
+  /** The percent of the amount added to every payment as CubePay's fee the customer pays: 0 to 99.99, up to two decimals (Persian digits are taken); blank or 0 for none. The order is still paid, delivered and credited at its own price. */
+  fee_percent?: string
+  /** Toman added to every payment as CubePay's fee the customer pays, on top of the percent: 0 to 1,000,000; 0 for none. */
+  fee_fixed: WholeNumberInput
+}
+
+/** A Zarinpal method's form: the label customers pick it by, its switch, the amounts it is offered for (Zarinpal takes 100 to 100,000,000 Toman), the merchant's code from Zarinpal's panel, and the sandbox switch. It names `merchant_id` (blank keeps the kept one) or `clear_merchant_id`, as the panels' form does with every save. */
+export interface ZarinpalMethodRequest {
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label?: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The merchant's 36-character code as Zarinpal's panel shows it (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `merchant_id`). */
+  merchant_id?: string
+  /** True empties the kept code, which is refused: a Zarinpal method cannot go without one (type another instead). */
+  clear_merchant_id?: boolean
+  /** Zarinpal's test service (sandbox.zarinpal.com): any code in its shape is taken and no money moves — a payment there still delivers its order. Only for trying it out. */
+  sandbox: boolean
+}
+
+/** An AtlasPay method's form: the label customers pick it by, its switch, the amounts it is offered for, and the merchant's API key from AtlasPay. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form. */
+export interface AtlasPayMethodRequest {
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label?: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). */
+  api_key?: string
+  /** True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead). */
+  clear_api_key?: boolean
+}
+
+/** An AbanGateway method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API key from AbanGateway's panel, and whether the card is shown in the bot and on the site. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save. */
+export interface AbanMethodRequest {
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label?: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The API key as AbanGateway's panel shows it once, when it is made: `ag_live_` — or `ag_test_` for its test mode, where no money moves — and 48 lowercase letters and digits. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). */
+  api_key?: string
+  /** True empties the kept key, which is refused: an AbanGateway method cannot go without one (type another instead). */
+  clear_api_key?: boolean
+  /** Show the card, its holder and the exact sum with copy buttons under the page — for a sum up to 10,000,000 Toman, the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts. */
+  show_card: boolean
+}
+
 /** A new card-to-card method: its driver and its form (ManualMethodRequest), with the label required. */
 export interface ManualMethodCreateRequest {
   /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
@@ -2670,11 +2898,91 @@ export interface ManualMethodCreateRequest {
   cards: PaymentCardInput[]
 }
 
+/** A new CubePay method: its driver and its form (CubePayMethodRequest), with the label, the token and `fee_fixed` required. */
+export interface CubePayMethodCreateRequest {
+  /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
+  driver: 'cubepay'
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The API token as CubePay's bot shows it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `token`). */
+  token?: string
+  /** True empties the kept token, which is refused: a CubePay method cannot go without one (type another instead). */
+  clear_token?: boolean
+  /** The percent of the amount added to every payment as CubePay's fee the customer pays: 0 to 99.99, up to two decimals (Persian digits are taken); blank or 0 for none. The order is still paid, delivered and credited at its own price. */
+  fee_percent?: string
+  /** Toman added to every payment as CubePay's fee the customer pays, on top of the percent: 0 to 1,000,000; 0 for none. */
+  fee_fixed: WholeNumberInput
+}
+
+/** A new Zarinpal method: its driver and its form (ZarinpalMethodRequest), with the label and the merchant's code required. */
+export interface ZarinpalMethodCreateRequest {
+  /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
+  driver: 'zarinpal'
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The merchant's 36-character code as Zarinpal's panel shows it (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `merchant_id`). */
+  merchant_id?: string
+  /** True empties the kept code, which is refused: a Zarinpal method cannot go without one (type another instead). */
+  clear_merchant_id?: boolean
+  /** Zarinpal's test service (sandbox.zarinpal.com): any code in its shape is taken and no money moves — a payment there still delivers its order. Only for trying it out. */
+  sandbox: boolean
+}
+
+/** A new AtlasPay method: its driver and its form (AtlasPayMethodRequest), with the label and the API key required. */
+export interface AtlasPayMethodCreateRequest {
+  /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
+  driver: 'atlaspay'
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). */
+  api_key?: string
+  /** True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead). */
+  clear_api_key?: boolean
+}
+
+/** A new AbanGateway method: its driver and its form (AbanMethodRequest), with the label and the API key required. */
+export interface AbanMethodCreateRequest {
+  /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
+  driver: 'abangateway'
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The API key as AbanGateway's panel shows it once, when it is made: `ag_live_` — or `ag_test_` for its test mode, where no money moves — and 48 lowercase letters and digits. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). */
+  api_key?: string
+  /** True empties the kept key, which is refused: an AbanGateway method cannot go without one (type another instead). */
+  clear_api_key?: boolean
+  /** Show the card, its holder and the exact sum with copy buttons under the page — for a sum up to 10,000,000 Toman, the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts. */
+  show_card: boolean
+}
+
 /** A new payment method for a driver that is not built in: the driver's key, the label customers pick it by, the switch and the driver's form (`DriverDescription.fields`). One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest. */
-export type PaymentMethodCreateRequest = ManualMethodCreateRequest
+export type PaymentMethodCreateRequest = ManualMethodCreateRequest | CubePayMethodCreateRequest | ZarinpalMethodCreateRequest | AtlasPayMethodCreateRequest | AbanMethodCreateRequest
 
 /** A payment method's form, as its driver takes it. One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest. A method whose driver is no longer installed cannot be updated (switch it off or delete it). */
-export type PaymentMethodUpdateRequest = ManualMethodRequest | WalletMethodRequest
+export type PaymentMethodUpdateRequest = ManualMethodRequest | WalletMethodRequest | CubePayMethodRequest | ZarinpalMethodRequest | AtlasPayMethodRequest | AbanMethodRequest
 
 /** A payment method's on/off switch. A JSON boolean only. */
 export interface PaymentMethodSwitchRequest {
@@ -5336,8 +5644,33 @@ export interface StorePayment {
   receipt: {
     sent_at: string
   } | null
-  /** The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer); null if none. */
+  /** The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer; an online payment whose page closed unpaid, or that came in once its order had closed and went to the wallet; for one held for support, whatever its status, that it is with support and not to be paid again — in place of the shop's words to support on why); null if none. */
   note: string | null
+  /** An online payment still waiting on its gateway (`pending`), while its page takes money: where to pay it, as the checkout gave it. Null for any other payment, once `expires_at` has passed, and for one held for support (`POST /payments/{id}/check` says so): its order is paid no more meanwhile. */
+  link: StorePayLink | null
+}
+
+/** An online gateway's page to pay a payment on: the customer pays there, and the gateway tells the shop by itself. */
+export interface StorePayLink {
+  /** The payment it pays: the one to ask about (`POST /payments/{id}/check`). */
+  payment_id: number
+  /** The gateway's page: open it (a link or a redirect) for the customer to pay there. */
+  url: string
+  /** Until when the page takes money: the gateway's own end, or the time the shop keeps its page when the gateway gives none. A request made again with its `Idempotency-Key` answers the same page while it has more than 3 minutes left, else a new one. */
+  expires_at: string | null
+  /** The exact sum the page asks, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart or the customer pays the gateway's fee (`fee`). Show this one as what to pay. */
+  amount: string
+  /** Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount. */
+  fee: string | null
+  /** The card that sum goes to, when the gateway gave one to show (CubePay's «🤖 نمایش کارت در ربات», AtlasPay's «نمایش مستقیم اطلاعات پرداخت», AbanGateway's «نمایش کارت در ربات و سایت» in the shop): the customer may transfer the exact `amount` to it rather than open the page. Null otherwise. */
+  card: {
+    /** The card number: 16 digits, no separators. */
+    number: string
+    /** The card holder's name, as the gateway gave it; null when it gave none. */
+    holder: string | null
+    /** The card's bank, as the gateway gave it; null when it gave none. */
+    bank: string | null
+  } | null
 }
 
 /** One of the customer's orders: what it was for, its status, and its payments (newest first). */
@@ -5386,7 +5719,7 @@ export interface StorePaymentMethod {
   id: number
   /** Its button text ("کارت به کارت (ملت)"). */
   label: string
-  /** `instant`: the wallet, paid at once. `manual`: a card transfer with a receipt. Null for a method whose driver is no longer installed. */
+  /** `instant`: the wallet, paid at once. `manual`: a card transfer with a receipt. `online`: an online gateway, paid on its own page (the checkout's `link`). Null for a method whose driver is no longer installed. */
   kind: GatewayKind | null
   /** The least amount to pay it takes, in Toman; null for no least. */
   min_amount: string | null
@@ -5625,10 +5958,10 @@ export interface StoreReceiptRequest {
   note?: string
 }
 
-/** The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409). */
+/** The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), an online gateway that would not open the payment (a 422 on `method_id`, in the customer's words; the order stays open), an order whose online payment is held for support (a 422 on `status`, naming the order), or an order paid or closed at the same moment elsewhere (a 409). */
 export interface StoreCheckout {
-  /** `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `processing`: paid, and the delivery is in progress. */
-  outcome: 'settled' | 'transfer' | 'processing'
+  /** `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card or online too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `link`: pay on the online gateway's page in `link`; the gateway tells the shop by itself, and `POST /payments/{id}/check` asks it now. `processing`: paid, and the delivery is in progress. */
+  outcome: 'settled' | 'transfer' | 'link' | 'processing'
   order: StoreOrder
   /** For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. A payment taken in support's private chat (made while the bot setting «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» is on) is shown no card: `card`, `holder` and `bank` are null and `contact` says where to go — tell the customer to send the order's number there, get the card from support, and send the receipt to support too; support approves the payment in its panel. */
   transfer: {
@@ -5652,12 +5985,27 @@ export interface StoreCheckout {
       url: string | null
     } | null
   } | null
+  /** For `link`: the online gateway's page to pay on, and the payment it is for. Null otherwise. */
+  link: StorePayLink | null
   /** Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise, and on a repeated request once the service is no longer the customer's (handed to another customer). */
   subscription: StoreSubscription | null
 }
 
 export interface StoreCheckoutResponse {
   checkout: StoreCheckout
+}
+
+/** What an online gateway says of a payment now, and its order as it stands after the shop acted on it. */
+export interface StorePaymentCheck {
+  /** `paid`: the money came in. The order is paid and delivered as a checkout's would be (`fulfilled`, with the service in `subscription`; `failed`, for support to finish; `paid` or `processing` while it is under way) — or, its order closed before the money came (paid another way, cancelled or expired), the payment is `paid` with a note saying it went to the wallet. `waiting`: nothing yet, and its page still takes money. `closed`: its page closed with nothing paid — a payment still waiting is `failed` then (its note says so), and its order, while open, may be paid again: a new attempt. Should the gateway take the money later after all, the shop still settles it. */
+  state: 'paid' | 'waiting' | 'closed'
+  order: StoreOrder
+  /** Once delivered: the service the order created, renewed or added extras to, while it is still the customer's; null otherwise. */
+  subscription: StoreSubscription | null
+}
+
+export interface StorePaymentCheckResponse {
+  check: StorePaymentCheck
 }
 
 /** A preview of a service's renewal: on its own plan (or, for a service without one, the plan picked — or the package built, `custom`), at its price today, by a renewal method among those the shop offers, and the service as the renewal would leave it by that method. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid. */
@@ -5872,9 +6220,10 @@ export interface StoreReferralResponse {
   rewards: number
 }
 
-/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). */
+/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). */
 export type StoreNoticeType =
   | 'payment_settled'
+  | 'payment_credited'
   | 'payment_rejected'
   | 'order_cancelled'
   | 'payment_refunded'
@@ -6264,6 +6613,8 @@ export type PanelWrite =
   | { method: 'POST'; path: `/payments/${number}/cancel`; body: NoteRequest; answer: PaymentResponse }
   /** Remind the customer to pay. The answer says whether the reminder reached them. */
   | { method: 'POST'; path: `/payments/${number}/remind`; body: undefined; answer: ReminderResponse }
+  /** Ask an online payment's gateway what came of it, and act on its word: paid, the payment settles — its order delivered, or, the order closed, the money into the customer's wallet — and the customer is told; its page closed unpaid, the payment fails; still waiting, nothing changes. `state` says which. Nobody decides it by hand: only the gateway's word moves it. */
+  | { method: 'POST'; path: `/payments/${number}/check`; body: undefined; answer: PaymentCheckResponse }
   /** Retry the delivery of what a paid payment bought. */
   | { method: 'POST'; path: `/payments/${number}/retry`; body: undefined; answer: PaymentResponse }
   /** Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are. */
@@ -6506,19 +6857,21 @@ export type StoreWrite =
   | { method: 'POST'; path: `/subscriptions/${number}/rotate-link`; body: undefined; answer: StoreSubscriptionResponse }
   /** «انتقال سرویس»: hand the service to another customer of the shop, found by their numeric Telegram id, for free — as the bot does it. Only while the shop lets customers (`shop.service_transfers` of `GET /`, off by default). The service keeps its link, term and traffic and is the recipient's from now on (this customer's `GET /subscriptions/{id}` is a 404 after it); its «تمدید خودکار» goes off; the link goes with it, so this customer's devices stay connected until the recipient changes it (`POST /subscriptions/{id}/rotate-link`); the recipient is told in the bot and among their notices (`service_received`, which says so where the link can change) — this customer is not: the answer is theirs; the report group hears of it. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first): a bearer token alone gives no service away. A 422 on `status` while the shop does not offer it, for a free test account, a service gone from its panel or being changed on it right then (try again in a moment), or one with an order this customer made not finished with (a renewal or an extra awaiting its payment or receipt, or being delivered; an unpaid one is dropped by itself after 48 hours, unless its card transfer went to support's private chat, which support approves or cancels; one whose delivery failed waits for support, and its message says to ask them); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the customer themselves, or a banned account. It looks the recipient up as `GET` does (one of its 10 in 10 minutes); at most 5 services handed on an hour per customer, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: `/subscriptions/${number}/transfer`; body: SubscriptionTransferRequest; answer: StoreTransferRecipientResponse }
-  /** Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders, or on `status` with a receipt still in review; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders — its bot switched off, or its selling suspended, which the GET answers with a 422 on `status`). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now. */
+  /** Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders, or on `status` with a receipt still in review; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders — its bot switched off, or its selling suspended, which the GET answers with a 422 on `status`). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/renewal`; body: StoreRenewalRequest; answer: StoreCheckoutResponse }
-  /** Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  /** Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-traffic`; body: StoreExtraTrafficRequest; answer: StoreCheckoutResponse }
-  /** Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  /** Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-time`; body: StoreExtraTimeRequest; answer: StoreCheckoutResponse }
-  /** Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  /** Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-devices`; body: StoreExtraDevicesRequest; answer: StoreCheckoutResponse }
-  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
+  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
   | { method: 'POST'; path: '/orders'; body: StoreOrderRequest; answer: StoreCheckoutResponse }
   /** Upload the receipt of a card transfer. For the payment the checkout returned (`transfer.payment_id`): a picture, with an optional note from the customer. Support always reviews it (in the panel or the report group): a card method's automatic approval window applies only to receipts sent in the bot, never to uploads. Returns the order, with the payment awaiting review. A 404 for another customer's payment; a 422 on `status` while the payment awaits no receipt (one was already sent, or it was rejected, paid, cancelled, or is not a card transfer), or while the shop takes one receipt at a time and another receipt of the customer's is still in review (the message names its order), on `file` when it is not a JPEG, PNG or WebP of at most 10 MB, or on `note` when it is too long. A 429 with `Retry-After` past 10 pictures in an hour (receipts and ticket pictures share this budget). A 503 while the host has less than 200 MB of free disk, once the shop's uploads for the day reach 1024 MB, or while the shop takes no orders (its bot is switched off). A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: `/payments/${number}/receipt`; body: StoreReceiptRequest; answer: StoreOrderResponse }
-  /** Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders or a receipt still in review (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now. */
+  /** Ask an online payment's gateway what came of it now — when the customer comes back from the gateway's page, or presses a «I paid» button. The gateway tells the shop by itself as well, and the shop asks it every few minutes until its page has been closed a while: this only makes it sooner. A payment the gateway says was paid is settled at once — its order paid and delivered (or, its order closed meanwhile, the money put in the wallet) — and the customer gets the notice of it; one whose page closed unpaid fails, its order left open to pay again. Answers what the gateway said, the order as it stands now and, once delivered, its service. A 404 for another customer's payment; a 422 on `status` for a payment that is not an online one (a card transfer, the wallet), and for one held for support and still waiting — the gateway's answer did not fit it (another order or amount), or it kept money on it unsettled for two days —, the message naming its order: tell the customer not to pay again but to write to support. A 503 while the gateway cannot be asked, saying so (nothing changed: if they paid, ask again a little later). At most 10 a minute per customer, then a 429 with `Retry-After`. */
+  | { method: 'POST'; path: `/payments/${number}/check`; body: undefined; answer: StorePaymentCheckResponse }
+  /** Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders or a receipt still in review (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now. */
   | { method: 'POST'; path: '/wallet/top-up'; body: StoreTopUpRequest; answer: StoreCheckoutResponse }
   /** «انتقال موجودی»: send `amount` from the wallet to another customer of the shop, found by their numeric Telegram id — as the bot does it, with no fee. Only while the shop offers it (`transfer` of `GET /wallet`, off by default), and only from the wallet's own balance, never an agent's credit. The recipient's wallet gets the whole amount at once; each wallet's ledger has a line naming the other customer («انتقال موجودی به …», «دریافت موجودی از …»); the recipient is told in the bot and among their notices (`wallet_received`), this customer among their notices and in Telegram (`wallet_sent`); the report group hears of it. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first): a bearer token alone gives no money away. A 422 on `status` while the shop offers none; on `telegram_id` as `GET` refuses it; on `amount` for no whole number of Toman, below `min` or above `max`, more than the balance, or past the daily cap (the message says what today leaves); on `idempotency_key` for a missing or malformed key, or one sent before with another recipient or amount. It looks the recipient up as `GET` does (one of its 10 in 10 minutes); at most 10 transfers an hour per customer, then a 429 with `Retry-After`. Repeated with the same `Idempotency-Key`, it answers the transfer that key made, with the wallet as it is now: never a second transfer. */
   | { method: 'POST'; path: '/wallet/transfer'; body: StoreWalletTransferRequest; answer: StoreWalletTransferResponse }

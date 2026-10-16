@@ -9,7 +9,8 @@ import { json, server } from '@/test/server'
 /*
  * A customer's wallet (components/users/wallet-modal): its ledger names who set a line right by hand — a panel's login,
  * one of the shop's admins on its website, as the server words them for this reader —, set apart left to right, and
- * nobody on a line the shop wrote itself; a wallet transfer's line links the other customer.
+ * nobody on a line the shop wrote itself — an online payment's that came after its order closed among them —; a wallet
+ * transfer's line links the other customer.
  */
 
 const CUSTOMER = userRow()
@@ -29,6 +30,16 @@ describe('a wallet’s ledger', () => {
     expect(staff.getAttribute('dir')).toBe('ltr')
     expect(screen.getByText('root').getAttribute('dir')).toBe('ltr')
     expect(screen.getByText('خرید سرویس').closest('li')?.querySelector('bdi')).toBeNull()
+  })
+
+  it('shows an online payment that came after its order closed as the shop wrote it: money in, by nobody’s hand', async () => {
+    const transactions = [line({ id: 4, description: 'پرداخت آنلاین #12 پس از بسته شدن سفارش #7', balance_after: '100000.00' })]
+    server().on('GET', '/api/admin/users/10/wallet', json({ user: CUSTOMER, transactions } satisfies UserWalletResponse))
+    render(<WalletPanel user={CUSTOMER} onChanged={() => undefined} />, { wrapper: providers().wrapper })
+
+    const entry = (await screen.findByText('پرداخت آنلاین #12 پس از بسته شدن سفارش #7')).closest('li')
+    expect(entry?.textContent).toContain('افزایش')
+    expect(entry?.querySelector('a, bdi')).toBeNull()
   })
 
   it('links a wallet transfer’s line to the other customer: whom it went to, or came from', async () => {

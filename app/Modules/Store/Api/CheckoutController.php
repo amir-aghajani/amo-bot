@@ -12,11 +12,13 @@ use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Orders\Exceptions\RenewalUnderWayException;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Payments\DTO\CheckoutResult;
+use App\Modules\Payments\Exceptions\PaymentHeldException;
 use App\Modules\Store\Exceptions\CheckoutRefusedException;
 use App\Modules\Store\Http\IdempotencyKey;
 use App\Modules\Store\Presenters\OrderPresenter;
 use App\Modules\Store\Presenters\SubscriptionPresenter;
 use App\Modules\Store\Services\CustomerCheckout;
+use App\Modules\Store\Services\CustomerOnlinePayments;
 use App\Modules\Store\Services\CustomerReceipts;
 use App\Modules\Store\Services\CustomerSubscriptions;
 use App\Modules\Subscriptions\Enums\ExtraKind;
@@ -28,14 +30,15 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 /**
  * A signed-in customer's checkout (Store\Services\CustomerCheckout): the ways to pay, a purchase, a renewal, its
  * preview and the plans it may be on, a service's extras, a discount code checked, a wallet top-up — each ordering
- * request with its Idempotency-Key, read before anything else — and a card transfer's receipt
- * (Store\Services\CustomerReceipts).
+ * request with its Idempotency-Key, read before anything else —, a card transfer's receipt
+ * (Store\Services\CustomerReceipts) and an online payment asked about (Store\Services\CustomerOnlinePayments).
  */
 final class CheckoutController extends ApiController
 {
     public function __construct(
         private readonly CustomerCheckout $checkout,
         private readonly CustomerReceipts $receipts,
+        private readonly CustomerOnlinePayments $online,
         private readonly CustomerSubscriptions $subscriptions,
         private readonly OrderPresenter $orders,
     ) {}
@@ -208,6 +211,21 @@ final class CheckoutController extends ApiController
         $order = $this->receipts->upload(Customer::of($request)->user, $this->routeId($args), $this->uploadedFile($request), $this->input($request));
 
         return $this->json($response, ['order' => $this->orders->present($order)]);
+    }
+
+    /**
+     * POST /payments/{id}/check — an online payment asked of its gateway now: paid, waiting or closed, with its order.
+     *
+     * @param array<string, string> $args
+     * @throws ModelNotFoundException 404: no payment of theirs
+     * @throws ValidationException 422 on `status`: not an online payment
+     * @throws PaymentHeldException 422 on `status`: held for support
+     * @throws TooManyAttemptsException 429
+     * @throws CheckoutRefusedException 503: its gateway could not be asked
+     */
+    public function check(Request $request, Response $response, array $args): Response
+    {
+        return $this->json($response, ['check' => $this->online->check(Customer::of($request)->user, $this->routeId($args))]);
     }
 
     /**

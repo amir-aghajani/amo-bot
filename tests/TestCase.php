@@ -35,16 +35,21 @@ use Tests\Fakes\FakeProvider;
 use Tests\Fakes\NullSleeper;
 use Tests\Fakes\ProbedDriver;
 use Tests\Fakes\RecordingMailTransport;
+use Tests\Support\FakeAban;
+use Tests\Support\FakeAtlasPay;
+use Tests\Support\FakeCubePay;
 use Tests\Support\FakeGoogleLogin;
 use Tests\Support\FakePanel;
 use Tests\Support\FakeTelegram;
 use Tests\Support\FakeTelegramLogin;
 use Tests\Support\FakeTurnstile;
+use Tests\Support\FakeZarinpal;
 
 /**
  * The base of every test: one booted application per process, kept off this machine (its own config.php, files and
  * no network). A test gets its doubles by swapping a leaf, never what was built around it: a fake transport under the
- * HTTP clients (panelHttp(), telegramLogin(), googleLogin(), turnstile(), telegram()), the mail server (mail()), a log
+ * HTTP clients (panelHttp(), telegramLogin(), googleLogin(), turnstile(), cubePay(), zarinpal(), atlasPay(),
+ * aban(), telegram()), the mail server (mail()), a log
  * handler (logs()), config.php (configFile()), a database probe (probedDatabase()), configuration (config()).
  * Everything is put back in tearDown.
  */
@@ -130,6 +135,14 @@ abstract class TestCase extends BaseTestCase
 
     private ?FakeTurnstile $turnstile = null;
 
+    private ?FakeCubePay $cubePay = null;
+
+    private ?FakeZarinpal $zarinpal = null;
+
+    private ?FakeAtlasPay $atlasPay = null;
+
+    private ?FakeAban $aban = null;
+
     private ?TestHandler $logs = null;
 
     private bool $fakePanel = false;
@@ -152,12 +165,16 @@ abstract class TestCase extends BaseTestCase
             }
             $this->telegram = null;
         }
-        if ($this->panelHttp !== null || $this->telegramLogin !== null || $this->googleLogin !== null || $this->turnstile !== null) {
+        if ($this->panelHttp !== null || $this->telegramLogin !== null || $this->googleLogin !== null || $this->turnstile !== null || $this->cubePay !== null || $this->zarinpal !== null || $this->atlasPay !== null || $this->aban !== null) {
             self::transport('http.transport')->setHandler(self::offline(...));
             $this->panelHttp = null;
             $this->telegramLogin = null;
             $this->googleLogin = null;
             $this->turnstile = null;
+            $this->cubePay = null;
+            $this->zarinpal = null;
+            $this->atlasPay = null;
+            $this->aban = null;
         }
         if (self::$app !== null) {
             self::mailServer()->reset();
@@ -370,6 +387,50 @@ abstract class TestCase extends BaseTestCase
         }
 
         return $this->turnstile;
+    }
+
+    /** CubePay's API as the outgoing client's transport for this test. */
+    protected function cubePay(): FakeCubePay
+    {
+        if ($this->cubePay === null) {
+            $this->cubePay = new FakeCubePay();
+            self::transport('http.transport')->setHandler($this->cubePay);
+        }
+
+        return $this->cubePay;
+    }
+
+    /** Zarinpal's API (live and sandbox) as the outgoing client's transport for this test. */
+    protected function zarinpal(): FakeZarinpal
+    {
+        if ($this->zarinpal === null) {
+            $this->zarinpal = new FakeZarinpal();
+            self::transport('http.transport')->setHandler($this->zarinpal);
+        }
+
+        return $this->zarinpal;
+    }
+
+    /** AtlasPay's API as the outgoing client's transport for this test. */
+    protected function atlasPay(): FakeAtlasPay
+    {
+        if ($this->atlasPay === null) {
+            $this->atlasPay = new FakeAtlasPay();
+            self::transport('http.transport')->setHandler($this->atlasPay);
+        }
+
+        return $this->atlasPay;
+    }
+
+    /** AbanGateway's API as the outgoing client's transport for this test. */
+    protected function aban(): FakeAban
+    {
+        if ($this->aban === null) {
+            $this->aban = new FakeAban();
+            self::transport('http.transport')->setHandler($this->aban);
+        }
+
+        return $this->aban;
     }
 
     /**

@@ -14,7 +14,8 @@ import { refusal, server } from '@/test/server'
  * place; a renewal's method; its amount, one at its plan's first-purchase price or its agent price
  * saying so beside it; and when the order moves on under the admin: a cancel waiting on its strip is withdrawn with a word; one confirmed
  * and refused because the order moved on meanwhile is said once — the server's words standing for the withdrawal, never
- * both —, even though nothing is left to do; and the focus, its strip gone, is on that word — never on the document.
+ * both —, even though nothing is left to do; and the focus, its strip gone, is on that word — never on the document. A
+ * payment paid online after the order closed says its money went to the wallet.
  */
 
 const CANCELLED = orderRow({ status: 'cancelled', notes: 'لغو توسط پشتیبانی', actions: { retry: false, cancel: false } })
@@ -119,6 +120,46 @@ describe('its amount', () => {
   })
 })
 
+describe('its payments', () => {
+  it('say of one paid online after the order closed that its money went to the wallet', () => {
+    const late = {
+      id: 9,
+      status: 'paid' as const,
+      amount: '50037.00',
+      gateway: 'cubepay',
+      method: 'پرداخت آنلاین',
+      paid_at: '2026-10-06T10:00:00Z',
+      to_wallet: true,
+      held: false,
+      created_at: '2026-10-06T09:00:00Z',
+    }
+    render(<OrderModal order={orderRow({ ...CANCELLED, payments: [late] })} onClose={vi.fn()} onChanged={vi.fn()} onStale={vi.fn()} />, { wrapper: providers().wrapper })
+
+    const link = within(dialog()).getByRole('link', { name: /پرداخت آنلاین/ })
+    // Apart from the time before it: two words for assistive tech, not one.
+    expect(link.textContent).toMatch(/\S\s+به کیف پول مشتری رفت/)
+    expect(link.textContent).toContain('پرداخت‌شده')
+  })
+
+  it('say of one held for support that it is held, apart from the words before it', () => {
+    const held = {
+      id: 10,
+      status: 'pending' as const,
+      amount: '50000.00',
+      gateway: 'atlaspay',
+      method: 'اطلس‌پی',
+      paid_at: null,
+      to_wallet: false,
+      held: true,
+      created_at: '2026-10-06T09:00:00Z',
+    }
+    render(<OrderModal order={orderRow({ payments: [held] })} onClose={vi.fn()} onChanged={vi.fn()} onStale={vi.fn()} />, { wrapper: providers().wrapper })
+
+    const link = within(dialog()).getByRole('link', { name: /اطلس‌پی/ })
+    expect(link.textContent).toMatch(/\S\s+نگه داشته شده برای پشتیبانی/)
+  })
+})
+
 /** «لغو سفارش», its strip open. */
 function openCancel() {
   fireEvent.click(within(dialog()).getByRole('button', { name: 'لغو سفارش' }))
@@ -135,6 +176,8 @@ describe('a cancel', () => {
     gateway: 'manual',
     method: 'کارت به کارت (ملت)',
     paid_at: null,
+    to_wallet: false,
+    held: false,
     created_at: '2026-10-06T08:55:00Z',
   }
   const pending: OrderRow['payments'][number] = { ...receipt, id: 8, status: 'pending' }

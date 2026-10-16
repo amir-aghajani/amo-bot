@@ -18,8 +18,10 @@ use App\Modules\Orders\Models\RequestKey;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\DTO\Shortfall;
+use App\Modules\Payments\Enums\OnlineSettlement;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\MethodUnavailableException;
+use App\Modules\Payments\Exceptions\PaymentHeldException;
 use App\Modules\Payments\Exceptions\ReceiptInReviewException;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
@@ -30,7 +32,8 @@ use App\Support\Money;
 /**
  * The one checkout of the bot (CheckoutScreen) and the website (CustomerCheckout): orders something — or finds the open
  * order of the same thing — and pays it with the chosen method. A short wallet orders nothing; the wallet settles at
- * once; a card transfer waits for its receipt; a free order is settled by the wallet row whatever was picked.
+ * once; a card transfer waits for its receipt; an online gateway's page waits for the gateway's word; a free order is
+ * settled by the wallet row whatever was picked.
  *
  * A website request made again with its Idempotency-Key is answered by the order the key came to, as it stands — never
  * a second order or charge, never paid another way. Two such requests at once make one order: the key's unique row and
@@ -44,6 +47,7 @@ final class Checkout
         private readonly GatewayRegistry $gateways,
         private readonly PaymentMethods $methods,
         private readonly ReceiptsInReview $inReview,
+        private readonly OnlinePayments $online,
     ) {}
 
     /** What the wallet lacks to pay `$price` (an agent's credit counting); null when it can, and for any other method. */
@@ -72,7 +76,11 @@ final class Checkout
      * - a card payment while another receipt of the customer's is in review (ReceiptsInReview): refused, nothing ordered;
      * - a short wallet: nothing is ordered;
      * - `$guard`, the caller's own hold (the bot: a checkout's wallet pays once), may close the checkout;
-     * - an order paid or closed elsewhere at the same moment is `closed` — or, with a key, the other request's result.
+     * - an order paid or closed elsewhere at the same moment is `closed` — or, with a key, the other request's result;
+     * - an order with an online payment held for support (OnlinePayments::isHeld()) is refused, whatever the method;
+     * - an online method's page of the order that is closing is asked about first (OnlinePayments::paidBefore()): paid
+     *   there, the order as it stands is the answer — `closed` when another call settled it a moment earlier, or its
+     *   order closed in that moment —, and no new page is opened.
      *
      * @param \Closure(?OrderKey): Order $open
      * @param (\Closure(): bool)|null $guard
@@ -85,6 +93,7 @@ final class Checkout
      * @throws ReceiptInReviewException 422: one receipt at a time, and the customer's last is still in review
      * @throws MethodUnavailableException 422 on `method_id`: the amount is outside the method's bounds, or no card of it
      *                                    has room for it today — nothing left ordered, nothing paid
+     * @throws PaymentHeldException 422 on `status`: the order's online payment is held for support — nothing paid
      */
     public function pay(User $user, PaymentMethod $method, OrderType $type, string $price, \Closure $open, ?string $key = null, ?\Closure $guard = null): CheckoutResult
     {
@@ -92,6 +101,10 @@ final class Checkout
         $order = $request === null ? null : $this->keyedOrder($user, $request, $open);
         if ($order !== null && !self::payable($order)) {
             return $this->standing($order, madeAgain: true);
+        }
+
+        if ($order !== null) {
+            self::refuseHeld($order);
         }
 
         $amount = $order === null ? $price : $order->amount;
@@ -113,6 +126,18 @@ final class Checkout
         $opening = $order === null;
         try {
             $order ??= $open($request);
+            // An order made just now has no payment to be held; one the caller found again may.
+            if ($opening && !$order->wasRecentlyCreated) {
+                self::refuseHeld($order);
+            }
+            // A page of it about to close may have been paid already: asked before another is opened, so nobody pays twice.
+            $paid = $this->online->paidBefore($order, $method);
+            if ($paid !== null) {
+                // Settled by this ask, the order as it stands is the customer's word on it. Settled by another call a moment
+                // earlier — which told them —, or its order closed in that moment, there is nothing more to show — but to a
+                // request made again with its key, which describes its order as it stands.
+                return $paid === OnlineSettlement::Settled || $request !== null ? $this->standing($order) : CheckoutResult::closed();
+            }
             ['payment' => $payment, 'initiation' => $initiation] = $this->payments->createForOrder($order, $method);
         } catch (MethodUnavailableException $e) {
             // No card took it after all — the last room went in the same moment, or the open payment that let the method
@@ -135,8 +160,12 @@ final class Checkout
         if ($initiation->transfer !== null) {
             return CheckoutResult::transfer($order, $payment, $initiation->transfer);
         }
+        if ($initiation->link !== null) {
+            return CheckoutResult::link($order, $payment, $initiation->link);
+        }
 
-        // Settled on the spot (the wallet): the order as it ended — or, the gateway having said no, still open.
+        // Settled on the spot (the wallet): the order as it ended — or, the gateway having said no (the wallet spent, an
+        // online gateway that would not open it), still open.
         $order->refresh();
 
         return match (true) {
@@ -194,6 +223,21 @@ final class Checkout
     }
 
     /**
+     * An online payment of the order held for support may be money the gateway took: the order is paid no other way
+     * meanwhile.
+     *
+     * @throws PaymentHeldException
+     */
+    private static function refuseHeld(Order $order): void
+    {
+        // Still waiting — pending, or failed with its page —: one support cancelled holds nothing (OnlinePayments::awaitsSupport()).
+        $held = $order->payments()->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::Failed->value])->whereNotNull('invoice->held')->first();
+        if ($held !== null) {
+            throw new PaymentHeldException($held);
+        }
+    }
+
+    /**
      * A request's order as it stands now: settled (delivered, failed or refunded), processing, or still open — then its
      * card transfer. A cancelled order is `closed` just now elsewhere, or `cancelled` for a request `$madeAgain` later.
      */
@@ -211,14 +255,19 @@ final class Checkout
 
     /**
      * An open order's card payment (the one with a receipt in review, else a pending one) and the card it was shown — the
-     * same card every time —, or support's private chat for one shown none.
+     * same card every time —, or support's private chat for one shown none; or its latest online payment's page — never
+     * one held for support.
      */
     private function awaiting(Order $order): CheckoutResult
     {
-        $open = $order->payments()->whereIn('status', [PaymentStatus::AwaitingReview->value, PaymentStatus::Pending->value])->get();
+        $open = $order->payments()->whereIn('status', [PaymentStatus::AwaitingReview->value, PaymentStatus::Pending->value])->latest('id')->get()->reject(OnlinePayments::isHeld(...));
         $payment = $open->first(static fn(Payment $payment): bool => $payment->status === PaymentStatus::AwaitingReview) ?? $open->first();
-        $transfer = $payment === null ? null : $this->gateways->forPayment($payment)->initiate($payment)->transfer;
+        $initiation = $payment === null ? null : $this->gateways->forPayment($payment)->initiate($payment);
 
-        return $payment !== null && $transfer !== null ? CheckoutResult::transfer($order, $payment, $transfer) : CheckoutResult::closed();
+        return match (true) {
+            $initiation?->transfer !== null => CheckoutResult::transfer($order, $payment, $initiation->transfer),
+            $initiation?->link !== null => CheckoutResult::link($order, $payment, $initiation->link),
+            default => CheckoutResult::closed(),
+        };
     }
 }

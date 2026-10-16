@@ -1060,6 +1060,12 @@ return [
             $table->string('status', 16)->default('pending');
             $table->decimal('amount', 14, 2);
             $table->string('reference', 191)->nullable();
+            // An online gateway's invoice (GatewayKind::Online): the page the customer pays on, until when it takes money
+            // there, the gateway's own details of it, and when the shop last asked the gateway about it.
+            $table->string('link', 1000)->nullable();
+            $table->timestamp('link_expires_at')->nullable();
+            $table->json('invoice')->nullable();
+            $table->timestamp('checked_at')->nullable();
             $table->string('receipt_file_id', 255)->nullable();
             $table->string('receipt_path', 255)->nullable();
             $table->string('receipt_name', 255)->nullable();

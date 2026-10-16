@@ -4,14 +4,15 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DismissReceiptsResponse, PaymentRow } from '@/lib/api-types'
 import { PaymentsPage } from '@/pages/payments'
 import { signedIn, until } from '@/test/render'
-import { paymentRow } from '@/test/rows'
+import { onlinePaymentRow, paymentRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
  * The payments screen (pages/payments): what each payment paid for — the amount an order of a service's extra traffic or
- * time brings, else the plan, else the order's type — over the order's type and number; and the receipts waiting for
- * review dismissed at once — those ticked, or every one waiting, a hundred a request —, after a confirmation that says
- * what it does, with a note for the customers.
+ * time brings, else the plan, else the order's type — over the order's type and number; an online payment paid after its
+ * order closed said to have gone to the wallet, one held for support said to be; and the receipts waiting for review
+ * dismissed at once — those ticked, or
+ * every one waiting, a hundred a request —, after a confirmation that says what it does, with a note for the customers.
  */
 
 const DISMISS = '/api/admin/payments/dismiss'
@@ -43,6 +44,31 @@ describe('what a payment paid for', () => {
     expect(paidFor(32)).toBe('۷ روززمان اضافه · سفارش #32')
     expect(paidFor(33)).toBe('طلاییخرید · سفارش #33')
     expect(paidFor(34)).toBe('شارژ کیف پولسفارش #34')
+  })
+})
+
+describe('an online payment', () => {
+  it('that came after its order closed says under its status that it went to the wallet', async () => {
+    open([
+      onlinePaymentRow({ id: 7, status: 'paid', to_wallet: true, description: 'سفارش پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت' }),
+      onlinePaymentRow({ id: 8, order: { ...paymentRow().order, id: 13 } }),
+    ])
+
+    const status = (await screen.findByText('به کیف پول مشتری رفت')).closest('div')
+    expect(status?.textContent?.replace(/\s+/g, ' ').trim()).toBe('پرداخت‌شده به کیف پول مشتری رفت')
+    expect(screen.getAllByText('به کیف پول مشتری رفت')).toHaveLength(1)
+  })
+
+  it('held for support says so under its status — still waiting, or since cancelled by support —, words apart', async () => {
+    const note = 'درگاه این پرداخت را با سفارش یا مبلغ دیگری تایید کرد؛ پشتیبانی باید آن را در درگاه بررسی کند'
+    open([
+      onlinePaymentRow({ id: 7, held: true, description: note, actions: { ...onlinePaymentRow().actions, check: false } }),
+      onlinePaymentRow({ id: 8, status: 'cancelled', held: true, reviewer: 'root', description: null, order: { ...paymentRow().order, id: 13 } }),
+      onlinePaymentRow({ id: 9, order: { ...paymentRow().order, id: 14 } }),
+    ])
+
+    const statuses = (await screen.findAllByText('نگه داشته شده برای پشتیبانی')).map((caption) => caption.closest('div')?.textContent?.replace(/\s+/g, ' ').trim())
+    expect(statuses).toEqual(['در انتظار پرداخت نگه داشته شده برای پشتیبانی', 'لغوشده نگه داشته شده برای پشتیبانی توسط root'])
   })
 })
 

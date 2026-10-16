@@ -86,6 +86,7 @@ final class StoreOrdersTest extends HttpTestCase
                 'paid_at' => '2026-10-07T12:00:00+00:00',
                 'receipt' => ['sent_at' => '2026-10-07T12:00:00+00:00'],
                 'note' => null,
+                'link' => null,
             ]],
         ], $answer['orders'][1]);
         self::assertNotNull($bought->subscription_id, 'the service it delivered');
@@ -116,6 +117,7 @@ final class StoreOrdersTest extends HttpTestCase
                 'paid_at' => null,
                 'receipt' => null,
                 'note' => null,
+                'link' => null,
             ]],
         ], $this->decode($this->get($this->storeApi($this->website, "/orders/{$topUp->id}")))['order']);
 

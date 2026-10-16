@@ -292,7 +292,10 @@ class Order extends Model
 
     /**
      * Unpaid orders an idle checkout's expiry may drop (Tasks\ExpireOrdersTask): pending, and none of their money with
-     * support — no receipt in review, nor a card transfer taken in support's private chat (Payment::isWithSupport()).
+     * support — no receipt in review, no card transfer taken in support's private chat, no online payment held for
+     * support (Payment::isWithSupport()).
+     * The expiry itself keeps one whose online payment is held for support, or whose online page still takes money
+     * (Payments\Services\PaymentService::expire()).
      *
      * @return Builder<static>
      */
@@ -408,16 +411,22 @@ class Order extends Model
         return null;
     }
 
-    /** When it was paid (refunded since or not); null while unpaid. Its payments must be loaded. */
+    /**
+     * When it was paid (refunded since or not); null while unpaid. Its payments must be loaded. One that came after it
+     * closed went to the wallet (Payment::wentToWallet()) and paid nothing of it.
+     */
     public function paidAt(): ?Carbon
     {
-        return $this->payments->first(static fn(Payment $payment): bool => $payment->paid_at !== null)?->paid_at;
+        return $this->payments->first(static fn(Payment $payment): bool => $payment->paid_at !== null && !$payment->wentToWallet())?->paid_at;
     }
 
-    /** The payment that paid it, unless refunded since; null otherwise. Its payments must be loaded. */
+    /**
+     * The payment that paid it, unless refunded since — never one that went to the wallet; null otherwise. Its payments
+     * must be loaded.
+     */
     public function paidBy(): ?Payment
     {
-        return $this->payments->first(static fn(Payment $payment): bool => $payment->isPaid());
+        return $this->payments->first(static fn(Payment $payment): bool => $payment->isPaid() && !$payment->wentToWallet());
     }
 
     /**

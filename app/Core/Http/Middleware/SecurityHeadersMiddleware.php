@@ -12,8 +12,9 @@ use Psr\Http\Server\RequestHandlerInterface;
 
 /**
  * Security headers on every answer PHP gives, whatever web server is in front: no sniffing, no framing, no indexing, a
- * sandboxing policy that lets nothing run (PHP answers only JSON and files, never a page), no caching unless the answer
- * set its own (a picture), and HSTS over HTTPS.
+ * sandboxing policy that lets nothing run (PHP answers JSON and files — its one page, an online payment's return page,
+ * sets a policy of its own that runs no script either), no caching unless the answer set its own (a picture), and HSTS
+ * over HTTPS.
  */
 final class SecurityHeadersMiddleware implements MiddlewareInterface
 {

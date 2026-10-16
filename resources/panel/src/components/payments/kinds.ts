@@ -4,6 +4,7 @@ import type { GatewayKind } from '@/lib/api-types'
 export const KIND_LABELS: Record<GatewayKind, string> = {
   instant: 'تسویه آنی',
   manual: 'تایید دستی',
+  online: 'درگاه آنلاین',
 }
 
 /** The label of a row whose driver may be gone (null kind). */

@@ -182,9 +182,11 @@ upgrade).
 ## Payments
 
 A payment method is a row: a gateway driver (`Payments\Drivers\*`, registered in `payment.drivers`) with its settings
-and a label. Three drivers ship: the wallet (built in, one row per shop, settles at once), the outside row (built in too,
-support's alone, above) and card-to-card (a manual gateway: shows a card, waits for a receipt). Adding a gateway is a driver class, its registration and its request shapes —
-see [Drivers](Drivers.md#a-payment-gateway).
+and a label. Seven drivers ship: the wallet (built in, one row per shop, settles at once), the outside row (built in
+too, support's alone, above), card-to-card (a manual gateway: shows a card, waits for a receipt), and CubePay,
+Zarinpal, AtlasPay and AbanGateway (online gateways: the customer pays on their page, and they are asked what came of
+it — [Drivers](Drivers.md#an-online-gateway)). Adding a gateway is a driver class, its registration and its request
+shapes — see [Drivers](Drivers.md#a-payment-gateway).
 
 Every method has bounds (`min_amount`, `max_amount`): `PaymentMethods::forOrder($type, $amount, $customer)` and
 `payable()` offer only a method that takes the amount (`takes()`: within `within()`, and a card method with a card that
@@ -255,7 +257,13 @@ moves the orders with the services). A refusal, or a panel that fails, leaves th
 `PaymentActions` and `OrderActions` are support's decisions, wherever they are made (both panels, the website's admin
 API, the report group's buttons, the timer). Each checks its rule (`allowed()`), who decides (an `Auth\Actor`: nobody
 approves or refunds their own payment; the website's admins approve only a receipt in review), and tells the customer
-only when this call decided — the loser of two decisions at once is refused with `DECIDED_MEANWHILE`.
+only when this call decided — the loser of two decisions at once is refused with `DECIDED_MEANWHILE`. An online payment
+is never approved nor rejected: `check()` asks its gateway (`OnlinePayments::check()`, the gateway's word alone moves
+it), and one paid after its order closed (`Payment::wentToWallet()`: its money in the wallet) is neither retried nor
+refunded — it paid nothing of the order. One held for support (`OnlinePayments::isHeld()`) is asked about no more —
+only `cancel()` is allowed —, and while it still waits (pending, or failed with its page) its order neither expires
+(`PaymentService::expire()` keeps it) nor is paid another way (`Checkout::pay()` throws `PaymentHeldException`);
+cancelled, it holds nothing.
 `ReceiptDismissals` rejects receipts in bulk by looping `PaymentActions::reject()`, then deletes each upload
 (`Receipts::discard()`) and reports one line a request (`ShopReports::receiptsDismissed()`). Its «all» takes the
 shop's oldest 100 a request, each round held to `receipt_at` up to the first round's moment (`until`, sent back by the

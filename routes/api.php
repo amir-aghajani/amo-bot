@@ -167,6 +167,8 @@ return static function (App $app): void {
         $shop->post('/payments/{id:[0-9]+}/reject', [PaymentsController::class, 'reject']);
         $shop->post('/payments/{id:[0-9]+}/cancel', [PaymentsController::class, 'cancel']);
         $shop->post('/payments/{id:[0-9]+}/remind', [PaymentsController::class, 'remind']);
+        // Asking an online payment's gateway moves it only on the gateway's word, as the customer's own question does.
+        $shop->post('/payments/{id:[0-9]+}/check', [PaymentsController::class, 'check']);
         $shop->post('/payments/{id:[0-9]+}/retry', [PaymentsController::class, 'retry']);
         $shop->post('/payments/{id:[0-9]+}/refund', [PaymentsController::class, 'refund'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Refunds->value);
 
@@ -480,6 +482,7 @@ return static function (App $app): void {
             $customer->get('/orders/{id:[0-9]+}', [StoreOrdersController::class, 'show']);
             $customer->post('/discount-codes/check', [CheckoutController::class, 'checkCode']);
             $customer->post('/payments/{id:[0-9]+}/receipt', [CheckoutController::class, 'receipt'])->setArgument(JsonBodiesMiddleware::UPLOAD, 'picture');
+            $customer->post('/payments/{id:[0-9]+}/check', [CheckoutController::class, 'check']);
             $customer->get('/wallet', [WalletController::class, 'show']);
             $customer->post('/wallet/top-up', [CheckoutController::class, 'topUp']);
             $customer->get('/wallet/transfer', [WalletController::class, 'transferRecipient']);

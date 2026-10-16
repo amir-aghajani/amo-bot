@@ -4,13 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AddMethodModal } from '@/components/payments/add-method-modal'
 import type { DriverDescription, FieldDescription, PaymentMethodResponse } from '@/lib/api-types'
 import { providers, until } from '@/test/render'
-import { cardMethodRow } from '@/test/rows'
+import { cardMethodRow, cubePayDriverRow, cubePayMethodRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
  * Adding a payment method (components/payments/add-method-modal): the drivers the API describes to pick from — the
  * wallet listed, but the shop has it already —, then the driver's form drawn from its description — a card method's with
- * a blank card to fill in — and sent as a new method of that driver, a refusal said under its field.
+ * a blank card to fill in, CubePay's with its token — and sent as a new method of that driver, a refusal said under its
+ * field.
  */
 
 const CARD_REFUSED = 'کارت ۱: شماره کارت باید 16 رقم و معتبر باشد.'
@@ -59,6 +60,7 @@ const DRIVERS: DriverDescription[] = [
       field('auto_approve_after', { type: 'number', label: 'تایید خودکار', unit: 'دقیقه', required: false, min: 0, max: 10080, default: 0 }),
     ],
   },
+  cubePayDriverRow(),
 ]
 
 function open() {
@@ -114,6 +116,47 @@ describe('adding a payment method', () => {
       auto_approve_after: '0',
       cards: [{ number: '6037997700001119', holder: 'امیر رضایی', bank: '', enabled: true, daily_cap: '' }],
     })
+  })
+
+  it('draws CubePay’s form — its token a secret, typed left to right — and sends it as a new method of that driver', async () => {
+    server().on('POST', '/api/admin/payment-methods', json({ method: cubePayMethodRow() } satisfies PaymentMethodResponse, 201))
+    const onCreated = open()
+
+    const card = await dialog().findByRole('button', { name: /CubePay/ })
+    expect(within(card).getByText('درگاه آنلاین')).toBeTruthy()
+    expect(within(card).getByText(/باید با https شروع شود/)).toBeTruthy()
+    fireEvent.click(card)
+    const token = dialog().getByLabelText('توکن API') as HTMLInputElement
+    expect([token.closest('[dir]')?.getAttribute('dir'), token.placeholder]).toEqual(['ltr', ''])
+    type('نام روش', 'پرداخت آنلاین')
+    type('توکن API', 'cp-test-token-1234')
+    fireEvent.click(dialog().getByRole('button', { name: 'افزودن روش' }))
+
+    await until(() => expect(onCreated).toHaveBeenCalledWith(cubePayMethodRow()))
+    expect(server().sent('POST', '/api/admin/payment-methods')[0]?.body).toEqual({
+      driver: 'cubepay',
+      label: 'پرداخت آنلاین',
+      enabled: true,
+      min_amount: '',
+      max_amount: '',
+      token: 'cp-test-token-1234',
+      clear_token: false,
+      fee_percent: '',
+      fee_fixed: '0',
+    })
+  })
+
+  it('says CubePay’s refusal of a missing token under the token', async () => {
+    const missing = 'توکن API را از ربات CubePay وارد کنید.'
+    server().on('POST', '/api/admin/payment-methods', refusal(422, missing, { token: [missing] }))
+    const onCreated = open()
+
+    fireEvent.click(await dialog().findByRole('button', { name: /CubePay/ }))
+    fireEvent.click(dialog().getByRole('button', { name: 'افزودن روش' }))
+
+    expect(await dialog().findByText(missing)).toBeTruthy()
+    expect(dialog().getByLabelText('توکن API').getAttribute('aria-invalid')).toBe('true')
+    expect(onCreated).not.toHaveBeenCalled()
   })
 
   it('says a refusal of a card under the cards, naming the card', async () => {

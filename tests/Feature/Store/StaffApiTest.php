@@ -14,9 +14,14 @@ use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Enums\OrderStatus;
+use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Enums\ConnectionFailure;
@@ -327,6 +332,44 @@ final class StaffApiTest extends HttpTestCase
         // The owner, who saw the transfer some other way, approves it by hand from their panel.
         $this->loginAsAdmin();
         self::assertSame(200, $this->postJson("/api/admin/payments/{$pending->id}/approve")->getStatusCode());
+    }
+
+    /**
+     * Asking an online payment's gateway is the daily work — no grant, no recent sign-in —: only the gateway's word moves
+     * the payment, as the customer's own question does.
+     */
+    public function testAnAdminAsksAnOnlinePaymentsGatewayAsTheDailyWork(): void
+    {
+        $this->config(['app.url' => 'https://shop.example']);
+        $cubePay = $this->cubePay();
+        $orders = $this->service(OrderService::class);
+        $payment = $this->service(Checkout::class)->pay($this->ali, $this->cubePayMethod(), OrderType::WalletTopUp, '10000', fn(?OrderKey $key): Order => $orders->openTopUp($this->ali, 10000, $key))->payment();
+        $this->loginAsStaff($this->website, $this->sara);
+        Carbon::setTestNow(now()->addSeconds(CustomerSessions::RECENT_SECONDS + 1));
+
+        $cubePay->pay((string) $payment->reference);
+        $response = $this->postJson($this->staffApi("/payments/{$payment->id}/check"));
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $answer = $this->decode($response);
+        self::assertSame(['paid', 'paid', null], [$answer['state'], $answer['payment']['status'], $answer['payment']['reviewer']], "settled on the gateway's word, under nobody's name");
+        self::assertSame($payment->refresh()->amount, $this->ali->balance());
+    }
+
+    /** An admin's ask whose answer does not fit the payment holds it for support, and says so — as the panels do. */
+    public function testAnAdminsAskThatHoldsAnOnlinePaymentSaysSo(): void
+    {
+        $this->config(['app.url' => 'https://shop.example']);
+        $cubePay = $this->cubePay();
+        $orders = $this->service(OrderService::class);
+        $payment = $this->service(Checkout::class)->pay($this->ali, $this->cubePayMethod(), OrderType::WalletTopUp, '10000', fn(?OrderKey $key): Order => $orders->openTopUp($this->ali, 10000, $key))->payment();
+        $this->loginAsStaff($this->website, $this->sara);
+        $order = $cubePay->onlyOrder();
+        $cubePay->orders[$order]['price'] -= 1000;
+        $cubePay->pay($order);
+
+        $this->assertRefusedUnder('status', PaymentService::NOTE_HELD . '.', $this->postJson($this->staffApi("/payments/{$payment->id}/check")));
+        self::assertSame([PaymentStatus::Pending, '0.00'], [$payment->refresh()->status, $this->ali->balance()]);
     }
 
     /** Still in review as it is approved: a receipt another admin rejects the moment this approval has read it stays rejected. */

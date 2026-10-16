@@ -16,6 +16,7 @@ use App\Modules\Payments\Exceptions\BuiltinMethodException;
 use App\Modules\Payments\Exceptions\MethodInUseException;
 use App\Modules\Payments\Exceptions\MethodUnavailableException;
 use App\Modules\Payments\GatewayRegistry;
+use App\Modules\Payments\MethodSettings;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
@@ -38,6 +39,7 @@ final class PaymentMethods
     public function __construct(
         private readonly GatewayRegistry $gateways,
         private readonly PaymentCards $cards,
+        private readonly MethodSettings $settings,
         private readonly ConnectionInterface $db,
     ) {}
 
@@ -305,8 +307,9 @@ final class PaymentMethods
         $toSupport = $manual !== [] && $this->cards->toSupport();
 
         return array_map(function (PaymentMethod $method) use ($cards, $toSupport): array {
-            $descriptor = $this->gateways->find($method->driver)?->describe();
-            $config = $method->config;
+            $driver = $this->gateways->find($method->driver);
+            $descriptor = $driver?->describe();
+            $config = $driver === null ? [] : $this->settings->read($driver, $method->config);
 
             return [
                 'id' => $method->id,
@@ -360,8 +363,9 @@ final class PaymentMethods
     }
 
     /**
-     * The label, the bounds, the settings as the driver's form checks them (a blank secret keeps the stored one) and the
-     * switch when sent; every refusal at once. A label or a bound left out keeps the stored one.
+     * The label, the bounds, the settings as the driver's form checks them (a blank secret keeps the stored one), its
+     * secrets encrypted to be kept (MethodSettings), and the switch when sent; every refusal at once. A label or a bound
+     * left out keeps the stored one.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
@@ -387,7 +391,7 @@ final class PaymentMethods
             $errors['max_amount'][] = 'بیشترین مبلغ نباید از کمترین مبلغ کمتر باشد.';
         }
 
-        $kept = $existing->config ?? [];
+        $kept = $this->settings->read($driver, $existing->config ?? []);
         try {
             $config = $driver->describe()->form->check($input, static fn(Field $field): mixed => $kept[$field->key] ?? null) + $kept;
         } catch (ValidationException $e) {
@@ -395,7 +399,7 @@ final class PaymentMethods
         }
         ValidationException::ifAny($errors);
 
-        return ['label' => $label, 'config' => $config, 'min_amount' => $min, 'max_amount' => $max] + ($switch === null ? [] : ['enabled' => Input::truthy($switch)]);
+        return ['label' => $label, 'config' => $this->settings->write($driver, $config), 'min_amount' => $min, 'max_amount' => $max] + ($switch === null ? [] : ['enabled' => Input::truthy($switch)]);
     }
 
     /**

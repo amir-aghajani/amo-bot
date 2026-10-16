@@ -25,10 +25,10 @@ webhooks. A poller still running when the webhooks are set is told Telegram now 
 
 ## The scheduler
 
-The shop's timed work — card receipts nobody reviewed, deliveries a dying process left, unpaid orders that expire,
-broadcasts, automatic renewals, the sync of every service with its panel, reminders, the removal of ended services and
-free tests, the report groups' queue and the housekeeping — runs in the scheduler, which the host's cron starts every
-minute in one of two ways:
+The shop's timed work — card receipts nobody reviewed, online payments to ask about, deliveries a dying process left,
+unpaid orders that expire, broadcasts, automatic renewals, the sync of every service with its panel, reminders, the
+removal of ended services and free tests, the report groups' queue and the housekeeping — runs in the scheduler, which
+the host's cron starts every minute in one of two ways:
 
 - **a cron job that runs `php bin/console schedule:run`** — cPanel › *Cron Jobs*, the line in
   [Installation](Installation.md#shared-hosting);
@@ -42,6 +42,7 @@ agents' bots. The dashboard's system card says when it last ran. What runs, and 
 | Every | Task |
 |---|---|
 | minute | card receipts nobody reviewed inside their method's window, accepted |
+| minute | the online gateways' payments not paid yet, asked about — a few each run, should a gateway's callback never come ([Payment methods](Payment-Methods.md#every-online-gateway)) |
 | minute | paid orders a process that died left undelivered, delivered (a failed delivery waits for support) |
 | minute | broadcasts, a batch at a time |
 | minute | «افزودن زمان و حجم» and «هدیه همگانی» no open screen is working on |
@@ -151,11 +152,13 @@ with the one-time link the main bot gives them ([Agency](Agency.md)).
 
 ## What keeps it safe
 
-PHP answers JSON — and the pictures it keeps, as their bytes — and nothing else, each answer with a sandboxing
-Content-Security-Policy, `nosniff`, no framing, and no caching but a picture's own few minutes; a failure's details are
-never a visitor's; a JSON body is read to 1 MiB and a picture to its own limit; uploads are judged by their bytes and
-written again; every sign-in is throttled and fails closed when the throttle cannot count; a fresh upload's installer
-asks for a key only the host's files hold; every file the app writes is its owner's alone where PHP runs as the account
-that owns the app ([file ownership](#file-ownership)); and secrets at rest (panel
-passwords, agents' bot tokens and webhook secrets, the websites' secrets) are encrypted with `APP_KEY`.
+PHP answers JSON — and the pictures it keeps, as their bytes, and one small page where an online gateway sends a
+customer back — and nothing else, each answer with a sandboxing Content-Security-Policy (the page one of its own that
+runs no script), `nosniff`, no framing, and no caching but a picture's own few minutes; a failure's details are never a
+visitor's; an online gateway's callback only makes the shop ask the gateway, never settles a payment by itself; a JSON
+body is read to 1 MiB and a picture to its own limit; uploads are judged by their bytes and written again; every
+sign-in is throttled and fails closed when the throttle cannot count; a fresh upload's installer asks for a key only
+the host's files hold; every file the app writes is its owner's alone where PHP runs as the account that owns the app
+([file ownership](#file-ownership)); and secrets at rest (panel passwords, agents' bot tokens and webhook secrets, the
+websites' secrets, the payment gateways' tokens and keys) are encrypted with `APP_KEY`.
 [Architecture](Architecture.md#failures-and-hardening) says more, and [Security](Security.md) how to report a weakness.

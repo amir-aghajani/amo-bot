@@ -17,9 +17,9 @@ use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
-use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Referrals\Models\ReferralAlert;
 use App\Modules\Referrals\Models\ReferralCommission;
@@ -53,10 +53,10 @@ use Psr\Log\LoggerInterface;
 /**
  * Queues what the shop tells its admins' report group (report_messages, sent by ReportSender): sales, renewals,
  * top-ups and wallet transfers, receipts and their verdicts, newcomers, agency requests and agents' selling suspended
- * or resumed, failed deliveries, panels down and up, servers' services moved, ticket conversations and reviews. Each
- * goes to the group of the bot it happened in (servers and the agency to the main bot's), only while a group is
- * connected and the admin wants the topic. Who of support did something is named as anyone but the owner reads it
- * (bySupport()). Nothing here talks to Telegram.
+ * or resumed, failed deliveries, online payments held for support, panels down and up, servers' services moved, ticket
+ * conversations and reviews. Each goes to the group of the bot it happened in (servers and the agency to the main
+ * bot's), only while a group is connected and the admin wants the topic. Who of support did something is named as
+ * anyone but the owner reads it (bySupport()). Nothing here talks to Telegram.
  *
  * A report is written in a savepoint of the caller's transaction, so it stands or falls with what it reports. Words
  * that cannot be composed are logged and dropped; a database error goes up to the caller. The wording is fixed here (the
@@ -234,6 +234,43 @@ final class ShopReports
                 'ref' => self::RECEIPT_REF . $payment->id,
             ];
         });
+    }
+
+    /**
+     * An online gateway took the money of a payment whose order had closed meanwhile (paid another way, cancelled, or
+     * expired): it went to the customer's wallet (Payments\Services\PaymentService::settleOnline()).
+     */
+    public function latePayment(Payment $payment): void
+    {
+        $this->report($payment->shop(), Topic::Wallet, static fn(): array => ['text' => implode("\n", [
+            sprintf('💳 <b>پرداخت آنلاین پس از بسته شدن سفارش</b> · پرداخت #%d', $payment->id),
+            '👤 ' . self::customer($payment->order->user),
+            sprintf('💰 %s · %s', Money::format($payment->amount), self::name($payment->method->label)),
+            sprintf('سفارش #%d پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت.', $payment->order_id),
+            '👛 موجودی: ' . Money::format($payment->order->user->balance()),
+        ])]);
+    }
+
+    /**
+     * An online payment held for support (Payments\Services\OnlinePayments): its gateway answered what does not fit it, or
+     * kept money on it unsettled too long. Who, for what, how much on which method, its id at the gateway (`$gatewayId`),
+     * why — its note, then what the gateway said (`$detail`, no secret in it) — and who of support asked, when it was
+     * their «استعلام از درگاه» (`$by`).
+     */
+    public function heldPayment(Payment $payment, string $gatewayId, string $detail, ?string $by): void
+    {
+        $this->report($payment->shop(), Topic::Errors, fn(): array => ['text' => implode("\n", [
+            sprintf('⚠️ <b>پرداخت آنلاین برای بررسی پشتیبانی نگه داشته شد</b> · پرداخت #%d', $payment->id),
+            '👤 ' . self::customer($payment->order->user),
+            self::purpose($payment->order),
+            sprintf('💳 مبلغ: %s · %s', Money::format($payment->amount), self::name($payment->method->label)),
+            '🔖 شناسه در درگاه: <code>' . self::field($gatewayId) . '</code>',
+            '❗️ علت: ' . self::field((string) $payment->note),
+            '🔎 پاسخ درگاه: ' . self::field($detail),
+            ...($by === null ? [] : [$this->bySupport($by, 'استعلام توسط پشتیبانی')]),
+            // Its order, still open, waits for support (Payments\Services\Checkout, PaymentService::expire()).
+            ...(OnlinePayments::awaitsSupport($payment) ? ['تا پشتیبانی آن را در پنل درگاه بررسی نکند، سفارشش پرداخت دیگری نمی‌گیرد و خودکار لغو نمی‌شود؛ در صفحه «پرداخت‌ها» پنل می‌شود آن را لغو کرد.'] : []),
+        ])]);
     }
 
     /** The receipt was accepted — by the admin, or by the timer when nobody looked inside the method's window. */
@@ -894,10 +931,10 @@ final class ShopReports
         return $order->subscription_id === null ? null : Subscription::query()->with(['plan', 'server'])->find($order->subscription_id);
     }
 
-    /** The payment that paid the order. */
+    /** The payment that paid the order — never one an online gateway took after it closed, which went to the wallet. */
     private static function paymentOf(Order $order): ?Payment
     {
-        return Payment::query()->where('order_id', $order->id)->where('status', PaymentStatus::Paid->value)->latest('id')->first();
+        return $order->load('payments')->paidBy();
     }
 
     private static function name(string $name): string

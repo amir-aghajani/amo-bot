@@ -120,6 +120,16 @@ export const NOT_DELIVERED: Record<Exclude<Delivery, 'told' | 'emailed'>, (who: 
   no_telegram: (who) => `این ${who} تلگرام ندارد، و ایمیلی هم برایش نرفت: ایمیلی ندارد، یا ارسال ایمیل راه نیفتاده است`,
 }
 
+/** Under a paid payment that went to the wallet (`to_wallet`): it came after its order had closed, and paid nothing of it. */
+export const TO_WALLET = 'به کیف پول مشتری رفت'
+
+/**
+ * Under an online payment held for support (`held`): its gateway took money on it that does not fit it, or kept money
+ * on it unsettled for 48 hours, so it is never asked about again and, while it waits, its order is paid no other way —
+ * support settles it with the customer at the gateway.
+ */
+export const HELD = 'نگه داشته شده برای پشتیبانی'
+
 export const PAYMENT_STATUS: Record<PaymentStatus, Status> = {
   pending: { label: 'در انتظار پرداخت', tone: 'warning' },
   awaiting_review: { label: 'در انتظار بررسی', tone: 'warning' },

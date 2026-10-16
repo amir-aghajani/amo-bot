@@ -456,9 +456,9 @@ A plan's own price list for extras, as a form sends it. Refusals are reported un
 
 ### GatewayKind
 
-How a gateway settles: `instant` (at once, like the wallet), or `manual` (once a person, or the method's automatic approval window, accepts the receipt of a card transfer).
+How a gateway settles: `instant` (at once, like the wallet), `manual` (once a person, or the method's automatic approval window, accepts the receipt of a card transfer), or `online` (the customer pays on the gateway's own page, and the shop asks the gateway what came of it).
 
-String: `instant`, `manual`.
+String: `instant`, `manual`, `online`.
 
 ### GiftCodeKind
 
@@ -546,6 +546,12 @@ A device limit a renewal queued after the current period: from when (the current
 | `from` | string (date-time) | yes |  |
 | `devices` | integer | yes | 0 for no limit. |
 
+### OnlineState
+
+What an online gateway said of a payment: `paid` (the money came in — the payment is paid, into its order or, the order closed, the wallet), `waiting` (nothing yet, and its page still takes money), `closed` (its page closed with nothing paid: the payment failed).
+
+String: `paid`, `waiting`, `closed`.
+
 ### OrderDiscountCode
 
 The discount code used for an order.
@@ -578,9 +584,11 @@ String or null.
 | `id` | integer | yes |  |
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
-| `gateway` | string | yes | Driver key ("manual", "wallet", or "outside": money support took outside the shop for an order it made). |
+| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made). |
 | `method` | string | yes | The payment method's label. A method with payments is never deleted. |
 | `paid_at` | string (date-time) or null | yes |  |
+| `to_wallet` | boolean | yes | Paid on its online gateway after the order had closed: its money went to the customer's wallet, and it paid nothing of the order (`PaymentRow.to_wallet`). |
+| `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit, or kept it unsettled (`PaymentRow.held`). |
 | `created_at` | string (date-time) | yes |  |
 
 ### OrderPricing
@@ -680,6 +688,13 @@ A paged list's position. A sorted list's meta also has its order (`sort`, `dir`)
 | `total` | integer | yes |  |
 | `last_page` | integer | yes |  |
 
+### PaymentCheckResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `payment` | [PaymentRow](#paymentrow) | yes |  |
+| `state` | [OnlineState](#onlinestate) | yes |  |
+
 ### PaymentResponse
 
 | Field | Type | Required | What it is |
@@ -695,12 +710,13 @@ A payment, as a row of the payments screen.
 | `id` | integer | yes |  |
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
-| `gateway` | string | yes | Driver key ("manual", "wallet", or "outside": money support took outside the shop for an order it made). |
+| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made). |
+| `gateway_label` | string or null | yes | The driver's name («کارت به کارت», «کیف پول», «CubePay»); null when the driver is no longer installed. |
 | `kind` | [GatewayKind](#gatewaykind) or null | yes | How the driver settles; null when the driver is no longer installed. |
 | `method` | string | yes | The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. |
-| `summary` | string or null | yes | What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); null for a method without one (the wallet). |
-| `reference` | string or null | yes | The gateway's own id for the payment (the wallet's ledger line); null when it has none (a card transfer). |
-| `description` | string or null | yes | The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), or a refund's note (also in `refund_note`). |
+| `summary` | string or null | yes | What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line (`PaymentMethodRow.summary`: an online gateway's fee passed on to customers, or its test mode); null when its method has none (the wallet, an online method with neither). |
+| `reference` | string or null | yes | The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id. Null when it has none (a card transfer, an online payment its gateway would not open). |
+| `description` | string or null | yes | The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, an online gateway's page closed unpaid — «مهلت پرداخت در درگاه تمام شد» —, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), a refund's note (also in `refund_note`), or on a payment `to_wallet` that its money went to the wallet. |
 | `user` | [UserRef](#userref) | yes |  |
 | `order` | object | yes |  |
 | `order.id` | integer | yes |  |
@@ -724,6 +740,10 @@ A payment, as a row of the payments screen.
 | `reviewer` | string or null | yes | Who decided it by hand: the agent's @bot, a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt; (in the report group or on the website), or the owner's login, which anyone but the owner sees as «پشتیبانی». |
 | `refund_note` | string or null | yes |  |
 | `paid_at` | string (date-time) or null | yes |  |
+| `link_expires_at` | string (date-time) or null | yes | An online payment's page on its gateway: until when it takes money — the gateway's own end, or the time the shop keeps its page when the gateway gives none. Null for any other payment, and for one its gateway would not open. |
+| `checked_at` | string (date-time) or null | yes | An online payment: when the shop last asked its gateway what came of it — its callback, the customer's question, «استعلام از درگاه» (`POST …/check`), or the scheduler every few minutes while it is open. Null until asked. |
+| `to_wallet` | boolean | yes | Paid after its order had closed (paid another way, cancelled or expired): the online gateway took the money when the order no longer waited for it, so it went to the customer's wallet («پرداخت آنلاین #12 پس از بسته شدن سفارش #7») and `description` says so. It paid nothing of the order: it is neither retried nor refunded here. |
+| `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) — or kept money on it unsettled for two days. `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. |
 | `created_at` | string (date-time) | yes |  |
 | `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.approve` | boolean | yes |  |
@@ -732,6 +752,7 @@ A payment, as a row of the payments screen.
 | `actions.remind` | boolean | yes |  |
 | `actions.retry` | boolean | yes |  |
 | `actions.refund` | boolean | yes |  |
+| `actions.check` | boolean | yes | Ask its online gateway what came of it (`POST …/check`): an online payment opened on its gateway and not paid — pending, its page closed, or cancelled. |
 
 ### PaymentSort
 

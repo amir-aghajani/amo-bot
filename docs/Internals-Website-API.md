@@ -126,6 +126,14 @@ website's shape and limits.
   links are rate-limited per customer, and a panel failure is told as its summary, never the owner's diagnosis.
 - **Receipts** (`CustomerReceipts`) are taken as the bot takes them, but an uploaded receipt never auto-approves: the
   account behind it may be an email made a minute ago.
+- **Online payments** (`CustomerOnlinePayments`): a checkout by an online gateway answers its page (`link`, read off
+  the payment by the gateway's `initiate()`, which calls nothing — so does an order's pending payment while its page
+  takes money, `OrderPresenter::link()`); `POST /payments/{id}/check` asks the gateway through
+  `Payments\Services\OnlinePayments::check()`, the one way any door asks, rate-limited per customer, and a gateway out
+  of reach is a 503 (`CheckoutRefusedException::unreachable()`) with its detail logged; a payment held for support and
+  still waiting — before, or by that very ask — is a 422 (`PaymentHeldException`), as a checkout of its order is, and
+  its order shows no `link` for it (`OrderPresenter::link()`); whatever its status, its `note` is the customer's words
+  for it, never the shop's words to support.
 - **Wallet transfers** («انتقال موجودی», `WalletController`, `CustomerWalletTransfers`) are the bot's
   `Users\Services\WalletTransfers`; the `POST` asks a recent sign-in (as a service handed away does) and an
   `Idempotency-Key`, answered by the transfer it made (`transferById()`), never a second

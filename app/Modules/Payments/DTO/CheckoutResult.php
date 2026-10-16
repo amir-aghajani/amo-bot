@@ -20,6 +20,7 @@ final class CheckoutResult
         private readonly ?Payment $payment = null,
         private readonly ?CardTransfer $card = null,
         private readonly ?Shortfall $shortfall = null,
+        private readonly ?PayLink $link = null,
     ) {}
 
     /** Paid at once: the order as it ended — fulfilled, or failed and waiting for support (refunded since, made again). */
@@ -32,6 +33,12 @@ final class CheckoutResult
     public static function transfer(Order $order, Payment $payment, CardTransfer $card): self
     {
         return new self(CheckoutOutcome::Transfer, $order, $payment, $card);
+    }
+
+    /** An online gateway's page to pay on, and the payment that waits for the gateway's word. */
+    public static function link(Order $order, Payment $payment, PayLink $link): self
+    {
+        return new self(CheckoutOutcome::Link, $order, $payment, link: $link);
     }
 
     /** Paid, and its delivery under way. */
@@ -70,7 +77,13 @@ final class CheckoutResult
         return $this->order ?? throw new \LogicException("A {$this->outcome->value} checkout carries no order.");
     }
 
-    /** The payment: a transfer's, which the receipt is for; the one the gateway refused. */
+    /** An online payment's page, the exact sum it asks and the card it may show. */
+    public function payLink(): PayLink
+    {
+        return $this->link ?? throw new \LogicException("A {$this->outcome->value} checkout carries no link.");
+    }
+
+    /** The payment: a transfer's, which the receipt is for; an online one's; the one the gateway refused. */
     public function payment(): Payment
     {
         return $this->payment ?? throw new \LogicException("A {$this->outcome->value} checkout carries no payment.");

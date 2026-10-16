@@ -11,7 +11,7 @@ import { api } from '@/lib/api'
 import type { PaymentResponse, PaymentsResponse, UserRow } from '@/lib/api-types'
 import { formatMoney, formatNumber, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { PAYMENT_STATUS } from '@/lib/statuses'
+import { HELD, PAYMENT_STATUS, TO_WALLET } from '@/lib/statuses'
 import { useNextRow } from '@/lib/use-next-row'
 import { useOpenRow } from '@/lib/use-open-row'
 
@@ -33,7 +33,7 @@ export function PaymentsCard({ customer }: { customer: UserRow }) {
         list={latest}
         noun="پرداخت‌ها"
         skeletonRows={2}
-        empty={<EmptyState compact icon={CreditCard} title="هنوز پرداختی نکرده است" description="پرداخت‌های این مشتری — کارت به کارت یا از کیف پول — این‌جا می‌آیند." />}
+        empty={<EmptyState compact icon={CreditCard} title="هنوز پرداختی نکرده است" description="پرداخت‌های این مشتری — کارت به کارت، آنلاین یا از کیف پول — این‌جا می‌آیند." />}
       >
         <Table>
           <TableHeader>
@@ -61,7 +61,11 @@ export function PaymentsCard({ customer }: { customer: UserRow }) {
                 </TableCell>
                 <TableCell className="whitespace-nowrap tabular">{formatMoney(payment.amount)}</TableCell>
                 <TableCell>
-                  <StatusBadge status={PAYMENT_STATUS[payment.status]} />
+                  {/* The spaces between the lines keep them words apart for assistive tech, not one. */}
+                  <div className="grid justify-items-start gap-0.5">
+                    <StatusBadge status={PAYMENT_STATUS[payment.status]} /> {payment.to_wallet && <span className="text-caption text-warning">{TO_WALLET}</span>}{' '}
+                    {payment.held && <span className="text-caption text-warning">{HELD}</span>}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">{timeAgo(payment.created_at)}</TableCell>
               </TableRow>

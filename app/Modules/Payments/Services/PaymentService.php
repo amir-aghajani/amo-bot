@@ -14,11 +14,14 @@ use App\Modules\Orders\Exceptions\OrderNotPayableException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Contracts\GatewayInterface;
+use App\Modules\Payments\Contracts\OnlineGateway;
 use App\Modules\Payments\DTO\PaymentInitiation;
 use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Enums\CancelOutcome;
 use App\Modules\Payments\Enums\GatewayKind;
+use App\Modules\Payments\Enums\OnlineSettlement;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Exceptions\MethodUnavailableException;
 use App\Modules\Payments\Exceptions\PaymentSettledException;
 use App\Modules\Payments\Exceptions\RefundRefusedException;
@@ -34,6 +37,7 @@ use App\Modules\Users\Services\CustomerPictures;
 use App\Modules\Users\Services\WalletService;
 use App\Support\Money;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -53,6 +57,27 @@ final class PaymentService
     /** The note on the order's other open payments once it was paid another way (a refused receipt keeps its own reason). */
     public const NOTE_PAID_OTHERWISE = 'سفارش با روش دیگری پرداخت شد';
 
+    /** The note on an online payment whose page closed with nothing paid (OnlinePayments). */
+    public const NOTE_LINK_CLOSED = 'مهلت پرداخت در درگاه تمام شد';
+
+    /** The note on an online payment the gateway took after its order had closed: its money went to the wallet. */
+    public const NOTE_TO_WALLET = 'سفارش پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت';
+
+    /** The note on an online payment held for support: its gateway answered what does not fit it (OnlinePayments). */
+    public const NOTE_HELD = 'درگاه این پرداخت را با سفارش یا مبلغ دیگری تایید کرد؛ پشتیبانی باید آن را در درگاه بررسی کند';
+
+    /**
+     * The note on one held for support since its gateway kept money on it unsettled two days (Tasks\OnlinePaymentsTask::
+     * REVIEW_HOURS) after its page closed.
+     */
+    public const NOTE_UNSETTLED = 'درگاه پولی را که برای این پرداخت رسیده بود دو روز پس از بسته شدن صفحه هم تسویه نکرد؛ پشتیبانی باید آن را در درگاه بررسی کند';
+
+    /**
+     * Minutes an online payment's page must still take money for a checkout to show it again; one closing sooner is left
+     * to the gateway's word and a new payment is opened.
+     */
+    public const LINK_SPARE_MINUTES = 3;
+
     /** The longest words a receipt keeps (`receipt_note`): a caption in the bot is cut to it, a website's note held to it. */
     public const RECEIPT_NOTE_MAX = 1024;
 
@@ -69,6 +94,7 @@ final class PaymentService
         private readonly ShopReports $reports,
         private readonly Receipts $receipts,
         private readonly Cashback $cashback,
+        private readonly OnlineInvoices $invoices,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
     ) {}
@@ -78,7 +104,8 @@ final class PaymentService
      * made, charged and the order paid in one transaction, then delivered — losing the order to another payment at that
      * moment leaves nothing behind. A card transfer waits for its receipt: the order's open payment with that method is
      * reused — with the card it was shown —, else a new one is made with a card picked for it (PaymentCards::pick()), or
-     * none while the shop takes card payments in support's private chat (openPayment()).
+     * none while the shop takes card payments in support's private chat (openPayment()). An online gateway's payment is
+     * opened on the gateway and waits for its word (payOnline()); one it would not open fails, the order left open.
      *
      * @return array{payment: Payment, initiation: PaymentInitiation}
      * @throws OrderNotPayableException the order is not open any more, or is for a service handed to another customer
@@ -100,9 +127,14 @@ final class PaymentService
             throw MethodUnavailableException::outOfBounds($method);
         }
         $gateway = $this->gateways->forMethod($method);
+        $kind = $this->gateways->kind($method->driver);
 
-        // Anything but an instant gateway waits for the customer: a card transfer for its receipt.
-        if ($this->gateways->kind($method->driver) !== GatewayKind::Instant) {
+        // An online gateway's page: the payment opened on the gateway once, outside any transaction.
+        if ($kind === GatewayKind::Online && $gateway instanceof OnlineGateway) {
+            return $this->payOnline($order, $method, $gateway);
+        }
+        // Anything else but an instant gateway waits for the customer: a card transfer for its receipt.
+        if ($kind !== GatewayKind::Instant) {
             $payment = $this->openPayment($order, $method);
 
             return ['payment' => $payment, 'initiation' => $gateway->initiate($payment)];
@@ -124,6 +156,63 @@ final class PaymentService
         }
 
         return ['payment' => $payment->refresh(), 'initiation' => $gateway->initiate($payment)];
+    }
+
+    /**
+     * Settles a payment its online gateway said was paid (OnlinePayments asked it), in one transaction under a lock on
+     * the order: an open order is paid by it as a receipt's approval pays it (settle()), and delivered after the commit;
+     * an order closed meanwhile — paid another way, cancelled, expired — leaves the money the customer's: the payment is
+     * paid with NOTE_TO_WALLET and its amount goes to their wallet, the report group told. A payment the shop had given
+     * up on (its page closed, failed; cancelled with its order) is settled all the same: the gateway took the money.
+     * `$reference` is the gateway's latest id of it, if it gave one.
+     */
+    public function settleOnline(Payment $payment, ?string $reference): OnlineSettlement
+    {
+        $gateway = $this->gateways->forPayment($payment);
+        $from = [PaymentStatus::Pending, PaymentStatus::Failed, PaymentStatus::Cancelled];
+        if ($reference !== null) {
+            // What the gateway's settle() writes as the payment's reference (Contracts\OnlineGateway).
+            $payment->reference = $reference;
+        }
+
+        try {
+            $outcome = $this->db->transaction(function () use ($payment, $gateway, $from): OnlineSettlement {
+                $orderStatus = Order::query()->whereKey($payment->order_id)->lockForUpdate()->value('status');
+                // Held for support in the meantime: what any gateway says of it from then on is support's to weigh.
+                if (Payment::query()->whereKey($payment->id)->whereNotNull('invoice->held')->exists()) {
+                    throw new PaymentSettledException($payment);
+                }
+                if ($orderStatus === OrderStatus::Pending) {
+                    $this->settle($payment, $gateway, null, $from);
+
+                    return OnlineSettlement::Settled;
+                }
+                // Marked in its invoice — not by its note's words — as having paid nothing of the order (Payment::wentToWallet()).
+                $marked = ['to_wallet' => true] + ($payment->invoice ?? []);
+                if (!Transitions::move($payment, 'status', $from, PaymentStatus::Paid, ['reference' => $payment->reference, 'note' => self::NOTE_TO_WALLET, 'invoice' => $marked, 'paid_at' => now()])) {
+                    throw new PaymentSettledException($payment);
+                }
+                $this->wallet->credit($payment->order->user, $payment->amount, WalletService::describeLatePayment($payment));
+                $this->reports->latePayment($payment);
+
+                return OnlineSettlement::Credited;
+            }, Ledger::ATTEMPTS);
+        } catch (PaymentSettledException) {
+            $payment->refresh();
+
+            return OnlineSettlement::Decided;
+        }
+        if ($outcome === OnlineSettlement::Settled) {
+            $this->settled($payment);
+        }
+
+        return $outcome;
+    }
+
+    /** An online payment whose page closed with nothing paid: pending → failed (NOTE_LINK_CLOSED). True when this call moved it. */
+    public function closeOnline(Payment $payment): bool
+    {
+        return Transitions::move($payment, 'status', [PaymentStatus::Pending], PaymentStatus::Failed, ['note' => self::NOTE_LINK_CLOSED]);
     }
 
     /**
@@ -252,7 +341,9 @@ final class PaymentService
     /**
      * Cancels, quietly, an order the customer walked away from — it and its payments untouched since `$idleSince` — with
      * its unpaid payments (ExpireOrdersTask; a service's previous owner at once, ServiceTransfers); never while money of it
-     * may be with support (Payment::isWithSupport(): a receipt in review, a card transfer taken in support's private chat).
+     * may be with support (Payment::isWithSupport(): a receipt in review, a card transfer taken in support's private chat,
+     * an online payment held for support and still waiting), nor while an online gateway's page of it still takes money
+     * (Payment::hasOpenPage()).
      * Under locks on the order and its payments, so a receipt arriving at the same moment either comes first or finds it
      * cancelled. Uploaded receipts of those payments are deleted after the commit. `$note` says why (an expired code hold,
      * unpaid in time, the service handed on). True when this call cancelled it.
@@ -267,6 +358,7 @@ final class PaymentService
             }
             $payments = $row->payments()->with('method')->lockForUpdate()->get();
             $kept = $payments->contains(static fn(Payment $payment): bool => $payment->isWithSupport()
+                || $payment->hasOpenPage()
                 || ($payment->status->isOpen() && $payment->updated_at > $idleSince));
             if ($kept) {
                 return false;
@@ -400,6 +492,67 @@ final class PaymentService
             }
 
             return $this->newPayment($order, $method, $card, $this->cards->amountFor($method, $card, $order->type, $order->amount));
+        });
+    }
+
+    /**
+     * An online payment of the order (openOnline()), opened on the gateway unless it was already (OnlineInvoices::open()),
+     * and its page. A gateway that would not open it fails the payment with the customer's word for it — unless another
+     * tap opened it in the same moment —, the order left open: the checkout says it was refused.
+     *
+     * @return array{payment: Payment, initiation: PaymentInitiation}
+     * @throws OrderNotPayableException the order is not open any more; nothing was written
+     */
+    private function payOnline(Order $order, PaymentMethod $method, OnlineGateway $gateway): array
+    {
+        $payment = $this->openOnline($order, $method);
+        if ($payment->link === null) {
+            try {
+                $this->invoices->open($payment, $gateway);
+            } catch (GatewayUnavailableException $e) {
+                $payment->refresh();
+                if ($payment->link === null) {
+                    Transitions::move($payment, 'status', [PaymentStatus::Pending], PaymentStatus::Failed, ['note' => $e->getMessage()]);
+
+                    return ['payment' => $payment, 'initiation' => PaymentInitiation::instant()];
+                }
+            }
+        }
+
+        return ['payment' => $payment, 'initiation' => $gateway->initiate($payment)];
+    }
+
+    /**
+     * The order's online payment with that method whose page takes money a while yet (LINK_SPARE_MINUTES) — or is being
+     * opened right now —, touched; else a new one. Under a lock on the order: two taps make one payment (and its page one,
+     * OnlineInvoices::open()). One whose page closes sooner stays as it is, for the gateway to say what came of it
+     * (OnlinePayments), and the customer gets a new one; one held for support is never shown again.
+     *
+     * @throws OrderNotPayableException
+     */
+    private function openOnline(Order $order, PaymentMethod $method): Payment
+    {
+        return $this->db->transaction(function () use ($order, $method): Payment {
+            if (Order::query()->whereKey($order->id)->lockForUpdate()->value('status') !== OrderStatus::Pending) {
+                throw new OrderNotPayableException($order);
+            }
+
+            $open = $order->payments()
+                ->where('payment_method_id', $method->id)
+                ->where('status', PaymentStatus::Pending->value)
+                ->whereNull('invoice->held')
+                ->where(static fn(Builder $page) => $page
+                    ->whereNull('link')
+                    ->orWhere('link_expires_at', '>', now()->addMinutes(self::LINK_SPARE_MINUTES)))
+                ->latest('id')
+                ->first();
+            if ($open !== null) {
+                $open->touch();
+
+                return $open;
+            }
+
+            return $this->newPayment($order, $method);
         });
     }
 

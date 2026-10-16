@@ -6,9 +6,10 @@ renewal («تمدید»), extra traffic, time or devices for a service they have
 shop, an agent's traffic («خرید حجم نمایندگی») —, and a **payment** one attempt to pay it, by one method.
 
 Nothing is ordered until the customer picks a way to pay. The wallet pays at once and the order is delivered there and
-then; a card transfer waits for its receipt and your review. An order and its payments move on once, however many
-people press at the same moment — two tabs, the report group, the timer —, and only the decision that stood tells the
-customer.
+then; a card transfer waits for its receipt and your review; an online gateway's payment
+([Payment methods](Payment-Methods.md#every-online-gateway)) is paid on the gateway's page and settles on the gateway's
+word alone. An order and its payments move on once, however many people press at the same moment — two tabs, the
+report group, the timer —, and only the decision that stood tells the customer.
 
 | Order status | Means |
 |---|---|
@@ -20,8 +21,9 @@ customer.
 | «لغوشده» | Cancelled — by you, or unpaid for 48 hours |
 | «بازپرداخت‌شده» | Refunded |
 
-A payment is «در انتظار پرداخت» (no receipt yet), «در انتظار بررسی» (its receipt waits for you), «پرداخت‌شده», «ناموفق»
-(its receipt was rejected, or the wallet refused it), «لغوشده» or «بازپرداخت‌شده».
+A payment is «در انتظار پرداخت» (no receipt yet — an online one: not paid on its page yet), «در انتظار بررسی» (its
+receipt waits for you), «پرداخت‌شده», «ناموفق» (its receipt was rejected, the wallet refused it, or an online gateway's
+page closed unpaid or would not open), «لغوشده» or «بازپرداخت‌شده».
 
 ## Payments
 
@@ -33,8 +35,12 @@ of the payments on screen were paid and their sum.
 
 **A payment's dialog** — «بررسی» on a receipt waiting, «جزئیات» on the rest — shows the receipt («نمایش در اندازه کامل»,
 «دانلود رسید» for one the browser cannot draw) and its facts: the customer, what it pays for, its order (a link), the
-method and card, the customer's caption, when it was started, sent and paid, who decided and why. Then what may be done
-with it now:
+method and card, the customer's caption, when it was started, sent and paid, who decided and why. An online payment has
+no receipt; it shows its gateway («درگاه CubePay», «درگاه زرین‌پال», «درگاه اطلس‌پی», «درگاه آبان گیت وی» under the
+method), its id there («شناسه در درگاه»: a CubePay card payment's authority, Zarinpal's authority and then its bank
+reference once paid, AtlasPay's tracking code, AbanGateway's invoice id), until when its page takes money while it
+waits («مهلت پرداخت در درگاه») and when the gateway was last asked («آخرین استعلام») — and, [held for
+support](#a-payment-held-for-support), that it is and why. Then what may be done with it now:
 
 | Operation | Offered | What it does |
 |---|---|---|
@@ -42,8 +48,13 @@ with it now:
 | «رد کردن» | A receipt waiting for review | Asks for a reason the customer reads («دلیل رد کردن»). The payment fails; the order stays open for them to pay again |
 | «لغو پرداخت» | Any payment not paid | Asks for an optional note. Cancels this payment, and — while nothing else paid it — its order with every other attempt to pay it; the customer is told when it cancelled the order. **But while another payment of the order has a receipt waiting for review**, this payment is cancelled alone: that receipt may be the money, so the order and the receipt stay for you to decide, and the customer is told nothing |
 | «یادآوری به مشتری» | A card payment waiting for its receipt, or rejected, its order open | At one press: a reminder with «ارسال رسید» and «پرداخت دوباره» (a rejected one, «پرداخت دوباره» alone; one taken in [support's private chat](Bot-Settings.md#card-to-card-payments) — shown no card —, the way there instead of «ارسال رسید»). Nothing changes; the toast says whether it reached them |
+| «استعلام از درگاه» | An online payment opened on its gateway and not paid — waiting, its page closed, or cancelled (the gateway may still take money on it) —, never one [held for support](#a-payment-held-for-support) | At one press: asks the gateway what came of it, as its callback, the customer's «🔄 بررسی پرداخت» and the scheduler do. Paid, it settles as an approval does — the order delivered, the customer told once —, or, its order closed meanwhile, [into the wallet](#money-that-came-after-its-order-closed); still waiting, nothing changes; its page closed unpaid, it fails («مهلت پرداخت در درگاه تمام شد»). The toast says which. An answer that does not fit the payment holds it, and a gateway that cannot be asked changes nothing: the dialog says so above its operations («درگاه این پرداخت را با سفارش یا مبلغ دیگری تایید کرد؛ …», «درگاه پرداخت الان جواب نمی‌دهد و چیزی تغییر نکرد؛ …»), and the log says why |
 | «تلاش دوباره برای تحویل» | A paid payment whose order's delivery failed, or stalled for ten minutes | At one press: the delivery again ([Orders](#orders)) |
-| «بازپرداخت به کیف پول» («بازپرداخت شارژ» for a top-up) | A paid payment whose order is not being delivered right now | Asks first, with an optional note: [refunds](#refunds) |
+| «بازپرداخت به کیف پول» («بازپرداخت شارژ» for a top-up) | A paid payment whose order is not being delivered right now — never one [gone to the wallet](#money-that-came-after-its-order-closed) | Asks first, with an optional note: [refunds](#refunds) |
+
+An online payment is never approved, rejected or reminded by hand: it has no receipt, and only its gateway's word
+settles it. «لغو پرداخت» drops one still waiting with its order, as it drops any; should the customer pay its page after
+all, the money goes to their wallet.
 
 An approval whose delivery failed says why — the panel's words — and stays open, its retry in reach; the order waits under
 «سفارش‌ها» › «نیازمند رسیدگی». A note is 300 characters at most — a refund's 190, since it is the line the customer reads in
@@ -69,9 +80,10 @@ the review window. Anyone but you reads your login as «پشتیبانی».
 Receipts are also decided from the report group's «رسیدها», by the bot's admins: «✅ تایید» and «❌ رد» — with or without a
 reason — do what this dialog does ([Report group](Telegram-Group.md)). The bot's admins may work this screen from the
 shop's website too, while it lets them in ([Website](Website.md#the-shops-admins)) — there they approve only a payment
-whose receipt waits for review, and refund only when the website grants it. **An admin never approves or refunds their
-own payment**, in the group or on the website: another admin, or you, does. A card's review window approves a receipt
-sent in the bot that nobody decided in time ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)).
+whose receipt waits for review, and refund only when the website grants it; they ask an online payment's gateway as you
+do. **An admin never approves or refunds their own payment**, in the group or on the website: another admin, or you,
+does. A card's review window approves a receipt sent in the bot that nobody decided in time
+([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)).
 
 ### Receipts
 
@@ -98,6 +110,34 @@ uploaded from the website is deleted too (one sent in the bot stays Telegram's),
 for each hundred, the most one request rejects — how many, and who. A receipt decided by someone else meanwhile is skipped; the toast says how many were
 rejected and how many were not. The shop's website admins may do it only while the website grants «رد یکجای رسیدها»
 ([Website](Website.md#the-shops-admins)).
+
+### Money that came after its order closed
+
+A customer may pay an online gateway's page after its order was paid another way, cancelled or expired — or the gateway
+may take money on a page shortly after it closed. That money is theirs: the payment is «پرداخت‌شده» with «به کیف پول
+مشتری رفت» under it (in the list, on the customer's page and among its order's payments), its dialog's «کیف پول» says
+«سفارش پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت», and its amount is in their wallet as «پرداخت
+آنلاین #12 پس از بسته شدن سفارش #7». The customer and the report group's «شارژ کیف پول» are told. It paid nothing of the
+order — a cancelled order stays unpaid —, so it is neither delivered again nor refunded here: a refund would give the
+money twice; to give it back, take it out of their wallet ([Customers](Customers.md)).
+
+### A payment held for support
+
+An online payment the shop would not settle on its gateway's word — confirmed for another order or amount, an
+underpayment AtlasPay accepted, or money the gateway kept unsettled on it for 48 hours
+([Payment methods](Payment-Methods.md#a-payment-held-for-you)) — is held for you. It keeps its state — «در انتظار
+پرداخت», as a rule —, marked «نگه داشته شده برای پشتیبانی» in the list, on the customer's page and among its order's
+payments; its dialog's «بررسی پشتیبانی» says why («درگاه این پرداخت را با سفارش یا مبلغ دیگری تایید کرد؛ …», or «درگاه
+پولی را که برای این پرداخت رسیده بود دو روز پس از بسته شدن صفحه هم تسویه نکرد؛ …»), and the report group's «خطاها»
+heard of it once. Nothing asks its gateway about it any more — «استعلام از درگاه» is not offered. While it still waits
+— pending, or failed with its page —, its order does not expire and the customer cannot pay it another way: they are
+told to message support.
+
+Look at the payment at its gateway (its «شناسه در درگاه»), settle it with the customer — what they paid, what they are
+owed —, then «لغو پرداخت»: it is the one operation a held payment offers, and it cancels the order with it unless
+something else paid it. Cancelled, it holds nothing more: the customer's check answers as for any closed page. Give the
+customer what is theirs by hand: an order you make for them ([below](#orders-support-makes)), or their wallet
+([Customers](Customers.md)).
 
 ## Orders
 
@@ -242,12 +282,20 @@ A referrer's commission stays paid.
   cancelled within ten minutes after (an order made with a discount code sooner —
   [Discounts](Discounts.md#uses-and-giving-them-back)): quietly, its rows kept, a rejected receipt's reason kept, the
   receipts uploaded for it on the website deleted. **An order whose receipt is with you never expires** — nor one whose
-  card payment went to support's private chat ([Bot settings](Bot-Settings.md#card-to-card-payments)).
+  card payment went to support's private chat ([Bot settings](Bot-Settings.md#card-to-card-payments)), one whose
+  online gateway's page still takes money, or one whose online payment is [held for you](#a-payment-held-for-support)
+  and still waits.
 - **Receipts approved by themselves** — a card's review window ([Payment methods](Payment-Methods.md)).
+- **Online payments asked about** — every payment on an online gateway (CubePay, Zarinpal, AtlasPay, AbanGateway) not
+  paid yet — failed with its page or cancelled with its order too — is asked about every few minutes while its page is
+  open and every quarter of an hour for two hours after, should its callback never come; one still waiting then is
+  given up on — unless its gateway said money came in on it, which is asked about until 48 hours after its page closed,
+  then held for you. A held payment is asked about no more
+  ([Payment methods](Payment-Methods.md#every-online-gateway)).
 
 ## Watch out for
 
-- **«تایید», «یادآوری» and «تلاش دوباره» run at one press**: no second look.
+- **«تایید», «یادآوری», «استعلام از درگاه» and «تلاش دوباره» run at one press**: no second look.
 - **Cancelling a payment of an unpaid order cancels the order** — and every other attempt to pay it —, unless another of
   its payments may be the money — a receipt waiting for review, or a card payment that went to support's private chat —:
   then that payment alone goes, and the other is still yours to approve or cancel. «لغو سفارش» drops everything,

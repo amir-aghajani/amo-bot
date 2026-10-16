@@ -6,7 +6,7 @@ import { Dash, ListView, RowTitleButton } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { AddMethodModal } from '@/components/payments/add-method-modal'
-import { gatewayIcon, MethodNote } from '@/components/payments/gateways'
+import { gatewayIcon, hasNote, MethodNote } from '@/components/payments/gateways'
 import { MethodForm } from '@/components/payments/gateways/method-form'
 import { kindLabel } from '@/components/payments/kinds'
 import { boundsLine, CardLines, MethodSummary } from '@/components/payments/method-summary'
@@ -79,7 +79,7 @@ export function PaymentMethodsPage() {
                 method.kind === null ? (
                   <span className="text-warning">به مشتری پیشنهاد نمی‌شود؛ درایورش نصب نیست.</span>
                 ) : (
-                  (method.summary || manual || bounds) && (
+                  (method.summary || manual || bounds || hasNote(method)) && (
                     <span className="grid gap-0.5">
                       {method.summary && <MethodSummary summary={method.summary} />}
                       {manual && <CardLines cards={manual.cards} toSupport={manual.to_support} />}
@@ -126,9 +126,7 @@ export function PaymentMethodsPage() {
         </Table>
       </ListView>
 
-      <p className="text-footnote text-muted-foreground">
-        کیف پول همیشه هست و حذف نمی‌شود؛ فقط نامش، کمترین و بیشترین مبلغش و روشن و خاموش بودنش عوض می‌شود. درگاه‌های آنلاین و پرداخت رمزارزی در نسخه‌های بعدی اضافه می‌شوند.
-      </p>
+      <p className="text-footnote text-muted-foreground">کیف پول همیشه هست و حذف نمی‌شود؛ فقط نامش، کمترین و بیشترین مبلغش و روشن و خاموش بودنش عوض می‌شود.</p>
 
       <AddMethodModal
         open={adding}

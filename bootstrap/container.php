@@ -52,10 +52,15 @@ use App\Modules\Catalog\Services\CustomServiceSettings;
 use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Installer\Services\InstallKey;
 use App\Modules\Payments\Contracts\RefundedOrders;
+use App\Modules\Payments\Drivers\Aban\AbanDriver;
+use App\Modules\Payments\Drivers\AtlasPay\AtlasPayDriver;
+use App\Modules\Payments\Drivers\CubePay\CubePayDriver;
 use App\Modules\Payments\Drivers\Manual\ManualDriver;
 use App\Modules\Payments\Drivers\Outside\OutsideDriver;
 use App\Modules\Payments\Drivers\Wallet\WalletDriver;
+use App\Modules\Payments\Drivers\Zarinpal\ZarinpalDriver;
 use App\Modules\Payments\GatewayRegistry;
+use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Payments\Services\PaymentSettings;
 use App\Modules\Providers\Drivers\PasarGuard\PasarGuardDriver;
 use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
@@ -191,6 +196,9 @@ return [
     'throttle.path' => factory(fn(Application $app) => $app->storagePath('cache/throttle')),
     RateLimiter::class => autowire()->constructorParameter('directory', get('throttle.path')),
     // What another service hands over and would hand over again unchanged — a picture Telegram keeps — kept a short while.
+    // The turns asks about an online payment take (Payments\Services\OnlinePayments), a lock file each.
+    'payments.turns' => factory(fn(Application $app) => $app->storagePath('cache/payment-turns')),
+    OnlinePayments::class => autowire()->constructorParameter('turns', get('payments.turns')),
     'files.cache' => factory(fn(Application $app) => $app->storagePath('cache/files')),
     FileCache::class => autowire()->constructorParameter('directory', get('files.cache')),
     // The OpenID providers' signing keys a website's sign-in is checked with, kept a while rather than read every time.
@@ -269,7 +277,7 @@ return [
     }),
 
     // The ways the shop takes money, by what payment_methods.driver holds (Payments\Drivers).
-    'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(OutsideDriver::class), $c->get(ManualDriver::class)])),
+    'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(OutsideDriver::class), $c->get(ManualDriver::class), $c->get(CubePayDriver::class), $c->get(ZarinpalDriver::class), $c->get(AtlasPayDriver::class), $c->get(AbanDriver::class)])),
     GatewayRegistry::class => autowire()->constructorParameter('drivers', get('payment.drivers')),
     // The pictures the shop is sent, each kind in a folder of its own (Users\Enums\PictureFolder): the receipts customers
     // upload from the shops' websites, the support tickets' — one sent in the bot stays Telegram's file.

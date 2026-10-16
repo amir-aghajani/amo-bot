@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
+use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
+use App\Core\Http\Json;
 use App\Modules\Auth\Principal;
+use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentDirectory;
@@ -15,19 +18,25 @@ use App\Modules\Payments\Services\Receipts;
 use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
+use Psr\Log\LoggerInterface;
 
 /**
  * The payments screen: the list, a receipt's picture, and the modal's operations — approve, reject, cancel, remind, retry
- * the delivery, refund — each PaymentActions', which tells the customer. An operation answers the payment's row as it
- * stands after it. The list's selection dismisses receipts waiting for review in bulk (ReceiptDismissals).
+ * the delivery, refund, and ask an online payment's gateway — each PaymentActions', which tells the customer. An
+ * operation answers the payment's row as it stands after it. The list's selection dismisses receipts waiting for review
+ * in bulk (ReceiptDismissals).
  */
 final class PaymentsController extends ApiController
 {
+    /** What the admin reads while an online payment's gateway cannot be asked (its reason is the log's). */
+    public const GATEWAY_DOWN = 'درگاه پرداخت الان جواب نمی‌دهد و چیزی تغییر نکرد؛ کمی بعد دوباره استعلام کنید.';
+
     public function __construct(
         private readonly PaymentDirectory $payments,
         private readonly PaymentActions $actions,
         private readonly Receipts $receipts,
         private readonly ReceiptDismissals $dismissals,
+        private readonly LoggerInterface $logger,
     ) {}
 
     /** GET /payments?search=&status=&user=&from=&to=&sort=&dir=&page= */
@@ -118,6 +127,32 @@ final class PaymentsController extends ApiController
         $delivery = $this->actions->remind($payment);
 
         return $this->json($response, ['payment' => $this->payments->present($payment->load(PaymentDirectory::RELATIONS)), 'delivery' => $delivery->value]);
+    }
+
+    /**
+     * POST /payments/{id}/check — ask an online payment's gateway what came of it, acting on its word (PaymentActions::
+     * check()); `state` says what it said. A 503 in the admin's words while the gateway cannot be asked: the log says why.
+     * An answer that does not fit the payment holds it for support: a 422 on `status`, as every ask of it from then on.
+     *
+     * @param array<string, string> $args
+     * @throws ValidationException 422 on `status`: not to be asked, or held for support by this ask
+     */
+    public function check(Request $request, Response $response, array $args): Response
+    {
+        $payment = $this->find($args);
+        try {
+            $state = $this->actions->check($payment, Principal::of($request)->actor());
+        } catch (GatewayUnavailableException $e) {
+            if ($e->held) {
+                // Held by this very ask, not "nothing changed": the gateway's answer did not fit it (OnlinePayments logs it).
+                throw ValidationException::on('status', $this->actions->refusal($payment->refresh(), 'check'));
+            }
+            $this->logger->warning('Payment {id}\'s gateway could not be asked from a panel: {detail}', ['id' => $payment->id, 'detail' => $e->detail]);
+
+            return Json::error($response, self::GATEWAY_DOWN, 503);
+        }
+
+        return $this->json($response, ['payment' => $this->payments->present($payment->refresh()->load(PaymentDirectory::RELATIONS)), 'state' => $state->value]);
     }
 
     /**

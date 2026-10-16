@@ -28,6 +28,8 @@ final class WalletService
     public const LESS_CASHBACK = ' (منهای کش‌بک)';
     public const LINE_TOP_UP_REFUND = 'برگشت شارژ کیف پول (پرداخت #%d)';
     public const LINE_REFERRAL = 'پورسانت زیرمجموعه (پرداخت #%d)';
+    /** Money an online gateway took for an order that had closed meanwhile: it is the customer's (OnlinePayments). */
+    public const LINE_LATE_PAYMENT = 'پرداخت آنلاین #%d پس از بسته شدن سفارش #%d';
     /** A manual credit or debit the admin wrote no note for. */
     public const LINE_CREDIT_BY_SUPPORT = 'افزایش موجودی توسط پشتیبانی';
     public const LINE_DEBIT_BY_SUPPORT = 'کاهش موجودی توسط پشتیبانی';
@@ -98,6 +100,12 @@ final class WalletService
     public static function describeTopUpRefund(Payment $payment, ?string $note): string
     {
         return sprintf(self::LINE_TOP_UP_REFUND, $payment->id) . self::noted($note);
+    }
+
+    /** The line of an online payment that came in after its order closed: «پرداخت آنلاین #12 پس از بسته شدن سفارش #7». */
+    public static function describeLatePayment(Payment $payment): string
+    {
+        return sprintf(self::LINE_LATE_PAYMENT, $payment->id, $payment->order_id);
     }
 
     private static function noted(?string $note): string

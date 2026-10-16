@@ -15,13 +15,18 @@ use App\Core\Forms\Form;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Payments\Contracts\GatewayDriver;
 use App\Modules\Payments\Contracts\GatewayInterface;
+use App\Modules\Payments\Drivers\Aban\AbanGateway;
+use App\Modules\Payments\Drivers\AtlasPay\AtlasPayGateway;
+use App\Modules\Payments\Drivers\CubePay\CubePayGateway;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
 use App\Modules\Payments\Drivers\Outside\OutsideGateway;
 use App\Modules\Payments\Drivers\Wallet\WalletGateway;
+use App\Modules\Payments\Drivers\Zarinpal\ZarinpalGateway;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\BuiltinMethodException;
 use App\Modules\Payments\Exceptions\MethodInUseException;
 use App\Modules\Payments\GatewayRegistry;
+use App\Modules\Payments\MethodSettings;
 use App\Modules\Payments\Models\PaymentCard;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentCards;
@@ -29,11 +34,15 @@ use App\Modules\Payments\Services\PaymentMethods;
 use App\Support\Validation;
 use Illuminate\Database\ConnectionInterface;
 use Tests\HttpTestCase;
+use Tests\Support\FakeAban;
+use Tests\Support\FakeAtlasPay;
+use Tests\Support\FakeCubePay;
+use Tests\Support\FakeZarinpal;
 
 /**
  * The payment methods screen: the built-in wallet row, card methods added from the driver picker with their cards (each
- * number normalised and checked, a card paid to kept), the amounts a method is offered for, ordering, the strict switch,
- * deletion only without payments, and what the checkout offers.
+ * number normalised and checked, a card paid to kept), a CubePay method's token kept encrypted, the amounts a method is
+ * offered for, ordering, the strict switch, deletion only without payments, and what the checkout offers.
  */
 final class AdminPaymentMethodsApiTest extends HttpTestCase
 {
@@ -58,7 +67,7 @@ final class AdminPaymentMethodsApiTest extends HttpTestCase
         self::assertSame([WalletGateway::key(), WalletGateway::label(), true, true, 'instant', null, null], [$methods[0]['driver'], $methods[0]['label'], $methods[0]['builtin'], $methods[0]['enabled'], $methods[0]['kind'], $methods[0]['min_amount'], $methods[0]['max_amount']]);
 
         $drivers = array_column($this->decode($this->get('/api/admin/payment-methods/drivers'))['drivers'], null, 'key');
-        self::assertSame([WalletGateway::key(), ManualGateway::key()], array_keys($drivers), 'in the order they are registered');
+        self::assertSame([WalletGateway::key(), ManualGateway::key(), CubePayGateway::key(), ZarinpalGateway::key(), AtlasPayGateway::key(), AbanGateway::key()], array_keys($drivers), 'in the order they are registered');
         self::assertSame([WalletGateway::label(), [], ['kind' => 'instant', 'builtin' => true]], [$drivers['wallet']['label'], $drivers['wallet']['fields'], $drivers['wallet']['traits']], 'the wallet: nothing to set');
         self::assertSame(['کارت به کارت', ['kind' => 'manual', 'builtin' => false]], [$drivers['manual']['label'], $drivers['manual']['traits']]);
         self::assertSame(['instructions', 'auto_approve_after'], array_column($drivers['manual']['fields'], 'name'), "a card method's settings are its driver's form; its cards a list of their own");
@@ -388,12 +397,16 @@ final class AdminPaymentMethodsApiTest extends HttpTestCase
                 throw new \LogicException('Nothing is paid with it here.');
             }
         };
-        $methods = new PaymentMethods(new GatewayRegistry(new Registry([$driver])), $this->service(PaymentCards::class), $this->service(ConnectionInterface::class));
+        $settings = $this->service(MethodSettings::class);
+        $methods = new PaymentMethods(new GatewayRegistry(new Registry([$driver]), $settings), $this->service(PaymentCards::class), $settings, $this->service(ConnectionInterface::class));
         $form = ['label' => 'درگاه', 'merchant' => 'm-1', 'test_mode' => false];
 
         $method = $methods->create(['driver' => 'gateway', 'api_key' => 'secret1', 'test_mode' => true, 'test_key' => 'tk-1'] + $form);
         $methods->update($method, $form + ['api_key' => '']);
-        self::assertSame(['merchant' => 'm-1', 'api_key' => 'secret1', 'test_mode' => false, 'test_key' => 'tk-1'], $method->refresh()->config, 'a secret left blank keeps the one kept, a field not shown what it holds');
+        $kept = $method->refresh()->config;
+        self::assertStringStartsWith('encrypted:', $kept['api_key'], 'a secret is kept encrypted');
+        self::assertStringNotContainsString('secret1', json_encode($kept, JSON_THROW_ON_ERROR));
+        self::assertSame(['merchant' => 'm-1', 'api_key' => 'secret1', 'test_mode' => false, 'test_key' => 'tk-1'], $settings->read($driver, $kept), 'a secret left blank keeps the one kept, a field not shown what it holds');
         self::assertEquals(
             (object) ['merchant' => 'm-1', 'api_key' => ['set' => true, 'hint' => '••••••ret1'], 'test_mode' => false, 'test_key' => 'tk-1'],
             $methods->presentOne($method)['config'],
@@ -410,6 +423,123 @@ final class AdminPaymentMethodsApiTest extends HttpTestCase
 
         $methods->update($method, $form + ['clear_api_key' => true]);
         self::assertSame('', $method->refresh()->config['api_key']);
+    }
+
+    /**
+     * CubePay through the panels' API: a new method cannot go without its token, which is kept encrypted, never shown
+     * back, kept while the form leaves it blank and never emptied; an agent's shop adds its own as the owner does.
+     */
+    public function testACubePayMethodKeepsItsTokenEncryptedAndNeverShowsIt(): void
+    {
+        $add = fn(array $form, string $panel = 'admin') => $this->postJson("/api/{$panel}/payment-methods", $form + ['driver' => 'cubepay', 'label' => 'پرداخت آنلاین', 'clear_token' => false, 'fee_percent' => '', 'fee_fixed' => 0]);
+
+        $response = $add([]);
+        self::assertSame([422, ['token' => ['توکن API را از ربات CubePay وارد کنید.']]], [$response->getStatusCode(), $this->decode($response)['errors']], 'no method without its token');
+        self::assertSame(['token' => ['توکن API را همان‌طور که ربات CubePay نشان می‌دهد کپی کنید؛ فاصله و حروف فارسی ندارد.']], $this->decode($add(['token' => 'توکن من']))['errors']);
+
+        $response = $add(['token' => FakeCubePay::TOKEN, 'min_amount' => '10000']);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['cubepay', 'CubePay', 'online', false, null, '10000.00', true], [$row['driver'], $row['driver_label'], $row['kind'], $row['builtin'], $row['summary'], $row['min_amount'], $row['enabled']]);
+        self::assertSame(['token' => ['set' => true, 'hint' => '••••••1234'], 'fee_percent' => '', 'fee_fixed' => 0], $row['config'], 'whether one is kept, never the token');
+        $method = PaymentMethod::query()->findOrFail($row['id']);
+        self::assertStringStartsWith('encrypted:', $method->config['token']);
+        self::assertStringNotContainsString(FakeCubePay::TOKEN, json_encode($method->config, JSON_THROW_ON_ERROR), 'kept encrypted');
+        self::assertStringNotContainsString(FakeCubePay::TOKEN, (string) $this->get('/api/admin/payment-methods')->getBody(), 'nor listed');
+
+        // The form saved again with the token left blank, as the panels send it: the kept one stays.
+        $edit = fn(array $form) => $this->putJson("/api/admin/payment-methods/{$method->id}", $form + ['label' => 'درگاه CubePay', 'enabled' => true, 'min_amount' => '', 'max_amount' => '', 'clear_token' => false, 'fee_percent' => '', 'fee_fixed' => 0]);
+        $response = $edit([]);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame(['درگاه CubePay', null, ['token' => ['set' => true, 'hint' => '••••••1234'], 'fee_percent' => '', 'fee_fixed' => 0]], [$this->decode($response)['method']['label'], $this->decode($response)['method']['min_amount'], $this->decode($response)['method']['config']]);
+        $settings = $this->service(MethodSettings::class);
+        $driver = $this->service(GatewayRegistry::class)->find('cubepay') ?? self::fail('CubePay is registered');
+        self::assertSame(FakeCubePay::TOKEN, $settings->read($driver, $method->refresh()->config)['token']);
+
+        $response = $edit(['clear_token' => true]);
+        self::assertSame([422, ['token' => ['توکن API را از ربات CubePay وارد کنید.']]], [$response->getStatusCode(), $this->decode($response)['errors']], 'never emptied: another is typed instead');
+        self::assertSame(200, $edit(['token' => 'cp-another-token-5678'])->getStatusCode());
+        self::assertSame('cp-another-token-5678', $settings->read($driver, $method->refresh()->config)['token']);
+
+        // The fee passed on to customers: a percent (Persian digits taken) and a fixed sum, said on the method's row.
+        $response = $edit(['fee_percent' => '۹٫۹', 'fee_fixed' => 500]);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['9.9', 500, 'کارمزد مشتری: ۹.۹٪ + ۵۰۰ تومان'], [$row['config']['fee_percent'], $row['config']['fee_fixed'], $row['summary']]);
+        $refused = $edit(['fee_percent' => '120', 'fee_fixed' => -1]);
+        self::assertSame(['fee_percent', 'fee_fixed'], array_keys($this->decode($refused)['errors']));
+
+        $agentShop = $this->agentBot();
+        $this->loginAsAgent($agentShop);
+        $response = $add(['token' => 'cp-agent-token-0001'], 'agent');
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame($agentShop->id, PaymentMethod::query()->withoutGlobalScopes()->findOrFail($this->decode($response)['method']['id'])->bot_id, "the agent's shop's own");
+        self::assertSame(['wallet', 'cubepay'], array_column($this->decode($this->get('/api/agent/payment-methods'))['methods'], 'driver'));
+    }
+
+    /** Zarinpal through the panels' API: its code required, kept encrypted and never shown; the sandbox said on its row. */
+    public function testAZarinpalMethodKeepsItsCodeEncryptedAndSaysWhenItIsTheSandbox(): void
+    {
+        $add = fn(array $form) => $this->postJson('/api/admin/payment-methods', $form + ['driver' => 'zarinpal', 'label' => 'زرین‌پال', 'clear_merchant_id' => false, 'sandbox' => false]);
+
+        self::assertSame(['merchant_id' => ['مرچنت کد زرین‌پال را وارد کنید.']], $this->decode($add([]))['errors']);
+        self::assertSame(['merchant_id'], array_keys($this->decode($add(['merchant_id' => 'not-a-code']))['errors']));
+
+        $response = $add(['merchant_id' => FakeZarinpal::MERCHANT]);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['zarinpal', 'online', null], [$row['driver'], $row['kind'], $row['summary']]);
+        self::assertSame(['merchant_id' => ['set' => true, 'hint' => '••••••05be'], 'sandbox' => false], $row['config']);
+        $method = PaymentMethod::query()->findOrFail($row['id']);
+        self::assertStringNotContainsString(FakeZarinpal::MERCHANT, json_encode($method->config, JSON_THROW_ON_ERROR), 'kept encrypted');
+
+        $response = $this->putJson("/api/admin/payment-methods/{$method->id}", ['label' => 'زرین‌پال', 'enabled' => true, 'min_amount' => '', 'max_amount' => '', 'clear_merchant_id' => false, 'sandbox' => true]);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame(['حالت آزمایشی: پولی جابه‌جا نمی‌شود', true], [$this->decode($response)['method']['summary'], $this->decode($response)['method']['config']['sandbox']]);
+    }
+
+    /** AtlasPay through the panels' API: its key required, kept encrypted and never shown; its form told from the wallet's by the key. */
+    public function testAnAtlasPayMethodKeepsItsKeyEncrypted(): void
+    {
+        $add = fn(array $form) => $this->postJson('/api/admin/payment-methods', $form + ['driver' => 'atlaspay', 'label' => 'اطلس‌پی', 'clear_api_key' => false]);
+
+        self::assertSame(['api_key' => ['کلید API اطلس‌پی را وارد کنید.']], $this->decode($add([]))['errors']);
+        self::assertSame(['api_key'], array_keys($this->decode($add(['api_key' => 'has space']))['errors']));
+
+        $response = $add(['api_key' => FakeAtlasPay::KEY]);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['atlaspay', 'online', null], [$row['driver'], $row['kind'], $row['summary']]);
+        self::assertSame(['api_key' => ['set' => true, 'hint' => '••••••4a6c']], $row['config']);
+        $method = PaymentMethod::query()->findOrFail($row['id']);
+        self::assertStringNotContainsString(FakeAtlasPay::KEY, json_encode($method->config, JSON_THROW_ON_ERROR), 'kept encrypted');
+
+        // A save with the key left blank keeps it.
+        $response = $this->putJson("/api/admin/payment-methods/{$method->id}", ['label' => 'اطلس‌پی (تلگرام)', 'enabled' => true, 'min_amount' => '', 'max_amount' => '', 'api_key' => '', 'clear_api_key' => false]);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame(['اطلس‌پی (تلگرام)', ['set' => true, 'hint' => '••••••4a6c']], [$this->decode($response)['method']['label'], $this->decode($response)['method']['config']['api_key']]);
+    }
+
+    /** AbanGateway through the panels' API: its key required in its shape, kept encrypted and never shown; a test key said on its row. */
+    public function testAnAbanMethodKeepsItsKeyEncryptedAndSaysWhenItIsATestKey(): void
+    {
+        $add = fn(array $form) => $this->postJson('/api/admin/payment-methods', $form + ['driver' => 'abangateway', 'label' => 'آبان گیت وی', 'clear_api_key' => false, 'show_card' => true]);
+
+        self::assertSame(['api_key' => ['کلید API آبان گیت وی را وارد کنید.']], $this->decode($add([]))['errors']);
+        self::assertSame(['api_key'], array_keys($this->decode($add(['api_key' => 'ag_live_short']))['errors']), 'cut short: 48 characters after the prefix');
+
+        $response = $add(['api_key' => FakeAban::KEY]);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['abangateway', 'online', null], [$row['driver'], $row['kind'], $row['summary']]);
+        self::assertSame(['api_key' => ['set' => true, 'hint' => '••••••7r4s'], 'show_card' => true], $row['config']);
+        $method = PaymentMethod::query()->findOrFail($row['id']);
+        self::assertStringNotContainsString(FakeAban::KEY, json_encode($method->config, JSON_THROW_ON_ERROR), 'kept encrypted');
+
+        $response = $this->putJson("/api/admin/payment-methods/{$method->id}", ['label' => 'آبان گیت وی', 'enabled' => true, 'min_amount' => '', 'max_amount' => '', 'api_key' => FakeAban::TEST_KEY, 'clear_api_key' => false, 'show_card' => false]);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['حالت آزمایشی: پولی جابه‌جا نمی‌شود', false], [$row['summary'], $row['config']['show_card']]);
     }
 
     private function addMethod(string $label, string $card): int

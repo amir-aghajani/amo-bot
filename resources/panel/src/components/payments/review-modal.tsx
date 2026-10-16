@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Ban, BellRing, Check, ChevronRight, RotateCcw, Undo2, X } from 'lucide-react'
+import { Ban, BellRing, Check, ChevronRight, RotateCcw, SearchCheck, Undo2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiPicture, PictureNote } from '@/components/api-picture'
 import { DetailFooter, DetailModal } from '@/components/detail-modal'
@@ -15,11 +15,11 @@ import { searchLink, TextLink } from '@/components/text-link'
 import { Button } from '@/components/ui/button'
 import { CustomerFacts } from '@/components/user-identity'
 import { api } from '@/lib/api'
-import type { OrderType, PaymentRow } from '@/lib/api-types'
+import type { OnlineState, OrderType, PaymentRow } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatDate, formatMoney, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { EMAILED, isDelivered, NOT_DELIVERED, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS } from '@/lib/statuses'
+import { EMAILED, HELD, isDelivered, NOT_DELIVERED, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS } from '@/lib/statuses'
 import type { NextRow } from '@/lib/use-next-row'
 
 type Action = keyof PaymentRow['actions']
@@ -27,6 +27,8 @@ type Action = keyof PaymentRow['actions']
 /** What each operation is called, what it does, and whether it asks first. */
 const ACTIONS: Record<Action, OperationSpec> = {
   approve: { label: 'تایید و تحویل', icon: Check, tone: 'primary', done: 'تایید شد و تحویل داده شد' },
+  // An online payment's, in place of an approval: its outcome — and its toast — is the gateway's word (checked()), not the admin's.
+  check: { label: 'استعلام از درگاه', icon: SearchCheck, tone: 'primary' },
   reject: { label: 'رد کردن', icon: X, tone: 'danger', done: 'رد شد', note: { label: 'دلیل رد کردن', placeholder: 'مثلا: مبلغ رسید با سفارش نمی‌خواند — مشتری این متن را می‌بیند' } },
   cancel: {
     label: 'لغو پرداخت',
@@ -61,6 +63,24 @@ const BRINGS: Record<OrderType, { does: string; done: string }> = {
   extra_traffic: { does: 'افزودن حجم', done: 'حجم به سرویس اضافه شد' },
   extra_time: { does: 'افزودن زمان', done: 'زمان به سرویس اضافه شد' },
   extra_devices: { does: 'افزودن کاربر', done: 'کاربر به سرویس اضافه شد' },
+}
+
+/**
+ * What an online payment's gateway said when asked («استعلام از درگاه»), after the payment's number, and how it is told:
+ * paid — into its order, or, the order closed meanwhile, into the customer's wallet —, still waiting, or its page closed.
+ */
+function checked(payment: PaymentRow, state: OnlineState): { tone: 'success' | 'info' | 'warning'; words: string } {
+  switch (state) {
+    case 'paid':
+      return {
+        tone: 'success',
+        words: payment.to_wallet ? 'در درگاه پرداخت شده بود؛ سفارشش بسته بود و مبلغ به کیف پول مشتری رفت' : `در درگاه پرداخت شده بود؛ تایید شد و ${BRINGS[payment.order.type].done}`,
+      }
+    case 'waiting':
+      return { tone: 'info', words: 'هنوز در درگاه پرداخت نشده است' }
+    case 'closed':
+      return { tone: 'warning', words: 'در درگاه پرداخت نشد و مهلت صفحه پرداخت تمام شده است' }
+  }
 }
 
 /** Approving, worded by what it brings — and, without a receipt to approve, as the admin's own call («تایید دستی»). */
@@ -181,18 +201,25 @@ function ReviewBody({ payment, onClose, onReviewed, onDecided, onStale, next, fo
     onDone: (answer, { action }) => {
       const reviewed = answer.payment
       onReviewed(reviewed)
-      const undelivered = (action === 'approve' || action === 'retry') && reviewed.order.status === 'failed'
+      // The gateway's word, when it was asked: paid settles the payment as an approval does.
+      const state = 'state' in answer ? answer.state : null
+      const settled = action === 'approve' || action === 'retry' || (state === 'paid' && !reviewed.to_wallet)
+      const undelivered = settled && reviewed.order.status === 'failed'
       const delivery = 'delivery' in answer ? answer.delivery : null
       if (undelivered) {
-        toast.error(`پرداخت ${idLabel(reviewed.id)} ${action === 'approve' ? 'تایید شد ولی تحویل انجام نشد' : 'باز هم تحویل نشد'}`, { description: reviewed.order.notes ?? undefined })
+        toast.error(`پرداخت ${idLabel(reviewed.id)} ${action === 'retry' ? 'باز هم تحویل نشد' : 'تایید شد ولی تحویل انجام نشد'}`, { description: reviewed.order.notes ?? undefined })
+      } else if (state !== null) {
+        const { tone, words } = checked(reviewed, state)
+        toast[tone](`پرداخت ${idLabel(reviewed.id)} ${words}`)
       } else if (delivery !== null && !isDelivered(delivery)) {
         toast.warning('یادآوری فرستاده نشد', { description: NOT_DELIVERED[delivery]('مشتری', reviewed.user.telegram_id !== null) })
       } else {
         // A customer without Telegram was reminded by email.
         toast.success(`پرداخت ${idLabel(reviewed.id)} ${delivery === 'emailed' ? `یادآوری ${EMAILED}` : specs[action].done}`)
       }
-      // A reminder, or a delivery that failed (the retry is right there), keeps the dialog as it is.
-      if (action === 'remind' || undelivered) ops.close()
+      // A reminder, a gateway that has not been paid, or a delivery that failed (the retry is right there), keeps the
+      // dialog as it is.
+      if (action === 'remind' || (state !== null && state !== 'paid') || undelivered) ops.close()
       else onDecided()
     },
     onStale,
@@ -218,15 +245,20 @@ function ReviewBody({ payment, onClose, onReviewed, onDecided, onStale, next, fo
   )
 }
 
-/** Everything known about the payment. */
+/**
+ * Everything known about the payment — an online one's gateway, its id there, its page's end, when it was last asked, and
+ * why it is held for support if it is.
+ */
 function Facts({ payment }: { payment: PaymentRow }) {
   const brings = orderBrings(payment.order)
+  const online = payment.kind === 'online'
 
   return (
     <FactList>
       {/* A space, not a margin alone, between the badge and the words beside it: two words for assistive tech, not one. */}
       <Fact label="وضعیت">
         <StatusBadge status={PAYMENT_STATUS[payment.status]} /> {payment.auto_approved && <span className="ms-1 text-footnote text-muted-foreground">خودکار، بعد از مهلت بررسی</span>}
+        {payment.held && <span className="ms-1 text-footnote text-warning">{HELD}</span>}{' '}
         {payment.reviewer && !payment.auto_approved && (
           <span className="ms-1 text-footnote text-muted-foreground">
             توسط <Reviewer name={payment.reviewer} />
@@ -263,12 +295,26 @@ function Facts({ payment }: { payment: PaymentRow }) {
       <Fact label="روش">
         {payment.method}
         {payment.summary && <MethodSummary summary={payment.summary} className="block text-footnote text-muted-foreground" />}
+        {online && payment.gateway_label && <span className="block text-footnote text-muted-foreground">درگاه {payment.gateway_label}</span>}
       </Fact>
       {payment.reference && (
-        <Fact label="مرجع">
+        <Fact label={online ? 'شناسه در درگاه' : 'مرجع'}>
           <bdi dir="ltr" className="text-footnote">
             {payment.reference}
           </bdi>
+        </Fact>
+      )}
+      {/* The page the customer pays on takes money until then («در ۲۵ دقیقه»): a pending payment's alone, what it waits on — a held one waits on support. */}
+      {payment.status === 'pending' && !payment.held && payment.link_expires_at && (
+        <Fact label="مهلت پرداخت در درگاه">
+          <span className="text-muted-foreground">
+            {formatDate(payment.link_expires_at)} ({timeAgo(payment.link_expires_at)})
+          </span>
+        </Fact>
+      )}
+      {payment.checked_at && (
+        <Fact label="آخرین استعلام">
+          <span className="text-muted-foreground">{timeAgo(payment.checked_at)}</span>
         </Fact>
       )}
       <Fact label="ثبت">
@@ -292,7 +338,19 @@ function Facts({ payment }: { payment: PaymentRow }) {
           </p>
         </Fact>
       )}
-      {(payment.status === 'failed' || payment.status === 'cancelled') && payment.description && <Fact label="دلیل">{payment.description}</Fact>}
+      {/* Held for support: why (its gateway's answer does not fit it, or it kept money on it unsettled for 48 hours) — or support's note once it was cancelled. */}
+      {payment.held && payment.description && (
+        <Fact label="بررسی پشتیبانی">
+          <span className="text-warning">{payment.description}</span>
+        </Fact>
+      )}
+      {!payment.held && (payment.status === 'failed' || payment.status === 'cancelled') && payment.description && <Fact label="دلیل">{payment.description}</Fact>}
+      {/* Paid after its order closed: the money is the customer's, in their wallet — it paid nothing of the order. */}
+      {payment.to_wallet && (
+        <Fact label="کیف پول">
+          <span className="text-warning">{payment.description}</span>
+        </Fact>
+      )}
       {payment.refund_note && <Fact label="توضیح بازپرداخت">{payment.refund_note}</Fact>}
     </FactList>
   )
@@ -304,7 +362,14 @@ const DRAWABLE = /\.(jpe?g|png|webp|gif)$/i
 /** The receipt picture (ApiPicture), or why the payment has none. */
 function ReceiptView({ payment }: { payment: PaymentRow }) {
   if (!payment.receipt) {
-    const why = payment.kind === 'instant' ? 'پرداخت از کیف پول؛ رسیدی در کار نیست' : payment.status === 'pending' ? 'مشتری هنوز رسیدی نفرستاده است' : 'این پرداخت رسیدی ندارد'
+    const why =
+      payment.kind === 'instant'
+        ? 'پرداخت از کیف پول؛ رسیدی در کار نیست'
+        : payment.kind === 'online'
+          ? 'پرداخت آنلاین در صفحه درگاه؛ رسیدی در کار نیست و نتیجه‌اش را درگاه می‌گوید'
+          : payment.status === 'pending'
+            ? 'مشتری هنوز رسیدی نفرستاده است'
+            : 'این پرداخت رسیدی ندارد'
     return <PictureNote place="column">{why}</PictureNote>
   }
 

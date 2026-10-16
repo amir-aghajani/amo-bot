@@ -623,9 +623,10 @@ final class OrderService
                 // Days and devices cost an agent's pool nothing (as support's extension of a service does not).
                 OrderType::ExtraTime, OrderType::ExtraDevices => $this->provisioning->addExtra($order, fn() => $this->fulfilled($order)),
                 OrderType::WalletTopUp => $this->db->transaction(function () use ($order): void {
-                    // The whole sum paid: a card transfer's asks a few Toman more than the order (Payments\Services\PaymentCards).
-                    $paid = $order->payments()->where('status', PaymentStatus::Paid->value)->value('amount');
-                    $this->wallet->credit($order->user, is_numeric($paid) ? Money::normalize($paid) : $order->amount, WalletService::describeTopUp($order));
+                    // The whole sum of the payment that paid it — a card transfer's asks a few Toman more than the order
+                    // (Payments\Services\PaymentCards) —, never one an online gateway took after it, which went to the wallet itself.
+                    $paid = $order->load('payments')->paidBy()?->amount;
+                    $this->wallet->credit($order->user, $paid !== null ? Money::normalize($paid) : $order->amount, WalletService::describeTopUp($order));
                     $this->fulfilled($order);
                 }, Ledger::ATTEMPTS),
                 OrderType::Traffic => $this->db->transaction(function () use ($order): void {

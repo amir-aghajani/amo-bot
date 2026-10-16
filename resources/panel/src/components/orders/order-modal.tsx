@@ -15,7 +15,7 @@ import type { OrderRow } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
 import { formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { MANUAL_PAYMENT, ORDER_PRICING, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS, RENEWAL_METHOD, SUBSCRIPTION_STATUS } from '@/lib/statuses'
+import { HELD, MANUAL_PAYMENT, ORDER_PRICING, ORDER_STATUS, ORDER_TYPE, PAYMENT_STATUS, RENEWAL_METHOD, SUBSCRIPTION_STATUS, TO_WALLET } from '@/lib/statuses'
 
 type Action = keyof OrderRow['actions']
 
@@ -178,7 +178,8 @@ function Payments({ order }: { order: OrderRow }) {
                   <span className="truncate">
                     <span dir="ltr">#{payment.id}</span> · {payment.method}
                   </span>
-                  <span className="text-footnote text-muted-foreground">{formatDate(payment.paid_at ?? payment.created_at)}</span>
+                  <span className="text-footnote text-muted-foreground">{formatDate(payment.paid_at ?? payment.created_at)}</span>{' '}
+                  {payment.to_wallet && <span className="text-footnote text-warning">{TO_WALLET}</span>} {payment.held && <span className="text-footnote text-warning">{HELD}</span>}
                 </span>
                 <StatusBadge status={PAYMENT_STATUS[payment.status]} />
               </Link>

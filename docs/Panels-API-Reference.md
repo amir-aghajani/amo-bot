@@ -79,6 +79,7 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`POST /api/{panel}/payments/{id}/reject`](#post-apipanelpaymentsidreject) | Reject a receipt |
 | [`POST /api/{panel}/payments/{id}/cancel`](#post-apipanelpaymentsidcancel) | Cancel an unpaid payment and its open order |
 | [`POST /api/{panel}/payments/{id}/remind`](#post-apipanelpaymentsidremind) | Remind the customer to pay |
+| [`POST /api/{panel}/payments/{id}/check`](#post-apipanelpaymentsidcheck) | Ask an online payment's gateway what came of it, and act on its word |
 | [`POST /api/{panel}/payments/{id}/retry`](#post-apipanelpaymentsidretry) | Retry the delivery of what a paid payment bought |
 | [`POST /api/{panel}/payments/{id}/refund`](#post-apipanelpaymentsidrefund) | Refund a paid payment |
 | [`GET /api/{panel}/subscriptions`](#get-apipanelsubscriptions) | All the shop's services |
@@ -1405,6 +1406,27 @@ Remind the customer to pay. The answer says whether the reminder reached them.
 | `200` | Sent, or attempted | [ReminderResponse](API-Schemas.md#reminderresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /api/{panel}/payments/{id}/check
+
+Ask an online payment's gateway what came of it, and act on its word: paid, the payment settles — its order delivered, or, the order closed, the money into the customer's wallet — and the customer is told; its page closed unpaid, the payment fails; still waiting, nothing changes. `state` says which. Nobody decides it by hand: only the gateway's word moves it.
+
+- **On the website:** the website's admins can also use it, as [`POST /payments/{id}/check`](Store-Admin-API-Reference.md#post-paymentsidcheck).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Asked | [PaymentCheckResponse](API-Schemas.md#paymentcheckresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### POST /api/{panel}/payments/{id}/retry
 
 Retry the delivery of what a paid payment bought.
@@ -1956,6 +1978,58 @@ One of:
 | `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. |
 | `cards` | list of [PaymentCardInput](#paymentcardinput) | yes | Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»). |
 
+**`CubePayMethodCreateRequest`** — A new CubePay method: its driver and its form (CubePayMethodRequest), with the label, the token and `fee_fixed` required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `cubepay` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `token` | string | no | The API token as CubePay's bot shows it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `token`). |
+| `clear_token` | boolean | no | True empties the kept token, which is refused: a CubePay method cannot go without one (type another instead). |
+| `fee_percent` | string | no | The percent of the amount added to every payment as CubePay's fee the customer pays: 0 to 99.99, up to two decimals (Persian digits are taken); blank or 0 for none. The order is still paid, delivered and credited at its own price. |
+| `fee_fixed` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman added to every payment as CubePay's fee the customer pays, on top of the percent: 0 to 1,000,000; 0 for none. |
+
+**`ZarinpalMethodCreateRequest`** — A new Zarinpal method: its driver and its form (ZarinpalMethodRequest), with the label and the merchant's code required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `zarinpal` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `merchant_id` | string | no | The merchant's 36-character code as Zarinpal's panel shows it (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `merchant_id`). |
+| `clear_merchant_id` | boolean | no | True empties the kept code, which is refused: a Zarinpal method cannot go without one (type another instead). |
+| `sandbox` | boolean | yes | Zarinpal's test service (sandbox.zarinpal.com): any code in its shape is taken and no money moves — a payment there still delivers its order. Only for trying it out. |
+
+**`AtlasPayMethodCreateRequest`** — A new AtlasPay method: its driver and its form (AtlasPayMethodRequest), with the label and the API key required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `atlaspay` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead). |
+
+**`AbanMethodCreateRequest`** — A new AbanGateway method: its driver and its form (AbanMethodRequest), with the label and the API key required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `abangateway` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The API key as AbanGateway's panel shows it once, when it is made: `ag_live_` — or `ag_test_` for its test mode, where no money moves — and 48 lowercase letters and digits. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AbanGateway method cannot go without one (type another instead). |
+| `show_card` | boolean | yes | Show the card, its holder and the exact sum with copy buttons under the page — for a sum up to 10,000,000 Toman, the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts. |
+
 **Answers**
 
 | Status | What it is | Body |
@@ -2020,15 +2094,55 @@ One of:
 | `instructions` | string | no | Shown to the customer with the card; blank for none. |
 | `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. |
 | `cards` | list of [PaymentCardInput](#paymentcardinput) | yes | Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»). |
+- [WalletMethodRequest](#walletmethodrequest)
 
-**`WalletMethodRequest`** — The wallet, the built-in method: its label, its switch and the amounts it is offered for.
+**`CubePayMethodRequest`** — A CubePay method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API token from CubePay's bot (@cubepy_bot, «🔗 پنل من») — `token` (blank keeps the kept one) or `clear_token` —, and the fee passed on to customers (`fee_percent`, `fee_fixed`). It always names `fee_fixed`, as the panels' form does with every save: that tells it from the wallet's form.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `label` | string | no |  |
-| `enabled` | boolean | no |  |
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
 | `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `token` | string | no | The API token as CubePay's bot shows it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `token`). |
+| `clear_token` | boolean | no | True empties the kept token, which is refused: a CubePay method cannot go without one (type another instead). |
+| `fee_percent` | string | no | The percent of the amount added to every payment as CubePay's fee the customer pays: 0 to 99.99, up to two decimals (Persian digits are taken); blank or 0 for none. The order is still paid, delivered and credited at its own price. |
+| `fee_fixed` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman added to every payment as CubePay's fee the customer pays, on top of the percent: 0 to 1,000,000; 0 for none. |
+
+**`ZarinpalMethodRequest`** — A Zarinpal method's form: the label customers pick it by, its switch, the amounts it is offered for (Zarinpal takes 100 to 100,000,000 Toman), the merchant's code from Zarinpal's panel, and the sandbox switch. It names `merchant_id` (blank keeps the kept one) or `clear_merchant_id`, as the panels' form does with every save.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `merchant_id` | string | no | The merchant's 36-character code as Zarinpal's panel shows it (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `merchant_id`). |
+| `clear_merchant_id` | boolean | no | True empties the kept code, which is refused: a Zarinpal method cannot go without one (type another instead). |
+| `sandbox` | boolean | yes | Zarinpal's test service (sandbox.zarinpal.com): any code in its shape is taken and no money moves — a payment there still delivers its order. Only for trying it out. |
+
+**`AtlasPayMethodRequest`** — An AtlasPay method's form: the label customers pick it by, its switch, the amounts it is offered for, and the merchant's API key from AtlasPay. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead). |
+
+**`AbanMethodRequest`** — An AbanGateway method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API key from AbanGateway's panel, and whether the card is shown in the bot and on the site. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The API key as AbanGateway's panel shows it once, when it is made: `ag_live_` — or `ag_test_` for its test mode, where no money moves — and 48 lowercase letters and digits. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AbanGateway method cannot go without one (type another instead). |
+| `show_card` | boolean | yes | Show the card, its holder and the exact sum with copy buttons under the page — for a sum up to 10,000,000 Toman, the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts. |
 
 **Answers**
 
@@ -5542,6 +5656,38 @@ The shop's name and whether it is installed. The panels ask this first.
 
 ## Schemas
 
+### AbanGatewayConfig
+
+An AbanGateway method's settings (`AbanMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and whether the bot and the site show the card under the page.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `api_key` | [SecretState](#secretstate) | yes |  |
+| `show_card` | boolean | yes | The card, its holder and the exact sum shown with copy buttons under the page, for a sum up to 10,000,000 Toman — the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts. |
+
+### AbanMethodRow
+
+An AbanGateway method (abangateway.ir), an online gateway: the customer transfers the exact sum its page asks to the merchant's own card, and AbanGateway confirms it from the bank's text message, with no receipt and no review.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `abangateway` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `config` | [AbanGatewayConfig](#abangatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) | yes |  |
+| `updated_at` | string (date-time) | yes |  |
+
 ### AccountResponse
 
 | Field | Type | Required | What it is |
@@ -5743,6 +5889,37 @@ The answer of `GET /api/app`, which the panels call first.
 | `name` | string | yes | The shop's name (APP_NAME). |
 | `installed` | boolean | yes | False until the web installer has finished; the panel then shows the installer. |
 | `timezone` | string | yes | The shop's time zone (APP_TIMEZONE, an IANA name such as Asia/Tehran). The panels show every date and time in it, as the bot does. |
+
+### AtlasPayGatewayConfig
+
+An AtlasPay method's settings (`AtlasPayMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `api_key` | [SecretState](#secretstate) | yes |  |
+
+### AtlasPayMethodRow
+
+An AtlasPay method (atlaspay.space), an online gateway: the customer pays by card transfer in AtlasPay's mini app in Telegram, and AtlasPay confirms it from the bank's text message, with no receipt and no review — one paid short, the customer having accepted paying less, is held for support.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `atlaspay` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `config` | [AtlasPayGatewayConfig](#atlaspaygatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) | yes |  |
+| `updated_at` | string (date-time) | yes |  |
 
 ### BotChannelResponse
 
@@ -6099,6 +6276,39 @@ The installation's configuration, read from config.php.
 |---|---|---|---|
 | `url` | string or null | yes | The full cron trigger address, token included, for the copy button; null without a token. |
 
+### CubePayGatewayConfig
+
+A CubePay method's settings (`CubePayMethodRow.config`): the merchant's API token, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and the fee passed on to customers: a percent of the amount and a fixed sum on every payment.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `token` | [SecretState](#secretstate) | yes |  |
+| `fee_percent` | string | yes | The percent of the amount added to every payment as the fee the customer pays ("3.1"); "" for none. |
+| `fee_fixed` | integer | yes | Toman added to every payment as the fee the customer pays; 0 for none. |
+
+### CubePayMethodRow
+
+A CubePay method (cubevps.ir), an online gateway: the customer pays on CubePay's page — a card transfer or crypto, as the merchant set it up at CubePay — and CubePay confirms it, with no receipt and no review.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `cubepay` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `config` | [CubePayGatewayConfig](#cubepaygatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) | yes |  |
+| `updated_at` | string (date-time) | yes |  |
+
 ### CustomEmojiRow
 
 A premium emoji an admin sent the bot with /emoji, offered by the bot texts and keyboards editors.
@@ -6207,7 +6417,7 @@ A driver (a database, a mail transport, a panel connector, a payment gateway, a 
 | `description` | string | yes |  |
 | `notes` | list of string | yes | Short notes under the description, such as required versions and caveats. |
 | `fields` | list of [FieldDescription](#fielddescription) | yes |  |
-| `traits` | map of string or number or boolean or list of string or number or boolean or null | yes | Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet, or `manual`, a card transfer whose receipt a person approves) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. |
+| `traits` | map of string or number or boolean or list of string or number or boolean or null | yes | Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. |
 
 ### DriverValues
 
@@ -6543,7 +6753,7 @@ A card-to-card method, with its cards: each payment is shown one of them at rand
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
 | `config` | [ManualGatewayConfig](#manualgatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -6704,6 +6914,10 @@ A payment method, in checkout order, as its driver describes it. `config` holds 
 One of:
 - [ManualMethodRow](#manualmethodrow)
 - [WalletMethodRow](#walletmethodrow)
+- [CubePayMethodRow](#cubepaymethodrow)
+- [ZarinpalMethodRow](#zarinpalmethodrow)
+- [AtlasPayMethodRow](#atlaspaymethodrow)
+- [AbanMethodRow](#abanmethodrow)
 - [UnregisteredMethodRow](#unregisteredmethodrow)
 
 ### PaymentMethodsResponse
@@ -7318,7 +7532,7 @@ A method whose driver is no longer installed. No checkout offers it, even when s
 | `kind` | string: `null` or null | yes | Unknown without the driver. |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
 | `config` | object | yes | Not shown, since without the driver it is unknown which settings are secrets. |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -7367,6 +7581,17 @@ An update's step: `download` (fetch and verify the files), `extract` (unpack), `
 
 String: `download`, `extract`, `preflight`, `install`, `done`, `rolled_back`.
 
+### WalletMethodRequest
+
+The wallet, the built-in method: its label, its switch and the amounts it is offered for.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no |  |
+| `enabled` | boolean | no |  |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+
 ### WalletMethodRow
 
 The wallet, the built-in method.
@@ -7379,7 +7604,7 @@ The wallet, the built-in method.
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
 | `config` | object | yes | Nothing to configure. |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -7538,3 +7763,35 @@ A lucky wheel spin: the slice it landed on (as the slice was then) and the resul
 |---|---|---|---|
 | `spins` | list of [WheelSpinRow](#wheelspinrow) | yes |  |
 | `meta` | [PageMeta](API-Schemas.md#pagemeta) | yes |  |
+
+### ZarinpalGatewayConfig
+
+A Zarinpal method's settings (`ZarinpalMethodRow.config`): the merchant's code, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and whether it runs on Zarinpal's sandbox (no real money).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `merchant_id` | [SecretState](#secretstate) | yes |  |
+| `sandbox` | boolean | yes | Zarinpal's test service: any code is taken and no money moves, while a payment there still delivers its order. |
+
+### ZarinpalMethodRow
+
+A Zarinpal method (zarinpal.com), an online gateway: the customer pays with any bank card on Zarinpal's page and is sent back to the shop; Zarinpal confirms it, with no receipt and no review.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `zarinpal` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `config` | [ZarinpalGatewayConfig](#zarinpalgatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) | yes |  |
+| `updated_at` | string (date-time) | yes |  |

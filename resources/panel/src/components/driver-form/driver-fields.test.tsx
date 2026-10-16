@@ -62,7 +62,7 @@ const DRIVER: DriverDescription = {
     field('region', { type: 'choice', label: 'منطقه', required: true, default: 'eu', options: ['eu', 'us', 'asia', 'africa'].map((value) => ({ value, label: value.toUpperCase() })) }),
     field('auth', { type: 'toggle', label: 'ورود با حساب', default: false }),
     field('username', { label: 'نام کاربری', when: { auth: ['true'] } }),
-    field('password', { type: 'secret', label: 'رمز عبور', secret: true, default: null, bound_to: ['host'], moved: MOVED, hint: 'رمز همان حساب.' }),
+    field('password', { type: 'secret', label: 'رمز عبور', required: false, secret: true, default: null, bound_to: ['host'], moved: MOVED, hint: 'رمز همان حساب.' }),
     field('socket', { type: 'path', label: 'سوکت', advanced: true }),
   ],
 }

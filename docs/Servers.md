@@ -60,7 +60,8 @@ for sale** until you mark them ([inbounds](#inbounds)).
 
 **The secrets** — the token or key, the password, the TOTP secret, the proxy's password — are kept encrypted and never
 shown again: a kept one shows as dots (a token with its last four characters). Left blank on an edit, it stays;
-«پاک کردن مقدار ذخیره‌شده» removes it. **A secret stays only while the address keeps its origin** — the same http or
+«پاک کردن مقدار ذخیره‌شده» removes one the connection can do without — one it needs (a panel's token or password) has
+no such button: type the new one. **A secret stays only while the address keeps its origin** — the same http or
 https, host and port (a path may change): moved, it is never sent to the new address, not even by «تست اتصال», and the
 form asks for it again («آدرس پنل عوض شده است؛ … را دوباره وارد کنید.»). The proxy's password likewise stays only
 while the proxy's address and port do. Saving another way in removes the other way's credentials.

@@ -22,11 +22,14 @@ final class Urls
     /** The scheduler's trigger, for a host without a real cron. */
     public const CRON = '/cron/{token}';
 
+    /** An online payment gateway's callback: the payment's id, then a secret of its own (Payments\Services\OnlineInvoices). */
+    public const PAYMENT_CALLBACK = '/payments/callback/{payment:[0-9]+}/{secret}';
+
     /** The website's API (the Store API): its version, then the store key that names the shop — no secret. */
     public const STORE = '/api/store/v1/{store:[0-9a-f]{24}}';
 
     /** @var list<string> The addresses whose last segment is a secret: a log line never holds it (Redact). */
-    public const SECRET_PATHS = [self::TELEGRAM_WEBHOOK, self::AGENT_WEBHOOK, self::CRON];
+    public const SECRET_PATHS = [self::TELEGRAM_WEBHOOK, self::AGENT_WEBHOOK, self::CRON, self::PAYMENT_CALLBACK];
 
     /** A route placeholder (`{secret}`, `{store:[0-9a-f]{24}}`): its name (group 1) and its pattern, if any (group 2). */
     public const PLACEHOLDER = '/\{(\w+)(?::((?:[^{}]++|\{[^{}]*\})+))?\}/';
@@ -52,6 +55,12 @@ final class Urls
     public function cron(string $token): string
     {
         return $this->base() . self::fill(self::CRON, ['token' => $token]);
+    }
+
+    /** Where an online gateway tells the shop about a payment (only ever a reason to ask the gateway itself). */
+    public function paymentCallback(int $payment, string $secret): string
+    {
+        return $this->base() . self::fill(self::PAYMENT_CALLBACK, ['payment' => (string) $payment, 'secret' => $secret]);
     }
 
     /** The base address of a website's API, handed to its developer. */

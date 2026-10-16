@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * No secret reaches a log line or an error message: a bot token in Telegram's URLs (a transport error carries the
- * whole URL), a bare token, the webhook secret and the cron token in a request's path.
+ * whole URL), a bare token, the webhook secret, the cron token and a payment callback's secret in a request's path.
  */
 final class RedactTest extends TestCase
 {
@@ -33,6 +33,9 @@ final class RedactTest extends TestCase
         self::assertSame('POST /webhooks/telegram/*** -> 500', Redact::text('POST /webhooks/telegram/9f8e7d6c5b4a -> 500'));
         self::assertSame('POST /webhooks/telegram/bot/7/*** -> 500', Redact::text('POST /webhooks/telegram/bot/7/a1b2c3d4 -> 500'));
         self::assertSame('GET /shop/cron/*** -> 500', Redact::text('GET /shop/cron/0123456789abcdef -> 500'));
+        // An online payment's callback: its id stays, its secret goes — before a query, or in a whole address.
+        self::assertSame('GET /payments/callback/12/***?Authority=A1&Status=OK', Redact::text('GET /payments/callback/12/0123456789abcdef0123456789abcdef01234567?Authority=A1&Status=OK'));
+        self::assertSame('POST https://shop.example/payments/callback/12/*** -> 503', Redact::text('POST https://shop.example/payments/callback/12/0123456789abcdef0123456789abcdef01234567 -> 503'));
     }
 
     public function testAnAddresssLoginIsTakenOut(): void

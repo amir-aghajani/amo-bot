@@ -192,7 +192,7 @@ service's own, `null` for the rest (an agent's `traffic` order says its traffic 
 
 | Order `status` | |
 |---|---|
-| `pending` | waiting to be paid — a card's receipt to come, refused, or with support (its payment says which) |
+| `pending` | waiting to be paid — a card's receipt to come, refused, or with support; an online gateway's page to pay on (its payment says which) |
 | `paid` | paid; the delivery has not started |
 | `processing` | paid; the delivery is under way |
 | `fulfilled` | delivered (`fulfilled_at`; `subscription` the service delivered, renewed or given its extras) |
@@ -202,17 +202,19 @@ service's own, `null` for the rest (an agent's `traffic` order says its traffic 
 
 | Payment `status` | |
 |---|---|
-| `pending` | a card transfer waiting for its receipt |
+| `pending` | a card transfer waiting for its receipt, or an online payment waiting for its gateway's word (`link`: its page, while it takes money — [paying online](Store-API-Buying.md#paying-online)) |
 | `awaiting_review` | its receipt is with support (`receipt.sent_at`) |
 | `paid` | accepted (`paid_at`) |
-| `failed` | its receipt was refused, or the payment was turned down |
+| `failed` | its receipt was refused, the payment was turned down, or an online payment's page closed unpaid |
 | `cancelled` | cancelled by support, the order expired, it was paid another way, or its service went to another customer |
 | `refunded` | given back |
 
 A payment's `note` is the word on its latest verdict, for the customer: support's reason for a refusal, their note on a
 cancellation or a refund, or the shop's own (`سفارش با روش دیگری پرداخت شد`, `پرداخت در مهلت کامل نشد`,
-`سرویس این سفارش به حساب دیگری منتقل شد`). Show it under the payment. Support's internal notes on an order are never in
-the API.
+`سرویس این سفارش به حساب دیگری منتقل شد`, `مهلت پرداخت در درگاه تمام شد`, `سفارش پیش از رسیدن این پرداخت بسته شده بود؛
+مبلغ به کیف پول مشتری رفت`, and for an online payment [held for support](Store-API-Buying.md#a-payment-held-for-support),
+whatever its status, `پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ …` in place of the shop's words to support on
+why). Show it under the payment. Support's internal notes on an order are never in the API.
 
 ## The wallet
 

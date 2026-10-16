@@ -17,15 +17,18 @@ interface SecretFieldProps {
   error?: string
   hint?: ReactNode
   optional?: boolean
+  /** False for a secret the form cannot go without: it is replaced, never emptied. */
+  clearable?: boolean
   /** Beside the input (a button that makes a fresh value). */
   action?: ReactNode
 }
 
 /**
  * A secret the server never sends back: shows a recognisable hint of the stored value as the
- * placeholder, takes a replacement, and offers to clear it. Sends nothing when left untouched.
+ * placeholder, takes a replacement, and offers to clear it — unless the form cannot go without it
+ * (`clearable`). Sends nothing when left untouched.
  */
-export function SecretField({ id, label, stored, value, onChange, clear, onClear, error, hint, optional, action }: SecretFieldProps) {
+export function SecretField({ id, label, stored, value, onChange, clear, onClear, error, hint, optional, clearable = true, action }: SecretFieldProps) {
   const placeholder = clear ? 'با ذخیره حذف می‌شود' : stored.set ? stored.hint : undefined
 
   return (
@@ -47,7 +50,7 @@ export function SecretField({ id, label, stored, value, onChange, clear, onClear
             </div>
             {action}
           </div>
-          {stored.set && value === '' && (
+          {clearable && stored.set && value === '' && (
             <Button variant="link" className="w-fit text-caption text-muted-foreground hover:text-foreground" onClick={() => onClear(!clear)}>
               {clear ? 'انصراف از حذف' : 'پاک کردن مقدار ذخیره‌شده'}
             </Button>

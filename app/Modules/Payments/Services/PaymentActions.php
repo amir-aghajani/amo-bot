@@ -15,7 +15,10 @@ use App\Modules\Orders\Exceptions\OrderNotPayableException;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Payments\Contracts\RefundedOrders;
 use App\Modules\Payments\Enums\CancelOutcome;
+use App\Modules\Payments\Enums\GatewayKind;
+use App\Modules\Payments\Enums\OnlineState;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
@@ -24,7 +27,8 @@ use App\Modules\Payments\Models\Payment;
  * Support's decisions about a payment, wherever they are made (the panels, the website's admins, the report group's
  * buttons, the auto-approve timer). Each checks its rule (allowed()) and who decides (never one's own payment), is one
  * compare-and-swap in PaymentService, and tells the customer only when this call decided; the loser of two decisions at
- * once is refused with DECIDED_MEANWHILE.
+ * once is refused with DECIDED_MEANWHILE. An online payment is never approved nor rejected by hand: support asks its
+ * gateway (check()).
  */
 final class PaymentActions
 {
@@ -43,6 +47,7 @@ final class PaymentActions
         private readonly GatewayRegistry $gateways,
         private readonly CustomerNotifier $notifier,
         private readonly RefundedOrders $refunded,
+        private readonly OnlinePayments $online,
     ) {}
 
     /**
@@ -52,9 +57,13 @@ final class PaymentActions
      * - cancel: anything unpaid;
      * - remind: a card payment the customer never finished, of an open order;
      * - retry: the payment that paid an order whose delivery stalled (OrderActions::stalled());
-     * - refund: a paid payment whose order's delivery is not under way.
+     * - refund: a paid payment whose order's delivery is not under way;
+     * - check: an online payment opened on its gateway and not paid — waiting, its page closed, or cancelled —, whose
+     *   gateway may have taken the money all the same (check()); never one held for support (OnlinePayments::isHeld()).
+     * One that went to the wallet once its order had closed (Payment::wentToWallet()) paid nothing of the order: its
+     * money is the customer's, nothing to retry or refund.
      *
-     * @return array{approve: bool, reject: bool, cancel: bool, remind: bool, retry: bool, refund: bool}
+     * @return array{approve: bool, reject: bool, cancel: bool, remind: bool, retry: bool, refund: bool, check: bool}
      */
     public function allowed(Payment $payment): array
     {
@@ -62,14 +71,17 @@ final class PaymentActions
         $orderOpen = $order->status === OrderStatus::Pending;
         $card = $this->gateways->isManual($payment->method);
         $unpaid = $payment->status->isOpen();
+        $paid = $payment->isPaid() && !$payment->wentToWallet();
 
         return [
             'approve' => $card && $unpaid && $orderOpen,
             'reject' => $payment->status === PaymentStatus::AwaitingReview,
             'cancel' => $unpaid,
             'remind' => $card && in_array($payment->status, [PaymentStatus::Pending, PaymentStatus::Failed], true) && $orderOpen,
-            'retry' => $payment->isPaid() && OrderActions::stalled($order),
-            'refund' => $payment->isPaid() && in_array($order->status, [OrderStatus::Paid, OrderStatus::Failed, OrderStatus::Fulfilled], true),
+            'retry' => $paid && OrderActions::stalled($order),
+            'refund' => $paid && in_array($order->status, [OrderStatus::Paid, OrderStatus::Failed, OrderStatus::Fulfilled], true),
+            'check' => $this->isOnline($payment) && $payment->link !== null && !OnlinePayments::isHeld($payment)
+                && in_array($payment->status, [PaymentStatus::Pending, PaymentStatus::Failed, PaymentStatus::Cancelled], true),
         ];
     }
 
@@ -202,7 +214,22 @@ final class PaymentActions
     }
 
     /**
-     * @param 'approve'|'reject'|'cancel'|'remind'|'retry'|'refund' $action
+     * Asks an online payment's gateway what came of it (OnlinePayments::check()): paid, it is settled and the customer
+     * told; closed, it fails. The gateway's word alone moves it. `$by`: who of support asked — the report of a hold the
+     * answer causes names them.
+     *
+     * @throws ValidationException 422 on `status`
+     * @throws GatewayUnavailableException the gateway could not say — nothing changed —, or its answer held it (`held`)
+     */
+    public function check(Payment $payment, ?Actor $by = null): OnlineState
+    {
+        $this->allow($payment, 'check');
+
+        return $this->online->check($payment, $by?->reviewer);
+    }
+
+    /**
+     * @param 'approve'|'reject'|'cancel'|'remind'|'retry'|'refund'|'check' $action
      * @throws ValidationException 422 on `status`, worded by the state the payment and its order are in
      */
     private function allow(Payment $payment, string $action): void
@@ -216,21 +243,31 @@ final class PaymentActions
      * Why an action is not allowed, worded by the state the payment and its order are in now (the report group's buttons
      * say it too). `receipt` words why a receipt is not taken (PaymentService::awaitsReceipt()).
      *
-     * @param 'approve'|'reject'|'cancel'|'remind'|'retry'|'refund'|'receipt' $action
+     * @param 'approve'|'reject'|'cancel'|'remind'|'retry'|'refund'|'check'|'receipt' $action
      */
     public function refusal(Payment $payment, string $action): string
     {
         $status = $payment->status;
         $order = $payment->order;
+        $online = $this->isOnline($payment);
 
+        // Held for support — what its gateway said does not fit it, or it kept the money unsettled —: its own note says which.
+        if ($action === 'check' && OnlinePayments::isHeld($payment)) {
+            return (in_array($payment->note, [PaymentService::NOTE_HELD, PaymentService::NOTE_UNSETTLED], true) ? $payment->note : PaymentService::NOTE_HELD) . '.';
+        }
+        // Unpaid, and no online payment opened on its gateway: nothing to ask it.
+        if ($action === 'check' && $status !== PaymentStatus::Paid && $status !== PaymentStatus::Refunded) {
+            return $online ? 'این پرداخت در درگاه باز نشد؛ چیزی برای استعلام ندارد.' : 'استعلام از درگاه فقط برای پرداخت آنلاین است.';
+        }
         if ($status === PaymentStatus::Paid) {
-            return match ($action) {
-                'cancel' => 'این پرداخت انجام شده است و لغو نمی‌شود؛ برای برگرداندن مبلغ، بازپرداختش کنید.',
-                'remind' => 'این پرداخت انجام شده است.',
-                'retry' => $order->status === OrderStatus::Fulfilled
+            return match (true) {
+                $action === 'cancel' => 'این پرداخت انجام شده است و لغو نمی‌شود؛ برای برگرداندن مبلغ، بازپرداختش کنید.',
+                in_array($action, ['remind', 'check'], true) => 'این پرداخت انجام شده است.',
+                in_array($action, ['retry', 'refund'], true) && $payment->wentToWallet() => 'این پرداخت بعد از بسته شدن سفارشش رسید و مبلغش به کیف پول مشتری رفت؛ نه تحویلی دارد نه بازپرداختی.',
+                $action === 'retry' => $order->status === OrderStatus::Fulfilled
                     ? 'سفارش این پرداخت تحویل شده است.'
                     : 'تحویل سفارش این پرداخت در جریان است؛ اگر تا چند دقیقه دیگر تمام نشد، دوباره امتحان کنید.',
-                'refund' => PaymentService::DELIVERY_RUNNING,
+                $action === 'refund' => PaymentService::DELIVERY_RUNNING,
                 default => 'این پرداخت تایید شده است.',
             };
         }
@@ -240,13 +277,17 @@ final class PaymentActions
 
         // Open — pending, a receipt in review, refused —, which anyone may cancel: the money is not in.
         return match ($action) {
-            'reject' => $status === PaymentStatus::Pending ? 'رسید این پرداخت هنوز نرسیده است.' : self::failed($payment),
+            'reject' => match (true) {
+                $online => 'پرداخت آنلاین رسیدی ندارد؛ نتیجه‌اش را درگاه می‌گوید.',
+                $status === PaymentStatus::Pending => 'رسید این پرداخت هنوز نرسیده است.',
+                default => self::failed($payment),
+            },
             'retry', 'refund' => 'این پرداخت انجام نشده است.',
             default => match (true) {
                 !$this->gateways->isManual($payment->method) => match ($action) {
                     'remind' => 'یادآوری فقط برای پرداخت کارت به کارت است.',
                     'receipt' => 'رسید فقط برای پرداخت کارت به کارت فرستاده می‌شود.',
-                    default => 'پرداخت از کیف پول تایید دستی ندارد.',
+                    default => $online ? 'پرداخت آنلاین تایید دستی ندارد؛ نتیجه‌اش را درگاه می‌گوید.' : 'پرداخت از کیف پول تایید دستی ندارد.',
                 },
                 in_array($action, ['remind', 'receipt'], true) && $status === PaymentStatus::AwaitingReview => 'رسید این پرداخت رسیده و در انتظار بررسی است.',
                 $action === 'receipt' && $status === PaymentStatus::Failed => self::failed($payment),
@@ -260,5 +301,11 @@ final class PaymentActions
     private static function failed(Payment $payment): string
     {
         return $payment->receipt_at !== null ? 'رسید این پرداخت رد شده است.' : 'این پرداخت ناموفق بوده است.';
+    }
+
+    /** Made on an online gateway (GatewayKind::Online): paid on its page, and only its word settles it. */
+    private function isOnline(Payment $payment): bool
+    {
+        return $this->gateways->kind($payment->method->driver) === GatewayKind::Online;
     }
 }

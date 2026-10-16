@@ -11,4 +11,9 @@ enum GatewayKind: string
     case Instant = 'instant';
     /** The customer pays outside the shop and a person — or the method's review window — accepts the receipt: a card transfer. */
     case Manual = 'manual';
+    /**
+     * The customer pays on the gateway's own page (Contracts\OnlineGateway) and the gateway is asked what came of it —
+     * when it calls back, when the customer asks, and now and then until its page closes (Services\OnlinePayments).
+     */
+    case Online = 'online';
 }

@@ -11,6 +11,125 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.6.0
+
+### Added
+
+- **CubePay, the first online payment gateway** («افزودن روش پرداخت» › «CubePay», in both panels) — card-to-card and
+  crypto payments CubePay confirms by itself: a card transfer from your bank's text message, a crypto one from the
+  chain. Its settings are your API token from ‎@cubepy_bot, kept encrypted, and the fee you pass on to customers
+  ([Payment methods](Payment-Methods.md#cubepay)).
+  - The customer gets CubePay's page — «💳 پرداخت», the exact sum it asks and until when — and the order is delivered as
+    soon as CubePay says it was paid: no receipt, nobody to approve it. With «🤖 نمایش کارت در ربات» on at CubePay, the
+    bot also shows the card, its holder and the exact sum with copy buttons, protected like a card-to-card payment's.
+    A page answered paid turns into a short line saying so, its buttons gone.
+  - The shop never takes a call to its address as CubePay's word: it asks CubePay itself — when CubePay calls (a few
+    times a minute at most for one payment; a call past that is answered with what the shop knows), when the customer
+    taps «🔄 بررسی پرداخت» (once every few seconds at most), when support taps «استعلام از درگاه» on the payments
+    screen, and on its own every few minutes while a page is open and every quarter of an hour for two hours after it
+    closed —, so a payment is settled and its customer told once, even when a call is lost or CubePay takes the money
+    late. While CubePay cannot be asked, the customer's check says to try again a little later («الان نمی‌شود از درگاه
+    پرسید؛ …», a text you may reword).
+  - A page whose time ran out unpaid fails its payment («مهلت پرداخت در درگاه تمام شد»); a payment has one page — the
+    same page is shown again while it has a few minutes left, two taps at once included —, and before a new one opens
+    CubePay is asked about the old one — a bank's text can reach it minutes late —: paid there, the order is delivered
+    and nobody pays twice. An order whose page still takes money never expires, a discount code's hold included.
+  - **CubePay's fee passed on to customers**: «کارمزد درصدی بر عهده مشتری» and «کارمزد ثابت بر عهده مشتری» on the
+    method add the fee to what each payment asks — said apart on the bot's page and the website («(شامل … کارمزد
+    درگاه)»), and on the method's line in the list —, as CubePay's guide for shops has it: a card payment's fixed fee
+    in the fixed field, a percent one a little higher than CubePay's (3.1 for its 3%), since it is taken of the whole
+    sum.
+  - The order is paid at its price — a top-up credits its amount —, as CubePay advises: the fee and the few Toman
+    CubePay adds to tell transfers apart are CubePay's.
+  - **No money is lost**: what CubePay takes for an order that is no longer waiting — paid another way, cancelled,
+    expired — goes to the customer's wallet («پرداخت آنلاین #… پس از بسته شدن سفارش #…»), they and the report group's
+    «شارژ کیف پول» told; such a payment is never refunded or delivered again from the panels.
+  - **A payment the shop cannot take at its gateway's word is held for you** — one confirmed for another order or
+    amount, or one on which a gateway kept money unsettled for 48 hours
+    ([Payment methods](Payment-Methods.md#a-payment-held-for-you)). It is asked about no more, the report group's
+    «خطاها» hears of it once, and the payments screen marks it with why («لغو پرداخت» the one thing offered). While it
+    still waits — pending, or failed with its page —, its order never expires and is paid no other way, and the
+    customer who asks — in the bot, on the website, on the page a gateway sends them back to — is told it is with
+    support and not to pay again («پرداخت شما برای بررسی به پشتیبانی رسید؛ …»); once you cancel it, it holds nothing.
+  - CubePay refusing to open a payment — a wrong token, an account not approved yet, a fee wallet short at CubePay —
+    is the checkout's «درگاه پرداخت الان در دسترس نیست؛ …», and the log says what CubePay said.
+- **Zarinpal** («افزودن روش پرداخت» › «زرین‌پال») — online payment with any Iranian bank card. Its settings are your
+  merchant code («مرچنت کد», kept encrypted) and «حالت آزمایشی (sandbox)», Zarinpal's test service
+  ([Payment methods](Payment-Methods.md#zarinpal)). The customer pays on Zarinpal's page and is sent back to a page of
+  the shop's saying what came of it — the order paid, the money gone to their wallet, not paid yet, or not paid (then
+  to message support should money have left their account) —, with «بازگشت به ربات» for a customer with a Telegram
+  account (one of the website alone is told to look at their account on the site); the order is delivered and they are
+  told once.
+  The shop asks Zarinpal to confirm every payment with the bank by itself, so nothing is handed back for want of the
+  shop's answer, and asks about every unpaid one as it does CubePay's. Zarinpal's fee, when you set the buyer to pay it
+  there, is shown apart in the sum the page asks; the order is paid at its price.
+- **AtlasPay** («افزودن روش پرداخت» › «اطلس‌پی») — card-to-card payments AtlasPay confirms from your bank's text
+  message, paid in its mini app inside Telegram. Its one setting is your API key, kept encrypted
+  ([Payment methods](Payment-Methods.md#atlaspay)). The customer pays the exact sum AtlasPay asks — its markup and last
+  digit said apart — and the order is delivered and credited at its price; with AtlasPay's «نمایش مستقیم اطلاعات
+  پرداخت», the bot also shows the card with copy buttons. AtlasPay calls a shop on https at once, and the shop asks
+  about every unpaid payment as it does CubePay's — one with a receipt in review at AtlasPay, or the rest of an
+  underpayment to come, for up to 48 hours after its page closed. An underpayment AtlasPay accepted is never delivered
+  by itself: it is held for you.
+- **AbanGateway** («افزودن روش پرداخت» › «آبان گیت وی») — card-to-card payments to your own cards, confirmed by
+  AbanGateway from your bank's text message. Its settings are your API key (kept encrypted; a `ag_test_` key is its
+  test mode) and «نمایش کارت در ربات و سایت» ([Payment methods](Payment-Methods.md#abangateway)). The customer pays the
+  exact sum AbanGateway asks — a few Rial more than the order's —, on its page or to the card shown in the bot; a shop
+  on https is called at once and the customer's browser sent back to it, and a paid invoice is claimed once, so nothing
+  is delivered twice; a large sum split into parts and paid in part is waited for, up to 48 hours after its page
+  closed. The order is credited at its price.
+
+### Changed
+
+- **A secret a connection needs** — a panel's token or password, a payment gateway's token, an email service's or a
+  captcha's key — can no longer be cleared from the panels' forms (the server always refused it), only replaced.
+
+### For website developers
+
+- A checkout may answer `outcome: "link"` with a `link`: `payment_id`, `url` (open it for the customer), `expires_at`,
+  `amount` (the exact sum the page asks — a few Toman more than the order's for a card payment: show this one),
+  `fee` (of `amount`, the gateway's fee the customer pays — the one the shop passes on, Zarinpal's when the payer is
+  set to pay it, AtlasPay's markup —; `null` for none) and `card` (`{number, holder, bank}` when the gateway gave one
+  to show — `holder` and `bank` `null` when it did not say —, else `null`). A request made again with its
+  Idempotency-Key answers the same page while it has a few minutes left; after that, should the old page turn out
+  paid, the order as it stands (`settled` or `processing`) and no new page.
+- `POST /payments/{id}/check` asks the gateway about the customer's own online payment: `{check: {state, order,
+  subscription}}`, `state` being `paid`, `waiting` or `closed`; 404 another's, 422 on `status` for a card or wallet
+  payment — or one held for support (send the customer to support) —, 429 past 10 a minute, 503 while the gateway
+  cannot be asked. The gateway tells the shop by itself; the site may ask when the customer comes back, and watch
+  `GET /orders/{id}`.
+- A payment in `GET /orders` carries `link` while its page is open (never one held for support); a method's `kind` may
+  be `online`; an online payment takes no receipt (the receipt upload refuses it).
+- A gateway that will not open the payment is the refused checkout (422 on `method_id`), the order left open. An order
+  whose online payment is held for support is paid no other way meanwhile: its checkout is a 422 on `status`, whatever
+  the way to pay ([a payment held for support](Store-API-Buying.md#a-payment-held-for-support)).
+- A gateway may send the customer back to the shop's own address after paying (Zarinpal and AbanGateway do): a page
+  there says what came of it and leads a customer with a Telegram account back to the bot; one without is told to look
+  at their account on the site, with no link — open `link.url` in a new tab and learn the outcome with
+  `POST /payments/{id}/check` or `GET /orders/{id}`.
+- `link.url` may be a Telegram link (AtlasPay's mini app): the customer pays in Telegram.
+- The notice `payment_credited`: an online payment that came after its order closed went to the wallet.
+- For a shop's admins on the website: `POST /admin/payments/{id}/check` («استعلام از درگاه»), no grant needed — a 422
+  on `status` when the gateway's answer holds the payment for support; payment rows gain `gateway_label`,
+  `link_expires_at`, `checked_at`, `to_wallet` and `held`, an order's payments `to_wallet` and `held`, and the
+  actions `check`.
+
+### Upgrading
+
+- The database gains each payment's online page: its address, until when it takes money, the gateway's details of it
+  and when the shop last asked about it. The panel's update runs this upgrade by itself.
+- CubePay calls the shop back at its address («آدرس سایت», `APP_URL`), which must begin with `https://`, and needs the
+  scheduler (the cron or the poller) to ask about payments whose call was lost. Zarinpal sends customers back to that
+  address too: its domain must be the one registered for your gateway at Zarinpal. AtlasPay and AbanGateway call a
+  shop on `https://` only — AbanGateway one the internet reaches —; on http the scheduler's asking is all they have.
+- A payment gateway driver of your own: a `Secret` field of its form is now kept encrypted with `APP_KEY` and handed to
+  the driver readable (one that no longer decrypts reads as empty); an online gateway is a kind of its own (`online`,
+  `Contracts\OnlineGateway`) — [Drivers](Drivers.md#an-online-gateway).
+- Tools of your own that write through the panels' API: a CubePay method's request is `token`, `fee_percent` and
+  `fee_fixed`, a Zarinpal method's `merchant_id` and `sandbox`, an AtlasPay method's `api_key`, an AbanGateway method's
+  `api_key` and `show_card` (each with `label`, the bounds and `enabled`), and a row never returns the token, the code
+  or the key. A payment row's `gateway` may be `cubepay`, `zarinpal`, `atlaspay` or `abangateway`.
+
 ## Version 0.5.0
 
 ### Added

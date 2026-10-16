@@ -15,6 +15,7 @@ use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
@@ -100,6 +101,10 @@ final class OrderDirectory
                 'gateway' => $payment->method->driver,
                 'method' => $payment->method->label,
                 'paid_at' => $payment->paid_at?->toIso8601String(),
+                // Paid after the order closed: its money in the wallet, none of the order's.
+                'to_wallet' => $payment->wentToWallet(),
+                // Held for support: its gateway took money on it that does not fit, for support to settle.
+                'held' => OnlinePayments::isHeld($payment),
                 'created_at' => $payment->created_at->toIso8601String(),
             ])->values()->all(),
             'paid_at' => $order->paidAt()?->toIso8601String(),

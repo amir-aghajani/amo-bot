@@ -26,6 +26,7 @@ interface Schema {
   allOf?: Schema[]
   oneOf?: Schema[]
   anyOf?: Schema[]
+  not?: Schema
   pattern?: string
   minimum?: number
   description?: string
@@ -188,6 +189,7 @@ const KEYWORDS = new Set([
   'allOf',
   'oneOf',
   'anyOf',
+  'not',
   'pattern',
   'minimum',
   'description',
@@ -219,6 +221,7 @@ function check(value: unknown, given: Schema, where: string): string[] {
   for (const part of schema.allOf ?? []) problems.push(...check(value, part, where))
   if (schema.oneOf !== undefined) problems.push(...oneOfProblems(value, schema.oneOf, where))
   if (schema.anyOf !== undefined && !schema.anyOf.some((part) => check(value, part, where).length === 0)) problems.push(`${where}: ${shown(value)}, none of its forms`)
+  if (schema.not !== undefined && check(value, schema.not, where).length === 0) problems.push(`${where}: ${shown(value)}, the very form it is not`)
 
   return problems
 }

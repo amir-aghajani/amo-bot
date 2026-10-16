@@ -1,19 +1,20 @@
 import { useState } from 'react'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReviewModal } from '@/components/payments/review-modal'
-import type { PaymentRow } from '@/lib/api-types'
+import type { PaymentCheckResponse, PaymentRow } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
 import type { NextRow } from '@/lib/use-next-row'
 import { providers, until } from '@/test/render'
-import { paymentRow } from '@/test/rows'
+import { onlinePaymentRow, paymentRow } from '@/test/rows'
 import { json, refusal, server, type Answer } from '@/test/server'
 
 /*
  * A payment's dialog (components/payments/review-modal): how approving is labelled, the method's summary, a reminder
- * that could not be sent, a receipt the browser could not draw, «بعدی» through the list, and the focus while and after
- * an operation runs.
+ * that could not be sent, an online payment asked of its gateway — what it said, money gone to the wallet, and one held
+ * for support —, a receipt the browser could not draw, «بعدی» through the list, and the focus while and after an
+ * operation runs.
  */
 
 const RECEIPT = '/api/admin/payments/7/receipt'
@@ -124,7 +125,7 @@ describe('an operation', () => {
       status: 'paid',
       reviewer: 'root',
       order: { ...paymentRow().order, status: 'failed', notes: 'پنل «آلمان»: پاسخ نداد.' },
-      actions: { approve: false, reject: false, cancel: false, remind: false, retry: true, refund: true },
+      actions: { approve: false, reject: false, cancel: false, remind: false, retry: true, refund: true, check: false },
     })
     server().on('POST', '/api/admin/payments/7/approve', json({ payment: delivered }))
     vi.spyOn(toast, 'error')
@@ -140,7 +141,7 @@ describe('an operation', () => {
 
   it('refused because the payment changed shows the server’s message once, even with nothing left to do, with the focus on it', async () => {
     const decided = 'این پرداخت را نمی‌شود تایید کرد؛ یا پرداخت‌شده است، یا سفارشش دیگر باز نیست.'
-    const cancelled = paymentRow({ status: 'cancelled', actions: { approve: false, reject: false, cancel: false, remind: false, retry: false, refund: false } })
+    const cancelled = paymentRow({ status: 'cancelled', actions: { approve: false, reject: false, cancel: false, remind: false, retry: false, refund: false, check: false } })
     server().on('POST', '/api/admin/payments/7/approve', refusal(422, decided, { status: [decided] }))
     render(<Reviewing first={paymentRow()} refreshed={cancelled} />, { wrapper: providers().wrapper })
     const approve = button('تایید و شارژ کیف پول')
@@ -247,6 +248,124 @@ describe('a reminder', () => {
     const sara = { ...paymentRow().user, name: 'سارا', username: null, telegram_id: null, email: 'sara@example.com' }
     remind(json({ payment: paymentRow({ status: 'pending', receipt: null, user: sara }), delivery: 'unreachable' }))
     await until(() => expect(toast.warning).toHaveBeenCalledWith('یادآوری فرستاده نشد', { description: 'سرور ایمیل در دسترس نبود' }))
+  })
+})
+
+describe('an online payment', () => {
+  const CHECK = '/api/admin/payments/7/check'
+
+  /** Payment #7 on CubePay as the dialog shows it, «استعلام از درگاه» pressed with the server answering `answer`. */
+  const asked = (answer: Answer, payment = onlinePaymentRow()) => {
+    server().on('POST', CHECK, answer)
+    const props = show(payment)
+    fireEvent.click(button('استعلام از درگاه'))
+    return props
+  }
+
+  it('shows its gateway, its id there and its page’s end; no receipt, and nothing to approve or reject by hand', () => {
+    show(onlinePaymentRow({ checked_at: '2026-10-06T09:00:00Z' }))
+
+    expect(within(dialog()).getByText('درگاه CubePay')).toBeTruthy()
+    expect(within(dialog()).getByText('شناسه در درگاه').nextElementSibling?.textContent).toBe('A1b2C3d4E5f6')
+    expect(within(dialog()).getByText('مهلت پرداخت در درگاه')).toBeTruthy()
+    expect(within(dialog()).getByText('آخرین استعلام')).toBeTruthy()
+    expect(within(dialog()).getByText(/پرداخت آنلاین در صفحه درگاه؛ رسیدی در کار نیست/)).toBeTruthy()
+    expect(button('استعلام از درگاه')).toBeTruthy()
+    expect(button('لغو پرداخت')).toBeTruthy()
+    expect(within(dialog()).queryByRole('button', { name: /تایید/ })).toBeNull()
+    expect(within(dialog()).queryByRole('button', { name: 'رد کردن' })).toBeNull()
+  })
+
+  it('asks the gateway at one press and, still waiting, says so and stays', async () => {
+    vi.spyOn(toast, 'info')
+    const { onClose, onReviewed } = asked(json({ payment: onlinePaymentRow({ checked_at: '2026-10-06T09:10:00Z' }), state: 'waiting' } satisfies PaymentCheckResponse))
+
+    await until(() => expect(toast.info).toHaveBeenCalledWith(`پرداخت ${idLabel(7)} هنوز در درگاه پرداخت نشده است`))
+    expect(server().sent('POST', CHECK)[0]?.body).toBeUndefined()
+    expect(onReviewed).toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(button('استعلام از درگاه')).toBeTruthy()
+  })
+
+  it('says a payment the gateway took was approved, and what it brought', async () => {
+    const paid = onlinePaymentRow({
+      status: 'paid',
+      paid_at: '2026-10-06T09:05:00Z',
+      order: { ...paymentRow().order, status: 'fulfilled' },
+      actions: { ...onlinePaymentRow().actions, cancel: false, check: false, refund: true },
+    })
+    const { onClose } = asked(json({ payment: paid, state: 'paid' } satisfies PaymentCheckResponse))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith(`پرداخت ${idLabel(7)} در درگاه پرداخت شده بود؛ تایید شد و کیف پول شارژ شد`))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('says a page that closed unpaid failed', async () => {
+    const closed = onlinePaymentRow({ status: 'failed', description: 'مهلت پرداخت در درگاه تمام شد' })
+    asked(json({ payment: closed, state: 'closed' } satisfies PaymentCheckResponse))
+
+    await until(() => expect(toast.warning).toHaveBeenCalledWith(`پرداخت ${idLabel(7)} در درگاه پرداخت نشد و مهلت صفحه پرداخت تمام شده است`))
+  })
+
+  it('says the money that came after its order closed went to the wallet — in the toast and in the dialog', async () => {
+    const credited = onlinePaymentRow({
+      status: 'paid',
+      to_wallet: true,
+      description: 'سفارش پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت',
+      order: { ...paymentRow().order, status: 'cancelled' },
+      actions: { approve: false, reject: false, cancel: false, remind: false, retry: false, refund: false, check: false },
+    })
+    asked(json({ payment: credited, state: 'paid' } satisfies PaymentCheckResponse), onlinePaymentRow({ status: 'cancelled' }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith(`پرداخت ${idLabel(7)} در درگاه پرداخت شده بود؛ سفارشش بسته بود و مبلغ به کیف پول مشتری رفت`))
+    cleanup()
+    show(credited)
+    expect(within(dialog()).getByText('کیف پول').nextElementSibling?.textContent).toBe('سفارش پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت')
+    expect(within(dialog()).queryByRole('button', { name: /بازپرداخت/ })).toBeNull()
+  })
+
+  it('shows the server’s words when the gateway cannot be asked, nothing changed', async () => {
+    const down = 'درگاه پرداخت الان جواب نمی‌دهد و چیزی تغییر نکرد؛ کمی بعد دوباره استعلام کنید.'
+    asked(refusal(503, down))
+
+    expect(await within(dialog()).findByText(down)).toBeTruthy()
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  /** Payment #7 held for support (PaymentService::NOTE_HELD): never asked again, its cancel alone offered. */
+  const HELD_NOTE = 'درگاه این پرداخت را با سفارش یا مبلغ دیگری تایید کرد؛ پشتیبانی باید آن را در درگاه بررسی کند'
+  const held = () => onlinePaymentRow({ held: true, description: HELD_NOTE, checked_at: '2026-10-06T09:10:00Z', actions: { ...onlinePaymentRow().actions, check: false } })
+
+  it('held for support says so beside its status, and why — with its cancel alone offered, and no page’s end to wait on', () => {
+    show(held())
+
+    const status = within(dialog()).getByText('وضعیت').nextElementSibling
+    expect(status?.textContent?.replace(/\s+/g, ' ').trim()).toBe('در انتظار پرداخت نگه داشته شده برای پشتیبانی')
+    expect(within(dialog()).getByText('بررسی پشتیبانی').nextElementSibling?.textContent).toBe(HELD_NOTE)
+    expect(within(dialog()).queryByText('دلیل')).toBeNull()
+    expect(within(dialog()).queryByText('مهلت پرداخت در درگاه')).toBeNull()
+    expect(within(dialog()).queryByRole('button', { name: 'استعلام از درگاه' })).toBeNull()
+    expect(button('لغو پرداخت')).toBeTruthy()
+  })
+
+  it('whose ask holds it for support says so twice on purpose — the refusal over its operations, and why among its facts', async () => {
+    const words = `${HELD_NOTE}.`
+    server().on('POST', CHECK, refusal(422, words, { status: [words] }))
+    render(<Reviewing first={onlinePaymentRow()} refreshed={held()} />, { wrapper: providers().wrapper })
+    const ask = button('استعلام از درگاه')
+    ask.focus()
+    fireEvent.click(ask)
+
+    await until(() => expect(within(dialog()).queryByRole('button', { name: 'استعلام از درگاه' })).toBeNull())
+    // What this press came to, where the operations are — with the focus on it, as any refusal…
+    const operations = within(dialog()).getByRole('region', { name: 'عملیات' })
+    expect(within(operations).getAllByText(words)).toHaveLength(1)
+    expect(document.activeElement?.textContent).toContain(words)
+    // …and why the payment is held, as its dialog shows it for anyone opening it later: the same sentence, both kept.
+    expect(within(dialog()).getByText('بررسی پشتیبانی').nextElementSibling?.textContent).toBe(HELD_NOTE)
+    expect(within(dialog()).getAllByText(new RegExp(HELD_NOTE))).toHaveLength(2)
+    expect(within(operations).getByRole('button', { name: 'لغو پرداخت' })).toBeTruthy()
+    expect(toast.success).not.toHaveBeenCalled()
   })
 })
 

@@ -55,7 +55,7 @@ final class UrlsTest extends TestCase
 
     public function testTheAddressesWhoseLastSegmentIsASecretAreTheMachinesOwn(): void
     {
-        self::assertSame([Urls::TELEGRAM_WEBHOOK, Urls::AGENT_WEBHOOK, Urls::CRON], Urls::SECRET_PATHS, 'what Redact masks in a log line');
+        self::assertSame([Urls::TELEGRAM_WEBHOOK, Urls::AGENT_WEBHOOK, Urls::CRON, Urls::PAYMENT_CALLBACK], Urls::SECRET_PATHS, 'what Redact masks in a log line');
         foreach (Urls::SECRET_PATHS as $path) {
             self::assertMatchesRegularExpression('~/\{\w+\}$~', $path, "{$path} ends with its secret");
         }

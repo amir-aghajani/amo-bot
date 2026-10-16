@@ -8,6 +8,7 @@ use App\Modules\Agency\Tasks\AgencyStandingTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
+use App\Modules\Payments\Tasks\OnlinePaymentsTask;
 use App\Modules\Rewards\Tasks\NightlyDrawTask;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Subscriptions\Tasks\CleanupServicesTask;
@@ -31,6 +32,8 @@ use App\Modules\Updates\Tasks\CheckReleasesTask;
 return static function (Scheduler $schedule): void {
     // Card-to-card receipts nobody reviewed inside their method's window.
     $schedule->everyMinutes(1, AutoApproveReceiptsTask::class, eachBot: true);
+    // Online gateways' payments asked about now and then, should a gateway's callback never come.
+    $schedule->everyMinutes(1, OnlinePaymentsTask::class, eachBot: true);
     // Paid orders a process that died left undelivered (never a failed delivery: that one waits for support).
     $schedule->everyMinutes(1, ResumeDeliveriesTask::class, eachBot: true);
     // Checkouts the customer walked away from, dropped once nothing happened to them for two days — one made with a

@@ -13,6 +13,9 @@ enum NoticeType: string
     /** A payment was approved: the service delivered, the wallet charged, the traffic added — or the delivery failed and support finishes it. */
     case PaymentSettled = 'payment_settled';
 
+    /** An online payment came in after its order had closed: its money went to the wallet. */
+    case PaymentCredited = 'payment_credited';
+
     /** Support refused the receipt, with their reason. */
     case PaymentRejected = 'payment_rejected';
 
@@ -153,6 +156,7 @@ enum NoticeType: string
     {
         return match ($this) {
             self::PaymentSettled => 'پرداخت شما تایید شد',
+            self::PaymentCredited => 'پرداخت شما به کیف پولتان افزوده شد',
             self::PaymentRejected => 'رسید پرداخت شما تایید نشد',
             self::OrderCancelled => 'سفارش شما لغو شد',
             self::PaymentRefunded => 'مبلغ پرداخت شما به کیف پول برگشت داده شد',

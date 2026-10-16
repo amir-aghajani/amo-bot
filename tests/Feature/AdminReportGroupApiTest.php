@@ -53,7 +53,7 @@ final class AdminReportGroupApiTest extends HttpTestCase
         $topics = array_column($this->group($this->get('/api/agent/bot/report-group'))['topics'], 'about', 'key');
 
         self::assertSame(['purchases', 'renewals', 'wallet', 'receipts', 'users', 'errors', 'tickets', 'reviews'], array_keys($topics), 'no agency of its own; its tickets and its reviews its own');
-        self::assertSame('سفارش‌های پرداخت‌شده‌ای که تحویلشان ناموفق بود، با دکمه تلاش دوباره برای مدیرهای ربات.', $topics['errors'], 'its own deliveries, not the servers');
+        self::assertSame('سفارش‌های پرداخت‌شده‌ای که تحویلشان ناموفق بود، با دکمه تلاش دوباره برای مدیرهای ربات؛ و پرداخت‌های آنلاینی که برای بررسی پشتیبانی نگه داشته می‌شوند، چون درگاه آن‌ها را با سفارش یا مبلغ دیگری تایید کرد یا پولشان را تسویه نکرد.', $topics['errors'], 'its own deliveries and held payments, not the servers');
     }
 
     public function testALinkNeedsTheBotsUsernameAndANewOneReplacesTheLast(): void

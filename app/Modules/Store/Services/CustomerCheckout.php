@@ -448,11 +448,11 @@ final class CustomerCheckout
 
     /**
      * What a checkout came to, as the website is answered: the outcome, the order as it stands (support's notes never),
-     * a card transfer's details, and the service once delivered (a purchase's, or the one renewed or given extras) while
-     * it is still theirs — a repeated request after they handed it on gets none. A checkout that paid nothing is
-     * refused instead.
+     * a card transfer's details or an online gateway's page (OrderPresenter::link()), and the service once delivered
+     * (delivered()). A checkout that paid nothing is refused instead — an online gateway that would not open the payment
+     * among them, in the payment's note.
      *
-     * @return array{outcome: string, order: array<string, mixed>, transfer: array{payment_id: int, amount: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null}|null, subscription: array<string, mixed>|null}
+     * @return array{outcome: string, order: array<string, mixed>, transfer: array{payment_id: int, amount: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null}|null, link: array<string, mixed>|null, subscription: array<string, mixed>|null}
      * @throws CheckoutRefusedException 422 the wallet short, or its refusal; 409 paid or closed elsewhere a moment ago, or — made again — cancelled since
      */
     public function answer(User $customer, CheckoutResult $result): array
@@ -464,22 +464,34 @@ final class CustomerCheckout
             CheckoutOutcome::Refused => throw CheckoutRefusedException::refused($result->payment()->note),
             default => $this->customerOrders->find($customer, $result->order()->id),
         };
-        $delivered = ($order->type === OrderType::Purchase || $order->type->forService()) && $order->fulfilled_at !== null && $order->subscription_id !== null;
-        $service = null;
-        if ($delivered) {
-            try {
-                $service = $this->subscriptions->present($this->subscriptions->find($customer, (int) $order->subscription_id));
-            } catch (ModelNotFoundException) {
-                // Handed to another customer (or removed) since it was delivered: the order stays theirs, the service not.
-            }
-        }
 
         return [
             'outcome' => $result->outcome->value,
             'order' => $this->presenter->present($order),
             'transfer' => $result->outcome !== CheckoutOutcome::Transfer ? null : $this->transfer($result),
-            'subscription' => $service,
+            'link' => $result->outcome !== CheckoutOutcome::Link ? null : $this->presenter->link($result->payment(), $result->payLink()),
+            'subscription' => $this->delivered($customer, $order),
         ];
+    }
+
+    /**
+     * The service the customer's order delivered — a purchase's, or the one renewed or given extras — while it is still
+     * theirs; null before it is delivered, and once they handed it on.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function delivered(User $customer, Order $order): ?array
+    {
+        if (!($order->type === OrderType::Purchase || $order->type->forService()) || $order->fulfilled_at === null || $order->subscription_id === null) {
+            return null;
+        }
+
+        try {
+            return $this->subscriptions->present($this->subscriptions->find($customer, $order->subscription_id));
+        } catch (ModelNotFoundException) {
+            // Handed to another customer (or removed) since it was delivered: the order stays theirs, the service not.
+            return null;
+        }
     }
 
     /**

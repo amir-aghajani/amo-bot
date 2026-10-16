@@ -7,8 +7,8 @@ GitHub's private vulnerability reporting: the repository's **Security** tab › 
 ([github.com/amir-aghajani/amo-bot/security/advisories/new](https://github.com/amir-aghajani/amo-bot/security/advisories/new)).
 Say:
 
-- what it is and where — the panels' API, a panel, a bot, the Store API, the installer, the webhooks or the cron
-  address, the release zip;
+- what it is and where — the panels' API, a panel, a bot, the Store API, the installer, the webhooks, the cron
+  address or a payment gateway's callback, the release zip;
 - the version (`Application::VERSION`, or the commit);
 - how to reproduce it, and what an attacker gains.
 
@@ -32,7 +32,8 @@ What the code does by itself, in short — [Running in production](Running-In-Pr
 [Architecture](Architecture.md#failures-and-hardening) have more:
 
 - PHP answers JSON only, every answer with a sandboxing Content-Security-Policy, `nosniff`, no framing and no caching;
-  the panels' pages carry a policy of their own from the build. A failure's details never reach a visitor.
+  the panels' pages carry a policy of their own from the build, and PHP's one page — where an online gateway sends a
+  customer's browser back — one that loads nothing and runs no script. A failure's details never reach a visitor.
 - Every guard is the route group's: an address spelled another way is the same route behind the same guards (a test
   walks every route). The panels' writes need a header a page of another site cannot send; the websites' API takes a
   bearer token, no cookie, and answers CORS for the website's own origins alone.
@@ -49,10 +50,15 @@ What the code does by itself, in short — [Running in production](Running-In-Pr
 - Moving the Bot API's address — where every bot's token goes — asks the owner's current password, a wrong one counted
   as a failed sign-in.
 - Secrets at rest — the servers' panel credentials and their SOCKS5 proxies' passwords, the agents' bots' tokens, the
-  websites' secrets, customers' two-factor secrets — are encrypted with `APP_KEY`; short codes are kept as keyed
-  hashes; passwords as bcrypt hashes. Secrets are taken out of every log line and error — a proxy's login with any
-  address's. A kept panel secret goes only to the panel's own origin, a kept proxy password only to the same proxy
-  host and port: moved, either is typed again.
+  websites' secrets, the payment methods' tokens and keys, customers' two-factor secrets — are encrypted with
+  `APP_KEY`; short codes are kept as keyed hashes; passwords as bcrypt hashes. Secrets are taken out of every log
+  line and error — a proxy's login with any address's. A kept panel secret goes only to the panel's own origin, a kept
+  proxy password only to the same proxy host and port: moved, either is typed again.
+- An online payment gateway's callback is never taken at its word: each payment has an address of its own with a
+  secret in it (kept out of the log), and a call there only makes the shop ask the gateway itself — a few times a minute
+  at most for one payment, then answered with what the shop already knows. A payment is settled only on what the
+  gateway says when asked, and one whose answer does not fit it (another order or amount) is held for support, never
+  settled.
 - A server's proxy carries that panel's requests alone: Telegram, mail and every other outgoing call never go through
   it.
 - A fresh upload's installer asks for a key only the host's files hold, and a lost panel login comes back through a key

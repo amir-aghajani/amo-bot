@@ -81,6 +81,7 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 | [`POST /payments/{id}/reject`](#post-paymentsidreject) | Reject a receipt |
 | [`POST /payments/{id}/cancel`](#post-paymentsidcancel) | Cancel an unpaid payment and its open order |
 | [`POST /payments/{id}/remind`](#post-paymentsidremind) | Remind the customer to pay |
+| [`POST /payments/{id}/check`](#post-paymentsidcheck) | Ask an online payment's gateway what came of it, and act on its word |
 | [`POST /payments/{id}/retry`](#post-paymentsidretry) | Retry the delivery of what a paid payment bought |
 | [`POST /payments/{id}/refund`](#post-paymentsidrefund) | Refund a paid payment |
 | [`GET /subscriptions`](#get-subscriptions) | All the shop's services |
@@ -1384,6 +1385,30 @@ Remind the customer to pay. The answer says whether the reminder reached them.
 | Status | What it is | Body |
 |---|---|---|
 | `200` | Sent, or attempted | [ReminderResponse](API-Schemas.md#reminderresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /payments/{id}/check
+
+Ask an online payment's gateway what came of it, and act on its word: paid, the payment settles — its order delivered, or, the order closed, the money into the customer's wallet — and the customer is told; its page closed unpaid, the payment fails; still waiting, nothing changes. `state` says which. Nobody decides it by hand: only the gateway's word moves it.
+
+- **Who:** an admin of the shop, signed in on its website.
+- **In the panels:** [`POST /api/{panel}/payments/{id}/check`](Panels-API-Reference.md#post-apipanelpaymentsidcheck).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Asked | [PaymentCheckResponse](API-Schemas.md#paymentcheckresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |

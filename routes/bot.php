@@ -18,6 +18,7 @@ use App\Modules\Telegram\Handlers\FallbackHandler;
 use App\Modules\Telegram\Handlers\GiftCodeHandler;
 use App\Modules\Telegram\Handlers\JoinHandler;
 use App\Modules\Telegram\Handlers\MenuHandler;
+use App\Modules\Telegram\Handlers\OnlinePaymentHandler;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Handlers\ReceiptHandler;
 use App\Modules\Telegram\Handlers\RenewalHandler;
@@ -81,6 +82,8 @@ return static function (Dispatcher $bot): void {
     $bot->state(DiscountCodeHandler::STATE, DiscountCodeHandler::class);
     $bot->state(ReceiptHandler::PREFIX, ReceiptHandler::class);
     $bot->callback(ReceiptHandler::PREFIX, ReceiptHandler::class);
+    // «🔄 بررسی پرداخت» under an online gateway's page.
+    $bot->callback(OnlinePaymentHandler::PREFIX, OnlinePaymentHandler::class);
     $bot->callback(TopUpHandler::CALLBACK, TopUpHandler::class);
     $bot->state(TopUpHandler::STATE, TopUpHandler::class);
     // «💸 انتقال موجودی» on the wallet: the recipient's Telegram id and the amount typed, and the transfer confirmed.

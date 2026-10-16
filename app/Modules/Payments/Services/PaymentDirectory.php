@@ -56,7 +56,8 @@ final class PaymentDirectory
     }
 
     /**
-     * One row of the screen. `description` is the note of its latest verdict; `refund_note` the same, on a refund.
+     * One row of the screen. `description` is the note of its latest verdict; `refund_note` the same, on a refund. An
+     * online payment's page closes at `link_expires_at`, and `checked_at` is when its gateway was last asked.
      *
      * @return array<string, mixed>
      */
@@ -70,6 +71,7 @@ final class PaymentDirectory
             'status' => $payment->status->value,
             'amount' => $payment->amount,
             'gateway' => $method->driver,
+            'gateway_label' => $this->gateways->find($method->driver)?->describe()->label,
             'kind' => $this->gateways->kind($method->driver)?->value,
             'method' => $method->label,
             // A card transfer's card — the one it was shown, among its method's — or, shown none, support's private chat;
@@ -105,6 +107,10 @@ final class PaymentDirectory
             'reviewer' => $this->reviewers->present($payment->reviewer),
             'refund_note' => $payment->status === PaymentStatus::Refunded ? $payment->note : null,
             'paid_at' => $payment->paid_at?->toIso8601String(),
+            'link_expires_at' => $payment->link_expires_at?->toIso8601String(),
+            'checked_at' => $payment->checked_at?->toIso8601String(),
+            'to_wallet' => $payment->wentToWallet(),
+            'held' => OnlinePayments::isHeld($payment),
             'created_at' => $payment->created_at->toIso8601String(),
             'actions' => $this->actions->allowed($payment),
         ];

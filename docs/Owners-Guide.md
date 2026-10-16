@@ -20,7 +20,8 @@ A new shop sells once it has a bot, a server, a plan and a way to pay. In order:
    of its inbounds the shop sells on ([Servers](Servers.md)).
 3. **A plan** — «فروشگاه › پلن‌ها» › «افزودن پلن»: its name, price, traffic, days and devices, and the server it is sold
    on ([Plans](Plans.md)). Categories are optional.
-4. **A way to pay** — the wallet is built in; for card-to-card payments add your card in «فروشگاه › روش‌های پرداخت»
+4. **A way to pay** — the wallet is built in; for card-to-card payments add your card in «فروشگاه › روش‌های پرداخت»,
+   and for payments confirmed without a receipt an online gateway — CubePay, Zarinpal, AtlasPay or AbanGateway
    ([Payment methods](Payment-Methods.md)).
 5. **The bot's rules and words** — the support contact, required channels, top-ups, renewals, the prices of extra
    traffic and time, reminders and the removal of ended services in «تنظیمات ربات» ([Bot settings](Bot-Settings.md));
@@ -43,6 +44,7 @@ approve it in the panel.
 | What waits on you | The dashboard's «نیازمند توجه»: receipts to review, orders stuck, tickets waiting on an answer, reviews to decide, unpaid orders, servers whose panel failed, services ending soon — each a link to its list ([The panels](Panels.md#the-dashboard)) |
 | Receipts | «فروش › پرداخت‌ها», the «در انتظار بررسی» tab — or «✅ تایید» and «❌ رد» under the receipt in the report group ([Orders and payments](Orders-And-Payments.md)) |
 | Paid orders not delivered | «فروش › سفارش‌ها», the «نیازمند رسیدگی» tab: retry once the server is back ([Orders and payments](Orders-And-Payments.md#orders)) |
+| An online payment held for support | The report group's «خطاها» says so once, and the payment's dialog why: check it at the gateway and settle it with the customer ([Orders and payments](Orders-And-Payments.md#a-payment-held-for-support)) |
 | Customers' questions | «پشتیبانی» — or a reply in the report group's «تیکت‌ها» topic ([Support tickets](Support-Tickets.md)) |
 | Reviews to publish | «نظرات», the «در انتظار بررسی» tab ([Reviews](Reviews.md)) |
 | One customer | Their page: their name anywhere in the panel leads there ([Customers](Customers.md)) |
@@ -60,7 +62,7 @@ live: there is no need to reload.
 | [The panels](Panels.md) | Signing in, the shop on screen, the menu, the dashboard, lists, live updates, failures |
 | [Servers](Servers.md) | The VPN panels the shop sells on: adding one, its inbounds, its health, days and traffic for its services, moving them all to another server |
 | [Plans](Plans.md) | Plans, the servers they are sold on, and their categories |
-| [Payment methods](Payment-Methods.md) | The wallet, card-to-card, and the automatic approval of receipts |
+| [Payment methods](Payment-Methods.md) | The wallet, card-to-card, the automatic approval of receipts, and the online gateways |
 | [Customers](Customers.md) | The customers, a customer's page, bans and the bot's admins, groups, the wallet |
 | [Orders and payments](Orders-And-Payments.md) | Receipts, approvals, rejections, refunds, reminders, stuck orders |
 | [Services](Services.md) | Customers' services: read, extended, switched, moved, deleted — and what runs by itself |

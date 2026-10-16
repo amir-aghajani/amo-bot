@@ -36,8 +36,8 @@ final class GatewayRegistryTest extends TestCase
     {
         [$card, $wallet, $gone] = self::methods();
 
-        self::assertSame(['wallet', 'outside', 'manual'], array_map(static fn(GatewayDriver $driver): string => $driver->key(), $this->gateways->all()));
-        self::assertSame([GatewayKind::Manual, GatewayKind::Instant, null], [$this->gateways->kind('manual'), $this->gateways->kind('wallet'), $this->gateways->kind('paypal')]);
+        self::assertSame(['wallet', 'outside', 'manual', 'cubepay', 'zarinpal', 'atlaspay', 'abangateway'], array_map(static fn(GatewayDriver $driver): string => $driver->key(), $this->gateways->all()));
+        self::assertSame([GatewayKind::Manual, GatewayKind::Instant, GatewayKind::Online, null], [$this->gateways->kind('manual'), $this->gateways->kind('wallet'), $this->gateways->kind('cubepay'), $this->gateways->kind('paypal')]);
         self::assertSame([false, true, false], [$this->gateways->builtin('manual'), $this->gateways->builtin('wallet'), $this->gateways->builtin('paypal')]);
         self::assertSame([true, false, false], [$this->gateways->isManual($card), $this->gateways->isManual($wallet), $this->gateways->isManual($gone)]);
         self::assertSame([null, null, null], [$this->gateways->summary($card), $this->gateways->summary($wallet), $this->gateways->summary($gone)], 'a card method\'s cards are rows of their own: its settings say nothing of them');

@@ -103,6 +103,12 @@ describe('a request held to the API description', () => {
     expect(contractProblem(request('PUT', '/api/admin/bot/settings/channels', { join_required: true, qr_enabled: true }))).toMatch(
       /^PUT \/api\/admin\/bot\/settings\/channels: body: fits none of its forms/,
     )
+    // A form that is another's but for what it may leave out says what it is not: the wallet's is no AtlasPay method's,
+    // whose key may be left out too. One that requires a field of its own (CubePay's fee) is told apart by it.
+    const method = { label: 'کیف پول', enabled: true, min_amount: '', max_amount: '' }
+    expect(contractProblem(request('PUT', '/api/admin/payment-methods/1', method))).toBeNull()
+    expect(contractProblem(request('PUT', '/api/admin/payment-methods/8', { ...method, api_key: '' }))).toBeNull()
+    expect(contractProblem(request('PUT', '/api/admin/payment-methods/6', { ...method, clear_token: false, fee_percent: '', fee_fixed: 0 }))).toBeNull()
   })
 
   it('takes a file as the multipart form its operation describes, and refuses one sent as JSON', () => {

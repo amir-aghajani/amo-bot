@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.
 
@@ -1440,6 +1440,25 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReminderResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/{panel}/payments/{id}/check:
+    parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    post:
+      x-staff: true
+      summary: "Ask an online payment's gateway what came of it, and act on its word: paid, the payment settles — its order delivered, or, the order closed, the money into the customer's wallet — and the customer is told; its page closed unpaid, the payment fails; still waiting, nothing changes. `state` says which. Nobody decides it by hand: only the gateway's word moves it."
+      description: |
+        Offered (`actions.check`) for an online payment opened on its gateway and not paid. A 422 on `status` for any
+        other — one held for support (`held`) among them, with its description's words. An answer that does not fit the
+        payment (another order or amount) holds it for support: that ask is a 422 on `status` in the same words, as every
+        ask after it. A 503 while the gateway cannot be asked (out of reach, or refusing the shop's token): nothing
+        changed, and the log says what the gateway said.
+      x-no-body: true
+      responses:
+        '200':
+          description: Asked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentCheckResponse' }
         default: { $ref: '#/components/responses/Error' }
   /api/{panel}/payments/{id}/retry:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
@@ -3548,7 +3567,7 @@ paths:
         '401': { $ref: '#/components/responses/SignedOut' }
         default: { $ref: '#/components/responses/Error' }
     post:
-      summary: "Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders, or on `status` with a receipt still in review; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders — its bot switched off, or its selling suspended, which the GET answers with a 422 on `status`). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now."
+      summary: "Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders, or on `status` with a receipt still in review; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders — its bot switched off, or its selling suspended, which the GET answers with a 422 on `status`). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now."
       security: [{ customer: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreRenewalRequest' } } } }
@@ -3589,7 +3608,7 @@ paths:
   /api/store/v1/{store}/subscriptions/{id}/extra-traffic:
     parameters: [{ $ref: '#/components/parameters/Store' }, { $ref: '#/components/parameters/Id' }]
     post:
-      summary: "Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now."
+      summary: "Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now."
       security: [{ customer: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreExtraTrafficRequest' } } } }
@@ -3604,7 +3623,7 @@ paths:
   /api/store/v1/{store}/subscriptions/{id}/extra-time:
     parameters: [{ $ref: '#/components/parameters/Store' }, { $ref: '#/components/parameters/Id' }]
     post:
-      summary: "Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now."
+      summary: "Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now."
       security: [{ customer: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreExtraTimeRequest' } } } }
@@ -3619,7 +3638,7 @@ paths:
   /api/store/v1/{store}/subscriptions/{id}/extra-devices:
     parameters: [{ $ref: '#/components/parameters/Store' }, { $ref: '#/components/parameters/Id' }]
     post:
-      summary: "Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now."
+      summary: "Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now."
       security: [{ customer: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreExtraDevicesRequest' } } } }
@@ -3665,7 +3684,7 @@ paths:
         '401': { $ref: '#/components/responses/SignedOut' }
         default: { $ref: '#/components/responses/Error' }
     post:
-      summary: "Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge."
+      summary: "Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge."
       security: [{ customer: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreOrderRequest' } } } }
@@ -3704,6 +3723,20 @@ paths:
               schema: { $ref: '#/components/schemas/StoreOrderResponse' }
         '401': { $ref: '#/components/responses/SignedOut' }
         default: { $ref: '#/components/responses/Error' }
+  /api/store/v1/{store}/payments/{id}/check:
+    parameters: [{ $ref: '#/components/parameters/Store' }, { $ref: '#/components/parameters/Id' }]
+    post:
+      summary: "Ask an online payment's gateway what came of it now — when the customer comes back from the gateway's page, or presses a «I paid» button. The gateway tells the shop by itself as well, and the shop asks it every few minutes until its page has been closed a while: this only makes it sooner. A payment the gateway says was paid is settled at once — its order paid and delivered (or, its order closed meanwhile, the money put in the wallet) — and the customer gets the notice of it; one whose page closed unpaid fails, its order left open to pay again. Answers what the gateway said, the order as it stands now and, once delivered, its service. A 404 for another customer's payment; a 422 on `status` for a payment that is not an online one (a card transfer, the wallet), and for one held for support and still waiting — the gateway's answer did not fit it (another order or amount), or it kept money on it unsettled for two days —, the message naming its order: tell the customer not to pay again but to write to support. A 503 while the gateway cannot be asked, saying so (nothing changed: if they paid, ask again a little later). At most 10 a minute per customer, then a 429 with `Retry-After`."
+      security: [{ customer: [] }]
+      x-no-body: true
+      responses:
+        '200':
+          description: "What the gateway said, and the order as it stands"
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorePaymentCheckResponse' }
+        '401': { $ref: '#/components/responses/SignedOut' }
+        default: { $ref: '#/components/responses/Error' }
   /api/store/v1/{store}/wallet:
     parameters: [{ $ref: '#/components/parameters/Store' }]
     get:
@@ -3720,7 +3753,7 @@ paths:
   /api/store/v1/{store}/wallet/top-up:
     parameters: [{ $ref: '#/components/parameters/Store' }]
     post:
-      summary: "Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders or a receipt still in review (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now."
+      summary: "Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders or a receipt still in review (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now."
       security: [{ customer: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreTopUpRequest' } } } }
@@ -4237,7 +4270,7 @@ components:
         fields: { type: array, items: { $ref: '#/components/schemas/FieldDescription' } }
         traits:
           type: object
-          description: "Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet, or `manual`, a card transfer whose receipt a person approves) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none."
+          description: "Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none."
           additionalProperties:
             nullable: true
             oneOf:
@@ -5018,25 +5051,26 @@ components:
       enum: [pending, awaiting_review, paid, failed, cancelled, refunded]
 
     GatewayKind:
-      description: "How a gateway settles: `instant` (at once, like the wallet), or `manual` (once a person, or the method's automatic approval window, accepts the receipt of a card transfer)."
+      description: "How a gateway settles: `instant` (at once, like the wallet), `manual` (once a person, or the method's automatic approval window, accepts the receipt of a card transfer), or `online` (the customer pays on the gateway's own page, and the shop asks the gateway what came of it)."
       type: string
-      enum: [instant, manual]
+      enum: [instant, manual, online]
 
     PaymentRow:
       description: A payment, as a row of the payments screen.
       type: object
       additionalProperties: false
-      required: [id, status, amount, gateway, kind, method, summary, reference, description, user, order, receipt, auto_approved, reviewer, refund_note, paid_at, created_at, actions]
+      required: [id, status, amount, gateway, gateway_label, kind, method, summary, reference, description, user, order, receipt, auto_approved, reviewer, refund_note, paid_at, link_expires_at, checked_at, to_wallet, held, created_at, actions]
       properties:
         id: { type: integer }
         status: { $ref: '#/components/schemas/PaymentStatus' }
         amount: { type: string }
-        gateway: { type: string, description: 'Driver key ("manual", "wallet", or "outside": money support took outside the shop for an order it made).' }
+        gateway: { type: string, description: 'Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made).' }
+        gateway_label: { type: string, nullable: true, description: "The driver's name («کارت به کارت», «کیف پول», «CubePay»); null when the driver is no longer installed." }
         kind: { allOf: [{ $ref: '#/components/schemas/GatewayKind' }], nullable: true, description: How the driver settles; null when the driver is no longer installed. }
         method: { type: string, description: "The payment method's label (\"کارت به کارت (ملت)\"). A method with payments is never deleted." }
-        summary: { type: string, nullable: true, description: 'What the customer was told to pay to: a card transfer''s card, the one of its method''s cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support''s private chat (`BotSettingsData.card_to_support`); null for a method without one (the wallet).' }
-        reference: { type: string, nullable: true, description: "The gateway's own id for the payment (the wallet's ledger line); null when it has none (a card transfer)." }
-        description: { type: string, nullable: true, description: "The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), or a refund's note (also in `refund_note`)." }
+        summary: { type: string, nullable: true, description: 'What the customer was told to pay to: a card transfer''s card, the one of its method''s cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support''s private chat (`BotSettingsData.card_to_support`); for any other, its method''s one line (`PaymentMethodRow.summary`: an online gateway''s fee passed on to customers, or its test mode); null when its method has none (the wallet, an online method with neither).' }
+        reference: { type: string, nullable: true, description: "The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id. Null when it has none (a card transfer, an online payment its gateway would not open)." }
+        description: { type: string, nullable: true, description: "The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, an online gateway's page closed unpaid — «مهلت پرداخت در درگاه تمام شد» —, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), a refund's note (also in `refund_note`), or on a payment `to_wallet` that its money went to the wallet." }
         user: { $ref: '#/components/schemas/UserRef' }
         order:
           type: object
@@ -5070,12 +5104,16 @@ components:
         reviewer: { type: string, nullable: true, description: "Who decided it by hand: the agent's @bot, a bot admin's @username, tg:<id> or user#<id> (in the report group or on the website), or the owner's login, which anyone but the owner sees as «پشتیبانی»." }
         refund_note: { type: string, nullable: true }
         paid_at: { type: string, format: date-time, nullable: true }
+        link_expires_at: { type: string, format: date-time, nullable: true, description: "An online payment's page on its gateway: until when it takes money — the gateway's own end, or the time the shop keeps its page when the gateway gives none. Null for any other payment, and for one its gateway would not open." }
+        checked_at: { type: string, format: date-time, nullable: true, description: "An online payment: when the shop last asked its gateway what came of it — its callback, the customer's question, «استعلام از درگاه» (`POST …/check`), or the scheduler every few minutes while it is open. Null until asked." }
+        to_wallet: { type: boolean, description: "Paid after its order had closed (paid another way, cancelled or expired): the online gateway took the money when the order no longer waited for it, so it went to the customer's wallet («پرداخت آنلاین #12 پس از بسته شدن سفارش #7») and `description` says so. It paid nothing of the order: it is neither retried nor refunded here." }
+        held: { type: boolean, description: "An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) — or kept money on it unsettled for two days. `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing." }
         created_at: { type: string, format: date-time }
         actions:
           type: object
           description: "Which operations its current state allows (the server decides)."
           additionalProperties: false
-          required: [approve, reject, cancel, remind, retry, refund]
+          required: [approve, reject, cancel, remind, retry, refund, check]
           properties:
             approve: { type: boolean }
             reject: { type: boolean }
@@ -5083,6 +5121,7 @@ components:
             remind: { type: boolean }
             retry: { type: boolean }
             refund: { type: boolean }
+            check: { type: boolean, description: "Ask its online gateway what came of it (`POST …/check`): an online payment opened on its gateway and not paid — pending, its page closed, or cancelled." }
 
     PaymentSort:
       description: "The payments list's sort keys: creation time (the default) or amount."
@@ -5126,6 +5165,19 @@ components:
       properties:
         payment: { $ref: '#/components/schemas/PaymentRow' }
         delivery: { $ref: '#/components/schemas/Delivery' }
+
+    OnlineState:
+      description: "What an online gateway said of a payment: `paid` (the money came in — the payment is paid, into its order or, the order closed, the wallet), `waiting` (nothing yet, and its page still takes money), `closed` (its page closed with nothing paid: the payment failed)."
+      type: string
+      enum: [paid, waiting, closed]
+
+    PaymentCheckResponse:
+      type: object
+      additionalProperties: false
+      required: [payment, state]
+      properties:
+        payment: { $ref: '#/components/schemas/PaymentRow' }
+        state: { $ref: '#/components/schemas/OnlineState' }
 
     DismissReceiptsRequest:
       description: "Which receipts waiting for review to reject: the payments `ids` names, or `all` of them. One of the two; with `note`, support's note to each customer (at most 300 characters; blank for none)."
@@ -5207,14 +5259,16 @@ components:
     OrderPayment:
       type: object
       additionalProperties: false
-      required: [id, status, amount, gateway, method, paid_at, created_at]
+      required: [id, status, amount, gateway, method, paid_at, to_wallet, held, created_at]
       properties:
         id: { type: integer }
         status: { $ref: '#/components/schemas/PaymentStatus' }
         amount: { type: string }
-        gateway: { type: string, description: 'Driver key ("manual", "wallet", or "outside": money support took outside the shop for an order it made).' }
+        gateway: { type: string, description: 'Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made).' }
         method: { type: string, description: "The payment method's label. A method with payments is never deleted." }
         paid_at: { type: string, format: date-time, nullable: true }
+        to_wallet: { type: boolean, description: "Paid on its online gateway after the order had closed: its money went to the customer's wallet, and it paid nothing of the order (`PaymentRow.to_wallet`)." }
+        held: { type: boolean, description: "An online payment held for support: its gateway took money on it that does not fit, or kept it unsettled (`PaymentRow.held`)." }
         created_at: { type: string, format: date-time }
 
     OrderSort:
@@ -6766,6 +6820,10 @@ components:
       oneOf:
         - $ref: '#/components/schemas/ManualMethodRow'
         - $ref: '#/components/schemas/WalletMethodRow'
+        - $ref: '#/components/schemas/CubePayMethodRow'
+        - $ref: '#/components/schemas/ZarinpalMethodRow'
+        - $ref: '#/components/schemas/AtlasPayMethodRow'
+        - $ref: '#/components/schemas/AbanMethodRow'
         - $ref: '#/components/schemas/UnregisteredMethodRow'
 
     WalletMethodRow:
@@ -6780,7 +6838,7 @@ components:
         kind: { $ref: '#/components/schemas/GatewayKind' }
         builtin: { type: boolean }
         label: { type: string, description: 'The button text customers see, such as "کارت به کارت (ملت)".' }
-        summary: { type: string, nullable: true, description: "The driver's one-line summary of the method from its settings; null when it has none (the wallet; a card method, whose cards are listed under `cards`)." }
+        summary: { type: string, nullable: true, description: "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always)." }
         config: { type: object, additionalProperties: false, description: Nothing to configure. }
         min_amount: { type: string, nullable: true, description: 'The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it.' }
         max_amount: { type: string, nullable: true, description: 'The most amount to pay it is offered for, in Toman; null for no most.' }
@@ -6807,6 +6865,46 @@ components:
         cards: { type: array, items: { $ref: '#/components/schemas/PaymentCardRow' }, description: 'In their order. None switched on with room left: the method is not offered — unless `to_support`.' }
         to_support: { type: boolean, description: "The shop takes card payments in support's private chat now (`BotSettingsData.card_to_support`, with a support contact): no card is shown nor picked, so the cards' switches and daily caps do not hold the method back." }
 
+    CubePayMethodRow:
+      description: "A CubePay method (cubevps.ir), an online gateway: the customer pays on CubePay's page — a card transfer or crypto, as the merchant set it up at CubePay — and CubePay confirms it, with no receipt and no review."
+      type: object
+      additionalProperties: false
+      required: *paymentMethodRequired
+      properties:
+        <<: *paymentMethodProperties
+        driver: { type: string, enum: [cubepay] }
+        config: { $ref: '#/components/schemas/CubePayGatewayConfig' }
+
+    ZarinpalMethodRow:
+      description: "A Zarinpal method (zarinpal.com), an online gateway: the customer pays with any bank card on Zarinpal's page and is sent back to the shop; Zarinpal confirms it, with no receipt and no review."
+      type: object
+      additionalProperties: false
+      required: *paymentMethodRequired
+      properties:
+        <<: *paymentMethodProperties
+        driver: { type: string, enum: [zarinpal] }
+        config: { $ref: '#/components/schemas/ZarinpalGatewayConfig' }
+
+    AtlasPayMethodRow:
+      description: "An AtlasPay method (atlaspay.space), an online gateway: the customer pays by card transfer in AtlasPay's mini app in Telegram, and AtlasPay confirms it from the bank's text message, with no receipt and no review — one paid short, the customer having accepted paying less, is held for support."
+      type: object
+      additionalProperties: false
+      required: *paymentMethodRequired
+      properties:
+        <<: *paymentMethodProperties
+        driver: { type: string, enum: [atlaspay] }
+        config: { $ref: '#/components/schemas/AtlasPayGatewayConfig' }
+
+    AbanMethodRow:
+      description: "An AbanGateway method (abangateway.ir), an online gateway: the customer transfers the exact sum its page asks to the merchant's own card, and AbanGateway confirms it from the bank's text message, with no receipt and no review."
+      type: object
+      additionalProperties: false
+      required: *paymentMethodRequired
+      properties:
+        <<: *paymentMethodProperties
+        driver: { type: string, enum: [abangateway] }
+        config: { $ref: '#/components/schemas/AbanGatewayConfig' }
+
     UnregisteredMethodRow:
       description: A method whose driver is no longer installed. No checkout offers it, even when switched on; it can only be switched off or deleted.
       type: object
@@ -6826,6 +6924,42 @@ components:
       properties:
         instructions: { type: string }
         auto_approve_after: { type: integer, description: 'Minutes a receipt sent in the bot may wait for review before it is approved automatically; 0 for manual approval only.' }
+
+    CubePayGatewayConfig:
+      description: "A CubePay method's settings (`CubePayMethodRow.config`): the merchant's API token, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and the fee passed on to customers: a percent of the amount and a fixed sum on every payment."
+      type: object
+      additionalProperties: false
+      required: [token, fee_percent, fee_fixed]
+      properties:
+        token: { $ref: '#/components/schemas/SecretState' }
+        fee_percent: { type: string, description: 'The percent of the amount added to every payment as the fee the customer pays ("3.1"); "" for none.' }
+        fee_fixed: { type: integer, description: 'Toman added to every payment as the fee the customer pays; 0 for none.' }
+
+    ZarinpalGatewayConfig:
+      description: "A Zarinpal method's settings (`ZarinpalMethodRow.config`): the merchant's code, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and whether it runs on Zarinpal's sandbox (no real money)."
+      type: object
+      additionalProperties: false
+      required: [merchant_id, sandbox]
+      properties:
+        merchant_id: { $ref: '#/components/schemas/SecretState' }
+        sandbox: { type: boolean, description: "Zarinpal's test service: any code is taken and no money moves, while a payment there still delivers its order." }
+
+    AtlasPayGatewayConfig:
+      description: "An AtlasPay method's settings (`AtlasPayMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it."
+      type: object
+      additionalProperties: false
+      required: [api_key]
+      properties:
+        api_key: { $ref: '#/components/schemas/SecretState' }
+
+    AbanGatewayConfig:
+      description: "An AbanGateway method's settings (`AbanMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and whether the bot and the site show the card under the page."
+      type: object
+      additionalProperties: false
+      required: [api_key, show_card]
+      properties:
+        api_key: { $ref: '#/components/schemas/SecretState' }
+        show_card: { type: boolean, description: "The card, its holder and the exact sum shown with copy buttons under the page, for a sum up to 10,000,000 Toman — the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts." }
 
     PaymentCardRow:
       description: A card of a card-to-card method.
@@ -6876,8 +7010,8 @@ components:
       additionalProperties: false
       required: [cards]
       properties: &manualMethodProperties
-        label: { type: string, description: "The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged." }
-        enabled: { type: boolean, description: 'Left out: on for a new method, unchanged for an existing one.' }
+        label: &methodLabel { type: string, description: "The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged." }
+        enabled: &methodEnabled { type: boolean, description: 'Left out: on for a new method, unchanged for an existing one.' }
         min_amount: &methodMinAmount { allOf: [{ $ref: '#/components/schemas/AmountInput' }], nullable: true, description: 'The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged.' }
         max_amount: &methodMaxAmount { allOf: [{ $ref: '#/components/schemas/AmountInput' }], nullable: true, description: 'The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged.' }
         instructions: { type: string, description: 'Shown to the customer with the card; blank for none.' }
@@ -6894,6 +7028,63 @@ components:
         min_amount: *methodMinAmount
         max_amount: *methodMaxAmount
 
+    CubePayMethodRequest:
+      description: "A CubePay method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API token from CubePay's bot (@cubepy_bot, «🔗 پنل من») — `token` (blank keeps the kept one) or `clear_token` —, and the fee passed on to customers (`fee_percent`, `fee_fixed`). It always names `fee_fixed`, as the panels' form does with every save: that tells it from the wallet's form."
+      type: object
+      additionalProperties: false
+      required: [fee_fixed]
+      properties: &cubePayMethodProperties
+        label: *methodLabel
+        enabled: *methodEnabled
+        min_amount: *methodMinAmount
+        max_amount: *methodMaxAmount
+        token: { type: string, description: "The API token as CubePay's bot shows it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `token`)." }
+        clear_token: { type: boolean, description: 'True empties the kept token, which is refused: a CubePay method cannot go without one (type another instead).' }
+        fee_percent: { type: string, description: 'The percent of the amount added to every payment as CubePay''s fee the customer pays: 0 to 99.99, up to two decimals (Persian digits are taken); blank or 0 for none. The order is still paid, delivered and credited at its own price.' }
+        fee_fixed: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Toman added to every payment as CubePay''s fee the customer pays, on top of the percent: 0 to 1,000,000; 0 for none.' }
+
+    ZarinpalMethodRequest:
+      description: "A Zarinpal method's form: the label customers pick it by, its switch, the amounts it is offered for (Zarinpal takes 100 to 100,000,000 Toman), the merchant's code from Zarinpal's panel, and the sandbox switch. It names `merchant_id` (blank keeps the kept one) or `clear_merchant_id`, as the panels' form does with every save."
+      type: object
+      additionalProperties: false
+      required: [sandbox]
+      properties: &zarinpalMethodProperties
+        label: *methodLabel
+        enabled: *methodEnabled
+        min_amount: *methodMinAmount
+        max_amount: *methodMaxAmount
+        merchant_id: { type: string, description: "The merchant's 36-character code as Zarinpal's panel shows it (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `merchant_id`)." }
+        clear_merchant_id: { type: boolean, description: 'True empties the kept code, which is refused: a Zarinpal method cannot go without one (type another instead).' }
+        sandbox: { type: boolean, description: "Zarinpal's test service (sandbox.zarinpal.com): any code in its shape is taken and no money moves — a payment there still delivers its order. Only for trying it out." }
+
+    AtlasPayMethodRequest:
+      description: "An AtlasPay method's form: the label customers pick it by, its switch, the amounts it is offered for, and the merchant's API key from AtlasPay. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form."
+      type: object
+      additionalProperties: false
+      # Neither shape names the method's driver (its row does): what tells the two apart is the key.
+      not: { $ref: '#/components/schemas/WalletMethodRequest' }
+      properties: &atlasPayMethodProperties
+        label: *methodLabel
+        enabled: *methodEnabled
+        min_amount: *methodMinAmount
+        max_amount: *methodMaxAmount
+        api_key: { type: string, description: "The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`)." }
+        clear_api_key: { type: boolean, description: 'True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead).' }
+
+    AbanMethodRequest:
+      description: "An AbanGateway method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API key from AbanGateway's panel, and whether the card is shown in the bot and on the site. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save."
+      type: object
+      additionalProperties: false
+      required: [show_card]
+      properties: &abanMethodProperties
+        label: *methodLabel
+        enabled: *methodEnabled
+        min_amount: *methodMinAmount
+        max_amount: *methodMaxAmount
+        api_key: { type: string, description: "The API key as AbanGateway's panel shows it once, when it is made: `ag_live_` — or `ag_test_` for its test mode, where no money moves — and 48 lowercase letters and digits. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`)." }
+        clear_api_key: { type: boolean, description: 'True empties the kept key, which is refused: an AbanGateway method cannot go without one (type another instead).' }
+        show_card: { type: boolean, description: "Show the card, its holder and the exact sum with copy buttons under the page — for a sum up to 10,000,000 Toman, the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts." }
+
     ManualMethodCreateRequest:
       description: "A new card-to-card method: its driver and its form (ManualMethodRequest), with the label required."
       type: object
@@ -6903,16 +7094,60 @@ components:
         driver: { type: string, enum: [manual], description: 'A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`.' }
         <<: *manualMethodProperties
 
+    CubePayMethodCreateRequest:
+      description: "A new CubePay method: its driver and its form (CubePayMethodRequest), with the label, the token and `fee_fixed` required."
+      type: object
+      additionalProperties: false
+      required: [driver, label, fee_fixed]
+      properties:
+        driver: { type: string, enum: [cubepay], description: 'A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`.' }
+        <<: *cubePayMethodProperties
+
+    ZarinpalMethodCreateRequest:
+      description: "A new Zarinpal method: its driver and its form (ZarinpalMethodRequest), with the label and the merchant's code required."
+      type: object
+      additionalProperties: false
+      required: [driver, label, sandbox]
+      properties:
+        driver: { type: string, enum: [zarinpal], description: 'A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`.' }
+        <<: *zarinpalMethodProperties
+
+    AtlasPayMethodCreateRequest:
+      description: "A new AtlasPay method: its driver and its form (AtlasPayMethodRequest), with the label and the API key required."
+      type: object
+      additionalProperties: false
+      required: [driver, label]
+      properties:
+        driver: { type: string, enum: [atlaspay], description: 'A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`.' }
+        <<: *atlasPayMethodProperties
+
+    AbanMethodCreateRequest:
+      description: "A new AbanGateway method: its driver and its form (AbanMethodRequest), with the label and the API key required."
+      type: object
+      additionalProperties: false
+      required: [driver, label, show_card]
+      properties:
+        driver: { type: string, enum: [abangateway], description: 'A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`.' }
+        <<: *abanMethodProperties
+
     PaymentMethodCreateRequest:
       description: "A new payment method for a driver that is not built in: the driver's key, the label customers pick it by, the switch and the driver's form (`DriverDescription.fields`). One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest."
       oneOf:
         - $ref: '#/components/schemas/ManualMethodCreateRequest'
+        - $ref: '#/components/schemas/CubePayMethodCreateRequest'
+        - $ref: '#/components/schemas/ZarinpalMethodCreateRequest'
+        - $ref: '#/components/schemas/AtlasPayMethodCreateRequest'
+        - $ref: '#/components/schemas/AbanMethodCreateRequest'
 
     PaymentMethodUpdateRequest:
       description: "A payment method's form, as its driver takes it. One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest. A method whose driver is no longer installed cannot be updated (switch it off or delete it)."
       oneOf:
         - $ref: '#/components/schemas/ManualMethodRequest'
         - $ref: '#/components/schemas/WalletMethodRequest'
+        - $ref: '#/components/schemas/CubePayMethodRequest'
+        - $ref: '#/components/schemas/ZarinpalMethodRequest'
+        - $ref: '#/components/schemas/AtlasPayMethodRequest'
+        - $ref: '#/components/schemas/AbanMethodRequest'
 
     PaymentMethodSwitchRequest:
       description: "A payment method's on/off switch. A JSON boolean only."
@@ -9839,7 +10074,7 @@ components:
       description: "A payment attempt for an order."
       type: object
       additionalProperties: false
-      required: [id, method, status, amount, created_at, paid_at, receipt, note]
+      required: [id, method, status, amount, created_at, paid_at, receipt, note, link]
       properties:
         id: { type: integer }
         method: { allOf: [{ $ref: '#/components/schemas/StorePaymentMethod' }], description: "The payment method." }
@@ -9855,7 +10090,30 @@ components:
           required: [sent_at]
           properties:
             sent_at: { type: string, format: date-time }
-        note: { type: string, nullable: true, description: "The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer); null if none." }
+        note: { type: string, nullable: true, description: "The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer; an online payment whose page closed unpaid, or that came in once its order had closed and went to the wallet; for one held for support, whatever its status, that it is with support and not to be paid again — in place of the shop's words to support on why); null if none." }
+        link: { allOf: [{ $ref: '#/components/schemas/StorePayLink' }], nullable: true, description: "An online payment still waiting on its gateway (`pending`), while its page takes money: where to pay it, as the checkout gave it. Null for any other payment, once `expires_at` has passed, and for one held for support (`POST /payments/{id}/check` says so): its order is paid no more meanwhile." }
+
+    StorePayLink:
+      description: "An online gateway's page to pay a payment on: the customer pays there, and the gateway tells the shop by itself."
+      type: object
+      additionalProperties: false
+      required: [payment_id, url, expires_at, amount, fee, card]
+      properties:
+        payment_id: { type: integer, description: 'The payment it pays: the one to ask about (`POST /payments/{id}/check`).' }
+        url: { type: string, description: "The gateway's page: open it (a link or a redirect) for the customer to pay there." }
+        expires_at: { type: string, format: date-time, nullable: true, description: "Until when the page takes money: the gateway's own end, or the time the shop keeps its page when the gateway gives none. A request made again with its `Idempotency-Key` answers the same page while it has more than 3 minutes left, else a new one." }
+        amount: { type: string, description: "The exact sum the page asks, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart or the customer pays the gateway's fee (`fee`). Show this one as what to pay." }
+        fee: { type: string, nullable: true, description: "Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount." }
+        card:
+          type: object
+          nullable: true
+          description: "The card that sum goes to, when the gateway gave one to show (CubePay's «🤖 نمایش کارت در ربات», AtlasPay's «نمایش مستقیم اطلاعات پرداخت», AbanGateway's «نمایش کارت در ربات و سایت» in the shop): the customer may transfer the exact `amount` to it rather than open the page. Null otherwise."
+          additionalProperties: false
+          required: [number, holder, bank]
+          properties:
+            number: { type: string, description: 'The card number: 16 digits, no separators.' }
+            holder: { type: string, nullable: true, description: "The card holder's name, as the gateway gave it; null when it gave none." }
+            bank: { type: string, nullable: true, description: "The card's bank, as the gateway gave it; null when it gave none." }
 
     StoreOrder:
       description: "One of the customer's orders: what it was for, its status, and its payments (newest first)."
@@ -9905,7 +10163,7 @@ components:
       properties:
         id: { type: integer }
         label: { type: string, description: 'Its button text ("کارت به کارت (ملت)").' }
-        kind: { allOf: [{ $ref: '#/components/schemas/GatewayKind' }], nullable: true, description: '`instant`: the wallet, paid at once. `manual`: a card transfer with a receipt. Null for a method whose driver is no longer installed.' }
+        kind: { allOf: [{ $ref: '#/components/schemas/GatewayKind' }], nullable: true, description: "`instant`: the wallet, paid at once. `manual`: a card transfer with a receipt. `online`: an online gateway, paid on its own page (the checkout's `link`). Null for a method whose driver is no longer installed." }
         min_amount: { type: string, nullable: true, description: 'The least amount to pay it takes, in Toman; null for no least.' }
         max_amount: { type: string, nullable: true, description: 'The most amount to pay it takes, in Toman; null for no most. An order outside the bounds is a 422 on `method_id`.' }
 
@@ -10148,15 +10406,15 @@ components:
         note: { type: string, description: "An optional note for support, at most 1024 characters; blank for none." }
 
     StoreCheckout:
-      description: "The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409)."
+      description: "The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), an online gateway that would not open the payment (a 422 on `method_id`, in the customer's words; the order stays open), an order whose online payment is held for support (a 422 on `status`, naming the order), or an order paid or closed at the same moment elsewhere (a 409)."
       type: object
       additionalProperties: false
-      required: [outcome, order, transfer, subscription]
+      required: [outcome, order, transfer, link, subscription]
       properties:
         outcome:
           type: string
-          enum: [settled, transfer, processing]
-          description: "`settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `processing`: paid, and the delivery is in progress."
+          enum: [settled, transfer, link, processing]
+          description: "`settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card or online too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `link`: pay on the online gateway's page in `link`; the gateway tells the shop by itself, and `POST /payments/{id}/check` asks it now. `processing`: paid, and the delivery is in progress."
         order: { $ref: '#/components/schemas/StoreOrder' }
         transfer:
           type: object
@@ -10180,6 +10438,7 @@ components:
               properties:
                 text: { type: string, description: "Support's contact as the shop wrote it (a Telegram handle, a link, a phone number)." }
                 url: { type: string, nullable: true, description: 'It as a link to open: a handle as its t.me address, a web or t.me address, a phone number as `tel:`; null when it is none of these.' }
+        link: { allOf: [{ $ref: '#/components/schemas/StorePayLink' }], nullable: true, description: "For `link`: the online gateway's page to pay on, and the payment it is for. Null otherwise." }
         subscription: { allOf: [{ $ref: '#/components/schemas/StoreSubscription' }], nullable: true, description: "Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise, and on a repeated request once the service is no longer the customer's (handed to another customer)." }
 
     StoreCheckoutResponse:
@@ -10188,6 +10447,26 @@ components:
       required: [checkout]
       properties:
         checkout: { $ref: '#/components/schemas/StoreCheckout' }
+
+    StorePaymentCheck:
+      description: "What an online gateway says of a payment now, and its order as it stands after the shop acted on it."
+      type: object
+      additionalProperties: false
+      required: [state, order, subscription]
+      properties:
+        state:
+          type: string
+          enum: [paid, waiting, closed]
+          description: "`paid`: the money came in. The order is paid and delivered as a checkout's would be (`fulfilled`, with the service in `subscription`; `failed`, for support to finish; `paid` or `processing` while it is under way) — or, its order closed before the money came (paid another way, cancelled or expired), the payment is `paid` with a note saying it went to the wallet. `waiting`: nothing yet, and its page still takes money. `closed`: its page closed with nothing paid — a payment still waiting is `failed` then (its note says so), and its order, while open, may be paid again: a new attempt. Should the gateway take the money later after all, the shop still settles it."
+        order: { $ref: '#/components/schemas/StoreOrder' }
+        subscription: { allOf: [{ $ref: '#/components/schemas/StoreSubscription' }], nullable: true, description: "Once delivered: the service the order created, renewed or added extras to, while it is still the customer's; null otherwise." }
+
+    StorePaymentCheckResponse:
+      type: object
+      additionalProperties: false
+      required: [check]
+      properties:
+        check: { $ref: '#/components/schemas/StorePaymentCheck' }
 
     StoreRenewal:
       description: "A preview of a service's renewal: on its own plan (or, for a service without one, the plan picked — or the package built, `custom`), at its price today, by a renewal method among those the shop offers, and the service as the renewal would leave it by that method. It uses the last numbers read from the panel; the renewal itself reads the panel when it is paid."
@@ -10410,9 +10689,9 @@ components:
         rewards: { type: integer, description: 'How many free services they got for their invitations («جایزه دعوت»).' }
 
     StoreNoticeType:
-      description: "The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»)."
+      description: "The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»)."
       type: string
-      enum: [payment_settled, payment_rejected, order_cancelled, payment_refunded, topup_refunded, wallet_sent, wallet_received, payment_reminder, service_disabled, service_enabled, service_deleted, service_moved, service_transferred, service_received, service_granted, expiry_reminder, traffic_reminder, auto_renewed, auto_renew_short, renewal_failed, referral_joined, referral_commission, referral_start_gift, referral_reward, agency_approved, agency_rejected, agency_changed, agency_revoked, agency_traffic_short, agency_expiring, agency_minimum_short, agency_suspended, agency_resumed, two_factor_disabled, way_in_added, way_in_removed, password_changed, two_factor_enabled, account_merged, second_step_locked, email_codes_failed, ticket_answered, ticket_closed, loyalty_tier_up, cashback_earned, lottery_won]
+      enum: [payment_settled, payment_credited, payment_rejected, order_cancelled, payment_refunded, topup_refunded, wallet_sent, wallet_received, payment_reminder, service_disabled, service_enabled, service_deleted, service_moved, service_transferred, service_received, service_granted, expiry_reminder, traffic_reminder, auto_renewed, auto_renew_short, renewal_failed, referral_joined, referral_commission, referral_start_gift, referral_reward, agency_approved, agency_rejected, agency_changed, agency_revoked, agency_traffic_short, agency_expiring, agency_minimum_short, agency_suspended, agency_resumed, two_factor_disabled, way_in_added, way_in_removed, password_changed, two_factor_enabled, account_merged, second_step_locked, email_codes_failed, ticket_answered, ticket_closed, loyalty_tier_up, cashback_earned, lottery_won]
 
     StoreNotification:
       description: "A notification the bot sent the customer, with the same text as the Telegram message (sent, or that would have been sent)."

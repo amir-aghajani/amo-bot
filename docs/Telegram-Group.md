@@ -36,10 +36,10 @@ without the right to manage topics.
 |---|---|
 | «خریدها» | A service sold and delivered: the customer, the plan, the location, the service, the amount and the way it was paid, the referrer's commission; a service a customer added to their account by its link: the customer, the service and its location ([Services added by their link](Service-Claims.md#who-gets-it)); a service handed to another customer: from whom, to whom, the service, its location, and whether its customer or support did it ([Services](Services.md#handing-a-service-to-another-customer)); under an order support made by hand, «🎧 ثبت دستی توسط پشتیبانی» and how it was paid ([Orders and payments](Orders-And-Payments.md)) |
 | «تمدیدها» | A renewal — by which method, unless «تمدید پلن فعلی» — and the new end; extra traffic, time or devices bought for a service («حجم، زمان و کاربر اضافه»), and what the service has now |
-| «شارژ کیف پول» | A wallet top-up, and the balance; money one customer sent another («انتقال موجودی»), with both balances |
+| «شارژ کیف پول» | A wallet top-up, and the balance; money one customer sent another («انتقال موجودی»), with both balances; an online payment that came after its order closed, its amount gone to the customer's wallet («💳 پرداخت آنلاین پس از بسته شدن سفارش») |
 | «رسیدها» | A copy of each card receipt with what it pays for and the card it was shown («🏦 کارت: …», or «🏦 کارت در پیوی پشتیبانی داده شد» for one taken in support's private chat), «✅ تایید» and «❌ رد»; then its verdict as a reply to it; and receipts support dismissed at once («🗑»): how many, and support's note |
 | «کاربران جدید» | A newcomer, and who brought them |
-| «خطاها» | A paid order whose delivery failed, with why and «🔁 تلاش دوباره برای تحویل»; in the main bot's group also a server's panel that stopped answering («🔴») and answers again («🟢»), and a move of a server's services to another starting («🚚») and ending — done («✅»), stopped because the target could take no more («⛔️»), or cancelled («⏹») — with its numbers ([Servers](Servers.md#moving-its-services)) |
+| «خطاها» | A paid order whose delivery failed, with why and «🔁 تلاش دوباره برای تحویل»; an online payment held for support, once («⚠️ پرداخت آنلاین برای بررسی پشتیبانی نگه داشته شد»): the customer, what it pays for, the amount and the method, its id at the gateway, why and what the gateway said, who of support asked when it was their «استعلام از درگاه» — and, for one still waiting, that its order takes no other payment and is never cancelled by itself until you look at it ([Payment methods](Payment-Methods.md#a-payment-held-for-you)); in the main bot's group also a server's panel that stopped answering («🔴») and answers again («🟢»), and a move of a server's services to another starting («🚚») and ending — done («✅»), stopped because the target could take no more («⛔️»), or cancelled («⏹») — with its numbers ([Servers](Servers.md#moving-its-services)) |
 | «نمایندگی» | The main bot's group alone: a request to become an agent with its buttons, then the verdict; a purchase of traffic; an agent's selling suspended («⛔️», with why and what opens it again) and opened again («✅») ([Agency](Agency.md)) |
 | «تیکت‌ها» | A ticket opened, then every later message, its closing, opening again and rating — [Support tickets](Support-Tickets.md#from-the-report-group) |
 | «نظرات» | A review written on the website: its number, name, stars, where they use the service from, who wrote it, the words — no buttons: it is decided on the panel's «نظرات» ([Reviews](Reviews.md)) |
@@ -48,8 +48,9 @@ without the right to manage topics.
 stays in the group.
 
 Who of support did something — handed a service on, dismissed receipts, made an order by hand, began moving a server's
-services — reads «🎧 توسط پشتیبانی»: an admin or an agent by name, you as plain «پشتیبانی», never your panel login (the
-group's members are not all you).
+services, asked a gateway about a payment that was then held («🎧 استعلام توسط پشتیبانی») — reads «🎧 توسط
+پشتیبانی»: an admin or an agent by name, you as plain «پشتیبانی», never your panel login (the group's members are not
+all you).
 
 ## Acting from the group
 

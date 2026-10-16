@@ -28,8 +28,8 @@ export interface OperationSpec {
   label: string
   icon: LucideIcon
   tone: 'primary' | 'danger' | 'neutral'
-  /** The toast after the subject ("پرداخت #n …"). */
-  done: string
+  /** The toast after the subject ("پرداخت #n …"); none for one whose answer words its own (a payment's «استعلام از درگاه»). */
+  done?: string
   /** A warning shown before it runs: the operation deserves a second look. */
   confirm?: string
   /** A note it takes (a reason the customer sees, a ledger line). */

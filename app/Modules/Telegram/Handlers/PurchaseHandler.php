@@ -39,8 +39,9 @@ use App\Support\Traffic;
  *   plan:{plan}                       → the plan's details and a button per location (its servers)
  *   plan:{plan}:srv:{server}          → the checkout of the plan on that server
  *   plan:{plan}:srv:{server}:{method} → pay: the order is made now, or the open one of the same is found
- *   checkout:{order}                  → a payment reminder's «پرداخت دوباره»: the checkout of whatever that order buys (a
- *                                       purchase's with the name it asked for, so paying finds that order)
+ *   checkout:{order}                  → a payment reminder's «پرداخت دوباره» (and «بازگشت» from an online page whose time
+ *                                       ran out): the checkout of whatever that order buys (a purchase's with the name it
+ *                                       asked for, so paying finds that order)
  * The price shown and charged is the customer's own (Pricing: a first-purchase or agent price, less their automatic
  * discount and the code they typed).
  */

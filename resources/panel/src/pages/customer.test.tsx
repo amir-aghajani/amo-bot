@@ -8,7 +8,7 @@ import { idLabel } from '@/lib/direction'
 import { queryKeys } from '@/lib/query-keys'
 import { CustomerPage, type CustomerPageProps } from '@/pages/customer'
 import { OWNER, testQueryClient, until } from '@/test/render'
-import { customerAccount, loyaltyStanding, orderRow, paymentRow, planRow, subscriptionRow, ticketRow, userRow } from '@/test/rows'
+import { customerAccount, loyaltyStanding, onlinePaymentRow, orderRow, paymentRow, planRow, subscriptionRow, ticketRow, userRow } from '@/test/rows'
 import { json, refusal, server, type Answer } from '@/test/server'
 
 /*
@@ -144,6 +144,24 @@ describe('a customer’s page', () => {
 
     await until(() => expect(within(card('پرداخت‌ها')).getByText('۱۰ گیگابایت')).toBeTruthy())
     expect(within(card('پرداخت‌ها')).queryByText('طلایی')).toBeNull()
+  })
+
+  it('says under a payment’s status, words apart, that it went to the wallet — or that it is held for support', async () => {
+    answers()
+    const payments = [
+      onlinePaymentRow({ id: 7, status: 'paid', to_wallet: true, description: 'سفارش پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت' }),
+      onlinePaymentRow({ id: 8, held: true, description: 'درگاه این پرداخت را با سفارش یا مبلغ دیگری تایید کرد؛ پشتیبانی باید آن را در درگاه بررسی کند' }),
+    ]
+    server().on(
+      'GET',
+      '/api/admin/payments',
+      json({ payments, meta: { ...META, total: 2, sort: 'created', dir: 'desc', awaiting_review: 0, paid: 1, paid_amount: '50000.00' } } satisfies PaymentsResponse),
+    )
+    open()
+
+    const status = (caption: string) => within(card('پرداخت‌ها')).getByText(caption).closest('div')?.textContent?.replace(/\s+/g, ' ').trim()
+    await until(() => expect(status('به کیف پول مشتری رفت')).toBe('پرداخت‌شده به کیف پول مشتری رفت'))
+    expect(status('نگه داشته شده برای پشتیبانی')).toBe('در انتظار پرداخت نگه داشته شده برای پشتیبانی')
   })
 
   it('opens a service in the subscriptions screen’s dialog', async () => {

@@ -32,8 +32,14 @@ use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
+use App\Modules\Payments\Drivers\Aban\AbanGateway;
+use App\Modules\Payments\Drivers\AtlasPay\AtlasPayGateway;
+use App\Modules\Payments\Drivers\CubePay\CubePayGateway;
+use App\Modules\Payments\Drivers\Zarinpal\ZarinpalGateway;
 use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\GatewayRegistry;
+use App\Modules\Payments\MethodSettings;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentCard;
 use App\Modules\Payments\Models\PaymentMethod;
@@ -337,6 +343,82 @@ trait Fixtures
             'holder' => 'AmoBot',
             'enabled' => true,
             'sort' => $method->cards()->count() + 1,
+        ]);
+    }
+
+    /**
+     * A CubePay method (an online gateway), switched on, with the token FakeCubePay knows kept as its form keeps it —
+     * encrypted (MethodSettings) — unless told another.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function cubePayMethod(string $label = 'پرداخت آنلاین', string $token = FakeCubePay::TOKEN, array $overrides = []): PaymentMethod
+    {
+        $driver = $this->service(GatewayRegistry::class)->find(CubePayGateway::key()) ?? throw new \LogicException('CubePay is not registered.');
+
+        return PaymentMethod::query()->create($overrides + [
+            'driver' => CubePayGateway::key(),
+            'label' => $label,
+            'config' => $this->service(MethodSettings::class)->write($driver, ['token' => $token]),
+            'enabled' => true,
+            'sort' => Sorting::next(PaymentMethod::class),
+        ]);
+    }
+
+    /**
+     * A Zarinpal method (an online gateway), switched on, live unless `$sandbox`, with the code FakeZarinpal knows kept
+     * as its form keeps it — encrypted (MethodSettings).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function zarinpalMethod(string $label = 'زرین‌پال', bool $sandbox = false, string $merchant = FakeZarinpal::MERCHANT, array $overrides = []): PaymentMethod
+    {
+        $driver = $this->service(GatewayRegistry::class)->find(ZarinpalGateway::key()) ?? throw new \LogicException('Zarinpal is not registered.');
+
+        return PaymentMethod::query()->create($overrides + [
+            'driver' => ZarinpalGateway::key(),
+            'label' => $label,
+            'config' => $this->service(MethodSettings::class)->write($driver, ['merchant_id' => $merchant, 'sandbox' => $sandbox]),
+            'enabled' => true,
+            'sort' => Sorting::next(PaymentMethod::class),
+        ]);
+    }
+
+    /**
+     * An AtlasPay method (an online gateway), switched on, with the key FakeAtlasPay knows kept as its form keeps it —
+     * encrypted (MethodSettings).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function atlasPayMethod(string $label = 'اطلس‌پی', string $key = FakeAtlasPay::KEY, array $overrides = []): PaymentMethod
+    {
+        $driver = $this->service(GatewayRegistry::class)->find(AtlasPayGateway::key()) ?? throw new \LogicException('AtlasPay is not registered.');
+
+        return PaymentMethod::query()->create($overrides + [
+            'driver' => AtlasPayGateway::key(),
+            'label' => $label,
+            'config' => $this->service(MethodSettings::class)->write($driver, ['api_key' => $key]),
+            'enabled' => true,
+            'sort' => Sorting::next(PaymentMethod::class),
+        ]);
+    }
+
+    /**
+     * An AbanGateway method (an online gateway), switched on, with the live key FakeAban knows kept as its form keeps it —
+     * encrypted (MethodSettings) —, showing the card unless told not to.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function abanMethod(string $label = 'آبان گیت وی', string $key = FakeAban::KEY, bool $showCard = true, array $overrides = []): PaymentMethod
+    {
+        $driver = $this->service(GatewayRegistry::class)->find(AbanGateway::key()) ?? throw new \LogicException('AbanGateway is not registered.');
+
+        return PaymentMethod::query()->create($overrides + [
+            'driver' => AbanGateway::key(),
+            'label' => $label,
+            'config' => $this->service(MethodSettings::class)->write($driver, ['api_key' => $key, 'show_card' => $showCard]),
+            'enabled' => true,
+            'sort' => Sorting::next(PaymentMethod::class),
         ]);
     }
 

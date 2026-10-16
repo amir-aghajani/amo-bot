@@ -12,9 +12,11 @@ checkout — the one the bot's purchases go through — so the same rules answer
 3. When they confirm, make the attempt's `Idempotency-Key`.
 4. Send the order: `POST /orders`, `POST /subscriptions/{id}/renewal`, `POST /subscriptions/{id}/extra-traffic`,
    `POST /subscriptions/{id}/extra-time`, `POST /subscriptions/{id}/extra-devices` or `POST /wallet/top-up`.
-5. Act on the outcome: delivered, a card to pay, or a delivery under way ([what a checkout answers](#what-a-checkout-answers)).
+5. Act on the outcome: delivered, a card to pay, an online gateway's page to pay on, or a delivery under way
+   ([what a checkout answers](#what-a-checkout-answers)).
 6. For a card transfer, upload the receipt ([card transfer and the receipt](#card-transfer-and-the-receipt)) and wait
-   for the review ([the review](#the-review)).
+   for the review ([the review](#the-review)); for an online gateway, send the customer to its page and wait for its
+   word ([paying online](#paying-online)).
 
 Nothing is ordered until the way to pay is picked: browsing plans and opening a checkout cost nothing. While the shop
 takes no orders — `GET /`'s `shop.taking_orders` is `false` — every ordering request is `503`, a request made again too:
@@ -34,16 +36,17 @@ takes no orders — `GET /`'s `shop.taking_orders` is `false` — every ordering
 {
   "methods": [
     { "id": 1, "label": "کیف پول", "kind": "instant", "min_amount": null, "max_amount": "5000000.00" },
-    { "id": 2, "label": "کارت به کارت (ملت)", "kind": "manual", "min_amount": "10000.00", "max_amount": null }
+    { "id": 2, "label": "کارت به کارت (ملت)", "kind": "manual", "min_amount": "10000.00", "max_amount": null },
+    { "id": 3, "label": "پرداخت آنلاین", "kind": "online", "min_amount": null, "max_amount": null }
   ]
 }
 ```
 
 In checkout order, as the bot offers them. `kind: "instant"` is the wallet — paid at once from the balance (an agent's
-credit counting); `"manual"` is a card-to-card transfer and its receipt. A way of paying whose driver is no longer
-installed is never offered (an earlier payment made with one shows it in its order with `kind: null`). The wallet is
-never offered for a top-up — and is for extra traffic, time or devices. `for` is required: anything but the six kinds is
-`422` on `for`.
+credit counting); `"manual"` is a card-to-card transfer and its receipt; `"online"` is an online gateway, paid on its own
+page ([paying online](#paying-online)). A way of paying whose driver is no longer installed is never offered (an earlier
+payment made with one shows it in its order with `kind: null`). The wallet is never offered for a top-up — and is for
+extra traffic, time or devices. `for` is required: anything but the six kinds is `422` on `for`.
 
 Each way is offered for the amounts between its `min_amount` and `max_amount` (Toman; `null`: no bound). With `amount`
 — the price to pay, after its discounts (a quote's `amount`, `POST /discount-codes/check`'s), as the bot reads one:
@@ -66,13 +69,16 @@ the way to pay it was first sent with (`method_id`), for a week.
   pay: a key is tied to its `method_id`.
 - **Send the same key again** — the same body, the same `method_id` — to retry the same request: a network error, a
   timeout, a `5xx`, a double click. It never makes a second order or a second charge; two sent in the same moment make
-  one order and get one answer. What it answers depends on where that order stands:
+  one order and get one answer — by an online gateway, the one page the shop keeps for the payment. What it answers
+  depends on where that order stands:
   - **no longer to be paid** — paid, being delivered, delivered, failed, refunded, or its receipt with support: the
     order as it stands, whatever changed since (a price, the plan, the wallet, the extras on sale);
-  - **still to be paid** — a card transfer with no receipt yet, a wallet payment the wallet refused: the request is
-    tried again on that same order, at the price it was made at — and today's rules are asked again first, so a plan
-    switched off, a location or a way to pay no longer offered, an amount of extra traffic, time or devices no longer
-    sold, or a top-up outside today's bounds is a `422` although the order exists (look at `GET /orders`);
+  - **still to be paid** — a card transfer with no receipt yet, an online payment not paid yet, a wallet payment the
+    wallet refused: the request is tried again on that same order, at the price it was made at — an online one answers
+    the same page while it has more than 3 minutes left, else a new one ([paying online](#paying-online)) —, and
+    today's rules are asked again first, so a plan switched off, a location or a way to pay no longer offered, an amount
+    of extra traffic, time or devices no longer sold, or a top-up outside today's bounds is a `422` although the order
+    exists (look at `GET /orders`);
   - **cancelled since** — see the next point.
 - **Once that order was cancelled** — by support, or left unpaid for 48 hours, perhaps days ago —, a retry with its key
   is a `409` in words of its own (`این سفارش لغو شده است؛ پرداخت نشد یا پشتیبانی آن را لغو کرد. برای خرید دوباره از نو
@@ -572,21 +578,28 @@ top-ups, so each transfer is a different amount and its receipt is told apart: `
 `amount`) is then, say, `"50037.00"` while `order.amount` stays `"50000.00"`. Show `transfer.amount` as what to transfer;
 the whole of it lands on the balance once approved.
 
+Paid online, the gateway's page may ask more than `amount` — a few Toman of the gateway's own, to tell its transfers
+apart, and the gateway's fee the shop passes on to customers (`link.fee`): show `link.amount` as what to pay.
+`amount` — the order's, and its payment's — is what lands on the balance once the gateway says it was paid; the rest
+is the gateway's.
+
 ## What a checkout answers
 
-Every ordering request answers `{ "checkout": { outcome, order, transfer, subscription } }`:
+Every ordering request answers `{ "checkout": { outcome, order, transfer, link, subscription } }`:
 
 | `outcome` | `order.status` | Meaning | The site |
 |---|---|---|---|
 | `settled` | `fulfilled` | paid from the wallet and delivered | show `subscription` — for a purchase the new service, for a renewal the renewed one, for extra traffic, time or devices the service with it: its link and a QR code of it |
 | `settled` | `failed` | paid, but the delivery failed; support delivers it (the money is not lost) | "Paid — support is finishing your order", with a link to the order |
 | `transfer` | `pending` | pay by card: `transfer` says where | show the card and the receipt upload for `transfer.payment_id` ([the receipt](#card-transfer-and-the-receipt)) |
+| `link` | `pending` | pay on an online gateway's page: `link` says where | send the customer to `link.url`, then wait for the gateway's word ([paying online](#paying-online)) |
 | `processing` | `paid` or `processing` | paid, its delivery under way | read `GET /orders/{id}` every few seconds until `fulfilled` or `failed` |
 
 A request made again with its key answers its order as it stands now, so it may also be `settled` with a card order
 since approved, or with `refunded` — or the `409` of [the Idempotency-Key](#the-idempotency-key), once the order was
 cancelled; go by `order.status`. A `transfer` whose payment already has its receipt (`awaiting_review`) means it is with
-support. Support's own notes on an order are never in the answer.
+support. `transfer` and `link` are `null` for every other outcome. Support's own notes on an order are never in the
+answer.
 
 `POST /orders` → `200`
 ```json
@@ -624,6 +637,7 @@ support. Support's own notes on an order are never in the answer.
       ]
     },
     "transfer": null,
+    "link": null,
     "subscription": {
       "id": 17,
       "name": "ali_2",
@@ -689,6 +703,7 @@ support. Support's own notes on an order are never in the answer.
       "instructions": "شماره پیگیری را نگه دارید.",
       "contact": null
     },
+    "link": null,
     "subscription": null
   }
 }
@@ -702,6 +717,7 @@ A wallet purchase, renewal or extra made on the site sends no notice: this answe
 |---|---|---|
 | `422` on `method_id`: `موجودی کیف پول کافی نیست؛ ۷۰٬۰۰۰ تومان کم است.` | the wallet (with an agent's credit) does not cover the price; nothing was ordered | offer a top-up or the card |
 | `422` on `method_id`, other words | that way cannot pay this kind of order now, or it refused the payment | read the ways to pay again |
+| `422` on `method_id`: `درگاه پرداخت الان در دسترس نیست؛ کمی بعد دوباره امتحان کنید یا روش دیگری را انتخاب کنید.` | an online gateway out of reach, or it would not open the payment; nothing was paid, the order stays open | offer another way, or the same a little later ([paying online](#paying-online)) |
 | `422` on `plan_id` | not on sale now | read the catalogue again (`GET /plans`, with the customer's token) |
 | `422` on `server_id` | not on that location now, while another of the plan's sells it | read the plan again (`GET /plans/{id}`) and offer its `locations` |
 | `422` on `amount` | a top-up outside the bounds | show the message |
@@ -710,6 +726,7 @@ A wallet purchase, renewal or extra made on the site sends no notice: this answe
 | `422` on `method` | a renewal method the shop does not offer (switched off since the page was drawn) | preview the renewal again and offer its `methods` |
 | `422` on `idempotency_key` | a key reused for something else or with another `method_id`, or none | a new key for a new attempt — and look at `GET /orders` first, the earlier attempt may have gone through |
 | `422`, no field: `سفارش‌های پرداخت‌نشده شما زیاد است؛ اول آن‌ها را پرداخت کنید یا بگذارید منقضی شوند.` | 5 unpaid orders open; nothing was ordered | link to the orders: pay one, or let it expire |
+| `422` on `status`: `پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ …` | the order's online payment is [held for support](#a-payment-held-for-support): it is paid no other way meanwhile; nothing was charged | show the message, send the customer to support with the order's number |
 | `422` on `status`: `رسید سفارش #142 هنوز در حال بررسی پشتیبانی است؛ …` | a card while the shop takes one receipt at a time and the customer's last receipt (of that order) is still with support; nothing was ordered | show the message, link to that order; the wallet still pays |
 | `409` `این سفارش همین حالا جای دیگری پرداخت یا بسته شد؛ وضعیت آن را در سفارش‌ها ببینید.` | the order was paid or closed elsewhere in the same moment; nothing was charged | show the orders |
 | `409` `این سفارش لغو شده است؛ پرداخت نشد یا پشتیبانی آن را لغو کرد. برای خرید دوباره از نو شروع کنید.` | made again with its key, its order was cancelled since — by support, or unpaid for 48 hours; nothing was charged | a new attempt, with a new key |
@@ -846,3 +863,118 @@ which accepts on its own a receipt sent in the bot that nobody looked at, never 
 
 To learn the outcome, read `GET /orders/{id}` while its page is open (every 15–30 seconds) until the order is
 `fulfilled`, `failed` or `cancelled`, or watch `unread_notifications` in `GET /me`.
+
+## Paying online
+
+A way to pay of `kind: "online"` is an online gateway ([Payment methods](Payment-Methods.md)): the customer pays on the
+gateway's own page, and the gateway tells the shop. Its checkout answers `link`, the order `pending`:
+
+`POST /orders` → `200`
+```json
+{
+  "checkout": {
+    "outcome": "link",
+    "order": { "id": 53, "type": "purchase", "status": "pending", "amount": "120000.00", "…": "…", "payments": [{ "id": 90, "status": "pending", "amount": "120000.00", "…": "…", "link": { "…": "the same as below" } }] },
+    "transfer": null,
+    "link": {
+      "payment_id": 90,
+      "url": "https://cubevps.ir/smspay/pay.php?authority=…",
+      "expires_at": "2026-10-07T12:40:00+00:00",
+      "amount": "120037.00",
+      "fee": null,
+      "card": null
+    },
+    "subscription": null
+  }
+}
+```
+
+- `url` — the gateway's page: open it for the customer (a new tab, so the order's page stays behind it). They pay there
+  and the page says how it went; a gateway may then send them to the shop's own address (Zarinpal and AbanGateway do),
+  never to a page of the site's choosing: it shows what came of it — with the way back to the bot for a customer with a
+  Telegram account; one without is told to look at their account on the site, and given no link. The site's own page,
+  behind, learns it with `POST /payments/{id}/check` or `GET /orders/{id}`. It may be a Telegram link (`https://t.me/…`,
+  AtlasPay's mini app): the customer pays in Telegram, and the site learns it the same way.
+- `amount` — the exact sum the page asks, in Toman: the payment's own, or a few Toman more when the gateway adds some to
+  tell its transfers apart (above: 37), or passes on a share of its fee. Show this one as what they pay; the order's
+  `amount` is what they bought, and what a top-up adds to the wallet.
+- `fee` — of `amount`, the gateway's fee the customer pays, in Toman (`null` for none): the one the shop passes on
+  (CubePay), Zarinpal's when the merchant set the payer to pay it, or AtlasPay's markup on the order's amount. Say it
+  beside the sum («including 2,000 Toman gateway fee»).
+- `expires_at` — until when the page takes money: the gateway's own end, or the time the shop keeps its page when the
+  gateway gives none. A countdown may show it.
+- `card` — `{ "number", "holder", "bank" }` when the gateway gave a card to show (CubePay's «🤖 نمایش کارت در ربات»,
+  AtlasPay's «نمایش مستقیم اطلاعات پرداخت», AbanGateway's «نمایش کارت در ربات و سایت» in the shop) — `holder` and
+  `bank` `null` when it did not say them —, else `null`: show it as a card transfer's
+  ([the receipt](#card-transfer-and-the-receipt)), with `amount` — the customer may transfer exactly that sum to it, and
+  the gateway knows the transfer by the sum. No receipt is sent for it.
+
+**The outcome.** The gateway tells the shop by itself once the customer paid; the shop then asks the gateway what came
+of the payment — never takes the call's word for it —, and asks it every few minutes too, until two hours after the
+page closed (48 hours while the gateway says money came in on it that it has not settled yet: a receipt in review, a
+sum paid in part). A payment the gateway says was paid is settled at once — the order paid and delivered, as a card
+payment approved is ([the review](#the-review)) — and the customer gets a `payment_settled` notice. Meanwhile read
+`GET /orders/{id}` every 15–30 seconds while the order's page is open, until it is `fulfilled`, `failed` or `cancelled`
+or its payment `failed`, and offer a «پرداخت کردم» button — or ask as the customer comes back — that asks the gateway
+now:
+
+`POST /payments/{id}/check` → `200` (no body)
+```json
+{
+  "check": {
+    "state": "paid",
+    "order": { "id": 53, "type": "purchase", "status": "fulfilled", "…": "…" },
+    "subscription": { "id": 18, "name": "ali_3", "…": "…" }
+  }
+}
+```
+
+| `state` | Meaning | The site |
+|---|---|---|
+| `paid` | the money came in: the order paid and delivered — `fulfilled` (`subscription` its service), `failed` for support to finish, `paid` or `processing` while under way | show the service, or the order |
+| `waiting` | nothing yet, and the page still takes money | "not paid yet": the page again, or wait |
+| `closed` | the page closed with nothing paid: a payment still waiting becomes `failed` (`مهلت پرداخت در درگاه تمام شد`) and its order, still `pending`, is paid again by a new attempt; one cancelled with its order stays `cancelled` | pay again, while the order is `pending` |
+
+`subscription` is the order's service once delivered, as a checkout's
+([what a checkout answers](#what-a-checkout-answers)). A payment already paid answers `paid` without asking the
+gateway. Refusals: a `404` for a payment that is not the customer's; a `422` on `status` for one that is no online
+payment (`بررسی پرداخت فقط برای پرداخت آنلاین است.`), or for one [held for support](#a-payment-held-for-support)
+(`پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ دوباره پرداخت نکنید و برای پیگیری به پشتیبانی پیام بدهید.`); a
+`503` while the gateway cannot be asked (`الان نمی‌شود از درگاه پرسید؛ اگر پرداخت کرده‌اید کمی بعد دوباره بررسی کنید.`
+— nothing changed: ask again later); a `429` with `Retry-After` past 10 a minute per customer (`پرداخت را زیاد بررسی
+کرده‌اید؛ …`).
+
+**Coming back to it.** While the payment waits and its page takes money, the order shows the page too: its payment's
+`link` (`GET /orders`, `GET /orders/{id}`; `null` for any other payment, once `expires_at` has passed, and for one held
+for support) — a "go on paying" button. The request made again with its `Idempotency-Key` answers the same page while
+it has more than 3 minutes left; after that, the gateway is asked about the old page first — paid there, the answer is
+the order as it stands (`settled` or `processing`) and no new page opens —, else a new payment and a new page — the old
+one is still settled should the gateway take money on it after all.
+
+**Refusals.** A gateway out of reach, or one that would not open the payment, is a `422` on `method_id` (`درگاه پرداخت
+الان در دسترس نیست؛ …`): nothing paid, the order left `pending` with that payment `failed` — try again a little later,
+with the same key or a new one, or another way to pay. A receipt for an online payment is a `422` on `status` (`رسید
+فقط برای پرداخت کارت به کارت فرستاده می‌شود.`).
+
+**Paid too late.** Money the gateway takes for an order that closed meanwhile — paid another way, cancelled, or expired
+— is the customer's: it goes to their wallet, the payment `paid` with the note `سفارش پیش از رسیدن این پرداخت بسته شده
+بود؛ مبلغ به کیف پول مشتری رفت`, and they get a `payment_credited` notice; a check answers `paid`, with the order as it
+closed.
+
+### A payment held for support
+
+The shop does not settle a payment it cannot take at its gateway's word — one the gateway confirmed for another order
+or amount, or on which it kept money unsettled for 48 hours —: the payment is held for support
+([Payment methods](Payment-Methods.md#a-payment-held-for-you)), and nothing more is asked of the gateway about it. Its
+`note` says so in the customer's words, whatever its `status` — `پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ …`,
+in place of the shop's words to support on why. While it still waits — `pending`, or `failed` with its page — its
+order stays `pending` and never expires. Meanwhile:
+
+- `POST /payments/{id}/check` is a `422` on `status`: `پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ دوباره
+  پرداخت نکنید و برای پیگیری به پشتیبانی پیام بدهید.`;
+- its `link` is `null`: offer no "go on paying";
+- the order is paid no other way: a checkout of it — the request made again with its key, or another way to pay the
+  same thing — is the same `422` on `status`, nothing charged.
+
+Show the message and send the customer to support with the order's number; support settles it at the gateway. Once
+support cancelled it, it holds nothing more: its check answers as for any closed page.

@@ -20,7 +20,10 @@ use App\Modules\Payments\Models\PaymentMethod;
 final class GatewayRegistry
 {
     /** @param Registry<GatewayDriver> $drivers */
-    public function __construct(private readonly Registry $drivers) {}
+    public function __construct(
+        private readonly Registry $drivers,
+        private readonly MethodSettings $kept,
+    ) {}
 
     /** @return list<GatewayDriver> Every driver, in the order they are registered: the "add method" picker's. */
     public function all(): array
@@ -65,7 +68,7 @@ final class GatewayRegistry
     {
         $driver = $this->find($method->driver);
 
-        return $driver === null ? null : $driver->summary(self::settings($driver, $method));
+        return $driver === null ? null : $driver->summary($this->settings($driver, $method));
     }
 
     /** @throws UnknownDriverException for a row whose driver is no longer installed */
@@ -73,7 +76,7 @@ final class GatewayRegistry
     {
         $driver = $this->drivers->get($method->driver);
 
-        return $driver->gateway(self::settings($driver, $method));
+        return $driver->gateway($this->settings($driver, $method));
     }
 
     /** The gateway a payment was started on: its method's (a method that has payments is never deleted). */
@@ -83,13 +86,14 @@ final class GatewayRegistry
     }
 
     /**
-     * The method's settings as its driver reads them: each field of its form from the row's config.
+     * The method's settings as its driver reads them: each field of its form from the row's config, its secrets readable
+     * (MethodSettings).
      *
      * @return array<string, mixed> By field name
      */
-    private static function settings(GatewayDriver $driver, PaymentMethod $method): array
+    private function settings(GatewayDriver $driver, PaymentMethod $method): array
     {
-        $config = $method->config;
+        $config = $this->kept->read($driver, $method->config);
 
         return $driver->describe()->form->values(static fn(Field $field): mixed => $config[$field->key] ?? null);
     }

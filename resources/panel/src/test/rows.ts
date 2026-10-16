@@ -3,6 +3,7 @@ import type {
   AgencyStanding,
   BotSettingsData,
   BotSettingsResponse,
+  CubePayMethodRow,
   CustomerAccount,
   CustomerGroupRow,
   DashboardResponse,
@@ -224,6 +225,7 @@ export function paymentRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
     status: 'awaiting_review',
     amount: '50000.00',
     gateway: 'manual',
+    gateway_label: 'کارت به کارت',
     kind: 'manual',
     method: 'کارت به کارت (ملت)',
     summary: '6037 •••• •••• 1119 · امیر رضایی',
@@ -250,10 +252,34 @@ export function paymentRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
     reviewer: null,
     refund_note: null,
     paid_at: null,
+    link_expires_at: null,
+    checked_at: null,
+    to_wallet: false,
+    held: false,
     created_at: '2026-10-06T08:55:00Z',
-    actions: { approve: true, reject: true, cancel: true, remind: false, retry: false, refund: false },
+    actions: { approve: true, reject: true, cancel: true, remind: false, retry: false, refund: false, check: false },
     ...overrides,
   }
+}
+
+/**
+ * Payment 7 on CubePay, an online gateway, as the payments screen lists it: Ali's wallet top-up opened there and not
+ * paid yet — its authority its id at CubePay, its page open until `link_expires_at` —, what such a one allows.
+ */
+export function onlinePaymentRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
+  return paymentRow({
+    status: 'pending',
+    gateway: 'cubepay',
+    gateway_label: 'CubePay',
+    kind: 'online',
+    method: 'پرداخت آنلاین',
+    summary: null,
+    reference: 'A1b2C3d4E5f6',
+    receipt: null,
+    link_expires_at: '2026-10-06T09:25:00Z',
+    actions: { approve: false, reject: false, cancel: true, remind: false, retry: false, refund: false, check: true },
+    ...overrides,
+  })
 }
 
 /** An order as the orders screen lists it: the wallet top-up payment 7 pays, still to be paid. */
@@ -278,7 +304,9 @@ export function orderRow(overrides: Partial<OrderRow> = {}): OrderRow {
     devices: null,
     notes: null,
     manual: null,
-    payments: [{ id: 7, status: 'awaiting_review', amount: '50000.00', gateway: 'manual', method: 'کارت به کارت (ملت)', paid_at: null, created_at: '2026-10-06T08:55:00Z' }],
+    payments: [
+      { id: 7, status: 'awaiting_review', amount: '50000.00', gateway: 'manual', method: 'کارت به کارت (ملت)', paid_at: null, to_wallet: false, held: false, created_at: '2026-10-06T08:55:00Z' },
+    ],
     paid_at: null,
     fulfilled_at: null,
     created_at: '2026-10-06T08:50:00Z',
@@ -580,6 +608,47 @@ export function cardMethodRow(overrides: Partial<ManualMethodRow> = {}): ManualM
     cards: [paymentCardRow()],
     to_support: false,
     ...overrides,
+  }
+}
+
+/** CubePay method 6, an online gateway, for any amount: its token kept (never shown), no payment made with it yet. */
+export function cubePayMethodRow(overrides: Partial<CubePayMethodRow> = {}): CubePayMethodRow {
+  return {
+    id: 6,
+    driver: 'cubepay',
+    driver_label: 'CubePay',
+    kind: 'online',
+    builtin: false,
+    label: 'پرداخت آنلاین',
+    summary: null,
+    config: { token: { set: true, hint: '••••••1234' }, fee_percent: '', fee_fixed: 0 },
+    min_amount: null,
+    max_amount: null,
+    enabled: true,
+    sort: 3,
+    counts: { payments: 0 },
+    created_at: '2026-10-15T10:00:00Z',
+    updated_at: '2026-10-15T10:00:00Z',
+    ...overrides,
+  }
+}
+
+/**
+ * The CubePay driver as GET /payment-methods/drivers describes it (Payments\Drivers\CubePay\CubePayDriver): the token, a
+ * secret it cannot go without, and the fee passed on to customers — a percent and a fixed sum.
+ */
+export function cubePayDriverRow(): DriverDescription {
+  return {
+    key: 'cubepay',
+    label: 'CubePay',
+    description: 'مشتری در صفحه CubePay پرداخت می‌کند و پرداخت بدون رسید تایید می‌شود.',
+    notes: ['آدرس سایت فروشگاه باید با https شروع شود: CubePay نتیجه هر پرداخت را به آن خبر می‌دهد'],
+    traits: { kind: 'online', builtin: false },
+    fields: [
+      serverField('token', { type: 'secret', label: 'توکن API', hint: 'از ربات ‎@cubepy_bot، بخش «🔗 پنل من».', required: true, secret: true, ltr: true, default: null }),
+      serverField('fee_percent', { label: 'کارمزد درصدی بر عهده مشتری', placeholder: '0', ltr: true }),
+      serverField('fee_fixed', { type: 'number', label: 'کارمزد ثابت بر عهده مشتری', required: true, unit: 'تومان', min: 0, max: 1000000, default: 0 }),
+    ],
   }
 }
 

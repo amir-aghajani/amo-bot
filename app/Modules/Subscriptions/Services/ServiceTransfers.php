@@ -251,10 +251,11 @@ final class ServiceTransfers
      * Cancel, quietly, what the previous owner left unpaid of the service — a renewal or an extra that can no longer be
      * paid or delivered (Order::serviceChangedHands()), and whose renewal would hold back the new owner's automatic
      * renewal — as an order unpaid in time is (PaymentService::expire(), with NOTE_CANCELLED), at once. One whose money may
-     * be with support — its receipt in review, or its card transfer taken in support's private chat — is left to fail at
-     * its delivery for support to give it back. Only support's transfer leaves any (a customer's waits for their open
-     * orders), and after its commit, as expire() discards uploaded receipts after its own: the previous owner orders
-     * nothing more for a service no longer theirs (OrderService).
+     * be with support — its receipt in review, its card transfer taken in support's private chat, its online payment held
+     * for support — or whose online gateway's page still takes money is left to fail at its delivery for support to give it
+     * back. Only support's transfer leaves any (a customer's waits for their open orders), and after its commit, as
+     * expire() discards uploaded receipts after its own: the previous owner orders nothing more for a service no longer
+     * theirs (OrderService).
      *
      * @return list<int> the ids of the orders cancelled
      */

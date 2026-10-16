@@ -75,9 +75,40 @@ not understand — a word typed, a button of a screen long gone — is answered 
      approves the payment in the panel.
      A payment reminder of such a payment sends them there too, in place of «ارسال رسید» — and of one shown a card,
      asks for its receipt here, whatever the shop does now.
+   - **An online gateway** ([CubePay](Payment-Methods.md#cubepay), [Zarinpal](Payment-Methods.md#zarinpal),
+     [AtlasPay](Payment-Methods.md#atlaspay), [AbanGateway](Payment-Methods.md#abangateway)) shows its page
+     in place of the checkout:
+     «💳 پرداخت آنلاین سفارش #…», the exact sum the page asks — a gateway may add a few Toman to the order's, to tell
+     transfers apart, and the fee you pass on to customers, said apart («(شامل … کارمزد درگاه)») —, until when the page
+     takes money («⏳ مهلت پرداخت: تا …», the shop's time) and what comes once
+     paid, with «💳 پرداخت» (the gateway's page), «🔄 بررسی پرداخت» and «بازگشت» to the checkout. No receipt is sent
+     and none is taken: once the gateway says it was paid — it calls the shop back, the customer taps «🔄 بررسی پرداخت»,
+     or the shop asks it every few minutes — the order is delivered and the customer gets it as any approved payment's
+     notice — Zarinpal and AbanGateway send the customer's browser back to a page of the shop's saying what came of it,
+     with «بازگشت به ربات». «🔄 بررسی پرداخت» answers in a popup: «هنوز پرداختی ثبت نشده است…», «پرداخت شما به درگاه
+     رسیده و هنوز در حال بررسی است؛ دوباره پرداخت نکنید…» while money came in that the gateway still reviews (a receipt at
+     AtlasPay, part of a split AbanGateway sum), «✅ پرداخت شما تایید شد…» (the delivery follows as its own message),
+     «این پرداخت قبلا تایید شده است», «الان نمی‌شود از درگاه پرسید؛ اگر پرداخت کرده‌اید کمی بعد دوباره بزنید.» while the
+     gateway cannot be asked, or — a payment [held for support](Payment-Methods.md#a-payment-held-for-you) —
+     «پرداخت شما برای بررسی به پشتیبانی رسید؛ دوباره پرداخت نکنید و برای پیگیری به پشتیبانی پیام بدهید.»; the gateway
+     is asked once in five seconds per payment, a tap sooner told nothing came yet. A page answered paid turns into
+     «✅ پرداخت آنلاین سفارش #… تایید شد.», its buttons and card gone. A page whose time ran out turns into
+     «⌛ مهلت پرداخت سفارش #… در صفحه درگاه تمام شد…» with «بازگشت» to the order's checkout, where the same way to pay
+     opens a new page; one whose order closed meanwhile (paid another way, cancelled, expired) turns into «این سفارش
+     دیگر قابل پرداخت نیست.» instead. The checkout opens a new page too whenever the old one has three minutes or less
+     left, once the gateway has been asked about the old one (paid there, the order is delivered instead); until then it
+     shows the same page again. When the gateway gives a card to show — CubePay's «🤖 نمایش کارت در ربات», AtlasPay's
+     «نمایش مستقیم اطلاعات پرداخت», AbanGateway's «نمایش کارت در ربات و سایت» —, its card — with its holder and its
+     bank when the gateway gave them — and the exact sum come under the page — «مبلغ باید دقیقا همین باشد، تا آخرین
+     رقم» — with «📋 کپی مبلغ» and «📋 کپی شماره کارت», protected as a card transfer's message is. A gateway that will
+     not open a page says «پرداخت انجام نشد: درگاه پرداخت الان در دسترس نیست…» with «بازگشت»; nothing is paid, and its
+     own reason is in the shop's log. An order whose payment is held for support is paid no other way while that
+     payment waits: paying it again, by any way, says the same «پرداخت شما برای بررسی به پشتیبانی رسید؛ …», with
+     «💬 پیام به پشتیبانی» and «بازگشت», and nothing is paid. Once support cancels that payment, it holds nothing more.
 
-An order left unpaid expires after 48 hours of nothing — but one whose receipt is with support, or whose card payment
-went to support's private chat.
+An order left unpaid expires after 48 hours of nothing — but one whose receipt is with support, whose card payment
+went to support's private chat, whose online page still takes money, or whose online payment is held for support and
+still waits.
 
 **An agent's bot whose selling the main shop suspended** ([Agency](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum))
 sells nothing new: «خرید اشتراک» says «🛑 فعلا خرید، تمدید و اکانت تست در این ربات ممکن نیست…» (a text the agent may
@@ -226,8 +257,9 @@ builder is on, «🛠 تمدید با سرویس دلخواه» comes under them
 days, then the renewal's checkout of that package, «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; renewed so, the service still has
 no plan, and «تمدید خودکار» is never offered for it ([Custom services](Custom-Services.md#renewing-a-built-service)).
 With nothing to pick: «فعلا پلنی برای تمدید این سرویس فروخته نمی‌شود …». The wallet renews it at once
-(«📊 مشاهده سرویس» under the word); a card waits for its receipt. A service switched off by support, without a plan while neither a plan nor the builder is there to pick, or —
-in an agent's bot — beyond the agent's traffic, cannot be renewed; one whose renewal is already with support or being
+(«📊 مشاهده سرویس» under the word); a card waits for its receipt, an online gateway's page for its word. A service
+switched off by support, without a plan while neither a plan nor the builder is there to pick, or — in an agent's bot
+— beyond the agent's traffic, cannot be renewed; one whose renewal is already with support or being
 delivered says so. A service bought at a [first-purchase price](#first-purchase-prices) renews at the plan's price — an
 agent's or a colleague's at its [agent price](#agent-prices). The plan's checkout note is under the renewal's checkout
 too.
@@ -252,7 +284,8 @@ when it has its own, else the shop's:
    one you do not sell is said so, and another awaited.
 2. **The checkout** — what it costs and the service **as it would leave it** — its traffic left, its end, its devices
    —, then the ways to pay. Nothing is ordered until one is picked.
-3. **The wallet** adds it at once («📊 مشاهده سرویس» under the word); **a card** waits for its receipt, as a purchase does.
+3. **The wallet** adds it at once («📊 مشاهده سرویس» under the word); **a card** waits for its receipt and **an online
+   gateway** shows its page, as a purchase does.
 
 Devices are priced for 30 days and charged for the days left of the service's period — a service 15 days from its end
 pays half the price, its screen saying «قیمت‌ها برای ۱۵ روز مانده از دوره فعلی سرویس حساب شده است» —, and last as long:
@@ -275,7 +308,8 @@ range, new ones each time the screen opens ([Bot settings](Bot-Settings.md#walle
 customer picks one, or types any amount within your bounds right there (Persian digits, separators and «تومان» are
 fine); then the checkout, every way to pay but the wallet itself that takes that amount. Paid by card, the top-up may
 ask a few Toman more — the whole of it credited — while the shop adds a random sum to card-to-card top-ups ([Payment
-methods](Payment-Methods.md#a-random-sum-on-card-to-card-top-ups)).
+methods](Payment-Methods.md#a-random-sum-on-card-to-card-top-ups)); an online gateway's page may ask a few Toman of its
+own too (CubePay's), and the top-up's amount is what is credited.
 
 ### Sending money to another customer
 
@@ -319,7 +353,8 @@ transfers an hour.
 
 | When | They get |
 |---|---|
-| A card payment approved — or retried, or delivered after a restart | Their service (a QR card), its renewal or the traffic, time or devices it bought, the wallet charged or the agent's traffic added — or that the delivery failed and support will finish it |
+| A card payment approved, an online payment its gateway confirmed — or retried, or delivered after a restart | Their service (a QR card), its renewal or the traffic, time or devices it bought, the wallet charged or the agent's traffic added — or that the delivery failed and support will finish it |
+| An online payment that came in after its order had closed (paid another way, cancelled, expired) | «💳 پرداخت شما برای سفارش #… پس از بسته شدن آن سفارش رسید؛ …»: its money went to their wallet, with the balance now |
 | A receipt rejected, an order cancelled, a payment refunded | A word, with your note, as a reply to their receipt |
 | A payment reminder from the panel | A nudge, with «📎 ارسال رسید» and «🔄 پرداخت دوباره» |
 | A service switched off or on, deleted (while running), moved, given days or traffic | A word — a moved one with its new link |

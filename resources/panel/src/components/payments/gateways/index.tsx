@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from 'react'
-import { CreditCard, TimerReset, Wallet, type LucideIcon } from 'lucide-react'
+import { BadgeCheck, Box, CreditCard, Globe, Landmark, MessageSquareText, TimerReset, Wallet, type LucideIcon } from 'lucide-react'
 import { KIND_LABELS } from '@/components/payments/kinds'
 import type { DriverDescription, GatewayKind, PaymentMethodRow, UnregisteredMethodRow } from '@/lib/api-types'
 import { formatMinutes } from '@/lib/format'
@@ -10,7 +10,10 @@ import { formatMinutes } from '@/lib/format'
  * so nothing is cast. A new driver in the API is a type error here until it has an entry.
  */
 
-/** A method of a driver the panel knows, by its driver: a card's (`manual`), the wallet. */
+/**
+ * A method of a driver the panel knows, by its driver: a card's (`manual`), the wallet, CubePay's, Zarinpal's,
+ * AtlasPay's, AbanGateway's.
+ */
 type Registered = Exclude<PaymentMethodRow, UnregisteredMethodRow>
 type DriverKey = Registered['driver']
 type MethodOf<Key extends DriverKey> = Extract<Registered, { driver: Key }>
@@ -24,6 +27,10 @@ interface GatewayUi<Method extends PaymentMethodRow> {
 const GATEWAYS: { [Key in DriverKey]: GatewayUi<MethodOf<Key>> } = {
   wallet: { icon: Wallet },
   manual: { icon: CreditCard, Note: AutoApproval },
+  cubepay: { icon: Box, Note: ConfirmedByGateway },
+  zarinpal: { icon: Landmark, Note: ConfirmedByGateway },
+  atlaspay: { icon: Globe, Note: ConfirmedByGateway },
+  abangateway: { icon: MessageSquareText, Note: ConfirmedByGateway },
 }
 
 const isKnown = (key: string): key is DriverKey => Object.hasOwn(GATEWAYS, key)
@@ -39,6 +46,11 @@ export function gatewayIcon(key: string): LucideIcon | undefined {
 export function gatewayKind(driver: DriverDescription): GatewayKind | null {
   const kind = driver.traits.kind
   return isKind(kind) ? kind : null
+}
+
+/** Whether the list may say something of a method beside its summary: its driver has a Note. */
+export function hasNote(method: PaymentMethodRow): boolean {
+  return method.kind !== null && isKnown(method.driver) && GATEWAYS[method.driver].Note !== undefined
 }
 
 /** What the list says of a method beside its summary, by its driver. */
@@ -60,6 +72,16 @@ function AutoApproval({ method }: { method: MethodOf<'manual'> }) {
     <span className="flex items-center gap-1 text-muted-foreground">
       <TimerReset className="size-3" aria-hidden />
       تایید خودکار بعد از {formatMinutes(minutes)}
+    </span>
+  )
+}
+
+/** An online gateway's payments: paid on its page and confirmed by it — no receipt, nothing to review. */
+function ConfirmedByGateway({ method }: { method: MethodOf<'cubepay' | 'zarinpal' | 'atlaspay' | 'abangateway'> }) {
+  return (
+    <span className="flex items-center gap-1 text-muted-foreground">
+      <BadgeCheck className="size-3" aria-hidden />
+      پرداخت در صفحه {method.driver_label}، بدون رسید و با تایید خود درگاه
     </span>
   )
 }

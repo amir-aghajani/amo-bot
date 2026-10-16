@@ -10,6 +10,7 @@ use App\Modules\Agency\Tasks\AgencyStandingTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
+use App\Modules\Payments\Tasks\OnlinePaymentsTask;
 use App\Modules\Rewards\Tasks\NightlyDrawTask;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Subscriptions\Tasks\CleanupServicesTask;
@@ -39,6 +40,7 @@ final class ShopScheduleTest extends DatabaseTestCase
 
         self::assertSame([
             AutoApproveReceiptsTask::class => [1, 'each shop'],
+            OnlinePaymentsTask::class => [1, 'each shop'],
             ResumeDeliveriesTask::class => [1, 'each shop'],
             ExpireOrdersTask::class => [10, 'each shop'],
             SendBroadcastsTask::class => [1, 'each shop'],

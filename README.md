@@ -17,8 +17,10 @@ its scheduler and Telegram reaches its bots through webhooks — no shell, Compo
 ## Features
 
 - **A bot that sells** — plans by category and location, services the customer builds by the gigabyte and the day, the
-  wallet — money sent to another customer too — and card-to-card payments with a receipt (several cards a method, each
-  with a daily cap, and buttons that copy the card and the sum), the subscription link delivered as a QR card, renewals
+  wallet — money sent to another customer too —, card-to-card payments with a receipt (several cards a method, each
+  with a daily cap, and buttons that copy the card and the sum) and online payments through CubePay (card-to-card and
+  crypto it confirms by itself), Zarinpal (any bank card), AtlasPay (card-to-card in its Telegram mini app) and
+  AbanGateway (card-to-card to your own cards), the subscription link delivered as a QR card, renewals
   by hand and automatic (by the methods and within the window the owner allows), extra traffic, time or devices for a
   service, each on its own, at the owner's prices, services handed to another customer or added by their link, free
   test accounts, reminders before a service ends, referrals, and support tickets. Every word it says and its whole menu

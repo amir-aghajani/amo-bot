@@ -8,7 +8,9 @@ Internals pages — [commerce](Internals-Commerce.md), [services](Internals-Serv
 
 ## The shape of it
 
-AmoBot is a PHP 8.2 application (Slim 4, PHP-DI, Eloquent, Symfony Console) that renders no HTML. It has four faces:
+AmoBot is a PHP 8.2 application (Slim 4, PHP-DI, Eloquent, Symfony Console) that renders no HTML but one small page —
+the one a customer's browser comes back to from an online payment gateway (`Payments\Controllers\ReturnPage`). It has
+four faces:
 
 - **Two panels** — the owner's at `/admin/` and an agent's at `/agent/` — one React project (`resources/panel`) built
   to static files the web server serves as they are. They talk to PHP only through the JSON API.
@@ -53,7 +55,7 @@ walks every route to prove it.
 | `/api/install` | not installed yet › CSRF header › the install key |
 | `/api/store/v1/{store}` | installed › the website the key opens › JSON bodies › (a customer's bearer token) |
 | `…/admin` under the store | › a customer's token › one of the shop's admins, let in, signed in recently enough |
-| `/webhooks/…`, `/cron/{token}` | installed (a secret in the address authenticates) |
+| `/webhooks/…`, `/cron/{token}`, `/payments/callback/{payment}/{secret}` (an online gateway's callback) | installed (a secret in the address authenticates) |
 | `/`, `/health`, `/api/app` | nothing: they answer before installation too |
 
 A controller is *load → service → present*. It lets the shop's refusals through: a `Core\Exceptions\DomainRuleException`
@@ -69,10 +71,12 @@ show it on a server failure as «کد پیگیری», and the owner finds the li
 shown only with `APP_DEBUG`, only for a 500, and only to a request straight from the server itself. What the app cannot
 handle — a broken `config.php`, a fatal error — is `public/index.php`'s last resort: the same JSON 500 with its id.
 
-Around that: every answer carries a sandboxing policy and is not cached; secrets (bot tokens, the webhook and cron
-secrets) are taken out of every log line and error (`Core\Logging\Redact`); every sign-in is throttled and the throttle
-fails closed; a fresh upload's installer needs a key from the host's files; uploaded pictures are judged by their
-bytes and written again; and every file the app writes is owner-only where PHP runs as the account that owns the app
+Around that: every answer carries a sandboxing policy and is not cached (the return page a policy of its own, which
+runs no script either); secrets (bot tokens, the webhook, cron and payment callback secrets) are taken out of every log
+line and error (`Core\Logging\Redact`); an online gateway's callback is never believed — it only makes the shop ask
+the gateway itself (`Payments\Services\OnlinePayments`); every sign-in is throttled and the throttle fails closed; a
+fresh upload's installer needs a key from the host's files; uploaded pictures are judged by their bytes and written
+again; and every file the app writes is owner-only where PHP runs as the account that owns the app
 (`Core\Support\Files`). [Security](Security.md) has the reporting policy and
 [Running in production](Running-In-Production.md) the operator's side.
 

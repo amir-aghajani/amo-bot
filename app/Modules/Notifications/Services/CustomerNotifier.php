@@ -93,7 +93,30 @@ final class CustomerNotifier
             $this->tell($payment, NoticeType::PaymentSettled, fn(): array => $this->message($this->card->failedText($order), self::replyingToReceipt($payment)));
         }
 
+        $this->commissionSettled($payment);
+    }
+
+    /**
+     * The referrer of the payment's customer told what its settlement earned them, once — on its own where the customer
+     * is told otherwise (a checkout that found an online page paid shows them the order: Payments\Services\
+     * OnlinePayments::paidBefore()).
+     */
+    public function commissionSettled(Payment $payment): void
+    {
         CurrentBot::run($payment->shop(), fn() => $this->commissionEarned($payment));
+    }
+
+    /**
+     * An online payment came in after its order had closed (Payments\Services\PaymentService::settleOnline()): its money
+     * went to the wallet.
+     */
+    public function paymentCredited(Payment $payment): void
+    {
+        $this->tell($payment, NoticeType::PaymentCredited, fn(): array => $this->message($this->texts->render(BotText::PaymentCredited, [
+            'amount' => Money::format($payment->amount),
+            'order' => $payment->order_id,
+            'balance' => Messages::balance($payment->order->user->balance()),
+        ])));
     }
 
     /** Support refused the receipt, with the reason (the payment's note); the order stays open. */

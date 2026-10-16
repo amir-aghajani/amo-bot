@@ -489,6 +489,7 @@ For the signed-in customer, with their bearer token ([the customer scheme](#the-
 | [`POST /orders`](#post-orders) | Buy a plan on one of its locations, paid with `method_id` |
 | [`GET /orders/{id}`](#get-ordersid) | One of the customer's orders, with its payments |
 | [`POST /payments/{id}/receipt`](#post-paymentsidreceipt) | Upload the receipt of a card transfer |
+| [`POST /payments/{id}/check`](#post-paymentsidcheck) | Ask an online payment's gateway what came of it now |
 | [`GET /wallet`](#get-wallet) | The customer's wallet |
 | [`POST /wallet/top-up`](#post-wallettop-up) | Top up the wallet by `amount`, paid with `method_id` |
 | [`GET /wallet/transfer`](#get-wallettransfer) | «انتقال موجودی», before it is done |
@@ -1171,7 +1172,7 @@ Preview a service's renewal. As the bot's «♻️ تمدید سرویس» shows
 
 ### POST /subscriptions/{id}/renewal
 
-Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders, or on `status` with a receipt still in review; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders — its bot switched off, or its selling suspended, which the GET answers with a 422 on `status`). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now.
+Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders, or on `status` with a receipt still in review; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders — its bot switched off, or its selling suspended, which the GET answers with a 422 on `status`). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1245,7 +1246,7 @@ The extra traffic, time and devices a service can buy now. As the bot's «🔋 �
 
 ### POST /subscriptions/{id}/extra-traffic
 
-Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
+Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1276,7 +1277,7 @@ Extra traffic for a service: how much, and the payment method.
 
 ### POST /subscriptions/{id}/extra-time
 
-Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
+Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1307,7 +1308,7 @@ Extra time for a service: how many days, and the payment method.
 
 ### POST /subscriptions/{id}/extra-devices
 
-Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
+Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1381,7 +1382,7 @@ The customer's orders, newest first, each with its payments. Filter by status an
 
 ### POST /orders
 
-Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, or a wallet short of the price (the message says how much is missing); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.
+Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1461,6 +1462,28 @@ A card transfer's receipt, as a browser form uploads it.
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /payments/{id}/check
+
+Ask an online payment's gateway what came of it now — when the customer comes back from the gateway's page, or presses a «I paid» button. The gateway tells the shop by itself as well, and the shop asks it every few minutes until its page has been closed a while: this only makes it sooner. A payment the gateway says was paid is settled at once — its order paid and delivered (or, its order closed meanwhile, the money put in the wallet) — and the customer gets the notice of it; one whose page closed unpaid fails, its order left open to pay again. Answers what the gateway said, the order as it stands now and, once delivered, its service. A 404 for another customer's payment; a 422 on `status` for a payment that is not an online one (a card transfer, the wallet), and for one held for support and still waiting — the gateway's answer did not fit it (another order or amount), or it kept money on it unsettled for two days —, the message naming its order: tell the customer not to pay again but to write to support. A 503 while the gateway cannot be asked, saying so (nothing changed: if they paid, ask again a little later). At most 10 a minute per customer, then a 429 with `Retry-After`.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes |  |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | What the gateway said, and the order as it stands | [StorePaymentCheckResponse](#storepaymentcheckresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /wallet
 
 The customer's wallet. Its balance, an agent's credit, what they can spend now, the top-up limits, and what they may send another customer («انتقال موجودی», `transfer`).
@@ -1477,7 +1500,7 @@ The customer's wallet. Its balance, an agent's credit, what they can spend now, 
 
 ### POST /wallet/top-up
 
-Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders or a receipt still in review (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now.
+Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders or a receipt still in review (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1951,11 +1974,11 @@ The result of a token check: whether it passed, the action and host it was solve
 
 ### StoreCheckout
 
-The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), or an order paid or closed at the same moment elsewhere (a 409).
+The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), an online gateway that would not open the payment (a 422 on `method_id`, in the customer's words; the order stays open), an order whose online payment is held for support (a 422 on `status`, naming the order), or an order paid or closed at the same moment elsewhere (a 409).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `outcome` | string: `settled`, `transfer`, `processing` | yes | `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `processing`: paid, and the delivery is in progress. |
+| `outcome` | string: `settled`, `transfer`, `link`, `processing` | yes | `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card or online too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `link`: pay on the online gateway's page in `link`; the gateway tells the shop by itself, and `POST /payments/{id}/check` asks it now. `processing`: paid, and the delivery is in progress. |
 | `order` | [StoreOrder](#storeorder) | yes |  |
 | `transfer` | object or null | yes | For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. A payment taken in support's private chat (made while the bot setting «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» is on) is shown no card: `card`, `holder` and `bank` are null and `contact` says where to go — tell the customer to send the order's number there, get the card from support, and send the receipt to support too; support approves the payment in its panel. |
 | `transfer.payment_id` | integer | yes | The payment to upload the receipt for. |
@@ -1967,6 +1990,7 @@ The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, 
 | `transfer.contact` | object or null | yes | While the shop takes card payments in support's private chat: how to reach support. Null while the card is shown. |
 | `transfer.contact.text` | string | yes | Support's contact as the shop wrote it (a Telegram handle, a link, a phone number). |
 | `transfer.contact.url` | string or null | yes | It as a link to open: a handle as its t.me address, a web or t.me address, a phone number as `tel:`; null when it is none of these. |
+| `link` | [StorePayLink](#storepaylink) or null | yes | For `link`: the online gateway's page to pay on, and the payment it is for. Null otherwise. |
 | `subscription` | [StoreSubscription](#storesubscription) or null | yes | Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise, and on a repeated request once the service is no longer the customer's (handed to another customer). |
 
 ### StoreCheckoutResponse
@@ -2148,9 +2172,9 @@ A renewal queued after the current period (whose unused traffic is not carried o
 
 ### StoreNoticeType
 
-The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»).
+The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»).
 
-String: `payment_settled`, `payment_rejected`, `order_cancelled`, `payment_refunded`, `topup_refunded`, `wallet_sent`, `wallet_received`, `payment_reminder`, `service_disabled`, `service_enabled`, `service_deleted`, `service_moved`, `service_transferred`, `service_received`, `service_granted`, `expiry_reminder`, `traffic_reminder`, `auto_renewed`, `auto_renew_short`, `renewal_failed`, `referral_joined`, `referral_commission`, `referral_start_gift`, `referral_reward`, `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked`, `agency_traffic_short`, `agency_expiring`, `agency_minimum_short`, `agency_suspended`, `agency_resumed`, `two_factor_disabled`, `way_in_added`, `way_in_removed`, `password_changed`, `two_factor_enabled`, `account_merged`, `second_step_locked`, `email_codes_failed`, `ticket_answered`, `ticket_closed`, `loyalty_tier_up`, `cashback_earned`, `lottery_won`.
+String: `payment_settled`, `payment_credited`, `payment_rejected`, `order_cancelled`, `payment_refunded`, `topup_refunded`, `wallet_sent`, `wallet_received`, `payment_reminder`, `service_disabled`, `service_enabled`, `service_deleted`, `service_moved`, `service_transferred`, `service_received`, `service_granted`, `expiry_reminder`, `traffic_reminder`, `auto_renewed`, `auto_renew_short`, `renewal_failed`, `referral_joined`, `referral_commission`, `referral_start_gift`, `referral_reward`, `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked`, `agency_traffic_short`, `agency_expiring`, `agency_minimum_short`, `agency_suspended`, `agency_resumed`, `two_factor_disabled`, `way_in_added`, `way_in_removed`, `password_changed`, `two_factor_enabled`, `account_merged`, `second_step_locked`, `email_codes_failed`, `ticket_answered`, `ticket_closed`, `loyalty_tier_up`, `cashback_earned`, `lottery_won`.
 
 ### StoreNotification
 
@@ -2218,6 +2242,22 @@ One of the customer's orders: what it was for, its status, and its payments (new
 | `orders` | list of [StoreOrder](#storeorder) | yes |  |
 | `meta` | [PageMeta](API-Schemas.md#pagemeta) | yes |  |
 
+### StorePayLink
+
+An online gateway's page to pay a payment on: the customer pays there, and the gateway tells the shop by itself.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `payment_id` | integer | yes | The payment it pays: the one to ask about (`POST /payments/{id}/check`). |
+| `url` | string | yes | The gateway's page: open it (a link or a redirect) for the customer to pay there. |
+| `expires_at` | string (date-time) or null | yes | Until when the page takes money: the gateway's own end, or the time the shop keeps its page when the gateway gives none. A request made again with its `Idempotency-Key` answers the same page while it has more than 3 minutes left, else a new one. |
+| `amount` | string | yes | The exact sum the page asks, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart or the customer pays the gateway's fee (`fee`). Show this one as what to pay. |
+| `fee` | string or null | yes | Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount. |
+| `card` | object or null | yes | The card that sum goes to, when the gateway gave one to show (CubePay's «🤖 نمایش کارت در ربات», AtlasPay's «نمایش مستقیم اطلاعات پرداخت», AbanGateway's «نمایش کارت در ربات و سایت» in the shop): the customer may transfer the exact `amount` to it rather than open the page. Null otherwise. |
+| `card.number` | string | yes | The card number: 16 digits, no separators. |
+| `card.holder` | string or null | yes | The card holder's name, as the gateway gave it; null when it gave none. |
+| `card.bank` | string or null | yes | The card's bank, as the gateway gave it; null when it gave none. |
+
 ### StorePayment
 
 A payment attempt for an order.
@@ -2232,7 +2272,24 @@ A payment attempt for an order.
 | `paid_at` | string (date-time) or null | yes |  |
 | `receipt` | object or null | yes | The receipt the customer sent for it, in the bot or on the website; null if none was sent. |
 | `receipt.sent_at` | string (date-time) | yes |  |
-| `note` | string or null | yes | The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer); null if none. |
+| `note` | string or null | yes | The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer; an online payment whose page closed unpaid, or that came in once its order had closed and went to the wallet; for one held for support, whatever its status, that it is with support and not to be paid again — in place of the shop's words to support on why); null if none. |
+| `link` | [StorePayLink](#storepaylink) or null | yes | An online payment still waiting on its gateway (`pending`), while its page takes money: where to pay it, as the checkout gave it. Null for any other payment, once `expires_at` has passed, and for one held for support (`POST /payments/{id}/check` says so): its order is paid no more meanwhile. |
+
+### StorePaymentCheck
+
+What an online gateway says of a payment now, and its order as it stands after the shop acted on it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `state` | string: `paid`, `waiting`, `closed` | yes | `paid`: the money came in. The order is paid and delivered as a checkout's would be (`fulfilled`, with the service in `subscription`; `failed`, for support to finish; `paid` or `processing` while it is under way) — or, its order closed before the money came (paid another way, cancelled or expired), the payment is `paid` with a note saying it went to the wallet. `waiting`: nothing yet, and its page still takes money. `closed`: its page closed with nothing paid — a payment still waiting is `failed` then (its note says so), and its order, while open, may be paid again: a new attempt. Should the gateway take the money later after all, the shop still settles it. |
+| `order` | [StoreOrder](#storeorder) | yes |  |
+| `subscription` | [StoreSubscription](#storesubscription) or null | yes | Once delivered: the service the order created, renewed or added extras to, while it is still the customer's; null otherwise. |
+
+### StorePaymentCheckResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `check` | [StorePaymentCheck](#storepaymentcheck) | yes |  |
 
 ### StorePaymentMethod
 
@@ -2242,7 +2299,7 @@ A payment method, as the checkout shows it.
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `label` | string | yes | Its button text ("کارت به کارت (ملت)"). |
-| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) or null | yes | `instant`: the wallet, paid at once. `manual`: a card transfer with a receipt. Null for a method whose driver is no longer installed. |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) or null | yes | `instant`: the wallet, paid at once. `manual`: a card transfer with a receipt. `online`: an online gateway, paid on its own page (the checkout's `link`). Null for a method whose driver is no longer installed. |
 | `min_amount` | string or null | yes | The least amount to pay it takes, in Toman; null for no least. |
 | `max_amount` | string or null | yes | The most amount to pay it takes, in Toman; null for no most. An order outside the bounds is a 422 on `method_id`. |
 

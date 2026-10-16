@@ -4,7 +4,8 @@
 —, your login and AmoBot's own update. A section each; each card saved on its own. An agent's «تنظیمات پنل» has «ظاهر»
 alone.
 
-**A secret** — a token, a password, a key — is never shown back: left blank it stays, «پاک کردن مقدار ذخیره‌شده» clears it.
+**A secret** — a token, a password, a key — is never shown back: left blank it stays, «پاک کردن مقدار ذخیره‌شده» clears
+one that may be empty (a required one has no such button: type the new one).
 One kept for an address must be typed again when the address moves, so it is never sent somewhere new. **While the web
 server may not write `config.php`**, the page says so in red and saves nothing: give the file (and the app's folder)
 write permission in the host's File Manager — or edit the file by hand meanwhile.

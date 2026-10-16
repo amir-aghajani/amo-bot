@@ -23,7 +23,7 @@ import { api } from '@/lib/api'
 import type { PaymentResponse, PaymentRow, PaymentSort, PaymentsResponse, PaymentStatus } from '@/lib/api-types'
 import { formatMoney, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { PAYMENT_STATUS } from '@/lib/statuses'
+import { HELD, PAYMENT_STATUS, TO_WALLET } from '@/lib/statuses'
 import { useNextRow } from '@/lib/use-next-row'
 import { useOpenRow } from '@/lib/use-open-row'
 import { usePagedList } from '@/lib/use-paged-list'
@@ -75,7 +75,7 @@ export function PaymentsPage() {
     <Page>
       <PageHeader
         title="پرداخت‌ها"
-        description="هر پرداختی که مشتری‌ها شروع کرده‌اند. رسیدهای کارت به کارت این‌جا بررسی می‌شوند؛ تایید یعنی تحویل سرویس یا شارژ کیف پول. برای رد کردن چند رسید در انتظار با هم، انتخابشان کنید."
+        description="هر پرداختی که مشتری‌ها شروع کرده‌اند. رسیدهای کارت به کارت این‌جا بررسی می‌شوند؛ تایید یعنی تحویل سرویس یا شارژ کیف پول. پرداخت آنلاین را خود درگاه تایید می‌کند و از جزئیاتش می‌شود از درگاه استعلام کرد. برای رد کردن چند رسید در انتظار با هم، انتخابشان کنید."
       />
 
       <PageTabs id={tabs} value={list.filter} tabs={statusTabs(PAYMENT_STATUS, QUEUE, { awaiting_review: list.meta?.awaiting_review })} onChange={list.setFilter} aria-label="وضعیت پرداخت" />
@@ -209,6 +209,7 @@ function PaymentsTable({
                 {/* The spaces between the lines keep them words apart for assistive tech («ناموفق توسط …»), not one. */}
                 <div className="grid justify-items-start gap-0.5">
                   <StatusBadge status={PAYMENT_STATUS[payment.status]} /> {payment.auto_approved && <span className="text-caption text-faint">تایید خودکار</span>}
+                  {payment.to_wallet && <span className="text-caption text-warning">{TO_WALLET}</span>} {payment.held && <span className="text-caption text-warning">{HELD}</span>}{' '}
                   {payment.reviewer && !payment.auto_approved && (
                     <span className="text-caption text-faint">
                       توسط <Reviewer name={payment.reviewer} />

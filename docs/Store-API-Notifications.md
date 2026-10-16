@@ -56,7 +56,8 @@ screens, a wallet purchase's or renewal's own confirmation (the website's checko
 
 | `type` | About | `subject` |
 |---|---|---|
-| `payment_settled` | a payment approved: the service delivered, the wallet charged — or the delivery failed and support finishes it | order |
+| `payment_settled` | a payment approved — a receipt by support, an online payment by its gateway: the service delivered, the wallet charged — or the delivery failed and support finishes it | order |
+| `payment_credited` | an online payment that came in once its order had closed (paid another way, cancelled or expired): its money put in the wallet | order |
 | `payment_rejected` | a receipt refused, with the reason | order |
 | `order_cancelled` | an order cancelled by support | order |
 | `payment_refunded` | a payment back in the wallet | order |

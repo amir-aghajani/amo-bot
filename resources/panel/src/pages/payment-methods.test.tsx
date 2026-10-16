@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DriverDescription, FieldDescription, PaymentMethodResponse, PaymentMethodsResponse, UnregisteredMethodRow, WalletMethodRow } from '@/lib/api-types'
 import { PaymentMethodsPage } from '@/pages/payment-methods'
 import { providers, until } from '@/test/render'
-import { cardMethodRow, paymentCardRow } from '@/test/rows'
+import { cardMethodRow, cubePayDriverRow, cubePayMethodRow, paymentCardRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
@@ -12,7 +12,8 @@ import { json, refusal, server } from '@/test/server'
  * with its holder and bank, one switched off or full for today said so —, a card's automatic approval and the amounts
  * a method is offered for under it; a method opens in its driver's form, drawn from the driver's description with its
  * settings as the API describes them, its bounds and a card method's cards beside them, and is saved as the driver's own
- * request; the wallet opens in its form too (its label, bounds and switch); one whose driver is no longer installed
+ * request; the wallet opens in its form too (its label, bounds and switch); a CubePay method says its gateway confirms
+ * its payments, and its form keeps its token unless another is typed; one whose driver is no longer installed
  * says no customer is offered it, a card method no card is shown while card payments go to support's private chat (its
  * caps then beside the point); a method payments were made with is not offered a delete it would be refused; and the
  * page counts its methods once their list was read — never a zero it does not know.
@@ -189,6 +190,38 @@ describe('the payment methods', () => {
 
     await until(() => expect(toast.success).toHaveBeenCalledWith('روش پرداخت ذخیره شد'))
     expect(server().sent('PUT', '/api/admin/payment-methods/1')[0]?.body).toEqual({ label: 'کیف پول', enabled: true, min_amount: '', max_amount: '2000000' })
+  })
+
+  it('say of a CubePay method that the gateway confirms its payments, an online gateway', async () => {
+    showMethods([WALLET, cubePayMethodRow()])
+
+    expect((await screen.findAllByText('پرداخت در صفحه CubePay، بدون رسید و با تایید خود درگاه')).length).toBeGreaterThan(0)
+    expect(screen.getByText('درگاه آنلاین')).toBeTruthy()
+  })
+
+  it('open a CubePay method in its form: the token kept, never shown nor emptied, and left blank it is kept', async () => {
+    server()
+      .on('GET', '/api/admin/payment-methods/drivers', json({ drivers: [WALLET_DRIVER, MANUAL, cubePayDriverRow()] }))
+      .on('PUT', '/api/admin/payment-methods/6', json({ method: cubePayMethodRow({ label: 'درگاه CubePay' }) } satisfies PaymentMethodResponse))
+    showMethods([WALLET, cubePayMethodRow()])
+
+    fireEvent.click(await screen.findByRole('button', { name: 'پرداخت آنلاین' }))
+    const token = (await openDialog().findByLabelText('توکن API')) as HTMLInputElement
+    expect([token.value, token.placeholder, token.closest('[dir]')?.getAttribute('dir')]).toEqual(['', '••••••1234', 'ltr'])
+    expect(openDialog().queryByRole('button', { name: 'پاک کردن مقدار ذخیره‌شده' })).toBeNull()
+    fireEvent.change(openDialog().getByLabelText('نام روش'), { target: { value: 'درگاه CubePay' } })
+    fireEvent.click(openDialog().getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith('روش پرداخت ذخیره شد'))
+    expect(server().sent('PUT', '/api/admin/payment-methods/6')[0]?.body).toEqual({
+      clear_token: false,
+      fee_percent: '',
+      fee_fixed: '0',
+      label: 'درگاه CubePay',
+      enabled: true,
+      min_amount: '',
+      max_amount: '',
+    })
   })
 
   it('say of one whose driver is no longer installed that no customer is offered it', async () => {

@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Modules\Admin\Api\PaymentsController;
+use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Exceptions\OrderNotPayableException;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
+use App\Modules\Payments\Drivers\CubePay\CubePayGateway;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
+use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Subscriptions\Models\Subscription;
@@ -20,6 +25,8 @@ use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Models\WalletTransaction;
+use App\Modules\Users\Services\WalletService;
 use App\Support\Input;
 use App\Support\LocalTime;
 use App\Support\Money;
@@ -33,7 +40,8 @@ use Tests\Support\FakeTelegram;
 /**
  * The payments screen: tabs, search, days and the paid total, the receipt served from Telegram, and the review operations —
  * approve (even a refused receipt), reject, cancel (with the open order unless another receipt is in review), remind, retry
- * — each told as a bare reply to the receipt. Refunds are PaymentRefundsTest's.
+ * — each told as a bare reply to the receipt; an online payment asked of its gateway («استعلام از درگاه»), and one paid
+ * after its order closed read as gone to the wallet. Refunds are PaymentRefundsTest's.
  */
 final class AdminPaymentsApiTest extends HttpTestCase
 {
@@ -76,11 +84,11 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertNotNull($row['receipt']['sent_at']);
         self::assertNull($row['reviewer']);
         self::assertSame('6037 •••• •••• 1119 · AmoBot', $row['summary'], 'the card the customer was told to pay to, and whose it is');
-        self::assertSame(['approve' => true, 'reject' => true, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false], $row['actions']);
+        self::assertSame(['approve' => true, 'reject' => true, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false], $row['actions']);
 
         $wallet = $data['payments'][0];
         self::assertSame(['instant', null, null], [$wallet['kind'], $wallet['summary'], $wallet['receipt']], 'the wallet has no card to show, and no receipt');
-        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => true], $wallet['actions']);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => true, 'check' => false], $wallet['actions']);
 
         $ids = fn(string $query): array => array_column($this->decode($this->get("/api/admin/payments?{$query}"))['payments'], 'id');
         self::assertSame([$waiting->id], $ids('status=awaiting_review'));
@@ -229,7 +237,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertSame('واریز کردم', $row['receipt']['note'], "the customer's own note is untouched");
         self::assertSame(self::ADMIN_USERNAME, $row['reviewer']);
         self::assertSame('pending', $row['order']['status'], 'the order can still be paid');
-        self::assertSame(['approve' => true, 'reject' => false, 'cancel' => true, 'remind' => true, 'retry' => false, 'refund' => false], $row['actions'], 'support may still find the money, drop it or nudge');
+        self::assertSame(['approve' => true, 'reject' => false, 'cancel' => true, 'remind' => true, 'retry' => false, 'refund' => false, 'check' => false], $row['actions'], 'support may still find the money, drop it or nudge');
         self::assertSame('0.00', $this->ali->balance());
 
         self::assertSame([self::text(BotText::ReceiptRejected, [
@@ -281,7 +289,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
     public function testAnUnpaidCardPaymentCanBeApprovedByHandRemindedOrCancelled(): void
     {
         $payment = $this->cardPayment($this->topUpOrder($this->ali, '50000.00'), $this->card);
-        self::assertSame(['approve' => true, 'reject' => false, 'cancel' => true, 'remind' => true, 'retry' => false, 'refund' => false], $this->service(PaymentActions::class)->allowed($payment));
+        self::assertSame(['approve' => true, 'reject' => false, 'cancel' => true, 'remind' => true, 'retry' => false, 'refund' => false, 'check' => false], $this->service(PaymentActions::class)->allowed($payment));
 
         // A nudge: send the receipt, or pay again.
         $reminded = $this->postJson("/api/admin/payments/{$payment->id}/remind");
@@ -314,7 +322,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
             'note' => self::text(BotText::AdminNote, ['comment' => 'سفارش تکراری بود']),
         ])], $this->telegram()->sentTo(1001));
         self::assertArrayNotHasKey('reply_markup', $this->telegram()->params(0), 'no keyboard on a verdict');
-        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => false], $row['actions']);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false], $row['actions']);
 
         self::assertSame(422, $this->postJson("/api/admin/payments/{$second->id}/remind")->getStatusCode(), 'nothing to remind about');
     }
@@ -549,6 +557,156 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertSame([OrderStatus::Failed, OrderService::DELIVERY_BROKEN], [$order->refresh()->status, $order->notes], 'the order says so, in the shop\'s words, for the retry');
         self::assertSame(PaymentStatus::Paid, $payment->refresh()->status, 'the money is in');
         self::assertTrue($this->decode($this->get("/api/admin/payments/{$payment->id}"))['payment']['actions']['retry']);
+    }
+
+    /**
+     * An online payment shows its gateway, its id there and its page's end; nobody approves or rejects it — support asks
+     * the gateway, which alone settles it, and the customer is told once.
+     */
+    public function testAnOnlinePaymentIsAskedOfItsGatewayNeverApprovedByHand(): void
+    {
+        $payment = $this->onlinePayment('50000');
+
+        $row = $this->decode($this->get("/api/admin/payments/{$payment->id}"))['payment'];
+        self::assertSame(['cubepay', 'CubePay', 'online', 'پرداخت آنلاین', null, null], [$row['gateway'], $row['gateway_label'], $row['kind'], $row['method'], $row['summary'], $row['receipt']]);
+        self::assertSame($payment->reference, $row['reference'], "CubePay's authority");
+        self::assertSame($payment->link_expires_at?->toIso8601String(), $row['link_expires_at']);
+        self::assertNotNull($row['link_expires_at']);
+        self::assertSame([null, false], [$row['checked_at'], $row['to_wallet']]);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => true], $row['actions']);
+
+        $refused = fn(string $action): string => $this->decode($this->postJson("/api/admin/payments/{$payment->id}/{$action}", $action === 'reject' ? [] : null))['errors']['status'][0];
+        self::assertSame('پرداخت آنلاین تایید دستی ندارد؛ نتیجه‌اش را درگاه می‌گوید.', $refused('approve'));
+        self::assertSame('پرداخت آنلاین رسیدی ندارد؛ نتیجه‌اش را درگاه می‌گوید.', $refused('reject'));
+        self::assertSame('یادآوری فقط برای پرداخت کارت به کارت است.', $refused('remind'));
+
+        // Not paid yet: nothing moves, and the customer hears nothing.
+        $asked = $this->decode($this->postJson("/api/admin/payments/{$payment->id}/check"));
+        self::assertSame(['waiting', 'pending'], [$asked['state'], $asked['payment']['status']]);
+        self::assertNotNull($asked['payment']['checked_at'], 'when it was last asked');
+        self::assertSame([], $this->telegram()->calls());
+
+        $this->cubePay()->pay((string) $payment->reference);
+        $asked = $this->decode($this->postJson("/api/admin/payments/{$payment->id}/check"));
+        self::assertSame(['paid', 'paid', 'fulfilled', null], [$asked['state'], $asked['payment']['status'], $asked['payment']['order']['status'], $asked['payment']['reviewer']], 'settled on its word: nobody approved it');
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => true, 'check' => false], $asked['payment']['actions']);
+        self::assertSame($payment->amount, $this->ali->balance(), 'a top-up credits its own amount, not the few Toman the gateway added');
+        self::assertSame([self::charged($payment->amount)], $this->telegram()->sentTo(1001), 'told once');
+        self::assertSame('این پرداخت انجام شده است.', $refused('check'));
+    }
+
+    public function testAGatewayOutOfReachIsA503AndChangesNothing(): void
+    {
+        $payment = $this->onlinePayment('50000');
+        $logs = $this->logs();
+        $this->cubePay()->down();
+
+        $response = $this->postJson("/api/admin/payments/{$payment->id}/check");
+
+        self::assertSame([503, PaymentsController::GATEWAY_DOWN], [$response->getStatusCode(), $this->decode($response)['message']]);
+        self::assertTrue($logs->hasWarningThatContains('CubePay is out of reach'), 'why, for the owner');
+        self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
+    }
+
+    /**
+     * «استعلام از درگاه» whose answer does not fit the payment (CubePay took less than it was asked) holds it for support:
+     * a 422 saying so — not "nothing changed" —, as the next press says too; its row then shows it held, only «لغو» left.
+     */
+    public function testACheckThatHoldsThePaymentSaysSo(): void
+    {
+        $payment = $this->onlinePayment('50000');
+        $fake = $this->cubePay();
+        $order = $fake->onlyOrder();
+        $fake->orders[$order]['price'] -= 1000;
+        $fake->pay($order);
+
+        $response = $this->postJson("/api/admin/payments/{$payment->id}/check");
+
+        self::assertSame([422, PaymentService::NOTE_HELD . '.'], [$response->getStatusCode(), $this->decode($response)['errors']['status'][0] ?? null]);
+        $row = $this->decode($this->get("/api/admin/payments/{$payment->id}"))['payment'];
+        self::assertSame([true, 'pending', PaymentService::NOTE_HELD], [$row['held'], $row['status'], $row['description']]);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false], $row['actions']);
+        $orders = $this->decode($this->get("/api/admin/orders/{$payment->order_id}"))['order']['payments'];
+        self::assertSame([true], array_column($orders, 'held'), 'its order\'s payments say so too');
+        $again = $this->postJson("/api/admin/payments/{$payment->id}/check");
+        self::assertSame([422, PaymentService::NOTE_HELD . '.'], [$again->getStatusCode(), $this->decode($again)['errors']['status'][0] ?? null], 'the same words');
+        self::assertSame('0.00', $this->ali->balance(), 'nothing credited');
+    }
+
+    public function testAPageClosedUnpaidFailsAndMayStillBeAskedAbout(): void
+    {
+        $payment = $this->onlinePayment('50000');
+        $this->cubePay()->close((string) $payment->reference);
+
+        $asked = $this->decode($this->postJson("/api/admin/payments/{$payment->id}/check"));
+
+        self::assertSame(['closed', 'failed', PaymentService::NOTE_LINK_CLOSED, 'pending'], [$asked['state'], $asked['payment']['status'], $asked['payment']['description'], $asked['payment']['order']['status']]);
+        self::assertTrue($asked['payment']['actions']['check'], 'the gateway may yet take money on it');
+
+        // One the gateway would not open has nothing there to ask.
+        $this->cubePay()->refuse(503, 'ظرفیت پر است.');
+        $refused = $this->onlinePayment('30000');
+        self::assertSame([PaymentStatus::Failed, null], [$refused->status, $refused->link]);
+        self::assertFalse($this->decode($this->get("/api/admin/payments/{$refused->id}"))['payment']['actions']['check']);
+        $response = $this->postJson("/api/admin/payments/{$refused->id}/check");
+        self::assertSame([422, 'این پرداخت در درگاه باز نشد؛ چیزی برای استعلام ندارد.'], [$response->getStatusCode(), $this->decode($response)['errors']['status'][0]]);
+        $card = $this->cardPayment($this->topUpOrder($this->ali, '10000.00'), $this->card);
+        self::assertSame('استعلام از درگاه فقط برای پرداخت آنلاین است.', $this->decode($this->postJson("/api/admin/payments/{$card->id}/check"))['errors']['status'][0]);
+    }
+
+    /**
+     * The customer paid the order by card while its online page was still open, then paid that page too: the second
+     * money went to their wallet. Its row says so, and it is neither retried nor refunded — a refund would take back the
+     * service the card paid for and give the money twice.
+     */
+    public function testMoneyTheGatewayTookAfterItsOrderClosedReadsAsGoneToTheWallet(): void
+    {
+        $payment = $this->onlinePayment('50000');
+        $this->paidByCard($payment->order, $this->card);
+        self::assertSame(PaymentStatus::Cancelled, $payment->refresh()->status, 'paid another way');
+        self::assertTrue($this->decode($this->get("/api/admin/payments/{$payment->id}"))['payment']['actions']['check'], 'its page still takes money');
+        $this->telegram()->reset();
+
+        $this->cubePay()->pay((string) $payment->reference);
+        $asked = $this->decode($this->postJson("/api/admin/payments/{$payment->id}/check"));
+
+        $row = $asked['payment'];
+        self::assertSame(['paid', 'paid', true, PaymentService::NOTE_TO_WALLET, 'fulfilled'], [$asked['state'], $row['status'], $row['to_wallet'], $row['description'], $row['order']['status']]);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false], $row['actions']);
+        $balance = Money::add('50000.00', $payment->amount);
+        self::assertSame($balance, $this->ali->balance(), 'the top-up once, and the late payment beside it');
+        self::assertSame(WalletService::describeLatePayment($payment), WalletTransaction::query()->where('user_id', $this->ali->id)->latest('id')->value('description'));
+        self::assertSame([self::text(BotText::PaymentCredited, ['amount' => Money::format($payment->amount), 'order' => $payment->order_id, 'balance' => Messages::balance($balance)])], $this->telegram()->sentTo(1001));
+
+        $response = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+        self::assertSame([422, 'این پرداخت بعد از بسته شدن سفارشش رسید و مبلغش به کیف پول مشتری رفت؛ نه تحویلی دارد نه بازپرداختی.'], [$response->getStatusCode(), $this->decode($response)['errors']['status'][0]]);
+        self::assertSame($balance, $this->ali->balance(), 'nothing given twice');
+    }
+
+    /** An order cancelled before its page was paid stays unpaid on the orders screen: the money is the wallet's. */
+    public function testAnOrderClosedBeforeItsPageWasPaidStaysUnpaid(): void
+    {
+        $payment = $this->onlinePayment('50000');
+        self::assertSame(200, $this->postJson("/api/admin/payments/{$payment->id}/cancel", [])->getStatusCode());
+        $this->cubePay()->pay((string) $payment->reference);
+
+        self::assertSame('paid', $this->decode($this->postJson("/api/admin/payments/{$payment->id}/check"))['state']);
+
+        $order = $this->decode($this->get("/api/admin/orders/{$payment->order_id}"))['order'];
+        self::assertSame(['cancelled', null], [$order['status'], $order['paid_at']], 'never paid by it');
+        self::assertSame([[$payment->id, 'paid', true]], array_map(static fn(array $row): array => [$row['id'], $row['status'], $row['to_wallet']], $order['payments']));
+        self::assertSame($payment->amount, $this->ali->balance());
+    }
+
+    /** Ali's wallet top-up, opened on CubePay — or refused there — through the checkout every door uses. */
+    private function onlinePayment(string $amount): Payment
+    {
+        $this->config(['app.url' => 'https://shop.example']);
+        $this->cubePay();
+        $method = PaymentMethod::query()->where('driver', CubePayGateway::key())->first() ?? $this->cubePayMethod();
+        $orders = $this->service(OrderService::class);
+
+        return $this->service(Checkout::class)->pay($this->ali, $method, OrderType::WalletTopUp, $amount, fn(?OrderKey $key): Order => $orders->openTopUp($this->ali, (int) $amount, $key))->payment()->refresh();
     }
 
     /** Ali's wallet top-up paid by card, its receipt (a photo) waiting for review. */

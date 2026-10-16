@@ -101,7 +101,15 @@ handler: the bot only renders.
   code, the order paid. A purchase's checkout says its service's name, with a button per way the shop lets buyers name
   it (`ClientNameHandler`, which judges the name on the server the checkout names); the name drawn or typed is kept the
   same way (`keepName()`) and handed to the order (`requestedName()`) — «پرداخت دوباره» keeps its order's
-  (`keepOrderName()`), so paying finds it.
+  (`keepOrderName()`), so paying finds it. An online gateway's outcome (`CheckoutOutcome::Link`) is its page (`link()`):
+  the exact sum it asks, until when, «💳 پرداخت» to it and «🔄 بررسی پرداخت» — `OnlinePaymentHandler`
+  (`online:{payment}`), which asks the gateway through `Payments\Services\OnlinePayments::check()` (the customer's own
+  payment, once in `ASK_SECONDS` by the `RateLimiter`) and answers in a popup — a payment held for support and still
+  waiting never asked about (`PayOnlineHeld`), a gateway out of reach `PayOnlineUnreachable` —, a paid page edited to
+  `PayOnlineDone` without its buttons, a closed one to its word (or `OrderNotPending` once its order closed) —; a card
+  the gateway gave to show in the bot comes under it, protected as a card transfer is. A checkout of an order whose
+  payment is held (`PaymentHeldException`) says `PayOnlineHeld` with the way to support. The settled payment's notice
+  is `CustomerNotifier`'s, whoever asked; no receipt is awaited.
 - **`Checkouts`** draws a checkout again from its callback data (`plan:…`, `renew:…`, `extra:…`, `custom:…`, each
   handler implementing `RedrawableCheckout`, which also says the server a purchase's checkout names) for the steps
   under it — a discount code, a name — and runs their one "typed for a checkout" step: what was typed taken and the
