@@ -94,8 +94,10 @@ the repository's own view on GitHub, the project's GitHub wiki, and GitHub Pages
   the shared page, and a request's body field by field at its operation. They are English only.
 - **The check** — `php scripts/docs.php --check`, which CI runs — fails while a generated page is stale, a link leads to
   no page or no heading, a page is not in its language's sidebar or its name is not of the tree's form, or an English
-  heading would get two anchors; it checks the links of the repository's `README.md` too, and holds the translations to
-  the rules of [their languages](#languages).
+  heading would get two anchors, or the release notes (`docs/Releases.md`) have an `@name` outside code — on GitHub a
+  release's text links each such name to its GitHub account, notifies it and lists it among the release's
+  contributors; it checks the links of the repository's `README.md` too, and holds the translations to the rules of
+  [their languages](#languages).
 - **The wiki** is published by `.github/workflows/wiki.yml` on every push to the default branch that changes `docs/`:
   it checks out the wiki's repository, runs `php scripts/docs.php --wiki <dir>` — every page, its links written without
   `.md`, a language's pages in its folder, and a page the tree no longer has taken out — and pushes. GitHub makes a

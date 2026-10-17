@@ -20,8 +20,8 @@ declare(strict_types=1);
  * A generated page says so at its top and is never edited by hand: change what it is made from, then run the script.
  * The check also follows every link between pages — to the page and to its heading, under the anchor GitHub gives it
  * (and Docsify: docs/index.html gives every heading GitHub's) —, holds every page to its name's form and to its
- * language's sidebar, every translation to its English page and to its language's direction, and every link of
- * README.md. The wiki's form is the same pages with their links to each other written without `.md`, a language's in its
+ * language's sidebar, every translation to its English page and to its language's direction, every link of README.md,
+ * and the release notes (docs/Releases.md, each release's text on GitHub) to no @name outside code. The wiki's form is the same pages with their links to each other written without `.md`, a language's in its
  * folder under names of their own (fa/fa-Page-Name.md: the wiki's page names are one namespace);
  * .github/workflows/wiki.yml publishes it.
  */
@@ -59,7 +59,7 @@ $options = getopt('', ['check', 'require-translations', 'wiki:']) ?: [];
 
 if (isset($options['check'])) {
     [$translations, $notes] = languageProblems($docs, isset($options['require-translations']));
-    $problems = [...stalePages($root, $docs), ...linkProblems($root, $docs), ...$translations];
+    $problems = [...stalePages($root, $docs), ...linkProblems($root, $docs), ...mentionProblems($docs), ...$translations];
     foreach ($notes as $note) {
         fwrite(STDOUT, $note . "\n");
     }
@@ -1035,6 +1035,29 @@ function stalePages(string $root, string $docs): array
         if (readPage($docs . '/' . $name) !== $markdown) {
             $problems[] = "docs/{$name} is not as the code makes it now: run `php scripts/docs.php`.";
         }
+    }
+
+    return $problems;
+}
+
+/**
+ * The @names of the release notes outside code: docs/Releases.md is each release's text on GitHub, where a bare @name
+ * links that GitHub account, notifies it and lists it among the release's contributors.
+ *
+ * @return list<string>
+ */
+function mentionProblems(string $docs): array
+{
+    $problems = [];
+    foreach (proseLines(readPage($docs . '/Releases.md')) as $line => $text) {
+        outsideCode($text, static function (string $prose) use (&$problems, $line): string {
+            preg_match_all('/(?<![\w\/.@])@[A-Za-z0-9](?:-?[A-Za-z0-9])*/u', $prose, $mentions);
+            foreach ($mentions[0] as $mention) {
+                $problems[] = "docs/Releases.md:{$line}: {$mention} in a release's text on GitHub mentions that GitHub account and lists it among the release's contributors: write it as code, in backticks.";
+            }
+
+            return $prose;
+        });
     }
 
     return $problems;

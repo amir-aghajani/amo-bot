@@ -89,9 +89,9 @@ Nothing yet.
 - **Who decided** a payment, a review or an agency request, wrote a wallet's line or an agent's traffic line, answered a
   ticket, made an order by hand, or started a broadcast, a grant of days or traffic or a move of a server's services
   reads as the admin's name — their first and last name, as their account has them —, in your panel and in an agent's;
-  for an admin whose account shows no name, their @handle, else «کاربر #12», «نماینده #3» or «شناسه تلگرام …» instead
+  for an admin whose account shows no name, their `@handle`, else «کاربر #12», «نماینده #3» or «شناسه تلگرام …» instead
   of `user#12` or `tg:…`. A Telegram first name of nothing but invisible characters counts as no name.
-- **A customer without a name** is shown by their @handle, with their Telegram id under it, where the panels said «بدون
+- **A customer without a name** is shown by their `@handle`, with their Telegram id under it, where the panels said «بدون
   نام» (it stays for a customer with no handle either).
 - **Digits in the panels' hints**: a bound or a value as you would type it is in Latin digits («حداکثر 100 درصد», «0»,
   «3.1»), a quantity in Persian ones («قیمت هر کاربر برای ۳۰ روز»).
@@ -169,7 +169,7 @@ Nothing yet.
   - A client name the customer types with Persian digits is accepted.
   - **A number, a command or a handle in a Persian line reads the right way round** in Telegram: an order's, a
     ticket's or a broadcast's number after Persian words («سفارش #12», «تیکت #37»…) in the default texts, the report
-    group, the broadcasts' progress and the wallet history; /menu, /newbot, @BotFather and @userinfobot in the default
+    group, the broadcasts' progress and the wallet history; /menu, /newbot, `@BotFather` and `@userinfobot` in the default
     texts and the bot's own messages about a token or /broadcast; and a handle after Persian words — the other customer
     of a transfer, an agent's bot, support's contact, and a customer or an admin in the report group. A text you changed
     keeps your wording, and a handle or a number the bot fills into it (`%name%`, `%bot%`, `%contact%`) reads right there
@@ -244,7 +244,7 @@ Nothing yet.
     update, the webhook: it is held until its change is done.
   - **A server's page never takes on another server's form**: going from one server's page to another's kept the first
     one's unsaved connection settings, which saving then wrote onto the second.
-  - «انتقال به مشتری دیگر» refuses a handle typed by mistake («@sara1990») instead of reading the digits in it as the
+  - «انتقال به مشتری دیگر» refuses a handle typed by mistake («`@sara1990`») instead of reading the digits in it as the
     id 1990.
   - Ticked payments that leave the list (another filter, decided elsewhere) are unticked, so a bulk action acts only on
     what is shown; «ساخت کپی» pressed twice makes one copy, shown right after its plan.
@@ -359,7 +359,7 @@ Nothing yet.
 - `POST /auth/nonce` is a 422 while neither Telegram nor Google sign-in is on for the website («ورود با تلگرام و Google
   برای این وب‌سایت فعال نیست.»): no sign-in would take its nonce.
 - A JSON `true` sent where a number belongs (an id, an amount) is a 422 on its field, no longer read as 1.
-- **An invisible left-to-right mark** (U+200E, `‎` in raw JSON) now comes before an «#N» or an «@handle» that
+- **An invisible left-to-right mark** (U+200E, `‎` in raw JSON) now comes before an «#N» or an «`@handle`» that
   follows Persian words in some of the shop's words, so they read the right way round on a right-to-left page: refusals
   that name an order or a location (an order no longer open, a payment held for support, a discount code another order
   of the customer's holds, a location not available), an order's `note` while its payment is held, the notices' `text`
@@ -423,7 +423,7 @@ Nothing yet.
 
 - **CubePay, the first online payment gateway** («افزودن روش پرداخت» › «CubePay», in both panels) — card-to-card and
   crypto payments CubePay confirms by itself: a card transfer from your bank's text message, a crypto one from the
-  chain. Its settings are your API token from ‎@cubepy_bot, kept encrypted, and the fee you pass on to customers
+  chain. Its settings are your API token from `@cubepy_bot`, kept encrypted, and the fee you pass on to customers
   ([Payment methods](Payment-Methods.md#cubepay)).
   - The customer gets CubePay's page — «💳 پرداخت», the exact sum it asks and until when — and the order is delivered as
     soon as CubePay says it was paid: no receipt, nobody to approve it. With «🤖 نمایش کارت در ربات» on at CubePay, the
