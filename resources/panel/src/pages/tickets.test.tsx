@@ -50,7 +50,7 @@ describe('the tickets', () => {
     expect(within(closed).getByRole('link', { name: 'Renewal problem' }).getAttribute('href')).toBe('/tickets/9')
     expect(within(closed).getByText('sara@example.com')).toBeTruthy()
     expect(within(closed).getByText('بسته‌شده')).toBeTruthy()
-    expect(within(closed).getByText('۴ از ۵')).toBeTruthy()
+    expect(within(closed).getByRole('img', { name: '۴ از ۵' })).toBeTruthy()
   })
 
   it('lead to what waits on support as the row’s primary way in, each named by its ticket', async () => {

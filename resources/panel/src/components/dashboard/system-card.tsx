@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { StatusDot } from '@/components/status-badge'
 import { TextLink } from '@/components/text-link'
 import { Card, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
@@ -9,7 +10,7 @@ import { MAIN_SHOP } from '@/lib/config'
 import { handleLabel } from '@/lib/direction'
 import { formatNumber, timeAgo } from '@/lib/format'
 import { systemQuery, updateQuery } from '@/lib/queries'
-import { BOT_MODE, type Tone } from '@/lib/statuses'
+import { BOT_MODE, BOT_NOT_CONNECTED, type Tone } from '@/lib/statuses'
 
 /** One part of the machinery: its name and state, and under them what it is doing — a sentence, which wraps (a link in it is never cut). */
 function Row({ label, value, detail, health }: { label: string; value: string; detail?: ReactNode; health: Tone }) {
@@ -34,6 +35,7 @@ function Row({ label, value, detail, health }: { label: string; value: string; d
  */
 export function SystemCard() {
   const read = useQuery({ ...systemQuery, refetchInterval: 60_000 })
+  const failure = useReadFailure(read)
   const system = read.data?.system
   const update = useQuery(updateQuery).data
   const newer = update?.available ? update.latest : null
@@ -56,8 +58,8 @@ export function SystemCard() {
       </CardHeader>
       <div className="px-4 pb-2">
         {!system ? (
-          read.error ? (
-            <ErrorState what="وضعیت سیستم" error={read.error} onRetry={() => void read.refetch()} retrying={read.isFetching} className="mb-2" />
+          failure.error ? (
+            <ErrorState what="وضعیت سیستم" error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} className="mb-2" />
           ) : (
             <div className="grid gap-2 pb-2">
               {Array.from({ length: 2 }).map((_, i) => (
@@ -78,8 +80,8 @@ export function SystemCard() {
                   )
                 ) : system.bot.mode === 'offline' ? (
                   <>
-                    پیامی نمی‌رسد: Webhook ثبت نشده است ·{' '}
-                    <TextLink inline to="/settings/telegram">
+                    پیامی نمی‌رسد: Webhook ثبت نشده است · {/* One piece: «Webhook» never on a line apart from «ثبت». */}
+                    <TextLink inline to="/settings/telegram" className="whitespace-nowrap">
                       ثبت Webhook
                     </TextLink>
                   </>
@@ -87,17 +89,18 @@ export function SystemCard() {
                   `${system.bot.username ? '' : 'توکن تنظیم شده · '}آخرین پیام: ${timeAgo(system.bot.last_update_at)}`
                 )
               }
-              value={!system.bot.configured ? 'راه‌اندازی نشده' : system.bot.mode !== 'offline' && !system.bot.enabled ? 'غیرفعال از تنظیمات' : BOT_MODE[system.bot.mode].label}
+              // In the words the agents list has for an agent's bot: «وصل نشده» without a token, «مشکل دارد» when it gets nothing.
+              value={!system.bot.configured ? BOT_NOT_CONNECTED.label : system.bot.mode !== 'offline' && !system.bot.enabled ? 'غیرفعال از تنظیمات' : BOT_MODE[system.bot.mode].label}
               health={!system.bot.configured ? 'danger' : system.bot.mode === 'offline' || !system.bot.enabled ? 'warning' : 'success'}
             />
             <Row
-              label="Scheduler"
+              label="کارهای زمان‌بندی‌شده"
               detail={
                 system.cron.last_run_at ? (
                   `آخرین اجرا: ${timeAgo(system.cron.last_run_at)} · ${formatNumber(system.cron.tasks)} وظیفه`
                 ) : (
                   <>
-                    کارهای زمان‌بندی‌شده هنوز اجرا نشده‌اند ·{' '}
+                    هنوز اجرا نشده‌اند ·{' '}
                     <TextLink inline to="/settings/advanced">
                       راه‌اندازی Cron
                     </TextLink>

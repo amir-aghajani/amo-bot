@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { Plus, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmModal } from '@/components/confirm-modal'
-import { FormError, SaveFooter } from '@/components/form-footer'
+import { ChangedElsewhere, FormError, SaveFooter } from '@/components/form-footer'
 import { ButtonModal, type ButtonMoves } from '@/components/keyboards/button-modal'
 import { KeyboardPreview } from '@/components/keyboards/keyboard-preview'
 import { KeyboardRow } from '@/components/keyboards/keyboard-row'
@@ -61,6 +61,7 @@ export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, onS
     onSuccess: (data) => {
       toast.success('کیبورد به چیدمان پیش‌فرض برگشت')
       setConfirmReset(false)
+      draft.restart(data.keyboard)
       onSaved(data.keyboard)
     },
   })
@@ -115,8 +116,8 @@ export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, onS
             {keyboard.is_default && !form.dirty && <Badge variant="outline">چیدمان پیش‌فرض</Badge>}
           </CardTitle>
           <CardDescription>
-            کیبوردی که با /start به مشتری نشان داده می‌شود. دکمه‌ها را بکشید و هر جا خواستید بیندازید، یا از پنجره هر دکمه جابه‌جایش کنید؛ ردیف اول، بالاترین ردیف است و دکمه اول هر ردیف سمت راست
-            می‌نشیند.
+            کیبوردی که با <bdi dir="ltr">/start</bdi> به مشتری نشان داده می‌شود. دکمه‌ها را بکشید و هر جا خواستید بیندازید، یا از پنجره هر دکمه جابه‌جایش کنید؛ ردیف اول، بالاترین ردیف است و دکمه اول
+            هر ردیف سمت راست می‌نشیند.
           </CardDescription>
         </CardHeading>
       </CardHeader>
@@ -128,6 +129,7 @@ export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, onS
             <p className="text-footnote leading-relaxed text-muted-foreground">{TYPE_HINT[type]}</p>
           </div>
 
+          <ChangedElsewhere shown={form.elsewhere} onTake={form.revert} />
           <FormError message={form.formError ?? (topErrors.length > 0 ? topErrors.join(' ') : null)} />
 
           <ol className="grid gap-3">
@@ -163,7 +165,8 @@ export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, onS
 
           {exhausted && <p className="text-footnote text-muted-foreground">همه دکمه‌های ربات روی کیبورد هستند؛ هر دکمه یک بار می‌آید، پس برای دکمه تازه اول یکی را بردارید.</p>}
 
-          <Button variant="secondary" icon={Plus} className="w-fit" onClick={draft.addRow} disabled={rows.length >= limits.rows}>
+          {/* Held, not disabled: the row it adds may be the last one there is room for, and the focus stays on it. */}
+          <Button variant="secondary" icon={Plus} className="w-fit" onClick={draft.addRow} aria-disabled={rows.length >= limits.rows}>
             افزودن ردیف
           </Button>
         </div>
@@ -180,7 +183,8 @@ export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, onS
         onRevert={form.revert}
         onSave={() => void draft.save()}
         start={
-          <Button variant="secondary" size="sm" icon={RotateCcw} onClick={() => setConfirmReset(true)} disabled={form.busy || (keyboard.is_default && !form.dirty)}>
+          // Held: the dialog that reset the keyboard hands the focus back to it as it closes.
+          <Button variant="secondary" size="sm" icon={RotateCcw} onClick={() => setConfirmReset(true)} aria-disabled={form.busy || (keyboard.is_default && !form.dirty)}>
             بازگشت به پیش‌فرض
           </Button>
         }

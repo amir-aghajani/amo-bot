@@ -1,3 +1,5 @@
+[فارسی](fa/Internals-Services.md)
+
 # Internals: services
 
 How the shop's services live on the VPN panels, and the pieces around them: the panel connectors, provisioning and
@@ -9,7 +11,7 @@ of them is in [Servers](Servers.md), [Services](Services.md), [Test accounts](Te
 
 | Module | Holds |
 |---|---|
-| `app/Modules/Providers` | Servers, the connector contract, the 3x-ui and PasarGuard connectors, panel health |
+| `app/Modules/Providers` | Servers, the connector contract, the 3X-UI and PasarGuard connectors, panel health |
 | `app/Modules/Subscriptions` | Services, provisioning, the operations, grants, renewals, extras, reminders, free test accounts, the automatic removal, the sync |
 | `app/Modules/Bots` | The bots, `CurrentBot` and the shop scope |
 | `app/Modules/Notifications` | Every notice a customer gets, kept for their website and sent by Telegram or email |
@@ -32,7 +34,7 @@ only the connector understands. What a panel cannot answer is a `null` on the DT
 `UnsupportedOperationException`; the generic code branches only on `Capabilities` (inbounds, link rotation, an IP
 limit the panel enforces).
 
-- **3x-ui** (`Drivers/ThreeXui`, v3+): `ThreeXuiClient` (token, or a cookie session behind the panel's CSRF guard with a
+- **3X-UI** (`Drivers/ThreeXui`, v3+): `ThreeXuiClient` (token, or a cookie session behind the panel's CSRF guard with a
   TOTP code) → `ThreeXuiApi` (one method per endpoint, held to the panel's own OpenAPI file by `ThreeXuiContractTest`)
   → `ThreeXuiProvider`. A term from the first connection is a negative `expiryTime`.
 - **PasarGuard** (`Drivers/PasarGuard`, 3.1+): `PasarGuardClient` (API key, or a password traded for a kept token) →
@@ -58,14 +60,17 @@ whole row — a row without the proxy's columns would reach the panel straight �
 its links' prefix reads them with `addresses()` from `base_url` and `meta` alone.
 
 `ProviderRegistry::forServer()` reuses a server's client for five minutes while its connection is unchanged, so one
-sign-in serves many calls; a 3x-ui session or a PasarGuard token is not renewed per call (PasarGuard notifies its admins
+sign-in serves many calls; a 3X-UI session or a PasarGuard token is not renewed per call (PasarGuard notifies its admins
 of every sign-in). A server not stored yet — a probe of the add-server form — gets a client of its own.
 
 `ServerService` is everything the owner does with a server: one form for every connector (the server's own fields around
 the connector's form, checked as one, every refusal at once), the probe (each question asked on its own once the
 connection is good, so one flaky endpoint loses only its answer), the inbound copy, and the presentation without
-secrets. **A kept secret is bound to the panel's origin** (scheme, host, port): moved to another host, it is never sent
-there and must be typed again.
+secrets. **A kept secret is bound to the panel's way in** (`PanelConnection::bound()`): the panel's origin (scheme,
+host, port), the proxy's host and port, and the TLS check. When one of them changes, the secret is never sent the new
+way and must be typed again — the save is refused in words starting `PanelConnection::MOVED` («آدرس پنل، پراکسی یا
+بررسی گواهی TLS عوض شده است؛ …»); a proxy switched off sends it straight to the panel it was given for, and asks
+nothing.
 
 ### Failures and health
 
@@ -106,6 +111,15 @@ stays null until the panel starts the clock (`Subscription::awaitsFirstUse()`). 
 (`duration_hours`), so hourly plans and daily ones share every rule; days given (a grant, an extension, extra time) are
 turned into hours in `ServiceTerms`. The APIs also say `duration_days`, rounded up, for older clients.
 
+**No term ends past the last day the shop keeps** (`LocalTime::LAST_DAY`, 17 January 2038 («۲۸ دی ۱۴۱۶»): the database's
+`TIMESTAMP` columns end two days later — [Database](Database.md#time-and-the-2038-bound)). What lengthens a service — a
+purchase (`ServiceTerms::newTerm()`), a renewal, a grant, extra time — is refused with `TermTooLongException` when it
+would end it later, before anything is charged or sent to a panel; a term still waiting for the first connection is
+judged as if it began now. `ServiceTerms::daysLeft()` is the most whole days a service may still be given (null for one
+that never ends): extra time is offered up to it, and a grant or a prize of more days passes the service by. A deadline
+a panel reports past that day — a long term first connected late, a client extended on its panel by hand — is kept as
+the last moment (`LocalTime::last()`) when `mirror()` copies it, and the shop gives that service no more time.
+
 Three rules keep concurrent work safe — keep them in any change here:
 
 1. **A change holds the service.** Renew, grant, extra, the next period, rotate, switch, move and delete run inside
@@ -117,7 +131,12 @@ Three rules keep concurrent work safe — keep them in any change here:
    before a renewal never puts older numbers back, and never marks deleted a service that moved meanwhile.
 3. **What the panel took is always recorded.** A change that lost its lease after the panel accepted it (it stalled
    past its time) still writes the answer by the row's key and logs it (`record()`): undoing or retrying would apply
-   it twice. A move that loses its lease before deleting the old client takes the new one back.
+   it twice. A change whose answer never came, or whose read-back failed (`ProviderException::mayHaveBeenDone()`,
+   below), has the panel asked: a client there just as it was sent — its quota, term, switch and, where the panel keeps
+   one, device limit (`took()`) — took it, and that answer is recorded (`update()`), so a retry never adds the same
+   renewal, extra or grant on top of what the panel has, nor does a refund take it back twice. A panel that cannot be
+   asked, or has the client otherwise, leaves the failure as it came. A move that loses its lease before deleting the
+   old client takes the new one back.
 
 The arithmetic of what a service gets is `ServiceTerms`: pure functions of the row and the plan — `renewal()`,
 `grant()`, `extra()`, `nextPeriod()`, and `preview()` for a checkout — with no panel and no database, so every rule is
@@ -129,11 +148,11 @@ a relabel leave it as the panel had it — no change but `setEnabled()` ever und
 
 `provision()` makes **one client on every inbound** of the plan entry, so the customer has one link for all of them,
 named by `ClientNaming` (below). A panel that answers without a link, or a transaction that fails after the panel call,
-takes the client back off the panel. A create that may have been done though no answer came
-(`ProviderException::mayHaveBeenDone()`, below) has the panel asked at once (`makeOn()`, as a move's is): a client by
-that name with the quota asked and nothing used is the one made, and the service is delivered on it — a retry would draw
-the pattern's next name and leave that one behind; a panel that cannot say leaves the delivery failed and a warning in
-the log to look for it.
+takes the client back off the panel. A create that may have been done though no answer came, or whose read of the new
+client failed (`ProviderException::mayHaveBeenDone()`, below), has the panel asked at once (`makeOn()`, as a move's is):
+a client by that name with the quota asked, switched as asked and nothing used is the one made, and the service is
+delivered on it — a retry would draw the pattern's next name and leave that one behind; one made but not switched as
+asked is taken back; a panel that cannot say leaves the delivery failed and a warning in the log to look for it.
 
 ### Client names
 
@@ -163,9 +182,9 @@ padded with leading zeros: `{n}` → `001`), and `render()` shortens a username 
 
 A buyer's own name is one domain rule for every door — the bot's checkout (`CheckoutScreen`, `ClientNameHandler`), the
 Store API's `POST /orders` (`CustomerCheckout::clientName()`) and the custom builder: `requested(ClientNameMode,
-?typed, Server, ?seed)` is null for the pattern, a random name free on the server, or the typed one
-(`[A-Za-z0-9_-]{3,32}`, free there), each way refused on `name_mode` while `ClientNameSettings::modes()` does not offer
-it, a typed name on `client_name`. The order keeps it (`orders.client_name`, part of the order's shape: the same
+?typed, Server, ?seed)` is null for the pattern, a random name free on the server, or the typed one (trimmed, its
+Persian digits read as Latin, then `[A-Za-z0-9_-]{3,32}`, free there), each way refused on `name_mode` while
+`ClientNameSettings::modes()` does not offer it, a typed name on `client_name`. The order keeps it (`orders.client_name`, part of the order's shape: the same
 purchase with another name is another order, and an Idempotency-Key's request must name the same —
 `OrderService::same()` compares each shape column as the database keeps it, as `open()` finds an order by it). So the
 website's random name is worked out from the customer and the key (the seed: two requests sent with one key at once
@@ -177,8 +196,9 @@ makes every new client — a purchase's, a test's, a moved service's on its targ
 name (`PanelApiException`) and has a client by it (one `findClient()`, asked only then) — made there by hand with the
 pattern's next name or the moved service's own, or another order's asking the same name delivered at the same moment —,
 tries the pattern's next (`next()`, a test's by the test pattern, each name drawn once), `NAME_TRIES` (10) names in
-all; a refusal for another reason fails the delivery (or the move) as it came. The bot keeps a name per checkout in the chat's session (`_client_name`, as a discount code is kept), and `requestedName()` hands it to the
-order while its way is still offered.
+all; a refusal for another reason fails the delivery (or the move) as it came. The bot keeps a name per checkout in
+the chat's session (`_client_name`, as a discount code is kept), and `requestedName()` hands it to the order while its
+way is still offered.
 
 ## Operations from the screens
 
@@ -190,17 +210,29 @@ anyway, worded by the state found. Who asks matters:
 - **leaving a client on its panel** (a delete or move that does not contact an unreachable panel) is the owner's call
   in the main shop; anyone else may do it only while that panel is in backoff — a client left on a working panel would
   be a second service nobody paid for (a move's is written down and removed once that panel answers, below);
-- panel work from an agent's shop or the website's admins is rate-limited per shop (60 a minute); the owner in the main
-  shop is not, so a batch never floods a panel every shop depends on;
+- panel work asked from an agent's shop or by the website's admins is rate-limited per shop (60 a minute), so no
+  shop's batch floods a panel every shop depends on; the owner in the main shop is not limited;
 - traffic added to an agent's customer's service comes out of the agent's pool (`TrafficPool::extending()`);
-- a shop admin never changes their own service.
+- a shop admin never changes their own service;
+- days given to one service (`extend()`, «افزایش زمان و حجم») that would end it past the last day the shop keeps are
+  refused under `days` ([above](#provisioning-and-the-panel-as-the-truth)).
+
+**A delete waits for the service's orders.** `delete()` is refused (422 on `status`, `OPEN_ORDER`, naming the order)
+while an order of the service is not finished with (`Order::OPEN`: unpaid, being delivered, or failed and waiting for
+support): it would have no service left to deliver to. It asks under the service's row lock — the lock an order for it
+is opened under (`OrderService::holding()`) — before the panel is touched, and again as `ProvisioningService::remove()`
+removes the row under the same lock: an order opened while the panel deleted the client keeps the row (marked deleted,
+its client gone) and the refusal names it. The panels' `actions.delete` is false while such an order is open. A
+refund's removal of a purchase's service asks the same of the service's other orders
+([Internals: commerce](Internals-Commerce.md#payments)).
 
 A move creates the new client first and deletes the old one second, so a failure at any step leaves the service where
 it was (`MoveException` names the step; `errors.previous` is the screen's cue to offer leaving the old panel out). A
 call that may have been done though no answer came (`ProviderException::mayHaveBeenDone()`: a timeout or a cut
-connection once the request was on its way — `ConnectionFailure::beforeRequest()` false —, or an HTTP 5xx page something
-in front of the panel answered for it, `UnexpectedResponseException`; never the panel's own refusal) is asked about on
-its panel before anything is undone: the old client's delete — gone, the move stands; still there, the new client is
+connection once the request was on its way — `ConnectionFailure::beforeRequest()` false —, an HTTP 5xx page something
+in front of the panel answered for it, `UnexpectedResponseException`, or any failure of the read after a write the
+panel took, marked by the connector with `afterWrite()`; never the panel's own refusal) is asked about on its panel
+before anything is undone: the old client's delete — gone, the move stands; still there, the new client is
 taken back; no answer, the move stands and the old client is left behind (taking the new one back could leave the
 customer with neither) —, and the new client's create (`makeOn()`: a client by that name with the quota asked and
 nothing used is the one made, and kept, so the next name never makes a second; no answer, it is left behind).
@@ -211,7 +243,8 @@ that panel answers ([below](#moving-a-servers-services)): the customer still has
 the row at the new client takes it back only while it is nobody's (the service was deleted meanwhile) or the old one is
 still the customer's (`leavePrevious`); once the old one is gone, or may be, the new one is kept and the error logged.
 `ProvisioningService::move()` takes three more arguments for a server's bulk move ([below](#moving-a-servers-services)),
-each off for a single move: `switchedOff` (a service support switched off moves too, its new client made switched off),
+each off for a single move: `switchedOff` (a service support switched off moves too: its new client is made switched
+off in the one create — `ClientSpec::$enabled`, which every connector honours —, so it never works on the target),
 `from` (only while the service is still on that server, asked under its hold) and `by` (the job its leftovers are
 written down as).
 
@@ -237,9 +270,9 @@ recipient), the panels and the website's admins (`Admin\Api\SubscriptionsControl
   own texts (`%reason%`).
 - **The change** — `transfer()`: holding the service's lease as a change on its panel does (`Lease::take()`, for
   `HOLD_SECONDS`, let go at the end): a change under way there — a renewal's or an extra's delivery, which checked the
-  owner as it began (`ProvisioningService::renew()`, `addExtra()`) — makes it refuse with `BUSY` («try again in a
-  moment»), so a paid order of the giver's never lands on the new owner's service; one that begins after finds the
-  new owner. Then, under the service's row lock (the one `AutoRenewal` and `OrderService::holding()`
+  owner as it began (`ProvisioningService::renew()`, `addExtra()`) — makes it refuse with `BUSY` («این سرویس همین
+  حالا روی سرور در حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید.»), so a paid order of the giver's never lands on the
+  new owner's service; one that begins after finds the new owner. Then, under the service's row lock (the one `AutoRenewal` and `OrderService::holding()`
   make a renewal or an extra order under), its owner, status and open orders checked again, then the new owner's columns
   (`ProvisioningService::newOwner()`) with `ShopReports::serviceTransferred()` («خریدها») in the same transaction. After
   the commit `cancelLeftOrders()` cancels the previous owner's unpaid orders of it at once, as an idle one expires
@@ -341,9 +374,11 @@ recipient), the panels and the website's admins (`Admin\Api\SubscriptionsControl
   and `package` what it gives, its `quote` today's price. It refuses (null) a method the shop does not offer
   (`resolveMethod()` against `methods()`: the admin's switches, one at least — `Core\Forms\Fields\Ruled` holds the form
   to that and the default to one of them), a service whose window is closed (`window()` → `DTO\RenewalWindow`:
-  `windowDays()` before the deadline, or `windowPercent()` of the traffic left; an ended service always open, one
-  without a deadline only by its traffic; `when()` words from when for the bot's popup and the website's `422`), and one
-  whose renewal is under way. `refusal()` says why in an `Enums\RenewalRefusal`, asked in one order for both doors,
+  `windowDays()` before the deadline, or `windowPercent()` of the traffic left; an ended service always open; one
+  whose clock has not started only by its traffic; one that never ends by time only by its traffic, and open at once
+  when there is no percent rule for it (none set, or no quota); `when()` words from when for the bot's popup and the
+  website's `422`), and one whose renewal is under way; a renewal that would end the service past the last day the shop
+  keeps throws `TermTooLongException` (the bot's popup, the website's 422). `refusal()` says why in an `Enums\RenewalRefusal`, asked in one order for both doors,
   which only put it in their words; `picks()` is what the service may be renewed on now (the website's
   `…/renewal-plans`, empty while it is refused), `priced()` the preview with a code typed. The three share their
   questions (`renewsWith()`) and only `preview()` prices, so a picker prices each plan once (`Pricing::renewalOffers()`).
@@ -363,18 +398,25 @@ recipient), the panels and the website's admins (`Admin\Api\SubscriptionsControl
   renewal and drops what was left of it, it waits for the last run before the deadline (`LAST_RUN_MINUTES`: the
   interval and 5 minutes for a late run — `opensAt()`, `renewsNow()`), its panel not read meanwhile, so it loses that
   much at most; a short wallet is still told from the window's start, whatever the method. `claim()` makes the order
-  under a lock on the service row, only while the row is still due by the method (another renewal may have moved its
-  deadline meanwhile) and no renewal of it by its owner is open or has `fulfilled_at` since that deadline's renewal
-  could begin (`opensAt()`, refunded since or not, the customer's own too): two runs never charge twice, and a deadline
-  a renewal left where it was (a panel that kept its own) is never renewed again — no loop, whatever the method. A
-  short wallet is told once per window (`Transitions::claim()` on `renewal_notified_at`). A plan whose term is shorter
-  than the window never renews itself: it would be due again at once.
+  under a lock on the service row, only while the switch is still on, the service is still the customer's the run read
+  (one handed to another since would be paid from the wrong wallet), the row is still due by the method (another
+  renewal may have moved its deadline meanwhile) and no renewal of it by its owner is open or has `fulfilled_at` since
+  that deadline's renewal could begin (`opensAt()`, refunded since or not, the customer's own too): two runs never
+  charge twice, and a deadline a renewal left where it was (a panel that kept its own) is never renewed again — no
+  loop, whatever the method. A short wallet is told once per window (`Transitions::claim()` on `renewal_notified_at`).
+  A plan whose term is shorter than the window never renews itself: it would be due again at once. Nor does a renewal
+  that would end the service past the last day the shop keeps (`endsInTime()`, asked again once the panel is read): its
+  switch is not offered (`renews()`), and its customer is reminded of the end instead. The customer's
+  switch (`AutoRenewal::set()`) is written only while the service is still theirs, and «تغییر لینک»
+  (`ProvisioningService::rotateLink()`) rotates only a running service still the reader's: either refuses one handed
+  to another customer since the screen was drawn.
 - **Extras** (`CustomerExtras`, «حجم، زمان و کاربر اضافه»): traffic, days or devices (`Enums\ExtraKind`; each its own
   `OrderType`) bought for a service at the plan's or the shop's price list (`ExtrasSettings`, `DTO\ExtraPrices` of
   `DTO\ExtraOffer`s). `refusal()` is the one rule of what a service can take, asked at checkout and again at delivery
   (`ProvisioningService::addExtra()`) against the panel's numbers; devices also need a panel that enforces an IP limit
-  (`Capabilities::$ipLimit`: 3x-ui yes, PasarGuard no), and time and traffic left (a renewal of a service ended on
-  either count replaces its period at once). Devices are priced for 30 days (`ExtraOffer::PERIOD_DAYS`) and charged
+  (`Capabilities::$ipLimit`: 3X-UI yes, PasarGuard no), and time and traffic left (a renewal of a service ended on
+  either count replaces its period at once). Days are offered no further than `ServiceTerms::daysLeft()`, so the
+  service's end stays within the last day the shop keeps. Devices are priced for 30 days (`ExtraOffer::PERIOD_DAYS`) and charged
   `prorated()` to `deviceDays()` — the whole days left of the period in use (at least 1): to `period_ends_at` while a
   renewal is queued, else to the deadline; its whole term while it waits for its first connection, 30 for one that
   never ends —, rounded up once to whole Toman (`Money::shareOf()`), so the bot, the website and a code's check all
@@ -396,12 +438,17 @@ whoever holds the part's lease — the open screen a few seconds a request (`run
 `Core\Scheduling\Budget::screen()`), or `GrantsTask` every minute — so it finishes however many services there are, and an
 unreachable panel holds up only its own server (`waiting_reason`). The loop is `Core\Database\Lease::work()`: the service
 past the cursor (`next`), its turn (`step`, false when the part must wait or is no longer this call's), the end
-(`finish`), the lease let go however it ended. Each service is claimed (the cursor moved) before its panel is touched, so none is given twice; a
-failure that may have reached the panel (`ProviderException::mayHaveBeenDone()`: a timeout, a cut connection, a proxy's
-5xx page) is counted failed, not retried, as a refusal is — only a panel out of reach before the request went waits.
+(`finish`), the lease let go however it ended. Each service is claimed (the cursor moved) before its panel is touched,
+so none is given twice. A grant whose answer never came is asked about on the panel, as every change's is (rule 3
+above): found there as it was sent, it is recorded and counted given. A failure that may still have reached the panel
+(`ProviderException::mayHaveBeenDone()`, the panel unable to say) is counted failed, not retried, as a refusal is — only
+a panel out of reach before the request went waits. A service gone meanwhile, from its panel or from the shop, is
+passed by.
 The database allows one running part per server (`running_server_id`, a generated unique column); MySQL cannot cascade
-on such a column, so `ServerService::delete()` removes a server's parts itself. Who gets it is decided per service at its turn, by the panel's word: running, not switched off, and — unless
-ticked — not still waiting for the first connection.
+on such a column, so `ServerService::delete()` removes a server's parts itself. Who gets it is decided per service at
+its turn, by the panel's word: running, not switched off, not still waiting for the first connection (unless ticked),
+and not one the grant's days would carry past the last day the shop keeps (`ServiceTerms::daysLeft()`): that service is
+passed by whole.
 
 ## Moving a server's services
 
@@ -459,8 +506,9 @@ takes one.
   `issued_at`; a failure deletes the claim (only while still unissued) and goes up as it came. A claim whose process
   died is deleted by the clean-up's first run 30 minutes after it was made.
 - **The terms are the server's.** `TestServers` holds the owner's form for `servers.test_*` (read as `DTO\TestTerms`)
-  and `choices()`: switched on for tests, able to take a client (`ServerSelector::wholeServer()` — `ServerReadiness`,
-  then every inbound for sale), and in an agent's shop a pool holding the test's traffic.
+  and `choices()`: switched on for tests, a test that ends by the last day the shop keeps
+  (`ServiceTerms::startsInTime()`), able to take a client (`ServerSelector::wholeServer()` — `ServerReadiness`, then
+  every inbound for sale), and in an agent's shop a pool holding the test's traffic.
 - **Made like a sale.** `ProvisioningService::provisionTest()` goes through the same `create()` as `provision()` — one
   client on every inbound, the panel's link required, the client taken back if the row's transaction fails —, named by
   `ClientNaming` by the shop's test pattern (`test_amir_3` by default; a move that must rename it keeps to it), with no IP
@@ -495,7 +543,7 @@ A customer claims a client made by hand on a panel by sending its link ([Service
   trojan, Shadowsocks (a 2022 key whole and in its halves) or hysteria password. A web address stops at the first
   character no address is written in, and punctuation after a link (Persian too) is dropped. Values under eight
   characters are dropped, ids lower-cased.
-- **Whose client it is** is each connector's to say: `ProviderInterface::findClientByLink()`. 3x-ui reads
+- **Whose client it is** is each connector's to say: `ProviderInterface::findClientByLink()`. 3X-UI reads
   `/clients/list` once and matches a row's `subId` among the tokens, or its `uuid`, `password` or `auth` among the
   credentials — a `subId`, password or auth equal to the client's own name is no secret and matches nothing. PasarGuard
   first shows at most three parts of the links that can be its tokens (16 characters and more) to the panel's own public
@@ -512,10 +560,11 @@ A customer claims a client made by hand on a panel by sending its link ([Service
   already or someone else's, except the customer's own row marked `deleted` (its client gone, now back): that stale row
   is deleted, the panel untouched, and the client claimed afresh. One without a subscription link is refused.
 - **The row** is `ProvisioningService::adopt()`: through `values()`, as a sync would write it, with `claimed_at`, no
-  plan (a stale record's carried over), the panel's IP limit (`ClientInfo::$ipLimit`, so a later update does not wipe
+  plan — unless it replaces the customer's own stale record of the client, whose plan and «تمدید خودکار» carry over —,
+  the panel's IP limit (`ClientInfo::$ipLimit`, so a later update does not wipe
   it) and, for a deadline still ahead, the hours left to it as its term — `starts_at` left null, since the panel does
   not say when its clock started (`ServiceTerms::startedAt()` keeps a start unknown while the clock runs). A client
-  that ended comes `expired` — 3x-ui
+  that ended comes `expired` — 3X-UI
   switches a used-up client off by itself — with `ended_at` the claim, so the automatic removal counts from it; one
   switched off while it runs comes `disabled`. The `(server_id, remote_name)` unique key settles two claims at once; the
   report (`ShopReports::serviceClaimed()`, «خریدها») is written in the row's transaction. The customer is its owner
@@ -600,7 +649,13 @@ reminder). The same words everywhere: the bot text, rendered for the web and ema
 `Support\Services\Tickets` is one service for every channel — the website, the bot, both panels, the website's admins
 and the report group — so they keep the same rules. Every status change is one conditional update (`Transitions`), and
 a message is written with the status change it causes in one transaction **under the ticket's row lock**, so a close
-arriving at the same moment lands before or after it, never between. Reopening drops the rating. The report group
+arriving at the same moment lands before or after it, never between. Reopening drops the rating. Support's answer from
+a panel or the website's admin API may carry an `Idempotency-Key` (the panels send one): `answer()` keeps it on the
+message (`ticket_messages.request_key`, unique per ticket), and the same answer again — the same words, the same
+picture by its file name — finds the message the key wrote, with nothing written, uploaded, told or reported twice;
+the key with another answer is `KeyReusedException`. A message support wrote names its writer to the panels and the
+website's admins: `reviewer`, and `reviewer_name` — the shop admin's own first and last name
+(`Auth\Services\Reviewers::names()`), none for the owner or a name that shows nothing (`Support\Text::blank()`). The report group
 hears every change except what was written in it, inside the change's transaction. A customer's tries are counted
 against their windows (tickets an hour, messages per ten minutes, and uploads in the shop's one picture budget shared
 with receipts) only once the request passed its checks.
@@ -620,7 +675,10 @@ review bot behind a carrier's shared address locks nobody out of signing in.
 ## Tests
 
 Above the connectors, `TestCase::fakePanel()` registers a fake connector (`Tests\Fakes\FakePanelDriver`) whose client
-`Tests\Fakes\FakeProvider` keeps one panel per server and can be told to fail, refuse, race a change or stop listing.
+`Tests\Fakes\FakeProvider` keeps one panel per server and can be told to be out of reach (`$unreachable`, `$down`), to
+refuse a call (`$refusing`), to fail its connection (`$failing`), to carry a call out without answering
+(`$unanswered`) or to refuse the read after a write (`$unread`), to race a change (`$onCall`, `$whileListing`) or to
+stop listing (`$lists`).
 The connectors themselves are tested against `Tests\Support\FakePanel` on the outgoing HTTP client. `ServiceTermsTest`
 holds the term arithmetic; `ServiceHoldTest`, `SubscriptionSyncTest` and `ServerGrantsTest` hold the concurrency rules
 above. See [Testing](Testing.md).

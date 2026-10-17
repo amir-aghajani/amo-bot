@@ -12,8 +12,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
- * How the bot words traffic, terms (in days, hours or both), when a service ends, shares, gifts and
- * placeholders.
+ * How the bot words traffic, terms (in days, hours or both), when a service ends, shares, gifts,
+ * placeholders and row numbers in Persian sentences.
  */
 final class MessagesTest extends TestCase
 {
@@ -102,5 +102,26 @@ final class MessagesTest extends TestCase
         self::assertSame('صفحه ۲ از ۵', Messages::fill('صفحه %page% از %pages%', ['page' => '۲', 'pages' => '۵']));
         self::assertSame('پلن x %balance% · ۱۰', Messages::fill('پلن %plan% · %balance%', ['plan' => 'x %balance%', 'balance' => '۱۰']), 'a plan named after a variable stays that');
         self::assertSame('٪۵۰ و 50%', Messages::fill('٪۵۰ و 50%'), 'a percent sign alone is text');
+    }
+
+    public function testARowNumberAfterWordsGetsALeftToRightMarkOnce(): void
+    {
+        $lrm = "\u{200E}";
+
+        self::assertSame("پرداخت آنلاین {$lrm}#12 پس از بسته شدن سفارش {$lrm}#7", Messages::rowNumbers('پرداخت آنلاین #12 پس از بسته شدن سفارش #7'));
+        self::assertSame("شارژ کیف پول (سفارش {$lrm}#۴)", Messages::rowNumbers('شارژ کیف پول (سفارش #۴)'), 'in either digits');
+        self::assertSame("سفارش {$lrm}#12", Messages::rowNumbers("سفارش {$lrm}#12"), 'one marked already keeps its one mark');
+        self::assertSame("#12 اصلاح\nسفارش {$lrm}#3", Messages::rowNumbers("#12 اصلاح\nسفارش #3"), 'no words before it on its line: the mark would turn the line left to right');
+        self::assertSame('اصلاح پشتیبانی #ab', Messages::rowNumbers('اصلاح پشتیبانی #ab'), 'a «#» before no number');
+    }
+
+    public function testWordsBeforeAreLettersOnTheLastLineOutsideMarkup(): void
+    {
+        self::assertTrue(Messages::wordsBefore('✅ سرویس به '));
+        self::assertTrue(Messages::wordsBefore("👤\nبه "), 'the last line\'s');
+        self::assertTrue(Messages::wordsBefore('Sent to '), 'a Latin word is a word too');
+        self::assertFalse(Messages::wordsBefore("سلام\n👤 "), 'an emoji is no word');
+        self::assertFalse(Messages::wordsBefore('<b>%client%</b> &amp; '), 'nor a tag, an entity or a variable');
+        self::assertFalse(Messages::wordsBefore(''));
     }
 }

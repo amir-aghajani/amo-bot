@@ -26,7 +26,8 @@ use Psr\Log\LoggerInterface;
 
 /**
  * «🧪 اکانت تست»: home() — from the menu, /free or the `?start=usertest` link — lists the servers giving a free test now,
- * each with its traffic and term, and a button for each. `test:{server}` takes one there (TestAccounts) and sends it
+ * each with its traffic and term, and a button for each (`menu:test:{page}` past one page). `test:{server}` takes one
+ * there (TestAccounts) and sends it
  * like a delivery, in place of the screen. Whatever the quota refuses is said in its own words, with «خرید اشتراک» under
  * it where buying is the way on, and a refused tap redraws the screen as it is now. A panel that fails is logged and
  * said in a word; a test Telegram would not take still counts, and a word with a button to its screen says so.
@@ -40,6 +41,12 @@ final class TestAccountHandler implements Handler
 
     /** What the `t.me/<bot>?start=usertest` link carries after /start. */
     public const START_LINK = 'usertest';
+
+    /**
+     * Servers a page of the screen holds: each is a line of the message as well as a button, so the message's length
+     * (Limits::MESSAGE) comes long before the keyboard's buttons do.
+     */
+    public const PER_PAGE = 20;
 
     public function __construct(
         private readonly TestAccounts $tests,
@@ -62,11 +69,18 @@ final class TestAccountHandler implements Handler
         $this->take($ctx, (int) ($args[0] ?? 0));
     }
 
+    /** The test screen at that page. */
+    public static function pageCallback(int $page): string
+    {
+        return $page > 1 ? CallbackData::build(MainMenu::TEST, $page) : MainMenu::TEST;
+    }
+
     /**
-     * The servers giving a test now, a line each with its traffic and term, and a button each — or why the customer
-     * cannot take one. `$fresh` sends it as a new message instead of in place of a tapped one.
+     * The servers giving a test now, PER_PAGE a page: a line each with its traffic and term, and a button each in its
+     * server's colour and row (as the purchase's locations, Buttons::server()) — or why the customer cannot take one.
+     * `$fresh` sends it as a new message instead of in place of a tapped one.
      */
-    public function home(Context $ctx, bool $fresh = false): void
+    public function home(Context $ctx, bool $fresh = false, int $page = 1): void
     {
         try {
             $choices = $this->tests->offer($ctx->user);
@@ -76,19 +90,22 @@ final class TestAccountHandler implements Handler
             return;
         }
 
+        [$shown, $page, $pages] = Buttons::slice($choices, $page, self::PER_PAGE);
         $lines = [];
-        $keyboard = InlineKeyboard::make();
-        foreach ($choices as ['server' => $server, 'terms' => $terms]) {
+        $buttons = [];
+        foreach ($shown as ['server' => $server, 'terms' => $terms]) {
             $lines[] = $this->texts->part(BotText::TestServerLine, [
                 'server' => $server->name,
                 'traffic' => Messages::bytes($terms->bytes),
                 'duration' => Messages::duration($terms->hours),
                 'hold' => $terms->onHold ? $this->texts->part(BotText::TestOnHold) : '',
             ]);
-            $keyboard->row(InlineKeyboard::callback($this->texts->render(BotText::ServerButton, ['server' => $server->name]), CallbackData::build(self::PREFIX, $server->id)));
+            $buttons[] = $this->buttons->server($server, CallbackData::build(self::PREFIX, $server->id));
         }
 
-        $this->menu->screen($ctx, $this->texts->render(BotText::TestScreen, ['servers' => Html::lines(...$lines)]), $keyboard, fresh: $fresh);
+        $keyboard = InlineKeyboard::make()->flow($buttons);
+        $text = $this->buttons->paged($keyboard, $this->texts->render(BotText::TestScreen, ['servers' => Html::lines(...$lines)]), $page, $pages, self::pageCallback(...));
+        $this->menu->screen($ctx, $text, $keyboard, fresh: $fresh);
     }
 
     /**

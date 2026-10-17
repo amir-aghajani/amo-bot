@@ -8,6 +8,7 @@ use App\Core\Exceptions\ValidationException;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Api\Limits;
 use App\Modules\Telegram\Messages;
+use App\Support\Text;
 use App\Support\Validation;
 
 /**
@@ -16,12 +17,15 @@ use App\Support\Validation;
  * stored (length, variables, Telegram HTML): a text Telegram refuses would leave the customer with nothing.
  *
  * Escaping happens here alone: a value is plain text, escaped into an HTML text and left as it is in a popup or a
- * button; a part (an Html, from part()) goes into another text as it is.
+ * button; a part (an Html, from part()) goes into another text as it is. A value that starts with a handle or a row's
+ * number takes a left-to-right mark where words come before it on its line (marked()).
  */
 final class BotTexts
 {
     private const PREFIX = 'bot.text.';
     private const VARIABLE = '/%([A-Za-z_][A-Za-z0-9_]*)%/';
+
+    private const EMPTY = 'متن نمی‌تواند خالی باشد.';
 
     public function __construct(private readonly Settings $settings) {}
 
@@ -121,12 +125,16 @@ final class BotTexts
         $this->settings->forget(self::key($text));
     }
 
-    /** What is wrong with a wording, worded for the admin, or null. */
+    /**
+     * What is wrong with a wording, worded for the admin, or null — the first of, in order: empty; too long; a button on
+     * two lines; a variable it does not have, or one it must keep, missing; tags where there is no formatting, or HTML
+     * Telegram would not take; blank as Telegram reads it (blank()).
+     */
     public static function problem(TextSpec $spec, string $value): ?string
     {
         $kind = $spec->kind;
         if ($value === '' && $kind !== TextKind::Part) {
-            return 'متن نمی‌تواند خالی باشد.';
+            return self::EMPTY;
         }
         // Counted as Telegram counts what the customer sees: UTF-16 units, tags free.
         if (($kind->html() ? TelegramHtml::visibleLength($value) : Limits::length($value)) > $kind->limit()) {
@@ -150,13 +158,25 @@ final class BotTexts
             }
         }
 
-        if (!$kind->html()) {
-            return preg_match('/<\/?[a-z][a-z-]*[^>]*>/i', $value) === 1
-                ? 'این متن قالب‌بندی ندارد و تگ‌ها همان‌طور که نوشته شده‌اند نشان داده می‌شوند؛ آن‌ها را بردارید.'
-                : null;
+        $markup = $kind->html()
+            ? TelegramHtml::problem($value)
+            : (preg_match('/<\/?[a-z][a-z-]*[^>]*>/i', $value) === 1 ? 'این متن قالب‌بندی ندارد و تگ‌ها همان‌طور که نوشته شده‌اند نشان داده می‌شوند؛ آن‌ها را بردارید.' : null);
+        if ($markup !== null) {
+            return $markup;
         }
 
-        return TelegramHtml::problem($value);
+        return $kind !== TextKind::Part && self::blank($kind, $value) ? self::EMPTY : null;
+    }
+
+    /**
+     * Whether the customer would see nothing of `$value` — its tags dropped and its entities read, for a text Telegram
+     * reads as HTML —, nothing but what draws nothing being left (Text::blank(): a space of any kind, a line break, a
+     * zero-width or filler character): a no-break space alone passes trim(), and Telegram refuses a message of nothing.
+     * Checked after the HTML, so an unfinished tag, which strip_tags() swallows, is told as what it is.
+     */
+    private static function blank(TextKind $kind, string $value): bool
+    {
+        return Text::blank($kind->html() ? TelegramHtml::visible($value) : $value);
     }
 
     /**
@@ -190,6 +210,7 @@ final class BotTexts
                 'name' => $name,
                 'description' => $description ?? $meaning,
                 'sample' => $sample,
+                'html' => in_array($name, TextCatalog::HTML_VARIABLES, true),
                 'required' => in_array($name, $spec->required, true),
             ];
         }
@@ -246,7 +267,27 @@ final class BotTexts
             };
         }
 
-        return Messages::fill($this->template($text), $filled);
+        return Messages::fill(self::marked($this->template($text), $filled), $filled);
+    }
+
+    /**
+     * `$template` with a left-to-right mark (U+200E) before each variable whose value starts with a handle or a row's
+     * number («@sara», «#12») and that has words before it on its line — in the default wording and the admin's alike:
+     * right to left, after Persian words, «به @sara» would read «sara@ به» and «سفارش #12» «12# سفارش». One with no words
+     * before it on its line («👤 %name%») is left as the defaults leave theirs (TextCatalog::LRM), and one marked already
+     * keeps its one mark.
+     *
+     * @param array<string, string> $filled
+     */
+    private static function marked(string $template, array $filled): string
+    {
+        return (string) preg_replace_callback(self::VARIABLE, static function (array $variable) use ($template, $filled): string {
+            [$token, $at] = $variable[0];
+            $before = substr($template, 0, $at);
+            $leftToRight = preg_match('/^(?:@|#[0-9۰-۹])/u', $filled[$variable[1][0]] ?? '') === 1;
+
+            return $leftToRight && !str_ends_with($before, "\u{200E}") && Messages::wordsBefore($before) ? "\u{200E}{$token}" : $token;
+        }, $template, flags: PREG_OFFSET_CAPTURE);
     }
 
     /** A text sent on its own (get(), render()) — a part goes into another text, as part() makes it. */

@@ -10,7 +10,8 @@ use App\Support\Money;
 /**
  * One discount a price took (a line of Orders\DTO\Quote, kept on the order as `orders.discounts`): its source, the
  * customer's words for it («فروش ویژه نوروز ۲۰٪», «کد NOWRUZ»), the Toman it took off, its percent, the row it came from
- * (none for a customer's own percent), a code's text, and when a sale ends.
+ * (none for a customer's own percent), a code's text — and whether that code was for a first purchase only, which the
+ * order's delivery asks again (Orders\Services\OrderService) —, and when a sale ends.
  */
 final readonly class DiscountLine
 {
@@ -23,12 +24,13 @@ final readonly class DiscountLine
         public ?int $id = null,
         public ?\DateTimeInterface $endsAt = null,
         public ?string $code = null,
+        public bool $firstOnly = false,
     ) {}
 
     /**
-     * As an order keeps it (`endsAt` is not kept).
+     * As an order keeps it (`endsAt` is not kept; `first_only` only when set).
      *
-     * @return array{source: string, label: string, amount: string, percent: int|null, id: int|null, code?: string}
+     * @return array{source: string, label: string, amount: string, percent: int|null, id: int|null, code?: string, first_only?: true}
      */
     public function toArray(): array
     {
@@ -40,7 +42,7 @@ final readonly class DiscountLine
             'id' => $this->id,
         ];
 
-        return $this->code === null ? $kept : $kept + ['code' => $this->code];
+        return $kept + ($this->code === null ? [] : ['code' => $this->code]) + ($this->firstOnly ? ['first_only' => true] : []);
     }
 
     /** A line an order kept (toArray()); null for one that does not read as one. */
@@ -58,6 +60,7 @@ final readonly class DiscountLine
             is_int($kept['percent'] ?? null) ? $kept['percent'] : null,
             is_int($kept['id'] ?? null) ? $kept['id'] : null,
             code: is_string($kept['code'] ?? null) ? $kept['code'] : null,
+            firstOnly: ($kept['first_only'] ?? false) === true,
         );
     }
 

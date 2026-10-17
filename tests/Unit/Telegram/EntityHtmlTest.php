@@ -47,6 +47,11 @@ final class EntityHtmlTest extends TestCase
             [['type' => 'mention', 'offset' => 0, 'length' => 4], ['type' => 'url', 'offset' => 5, 'length' => 12], ['type' => 'hashtag', 'offset' => 18, 'length' => 4]],
             '@amo https://t.me #tag %client%',
         ];
+        yield 'a date and time, with its format or without' => [
+            'تا ۲۶ اسفند و فردا',
+            [['type' => 'date_time', 'offset' => 3, 'length' => 8, 'unix_time' => 1647531900, 'date_time_format' => 'wDT'], ['type' => 'date_time', 'offset' => 14, 'length' => 4, 'unix_time' => 1647531900]],
+            'تا <tg-time unix="1647531900" format="wDT">۲۶ اسفند</tg-time> و <tg-time unix="1647531900">فردا</tg-time>',
+        ];
         yield 'one that would cross another is left out' => ['abcdef', [['type' => 'bold', 'offset' => 0, 'length' => 4], ['type' => 'italic', 'offset' => 2, 'length' => 4]], '<b>abcd</b>ef'];
         yield 'one past the end is left out' => ['ab', [['type' => 'bold', 'offset' => 1, 'length' => 5]], 'ab'];
     }

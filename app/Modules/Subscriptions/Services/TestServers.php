@@ -21,7 +21,8 @@ use Illuminate\Database\Eloquent\Collection;
  * Each server's free test accounts: the owner's form for them (whether the server gives tests, and a test's traffic,
  * hours and "on hold" — counted from the first connection or from the moment it is made), and which servers give a
  * test now: switched on for tests, able to take a client (ServerSelector::wholeServer()), and — in an agent's shop —
- * not kept from it by the owner (Bot::hiddenServerIds()), with a test's traffic left in the agent's pool.
+ * not kept from it by the owner (Bot::hiddenServerIds()), with a test's traffic left in the agent's pool; none whose test
+ * would end past the last day the shop keeps (LocalTime::LAST_DAY).
  */
 final class TestServers
 {
@@ -97,7 +98,9 @@ final class TestServers
         $choices = [];
         foreach ($servers->where('test_enabled', true)->withCount(Server::activeServicesCount())->with('inbounds')->orderBy('sort')->orderBy('id')->get() as $server) {
             $terms = TestTerms::of($server);
-            $inbounds = $pool === null || $pool >= $terms->bytes ? $this->selector->wholeServer($server) : null;
+            // A test that would end past the last day the shop keeps (ServiceTerms::startsInTime()) is given nowhere.
+            $gives = ServiceTerms::startsInTime($terms->hours) && ($pool === null || $pool >= $terms->bytes);
+            $inbounds = $gives ? $this->selector->wholeServer($server) : null;
             if ($inbounds !== null) {
                 $choices[] = ['server' => $server, 'terms' => $terms, 'inbounds' => $inbounds];
             }

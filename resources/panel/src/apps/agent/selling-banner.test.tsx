@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { SellingBanner } from '@/apps/agent/selling-banner'
 import type { AccountResponse, AgencyStanding } from '@/lib/api-types'
-import { providers } from '@/test/render'
+import { queryKeys } from '@/lib/query-keys'
+import { providers, until } from '@/test/render'
 import { agencyStanding } from '@/test/rows'
 import { json, server } from '@/test/server'
 
@@ -32,7 +33,15 @@ function account(standing: AgencyStanding): AccountResponse {
 
 function open(standing: AgencyStanding, at = '/plans') {
   server().on('GET', '/api/agent/account', json(account(standing)))
-  render(<SellingBanner />, { wrapper: providers({ at }).wrapper })
+  const { client, wrapper } = providers({ at })
+  render(<SellingBanner />, { wrapper })
+  return client
+}
+
+/** The strip at `at` once the account it is drawn from has been read — whatever it then says, it says. */
+async function read(standing: AgencyStanding, at?: string) {
+  const client = open(standing, at)
+  await until(() => expect(client.getQueryState(queryKeys.account)?.status).toBe('success'))
 }
 
 describe('the selling strip', () => {
@@ -51,24 +60,24 @@ describe('the selling strip', () => {
     expect((await screen.findByText(/به پایان می‌رسد/)).textContent).toMatch(/نمایندگی شما .* به پایان می‌رسد\./)
   })
 
-  it('is not over the account, whose notice says the whole of it', async () => {
-    open(agencyStanding({ suspension: { reason: 'manual', since: '2026-10-01T10:00:00Z' } }), '/account')
+  it('is not over the account, whose notice says the whole of it — at its address with a closing slash too', async () => {
+    await read(agencyStanding({ suspension: { reason: 'manual', since: '2026-10-01T10:00:00Z' } }), '/account')
+    expect(screen.queryByRole('status')).toBeNull()
+    cleanup()
 
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await read(agencyStanding({ suspension: { reason: 'manual', since: '2026-10-01T10:00:00Z' } }), '/account/')
     expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('is not over the dashboard, whose attention card says it already', async () => {
-    open(agencyStanding({ suspension: { reason: 'manual', since: '2026-10-01T10:00:00Z' } }), '/')
+    await read(agencyStanding({ suspension: { reason: 'manual', since: '2026-10-01T10:00:00Z' } }), '/')
 
-    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('is not there while all is well', async () => {
-    open(agencyStanding())
+    await read(agencyStanding())
 
-    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.queryByRole('status')).toBeNull()
   })
 })

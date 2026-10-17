@@ -25,6 +25,12 @@ final class Urls
     /** An online payment gateway's callback: the payment's id, then a secret of its own (Payments\Services\OnlineInvoices). */
     public const PAYMENT_CALLBACK = '/payments/callback/{payment:[0-9]+}/{secret}';
 
+    /**
+     * An online gateway's webhook for its every payment, by its driver — one a gateway signs, with its own secret, for the
+     * shop to hear (Payments\Contracts\SignedWebhook): no secret in the address.
+     */
+    public const PAYMENT_WEBHOOK = '/payments/webhooks/{driver:[a-z0-9]+}';
+
     /** The website's API (the Store API): its version, then the store key that names the shop — no secret. */
     public const STORE = '/api/store/v1/{store:[0-9a-f]{24}}';
 
@@ -61,6 +67,12 @@ final class Urls
     public function paymentCallback(int $payment, string $secret): string
     {
         return $this->base() . self::fill(self::PAYMENT_CALLBACK, ['payment' => (string) $payment, 'secret' => $secret]);
+    }
+
+    /** Where an online gateway that signs its webhooks tells the shop about its payments, its owner pasting it there. */
+    public function paymentWebhook(string $driver): string
+    {
+        return $this->base() . self::fill(self::PAYMENT_WEBHOOK, ['driver' => $driver]);
     }
 
     /** The base address of a website's API, handed to its developer. */

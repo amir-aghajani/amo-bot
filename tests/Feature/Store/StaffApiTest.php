@@ -10,9 +10,11 @@ use App\Modules\Accounts\Enums\SignInMethod;
 use App\Modules\Accounts\Http\CustomerAuthMiddleware;
 use App\Modules\Accounts\Http\RecentSignInMiddleware;
 use App\Modules\Accounts\Models\CustomerSession;
+use App\Modules\Accounts\Services\AccountMerger;
 use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Enums\OrderStatus;
@@ -30,7 +32,6 @@ use App\Modules\Providers\Exceptions\PanelApiException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Reviews\Enums\ReviewStatus;
-use App\Modules\Store\Enums\StaffGrant;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Models\Website;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
@@ -40,6 +41,7 @@ use App\Modules\Support\Enums\TicketChannel;
 use App\Modules\Support\Models\TicketMessage;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Users\Enums\UserRole;
+use App\Modules\Users\Models\CustomerGroup;
 use App\Modules\Users\Models\User;
 use Illuminate\Support\Carbon;
 use Monolog\LogRecord;
@@ -321,6 +323,104 @@ final class StaffApiTest extends HttpTestCase
         self::assertSame(1, CustomerSession::query()->where('user_id', $agent->id)->count(), 'their session stands');
     }
 
+    /** A «همکار» group sets its customers' prices: from the website, no admin's account — their own neither — nor an agent's goes in one. */
+    public function testNoAdminPutsAnAdminsOrAnAgentsAccountInAGroupFromTheWebsite(): void
+    {
+        $this->loginAsStaff($this->website, $this->sara);
+        $this->grant(StaffGrant::Catalog);
+        $colleagues = $this->decode($this->postJson($this->staffApi('/customer-groups'), ['name' => 'همکاران', 'agent_pricing' => true]))['group']['id'];
+        $reza = $this->admin(['telegram_id' => 7003, 'username' => 'reza']);
+        $agent = $this->agent(overrides: ['telegram_id' => 7004, 'username' => 'nima']);
+        $put = fn(User $user) => $this->putJson($this->staffApi("/users/{$user->id}/groups"), ['group_ids' => [$colleagues]]);
+
+        $this->assertRefused(ActorRefusedException::ADMIN_ACCOUNT, $put($this->sara));
+        $this->assertRefused(ActorRefusedException::ADMIN_ACCOUNT, $put($reza));
+        $this->assertRefused(ActorRefusedException::AGENT_ACCOUNT, $put($agent));
+        foreach ([$this->sara, $reza, $agent] as $refused) {
+            self::assertSame([], $refused->groups()->pluck('customer_groups.id')->all(), "#{$refused->id} in no group");
+        }
+        self::assertFalse($this->sara->paysAgentPrices(), 'her prices as they were');
+
+        $alis = $put($this->ali);
+        self::assertSame(200, $alis->getStatusCode(), (string) $alis->getBody());
+        self::assertSame([$colleagues], array_column($this->decode($alis)['user']['groups'], 'id'), 'a customer\'s groups are the daily work');
+
+        // Nor does a group she is in — the owner put her there — become «همکار» from the website.
+        $vip = $this->customerGroup('VIP', [$this->sara, $this->ali]);
+        $this->assertRefused(sprintf(ActorRefusedException::ADMIN_IN_GROUP, 'VIP'), $this->putJson($this->staffApi("/customer-groups/{$vip->id}"), ['name' => 'VIP', 'agent_pricing' => true]));
+        self::assertSame('گروه «VIP» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل ممکن است.', sprintf(ActorRefusedException::ADMIN_IN_GROUP, 'VIP'), 'its own words, naming the group');
+        self::assertFalse($vip->refresh()->agent_pricing);
+        self::assertFalse($this->sara->paysAgentPrices());
+        self::assertSame('ویژه', $this->decode($this->putJson($this->staffApi("/customer-groups/{$vip->id}"), ['name' => 'ویژه']))['group']['name'], 'renamed, its pricing as it was');
+        $plain = $this->customerGroup('عادی', [$this->ali]);
+        self::assertTrue($this->decode($this->putJson($this->staffApi("/customer-groups/{$plain->id}"), ['name' => 'عادی', 'agent_pricing' => true]))['group']['agent_pricing'], 'no admin in it: the catalogue\'s grant');
+    }
+
+    /**
+     * A «همکار» group sets its customers' prices as the plans do: the groups are the `catalog` grant's, and so is a
+     * customer put in a «همکار» group — after a recent sign-in, as any granted operation —; their plain groups stay the
+     * daily work.
+     */
+    public function testTheCustomerGroupsAndAHamkarGroupsCustomersAskTheCatalogGrant(): void
+    {
+        $this->loginAsStaff($this->website, $this->sara);
+        $vip = $this->customerGroup('VIP');
+        $colleagues = $this->customerGroup('همکاران', overrides: ['agent_pricing' => true]);
+        $groups = fn(array $ids) => $this->putJson($this->staffApi("/users/{$this->ali->id}/groups"), ['group_ids' => $ids]);
+
+        $this->assertRefused(StaffMiddleware::NOT_GRANTED, $this->postJson($this->staffApi('/customer-groups'), ['name' => 'تازه']));
+        $this->assertRefused(StaffMiddleware::NOT_GRANTED, $this->postJson($this->staffApi('/customer-groups/reorder'), ['ids' => [$colleagues->id, $vip->id]]));
+        $this->assertRefused(StaffMiddleware::NOT_GRANTED, $this->putJson($this->staffApi("/customer-groups/{$vip->id}"), ['name' => 'ویژه']));
+        $this->assertRefused(StaffMiddleware::NOT_GRANTED, $this->deleteJson($this->staffApi("/customer-groups/{$vip->id}")));
+        self::assertSame(['VIP', 'همکاران'], CustomerGroup::query()->oldest('sort')->pluck('name')->all(), 'the groups as they were');
+
+        $this->assertRefused(ActorRefusedException::AGENT_GROUP_NOT_GRANTED, $groups([$vip->id, $colleagues->id]));
+        self::assertSame([], $this->ali->groups()->pluck('customer_groups.id')->all(), 'in no group: nothing of the list saved');
+        self::assertFalse($this->ali->paysAgentPrices());
+        self::assertSame(200, $groups([$vip->id])->getStatusCode(), 'a plain group: the daily work');
+
+        // The owner put him in «همکار»: his plain groups are still the daily work, and so is taking him out.
+        $colleagues->users()->attach($this->ali->id);
+        self::assertSame(200, $groups([$colleagues->id])->getStatusCode(), 'a «همکار» group he is in already');
+        self::assertSame(200, $groups([])->getStatusCode(), 'out of it');
+        self::assertFalse($this->ali->paysAgentPrices());
+
+        $this->grant(StaffGrant::Catalog);
+        self::assertSame(201, $this->postJson($this->staffApi('/customer-groups'), ['name' => 'تازه'])->getStatusCode());
+        $put = $groups([$colleagues->id]);
+        self::assertSame(200, $put->getStatusCode(), (string) $put->getBody());
+        self::assertTrue($this->ali->paysAgentPrices(), 'granted: in «همکار»');
+
+        // A grant asks a recent sign-in, the service's own rule as surely as a route's.
+        $groups([]);
+        Carbon::setTestNow(now()->addSeconds(CustomerSessions::RECENT_SECONDS + 1));
+        $stale = $this->assertRefused(RecentSignInMiddleware::SIGN_IN_AGAIN, $groups([$colleagues->id]));
+        self::assertSame(RecentSignInMiddleware::CHALLENGE, $stale->getHeaderLine('WWW-Authenticate'));
+        self::assertFalse($this->ali->paysAgentPrices());
+        self::assertSame(200, $groups([$vip->id])->getStatusCode(), 'the plain groups ask none');
+    }
+
+    /**
+     * The way around the guard: an admin puts their own other account — a customer's — in a «همکار» group, then makes the
+     * two one. The merge leaves the «همکار» group behind, so the admin's prices stay theirs.
+     */
+    public function testAnAdminsOtherAccountInAHamkarGroupBringsItIntoNoMerge(): void
+    {
+        $this->loginAsStaff($this->website, $this->sara);
+        $this->grant(StaffGrant::Catalog);
+        $colleagues = $this->customerGroup('همکاران', overrides: ['agent_pricing' => true]);
+        $vip = $this->customerGroup('VIP');
+        Carbon::setTestNow(now()->addMinute());
+        $second = $this->webCustomer();
+
+        self::assertSame(200, $this->putJson($this->staffApi("/users/{$second->id}/groups"), ['group_ids' => [$colleagues->id, $vip->id]])->getStatusCode(), 'a customer\'s account, as far as the website knows');
+        $survivor = $this->service(AccountMerger::class)->merge($second, $this->sara, AccountMerger::BY_CUSTOMER);
+
+        self::assertSame($this->sara->id, $survivor->id);
+        self::assertSame(['VIP'], $survivor->groups()->pluck('name')->all(), 'its plain group comes along');
+        self::assertFalse($survivor->paysAgentPrices(), 'her prices as they were');
+    }
+
     public function testAnApprovalFromTheWebsiteNeedsAReceiptInReview(): void
     {
         $this->loginAsStaff($this->website, $this->sara);
@@ -477,6 +577,7 @@ final class StaffApiTest extends HttpTestCase
 
         self::assertSame(200, $this->postJson($this->staffApi("/tickets/{$ticket->id}/messages"), ['body' => 'درست شد.'])->getStatusCode());
         $this->assertRefused(ActorRefusedException::ADMIN_ACCOUNT, $this->patchJson($this->staffApi("/users/{$reza->id}"), ['status' => 'banned']));
+        self::assertSame(404, $this->postJson($this->staffApi('/payments/999/approve'))->getStatusCode());
         self::assertSame(200, $this->get($this->staffApi('/tickets'))->getStatusCode());
 
         $actor = "staff @sara #{$this->sara->id}";
@@ -485,6 +586,7 @@ final class StaffApiTest extends HttpTestCase
         self::assertContains("Ticket {$ticket->id} answered by @sara (staff)", $said, "the decision's own line names them too");
         self::assertContains("A shop admin on the website asked POST /api/store/v1/{$this->website->key}/admin/tickets/{$ticket->id}/messages: 200", $said);
         self::assertContains("A shop admin on the website asked PATCH /api/store/v1/{$this->website->key}/admin/users/{$reza->id}: 403", $said, 'a refused change is logged too');
+        self::assertContains("A shop admin on the website asked POST /api/store/v1/{$this->website->key}/admin/payments/999/approve: 404", $said, 'and one of a row that is not there');
         self::assertCount(0, array_filter($said, static fn(string $line): bool => str_contains($line, 'asked GET')), 'a read leaves no line');
     }
 
@@ -498,10 +600,11 @@ final class StaffApiTest extends HttpTestCase
 
         $answer = TicketMessage::query()->where('ticket_id', $ticket->id)->latest('id')->firstOrFail();
         self::assertSame([TicketChannel::Staff, '@sara'], [$answer->channel, $answer->reviewer]);
-        self::assertStringContainsString("↩️ <b>پاسخ پشتیبانی</b> · تیکت #{$ticket->id} · از مدیریت وب‌سایت", ReportMessage::query()->latest('id')->firstOrFail()->text);
+        self::assertStringContainsString("↩️ <b>پاسخ پشتیبانی</b> · تیکت \u{200E}#{$ticket->id} · از مدیریت وب‌سایت", ReportMessage::query()->latest('id')->firstOrFail()->text);
 
         $this->loginAsAdmin();
-        self::assertSame('staff', $this->decode($this->get("/api/admin/tickets/{$ticket->id}"))['ticket']['messages'][1]['channel']);
+        $read = $this->decode($this->get("/api/admin/tickets/{$ticket->id}"))['ticket']['messages'][1];
+        self::assertSame(['staff', '@sara', 'Sara'], [$read['channel'], $read['reviewer'], $read['reviewer_name']], 'written on the website, by her name');
     }
 
     public function testAnotherShopsAdminsAreNotThisOnesAndTheirWebsiteOpensNothingHere(): void

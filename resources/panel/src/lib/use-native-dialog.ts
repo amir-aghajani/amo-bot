@@ -1,20 +1,39 @@
 import { useEffect, useRef, type DialogHTMLAttributes, type RefObject } from 'react'
+import { PHONE } from '@/lib/use-media-query'
 
 /** The fields a dialog's initial focus may go to: ones the keyboard reaches (not a hidden input behind a custom control). */
 const FIELDS = ['input:not([type="hidden"]):not([readonly])', 'textarea:not([readonly])', 'select', 'button[role="combobox"]'].map((field) => `${field}:not(:disabled):not([tabindex="-1"])`).join(', ')
 
+/** The inputs that take no typing: focused, they bring up no keyboard. */
+const UNTYPED = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file', 'image'])
+
+/** Whether the focus on `element` brings up a phone's keyboard: a field typed into. */
+function typedInto(element: HTMLElement): boolean {
+  if (element instanceof HTMLTextAreaElement || element.isContentEditable) return true
+  return element instanceof HTMLInputElement && !UNTYPED.has(element.type)
+}
+
+interface NativeDialogOptions {
+  /** Typing is the dialog's whole point (a text to write): its first field takes the focus on a phone too, keyboard and all. */
+  typing?: boolean
+}
+
 /**
  * Drives a native <dialog> (a Modal, the phone's drawer) from React state:
  * - showModal()/close() follow `open`, so the browser provides the focus trap, Escape and the top layer;
- * - the initial focus goes to a `[data-autofocus]` control, else the first field, else the browser's choice;
+ * - the initial focus goes to a `[data-autofocus]` control, else the first field, else the browser's choice — but on a
+ *   phone, where a field's focus brings up the keyboard over half the sheet, to the dialog itself instead of a field
+ *   typed into (unless `typing`): it is read out by its name, and the admin sees the whole sheet before choosing;
  * - the page behind stops scrolling meanwhile, without shifting sideways as its scrollbar goes;
  * - closed, the focus returns to what had it when the dialog opened (for a menu item, the menu's trigger).
- * The handlers it returns turn Escape and a backdrop click into `onDismiss`, leaving the state to React.
+ * The handlers it returns turn Escape and a backdrop click into `onDismiss`, leaving the state to React. The dialog
+ * takes the focus itself with a `tabIndex` of -1 (Modal's).
  */
 export function useNativeDialog(
   ref: RefObject<HTMLDialogElement | null>,
   open: boolean,
   onDismiss: () => void,
+  { typing = false }: NativeDialogOptions = {},
 ): Pick<DialogHTMLAttributes<HTMLDialogElement>, 'onCancel' | 'onClose' | 'onPointerDown' | 'onClick'> {
   const opener = useRef<Element | null>(null)
   // A press that started on the backdrop: a click whose press started elsewhere is no dismissal.
@@ -27,17 +46,19 @@ export function useNativeDialog(
       opener.current = openerOf(document.activeElement)
       dialog.showModal()
       const first = dialog.querySelector<HTMLElement>('[data-autofocus]') ?? [...dialog.querySelectorAll<HTMLElement>(FIELDS)].find((field) => field.closest('[hidden]') === null)
-      first?.focus()
+      const keyboard = first !== undefined && !typing && typedInto(first) && window.matchMedia(PHONE).matches
+      ;(keyboard ? dialog : first)?.focus()
     } else if (!open && dialog.open) {
       dialog.close()
       const back = opener.current
       opener.current = null
-      // What is gone meanwhile (a selection bar that emptied) would drop the focus on the document: the main column
-      // takes it instead.
-      if (back instanceof HTMLElement && back.isConnected) back.focus()
-      else document.getElementById('main')?.focus()
+      // What cannot take the focus back — gone meanwhile (a selection bar that emptied), disabled or hidden since (the
+      // phone's menu button, the phone turned on its side) — or nothing at all, a dialog the page opened itself (a link
+      // to a row), would drop it on the document: the main column takes it instead.
+      if (back instanceof HTMLElement && back !== document.body) back.focus()
+      if (back === null || back === document.body || document.activeElement !== back) document.getElementById('main')?.focus()
     }
-  }, [ref, open])
+  }, [ref, open, typing])
 
   useEffect(() => {
     if (!open) return

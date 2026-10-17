@@ -13,8 +13,10 @@ final class BotToken
     /** The bot's id (Telegram's numbers keep growing), a colon, the secret (35 characters today). */
     public const PATTERN = '/^\d{5,20}:[A-Za-z0-9_-]{30,64}$/';
 
-    public const MALFORMED = 'این توکن ربات نیست؛ توکن را همان‌طور که @BotFather داده کپی کنید (مثل 123456789:AAH...).';
-    public const REFUSED = 'تلگرام این توکن را نمی‌پذیرد؛ آن را دوباره از @BotFather بگیرید.';
+    // A left-to-right mark (U+200E) before the handle and the example: in a Persian line, in Telegram as in the panel,
+    // «@BotFather» would read «BotFather@» and the token its two halves swapped.
+    public const MALFORMED = "این توکن ربات نیست؛ توکن را همان‌طور که \u{200E}@BotFather داده کپی کنید (مثل \u{200E}123456789:AAH...).";
+    public const REFUSED = "تلگرام این توکن را نمی‌پذیرد؛ آن را دوباره از \u{200E}@BotFather بگیرید.";
     public const UNREACHABLE = TelegramUnreachableException::MESSAGE;
 
     /** Whether the text has a token's shape (asking Telegram is identify()'s). */

@@ -3,7 +3,7 @@ import { Radio } from 'lucide-react'
 import { customerList } from '@/components/customer-filter'
 import { LatestCard, useLatestRows } from '@/components/customer/latest-rows'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowTitleButton } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { StatusBadge } from '@/components/status-badge'
 import { MoveDialog } from '@/components/subscriptions/move-dialog'
 import type { ServerChoices } from '@/components/subscriptions/server-choices'
@@ -36,6 +36,12 @@ export function ServicesCard({ customer, servers, serverPage, traffic }: Service
   const [moving, setMoving] = useState<SubscriptionRow[] | null>(null)
   const { counts } = customer
 
+  // A service handed to another customer is theirs now: it leaves this customer's card, its dialog following it.
+  const changed = (subscription: SubscriptionRow) => {
+    opened.apply(subscription)
+    if (subscription.user.id !== customer.id) latest.remove(subscription.id)
+  }
+
   return (
     <LatestCard
       title="سرویس‌ها"
@@ -50,7 +56,7 @@ export function ServicesCard({ customer, servers, serverPage, traffic }: Service
               <TableHead className="hidden lg:table-cell">سرور</TableHead>
               <TableHead className="hidden md:table-cell">مصرف</TableHead>
               <TableHead className="hidden sm:table-cell">پایان</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -65,6 +71,9 @@ export function ServicesCard({ customer, servers, serverPage, traffic }: Service
                     </RowTitleButton>
                     <ServicePlan subscription={subscription} />
                   </div>
+                  <PhoneFacts>
+                    <StatusBadge status={SUBSCRIPTION_STATUS[subscription.status]} />
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">{subscription.server.name}</TableCell>
                 <TableCell className="hidden md:table-cell">
@@ -73,7 +82,7 @@ export function ServicesCard({ customer, servers, serverPage, traffic }: Service
                 <TableCell className="hidden sm:table-cell">
                   <ServiceExpiry subscription={subscription} />
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <StatusBadge status={SUBSCRIPTION_STATUS[subscription.status]} />
                 </TableCell>
               </TableRow>
@@ -86,7 +95,7 @@ export function ServicesCard({ customer, servers, serverPage, traffic }: Service
         subscription={opened.row}
         gone={opened.gone}
         onClose={() => opened.open(null)}
-        onChanged={opened.apply}
+        onChanged={changed}
         onDeleted={(subscription) => latest.remove(subscription.id)}
         onStale={opened.refresh}
         onMove={(subscription) => {

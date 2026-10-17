@@ -33,10 +33,10 @@ final class ConnectionException extends ProviderException
         return true;
     }
 
-    /** A timeout or a connection cut off, not one never made (ConnectionFailure::beforeRequest()). */
+    /** A timeout or a connection cut off, not one never made (ConnectionFailure::beforeRequest()) — or after a write. */
     public function mayHaveBeenDone(): bool
     {
-        return !$this->failure->beforeRequest();
+        return parent::mayHaveBeenDone() || !$this->failure->beforeRequest();
     }
 
     /**

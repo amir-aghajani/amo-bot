@@ -35,6 +35,7 @@ final class WebTextTest extends TestCase
             '<span class="tg-spoiler">a</span> <span class="tg-spoiler">b</span> c',
         ];
         yield 'a premium emoji, its plain emoji' => ['<tg-emoji emoji-id="5368324170671202286">👍</tg-emoji> آماده', '👍 آماده', '👍 آماده'];
+        yield 'a date and time, its words' => ['تا <tg-time unix="1647531900" format="wDT">۲۶ اسفند</tg-time>', 'تا ۲۶ اسفند', 'تا ۲۶ اسفند'];
         yield 'a code block keeps its lines, and loses its language' => ["<pre><code class=\"language-php\">echo 1;\necho 2;</code></pre>\nبعد", "echo 1;\necho 2;\nبعد", "<pre><code>echo 1;\necho 2;</code></pre><br>بعد"];
         yield 'an expandable quote, a quote' => ['<blockquote expandable>q</blockquote>', 'q', '<blockquote>q</blockquote>'];
         yield 'a link to a web address, its other attributes gone' => ['<a href="https://shop.example/help" target="_blank" onmouseover="steal()">راهنما</a>', 'راهنما', '<a href="https://shop.example/help">راهنما</a>'];
@@ -42,6 +43,8 @@ final class WebTextTest extends TestCase
         yield 'a link escaped where it could break out' => ['<a href="https://x.test/&quot;&gt;&lt;script&gt;">x</a>', 'x', '<a href="https://x.test/&quot;&gt;&lt;script&gt;">x</a>'];
         yield 'what is text stays text' => ['&lt;script&gt; "a" & \'b\' < c', '<script> "a" & \'b\' < c', '&lt;script&gt; &quot;a&quot; &amp; &apos;b&apos; &lt; c'];
         yield 'the outer white space' => ["\n\n  سلام  \n", 'سلام', 'سلام'];
+        // What the customer sees in the bot: Telegram shows «&nbsp;» and «&#X41;» as typed, and reads «&lt» without its «;».
+        yield 'the entities as Telegram reads them, not as a browser does' => ['a&nbsp;b &#X41; &#x41;&#65; &lt', 'a&nbsp;b &#X41; AA <', 'a&amp;nbsp;b &amp;#X41; AA &lt;'];
     }
 
     /** @return iterable<string, array{string, string}> source, safe HTML */

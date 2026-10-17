@@ -35,6 +35,7 @@ use App\Support\JalaliMonth;
 use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Traffic;
+use App\Support\Unit;
 
 /**
  * «نمایندگی», in the main bot only (MainMenu::AGENCY opens home()). A customer reads the terms and asks to become an
@@ -145,7 +146,7 @@ final class AgencyHandler implements Handler
         $this->screen->show($ctx, $this->texts->render(BotText::AgencyTrafficCheckout, [
             'traffic' => Messages::bytes(Traffic::bytesOfGb($gb)),
             'amount' => Money::format(self::level($agent)->priceOf($gb)),
-        ]), OrderType::Traffic, self::level($agent)->priceOf($gb), static fn(PaymentMethod $method): string => CallbackData::build(self::CALLBACK, self::TRAFFIC_CHECKOUT, $gb, $method->id), self::TRAFFIC);
+        ]), OrderType::Traffic, self::level($agent)->priceOf($gb), static fn(PaymentMethod $method): string => CallbackData::build(self::CALLBACK, self::TRAFFIC_CHECKOUT, $gb, $method->id), self::TRAFFIC, self::checkoutCallback($gb));
     }
 
     /**
@@ -245,7 +246,10 @@ final class AgencyHandler implements Handler
     /** State `agency.gb`: the GB the agent typed («۲۰ گیگ» is fine). */
     private function typedGb(Context $ctx): void
     {
-        $gb = $this->amounts->read($ctx, $this->orders->trafficAllowed(...), $this->texts->render(BotText::AgencyTrafficInvalid, ['min' => Persian::number($this->settings->trafficMin())]), self::TRAFFIC);
+        $gb = $this->amounts->read($ctx, Unit::Gigabyte, $this->orders->trafficAllowed(...), $this->texts->render(BotText::AgencyTrafficInvalid, [
+            'min' => Persian::number($this->settings->trafficMin()),
+            'most' => Persian::number(AgencySettings::TRAFFIC_MAX_GB),
+        ]), self::TRAFFIC);
         if ($gb !== null) {
             $this->checkout($ctx, $gb);
         }

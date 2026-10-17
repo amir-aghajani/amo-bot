@@ -46,9 +46,10 @@ export interface JobRunnerOptions<Job> {
 /**
  * A background job a card works on while it is on screen — a grant, a move of a server's services —, so it finishes
  * without waiting for the scheduler: a turn at a time, the next a second after, half a minute while it waits for a panel,
- * ten seconds after a request that got no answer; until a turn no longer works it, or it is refused (4xx: gone, the
- * session ended). What it changed is read again then — not when the card left it unfinished: the scheduler carries on,
- * and the live updates follow. The options are read afresh at each step; only another `id` restarts the run.
+ * ten seconds after a request that got no answer (or a server error); until a turn no longer works it, it is refused
+ * (4xx: gone, the session ended) or the panel's own code fails. What it changed is read again then — not when the card
+ * left it unfinished, nor after a failure of the panel's own: the scheduler carries on, and the live updates follow.
+ * The options are read afresh at each step; only another `id` restarts the run.
  */
 export function useJobRunner<Job>({ id, ...options }: JobRunnerOptions<Job>): void {
   const latest = useRef(options)
@@ -63,7 +64,9 @@ export function useJobRunner<Job>({ id, ...options }: JobRunnerOptions<Job>): vo
         try {
           job = await latest.current.run(of)
         } catch (error) {
-          if (error instanceof ApiError && error.status >= 400 && error.status < 500) return !left.aborted
+          // The panel's own bug ends the run, said and reported as any mutation's; the server's answer is the job's.
+          if (!(error instanceof ApiError)) throw error
+          if (error.status >= 400 && error.status < 500) return !left.aborted
         }
         if (left.aborted) return false
 

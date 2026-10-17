@@ -15,6 +15,7 @@ use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
 use Illuminate\Support\Carbon;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\BotTestCase;
 
 /**
@@ -162,10 +163,20 @@ final class BotChannelsTest extends BotTestCase
         self::assertSame([self::text(BotText::JoinDone), self::text(BotText::Welcome, ['name' => 'Ali'])], $this->said());
     }
 
-    public function testAChannelTelegramCannotAnswerForLetsTheCustomerThroughAndIsFlagged(): void
+    /** @return iterable<string, array{int, string}> Telegram's refusals of a lookup that are about the channel */
+    public static function refusalsAboutTheChannel(): iterable
+    {
+        yield 'the bot no admin there' => [400, 'Bad Request: member list is inaccessible'];
+        yield 'an admin right missing' => [400, 'Bad Request: CHAT_ADMIN_REQUIRED'];
+        yield 'the channel gone' => [400, 'Bad Request: chat not found'];
+        yield 'the bot thrown out' => [403, 'Forbidden: bot was kicked from the channel chat'];
+    }
+
+    #[DataProvider('refusalsAboutTheChannel')]
+    public function testAChannelTelegramCannotAnswerForLetsTheCustomerThroughAndIsFlagged(int $code, string $refusal): void
     {
         $log = $this->logs();
-        $this->telegram()->fail(400, 'Bad Request: member list is inaccessible');
+        $this->telegram()->fail($code, $refusal);
         $this->telegram()->reply(['status' => 'member']);
 
         $this->send($this->message('/start'));
@@ -173,6 +184,26 @@ final class BotChannelsTest extends BotTestCase
         self::assertSame([self::text(BotText::Welcome, ['name' => 'Ali'])], $this->said(), 'a broken channel never locks the shop');
         self::assertFalse(BotChannel::query()->where('chat_id', -1001)->firstOrFail()->bot_is_admin, 'the admin sees the channel needs attention');
         self::assertTrue($log->hasWarningThatContains('Membership check for channel -1001 failed'));
+    }
+
+    /** @return iterable<string, array{string}> Telegram's refusals of a lookup that are about the customer, not the channel */
+    public static function refusalsAboutTheCustomer(): iterable
+    {
+        yield 'user not found' => ['Bad Request: user not found'];
+        yield 'an id the chat does not know' => ['Bad Request: PARTICIPANT_ID_INVALID'];
+        yield 'an id that is none' => ['Bad Request: invalid user_id specified'];
+    }
+
+    #[DataProvider('refusalsAboutTheCustomer')]
+    public function testALookupRefusedForThisOneCustomerLetsThemThroughWithoutFlaggingTheChannel(string $refusal): void
+    {
+        $this->telegram()->fail(400, $refusal);
+        $this->telegram()->reply(['status' => 'member']);
+
+        $this->send($this->message('/start'));
+
+        self::assertSame([self::text(BotText::Welcome, ['name' => 'Ali'])], $this->said(), 'counted as joined, as an unanswered lookup is');
+        self::assertTrue(BotChannel::query()->where('chat_id', -1001)->firstOrFail()->bot_is_admin, 'nothing is wrong with the channel: everyone else is still looked up');
     }
 
     public function testTelegramOutOfReachForAMomentLetsTheCustomerThroughWithoutFlaggingTheChannel(): void

@@ -31,12 +31,14 @@ use App\Modules\Users\Models\WalletTransaction;
 use App\Support\Money;
 use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
+use Tests\Fakes\FakeProvider;
 use Tests\Support\FakeTelegram;
 
 /**
  * Referral gifts: the renewal commission rate; the start gift on joining or on the first purchase, once per newcomer; the
- * plan reward per milestone of referrals who bought, retried while undeliverable; and fake-referral alerts (burst, idle),
- * once per window, withholding the gifts (never commissions) for good.
+ * plan reward per milestone of referrals who bought and kept it, each first purchase taking the next milestone (none lost
+ * to two at once), retried while undeliverable; and fake-referral alerts (burst, idle), once per window, withholding the
+ * gifts (never commissions) for good.
  */
 final class ReferralGiftsTest extends BotTestCase
 {
@@ -257,7 +259,77 @@ final class ReferralGiftsTest extends BotTestCase
 
         $this->planEntry($prize, $this->server);
         $this->buy($two, $this->plan, $this->server);
-        self::assertSame([2], ReferralReward::query()->whereNotNull('order_id')->pluck('milestone')->all(), 'given at the milestone reached now');
+        self::assertSame([1], ReferralReward::query()->whereNotNull('order_id')->pluck('milestone')->all(), 'the milestone left is given by the next first purchase');
+    }
+
+    public function testTwoFirstPurchasesThatCrossTwoMilestonesAtOnceGiveBoth(): void
+    {
+        $prize = $this->plan(['name' => 'جایزه'], $this->server);
+        [$one, $two] = $this->friends(2);
+        // Both paid before either's gifts were looked at: each then counts two buyers.
+        $first = $this->buy($one, $this->plan, $this->server);
+        $second = $this->buy($two, $this->plan, $this->server);
+        $this->referralProgram(overrides: ['referral_reward_every' => 1, 'referral_reward_plan_id' => $prize->id]);
+
+        $gifts = $this->service(ReferralGifts::class);
+        $gifts->purchased($second->payments()->firstOrFail());
+        $gifts->purchased($first->payments()->firstOrFail());
+
+        self::assertSame([1, 2], ReferralReward::query()->whereNotNull('order_id')->orderBy('milestone')->pluck('milestone')->all(), 'each first purchase takes the next milestone: none lost');
+        self::assertSame(2, Order::query()->where('user_id', $this->referrer->id)->count());
+    }
+
+    public function testALoweredNumberGivesOneMilestoneAFirstPurchaseNeverSeveralAtOnce(): void
+    {
+        $prize = $this->plan(['name' => 'جایزه'], $this->server);
+        $this->referralProgram(overrides: ['referral_reward_every' => 5, 'referral_reward_plan_id' => $prize->id]);
+        $friends = $this->friends(6);
+        foreach (array_slice($friends, 0, 4) as $friend) {
+            $this->buy($friend, $this->plan, $this->server);
+        }
+        self::assertSame(0, ReferralReward::query()->count(), 'four of five');
+
+        $this->referralProgram(overrides: ['referral_reward_every' => 2, 'referral_reward_plan_id' => $prize->id]);
+        $this->buy($friends[4], $this->plan, $this->server);
+        self::assertSame([2], ReferralReward::query()->whereNotNull('order_id')->pluck('milestone')->all(), 'five buyers at every two: one milestone, not two');
+
+        $this->buy($friends[5], $this->plan, $this->server);
+        self::assertSame([2, 4], ReferralReward::query()->whereNotNull('order_id')->orderBy('milestone')->pluck('milestone')->all(), 'then the next, one a first purchase');
+        self::assertSame(2, Order::query()->where('user_id', $this->referrer->id)->count());
+    }
+
+    public function testARefundedPurchaseMakesNoBuyerForThePlanReward(): void
+    {
+        $prize = $this->plan(['name' => 'جایزه'], $this->server);
+        $this->referralProgram(overrides: ['referral_reward_every' => 2, 'referral_reward_plan_id' => $prize->id]);
+        [$one, $two] = $this->friends(2);
+
+        $refunded = $this->buy($one, $this->plan, $this->server);
+        self::assertTrue($this->service(PaymentService::class)->refund($refunded->payments()->firstOrFail(), 'admin', null));
+        $this->buy($two, $this->plan, $this->server);
+        self::assertSame(0, ReferralReward::query()->count(), 'one buyer of two: the refunded purchase counts for nothing');
+
+        $this->buy($one, $this->plan, $this->server);
+        self::assertSame([2], ReferralReward::query()->whereNotNull('order_id')->pluck('milestone')->all(), 'their purchase after the refund is their first kept one');
+    }
+
+    public function testARewardWhoseDeliveryBrokeIsGivenOnceAndWaitsForSupport(): void
+    {
+        $elsewhere = $this->sellingServer('فرانسه');
+        $prize = $this->plan(['name' => 'جایزه'], $elsewhere);
+        $this->referralProgram(overrides: ['referral_reward_every' => 2, 'referral_reward_plan_id' => $prize->id]);
+        [$one, $two, $three] = $this->friends(3);
+        // The prize's delivery breaks on a fault of the shop's own, after its order was paid.
+        FakeProvider::$onCall = static fn(int $server) => $server === $elsewhere->id ? throw new \RuntimeException('A fault of the shop\'s own.') : null;
+
+        $this->buy($one, $this->plan, $this->server);
+        $this->buy($two, $this->plan, $this->server);
+        $gift = Order::query()->where('user_id', $this->referrer->id)->sole();
+        self::assertSame([OrderStatus::Failed, OrderService::DELIVERY_BROKEN], [$gift->status, $gift->notes], 'paid, waiting for support\'s retry');
+        self::assertSame($gift->id, ReferralReward::query()->sole()->order_id, 'the milestone given');
+
+        $this->buy($three, $this->plan, $this->server);
+        self::assertSame(1, Order::query()->where('user_id', $this->referrer->id)->count(), 'never given a second time');
     }
 
     public function testAReferrerUnderAnAlertGetsNoPlanRewardNorLater(): void

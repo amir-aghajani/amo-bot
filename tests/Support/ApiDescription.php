@@ -12,7 +12,7 @@ use Symfony\Component\Yaml\Yaml;
 /**
  * resources/api/openapi.yaml as the API is: the file describes a screen of the shop's daily work once, under
  * `/api/{panel}/…`, and marks each operation the shop's admins also have on its website (`x-staff: true`, or the grant
- * the shop must give for it — Store\Enums\StaffGrant); this reads the file and adds, for every marked operation, its
+ * the shop must give for it — Auth\StaffGrant); this reads the file and adds, for every marked operation, its
  * path under the website's admin API (STAFF): the website's store key in place of the panel, no `X-Shop` (the key names
  * the shop), the `customer` bearer scheme, its 401 (`SignedOut`) and its 403 (`StaffRefused`) — the one place the
  * admins' paths are made, which the HTTP tests hold every request and answer to (HttpTestCase) and the documentation is
@@ -64,7 +64,7 @@ final class ApiDescription
      */
     public static function expanded(): array
     {
-        $description = Yaml::parseFile((string) realpath(self::FILE));
+        $description = self::read();
         $staff = [];
         foreach ($description['paths'] as $path => $item) {
             if (!str_starts_with($path, self::PANELS . '/')) {
@@ -77,6 +77,21 @@ final class ApiDescription
             $staff[self::STAFF . substr($path, strlen(self::PANELS))] = ['parameters' => self::parameters($item['parameters'] ?? [])] + array_map(self::operation(...), $operations);
         }
         $description['paths'] += $staff;
+
+        return $description;
+    }
+
+    /**
+     * The file as it is written, its anchors resolved: no admins' path added. Read as a website's own tools read it, with
+     * the YAML parser's guard against an alias bomb as it comes (at most 128 aliases of a shared mapping or list): a
+     * repeated field shares its wording by an anchor on the description's text, which that guard does not count.
+     *
+     * @return array<string, mixed>
+     */
+    public static function read(): array
+    {
+        $description = Yaml::parseFile((string) realpath(self::FILE));
+        \assert(is_array($description));
 
         return $description;
     }

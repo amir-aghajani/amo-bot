@@ -13,25 +13,32 @@ const wholeFormat = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 })
 const oneDecimalFormat = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 })
 const compactFormat = new Intl.NumberFormat(LOCALE, { notation: 'compact', maximumFractionDigits: 1 })
 
+/** `value` in `format`, never «−۰»: a value below zero that rounds to nothing (-0.4 Toman, a "-0.00") is zero. */
+function signed(format: Intl.NumberFormat, value: number): string {
+  const magnitude = format.format(Math.abs(value))
+  return value < 0 && magnitude !== format.format(0) ? format.format(value) : magnitude
+}
+
 export function formatNumber(value: number | string): string {
-  return numberFormat.format(Number(value))
+  return signed(numberFormat, Number(value))
 }
 
 /** "۱۲ هزار" — a chart's axis, where the unit is the title's. */
 export function formatCompact(value: number | string): string {
-  return compactFormat.format(Number(value))
+  return signed(compactFormat, Number(value))
 }
 
 /** A share: "۱۲٫۵٪". */
 export function formatPercent(value: number): string {
-  return `${oneDecimalFormat.format(value)}٪`
+  return `${signed(oneDecimalFormat, value)}٪`
 }
 
-/** A change against a baseline, signed: "+۱۲٫۵٪" / "−۳٪". */
+/** A change against a baseline, signed: "+۱۲٫۵٪" / "−۳٪" — a change that rounds to nothing is "۰٪", unsigned. */
 export function formatChange(value: number): string {
-  const sign = value > 0 ? '+' : value < 0 ? '−' : ''
+  const shown = formatPercent(Math.abs(value))
+  const sign = shown === formatPercent(0) ? '' : value > 0 ? '+' : '−'
 
-  return `${sign}${formatPercent(Math.abs(value))}`
+  return `${sign}${shown}`
 }
 
 /** Percentage change between two values; null when there is no baseline to compare with. */
@@ -46,7 +53,7 @@ export const MONEY_UNIT = 'تومان'
 
 /** An amount of Toman without its unit, "۱۲۰٬۰۰۰" — for where the unit is set apart (a stat card). Toman has no fraction. */
 export function formatAmount(value: number | string): string {
-  return wholeFormat.format(Number(value))
+  return signed(wholeFormat, Number(value))
 }
 
 /** "۱۲۰٬۰۰۰ تومان". */
@@ -56,7 +63,8 @@ export function formatMoney(value: number | string): string {
 
 /** A wallet as the bot words it (Messages::balance): "۸۰٬۰۰۰ تومان", below zero "۲۰٬۰۰۰ تومان بدهی" — an agent's credit in use. */
 export function formatBalance(balance: string): string {
-  return Number(balance) < 0 ? `${formatMoney(-Number(balance))} بدهی` : formatMoney(balance)
+  const amount = Number(balance)
+  return amount < 0 && formatAmount(-amount) !== formatAmount(0) ? `${formatMoney(-amount)} بدهی` : formatMoney(amount)
 }
 
 /** An agency level's price: "هر گیگابایت ۳٬۰۰۰ تومان". */
@@ -112,7 +120,8 @@ export function formatBytes(bytes: number): string {
   let value = Math.max(0, bytes)
   if (value === 0) return `${formatNumber(0)} گیگابایت`
   let unit = 0
-  while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
+  // A value that rounds to 1024 is the next unit's one: "۱ گیگابایت", never "۱٬۰۲۴ مگابایت".
+  while (Math.round(value) >= 1024 && unit < BYTE_UNITS.length - 1) {
     value /= 1024
     unit++
   }
@@ -163,10 +172,28 @@ export function decimalOf(typed: string): string | null {
   return match && whole.length <= 12 ? whole + (match[2] ?? '') : null
 }
 
-/** A typed price as whole Toman — a unit after it allowed («۳۰٬۰۰۰ تومان») —, read the way the server reads it (`Input::amountOf()`); null for anything else. */
+/** The words Input::amountOf() multiplies an amount by: «۵۰ هزار» is 50,000. */
+const SCALES: Readonly<Record<string, number>> = { هزار: 1_000, میلیون: 1_000_000 }
+
+/**
+ * An amount of money with what Input::amountOf() takes after it (Unit::Toman): «هزار» or «میلیون», then a word of Toman
+ * — any other word is no amount, so «۵۰۰ ریال» is never read as 500 Toman, nor «۲۰ گیگ» as 20.
+ */
+const AMOUNT_WORDS = /^(.*?)[\s\u{200C}]*(هزار|میلیون)?[\s\u{200C}]*(?:تومانی|تومان|تومنی|تومن|ت|toman)?$/iu
+
+/** The most an amount reads as (Input::amountOf()): twelve digits. */
+const AMOUNT_MOST = 999_999_999_999
+
+/**
+ * A typed price as whole Toman — «هزار» or «میلیون» and a word of Toman after it allowed («۳۰٬۰۰۰ تومان», «۵۰ هزار تومان») —, read
+ * the way the server reads it (`Input::amountOf()`); null for anything else.
+ */
 export function tomanOf(typed: string): number | null {
-  const number = decimalOf(typed.trim().replace(/\s*\p{L}+$/u, ''))
-  return number !== null && /^\d+(?:\.0{1,2})?$/.test(number) ? Number.parseInt(number, 10) : null
+  const [, typedNumber = '', scale = ''] = AMOUNT_WORDS.exec(typed.trim().replace(/ي/g, 'ی').replace(/ك/g, 'ک')) ?? []
+  const number = decimalOf(typedNumber)
+  if (number === null || !/^\d+(?:\.0{1,2})?$/.test(number)) return null
+  const amount = Number.parseInt(number, 10) * (SCALES[scale] ?? 1)
+  return amount <= AMOUNT_MOST ? amount : null
 }
 
 /** A typed amount as a request sends it: the API's form when it is one (decimalOf), else as typed, for the API to refuse. */
@@ -319,15 +346,16 @@ export function formatDay(day: string, options: Intl.DateTimeFormatOptions = { m
   return jalali({ ...options, timeZone: 'UTC' }).format(Date.UTC(year, month - 1, date))
 }
 
-/** The first letters of a name's first two words; a handle («@agent_bot») gives its first letter, not the «@». */
+/**
+ * The first letters of a name's first two words that have one: a handle («@agent_bot») gives its first letter, not the
+ * «@», and a word of emoji (Telegram names often start with one) gives nothing — never half of one.
+ */
 export function initials(name: string): string {
   return name
-    .trim()
-    .replace(/^@/, '')
     .split(/\s+/)
+    .map((word) => /[\p{L}\p{N}]/u.exec(word)?.[0] ?? '')
     .filter(Boolean)
-    .map((part) => part.charAt(0))
-    .join('')
     .slice(0, 2)
+    .join('')
     .toUpperCase()
 }

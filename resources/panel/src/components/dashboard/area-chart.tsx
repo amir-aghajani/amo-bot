@@ -5,7 +5,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type Po
  * paths and labels, not a charting library. Time runs left to right whatever the page's direction, while every label —
  * a figure «۱٫۲ میلیون», a day «۱۹ شهریور», the box of a day's figure — is Persian text, read right to left in its place;
  * the figure axis has five rounded steps from zero (none while nothing is above zero), the day axis as many days as fit;
- * a hand or the keyboard on it shows one day's figure.
+ * a hand or the keyboard on it shows one day's figure — the keyboard's read out to assistive tech too.
  */
 
 export interface AreaPoint {
@@ -66,14 +66,21 @@ export function valueTicks(max: number): number[] {
   }
 }
 
-/** The days that get a label: from the last one backwards, each that fits whole and keeps `MIN_TICK_GAP` from the next. */
+/**
+ * The days that get a label: from the last one backwards, every so many days — one step for all, the fewest that keep
+ * the widest label `MIN_TICK_GAP` from the next, so the labels stand evenly apart —, each that fits whole (the last one
+ * moved in to show whole, which may leave the one before it no room).
+ */
 export function dayTicks(xs: number[], widths: number[], width: number): { index: number; x: number }[] {
   const shown: { index: number; x: number }[] = []
+  const last = xs.length - 1
+  const spacing = last > 0 ? (xs[last]! - xs[0]!) / last : width
+  const step = Math.max(1, Math.ceil((Math.max(0, ...widths) + MIN_TICK_GAP) / spacing))
   let end = width
-  for (let index = xs.length - 1; index >= 0; index--) {
+  for (let index = last; index >= 0; index -= step) {
     const half = (widths[index] ?? 0) / 2
     const at = xs[index] ?? 0
-    const x = index === xs.length - 1 ? Math.min(at, end - half) : at
+    const x = index === last ? Math.min(at, end - half) : at
     if (x - half >= 0 && x + half <= end) {
       shown.unshift({ index, x })
       end = x - half - MIN_TICK_GAP
@@ -180,16 +187,21 @@ export function AreaChart({ data, label, formatTick, formatValue, tooltip }: Are
     ).map((tick) => ({ ...tick, text: labels[tick.index]! }))
   }, [data, xs, width, formatTick])
 
-  const shown = active?.shown ? data[active.index] : undefined
-  const x = shown ? xs[active!.index]! : 0
-  const anchorY = shown ? (active!.pointerY ?? yOf(shown.value)) : 0
+  // The day the hand or the keyboard is on — none once the period no longer has it (a shorter range came in), so the
+  // keyboard starts again from an end rather than from a day that is gone.
+  const current = active !== null && active.index < data.length ? active : null
+  const shown = current?.shown ? data[current.index] : undefined
+  const x = shown ? xs[current!.index]! : 0
+  const anchorY = shown ? (current!.pointerY ?? yOf(shown.value)) : 0
 
   // The figure's box stands off its day — on the side with room for it, measured as it is drawn: after the day, or
-  // before it at the right edge; under the hand, or over it at the foot.
+  // before it at the right edge, and never past either edge (a phone-wide chart has room on neither side); under the
+  // hand, or over it at the foot.
   useLayoutEffect(() => {
     const element = box.current
     if (!element) return
-    const left = x + TOOLTIP_OFFSET + element.offsetWidth > width ? x - TOOLTIP_OFFSET - element.offsetWidth : x + TOOLTIP_OFFSET
+    const side = x + TOOLTIP_OFFSET + element.offsetWidth > width ? x - TOOLTIP_OFFSET - element.offsetWidth : x + TOOLTIP_OFFSET
+    const left = Math.max(0, Math.min(side, width - element.offsetWidth))
     const top = anchorY + TOOLTIP_OFFSET + element.offsetHeight > HEIGHT ? Math.max(plot.top, anchorY - TOOLTIP_OFFSET - element.offsetHeight) : anchorY + TOOLTIP_OFFSET
     element.style.transform = `translate(${left}px, ${top}px)`
   })
@@ -202,20 +214,27 @@ export function AreaChart({ data, label, formatTick, formatValue, tooltip }: Are
     if (data.length) setActive({ index, shown: true, pointerY: event.clientY - bounds.top })
   }
 
-  // The keyboard walks the days: the first day as it arrives, the arrows to the next or the one before, Enter to hide
-  // or show the day's figure.
+  // The keyboard walks the days: the first day as it first arrives — the day it was on as it comes back —, the arrows to
+  // the next or the one before, Enter to hide or show the day's figure.
   const key = (event: KeyboardEvent<SVGSVGElement>) => {
     if (!data.length) return
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
       const forward = event.key === 'ArrowRight'
-      const next = active === null ? (forward ? 0 : data.length - 1) : active.index + (forward ? 1 : -1)
+      const next = current === null ? (forward ? 0 : data.length - 1) : current.index + (forward ? 1 : -1)
       if (next < 0 || next >= data.length) return
       event.preventDefault()
       setActive({ index: next, shown: true, pointerY: null })
-    } else if (event.key === 'Enter' && active !== null) {
-      setActive({ ...active, shown: !active.shown })
+    } else if (event.key === 'Enter' && current !== null) {
+      setActive({ ...current, shown: !current.shown })
     }
   }
+
+  const arrive = () =>
+    setActive((was) => {
+      if (was === null || was.index >= data.length) return data.length ? { index: 0, shown: true, pointerY: null } : null
+      // A press that brought the focus is the hand's: its box stays where the hand is.
+      return was.shown ? was : { ...was, shown: true, pointerY: null }
+    })
 
   const content = shown && tooltip(shown)
 
@@ -229,12 +248,13 @@ export function AreaChart({ data, label, formatTick, formatValue, tooltip }: Are
           role="application"
           aria-label={label}
           tabIndex={0}
-          className="block outline-none"
+          // A finger dragged across reads the days; up and down still scrolls the page. The keyboard's focus rings it.
+          className="block touch-pan-y rounded-md outline-none focus-visible:focus-ring"
           onPointerDown={point}
           onPointerMove={point}
-          onPointerLeave={() => setActive((current) => current && { ...current, shown: false })}
-          onFocus={() => setActive((current) => current ?? (data.length ? { index: 0, shown: true, pointerY: null } : null))}
-          onBlur={() => setActive((current) => current && { ...current, shown: false })}
+          onPointerLeave={() => setActive((was) => was && { ...was, shown: false })}
+          onFocus={arrive}
+          onBlur={() => setActive((was) => was && { ...was, shown: false })}
           onKeyDown={key}
         >
           {ticks.map((tick) => (
@@ -255,12 +275,14 @@ export function AreaChart({ data, label, formatTick, formatValue, tooltip }: Are
               </text>
             ))}
           </g>
-          {points.length > 0 && (
+          {points.length > 1 && (
             <>
               <path d={`${line}L${points.at(-1)![0]},${plot.bottom}L${points[0]![0]},${plot.bottom}Z`} className="fill-(--chart-1)" fillOpacity={0.1} />
               <path d={line} fill="none" strokeWidth={2} className="stroke-(--chart-1)" />
             </>
           )}
+          {/* A single day has no curve to draw: its figure is a dot. */}
+          {points.length === 1 && <circle cx={points[0]![0]} cy={points[0]![1]} r={3} className="fill-(--chart-1)" />}
           {shown && (
             <>
               <line x1={x} x2={x} y1={plot.top} y2={plot.bottom} className="stroke-border" />
@@ -273,12 +295,21 @@ export function AreaChart({ data, label, formatTick, formatValue, tooltip }: Are
         <div
           ref={box}
           dir="rtl"
+          aria-hidden
           className="pointer-events-none absolute top-0 left-0 grid min-w-44 items-start gap-1.5 rounded-lg border border-border bg-popover px-2.5 py-2 text-caption text-popover-foreground shadow-popover"
         >
           <div className="font-medium">{content.title}</div>
           {content.body}
         </div>
       )}
+      {/* The day the keyboard walked to, read out — the box above is drawn for the eye alone. */}
+      <div dir="rtl" className="sr-only" aria-live="polite">
+        {content && current?.pointerY === null && (
+          <>
+            {content.title}: {content.body}
+          </>
+        )}
+      </div>
     </div>
   )
 }

@@ -28,7 +28,7 @@ interface InfoTipProps {
   small?: boolean
 }
 
-/** An ⓘ beside a title or a label, with a longer explanation behind it — 24px either way, the target a finger needs. */
+/** An ⓘ beside a title or a label, with a longer explanation behind it — 24px either way, a finger's 44px press on a phone. */
 export function InfoTip({ label, children, small = false }: InfoTipProps) {
   return (
     <Popover>
@@ -36,7 +36,7 @@ export function InfoTip({ label, children, small = false }: InfoTipProps) {
         <button
           type="button"
           aria-label={label}
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-faint transition-colors outline-none hover:text-foreground focus-visible:focus-ring data-[state=open]:text-foreground"
+          className="touch-target flex size-6 shrink-0 items-center justify-center rounded-md text-faint transition-colors outline-none hover:text-foreground focus-visible:focus-ring data-[state=open]:text-foreground"
         >
           <Info className={small ? 'size-3.5' : 'size-4'} aria-hidden />
         </button>

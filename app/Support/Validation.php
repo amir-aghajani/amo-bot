@@ -12,6 +12,21 @@ final class Validation
     /** A settings switch that did not arrive as on/off. */
     public const NOT_A_SWITCH = 'مقدار این گزینه باید روشن یا خاموش باشد.';
 
+    /** The stars a rating gives (a review's, a closed ticket's): RATING_MIN to RATING_MAX. */
+    public const RATING_MIN = 1;
+    public const RATING_MAX = 5;
+
+    /** A rating that is not RATING_MIN to RATING_MAX stars. */
+    public const RATING_RANGE = 'امتیاز باید عددی بین 1 تا 5 باشد.';
+
+    /** A rating's stars, RATING_MIN to RATING_MAX (Persian digits too); null for anything else. */
+    public static function rating(mixed $value): ?int
+    {
+        $rating = Input::integerOf($value);
+
+        return $rating !== null && $rating >= self::RATING_MIN && $rating <= self::RATING_MAX ? $rating : null;
+    }
+
     /** «نام حداکثر 60 کاراکتر است.» — the limit keeps Latin digits, like every numeric guidance. */
     public static function tooLong(string $label, int $max): string
     {

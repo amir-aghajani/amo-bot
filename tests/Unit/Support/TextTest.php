@@ -30,4 +30,15 @@ final class TextTest extends TestCase
         self::assertSame('یک دو سه چه…', Text::fit('یک دو سه چهار پنج', 12), 'cut where the room ends otherwise');
         self::assertSame('یکدوسهچهارپ…', Text::fit('یکدوسهچهارپنج شش', 12, atWord: true), 'no space in the second half: cut where the room ends');
     }
+
+    /** A Telegram name made to look empty is typed with spaces, zero-width characters or fillers: it shows nothing. */
+    public function testTextOfInvisibleCharactersAloneIsBlank(): void
+    {
+        foreach (['', ' ', "\u{00A0}", "\u{200B}\u{200C}\u{200D}", "\u{200F}\u{2063}", "\u{FEFF}\u{2060}", "\u{3164}", "\u{115F}\u{1160}", "\u{FFA0}", "\u{2800}", "\u{034F}", "\u{17B5}", "\t\n\u{2009}\u{3000}"] as $invisible) {
+            self::assertTrue(Text::blank($invisible), (string) json_encode($invisible));
+        }
+        foreach (['علی', "\u{00A0}Ali", "نیما\u{200C}", '.', '😀'] as $visible) {
+            self::assertFalse(Text::blank($visible), $visible);
+        }
+    }
 }

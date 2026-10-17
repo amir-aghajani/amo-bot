@@ -131,7 +131,7 @@ final class BotCardTransferTest extends BotTestCase
         self::assertSame([trim(self::text(BotText::CardToSupport, [
             'order' => $order->id,
             'amount' => Money::format('120000'),
-            'contact' => '@amo_support',
+            'contact' => "\u{200E}@amo_support",
             'outcome' => self::text(BotText::ReceiptOutcomeSubscription),
             'instructions' => '',
         ]))], $this->said());
@@ -195,7 +195,7 @@ final class BotCardTransferTest extends BotTestCase
         self::assertSame([self::text(BotText::PaymentReminderToSupport, [
             'order' => $payment->order_id,
             'amount' => Money::format('120000'),
-            'contact' => '@amo_support',
+            'contact' => "\u{200E}@amo_support",
         ])], $this->said());
         self::assertSame([
             [['text' => self::text(BotText::CardToSupportButton), 'url' => 'https://t.me/amo_support']],
@@ -223,7 +223,7 @@ final class BotCardTransferTest extends BotTestCase
         $toSupport = $this->cardPayment($this->purchaseOrder($this->ali, $this->plan, $this->server), $this->card, ['card_id' => null]);
         $this->botSettings('payments', ['card_to_support' => false]);
         $this->service(CustomerNotifier::class)->paymentReminder($toSupport);
-        self::assertSame([self::text(BotText::PaymentReminderToSupport, ['order' => $toSupport->order_id, 'amount' => Money::format('120000'), 'contact' => '@amo_support'])], $this->said(), 'taken in support\'s chat before the shop showed cards again: still there');
+        self::assertSame([self::text(BotText::PaymentReminderToSupport, ['order' => $toSupport->order_id, 'amount' => Money::format('120000'), 'contact' => "\u{200E}@amo_support"])], $this->said(), 'taken in support\'s chat before the shop showed cards again: still there');
         self::assertSame('https://t.me/amo_support', $this->inlineKeyboard(0)[0][0]['url'] ?? null);
     }
 

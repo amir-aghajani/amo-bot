@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Providers\Models\Server;
-use App\Modules\Store\Enums\StaffGrant;
 use App\Modules\Store\Models\Website;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ServiceTransfers;

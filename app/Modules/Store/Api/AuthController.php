@@ -47,11 +47,16 @@ final class AuthController extends ApiController
     /**
      * POST /auth/nonce — the nonce the site hands the provider; the sign-in brings it back once.
      *
+     * @throws SignInRefusedException 422 neither Telegram nor Google sign-in on: no sign-in would take it
      * @throws TooManyAttemptsException 429 while this address asked too much
      * @throws SignInsBusyException 503 while the shop holds as many as it takes
      */
     public function nonce(Request $request, Response $response): Response
     {
+        $site = StoreMiddleware::website($request);
+        if ($site->telegramClientId() === null && $site->googleClientId() === null) {
+            throw SignInRefusedException::idTokenOff();
+        }
         $this->throttle->issuing($request);
 
         return $this->json($response, ['nonce' => $this->challenges->nonce(), 'expires_in' => AuthChallenges::NONCE_SECONDS]);

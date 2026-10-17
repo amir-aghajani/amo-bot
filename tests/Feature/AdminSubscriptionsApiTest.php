@@ -8,6 +8,7 @@ use App\Core\Database\Lease;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderStatus;
+use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Enums\ConnectionFailure;
@@ -483,6 +484,57 @@ final class AdminSubscriptionsApiTest extends HttpTestCase
         self::assertFalse(Subscription::query()->whereKey($ended->id)->exists());
         self::assertSame([], $this->telegram()->calls(), 'an ended service is tidied away quietly');
         self::assertSame(404, $this->postJson("/api/admin/subscriptions/{$ended->id}/delete", [])->getStatusCode(), 'nothing left to delete');
+    }
+
+    public function testAServiceIsNotDeletedWhileAnOrderOfItIsNotFinishedWith(): void
+    {
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        $this->purchaseOrder($this->ali, $this->plan, $this->server, ['status' => OrderStatus::Fulfilled, 'subscription_id' => $service->id]);
+        $renewal = $this->purchaseOrder($this->ali, $this->plan, $this->server, ['type' => OrderType::Renewal, 'status' => OrderStatus::Paid, 'subscription_id' => $service->id]);
+
+        foreach ([OrderStatus::Pending, OrderStatus::Paid, OrderStatus::Processing, OrderStatus::Failed] as $status) {
+            $renewal->forceFill(['status' => $status])->save();
+            $response = $this->postJson("/api/admin/subscriptions/{$service->id}/delete", []);
+
+            self::assertSame(422, $response->getStatusCode(), $status->value);
+            self::assertSame(sprintf(SubscriptionActions::OPEN_ORDER, $renewal->id), $this->decode($response)['errors']['status'][0], 'which order holds it');
+        }
+        self::assertSame([], FakeProvider::$deleted, 'the panel was not touched');
+        self::assertSame($service->id, $renewal->refresh()->subscription_id, 'the order keeps its service to be delivered to');
+        $other = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_2');
+        $offered = fn(): array => array_column(array_map(static fn(array $row): array => [$row['id'], $row['actions']['delete']], $this->decode($this->get('/api/admin/subscriptions'))['subscriptions']), 1, 0);
+        self::assertSame([$other->id => true, $service->id => false], $offered(), 'the list offers no delete it would refuse');
+        self::assertFalse($this->decode($this->postJson("/api/admin/subscriptions/{$service->id}/sync"))['subscription']['actions']['delete'] ?? null, 'nor one service shown alone');
+
+        $renewal->forceFill(['status' => OrderStatus::Cancelled])->save();
+        self::assertSame([$other->id => true, $service->id => true], $offered());
+        self::assertSame(204, $this->postJson("/api/admin/subscriptions/{$service->id}/delete", [])->getStatusCode(), 'an order cancelled, or the sale delivered, holds nothing');
+    }
+
+    public function testAnOrderOpenedWhileThePanelDeletesTheClientKeepsTheServiceForIt(): void
+    {
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+        $renewal = null;
+        // The customer orders its renewal while the panel deletes its client.
+        FakeProvider::$onCall = function (int $server, string $call) use ($service, &$renewal): void {
+            if ($call === 'deleteClient' && $renewal === null) {
+                $renewal = $this->purchaseOrder($this->ali, $this->plan, $this->server, ['type' => OrderType::Renewal, 'subscription_id' => $service->id]);
+            }
+        };
+
+        $response = $this->postJson("/api/admin/subscriptions/{$service->id}/delete", []);
+
+        self::assertNotNull($renewal);
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame(sprintf(SubscriptionActions::OPEN_ORDER, $renewal->id), $this->decode($response)['errors']['status'][0], 'the order that came meanwhile');
+        self::assertSame($service->id, $renewal->refresh()->subscription_id, 'it keeps the service it was ordered for');
+        self::assertSame(SubscriptionStatus::Deleted, $service->refresh()->status, 'kept as its panel has it: the client is gone');
+        self::assertCount(1, FakeProvider::$deleted);
+
+        $renewal->forceFill(['status' => OrderStatus::Cancelled])->save();
+        self::assertSame(204, $this->postJson("/api/admin/subscriptions/{$service->id}/delete", [])->getStatusCode());
+        self::assertNull(Subscription::query()->find($service->id));
+        self::assertCount(1, FakeProvider::$deleted, 'a client found gone is not asked about again');
     }
 
     public function testAClientAlreadyGoneFromThePanelIsDeletedAllTheSame(): void

@@ -65,9 +65,9 @@ final class BotClientNamesTest extends BotTestCase
 
         self::assertSame([BotTexts::paragraphs($this->checkoutText(), self::text(BotText::CheckoutNamePattern))], $this->said());
         self::assertSame([
-            ['text' => self::text(BotText::CheckoutNameSequential), 'callback_data' => $this->mode(ClientNameMode::Sequential)],
             ['text' => self::text(BotText::CheckoutNameRandom), 'callback_data' => $this->mode(ClientNameMode::Random)],
-        ], $this->inlineKeyboard(0)[1], 'under the ways to pay');
+            ['text' => self::text(BotText::CheckoutNameSequential), 'callback_data' => $this->mode(ClientNameMode::Sequential)],
+        ], $this->inlineKeyboard(0)[1], 'under the ways to pay, «ترتیبی» first, on the right');
 
         $this->botSettings('client_names', ['name_custom' => true]);
         $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));

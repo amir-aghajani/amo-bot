@@ -1,5 +1,5 @@
 import { Info } from 'lucide-react'
-import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
+import { useBotSettingsGroup, useHeldWhile } from '@/components/bot/settings/use-bot-settings-group'
 import { Callout } from '@/components/callout'
 import { Field } from '@/components/field'
 import { SectionCard } from '@/components/section-card'
@@ -10,17 +10,23 @@ import { api } from '@/lib/api'
 import type { BotExpiredServicesSettingsRequest, BotSettingsData } from '@/lib/api-types'
 import { formatDuration, wholeNumberOf } from '@/lib/format'
 import { EXPIRED_SERVICES_SETTINGS } from '@/lib/limits'
+import { queryKeys } from '@/lib/query-keys'
 
 /**
  * «سرویس‌های منقضی‌شده»: whether an ended service — its time or traffic ran out, or its panel no longer has it — is
  * removed from its panel and the shop by itself, and how many hours after its end. Free tests have their own rule.
  */
 export function ExpiredServicesSection({ settings }: { settings: BotSettingsData }) {
+  const saved = { expired_cleanup: settings.expired_cleanup, expired_cleanup_hours: String(settings.expired_cleanup_hours) } satisfies BotExpiredServicesSettingsRequest
   const group = useBotSettingsGroup(
-    { expired_cleanup: settings.expired_cleanup, expired_cleanup_hours: String(settings.expired_cleanup_hours) } satisfies BotExpiredServicesSettingsRequest,
+    saved,
     (values) => api.put('/bot/settings/expired_services', values),
+    // A service's dialog says when it goes (`removes_at`), by this rule.
+    { invalidates: [queryKeys.subscriptions, queryKeys.everySubscription] },
   )
   const { values, set, error } = group
+  // Switched off, the hours wait as they are kept; changed, they stay open, as the save still carries them.
+  const held = useHeldWhile(!values.expired_cleanup, group, saved)
   const hours = wholeNumberOf(values.expired_cleanup_hours)
 
   return (
@@ -42,7 +48,7 @@ export function ExpiredServicesSection({ settings }: { settings: BotSettingsData
           inputMode="numeric"
           value={values.expired_cleanup_hours}
           onChange={(e) => set('expired_cleanup_hours', e.target.value)}
-          disabled={!values.expired_cleanup}
+          disabled={held('expired_cleanup_hours')}
           className="sm:max-w-40"
         />
       </Field>

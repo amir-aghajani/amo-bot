@@ -16,15 +16,20 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
- * The payments screen («پرداخت‌ها»): a searchable page of payments with what a review needs and the operations allowed
- * now (`actions`, PaymentActions::allowed()).
+ * The payments screen («پرداخت‌ها»): a searchable page of payments with what a review needs, who decided each (Reviewers:
+ * the owner's login reads «پشتیبانی» to anyone but the owner; one of the shop's admins with their name too) and the
+ * operations allowed now (`actions`, PaymentActions::allowed()).
  */
 final class PaymentDirectory
 {
     /** What a row shows, loaded with it. */
-    public const RELATIONS = ['order.user', 'order.plan', 'order.server', 'method', 'card'];
+    public const RELATIONS = ['order.user', 'order.plan', 'order.server', 'order.subscription.server', 'method', 'card'];
+
+    /** The tab that is not a status: online payments held for support and still waiting (Payment::whereHeld()). */
+    public const HELD = 'held';
 
     public function __construct(
         private readonly PaymentActions $actions,
@@ -33,12 +38,12 @@ final class PaymentDirectory
     ) {}
 
     /**
-     * A page filtered by status, customer and days, searched by number or customer, newest first or by amount; with the
-     * review queue's count and the list's paid count and total.
+     * A page filtered by status (or the HELD queue), customer and days, searched by number or customer, newest first or by
+     * amount; with the review and held queues' counts and the list's paid count and total.
      */
     public function search(PageRequest $list): Page
     {
-        $query = Payment::query();
+        $query = $list->text('status') === self::HELD ? Payment::whereHeld(Payment::query()) : Payment::query();
         $status = $list->enum('status', PaymentStatus::class);
         if ($status !== null) {
             $query->where('status', $status->value);
@@ -51,8 +56,13 @@ final class PaymentDirectory
         $list->search($query, self::applySearch(...));
         [$paid, $amount] = Page::tally((clone $query)->where('status', PaymentStatus::Paid->value), 'amount');
 
-        return Page::fetch($query->with(self::RELATIONS), $list, $this->present(...), $list->sort(['created' => 'id', 'amount' => 'amount'], 'created'))
-            ->with(['awaiting_review' => Payment::query()->where('status', PaymentStatus::AwaitingReview->value)->count(), 'paid' => $paid, 'paid_amount' => $amount]);
+        return Page::fetchTogether($query->with(self::RELATIONS), $list, $this->presentAll(...), $list->sort(['created' => 'id', 'amount' => 'amount'], 'created'))
+            ->with([
+                'awaiting_review' => Payment::query()->where('status', PaymentStatus::AwaitingReview->value)->count(),
+                'held' => Payment::whereHeld(Payment::query())->count(),
+                'paid' => $paid,
+                'paid_amount' => $amount,
+            ]);
     }
 
     /**
@@ -62,6 +72,29 @@ final class PaymentDirectory
      * @return array<string, mixed>
      */
     public function present(Payment $payment): array
+    {
+        return $this->presentAll(new Collection([$payment]))[0];
+    }
+
+    /**
+     * Rows of the screen, the names of the shop's admins who decided them read once for them all (Reviewers::names()).
+     *
+     * @param Collection<int, Payment> $payments
+     * @return list<array<string, mixed>>
+     */
+    private function presentAll(Collection $payments): array
+    {
+        $names = $this->reviewers->names($payments->pluck('reviewer'));
+
+        return array_values($payments->map(fn(Payment $payment): array => $this->row($payment, $names[$payment->reviewer ?? ''] ?? null))->all());
+    }
+
+    /**
+     * present(), with the name of the admin who decided it (`$reviewerName`).
+     *
+     * @return array<string, mixed>
+     */
+    private function row(Payment $payment, ?string $reviewerName): array
     {
         $order = $payment->order;
         $method = $payment->method;
@@ -86,7 +119,9 @@ final class PaymentDirectory
                 'status' => $order->status->value,
                 // Its plan's name — or a service the customer built, in words (Order::packageName()).
                 'plan' => $order->packageName(),
-                'server' => $order->server?->name,
+                // A renewal, and extras, name no server of their own: they are where their service is (as on the
+                // orders screen, OrderDirectory::present()).
+                'server' => ($order->server ?? $order->subscription?->server)?->name,
                 'subscription_id' => $order->subscription_id,
                 // What it brings in traffic (an agent's, a service's extra), in days (a service's extra time) or in
                 // devices.
@@ -105,6 +140,7 @@ final class PaymentDirectory
             ],
             'auto_approved' => $payment->wasAutoApproved(),
             'reviewer' => $this->reviewers->present($payment->reviewer),
+            'reviewer_name' => $reviewerName,
             'refund_note' => $payment->status === PaymentStatus::Refunded ? $payment->note : null,
             'paid_at' => $payment->paid_at?->toIso8601String(),
             'link_expires_at' => $payment->link_expires_at?->toIso8601String(),

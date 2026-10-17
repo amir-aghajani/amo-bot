@@ -1,7 +1,7 @@
 import { Check } from 'lucide-react'
 import { toast } from 'sonner'
-import { AgencyTermsFields, termsBody, type AgencyTerms } from '@/components/agency/agency-terms-fields'
-import { sellingTermsBody, sellingTermsDraft, SellingTermsFields, type SellingTermsDraft } from '@/components/agency/selling-terms-fields'
+import { AgencyTermsFields, termsBody, termsRead, type AgencyTerms } from '@/components/agency/agency-terms-fields'
+import { sellingTermsBody, sellingTermsDraft, SellingTermsFields, sellingTermsRead, type SellingTermsDraft } from '@/components/agency/selling-terms-fields'
 import { FormActions } from '@/components/form-footer'
 import { Modal } from '@/components/modal'
 import { userLabel } from '@/components/user-identity'
@@ -38,11 +38,15 @@ function defaultEnd(days: number): string | null {
 }
 
 function ApproveForm({ request, defaultCredit, defaultLevel, defaultTermDays, defaultMinimum, onClose, onDone }: Omit<ApproveModalProps, 'request'> & { request: AgencyRequestRow }) {
-  const { values, set, error, formError, busy, submit, handleSubmit } = useForm<AgencyTerms & SellingTermsDraft>({
-    level_id: defaultLevel === null ? '' : String(defaultLevel),
-    credit_limit: amountDraft(defaultCredit),
-    ...sellingTermsDraft(defaultEnd(defaultTermDays), defaultMinimum),
-  })
+  // What was typed over the program's terms is asked about before the dialog closes on it (`dirty`, as the server reads it).
+  const { values, set, error, formError, busy, dirty, submit, handleSubmit } = useForm<AgencyTerms & SellingTermsDraft>(
+    () => ({
+      level_id: defaultLevel === null ? '' : String(defaultLevel),
+      credit_limit: amountDraft(defaultCredit),
+      ...sellingTermsDraft(defaultEnd(defaultTermDays), defaultMinimum),
+    }),
+    { reads: (draft) => ({ ...termsRead(draft), ...sellingTermsRead(draft) }) },
+  )
 
   // Decided meanwhile (in the report group), the refusal on `status` is the form's error. A new agent is on the agents
   // list and a level's count, and the program's numbers count one request fewer and one agent more.
@@ -67,7 +71,7 @@ function ApproveForm({ request, defaultCredit, defaultLevel, defaultTermDays, de
       <AgencyTermsFields values={values} set={set} error={error} />
       <SellingTermsFields values={values} onExpires={(expires) => set('expires', expires)} onMinimum={(minimum) => set('monthly_minimum', minimum)} error={error} />
       <p className="text-footnote leading-relaxed text-muted-foreground">پیام تایید، با سطح، قیمت هر گیگابایت، اعتبار و شرایط فروش، در ربات برای مشتری فرستاده می‌شود.</p>
-      <FormActions error={formError} onCancel={onClose} submitLabel="تایید و نماینده کردن" busy={busy} icon={Check} />
+      <FormActions error={formError} onCancel={onClose} submitLabel="تایید و نماینده کردن" busy={busy} dirty={dirty} icon={Check} />
     </form>
   )
 }

@@ -12,7 +12,7 @@ use App\Modules\Users\Models\User;
  * admin on its website), an admin in the report group (groupAdmin()), a customer deciding about their own (customer(),
  * a service they hand to another) or the shop itself (system(), a timer). `reviewer` is the name the decision keeps;
  * `userId` is the acting admin's own customer account — or the customer's —, so a rule can refuse them a decision about
- * themselves.
+ * themselves; a shop's admin on its website carries the grants they may use (holds()), for a rule a route cannot name.
  */
 final class Actor
 {
@@ -22,6 +22,8 @@ final class Actor
         public readonly ?string $reviewer,
         /** The acting admin's customer account (website or report group); null for the panels and the shop itself. */
         public readonly ?int $userId,
+        /** @var list<string>|null What a shop's admin on its website may use beyond the daily work (Principal::$grants); null: every grant. */
+        private readonly ?array $grants = null,
     ) {}
 
     public static function of(Principal $principal): self
@@ -32,7 +34,7 @@ final class Actor
             PrincipalKind::Staff => ActorKind::Staff,
         };
 
-        return new self($kind, $principal->name, $principal->customer?->id);
+        return new self($kind, $principal->name, $principal->customer?->id, $principal->grants);
     }
 
     /** One of the shop's admins deciding in its report group, by their account. */
@@ -67,6 +69,15 @@ final class Actor
     public function isStaff(): bool
     {
         return $this->kind === ActorKind::Staff;
+    }
+
+    /**
+     * Whether the actor may do what `$grant` opens: a shop's admin on its website while the website grants it and their
+     * sign-in is recent (StaffMiddleware); anyone else always.
+     */
+    public function holds(StaffGrant $grant): bool
+    {
+        return $this->grants === null || in_array($grant->value, $this->grants, true);
     }
 
     /** A customer about their own, not support. */

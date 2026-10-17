@@ -115,7 +115,7 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
 
             return;
         }
-        $subscription = $this->service($ctx, (int) ($args[0] ?? 0));
+        $subscription = $this->services->find($ctx, (int) ($args[0] ?? 0));
         if ($subscription === null) {
             return;
         }
@@ -136,7 +136,7 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
 
             return;
         }
-        $subscription = $this->service($ctx, (int) $args[0]);
+        $subscription = $this->services->find($ctx, (int) $args[0]);
         if ($subscription !== null) {
             $this->checkout($ctx, $subscription, $kind, (int) $args[2], $code);
         }
@@ -217,39 +217,41 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
 
     /**
      * The kind's screen: the service's traffic left and end, a button per amount offered at the customer's price (less
-     * their automatic discount), two a row, and «بازگشت» to the service. While any amount may be typed, the chat awaits
-     * one (state `extra.{kind}`); otherwise it awaits nothing.
+     * their automatic discount, as its checkout charges it: Pricing::extraOffer()) — and the unit price of an amount
+     * typed so too —, two a row, and «بازگشت» to the service. While any amount may be typed, the chat awaits one (state
+     * `extra.{kind}`); otherwise it awaits nothing.
      */
     private function menu(Context $ctx, Subscription $subscription, ExtraKind $kind, ExtraOffer $offer): void
     {
+        $automatic = $this->pricing->automatic($ctx->user);
+        $charged = static fn(string $price): string => Pricing::extraOffer($automatic, $subscription, $kind, $price)->amount();
         $values = $this->card->values($subscription);
         $text = match ($kind) {
             ExtraKind::Traffic => $this->texts->render(BotText::ExtraTrafficMenu, [
                 'client' => $values['client'],
                 'remaining' => $values['remaining'],
                 'expires' => $values['expires'],
-                'typed' => $this->typedHint($kind, $offer),
+                'typed' => $this->typedHint($kind, $offer, $charged),
             ]),
             ExtraKind::Time => $this->texts->render(BotText::ExtraTimeMenu, [
                 'client' => $values['client'],
                 'expires' => $values['expires'],
                 'remaining' => $values['remaining'],
                 'restart' => $subscription->isExpiredByTime() ? $this->texts->part(BotText::ExtraTimeRestart) : '',
-                'typed' => $this->typedHint($kind, $offer),
+                'typed' => $this->typedHint($kind, $offer, $charged),
             ]),
             ExtraKind::Devices => $this->texts->render(BotText::ExtraDevicesMenu, [
                 'client' => $values['client'],
                 'devices' => Messages::devices($subscription->ip_limit),
                 'expires' => $values['expires'],
                 'days_left' => self::daysLeft($offer),
-                'typed' => $this->typedHint($kind, $offer),
+                'typed' => $this->typedHint($kind, $offer, $charged),
             ]),
         };
 
-        $automatic = $this->pricing->automatic($ctx->user);
         $options = array_map(fn(array $choice): array => InlineKeyboard::callback($this->texts->render(BotText::ExtraOption, [
             'extra' => $kind->words($choice['quantity']),
-            'amount' => Money::format(Money::subtract($choice['price'], $automatic->best($subscription->plan_id, $kind->orderType(), $choice['price'])->amount ?? 0)),
+            'amount' => Money::format($charged($choice['price'])),
         ]), self::checkoutCallback($subscription->id, $kind, $choice['quantity'])), $offer->choices());
         $keyboard = InlineKeyboard::make()->grid($options, 2)->row($this->buttons->back(SubscriptionHandler::serviceCallback($subscription->id)));
 
@@ -274,7 +276,7 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
 
             return;
         }
-        $subscription = $this->service($ctx, (int) $ctx->session->get(self::SERVICE, 0));
+        $subscription = $this->services->find($ctx, (int) $ctx->session->get(self::SERVICE, 0));
         if ($subscription === null) {
             $ctx->session->clear();
 
@@ -292,6 +294,7 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
 
         $quantity = $this->amounts->read(
             $ctx,
+            $kind->typedUnit(),
             static fn(int $quantity): bool => $offer->priceOf($quantity) !== null,
             $this->texts->render(BotText::ExtraInvalid, ['least' => Persian::number($offer->min), 'most' => Persian::number($offer->max)]),
             self::screenCallback($subscription->id, $kind),
@@ -304,7 +307,8 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
     /**
      * A way to pay picked: the extra ordered (or the open order of the same found) and paid at what it costs now
      * (CustomerExtras::quote()). A service that cannot take it now gets a popup saying why; an amount no longer sold
-     * shows the kind's screen; a way to pay switched off since shows the checkout again.
+     * shows the kind's screen; a way to pay switched off since shows the checkout again; a service given away or gone
+     * meanwhile is said so (CustomerServices::movedOn()), nothing ordered.
      */
     private function buy(Context $ctx, Subscription $subscription, ExtraKind $kind, int $quantity, int $methodId): void
     {
@@ -316,15 +320,19 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
             return;
         }
 
-        $this->screen->pay(
-            $ctx,
-            $methodId,
-            $kind->orderType(),
-            self::checkoutCallback($subscription->id, $kind, $quantity),
-            $this->price($ctx, $subscription, $kind, $base),
-            fn(?OrderKey $key, Quote $quote): Order => $this->orders->openExtra($ctx->user, $subscription, $kind, $quantity, $base, $key, $quote),
-            fn() => $this->checkout($ctx, $subscription, $kind, $quantity),
-        );
+        try {
+            $this->screen->pay(
+                $ctx,
+                $methodId,
+                $kind->orderType(),
+                self::checkoutCallback($subscription->id, $kind, $quantity),
+                $this->price($ctx, $subscription, $kind, $base),
+                fn(?OrderKey $key, Quote $quote): Order => $this->orders->openExtra($ctx->user, $subscription, $kind, $quantity, $base, $key, $quote),
+                fn() => $this->checkout($ctx, $subscription, $kind, $quantity),
+            );
+        } catch (ValidationException $e) {
+            $this->services->movedOn($ctx, $e);
+        }
     }
 
     /** @return \Closure(?string): Quote The extra's price for the customer, from the shop's `$base`, with a given code. */
@@ -360,8 +368,13 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
         $ctx->alert($this->texts->get(BotText::ExtraUnavailable), ['reply_markup' => $this->buttons->backOnly($back)]);
     }
 
-    /** The hint at an amount typed — its range and the unit price as charged —; '' while no amount may be typed. */
-    private function typedHint(ExtraKind $kind, ExtraOffer $offer): Html|string
+    /**
+     * The hint at an amount typed — its range and the unit price as charged (prorated, then `$charged`: less the
+     * customer's automatic discount, as the buttons beside it) —; '' while no amount may be typed.
+     *
+     * @param \Closure(string): string $charged
+     */
+    private function typedHint(ExtraKind $kind, ExtraOffer $offer, \Closure $charged): Html|string
     {
         $unitPrice = $offer->unitPrice();
         if (!$offer->typed() || $unitPrice === null) {
@@ -375,7 +388,7 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
         }, [
             'least' => Persian::number($offer->min),
             'most' => Persian::number($offer->max),
-            'unit_price' => Money::format($unitPrice),
+            'unit_price' => Money::format($charged($unitPrice)),
         ]);
     }
 
@@ -383,11 +396,5 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
     private static function daysLeft(ExtraOffer $offer): string
     {
         return ExtraKind::Time->words($offer->days ?? ExtraOffer::PERIOD_DAYS);
-    }
-
-    /** The customer's service, «بازگشت» to «سرویس‌های من» when it is not there. */
-    private function service(Context $ctx, int $id): ?Subscription
-    {
-        return $this->services->find($ctx, $id, MenuHandler::subscriptionsCallback(1));
     }
 }

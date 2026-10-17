@@ -68,13 +68,24 @@ final class BotWalletTest extends BotTestCase
         self::assertSame([[['text' => self::text(BotText::WalletTopup), 'callback_data' => TopUpHandler::START, 'style' => 'success']]], $this->inlineKeyboard(0));
     }
 
+    public function testALedgerLinesRowNumberReadsLeftToRightInTheBotAndIsKeptAsWritten(): void
+    {
+        $line = sprintf(WalletService::LINE_TOP_UP, 42);
+        $this->service(WalletService::class)->credit($this->ali, 80000, $line);
+
+        $this->send($this->tap(MainMenu::WALLET));
+
+        self::assertStringContainsString(self::text(BotText::WalletHistoryCredit, ['amount' => Money::format('80000'), 'entry' => "شارژ کیف پول (سفارش \u{200E}#42)", 'when' => Persian::date(now())]), $this->said()[0], 'right to left, «سفارش #42» would read «42# سفارش»');
+        self::assertSame($line, WalletTransaction::query()->where('user_id', $this->ali->id)->value('description'), 'the ledger keeps its words; the panel isolates the number its own way');
+    }
+
     public function testAPresetAmountLeadsToACheckoutWithoutTheWalletAsAMethod(): void
     {
         $this->send($this->tap(TopUpHandler::START));
         self::assertSame([self::text(BotText::TopupPick, ['min' => Money::format(10000)])], $this->said());
         $keyboard = $this->inlineKeyboard(0);
-        self::assertSame([TopUpHandler::checkoutCallback(50000), TopUpHandler::checkoutCallback(100000)], array_column($keyboard[0], 'callback_data'), 'presets two per row');
-        self::assertSame([TopUpHandler::checkoutCallback(200000), TopUpHandler::checkoutCallback(500000)], array_column($keyboard[1], 'callback_data'));
+        self::assertSame([TopUpHandler::checkoutCallback(100000), TopUpHandler::checkoutCallback(50000)], array_column($keyboard[0], 'callback_data'), 'presets two per row, the first on the right');
+        self::assertSame([TopUpHandler::checkoutCallback(500000), TopUpHandler::checkoutCallback(200000)], array_column($keyboard[1], 'callback_data'));
         self::assertSame(self::text(BotText::TopupCustom), $keyboard[2][0]['text']);
         self::assertSame(MainMenu::WALLET, $keyboard[3][0]['callback_data']);
 
@@ -93,7 +104,7 @@ final class BotWalletTest extends BotTestCase
         self::assertSame([TopUpHandler::START], $this->callbacks(0), 'back to the amounts');
 
         $invalid = [self::text(BotText::TopupInvalid, ['min' => Money::format(10000)])];
-        foreach (['words' => 'پنج هزار', 'below the minimum' => '5000', 'above the most a top-up takes' => (string) (WalletSettings::TOPUP_MAX + 1)] as $why => $typed) {
+        foreach (['words' => 'پنج هزار', 'below the minimum' => '5000', 'above the most a top-up takes' => (string) (WalletSettings::TOPUP_MAX + 1), 'another unit' => '۵۰ هزار گیگ'] as $why => $typed) {
             $this->send($this->message($typed));
             self::assertSame($invalid, $this->said(), $why);
         }
@@ -123,7 +134,7 @@ final class BotWalletTest extends BotTestCase
         $this->send($this->tap(TopUpHandler::START));
 
         self::assertSame([self::text(BotText::TopupPick, ['min' => Money::format(25000)])], $this->said());
-        self::assertSame([TopUpHandler::checkoutCallback(25000), TopUpHandler::checkoutCallback(75000)], array_column($this->inlineKeyboard(0)[0], 'callback_data'));
+        self::assertSame([TopUpHandler::checkoutCallback(75000), TopUpHandler::checkoutCallback(25000)], array_column($this->inlineKeyboard(0)[0], 'callback_data'));
 
         // A preset below the minimum (an old button) shows the amounts again, and nothing is ordered.
         $this->send($this->tap($this->pay(20000)));

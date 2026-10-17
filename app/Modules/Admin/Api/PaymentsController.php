@@ -132,7 +132,8 @@ final class PaymentsController extends ApiController
     /**
      * POST /payments/{id}/check — ask an online payment's gateway what came of it, acting on its word (PaymentActions::
      * check()); `state` says what it said. A 503 in the admin's words while the gateway cannot be asked: the log says why.
-     * An answer that does not fit the payment holds it for support: a 422 on `status`, as every ask of it from then on.
+     * An answer that does not fit the payment, or one closing it after the gateway had said money came in on it, holds it
+     * for support: a 422 on `status`, as every ask of it from then on.
      *
      * @param array<string, string> $args
      * @throws ValidationException 422 on `status`: not to be asked, or held for support by this ask
@@ -144,7 +145,8 @@ final class PaymentsController extends ApiController
             $state = $this->actions->check($payment, Principal::of($request)->actor());
         } catch (GatewayUnavailableException $e) {
             if ($e->held) {
-                // Held by this very ask, not "nothing changed": the gateway's answer did not fit it (OnlinePayments logs it).
+                // Held by this very ask, not "nothing changed": the gateway's answer did not fit it, or closed it with money
+                // in (OnlinePayments logs it).
                 throw ValidationException::on('status', $this->actions->refusal($payment->refresh(), 'check'));
             }
             $this->logger->warning('Payment {id}\'s gateway could not be asked from a panel: {detail}', ['id' => $payment->id, 'detail' => $e->detail]);

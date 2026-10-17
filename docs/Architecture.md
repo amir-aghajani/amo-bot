@@ -1,3 +1,5 @@
+[فارسی](fa/Architecture.md)
+
 # Architecture
 
 A map of the system for someone new to the code: the parts, how a request, a Telegram update and a minute of
@@ -26,7 +28,8 @@ of Redis, the web installer and updater, a scheduler that works in slices.
 
 `public/index.php` (HTTP) and `bin/console` (CLI) both call `bootstrap/app.php`, which runs `Core\Application::boot()`:
 
-1. PHP's warnings are kept out of answers and go to `storage/logs/php-errors.log`; exceptions keep no call arguments.
+1. The files the app writes are made owner-only when PHP runs as the account that owns the app (`Core\Support\Files`).
+   PHP's warnings are kept out of answers and go to `storage/logs/php-errors.log`; exceptions keep no call arguments.
 2. `config.php` (the owner's settings — see [Configuration](Configuration.md)) is read into the parts `config/*.php`
    make of it (`Core\Config`). Nothing is read from the environment.
 3. PHP's clock is set to UTC; the shop's zone (`APP_TIMEZONE`) is kept for display only.
@@ -51,11 +54,12 @@ walks every route to prove it.
 | Group | Guards, in order |
 |---|---|
 | `/api/admin` (the owner's panel) | installed › CSRF header on a change › session › the owner signed in › the shop the request names |
-| `/api/agent` (an agent's panel) | installed › CSRF header › session › an agent signed in, in their bot's shop |
-| `/api/install` | not installed yet › CSRF header › the install key |
+| `/api/agent` (an agent's panel) | installed › CSRF header on a change › session › an agent signed in, in their bot's shop |
+| `/api/install` | not installed yet › CSRF header on a change › the install key |
 | `/api/store/v1/{store}` | installed › the website the key opens › JSON bodies › (a customer's bearer token) |
 | `…/admin` under the store | › a customer's token › one of the shop's admins, let in, signed in recently enough |
 | `/webhooks/…`, `/cron/{token}`, `/payments/callback/{payment}/{secret}` (an online gateway's callback) | installed (a secret in the address authenticates) |
+| `/payments/webhooks/{driver}` (the webhook a gateway signs: Variza's) | installed (the signature authenticates) |
 | `/`, `/health`, `/api/app` | nothing: they answer before installation too |
 
 A controller is *load → service → present*. It lets the shop's refusals through: a `Core\Exceptions\DomainRuleException`
@@ -71,25 +75,34 @@ show it on a server failure as «کد پیگیری», and the owner finds the li
 shown only with `APP_DEBUG`, only for a 500, and only to a request straight from the server itself. What the app cannot
 handle — a broken `config.php`, a fatal error — is `public/index.php`'s last resort: the same JSON 500 with its id.
 
-Around that: every answer carries a sandboxing policy and is not cached (the return page a policy of its own, which
-runs no script either); secrets (bot tokens, the webhook, cron and payment callback secrets) are taken out of every log
-line and error (`Core\Logging\Redact`); an online gateway's callback is never believed — it only makes the shop ask
-the gateway itself (`Payments\Services\OnlinePayments`); every sign-in is throttled and the throttle fails closed; a
-fresh upload's installer needs a key from the host's files; uploaded pictures are judged by their bytes and written
-again; and every file the app writes is owner-only where PHP runs as the account that owns the app
-(`Core\Support\Files`). [Security](Security.md) has the reporting policy and
-[Running in production](Running-In-Production.md) the operator's side.
+Around that:
+
+- every answer carries a sandboxing policy and is not cached (the return page has a policy of its own, which runs no
+  script either);
+- the app takes secrets out of every line it writes to its log and of every failure's details (`Core\Logging\Redact`):
+  bot tokens, the secret part of the machine addresses (the webhooks, the cron, the payment callbacks), a login written
+  into an address (a proxy's) and a key in an address's query. PHP's own warnings and fatal errors, which PHP itself
+  writes to `storage/logs/php-errors.log`, are not cleaned;
+- an online gateway's callback is never believed — it only makes the shop ask the gateway itself
+  (`Payments\Services\OnlinePayments`) —, and a gateway's webhook is believed only when a method's secret signs it;
+- every sign-in is throttled, and the throttle fails closed;
+- a fresh upload's installer needs a key from the host's files;
+- uploaded pictures are judged by their bytes and written again;
+- every file the app writes is owner-only where PHP runs as the account that owns the app (`Core\Support\Files`).
+
+[Security](Security.md) has the reporting policy and [Running in production](Running-In-Production.md) the operator's
+side.
 
 ## Modules
 
 Domain code lives in `app/Modules/<Module>/` (models, services, controllers, enums, tasks). `app/Core` (HTTP,
-database, drivers and forms, mail, captcha, scheduling, security, configuration) and `app/Support` (input, money,
-Persian, traffic) name no module: what Core needs from one is an interface the module implements (`Core\Scheduling\Shops`
-is the Bots module's `BotShops`).
+database, drivers and forms, mail, captcha, scheduling, security, sessions, logging, configuration, files) and
+`app/Support` (input, money, time, Persian, traffic) name no module. What Core needs from a module is an interface the
+module implements: `Core\Scheduling\Shops` is the Bots module's `BotShops`.
 
 | Module | What it is |
 |---|---|
-| Providers | The VPN panels: connectors (3x-ui, PasarGuard), servers and their health |
+| Providers | The VPN panels: connectors (3X-UI, PasarGuard), servers and their health |
 | Catalog | Plans, categories, and which servers can sell a plan today |
 | Subscriptions | A customer's service on a panel: provisioning, sync, renewal, moves, grants, extras, reminders |
 | Orders, Payments | The order's lifecycle; payment methods, the checkout the bot and the website share, the settlement |
@@ -99,7 +112,7 @@ is the Bots module's `BotShops`).
 | Telegram | The bots: update dispatch, handlers, gates, texts, keyboards, broadcasts, the report group |
 | Accounts, Store | Website customers' sign-in and accounts; the websites' API |
 | Notifications, Support, Reviews | What the shop tells a customer; support tickets; customers' reviews |
-| Auth | The panels' sign-in, the throttle, principals and actors |
+| Auth | The panels' sign-in, the throttle, principals and actors, the grants a shop gives its website's admins (`StaffGrant`) |
 | Admin | The panels' controllers, the dashboard and the queues |
 | Settings, Installer, Updates | The settings screens; the web installer; the one-press update |
 
@@ -138,7 +151,8 @@ the report group, or the shop itself (a timer). The actor's name is kept as the 
 the request's log lines, and an admin acting as themselves is refused decisions about their own account
 (`ActorRefusedException`). Anywhere else the name is read through `Auth\Services\Reviewers`: the owner's panel shows it
 as kept, everyone else — an agent, a website's admins, a report group (`ShopReports::bySupport()`, «🎧 توسط پشتیبانی») —
-reads the owner's login as «پشتیبانی».
+reads the owner's login as «پشتیبانی». Where a screen shows who wrote something (a ticket's answer),
+`Reviewers::names()` reads a shop admin's first and last name beside it — every name a screen needs in one query.
 
 ## The bots at work
 
@@ -162,10 +176,21 @@ number of agents. [Running in production](Running-In-Production.md#the-scheduler
 ## The change feed
 
 The panels follow the shop without a reload. `Core\Database\ChangeFeed` reads every committed write off the database
-connection's own events — whoever made it: a panel request, the bot, a task — and bumps a version number per area of
-the shop (`change_versions`). A panel polls `GET /api/{panel}/changes` every few seconds and refetches what the moved
-areas show. No service has to report its writes; a write a screen need not follow (a customer's last-seen time) is
-made inside `ChangeFeed::quietly()`.
+connection's own events — whoever made it: a panel request, the bot, a task — and bumps a version number per area
+(`change_versions`, `ChangeFeed::AREAS` maps each table to its area). A panel polls `GET /api/{panel}/changes` (the
+website's admins `…/admin/changes`) every few seconds and refetches what the moved areas show. No service has to
+report its writes; a write a screen need not follow (a customer's last-seen time) is made inside
+`ChangeFeed::quietly()`.
+
+Each write counts twice: for the installation, and for the shop it was made in (`Core\Scheduling\Shops::current()`).
+
+- **The owner's panel** reads the installation's numbers: every shop's writes.
+- **An agent's panel and a website's admins** read their own shop's numbers, and the writes made for every shop (one
+  made across every shop, or inside `ChangeFeed::forEveryShop()`) — another shop's activity never reloads their
+  screens. The agency's area also follows the main shop's writes (an agent's traffic bought from the main bot, a
+  request), and what the owner's agency screens write about an agent's shop counts for every shop
+  (`Bots\ShopScopeMiddleware`).
+- **The servers' areas** (servers, grants, a server's moves) are the installation's alone: one number for everyone.
 
 ## Data
 
@@ -183,8 +208,9 @@ container entry so the test suite points it at a folder of its own:
 | The configuration, and its writers' lock | `config.php` beside the app (`config.file`), `storage/cache/config.lock` |
 | The installation lock and the database's version | `storage/installed.lock` (`installation.lock`) |
 | The installer's and the recovery's one-time keys | `storage/install-key.txt`, `storage/recovery-key.txt` |
-| The scheduler's state and lock; the poller's lock | `storage/cache/schedule.json`, `storage/cache/bot-poll.lock` |
+| The scheduler's state and lock; the poller's lock | `storage/cache/schedule.json` and `schedule.json.lock`, `storage/cache/bot-poll.lock` |
 | Throttle counts | `storage/cache/throttle/` (`throttle.path`) |
+| The locks that let one process at a time ask a gateway about an online payment: 32 lock files, a payment's picked by its id | `storage/cache/payment-turns/` (`payments.turns`) |
 | Short-lived copies of pictures Telegram keeps | `storage/cache/files/` (`files.cache`) |
 | The OpenID providers' keys; the router's table | `storage/cache/jwks/`, `storage/cache/routes/` |
 | Uploaded receipts, tickets' pictures, QR backgrounds | `storage/uploads/{receipts,tickets,qr}` |

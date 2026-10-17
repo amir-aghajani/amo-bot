@@ -7,7 +7,7 @@ import { RecentOrders } from '@/components/dashboard/recent-orders'
 import { RecentUsers } from '@/components/dashboard/recent-users'
 import { ErrorState } from '@/components/error-state'
 import { FilterSelect } from '@/components/filter-select'
-import { Page } from '@/components/page'
+import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { StatCard, StatGrid } from '@/components/stat-card'
 import { Button } from '@/components/ui/button'
@@ -58,12 +58,14 @@ export function DashboardPage({ aside, trafficHelp, standingNotice }: DashboardP
   const [range, setRange] = useState<`${RangeDays}`>('30')
   const days = Number(range)
 
-  const { data, isPending, isFetching, isPlaceholderData, error, refetch, dataUpdatedAt } = useQuery({
+  const read = useQuery({
     queryKey: queryKeys.dashboard(days),
     queryFn: () => api.get<DashboardResponse>('/dashboard', new URLSearchParams({ range: range })),
     refetchInterval: 60_000,
     placeholderData: (previous) => previous,
   })
+  const { data, isPending, isFetching, isPlaceholderData, refetch, dataUpdatedAt } = read
+  const failure = useReadFailure(read, days)
 
   const kpis = data?.kpis
   // The days of the figures on screen: the last range's while another one's are read.
@@ -98,7 +100,7 @@ export function DashboardPage({ aside, trafficHelp, standingNotice }: DashboardP
         }
       />
 
-      {error && <ErrorState what="داشبورد" error={error} onRetry={() => void refetch()} retrying={isFetching} />}
+      {failure.error && <ErrorState what="داشبورد" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />}
 
       {/* The range's own figures: dimmed while another range's are read in their place. */}
       <div aria-busy={isPlaceholderData || undefined} className={cn('flex flex-col gap-6 transition-opacity duration-150', isPlaceholderData && 'opacity-60')}>

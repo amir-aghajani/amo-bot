@@ -134,6 +134,8 @@ enum BotText: string
     // delivery and what support decided about a payment
     case PaySuccess = 'pay_success';
     case PayProvisionFailed = 'pay_provision_failed';
+    case PayFirstPurchaseUsed = 'pay_first_purchase_used';
+    case PayServiceChangedHands = 'pay_service_changed_hands';
     case ReceiptRejected = 'receipt_rejected';
     case PaymentCredited = 'payment_credited';
     case OrderCancelledByAdmin = 'order_cancelled_by_admin';
@@ -320,6 +322,7 @@ enum BotText: string
     case ReferralOff = 'referral_off';
     case ReferralJoined = 'referral_joined';
     case ReferralCommission = 'referral_commission';
+    case ReferralCommissionTakenBack = 'referral_commission_back';
     case ReferralStartGiftReferrer = 'referral_start_gift_referrer';
     case ReferralStartGiftInvitee = 'referral_start_gift_invitee';
     case ReferralRewarded = 'referral_rewarded';

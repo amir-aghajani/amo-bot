@@ -77,6 +77,17 @@ describe('numbers and money', () => {
     expect(formatBalance('-20000.00')).toBe('۲۰٬۰۰۰ تومان بدهی')
   })
 
+  it('never writes «−۰»: below zero but rounding to nothing is zero, unsigned — a real negative keeps its sign', () => {
+    expect(formatMoney('-0.40')).toBe('۰ تومان')
+    expect(formatMoney('-0.00')).toBe('۰ تومان')
+    expect(formatNumber(-0)).toBe('۰')
+    expect(formatPercent(-0.04)).toBe('۰٪')
+    expect([formatChange(-0.04), formatChange(0.04)]).toEqual(['۰٪', '۰٪'])
+    expect(formatBalance('-0.40')).toBe('۰ تومان')
+    expect(formatAmount('-20000.00')).toContain('−۲۰٬۰۰۰')
+    expect(formatNumber(-1.5)).toContain('−۱٫۵')
+  })
+
   it('formats an agency level price per gigabyte', () => {
     expect(formatPricePerGb('3000.00')).toBe('هر گیگابایت ۳٬۰۰۰ تومان')
   })
@@ -117,6 +128,12 @@ describe('quotas and terms', () => {
     expect(formatBytes(1.5 * 1024 ** 3)).toBe('۱٫۵ گیگابایت')
     expect(formatBytes(10.4 * 1024 ** 3)).toBe('۱۰ گیگابایت')
     expect(formatBytes(5 * 1024 ** 5)).toBe('۵٬۱۲۰ ترابایت')
+  })
+
+  it('writes an amount that rounds to 1024 of a unit as one of the next', () => {
+    expect(formatBytes(1023.6 * 1024 ** 2)).toBe('۱ گیگابایت')
+    expect(formatBytes(1023.6)).toBe('۱ کیلوبایت')
+    expect(formatBytes(1023 * 1024)).toBe('۱٬۰۲۳ کیلوبایت')
   })
 
   it('writes none — or below zero — in the unit traffic is counted in everywhere else', () => {
@@ -276,6 +293,12 @@ describe('initials', () => {
     expect(initials('@agent_shop_bot')).toBe('A')
     expect(initials(' @reza_shop_bot')).toBe('R')
   })
+
+  it('passes a word of emoji by — a Telegram name’s — never taking half of one', () => {
+    expect(initials('🎮 Gamer')).toBe('G')
+    expect(initials('🌹 سارا 🌹 احمدی')).toBe('سا')
+    expect(initials('🎮🔥')).toBe('')
+  })
 })
 
 describe('a typed amount', () => {
@@ -306,6 +329,15 @@ describe('a typed amount', () => {
   it('reads as a price in whole Toman — its thousands set apart, a unit after it, or the API’s own form —, and nothing else', () => {
     expect([tomanOf('۳۰٬۰۰۰ تومان'), tomanOf('30,000'), tomanOf('30000.00'), tomanOf('۳۰۰۰۰')]).toEqual([30000, 30000, 30000, 30000])
     expect([tomanOf('1.5'), tomanOf('سی هزار'), tomanOf('')]).toEqual([null, null, null])
+  })
+
+  it('reads «هزار» and «میلیون» as the server does — never «۵۰ هزار» as 50 Toman —, and no word it does not take', () => {
+    expect([tomanOf('۵۰ هزار'), tomanOf('۵۰ هزار تومان'), tomanOf('۵۰\u{200C}هزار'), tomanOf('2 میلیون'), tomanOf('۱٫۵ میلیون')]).toEqual([50_000, 50_000, 50_000, 2_000_000, null])
+    expect([tomanOf('۵۰۰ ریال'), tomanOf('۵۰ هزاری'), tomanOf('هزار'), tomanOf('۵۰۰ تومن'), tomanOf('500 Toman')]).toEqual([null, null, null, 500, 500])
+    // Money's own words alone: another unit's after the number is no price (Unit::Toman).
+    expect([tomanOf('۲۰ گیگ'), tomanOf('۳۰ روز'), tomanOf('۲ کاربر'), tomanOf('5 gb'), tomanOf('۵۰ هزار گیگ')]).toEqual([null, null, null, null, null])
+    // Twelve digits at most, whatever it is multiplied by.
+    expect([tomanOf('999999999999'), tomanOf('1000000 میلیون')]).toEqual([999_999_999_999, null])
   })
 })
 

@@ -175,7 +175,9 @@ describe('the Telegram sign-in card', () => {
     await until(() => expect(toast.success).toHaveBeenCalledWith(SAVED_DONE))
     expect(sent()[0]).toMatchObject({ telegram_client_secret: 'aB3-secret_from_BotFather', clear_telegram_client_secret: false })
     expect(valueOf(SECRET)).toBe('')
-    expect((screen.getByLabelText(SECRET) as HTMLInputElement).placeholder).toBe('برای نگه‌داشتن مقدار فعلی خالی بگذارید')
+    // The placeholder only says one is stored, masked like any secret never shown; the line under it says blank keeps it.
+    expect((screen.getByLabelText(SECRET) as HTMLInputElement).placeholder).toBe('••••••••')
+    expect(screen.getByText('خالی بماند، همان مقدار ذخیره‌شده می‌ماند.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'پاک کردن مقدار ذخیره‌شده' })).toBeTruthy()
   })
 

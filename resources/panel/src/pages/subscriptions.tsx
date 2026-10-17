@@ -1,9 +1,9 @@
 import { useId, useState } from 'react'
 import { ArrowLeftRight, Radio, Search } from 'lucide-react'
-import { CustomerFilter } from '@/components/customer-filter'
+import { CustomerFilter, customerId } from '@/components/customer-filter'
 import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
-import { ListView, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
@@ -18,7 +18,7 @@ import { SubscriptionModal } from '@/components/subscriptions/subscription-modal
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { UserIdentity } from '@/components/user-identity'
+import { UserIdentity, UserLabel } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { SubscriptionKind, SubscriptionResponse, SubscriptionRow, SubscriptionSort, SubscriptionsResponse, SubscriptionStatus } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
@@ -68,6 +68,7 @@ export function SubscriptionsPage({ servers: readServers = shopServerChoices, se
     list: 'subscriptions',
     statuses: ['', ...QUEUE],
     params: ['server', 'user', 'kind'],
+    ids: ['server', 'user'],
     choices: { kind: kinds },
     sorts: SORTS,
     address: '/subscriptions',
@@ -78,13 +79,22 @@ export function SubscriptionsPage({ servers: readServers = shopServerChoices, se
   // Ticks belong to one list: another tab, server, kind, customer or search starts with nothing selected (its pages
   // keep theirs).
   const selection = useSelection<SubscriptionRow>(`${list.filter}|${list.params.server}|${list.params.user}|${list.params.kind}|${list.typed.trim()}`)
+  // A ticked service the list read again (ended, moved or deleted meanwhile) is moved as it is now.
+  selection.follow(list.rows)
   const days = list.meta?.expiring_days
 
+  // The customer the list is narrowed to (?user=), when it is: a service handed to another customer leaves their list.
+  const customer = customerId(list.params.user ?? '')
+
   // An operation's fresh row goes into the list, the modal and the selection (what else it moved is read again — the
-  // dialog's operations' `invalidates`).
+  // dialog's operations' `invalidates`). One handed to another customer is theirs now: out of this customer's list and
+  // the selection, its dialog following it.
   const changed = (subscription: SubscriptionRow) => {
     opened.apply(subscription)
-    selection.refresh(subscription)
+    if (customer !== null && subscription.user.id !== customer) {
+      list.remove(subscription.id)
+      selection.set([subscription], false)
+    } else selection.refresh(subscription)
   }
 
   // A deleted service is gone for good: out of the list and the selection.
@@ -195,16 +205,17 @@ function SubscriptionsTable({
             <Checkbox {...selection.page(subscriptions)} aria-label="انتخاب همه سرویس‌های این صفحه" />
           </TableHead>
           <TableHead>سرویس</TableHead>
-          <TableHead>مشتری</TableHead>
+          <TableHead className="hidden md:table-cell">مشتری</TableHead>
           <TableHead className="hidden lg:table-cell">سرور</TableHead>
-          <SortableHead list={sorting} by="used" label="حجم مصرف‌شده" className="hidden md:table-cell">
+          {/* The widest cell (its bar): with the widest screens — a tablet has a phone's room and a half. */}
+          <SortableHead list={sorting} by="used" label="حجم مصرف‌شده" className="hidden xl:table-cell">
             مصرف
           </SortableHead>
           <SortableHead list={sorting} by="expires" first="asc" label="زمان پایان" className="hidden sm:table-cell">
             پایان
           </SortableHead>
-          <TableHead>وضعیت</TableHead>
-          <TableHead className="w-20">
+          <TableHead className="hidden md:table-cell">وضعیت</TableHead>
+          <TableHead className="md:w-20">
             <span className="sr-only">جزئیات</span>
           </TableHead>
         </TableRow>
@@ -226,18 +237,22 @@ function SubscriptionsTable({
                   </RowTitleButton>
                   <ServicePlan subscription={subscription} />
                 </div>
+                <PhoneFacts>
+                  <StatusBadge status={SUBSCRIPTION_STATUS[subscription.status]} />
+                  <UserLabel user={subscription.user} />
+                </PhoneFacts>
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden md:table-cell">
                 <UserIdentity user={subscription.user} />
               </TableCell>
               <TableCell className="hidden lg:table-cell">{subscription.server.name}</TableCell>
-              <TableCell className="hidden md:table-cell">
+              <TableCell className="hidden xl:table-cell">
                 <UsageMeter traffic={subscription.traffic} className="w-40" />
               </TableCell>
               <TableCell className="hidden sm:table-cell">
                 <ServiceExpiry subscription={subscription} />
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden md:table-cell">
                 <StatusBadge status={SUBSCRIPTION_STATUS[subscription.status]} />
               </TableCell>
               <TableCell>

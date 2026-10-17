@@ -15,6 +15,7 @@ use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Auth\Principal;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Services\AgentRestrictions;
+use App\Modules\Store\Http\IdempotencyKey;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -119,14 +120,15 @@ final class AgencyController extends ApiController
     }
 
     /**
-     * POST /agency/agents/{id}/traffic — {gb, note?}: more traffic (or less, a negative gb), the note on the agent's ledger.
+     * POST /agency/agents/{id}/traffic — {gb, note?}: more traffic (or less, a negative gb), the note on the agent's ledger;
+     * with an Idempotency-Key if the caller sends one, the same request again answered by the line the key wrote.
      *
      * @param array<string, string> $args
      */
     public function adjustTraffic(Request $request, Response $response, array $args): Response
     {
         $agent = $this->load(User::class, $args);
-        $this->actions->adjustTraffic($agent, Principal::of($request)->actor(), $this->input($request));
+        $this->actions->adjustTraffic($agent, Principal::of($request)->actor(), $this->input($request), IdempotencyKey::optional($request));
 
         return $this->json($response, ['agent' => $this->directory->presentAgent($this->directory->agent($agent->id))]);
     }

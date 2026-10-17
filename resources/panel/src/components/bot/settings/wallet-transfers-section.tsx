@@ -1,5 +1,5 @@
 import { Info } from 'lucide-react'
-import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
+import { useBotSettingsGroup, useHeldWhile } from '@/components/bot/settings/use-bot-settings-group'
 import { Callout } from '@/components/callout'
 import { MoneyField } from '@/components/money-field'
 import { SectionCard } from '@/components/section-card'
@@ -18,19 +18,21 @@ import { asNumbers } from '@/lib/use-form'
  * never an agent's credit; a line in both ledgers; both told; the report in the wallet's topic.
  */
 export function WalletTransfersSection({ settings }: { settings: BotSettingsData }) {
+  const saved = {
+    wallet_transfer_enabled: settings.wallet_transfer_enabled,
+    wallet_transfer_min: String(settings.wallet_transfer_min),
+    wallet_transfer_max: String(settings.wallet_transfer_max),
+    wallet_transfer_daily: String(settings.wallet_transfer_daily),
+  } satisfies BotWalletTransfersSettingsRequest
   const group = useBotSettingsGroup(
-    {
-      wallet_transfer_enabled: settings.wallet_transfer_enabled,
-      wallet_transfer_min: String(settings.wallet_transfer_min),
-      wallet_transfer_max: String(settings.wallet_transfer_max),
-      wallet_transfer_daily: String(settings.wallet_transfer_daily),
-    } satisfies BotWalletTransfersSettingsRequest,
+    saved,
     (values) => api.put('/bot/settings/wallet_transfers', values),
     // An amount is what the server reads of it: «۵۰٬۰۰۰» is 50000, no change.
     { reads: asNumbers },
   )
   const { values, set, error } = group
-  const off = !values.wallet_transfer_enabled
+  // Switched off, the amounts wait as they are kept; one changed stays open, as the save still carries it.
+  const held = useHeldWhile(!values.wallet_transfer_enabled, group, saved)
 
   return (
     <SectionCard
@@ -54,7 +56,7 @@ export function WalletTransfersSection({ settings }: { settings: BotSettingsData
           reads={wholeNumberOf}
           error={error('wallet_transfer_min')}
           hint="کمتر از این مبلغ منتقل نمی‌شود."
-          disabled={off}
+          disabled={held('wallet_transfer_min')}
         />
         <MoneyField
           id="wallet_transfer_max"
@@ -64,7 +66,7 @@ export function WalletTransfersSection({ settings }: { settings: BotSettingsData
           reads={wholeNumberOf}
           error={error('wallet_transfer_max')}
           hint="بیشتر از این مبلغ در یک انتقال منتقل نمی‌شود."
-          disabled={off}
+          disabled={held('wallet_transfer_max')}
         />
         <MoneyField
           id="wallet_transfer_daily"
@@ -76,7 +78,7 @@ export function WalletTransfersSection({ settings }: { settings: BotSettingsData
           says={(money) => `= ${money} در روز برای هر مشتری؛ کمتر از کمترین مبلغ انتقال نمی‌شود.`}
           zero="بدون سقف روزانه؛ فقط موجودی مشتری و بیشترین مبلغ هر انتقال محدودش می‌کند."
           hint="0 یعنی بدون سقف روزانه؛ جز آن، کمتر از کمترین مبلغ انتقال نمی‌شود."
-          disabled={off}
+          disabled={held('wallet_transfer_daily')}
         />
       </div>
       <Callout tone="info" icon={Info}>

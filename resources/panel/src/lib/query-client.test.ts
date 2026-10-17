@@ -125,6 +125,23 @@ describe('a mutation', () => {
     expect(client.getQueryState(queryKeys.subscriptions)?.isInvalidated).toBe(true)
   })
 
+  it('goes at once while the browser says it is offline — a row’s operation as a form’s save: none waits to go out later', async () => {
+    const client = createQueryClient()
+    const send = vi.fn(() => Promise.reject(new ApiError(0, 'اتصال اینترنت قطع است.', {}, { offline: true })))
+    onlineManager.setOnline(false)
+    try {
+      const observer = new MutationObserver(client, { mutationFn: send })
+      const outcome = observer.mutate().catch((error: unknown) => error)
+
+      expect(observer.getCurrentResult().isPaused).toBe(false)
+      expect(await outcome).toMatchObject({ status: 0 })
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(toast.error).toHaveBeenCalledWith(FAILURE_KINDS.offline.title, { description: FAILURE_KINDS.offline.description })
+    } finally {
+      onlineManager.setOnline(true)
+    }
+  })
+
   it('that fails makes nothing stale', async () => {
     const client = createQueryClient()
     client.setQueryData(queryKeys.plans, { plans: [] })

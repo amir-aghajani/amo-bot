@@ -107,6 +107,19 @@ final class CustomerNotifier
     }
 
     /**
+     * The commission a referral's wallet top-up earned the referrer, taken back out of their wallet by the top-up's refund
+     * (Referrals\Services\ReferralService::takeBack()): how much, and their balance now.
+     */
+    public function commissionTakenBack(ReferralCommission $commission): void
+    {
+        $referrer = $commission->referrer;
+        $this->tell($referrer, NoticeType::ReferralCommissionTakenBack, fn(): array => $this->message($this->texts->render(BotText::ReferralCommissionTakenBack, [
+            'commission' => Money::format($commission->commission),
+            'balance' => Messages::balance($referrer->balance()),
+        ])));
+    }
+
+    /**
      * An online payment came in after its order had closed (Payments\Services\PaymentService::settleOnline()): its money
      * went to the wallet.
      */
@@ -244,7 +257,8 @@ final class CustomerNotifier
     {
         $this->tell($from, NoticeType::ServiceTransferred, fn(): array => $this->serviceChanged($subscription, BotText::ServiceTransferredBySupport, [
             'cancelled' => $cancelled === [] ? '' : $this->texts->part(BotText::ServiceTransferredOrders, [
-                'orders' => implode('، ', array_map(static fn(int $id): string => '#' . $id, $cancelled)),
+                // A left-to-right mark before each: after the Persian words, «#142» would read «142#».
+                'orders' => implode('، ', array_map(static fn(int $id): string => "\u{200E}#{$id}", $cancelled)),
             ]),
         ]));
     }

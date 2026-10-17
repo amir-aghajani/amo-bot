@@ -36,7 +36,8 @@ export function Disclosure({ label, defaultOpen = false, children }: { label: st
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={id}
-        className="-ms-1 flex h-7 w-fit items-center gap-1.5 rounded-md px-1 text-body text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:focus-ring"
+        // A finger's 44px press on a phone (`touch-target`), drawn as the 28px line it is.
+        className="touch-target -ms-1 flex h-7 w-fit items-center gap-1.5 rounded-md px-1 text-body text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:focus-ring"
       >
         <ChevronDown className={cn('size-4 transition-transform duration-150', open && 'rotate-180')} aria-hidden />
         {label}

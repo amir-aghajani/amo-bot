@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
  * The tickets screen («پشتیبانی», both panels and the website's admin API): every ticket of the shop, latest activity
  * first, by status (the open ones are support's queue, counted), customer and search; and one ticket with its whole
  * conversation, with who of support wrote each message (Reviewers: the owner's login reads «پشتیبانی» to anyone but the
- * owner) and where it was written.
+ * owner; one of the shop's admins with their name too) and where it was written.
  */
 final class TicketDirectory
 {
@@ -55,10 +55,13 @@ final class TicketDirectory
     /** @return array<string, mixed> The ticket with every message — its relations and messages loaded. */
     public function detail(Ticket $ticket): array
     {
+        $names = $this->reviewers->names($ticket->messages->pluck('reviewer'));
+
         return $this->row($ticket, $ticket->messages->count()) + [
             'rating_note' => $ticket->rating_note,
             'messages' => $ticket->messages->map(fn(TicketMessage $message): array => TicketFields::message($message) + [
                 'reviewer' => $this->reviewers->present($message->reviewer),
+                'reviewer_name' => $names[$message->reviewer ?? ''] ?? null,
                 'channel' => $message->channel->value,
             ])->values()->all(),
         ];

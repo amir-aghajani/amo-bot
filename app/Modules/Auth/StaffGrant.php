@@ -2,15 +2,16 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Store\Enums;
+namespace App\Modules\Auth;
 
 /**
- * What a shop lets its admins do from its website beyond the daily work (`staff_grants`, a switch each in «مدیران سایت»,
- * all off by default): the catalogue, a wallet adjusted by hand, refunds, receipts dismissed in bulk (`payments`),
- * extending a service, deleting one or handing it to another customer (`delete`: either takes it from its customer), an
- * order made for a customer by hand (`manual_orders`: a service delivered on the admin's word), and a customer's website
- * account security. An operation that needs one names it in its route's ARGUMENT (routes/api.php); the panels'
- * principals hold every grant.
+ * What a shop lets its admins do from its website beyond the daily work (`websites.staff_grants`, a switch each in
+ * «مدیران سایت», all off by default): the catalogue (the plans, their categories, and the customer groups — a «همکار» one
+ * sets prices too, so a customer put in one asks it as well), a wallet adjusted by hand, refunds, receipts dismissed in
+ * bulk (`payments`), extending a service, deleting one or handing it to another customer (`delete`: either takes it from
+ * its customer), an order made for a customer by hand (`manual_orders`: a service delivered on the admin's word), and a
+ * customer's website account security. An operation that needs one names it in its route's ARGUMENT (routes/api.php), or
+ * its service asks the actor (Actor::holds()); the panels' principals hold every grant.
  */
 enum StaffGrant: string
 {

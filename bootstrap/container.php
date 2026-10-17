@@ -53,10 +53,13 @@ use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Installer\Services\InstallKey;
 use App\Modules\Payments\Contracts\RefundedOrders;
 use App\Modules\Payments\Drivers\Aban\AbanDriver;
+use App\Modules\Payments\Drivers\AqayePardakht\AqayePardakhtDriver;
 use App\Modules\Payments\Drivers\AtlasPay\AtlasPayDriver;
 use App\Modules\Payments\Drivers\CubePay\CubePayDriver;
 use App\Modules\Payments\Drivers\Manual\ManualDriver;
 use App\Modules\Payments\Drivers\Outside\OutsideDriver;
+use App\Modules\Payments\Drivers\Plisio\PlisioDriver;
+use App\Modules\Payments\Drivers\Variza\VarizaDriver;
 use App\Modules\Payments\Drivers\Wallet\WalletDriver;
 use App\Modules\Payments\Drivers\Zarinpal\ZarinpalDriver;
 use App\Modules\Payments\GatewayRegistry;
@@ -277,7 +280,7 @@ return [
     }),
 
     // The ways the shop takes money, by what payment_methods.driver holds (Payments\Drivers).
-    'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(OutsideDriver::class), $c->get(ManualDriver::class), $c->get(CubePayDriver::class), $c->get(ZarinpalDriver::class), $c->get(AtlasPayDriver::class), $c->get(AbanDriver::class)])),
+    'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(OutsideDriver::class), $c->get(ManualDriver::class), $c->get(CubePayDriver::class), $c->get(ZarinpalDriver::class), $c->get(AtlasPayDriver::class), $c->get(AbanDriver::class), $c->get(PlisioDriver::class), $c->get(AqayePardakhtDriver::class), $c->get(VarizaDriver::class)])),
     GatewayRegistry::class => autowire()->constructorParameter('drivers', get('payment.drivers')),
     // The pictures the shop is sent, each kind in a folder of its own (Users\Enums\PictureFolder): the receipts customers
     // upload from the shops' websites, the support tickets' — one sent in the bot stays Telegram's file.

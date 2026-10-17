@@ -5,7 +5,7 @@ import { SaleForm } from '@/components/discounts/sale-form'
 import { kindsWords, namedWords } from '@/components/discounts/targets'
 import { windowWords } from '@/components/discounts/window'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowTitleButton } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { EditorModal, useEditor } from '@/components/row-editor'
@@ -72,7 +72,7 @@ export function SalesPage() {
               <TableHead>نام</TableHead>
               <TableHead>تخفیف</TableHead>
               <TableHead className="hidden lg:table-cell">زمان</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <TableHead>فعال</TableHead>
               <ActionsHead />
             </TableRow>
@@ -82,6 +82,9 @@ export function SalesPage() {
               <TableRow key={sale.id}>
                 <TableCell>
                   <RowTitleButton onClick={() => editor.edit(sale)}>{sale.name}</RowTitleButton>
+                  <PhoneFacts>
+                    <StatusBadge status={DISCOUNT_STATE[sale.state]} />
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell>
                   <div className="grid gap-0.5">
@@ -90,7 +93,7 @@ export function SalesPage() {
                   </div>
                 </TableCell>
                 <TableCell className="hidden text-footnote text-muted-foreground lg:table-cell">{windowWords(sale.starts_at, sale.ends_at)}</TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <StatusBadge status={DISCOUNT_STATE[sale.state]} />
                 </TableCell>
                 <TableCell>

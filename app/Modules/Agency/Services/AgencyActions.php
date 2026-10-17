@@ -6,6 +6,7 @@ namespace App\Modules\Agency\Services;
 
 use App\Core\Database\Ledger;
 use App\Core\Database\Transitions;
+use App\Core\Exceptions\KeyReusedException;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Agency\DTO\AgencyTerms;
 use App\Modules\Agency\DTO\SellingTerms;
@@ -22,6 +23,7 @@ use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Telegram\Reports\ShopReports;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
+use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\Traffic;
 use App\Support\Validation;
@@ -99,7 +101,8 @@ final class AgencyActions
      * opens and they are notified. Nobody approves their own request.
      *
      * @throws ActorRefusedException 403 their own request
-     * @throws ValidationException 422 on `status`: decided meanwhile (decided())
+     * @throws ValidationException 422 on `status`: decided meanwhile (decided()); on `expires_at`: the program's term,
+     *                             counted from now, ends past the last day the shop keeps (LocalTime::LAST_DAY)
      */
     public function approve(AgencyRequest $request, Actor $actor, AgencyLevel $level, ?string $credit, ?SellingTerms $selling = null): AgencyRequest
     {
@@ -107,6 +110,11 @@ final class AgencyActions
             throw ActorRefusedException::ownRequest();
         }
         $terms = new AgencyTerms($level, $credit ?? $this->settings->defaultCredit(), $selling ?? $this->standing->defaults());
+        // An end the owner typed is held to the bound as it is read (SellingTerms::fromInput()); the program's is here.
+        $end = $terms->selling?->expiresAt;
+        if ($end !== null && LocalTime::tooLate($end)) {
+            throw ValidationException::on('expires_at', LocalTime::tooLateFor('تاریخ پایان نمایندگی') . '؛ مدت نمایندگی را در تنظیمات نمایندگی کوتاه‌تر کنید یا تاریخ پایان را خودتان بنویسید.');
+        }
         $returning = $this->db->transaction(function () use ($request, $terms, $actor): ?Bot {
             if (!Transitions::move($request, 'status', [AgencyRequestStatus::Pending], AgencyRequestStatus::Approved, ['level_id' => $terms->level->id, 'reviewer' => $actor->name(), 'decided_at' => now()])) {
                 throw ValidationException::on('status', self::decided($request));
@@ -191,12 +199,15 @@ final class AgencyActions
     }
 
     /**
-     * Adds or (with a minus sign) removes GB of an agent's traffic, with the note they read on their ledger.
+     * Adds or (with a minus sign) removes GB of an agent's traffic, with the note they read on their ledger — under the
+     * request's Idempotency-Key `$key` when it sent one: the same adjustment asked again is answered by the line it wrote,
+     * never made twice (TrafficPool::adjust()).
      *
      * @param array<string, mixed> $input {gb, note?}
      * @throws ValidationException 422 on `status` (not an agent), `gb` (no amount, or more than the pool has) or `note`
+     * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another line
      */
-    public function adjustTraffic(User $agent, Actor $actor, array $input): void
+    public function adjustTraffic(User $agent, Actor $actor, array $input, ?string $key = null): void
     {
         if (!$agent->isAgent()) {
             throw ValidationException::on('status', self::notAgent($agent));
@@ -210,7 +221,7 @@ final class AgencyActions
         }
 
         $bot = $agent->ownBot ?? throw new \LogicException("Agent #{$agent->id} has no shop.");
-        $this->pool->adjust($bot, $actor, ($less ? -1 : 1) * Traffic::bytesOfGb($gb), $note);
+        $this->pool->adjust($bot, $actor, ($less ? -1 : 1) * Traffic::bytesOfGb($gb), $note, $key);
     }
 
     /**

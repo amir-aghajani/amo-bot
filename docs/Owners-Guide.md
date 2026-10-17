@@ -1,3 +1,5 @@
+[فارسی](fa/Owners-Guide.md)
+
 # Owner's guide
 
 The shop is run from a panel: the owner's at `/admin/`, and each agent's — a reseller with a bot and a shop of their own
@@ -6,29 +8,33 @@ the common tasks are done, and what to watch out for. The panels speak Persian; 
 they show them, and a path such as «فروش › پرداخت‌ها» is a group of the sidebar and its page.
 
 Everything here works the same in an agent's panel for the agent's own shop, except where a page says it is the owner's
-alone: the servers, the agents, the mass gift and the installation's settings.
+alone: the servers, the agents, the mass gift («هدیه همگانی»), custom services, services added by their link, and the
+installation's settings («تنظیمات پنل»).
 
 ## Setting a shop up
 
 A new shop sells once it has a bot, a server, a plan and a way to pay. In order:
 
 1. **The bot** — its token goes in «تنظیمات پنل › ربات تلگرام» (the installer may have taken it already), and Telegram
-   is pointed at the shop with «ثبت Webhook» on the same screen — or a poller runs the bot
-   ([how the bot receives updates](Running-In-Production.md#how-the-bot-receives-updates)). The dashboard's system card
-   says when it gets its updates.
-2. **A server** — «سرورها» › «افزودن سرور»: a VPN panel's address and an API token, tested, then saved; then mark which
-   of its inbounds the shop sells on ([Servers](Servers.md)).
+   is pointed at the shop with «ثبت Webhook» on the same screen
+   ([how the bot receives updates](Running-In-Production.md#how-the-bot-receives-updates)). The scheduler must run too:
+   the cron line of «تنظیمات پنل › پیشرفته» ([Installation](Installation.md#shared-hosting), step 6). The dashboard's
+   «وضعیت سیستم» card says whether the bot gets its updates and the scheduler runs.
+2. **A server** — «سرورها» › «افزودن سرور»: a VPN panel's address and its API token (or a username and password),
+   tested, then saved; then mark which of its inbounds the shop sells on ([Servers](Servers.md)).
 3. **A plan** — «فروشگاه › پلن‌ها» › «افزودن پلن»: its name, price, traffic, days and devices, and the server it is sold
    on ([Plans](Plans.md)). Categories are optional.
 4. **A way to pay** — the wallet is built in; for card-to-card payments add your card in «فروشگاه › روش‌های پرداخت»,
-   and for payments confirmed without a receipt an online gateway — CubePay, Zarinpal, AtlasPay or AbanGateway
-   ([Payment methods](Payment-Methods.md)).
+   and for payments confirmed without a receipt an online gateway — CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio,
+   AqayePardakht or Variza ([Payment methods](Payment-Methods.md)).
 5. **The bot's rules and words** — the support contact, required channels, top-ups, renewals, the prices of extra
    traffic and time, reminders and the removal of ended services in «تنظیمات ربات» ([Bot settings](Bot-Settings.md));
-   the welcome, the texts and the menu in «ربات» ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)).
-6. **The report group** — a Telegram group where sales, receipts, failed deliveries and tickets reach the shop's admins,
-   with buttons to act on them ([Report group](Telegram-Group.md)). The buttons answer the bot's admins alone: start
-   the bot from your own Telegram account, then «فروش › کاربران» › your row's menu › «مدیر ربات کردن».
+   the welcome, the texts and the menu in «ربات › متن‌های ربات» and «ربات › کیبوردها»
+   ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)).
+6. **The report group** — a Telegram group of you and your team, where sales, receipts, failed deliveries and tickets
+   arrive with buttons to act on them ([Report group](Telegram-Group.md)). Only the bot's admins can use the buttons, so
+   make yourself one: start the bot from your own Telegram account, then «فروش › کاربران» › your row's menu › «مدیر ربات
+   کردن».
 7. **Then, as the shop grows**: [free test accounts](Test-Accounts.md), [discounts](Discounts.md),
    [loyalty tiers and cashback](Loyalty-Cashback-And-Draws.md),
    [gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md), the [referral program](Referrals.md),
@@ -41,16 +47,16 @@ approve it in the panel.
 
 | What | Where |
 |---|---|
-| What waits on you | The dashboard's «نیازمند توجه»: receipts to review, orders stuck, tickets waiting on an answer, reviews to decide, unpaid orders, servers whose panel failed, services ending soon — each a link to its list ([The panels](Panels.md#the-dashboard)) |
+| What waits on you | The dashboard's «نیازمند توجه»: receipts to review, payments held for you, orders stuck, tickets waiting on an answer, reviews to decide, servers whose panel failed — and apart, uncounted, what waits on customers: services ending soon, unpaid orders. Each is a link to its list ([The panels](Panels.md#the-dashboard)) |
 | Receipts | «فروش › پرداخت‌ها», the «در انتظار بررسی» tab — or «✅ تایید» and «❌ رد» under the receipt in the report group ([Orders and payments](Orders-And-Payments.md)) |
 | Paid orders not delivered | «فروش › سفارش‌ها», the «نیازمند رسیدگی» tab: retry once the server is back ([Orders and payments](Orders-And-Payments.md#orders)) |
-| An online payment held for support | The report group's «خطاها» says so once, and the payment's dialog why: check it at the gateway and settle it with the customer ([Orders and payments](Orders-And-Payments.md#a-payment-held-for-support)) |
+| An online payment held for support | The report group's «خطاها» says so once, «فروش › پرداخت‌ها» lists it under «نگه داشته شده», and the payment's dialog says why: check it at the gateway and settle it with the customer ([Orders and payments](Orders-And-Payments.md#a-payment-held-for-support)) |
 | Customers' questions | «پشتیبانی» — or a reply in the report group's «تیکت‌ها» topic ([Support tickets](Support-Tickets.md)) |
 | Reviews to publish | «نظرات», the «در انتظار بررسی» tab ([Reviews](Reviews.md)) |
 | One customer | Their page: their name anywhere in the panel leads there ([Customers](Customers.md)) |
 | One service | «فروش › اشتراک‌ها»: its link, usage, days and traffic added, switched off, moved, deleted ([Services](Services.md)) |
 | A server down | Its page says why; its services' days can be made good afterwards, or its services rescued to another server ([Servers](Servers.md#moving-its-services)) |
-| News for everyone | `/broadcast` in the bot ([Broadcasts](Broadcasts.md)) |
+| News for everyone | `/broadcast` in the bot; «ربات › ارسال همگانی» follows and controls the runs ([Broadcasts](Broadcasts.md)) |
 
 The menu counts what waits beside its entries — «پشتیبانی», «نظرات», «سفارش‌ها», «پرداخت‌ها» —, and every list follows the shop
 live: there is no need to reload.
@@ -81,6 +87,6 @@ live: there is no need to reload.
 | [Bot settings](Bot-Settings.md) | The bot's switches and rules |
 | [Bot texts and keyboards](Bot-Texts-And-Keyboards.md) | Every word the bot says, and its menu ([reference](Bot-Texts-Reference.md)) |
 | [Website](Website.md) | A shop's own website: its address, sign-ins, captcha, reviews, and the bot's admins working the shop from it |
-| [Panel settings](Panel-Settings.md) | The installation's own settings, the owner's login, the look |
+| [Panel settings](Panel-Settings.md) | The installation's own settings, the owner's login, the look, AmoBot's update |
 
 The customer's side of every screen — what the bot shows and says — is the [Bot guide](Bot-Guide.md).

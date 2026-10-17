@@ -111,7 +111,7 @@ export function ClientNamesSection({ settings, variables }: { settings: BotSetti
       />
       <SwitchRow
         label="نام دلخواه"
-        hint="در صفحه پرداخت خرید، مشتری با دکمه «✏️ دلخواه» نام کاربری سرویسش را می‌نویسد: بین ۳ تا ۳۲ کاراکتر از حروف و رقم انگلیسی، _ و -، و نامی که روی همان سرور گرفته نشده باشد."
+        hint="در صفحه پرداخت خرید، مشتری با دکمه «✏️ دلخواه» نام کاربری سرویسش را می‌نویسد: بین 3 تا 32 کاراکتر از حروف و رقم انگلیسی، _ و -، و نامی که روی همان سرور گرفته نشده باشد."
         checked={values.name_custom}
         onCheckedChange={(checked) => set('name_custom', checked)}
         error={error('name_custom')}

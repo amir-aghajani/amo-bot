@@ -9,15 +9,19 @@ use App\Core\Drivers\Driver;
 /**
  * A way the shop takes money: a stateless driver registered in `payment.drivers`. Its descriptor gives the panels its
  * words, the form of a method row's settings (kept in `payment_methods.config`) and two traits — `kind` (a GatewayKind)
- * and `builtin` (one row in every shop, never added or deleted: the wallet).
+ * and `builtin` (one row in every shop, never added or deleted: the wallet, and the outside row support records money
+ * taken outside the shop with).
  */
 interface GatewayDriver extends Driver
 {
     /** The trait (Descriptor::$traits) that says how it settles: a GatewayKind's value. */
     public const KIND = 'kind';
 
-    /** The trait that says it is part of the shop itself (the wallet). */
+    /** The trait that says it is part of the shop itself (the wallet, the outside row). */
     public const BUILTIN = 'builtin';
+
+    /** The summary() of a method set to its gateway's test service, where no money moves. */
+    public const TEST_MODE = 'حالت آزمایشی: پولی جابه‌جا نمی‌شود';
 
     /**
      * One line saying what the customer is told to pay to — a masked card and its holder —, on the method's row and on

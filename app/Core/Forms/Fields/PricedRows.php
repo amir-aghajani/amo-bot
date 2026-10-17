@@ -8,6 +8,7 @@ use App\Core\Forms\FieldType;
 use App\Support\Input;
 use App\Support\Money;
 use App\Support\Persian;
+use App\Support\Unit;
 
 /**
  * A list of amounts each at a price, as rows of {<amount key>, price}: each amount a whole number from 1 to `$max`, each
@@ -143,7 +144,7 @@ abstract class PricedRows extends Field
     /** A price as kept, while it is whole Toman within its bounds; null otherwise. */
     private function price(mixed $sent): ?string
     {
-        $price = Input::amountOf($sent);
+        $price = Input::amountOf($sent, Unit::Toman);
 
         return $price === null || $price < 1 || $price > $this->priceMax ? null : Money::normalize($price);
     }

@@ -1,7 +1,7 @@
 import { CheckCheck, Menu, Mic, MoreVertical, Paperclip, Search, Smile } from 'lucide-react'
 import { usePlainEmoji } from '@/components/bot-texts/custom-emojis'
 import { PremiumEmoji } from '@/components/bot-texts/premium-emoji'
-import { TelegramHtml } from '@/components/bot-texts/telegram-html'
+import { TelegramText } from '@/components/bot-texts/telegram-html'
 import { styleOption } from '@/components/keyboards/styles'
 import type { KeyboardButtonSpec, KeyboardType } from '@/lib/api-types'
 import { cn } from '@/lib/utils'
@@ -23,7 +23,7 @@ const BOT_NAME = 'ربات فروشگاه'
  */
 export function KeyboardPreview({ type, rows, message }: KeyboardPreviewProps) {
   return (
-    <div className="tg-preview flex flex-col overflow-hidden rounded-xl border border-white/10 text-footnote" style={{ minHeight: 400 }} aria-label="پیش‌نمایش در تلگرام">
+    <div role="figure" className="tg-preview flex flex-col overflow-hidden rounded-xl border border-white/10 text-footnote" style={{ minHeight: 400 }} aria-label="پیش‌نمایش در تلگرام">
       {/* header */}
       <div className="flex items-center gap-3 px-3 py-2" style={{ background: 'var(--tg-header)' }} dir="rtl">
         <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full text-body font-semibold text-white" style={{ background: 'var(--tg-avatar)' }}>
@@ -59,7 +59,7 @@ export function KeyboardPreview({ type, rows, message }: KeyboardPreviewProps) {
           {/* The greeting keeps its line breaks and wraps a long run as Telegram does; the time drops to its own line at
               the bubble's end, as Telegram does when the last line is full. */}
           <div className="relative rounded-xl rounded-bl-sm px-3 pt-1.5 pb-1 leading-snug wrap-anywhere whitespace-pre-wrap" style={{ background: 'var(--tg-in)' }} dir="rtl">
-            {message === undefined ? <span style={{ color: 'var(--tg-muted)' }}>…</span> : <TelegramHtml html={message.trim()} />}
+            {message === undefined ? <span style={{ color: 'var(--tg-muted)' }}>…</span> : <TelegramText html={message.trim()} />}
             <span className="mt-0.5 block text-left text-caption" style={{ color: 'var(--tg-muted)' }} dir="ltr">
               12:00
             </span>

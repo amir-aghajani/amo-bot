@@ -7,10 +7,10 @@ namespace App\Modules\Store\Forms;
 use App\Core\Forms\Fields\Field;
 use App\Core\Forms\Fields\FieldRefused;
 use App\Core\Forms\FieldType;
-use App\Modules\Store\Enums\StaffGrant;
+use App\Modules\Auth\StaffGrant;
 
 /**
- * The website's `staff_grants` field: the whole list of grants (Enums\StaffGrant) is sent each time, kept without repeats
+ * The website's `staff_grants` field: the whole list of grants (Auth\StaffGrant) is sent each time, kept without repeats
  * in the grants' own order. Anything that is no grant is refused; a kept value no longer a grant reads back left out.
  *
  * @extends Field<list<string>>

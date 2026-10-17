@@ -21,7 +21,6 @@ use App\Modules\Telegram\Update\Update;
 final class TicketReplies
 {
     private const SENT = '✅ پاسخ برای مشتری فرستاده شد.';
-    private const NOT_ADMIN = 'فقط مدیرهای ربات می‌توانند به تیکت پاسخ دهند؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.';
     private const NO_WORDS = 'پاسخ را به صورت متن، یا تصویر همراه توضیح (کپشن) بفرستید.';
     private const NO_CAPTION = 'همراه تصویر توضیح هم بنویسید (کپشن)؛ مشتری پاسخ را با آن می‌خواند.';
     private const NOT_FOUND = 'این تیکت پیدا نشد.';
@@ -40,14 +39,14 @@ final class TicketReplies
     public function answer(Update $update): bool
     {
         $message = $update->raw['message'] ?? null;
-        $replied = is_array($message) ? $this->groupButtons->botReplied($message) : null;
-        if ($replied === null) {
+        $replied = $this->groupButtons->botReplied($update);
+        if (!is_array($message) || $replied === null) {
             return false;
         }
         $chatId = (int) $update->chatId();
         $ticketId = ReportMessage::query()->where('chat_id', $chatId)->where('message_id', (int) ($replied['message_id'] ?? 0))->latest('id')->value('ticket_id');
         if ($ticketId === null) {
-            if (!$this->inTicketsTopic($chatId, $message, $replied)) {
+            if (!$this->inTicketsTopic($chatId, $message)) {
                 return false;
             }
             $this->groupButtons->sayUnder($chatId, $message, self::NO_TICKET);
@@ -55,7 +54,7 @@ final class TicketReplies
             return true;
         }
 
-        $admin = $this->groupButtons->writer($chatId, $message, self::NOT_ADMIN);
+        $admin = $this->groupButtons->writer($chatId, $message, GroupButtons::onlyAdmins('به تیکت پاسخ دهند'));
         if ($admin === null) {
             return true;
         }
@@ -89,17 +88,13 @@ final class TicketReplies
     }
 
     /**
-     * Whether a person's message is in the connected group's tickets topic, replying to one of the bot's messages there
-     * — not to the topic's own first message, which every message written in the topic replies to.
+     * Whether a person's message (replying to one of the bot's, GroupButtons::botReplied()) is in the connected group's
+     * tickets topic.
      *
      * @param array<string, mixed> $message
-     * @param array<string, mixed> $replied
      */
-    private function inTicketsTopic(int $chatId, array $message, array $replied): bool
+    private function inTicketsTopic(int $chatId, array $message): bool
     {
-        return ($message['from']['is_bot'] ?? false) !== true
-            && (int) ($replied['message_id'] ?? 0) !== GroupButtons::threadOf($message)
-            && !isset($replied['forum_topic_created'])
-            && $this->topics->holds(Topic::Tickets, $chatId, $message);
+        return ($message['from']['is_bot'] ?? false) !== true && $this->topics->holds(Topic::Tickets, $chatId, $message);
     }
 }

@@ -41,6 +41,13 @@ final class AdminCustomerGroupsApiTest extends HttpTestCase
 
         $ordered = $this->postJson('/api/admin/customer-groups/reorder', ['ids' => [$friendsId, $vipId]]);
         self::assertSame(['همکاران', 'ویژه'], array_column($this->decode($ordered)['groups'], 'name'));
+        // An order is read off ids alone: "2abc", a boolean or a list is none — never group #2 or #1 put first.
+        foreach ([["{$vipId}abc", $friendsId], [true, $friendsId], [[$vipId], $friendsId]] as $garbled) {
+            $refused = $this->unchecked()->postJson('/api/admin/customer-groups/reorder', ['ids' => $garbled]);
+            self::assertSame(422, $refused->getStatusCode(), json_encode($garbled, JSON_THROW_ON_ERROR));
+            self::assertArrayHasKey('ids', $this->decode($refused)['errors']);
+        }
+        self::assertSame(['همکاران', 'ویژه'], array_column($this->decode($this->get('/api/admin/customer-groups'))['groups'], 'name'), 'the order as it was');
 
         $ali = $this->customer(['telegram_id' => 1001]);
         $this->putJson("/api/admin/users/{$ali->id}/groups", ['group_ids' => [$vipId]]);
@@ -96,6 +103,9 @@ final class AdminCustomerGroupsApiTest extends HttpTestCase
         self::assertSame(422, $unknown->getStatusCode());
         self::assertArrayHasKey('group_ids', $this->decode($unknown)['errors']);
         self::assertSame([], $sara->groups()->get()->all(), 'a refused list changes nothing');
+        $garbled = $this->unchecked()->putJson("/api/admin/users/{$sara->id}/groups", ['group_ids' => ["{$vip->id}abc"]]);
+        self::assertSame(422, $garbled->getStatusCode(), 'no id is read out of what is no whole number');
+        self::assertSame([], $sara->groups()->get()->all());
 
         $users = $this->decode($this->get("/api/admin/users?group={$vip->id}"))['users'];
         self::assertSame(['Ali'], array_column($users, 'name'));
@@ -105,5 +115,23 @@ final class AdminCustomerGroupsApiTest extends HttpTestCase
         $cleared = $this->putJson("/api/admin/users/{$ali->id}/groups", ['group_ids' => []]);
         self::assertSame([], $this->decode($cleared)['user']['groups']);
         self::assertSame(404, $this->putJson('/api/admin/users/999/groups', ['group_ids' => []])->getStatusCode());
+    }
+
+    /** The owner decides any account's groups — a bot's admin's, an agent's —: what the website's admins are refused is the panels'. */
+    public function testTheOwnerPutsAnAdminsOrAnAgentsAccountInAGroup(): void
+    {
+        $colleagues = $this->customerGroup('همکاران', overrides: ['agent_pricing' => true]);
+        $admin = $this->admin(['telegram_id' => 1001]);
+        $agent = $this->agent(overrides: ['telegram_id' => 1002]);
+
+        foreach ([$admin, $agent] as $user) {
+            $response = $this->putJson("/api/admin/users/{$user->id}/groups", ['group_ids' => [$colleagues->id]]);
+            self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+            self::assertSame([$colleagues->id], $user->groups()->pluck('customer_groups.id')->all());
+        }
+        self::assertTrue($admin->paysAgentPrices());
+
+        $vip = $this->customerGroup('VIP', [$admin]);
+        self::assertTrue($this->decode($this->putJson("/api/admin/customer-groups/{$vip->id}", ['name' => 'VIP', 'agent_pricing' => true]))['group']['agent_pricing'], 'a group with an admin in it switched too');
     }
 }

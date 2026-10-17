@@ -37,7 +37,7 @@ function orders(request: SentRequest): OrdersPage {
 
 /**
  * The orders list opened at `at` (the panel's address), the address it shows and how it got there, and a way to follow
- * another link meanwhile. Its `server` filter takes any value, its `type` filter the two `choices` alone.
+ * another link meanwhile. Its `server` filter takes a server's id, its `type` filter the two `choices` alone.
  */
 async function ordersList(at = '/orders', statuses: readonly string[] = STATUSES) {
   server().on('GET', '/api/admin/orders', (request) => json(orders(request)))
@@ -51,6 +51,7 @@ async function ordersList(at = '/orders', statuses: readonly string[] = STATUSES
         statuses,
         params: ['server', 'type'],
         choices: { type: ['purchase', 'renewal'] },
+        ids: ['server'],
         sorts: SORTS,
         address: '/orders',
       }),
@@ -116,6 +117,16 @@ describe('a list opened', () => {
     expect(lastQuery()).toEqual({ server: '3' })
     await until(() => expect(at(result)).toBe('/orders?server=3'))
     expect(result.current.navigation).toBe('REPLACE')
+  })
+
+  it('ignores an id filter’s value that is no whole number — the API would refuse it — and takes it out of its address', async () => {
+    for (const typed of ['abc', '3.5', '-2', '0', '۳']) {
+      const result = await ordersList(`/orders?server=${encodeURIComponent(typed)}&type=renewal`)
+
+      expect(result.current.list.params, typed).toEqual({ server: '', type: 'renewal' })
+      expect(lastQuery(), typed).toEqual({ type: 'renewal' })
+      await until(() => expect(at(result)).toBe('/orders?type=renewal'))
+    }
   })
 
   it('takes a filter’s value among its choices', async () => {
@@ -411,6 +422,49 @@ describe('a row an operation handed back', () => {
 
     await until(() => expect(lastQuery()).toEqual({ page: '4' }))
     await until(() => expect(at(result)).toBe('/orders?page=4'))
+  })
+})
+
+describe('a page past the list’s end — an old link, a list that shrank', () => {
+  it('takes the list to its last page in one step, not a page at a time', async () => {
+    // Two orders, a page each: the server answers any page after the second with no rows.
+    server().on('GET', '/api/admin/orders', (request) => {
+      const page = Number(request.query.get('page') ?? 1)
+      return json({ orders: page <= 2 ? [{ id: page, name: `page ${page}` }] : [], meta: { page, per_page: 1, total: 2, last_page: 2 } } satisfies OrdersPage)
+    })
+    const { wrapper } = providers({ at: '/orders?page=40' })
+    const { result } = renderHook(
+      () => ({ list: usePagedList({ queryKey: ['orders'], read: (query) => api.get<OrdersPage>('/orders', query), list: 'orders', address: '/orders' }), location: useLocation() }),
+      {
+        wrapper,
+      },
+    )
+
+    await until(() => expect(result.current.list.rows.map((row) => row.id)).toEqual([2]))
+    expect(
+      server()
+        .sent('GET', '/api/admin/orders')
+        .map((request) => request.query.get('page')),
+    ).toEqual(['40', '2'])
+    await until(() => expect(result.current.location.search).toBe('?page=2'))
+  })
+
+  it('answered with the last page — the server’s own clamp —, writes that page in its address', async () => {
+    // Five orders, a page each: a page past the fifth is answered with the fifth, as the server pages a list.
+    server().on('GET', '/api/admin/orders', (request) => {
+      const page = Math.min(5, Number(request.query.get('page') ?? 1))
+      return json({ orders: [{ id: page, name: `page ${page}` }], meta: { page, per_page: 1, total: 5, last_page: 5 } } satisfies OrdersPage)
+    })
+    const { wrapper } = providers({ at: '/orders?page=99' })
+    const { result } = renderHook(
+      () => ({ list: usePagedList({ queryKey: ['orders'], read: (query) => api.get<OrdersPage>('/orders', query), list: 'orders', address: '/orders' }), location: useLocation() }),
+      { wrapper },
+    )
+
+    await until(() => expect(result.current.location.search).toBe('?page=5'))
+    await until(() => expect(result.current.list.isPlaceholderData).toBe(false))
+    expect(result.current.list.rows.map((row) => row.id)).toEqual([5])
+    expect(result.current.list.meta?.page).toBe(5)
   })
 })
 

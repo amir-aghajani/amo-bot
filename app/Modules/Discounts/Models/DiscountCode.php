@@ -14,7 +14,8 @@ use Illuminate\Support\Carbon;
 
 /**
  * A discount code a customer types at a checkout («کد تخفیف»), kept and matched in upper case (Services\DiscountCodes).
- * A use is an order made with it that is not cancelled, so an order that expires unpaid gives its use back.
+ * A use is an order made with it that is neither cancelled nor refunded, so an order that expires unpaid, or is refunded,
+ * gives its use back.
  *
  * @property int $id
  * @property string $code Upper case
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property list<string>|null $order_types OrderType values; null every kind a customer buys for themselves
  * @property list<int>|null $plan_ids
  * @property list<int>|null $server_ids
- * @property bool $first_purchase_only Only for a customer who has bought nothing yet (Order::boughtBy())
+ * @property bool $first_purchase_only Only for a customer who has bought nothing yet (Order::boughtBy()) — asked again as its order is delivered
  * @property Carbon|null $starts_at
  * @property Carbon|null $ends_at
  * @property int|null $max_uses
@@ -34,7 +35,8 @@ use Illuminate\Support\Carbon;
  * @property bool $enabled
  * @property Carbon $created_at
  * @property Carbon $updated_at
- * @property-read int|null $uses withCount: its orders not cancelled
+ * @property-read int|null $uses withCount: its orders neither cancelled nor refunded
+ * @property-read bool|null $kept withExists: an order other than a cancelled one names it — kept for that order's history (Services\DiscountCodes::delete())
  */
 class DiscountCode extends Model
 {
@@ -90,7 +92,7 @@ class DiscountCode extends Model
     }
 
     /**
-     * Every order made with it, cancelled ones too: its uses are those not cancelled.
+     * Every order made with it, cancelled and refunded ones too: its uses are the others.
      *
      * @return HasMany<Order, $this>
      */

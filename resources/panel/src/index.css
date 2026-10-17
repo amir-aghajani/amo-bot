@@ -50,18 +50,27 @@
   --warning-line: #eda100;
   --danger: #8e2626;
   --danger-soft: #fad6d6;
-  --danger-line: #f09595;
+  /* Darker than the other families' lines: it marks a refused field, so it stands at 3:1 on every light surface and fill,
+     and on its own soft background. */
+  --danger-line: #d44f4f;
 
   --danger-solid: #c93a3a;
   --focus: #2a78d6;
   --link: #184f95;
 
+  /* A text field's or a filter pill's hairline and its hover (components/ui/input, components/filter-select), a theme's
+     own: the focus and a refusal draw over them in either theme, which a `dark:` border class would win over. */
+  --field-line: var(--line-strong);
+  --field-line-hover: var(--line-stronger);
+
   --shadow-popover: 0 8px 24px rgb(0 0 0 / 12%), 0 2px 6px rgb(0 0 0 / 6%);
   --shadow-card: 0 1px 2px rgb(11 11 11 / 4%);
   --backdrop: rgb(11 11 11 / 28%);
 
-  /* The surface a table sits on — the page's; a card sets its own —, under its last column when it sticks (see below). */
+  /* The surface a table sits on — the page's; a card and a dialog set their own —, under its last column when it sticks (see below). */
   --table-surface: var(--surface-1);
+  /* The shadow that column's edge casts while rows pass under it. */
+  --table-edge: rgb(11 11 11 / 14%);
 
   /* The overview chart's one series: it shows one metric at a time (components/dashboard/area-chart). */
   --chart-1: #2a78d6;
@@ -96,14 +105,19 @@
   --warning-line: #512e00;
   --danger: #ec7e7e;
   --danger-soft: #3c0e0e;
-  --danger-line: #641919;
+  /* Brighter than the other families' lines: it marks a refused field, so it stands at 3:1 on every dark surface and fill. */
+  --danger-line: #d65454;
 
   /* --danger-solid and --focus are the same in both themes. */
   --link: #6da7ec;
 
+  --field-line: var(--line);
+  --field-line-hover: var(--line-strong);
+
   --shadow-popover: 0 8px 24px rgb(0 0 0 / 32%), 0 2px 6px rgb(0 0 0 / 20%);
   --shadow-card: none;
   --backdrop: rgb(0 0 0 / 62%);
+  --table-edge: rgb(0 0 0 / 60%);
 
   --chart-1: #4f93e6;
 }
@@ -158,6 +172,8 @@
   --color-border: var(--line);
   --color-border-strong: var(--line-strong);
   --color-border-stronger: var(--line-stronger);
+  --color-field-line: var(--field-line);
+  --color-field-line-hover: var(--field-line-hover);
   /* What is on or chosen (a switch, a picked card, a bar's progress) — the focus blue, but not the focus. */
   --color-selected: var(--focus);
   --color-fill: var(--fill);
@@ -250,6 +266,23 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 20%, transparent);
 }
 
+/* A small control's finger-sized press on a phone (below `md`): 44px around its middle, its look and its place unchanged. */
+@utility touch-target {
+  position: relative;
+
+  @media (width < 48rem) {
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 2.75rem);
+      height: max(100%, 2.75rem);
+      translate: -50% -50%;
+    }
+  }
+}
+
 /* Unobtrusive scrollbars inside panels (sidebar nav, dialogs). */
 @utility scrollbar-thin {
   scrollbar-width: thin;
@@ -287,17 +320,40 @@
     background: inherit;
   }
 
-  [data-slot='table-body'] > [data-slot='table-row']:is(:hover, :has([aria-expanded='true']), [data-state='selected']) > [data-slot='table-cell']:last-child::before {
+  [data-slot='table-body'] > [data-slot='table-row']:is(:has([aria-expanded='true']), [data-state='selected']) > [data-slot='table-cell']:last-child::before {
     border-start-end-radius: var(--radius-lg);
     border-end-end-radius: var(--radius-lg);
   }
 
-  [data-slot='table-body'] > [data-slot='table-row']:is(:hover, :has([aria-expanded='true'])) > [data-slot='table-cell']:last-child {
+  [data-slot='table-body'] > [data-slot='table-row']:has([aria-expanded='true']) > [data-slot='table-cell']:last-child {
     background-image: linear-gradient(var(--fill), var(--fill));
+  }
+
+  /* Lit by a pointer that hovers, as the row's own fill is (TableRow's `hover:`): a tap on a touch screen leaves the
+     row's :hover behind, which would light this column alone. */
+  @media (hover: hover) {
+    [data-slot='table-body'] > [data-slot='table-row']:hover > [data-slot='table-cell']:last-child::before {
+      border-start-end-radius: var(--radius-lg);
+      border-end-end-radius: var(--radius-lg);
+    }
+
+    [data-slot='table-body'] > [data-slot='table-row']:hover > [data-slot='table-cell']:last-child {
+      background-image: linear-gradient(var(--fill), var(--fill));
+    }
   }
 
   [data-slot='table-body'] > [data-slot='table-row'][data-state='selected'] > [data-slot='table-cell']:last-child {
     background-image: linear-gradient(var(--fill-hover), var(--fill-hover));
+  }
+
+  /* While rows pass under it (components/ui/table's `data-under`), the column's inline-start edge casts a soft shadow
+     over them, so a cell cut there reads as going on under it rather than ending there. */
+  [data-slot='table-container'][data-under] [data-slot='table'] :is([data-slot='table-head'], [data-slot='table-cell']):last-child {
+    box-shadow: -10px 0 10px -8px var(--table-edge);
+  }
+
+  [dir='rtl'] [data-slot='table-container'][data-under] [data-slot='table'] :is([data-slot='table-head'], [data-slot='table-cell']):last-child {
+    box-shadow: 10px 0 10px -8px var(--table-edge);
   }
 
   /* The login and installer screens: a faint dot grid on the plain page — texture, not decoration. */
@@ -324,6 +380,8 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-2xl);
     background: var(--surface-3);
+    /* A table in a dialog sits on the dialog's surface: its sticky last column takes that, not the page's. */
+    --table-surface: var(--surface-3);
     padding: 0;
     color: inherit;
     box-shadow: var(--shadow-popover);

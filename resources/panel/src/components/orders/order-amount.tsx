@@ -11,7 +11,8 @@ export function OrderAmount({ order }: { order: Pick<OrderRow, 'amount' | 'prici
   const pricing = order.manual ? `سفارش دستی · ${MANUAL_PAYMENT[order.manual.payment]}` : ORDER_PRICING[order.pricing]
   return (
     <div className="grid">
-      <span>{formatMoney(order.amount)}</span>
+      {/* The amount keeps to its line where the words under it may wrap (a phone's narrow column). */}
+      <span className="whitespace-nowrap">{formatMoney(order.amount)}</span>
       {pricing && <span className="text-footnote text-muted-foreground">{pricing}</span>}
       {isDiscounted(order) && (
         <span className="text-footnote text-muted-foreground">

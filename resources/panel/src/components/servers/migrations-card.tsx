@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowLeftRight, CircleAlert, CircleSlash, Eraser, ServerOff } from 'lucide-react'
+import { ArrowLeftRight, CircleSlash, Eraser, ServerOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { Callout } from '@/components/callout'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { ErrorState } from '@/components/error-state'
+import { LastFailure } from '@/components/grants/grant-card'
 import { Modal } from '@/components/modal'
+import { useReadFailure } from '@/components/page'
 import { ProgressBar } from '@/components/progress-bar'
 import { Reviewer } from '@/components/reviewer'
 import { MigrationForm } from '@/components/servers/migration-form'
@@ -45,6 +47,7 @@ const CONFIRMS: Partial<Record<MigrationAction, { title: string; label: string; 
  */
 export function MigrationsCard({ server }: { server: ServerRow }) {
   const { read, current, put, act, changes } = useMigrations(server.id)
+  const failure = useReadFailure(read)
   const [starting, setStarting] = useState(false)
   const [asking, setAsking] = useState<{ job: ServerMigrationRow; action: MigrationAction } | null>(null)
   const [details, setDetails] = useState<ServerMigrationRow | null>(null)
@@ -64,7 +67,7 @@ export function MigrationsCard({ server }: { server: ServerRow }) {
         <Button variant="secondary" icon={ArrowLeftRight} className="w-fit" onClick={() => setStarting(true)} disabled={!read.data || current !== null}>
           انتقال سرویس‌ها
         </Button>
-        {read.error && <ErrorState what="لیست" error={read.error} onRetry={() => void read.refetch()} />}
+        {failure.error && <ErrorState what="لیست" error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} />}
         {read.data && <Leftovers server={server} leftovers={read.data.leftovers} />}
         {read.data
           ? read.data.migrations.length > 0 && (
@@ -74,7 +77,7 @@ export function MigrationsCard({ server }: { server: ServerRow }) {
                 ))}
               </ul>
             )
-          : !read.error && <Skeleton className="h-20 w-full" />}
+          : !failure.error && <Skeleton className="h-20 w-full" />}
       </CardContent>
 
       <Modal open={starting} onClose={() => setStarting(false)} size="md" title="انتقال سرویس‌ها" description={`از «${server.name}» به سرور دیگر`}>
@@ -151,7 +154,7 @@ function MigrationItem({ job, busy, onAction, onDetails }: { job: ServerMigratio
         <Callout tone="warning" icon={ServerOff} role="status" className="text-footnote">
           <div className="grid gap-0.5">
             <span>
-              {job.mode === 'migrate'
+              {job.waiting_on === 'source'
                 ? 'انتقال تا جواب دادن این پنل منتظر می‌ماند و خودکار دوباره تلاش می‌شود. اگر پنل این سرور از دسترس خارج شده است، با حالت نجات ادامه دهید.'
                 : 'انتقال تا جواب دادن این پنل منتظر می‌ماند و خودکار دوباره تلاش می‌شود.'}
             </span>
@@ -169,15 +172,7 @@ function MigrationItem({ job, busy, onAction, onDetails }: { job: ServerMigratio
           سرویس‌های باقی‌مانده روی همین سرور هستند؛ بعد از رفع مشکل، انتقال تازه‌ای شروع کنید.
         </Callout>
       )}
-      {job.last_failure && (
-        <p className="flex items-start gap-1.5 text-footnote text-danger">
-          <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
-          <span className="min-w-0 break-words" dir="auto">
-            <span className="sr-only">آخرین خطا: </span>
-            {job.last_failure}
-          </span>
-        </p>
-      )}
+      {job.last_failure && <LastFailure failure={job.last_failure} />}
       <div className="flex min-h-7 flex-wrap items-center justify-between gap-2 text-footnote text-muted-foreground">
         <span>
           <time dateTime={job.created_at} title={formatDate(job.created_at)}>
@@ -186,7 +181,7 @@ function MigrationItem({ job, busy, onAction, onDetails }: { job: ServerMigratio
           {job.reviewer && (
             <>
               {' · '}
-              <Reviewer name={job.reviewer} />
+              <Reviewer name={job.reviewer} person={job.reviewer_name} />
             </>
           )}
           {notes.map((note) => ` · ${note}`)}
@@ -197,23 +192,24 @@ function MigrationItem({ job, busy, onAction, onDetails }: { job: ServerMigratio
               سرویس‌های ناموفق
             </Button>
           )}
-          {open && job.mode === 'migrate' && job.waiting_reason && (
-            <Button variant="secondary" size="sm" disabled={busy} onClick={() => onAction('rescue')}>
+          {/* A rescue goes on without the source alone: a target out of reach holds it as well. */}
+          {open && job.waiting_on === 'source' && (
+            <Button variant="secondary" size="sm" aria-disabled={busy} onClick={() => onAction('rescue')}>
               ادامه با حالت نجات
             </Button>
           )}
           {workable(job) && (
-            <Button variant="secondary" size="sm" disabled={busy} onClick={() => onAction('pause')}>
+            <Button variant="secondary" size="sm" aria-disabled={busy} onClick={() => onAction('pause')}>
               توقف موقت
             </Button>
           )}
           {job.status === 'paused' && (
-            <Button variant="secondary" size="sm" disabled={busy} onClick={() => onAction('resume')}>
+            <Button variant="secondary" size="sm" aria-disabled={busy} onClick={() => onAction('resume')}>
               ادامه
             </Button>
           )}
           {open && (
-            <Button variant="danger" size="sm" disabled={busy} onClick={() => onAction('cancel')}>
+            <Button variant="danger" size="sm" aria-disabled={busy} onClick={() => onAction('cancel')}>
               لغو
             </Button>
           )}
@@ -280,11 +276,12 @@ function FailuresModal({ server, job, onClose }: { server: ServerRow; job: Serve
     queryFn: () => api.get<ServerMigrationDetailResponse>(`/servers/${server.id}/migrations/${job?.id ?? 0}`),
     enabled: job !== null,
   })
+  const readFailure = useReadFailure(detail, job?.id)
 
   return (
     <Modal open={job !== null} onClose={onClose} size="lg" title="سرویس‌های ناموفق" description={job ? `انتقال به «${job.target.name}»` : undefined}>
-      {detail.error ? (
-        <ErrorState what="لیست" error={detail.error} onRetry={() => void detail.refetch()} />
+      {readFailure.error ? (
+        <ErrorState what="لیست" error={readFailure.error} onRetry={() => void detail.refetch()} retrying={readFailure.retrying} />
       ) : detail.data ? (
         <ul className="grid divide-y divide-border overflow-hidden rounded-xl border border-border text-body" aria-label="سرویس‌های ناموفق">
           {detail.data.failures.map((failure) => (

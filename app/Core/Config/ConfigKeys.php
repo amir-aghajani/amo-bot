@@ -45,7 +45,7 @@ final class ConfigKeys
         'Keys and secrets' => [
             'APP_KEY' => ['', "The key the shop encrypts its secrets with (the panels' passwords, the agents' bots' tokens). Never change it:\nwhat it encrypted could not be read again. Keep a copy of this file with your backups."],
             'CRON_TOKEN' => ['', 'The secret of the /cron/<token> address, for a host whose cron calls an address instead of running a command.'],
-            'TRUSTED_PROXIES' => ['', "The reverse proxies in front of PHP (Cloudflare's ranges, a load balancer), addresses or CIDR ranges apart by\ncommas: their X-Forwarded-For says who the browser is. Empty: the web server's REMOTE_ADDR is the browser."],
+            'TRUSTED_PROXIES' => ['', "The reverse proxies in front of PHP (Cloudflare's ranges, a load balancer), addresses or CIDR ranges apart by\ncommas or spaces: their X-Forwarded-For says who the browser is. An entry that cannot be read trusts nobody.\nEmpty: the web server's REMOTE_ADDR is the browser."],
         ],
         'Advanced' => [
             'APP_BASE_PATH' => ['', 'The folder requests reach PHP under (/shop), only when the web server does not say it; empty: detected.'],

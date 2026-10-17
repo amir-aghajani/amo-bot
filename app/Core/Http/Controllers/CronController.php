@@ -13,8 +13,9 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * GET /cron/{token} — the scheduler's tick for a host without a shell cron, called every minute by an external pinger
- * (cron-job.org, UptimeRobot, …). Off while CRON_TOKEN is empty; the token in the address is the only key.
+ * GET /cron/{token} — the scheduler's tick, called every minute: by the line the panel prepares for cPanel's Cron Jobs
+ * («کپی خط Cron»), or by an external pinger (cron-job.org, UptimeRobot, …). Off while CRON_TOKEN is empty; the token
+ * in the address is the only key.
  */
 final class CronController extends ApiController
 {

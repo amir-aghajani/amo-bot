@@ -48,7 +48,8 @@ final class OwnerAuth implements PanelAuth
     /**
      * Sign in with {username, password}, in the shop the request names. In this order: the address (and the username
      * typed) must not be waiting, both fields are asked, a login must be set up; then the password is counted before it
-     * is judged (SignInThrottle::password()), so guesses sent at once never pass the limits.
+     * is judged (SignInThrottle::password()), so guesses sent at once never pass the limits. The right credentials at
+     * the address of a shop that is not there are no failed sign-in: the count goes back, and the shop is the refusal.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException 422: a field left blank, or `shop` that is no bot's id
@@ -75,11 +76,21 @@ final class OwnerAuth implements PanelAuth
         }
 
         $principal = null;
-        $this->throttle->password(AdminAccount::WAY, $request, $username, function () use ($username, $password, $request, &$principal): bool {
-            $principal = $this->attempt($username, $password, $request);
+        $refused = null;
+        $this->throttle->password(AdminAccount::WAY, $request, $username, function () use ($username, $password, $request, &$principal, &$refused): bool {
+            try {
+                $principal = $this->attempt($username, $password, $request);
+            } catch (ShopRefusedException|ValidationException $shop) {
+                $refused = $shop;
+
+                return true;
+            }
 
             return $principal !== null;
         });
+        if ($refused !== null) {
+            throw $refused;
+        }
 
         return $principal ?? throw SignInRefusedException::wrongCredentials();
     }

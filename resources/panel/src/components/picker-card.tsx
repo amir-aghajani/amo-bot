@@ -5,6 +5,7 @@ import { ErrorState } from '@/components/error-state'
 import { Creating } from '@/components/form-footer'
 import { IconButton } from '@/components/icon-button'
 import { Modal, useHeld } from '@/components/modal'
+import { useReadFailure } from '@/components/page'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirmDiscard } from '@/lib/use-unsaved-guard'
@@ -107,6 +108,7 @@ export function PickerModal<Option extends Pickable, Q extends QueryKey>({ open,
   const [picked, setPicked] = useState<Option | null>(null)
 
   const options = useQuery({ ...query, enabled: open })
+  const failure = useReadFailure(options)
 
   // Back to the picker on every opening (state adjusted during render, the React way to follow a prop).
   const [wasOpen, setWasOpen] = useState(open)
@@ -136,13 +138,13 @@ export function PickerModal<Option extends Pickable, Q extends QueryKey>({ open,
         <Creating value>{form.render(picked)}</Creating>
       ) : (
         <div className="grid gap-2.5">
-          {options.isPending ? (
+          {failure.error ? (
+            <ErrorState what="لیست" error={failure.error} onRetry={() => void options.refetch()} retrying={failure.retrying} />
+          ) : options.data === undefined ? (
             <>
               <Skeleton className="h-28 w-full rounded-xl" />
               <Skeleton className="h-28 w-full rounded-xl" />
             </>
-          ) : options.error ? (
-            <ErrorState what="لیست" error={options.error} onRetry={() => void options.refetch()} retrying={options.isFetching} />
           ) : (
             options.data.map((option) => <PickerCard key={option.key} {...card(option)} description={option.description} notes={option.notes} onPick={() => setPicked(option)} />)
           )}

@@ -67,7 +67,7 @@ final class DeliveryRetryTest extends BotTestCase
         self::assertSame('✅ سفارش تحویل شد.', $this->popup());
 
         $answered = ReportMessage::query()->where('topic', 'errors')->latest('id')->firstOrFail();
-        self::assertSame(["✅ سفارش #{$this->order->id} با تلاش دوباره تحویل شد.", "delivery:{$this->order->id}", true], [$answered->text, $answered->reply_ref, $answered->clears_buttons]);
+        self::assertSame(["✅ سفارش \u{200E}#{$this->order->id} با تلاش دوباره تحویل شد.", "delivery:{$this->order->id}", true], [$answered->text, $answered->reply_ref, $answered->clears_buttons]);
         self::assertSame(1, ReportMessage::query()->where('topic', 'purchases')->count(), 'and the sale is reported');
     }
 

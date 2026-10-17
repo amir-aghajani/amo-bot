@@ -1,5 +1,5 @@
 import type { DriverDescription, DriverValues, FieldDescription, SecretState } from '@/lib/api-types'
-import { digitsOnly } from '@/lib/format'
+import { digitsOnly, toLatinDigits, tomanOf, wholesOf } from '@/lib/format'
 import { originOf } from '@/lib/utils'
 
 /*
@@ -46,12 +46,13 @@ export function driverDraft(driver: DriverDescription, stored?: DriverValues): D
 
 /**
  * The fields shown, in order: each whose `when` holds — every field it names is shown before it and holds one of the
- * listed values (a switch as "true"/"false"). As on the server, a field not shown is neither read nor refused.
+ * listed values (a switch as "true"/"false", a number as its Latin digits — «۵» is "5" —, read trimmed as the server
+ * reads it). As on the server, a field not shown is neither read nor refused.
  */
 export function shownFields(driver: DriverDescription, draft: DriverDraft): FieldDescription[] {
   const shown = new Set<string>()
   return driver.fields.filter((field) => {
-    const holds = Object.entries(field.when).every(([name, values]) => shown.has(name) && values.includes(String(draft[name] ?? '')))
+    const holds = Object.entries(field.when).every(([name, values]) => shown.has(name) && values.includes(toLatinDigits(String(draft[name] ?? '')).trim()))
     if (holds) shown.add(field.name)
     return holds
   })
@@ -75,7 +76,7 @@ export function driverPayload(driver: DriverDescription, draft: DriverDraft): Dr
 /**
  * Whether a blank secret would keep the stored one although a shown field it is bound to (`bound_to`) moved — which the
  * server refuses in the field's `moved` words. Values are compared as the server compares them: a number by its
- * digits, an address by its origin.
+ * digits, an address by its origin, a proxy's host in lower case.
  */
 export function leftBehind(driver: DriverDescription, field: FieldDescription, draft: DriverDraft, stored?: DriverValues): boolean {
   const kept = stored?.[field.name]
@@ -89,10 +90,36 @@ export function leftBehind(driver: DriverDescription, field: FieldDescription, d
   })
 }
 
-/** What identifies a field's value, as the server compares a bound secret's fields: a number its digits, an address its origin. */
+/** A panel's proxy host, a text field the server keeps in a form of its own (Providers\Forms\ProxyHost::read()). */
+const PROXY_HOST = 'proxy_host'
+
+/**
+ * A host as the server keeps it: its digits (and «٫») Latin, in lower case, an IPv6 address without its brackets —
+ * «Proxy.Example.com» is the proxy.example.com kept.
+ */
+function hostOf(text: string): string {
+  const host = toLatinDigits(text).replace(/٫/g, '.').replace(/٬/g, '').toLowerCase()
+  return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host
+}
+
+/**
+ * What identifies a field's value, as the server compares a bound secret's fields — by what it reads: a number its
+ * digits, an amount its Toman, a list its numbers («50, 100» is what [50, 100] was), an address its origin, a proxy's
+ * host as it keeps it.
+ */
 function identity(field: FieldDescription, value: string | boolean | number | number[]): string {
-  const text = Array.isArray(value) ? value.join(',') : String(value).trim()
-  if (field.type === 'number') return digitsOnly(text)
-  if (field.type === 'url') return originOf(text)
-  return text
+  const text = Array.isArray(value) ? value.join(', ') : String(value).trim()
+  if (field.name === PROXY_HOST) return hostOf(text)
+  switch (field.type) {
+    case 'number':
+      return digitsOnly(text)
+    case 'amount':
+      return String(tomanOf(text) ?? text)
+    case 'list':
+      return (wholesOf(text) ?? [text]).join(',')
+    case 'url':
+      return originOf(text)
+    default:
+      return text
+  }
 }

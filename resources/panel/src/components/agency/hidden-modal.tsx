@@ -5,6 +5,7 @@ import { CheckList } from '@/components/check-list'
 import { ErrorState } from '@/components/error-state'
 import { FormActions } from '@/components/form-footer'
 import { Modal } from '@/components/modal'
+import { useReadFailure } from '@/components/page'
 import { Skeleton } from '@/components/ui/skeleton'
 import { userLabel } from '@/components/user-identity'
 import { api } from '@/lib/api'
@@ -28,10 +29,18 @@ export function HiddenModal({ agent, onClose, onSaved }: { agent: AgentRow | nul
 /** The servers and plans, read afresh each time the dialog opens. */
 function HiddenRead({ agent, onClose, onSaved }: { agent: AgentRow; onClose: () => void; onSaved: (agent: AgentRow) => void }) {
   const read = useQuery({ queryKey: queryKeys.agentHidden(agent.id), queryFn: () => api.get<AgentHiddenResponse>(`/agency/agents/${agent.id}/hidden`) })
+  const failure = useReadFailure(read)
+  const failed = failure.error && <ErrorState what="سرورها و پلن‌ها" error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} />
 
-  if (read.error) return <ErrorState what="سرورها و پلن‌ها" error={read.error} onRetry={() => void read.refetch()} retrying={read.isFetching} />
+  // A later read that fails is said over the form, which keeps what was ticked.
+  if (!read.data) return failed || <Skeleton className="h-48 w-full rounded-xl" />
 
-  return read.data ? <HiddenForm agent={agent} hidden={read.data.hidden} onClose={onClose} onSaved={onSaved} /> : <Skeleton className="h-48 w-full rounded-xl" />
+  return (
+    <>
+      {failed}
+      <HiddenForm agent={agent} hidden={read.data.hidden} onClose={onClose} onSaved={onSaved} />
+    </>
+  )
 }
 
 function HiddenForm({ agent, hidden, onClose, onSaved }: { agent: AgentRow; hidden: AgentHidden; onClose: () => void; onSaved: (agent: AgentRow) => void }) {
@@ -60,7 +69,7 @@ function HiddenForm({ agent, hidden, onClose, onSaved }: { agent: AgentRow; hidd
       />
       <CheckList
         label="پلن‌های پنهان"
-        hint="این پلن‌های نماینده فروخته نمی‌شوند؛ او آن‌ها را «پنهان‌شده توسط مدیر» می‌بیند و نمی‌تواند دوباره نمایششان دهد. سرویس‌هایی که با آن‌ها فروخته شده تمدید می‌شوند."
+        hint="این پلن‌های نماینده فروخته نمی‌شوند؛ او آن‌ها را «پنهان‌شده توسط پشتیبانی» می‌بیند و نمی‌تواند دوباره نمایششان دهد. سرویس‌هایی که با آن‌ها فروخته شده تمدید می‌شوند."
         options={hidden.plans.map((plan) => ({ value: plan.id, label: plan.name, hint: plan.is_active ? undefined : 'خاموش' }))}
         value={values.plan_ids}
         onChange={(ids) => set('plan_ids', ids)}

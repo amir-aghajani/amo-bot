@@ -9,7 +9,7 @@ enum OrderStatus: string
 {
     case Pending = 'pending';       // made, waiting for a payment
     case Paid = 'paid';             // paid, delivery not started
-    case Processing = 'processing'; // claimed by the process delivering it («در حال ساخت»); stale after ten minutes
+    case Processing = 'processing'; // claimed by the process delivering it («در حال ساخت»); stale once its delivery stops touching it (OrderService::STALE_PROCESSING_MINUTES)
     case Fulfilled = 'fulfilled';   // delivered: a service made or changed, the wallet credited, an agent's traffic added
     case Cancelled = 'cancelled';   // dropped unpaid — by support, or expired
     case Failed = 'failed';         // paid, but the delivery failed; waits for support's retry

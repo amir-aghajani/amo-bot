@@ -1,3 +1,5 @@
+[فارسی](fa/Testing.md)
+
 # Testing
 
 How the test suites are built, what each base class and helper gives you, and what keeps the code honest beyond the
@@ -6,7 +8,7 @@ tests themselves. Run everything with `composer check` and `pnpm check` before a
 
 ## The PHP suite
 
-`vendor/bin/phpunit` (or `composer test`) runs `tests/Unit` and `tests/Feature`, some 2,700 tests:
+`vendor/bin/phpunit` (or `composer test`) runs `tests/Unit` and `tests/Feature`, some 3,700 tests:
 
 - **On its own configuration**: the app boots once per test process on a `config.php` of the suite's own
   (`TestCase::CONFIG`: an in-memory SQLite database, a fixed `APP_KEY`, UTC, no bot token, no panel login), deleted as
@@ -31,8 +33,9 @@ A few things to know:
   one-off double, listing the entries that hold it so they are rebuilt and restored.
 - **The change feed** counts the test's transaction as the database (`ChangeFeed::countAsCommitted()`), so writes in a
   test move the panels' areas as committed writes would.
-- **Event listeners** are as each test found them: a test that changed them fails. To act at a precise moment — another
-  process's move in a race — use `whileListening($event, $listener, $work)`, which puts the listeners back;
+- **Leave event listeners as you found them**: a test that ends with them changed fails. Never `forget()` one by hand,
+  which drops the app's own listeners too. To act at a precise moment — another process's move in a race — use
+  `whileListening($event, $listener, $work)`, which puts the listeners back;
   `whileTheOrderClosesOnceRead()` is the settlement's race. `withTheTurnOver($work)` runs work as at the end of a
   scheduler's turn.
 - **HTTP tests validate both ways** against the API description ([API contract](API-Contract.md)). A request no client
@@ -56,18 +59,22 @@ service directly.
 
 ## Fakes
 
-Each fake stands in for one outside party and records what the app sent it.
+Each fake stands in for one outside party and records what the app sent it. A fake of an HTTP service is a Guzzle
+handler put under the app's one outgoing client: `TestCase::outgoingFake($class)` makes it the first time a test asks
+for it and puts it in place, and the client is offline again after the test. Each such fake has its helper below,
+which calls `outgoingFake()`.
 
 | Fake | Stands for | Reach it with |
 |---|---|---|
 | `Support\FakeTelegram` | the Bot API and bot:poll's long polls | `telegram()` — `reply()`, `fail()`, `on($method, …)`, `calls()`, `params()`, `sentTo()` |
-| `Support\FakePanel` | any other outgoing HTTP: a VPN panel, Resend, GitHub | `panelHttp()` — `ok()`, `fail()`, `raw()`, `refuse()`, `calls()`, `request()` |
+| `Support\FakePanel` | any other outgoing HTTP: a VPN panel, Resend | `panelHttp()` — `ok()`, `fail()`, `raw()`, `refuse()`, `calls()`, `request()`, `params()`, `options()` |
 | `Fakes\FakePanelDriver`, `Fakes\FakeProvider` | a VPN panel connector, for everything above the connector | `fakePanel()`, then a server with `driver: fake` |
+| `Support\FakeCubePay`, `FakeZarinpal`, `FakeAtlasPay`, `FakeAban`, `FakePlisio`, `FakeAqayePardakht`, `FakeVariza` | each online gateway's API | `cubePay()`, `zarinpal()`, `atlasPay()`, `aban()`, `plisio()`, `aqayePardakht()`, `variza()` — each pays, closes or refuses a payment as its gateway does, `down()` takes it out of reach; `FakeVariza::webhook()` writes and signs a webhook for the test to send |
 | `Support\FakeTelegramLogin`, `FakeGoogleLogin` | the OpenID providers (keys signed by `SigningKey`) | `telegramLogin()`, `googleLogin()` |
 | `Support\FakeTurnstile`, `AltchaWidget` | Cloudflare's siteverify; a visitor's browser solving ALTCHA | `turnstile()`; `AltchaWidget::solve()` |
 | `Fakes\RecordingMailTransport` | the mail server | `mail()` — `sent()`, `to()`, `codeIn()`, `failing()` |
 | `Fakes\ProbedDriver` | a database whose probe the test answers | `probedDatabase($key)` |
-| `Support\FakeGitHub`, `FakeRelease` | GitHub and a signed release | the update tests' `UpdateTestCase` |
+| `Support\FakeGitHub`, `FakeRelease` | GitHub's latest release and its files (`down()`, `answer()`, `storeOn()`), and a release signed for the test | the update tests' `UpdateTestCase`: `$this->gitHub` (`outgoingFake(FakeGitHub::class)`), `release()` |
 | `Fakes\NullSleeper`, `RecordingSleeper` | waiting | in place from the boot; the recording one when a test asserts the waits |
 
 `tests/Fakes` also holds small stand-ins a single test needs as a named class (a handler that throws, a task that
@@ -82,6 +89,8 @@ counts its runs, a leased table).
   names differ from its `MODULES` map ([Architecture](Architecture.md#modules)).
 - **Routes**: `tests/Feature/RouteGuardsTest` walks every route through every guard in order, and with another shop's
   row.
+- **The API description**: `tests/Unit/Http/ApiDescriptionTest` holds `resources/api/openapi.yaml` to the routes, its
+  objects closed, and readable by a website's own tools ([API contract](API-Contract.md#how-the-php-side-is-held-to-it)).
 - **Upgrades**: `tests/Unit/Database/UpgradesTest` holds every schema change to its upgrade ([Database](Database.md#upgrades)).
 - **Drivers**: `tests/Unit/Drivers/DriverFormsTest` holds each driver's request shape to its form
   ([Drivers](Drivers.md#the-kernel)).

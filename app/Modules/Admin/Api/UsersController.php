@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
+use App\Core\Exceptions\KeyReusedException;
+use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Accounts\Exceptions\AccountRefusedException;
 use App\Modules\Admin\Services\CustomerProfile;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Principal;
+use App\Modules\Store\Http\IdempotencyKey;
 use App\Modules\Users\Models\User;
-use App\Modules\Users\Services\CustomerGroups;
 use App\Modules\Users\Services\UserActions;
 use App\Modules\Users\Services\UserDirectory;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -26,7 +28,6 @@ final class UsersController extends ApiController
     public function __construct(
         private readonly UserDirectory $users,
         private readonly UserActions $actions,
-        private readonly CustomerGroups $groups,
         private readonly CustomerProfile $profile,
     ) {}
 
@@ -75,11 +76,12 @@ final class UsersController extends ApiController
      * PUT /users/{id}/groups — {group_ids: [..]}: the admin's groups the customer is in, every one listed and no other
      *
      * @param array<string, string> $args
+     * @throws ActorRefusedException 403 from the website, an admin's account or an agent's
      */
     public function groups(Request $request, Response $response, array $args): Response
     {
         $user = $this->load(User::class, $args);
-        $this->groups->assign($user, $this->input($request)['group_ids'] ?? null);
+        $this->actions->assignGroups($user, Principal::of($request)->actor(), $this->input($request)['group_ids'] ?? null);
 
         return $this->json($response, ['user' => $this->users->presentWithCounts($user)]);
     }
@@ -126,20 +128,23 @@ final class UsersController extends ApiController
     }
 
     /**
-     * POST /users/{id}/wallet — {type: credit|debit, amount, description?}
+     * POST /users/{id}/wallet — {type: credit|debit, amount, description?}, with an Idempotency-Key if the caller sends
+     * one: the line written (201), or the key's line written before (200), and the wallet as it is now.
      *
      * @param array<string, string> $args
      * @throws ActorRefusedException 403 one of the shop's admins' own wallet
+     * @throws ValidationException 422 under the field refused, or on `idempotency_key` (malformed)
+     * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another line
      */
     public function adjustWallet(Request $request, Response $response, array $args): Response
     {
         $user = $this->load(User::class, $args);
-        $transaction = $this->actions->adjustWallet($user, Principal::of($request)->actor(), $this->input($request));
+        $transaction = $this->actions->adjustWallet($user, Principal::of($request)->actor(), $this->input($request), IdempotencyKey::optional($request));
 
         return $this->json($response, [
             'user' => $this->users->presentWithCounts($user),
             'transaction' => $this->users->presentTransaction($transaction),
             'transactions' => $this->users->ledger($user),
-        ], 201);
+        ], $transaction->wasRecentlyCreated ? 201 : 200);
     }
 }

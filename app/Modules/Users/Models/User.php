@@ -222,7 +222,10 @@ class User extends Model
 
     /**
      * Who they are as another customer can tell — whom a service or money goes to, or came from: «Sara Ahmadi (@sara)»,
-     * the name or the handle alone, else the Telegram id (else «#12», their number in the shop). Never their email.
+     * the name or the handle alone, else the Telegram id, else «#12», their number in the shop. Never their email. The
+     * handle after the name has a left-to-right mark (U+200E) before it — after a Persian name it would read «(sara@)»;
+     * one that starts the value gets its mark where it is filled in, only when words come before it there
+     * (Telegram\Texts\BotTexts, the wallet's lines).
      */
     public function shownAs(): string
     {
@@ -230,7 +233,7 @@ class User extends Model
         $handle = $this->handle() === null ? null : '@' . $this->handle();
 
         return match (true) {
-            $name !== null && $handle !== null => "{$name} ({$handle})",
+            $name !== null && $handle !== null => "{$name} (\u{200E}{$handle})",
             default => $name ?? $handle ?? ($this->telegram_id !== null ? (string) $this->telegram_id : "#{$this->id}"),
         };
     }

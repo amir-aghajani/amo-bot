@@ -254,5 +254,4 @@ final class PasarGuardClient
 
         return implode('; ', $lines);
     }
-
 }

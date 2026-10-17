@@ -8,6 +8,7 @@ use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
+use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Rewards\Enums\RewardKind;
 use App\Modules\Rewards\Enums\WheelRefusal;
@@ -98,7 +99,12 @@ final class LuckyWheelTest extends DatabaseTestCase
         $this->buy($this->ali, $this->plan(['name' => 'تست رایگان', 'price' => '0.00'], $this->server), $this->server);
         self::assertSame(WheelRefusal::BuyersOnly, $this->refused(fn() => $this->wheel()->spin($this->ali))->reason, 'a free trial is no purchase here');
 
-        $this->buy($this->ali, $this->plan([], $this->server), $this->server);
+        $paid = $this->plan([], $this->server);
+        $refunded = $this->buy($this->ali, $paid, $this->server);
+        self::assertTrue($this->service(PaymentService::class)->refund($refunded->payments()->firstOrFail(), 'admin', null));
+        self::assertSame(WheelRefusal::BuyersOnly, $this->refused(fn() => $this->wheel()->spin($this->ali))->reason, 'nor one refunded since');
+
+        $this->buy($this->ali, $paid, $this->server);
         $this->wheel()->spin($this->ali);
         self::assertSame(1, WheelSpin::query()->where('user_id', $this->ali->id)->count(), 'once they bought, they spin');
     }
@@ -165,6 +171,22 @@ final class LuckyWheelTest extends DatabaseTestCase
         $spun = $this->wheel()->spin($this->ali);
         self::assertNotNull($spun->given, 'the failed spin counted for no cooldown');
         self::assertSame(Traffic::bytesOfGb(35), $service->refresh()->traffic_limit_bytes);
+    }
+
+    public function testAServiceWonWhoseDeliveryBrokeIsWonOnceAndWaitsForSupport(): void
+    {
+        $this->wheelOn(['wheel_cost' => 5000]);
+        $this->wallet($this->ali, '5000');
+        $this->wheelPrize('سرویس هدیه', ['kind' => RewardKind::Plan, 'amount' => null, 'plan_id' => $this->plan(['name' => 'هدیه'], $this->server)->id]);
+        FakeProvider::$onCall = static fn() => throw new \RuntimeException('A fault of the shop\'s own.');
+
+        $spun = $this->wheel()->spin($this->ali);
+
+        self::assertFalse($spun->refunded, 'won: its service waits for support\'s retry');
+        $spin = WheelSpin::query()->with('order')->sole();
+        self::assertSame([null, OrderStatus::Failed], [$spin->outcome, $spin->order?->status]);
+        self::assertSame('0.00', $this->ali->balance(), 'the cost kept');
+        self::assertSame(WheelRefusal::TooSoon, $this->refused(fn() => $this->wheel()->spin($this->ali))->reason, 'it counts for the cooldown: no second service');
     }
 
     public function testASliceIsDrawnAmongTheEnabledOnesThatCanReachTheCustomer(): void

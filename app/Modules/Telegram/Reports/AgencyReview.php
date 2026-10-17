@@ -36,7 +36,6 @@ final class AgencyReview implements GroupHandler
     private const REJECT = 'no';
     private const BACK = 'bk';
 
-    private const NOT_ADMIN = 'فقط مدیرهای ربات می‌توانند درخواست نمایندگی را تایید یا رد کنند؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.';
     private const NOT_FOUND = 'این درخواست پیدا نشد.';
     private const NO_LEVELS = 'هنوز سطح نمایندگی تعریف نشده است؛ در پنل، صفحه «نمایندگان»، بخش «سطح‌ها» یکی بسازید.';
     private const LEVEL_GONE = 'این سطح دیگر وجود ندارد؛ دوباره «تایید» را بزنید.';
@@ -74,7 +73,7 @@ final class AgencyReview implements GroupHandler
             return;
         }
 
-        $admin = $this->groupButtons->presser($update, self::NOT_ADMIN);
+        $admin = $this->groupButtons->presser($update, GroupButtons::onlyAdmins('درخواست نمایندگی را تایید یا رد کنند'));
         if ($admin === null) {
             return;
         }
@@ -139,7 +138,16 @@ final class AgencyReview implements GroupHandler
 
             return;
         } catch (ValidationException $e) {
-            $this->groupButtons->dismiss($update, $e->getMessage());
+            if (array_key_exists('status', $e->errors())) {
+                // Decided meanwhile: nothing is left to decide here.
+                $this->groupButtons->dismiss($update, $e->getMessage());
+
+                return;
+            }
+            // Refused as it stands (the agency would end past the last day the shop keeps): still waiting, its buttons
+            // back for another try once the program's terms are put right.
+            $this->groupButtons->buttons($update, self::buttons($request->id));
+            $this->groupButtons->answer($update, $e->getMessage(), alert: true);
 
             return;
         }

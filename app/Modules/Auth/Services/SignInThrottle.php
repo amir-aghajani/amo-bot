@@ -17,9 +17,10 @@ use Psr\Log\LoggerInterface;
  * Every sign-in budget, on RateLimiter. Each try is counted before it is judged (RateLimiter::attempt()), so requests
  * sent at once never pass a limit together; a right answer gives its count back where the budget is the wrong tries'.
  *
- * - Failed sign-ins, per way in (`login`, `link`, `website`): per address network (an IPv6 /64) — MAX_ATTEMPTS, or the
- *   looser WEBSITE_ATTEMPTS since Iran's mobile carriers put many customers behind one address — and, for a password,
- *   per account (MAX_ACCOUNT_ATTEMPTS from all addresses; a success does not clear it, or a guesser would get it back).
+ * - Failed sign-ins, per way in (`login`, `link`, `recovery`, `website`): per address network (an IPv6 /64) —
+ *   MAX_ATTEMPTS, or the looser WEBSITE_ATTEMPTS since Iran's mobile carriers put many customers behind one address —
+ *   and, for a password, per account (MAX_ACCOUNT_ATTEMPTS from all addresses; a success does not clear it, or a guesser
+ *   would get it back).
  * - A website's second-step codes per account (secondStep()) and its emailed codes per address and account
  *   (emailedCode()), an hour's and a day's; a spent budget tells the customer once a day.
  * - What a website's sign-in costs before anything is tried (issuing(): nonces, states, captcha tokens), and each email

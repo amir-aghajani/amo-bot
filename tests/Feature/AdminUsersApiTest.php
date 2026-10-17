@@ -111,7 +111,7 @@ final class AdminUsersApiTest extends HttpTestCase
 
         $beyond = $this->decode($this->get('/api/admin/users?page=9'));
         self::assertSame(2, $beyond['meta']['page'], 'a page past the end lands on the last one');
-        self::assertSame(30, $this->decode($this->get('/api/admin/users?status=nonsense'))['meta']['total'], 'an unknown status filters nothing');
+        self::assertSame(30, $this->decode($this->unchecked()->get('/api/admin/users?status=nonsense'))['meta']['total'], 'an unknown status filters nothing');
     }
 
     public function testACustomerCanBeBannedAndReinstated(): void
@@ -213,5 +213,32 @@ final class AdminUsersApiTest extends HttpTestCase
         self::assertSame(['type', 'amount', 'description'], array_keys($this->decode($bad)['errors']));
 
         self::assertSame(404, $this->get('/api/admin/users/999999/wallet')->getStatusCode());
+    }
+
+    /** Who of the shop's admins wrote each line by hand, by their account's name — read once for the whole ledger. */
+    public function testEachAdminsLineCarriesTheirNameReadOnceForTheLedger(): void
+    {
+        $ali = $this->customer(['telegram_id' => 1001]);
+        $this->admin(['telegram_id' => 7101, 'first_name' => 'Reza', 'last_name' => null]);
+        $sara = $this->admin(['telegram_id' => 7102, 'username' => 'sara', 'first_name' => 'Sara', 'last_name' => 'Ahmadi']);
+        $wallet = $this->service(WalletService::class);
+        $wallet->credit($ali, 20000, 'هدیه');
+        $wallet->credit($ali, 5000, 'جبران', 'tg:7101');
+        $wallet->credit($ali, 5000, 'جبران', "user#{$sara->id}");
+        $wallet->credit($ali, 5000, 'جبران', self::ADMIN_USERNAME);
+        $this->db()->enableQueryLog();
+        try {
+            $lines = $this->decode($this->get("/api/admin/users/{$ali->id}/wallet"))['transactions'];
+            $named = array_filter(array_column($this->db()->getQueryLog(), 'query'), static fn(string $query): bool => str_contains($query, '"telegram_id" in'));
+        } finally {
+            $this->db()->disableQueryLog();
+            $this->db()->flushQueryLog();
+        }
+
+        self::assertSame([null, 'Sara Ahmadi', 'Reza', null], array_column($lines, 'reviewer_name'), "the admins' names; none for the owner or a line the shop wrote");
+        self::assertCount(1, $named, 'one query for the names of every line');
+
+        $written = $this->decode($this->postJson("/api/admin/users/{$ali->id}/wallet", ['type' => 'credit', 'amount' => 1000]))['transaction'];
+        self::assertSame([self::ADMIN_USERNAME, null], [$written['reviewer'], $written['reviewer_name']], 'a line just written, as the ledger shows it');
     }
 }

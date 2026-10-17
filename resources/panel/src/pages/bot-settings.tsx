@@ -17,6 +17,7 @@ import { WalletSection } from '@/components/bot/settings/wallet-section'
 import { WalletTransfersSection } from '@/components/bot/settings/wallet-transfers-section'
 import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { SectionedPage } from '@/components/sectioned-page'
 import { BOT_SETTINGS_SECTIONS, sectionsOfShop } from '@/components/shell/nav'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -30,7 +31,9 @@ import { botSettingsQuery } from '@/lib/queries'
  * of the main shop's own sections (sectionsOfShop()).
  */
 export function BotSettingsPage() {
-  const { data, error, refetch } = useQuery(botSettingsQuery)
+  const read = useQuery(botSettingsQuery)
+  const { data, refetch } = read
+  const failure = useReadFailure(read)
   const sections = sectionsOfShop(BOT_SETTINGS_SECTIONS, useMainShop())
 
   return (
@@ -40,14 +43,14 @@ export function BotSettingsPage() {
       header={() => ({ title: 'تنظیمات ربات', description: 'رفتار ربات برای مشتری‌ها. تغییرات همان لحظه روی ربات اعمال می‌شود؛ نیازی به اجرای دوباره نیست.' })}
       above={() => (
         <>
-          {error && <ErrorState what="تنظیمات" error={error} onRetry={() => void refetch()} />}
+          {failure.error && <ErrorState what="تنظیمات" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />}
           {/* The one state that matters on every section: customers get nothing but the notice. */}
           {data && !data.settings.enabled && (
             <Callout tone="warning" icon={PowerOff}>
               <span className="font-medium">ربات خاموش است.</span> مشتری‌ها به جای منو فقط پیام «ربات فعلا غیرفعال است» می‌بینند. مدیرها همچنان می‌توانند از ربات استفاده کنند.
             </Callout>
           )}
-          {!data && !error && <Skeleton className="h-64 w-full rounded-xl" />}
+          {!data && !failure.error && <Skeleton className="h-64 w-full rounded-xl" />}
         </>
       )}
     >

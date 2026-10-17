@@ -4,7 +4,7 @@ import { Info, type LucideIcon } from 'lucide-react'
 import { Callout } from '@/components/callout'
 import { ConfirmActions, NoteField, type NoteSpec } from '@/components/confirm-modal'
 import { useSubjectGone } from '@/components/detail-modal'
-import { FormError } from '@/components/form-footer'
+import { FormError, SHEET_FOOT } from '@/components/form-footer'
 import { Button } from '@/components/ui/button'
 import { stateChanged } from '@/lib/api'
 import { messageOf } from '@/lib/failure'
@@ -111,7 +111,7 @@ interface Operations<A extends string> {
   forced: boolean
   /** Close the strip (back, or done with it while the dialog stays open). */
   close: () => void
-  /** A press: an operation that needs a word or a second look opens its strip; the rest run at once. */
+  /** A press: an operation that needs a word or a second look opens its strip; the rest run at once. Nothing while one runs. */
   choose: (action: A) => void
   /** The strip's confirm. */
   confirm: () => void
@@ -126,10 +126,16 @@ export function useOperations<A extends string, R>({ specs, allowed, perform, in
   const [refusal, setRefusal] = useState<{ message: string; movedOn: boolean } | null>(null)
   const [focus, setFocus] = useState<FocusRequest | null>(null)
   const moveFocus = (to: FocusRequest['to'], insist = false) => setFocus((current) => ({ to, insist, seq: (current?.seq ?? 0) + 1 }))
+  // One run at a time, from the press on: React hears of a run only on a later tick, so the buttons show it held only
+  // then — a second press before that (a double click on one that runs at once) starts nothing.
+  const flying = useRef(false)
 
   const mutation = useMutation({
     mutationFn: perform,
     meta: { quiet: true, invalidates },
+    onSettled: () => {
+      flying.current = false
+    },
     onSuccess: (result, run) => {
       onDone(result, run)
       moveFocus('operations')
@@ -143,8 +149,10 @@ export function useOperations<A extends string, R>({ specs, allowed, perform, in
     },
   })
 
-  /** A run; the last refusal goes with the new try. */
+  /** A run, unless one is in flight; the last refusal goes with the new try. */
   const start = (run: Run<A>) => {
+    if (flying.current) return
+    flying.current = true
     setRefusal(null)
     mutation.mutate(run)
   }
@@ -173,6 +181,7 @@ export function useOperations<A extends string, R>({ specs, allowed, perform, in
       moveFocus('operations')
     },
     choose: (action) => {
+      if (flying.current) return
       setRefusal(null)
       setLast(action)
       if (intercept?.(action)) return
@@ -187,6 +196,7 @@ export function useOperations<A extends string, R>({ specs, allowed, perform, in
       if (pending !== null) start({ action: pending, note: specs[pending].note ? note : undefined })
     },
     run: (next) => {
+      if (flying.current) return
       setLast(next.action)
       start(next)
     },
@@ -204,6 +214,11 @@ interface OperationsSectionProps<A extends string> {
   alternative?: (action: A) => OperationAlternative | null
   /** Shown instead of the strip and the buttons while the dialog asks a question of its own (the delete's). */
   override?: ReactNode
+  /**
+   * The dialog's very business (a receipt's review): on a phone's sheet its buttons stick to the sheet's foot (SHEET_FOOT),
+   * in reach however long what is above them — a strip, once opened, scrolls with the rest.
+   */
+  foot?: boolean
 }
 
 /**
@@ -211,7 +226,7 @@ interface OperationsSectionProps<A extends string> {
  * subject moved on, a withdrawal, or another refusal when no strip is open), then the buttons, the strip, or the
  * dialog's own question. Nothing for a subject that is gone (the dialog says so above its facts).
  */
-export function OperationsSection<A extends string>({ ops, specs, subject, form, alternative, override }: OperationsSectionProps<A>) {
+export function OperationsSection<A extends string>({ ops, specs, subject, form, alternative, override, foot = false }: OperationsSectionProps<A>) {
   const gone = useSubjectGone()
   const root = useRef<HTMLElement>(null)
   useOperationsFocus(root, ops)
@@ -230,7 +245,7 @@ export function OperationsSection<A extends string>({ ops, specs, subject, form,
   if (gone || (word === null && !override && ops.pending === null && ops.available.length === 0)) return null
 
   return (
-    <section ref={root} aria-label="عملیات" className="grid gap-3 border-t border-border pt-4">
+    <section ref={root} aria-label="عملیات" className={cn('grid gap-3 border-t border-border pt-4', foot && !override && ops.pending === null && SHEET_FOOT)}>
       {/* One element whatever it says, so the focus put on it stays as its content changes. */}
       {word !== null && (
         <div data-operations-word="" tabIndex={-1} className="rounded-lg outline-none focus-visible:focus-ring">
@@ -296,6 +311,8 @@ function OperationButtons<A extends string>({ specs, ops }: { specs: Record<A, O
             busy={ops.running === action}
             aria-disabled={ops.running !== null}
             onClick={() => ops.choose(action)}
+            // A finger's 44px on a phone, as the dialog's foot.
+            className="max-md:h-11"
           >
             {spec.label}
           </Button>

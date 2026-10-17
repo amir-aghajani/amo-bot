@@ -21,6 +21,7 @@ use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Services\TopUpAmounts;
 use App\Modules\Users\Services\WalletSettings;
 use App\Support\Money;
+use App\Support\Unit;
 
 /**
  * «افزایش موجودی», charging the wallet:
@@ -98,6 +99,7 @@ final class TopUpHandler implements Handler
             Money::normalize($amount),
             static fn(PaymentMethod $method): string => CallbackData::build(self::CALLBACK, self::AMOUNT, $amount, $method->id),
             self::START,
+            self::checkoutCallback($amount),
         );
     }
 
@@ -127,7 +129,7 @@ final class TopUpHandler implements Handler
     /** State `topup.amount`: the amount typed — its checkout, or why it is refused. */
     private function typed(Context $ctx): void
     {
-        $amount = $this->amounts->read($ctx, $this->orders->topUpAllowed(...), $this->texts->render(BotText::TopupInvalid, $this->minimum()), self::START);
+        $amount = $this->amounts->read($ctx, Unit::Toman, $this->orders->topUpAllowed(...), $this->texts->render(BotText::TopupInvalid, $this->minimum()), self::START);
         if ($amount !== null) {
             $this->checkout($ctx, $amount);
         }

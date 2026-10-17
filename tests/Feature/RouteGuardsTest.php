@@ -12,8 +12,8 @@ use App\Modules\Accounts\Http\CustomerAuthMiddleware;
 use App\Modules\Accounts\Http\RecentSignInMiddleware;
 use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Auth\PanelAuthMiddleware;
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\CurrentBot;
-use App\Modules\Store\Enums\StaffGrant;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Models\Website;
@@ -361,14 +361,14 @@ final class RouteGuardsTest extends HttpTestCase
 
         $this->loginAsStaff($website, $sara);
         $granted = array_values(array_filter($routes, static fn(array $route): bool => $route[2] !== null));
-        self::assertCount(23, $granted, 'the operations a grant opens');
+        self::assertCount(27, $granted, 'the operations a grant opens');
         foreach ($granted as [$method, $path]) {
             self::assertSame([403, StaffMiddleware::NOT_GRANTED], [$this->ask($method, $path)->getStatusCode(), $this->decode($this->ask($method, $path))['message'] ?? null], "{$method} {$path}");
         }
 
         $website->forceFill(['staff_grants' => array_map(static fn(StaffGrant $grant): string => $grant->value, StaffGrant::cases())])->save();
         $this->bearer($this->customerSession($sara, ['method' => SignInMethod::Telegram, 'authenticated_at' => now()->subSeconds(CustomerSessions::RECENT_SECONDS + 1)]));
-        self::assertCount(24, array_filter($routes, static fn(array $route): bool => $route[3]), 'the operations a grant opens, and approving a payment');
+        self::assertCount(28, array_filter($routes, static fn(array $route): bool => $route[3]), 'the operations a grant opens, and approving a payment');
         foreach ($routes as [$method, $path, , $recent]) {
             $response = $this->ask($method, $path);
             $asked = $response->getStatusCode() === 403 && $response->getHeaderLine('WWW-Authenticate') === RecentSignInMiddleware::CHALLENGE;

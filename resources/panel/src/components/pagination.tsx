@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, type LucideIcon
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { digitsOnly, formatNumber } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 interface PaginationProps {
   page: number
@@ -20,7 +21,8 @@ interface PaginationProps {
  * field takes a page's number (Persian digits too) and goes there on Enter or as it loses the focus, held to the list's
  * pages, and keeps the focus as the page turns —, the next and the last. A button with nowhere to go, or waiting for the
  * next page, keeps the focus it has (aria-disabled, not disabled): pressing «صفحه آخر» never drops the keyboard on the
- * document. On a phone every control is a finger's size (44px).
+ * document. On a phone every control is a finger's size (44px); below `sm` the first and last pages' buttons step aside
+ * — the field goes to any page —, so the row fits a 320px screen.
  */
 export function Pagination({ page, lastPage, total, unit, onChange, disabled = false }: PaginationProps) {
   const go = (to: number) => {
@@ -35,20 +37,21 @@ export function Pagination({ page, lastPage, total, unit, onChange, disabled = f
       {lastPage > 1 && (
         <nav aria-label="صفحه‌بندی" className="flex items-center gap-1">
           {/* Right to left, the first page is on the right: the arrows point the way the pages run. */}
-          <PageButton label="صفحه اول" icon={ChevronsRight} off={disabled || page <= 1} onPress={() => go(1)} />
+          <PageButton label="صفحه اول" icon={ChevronsRight} off={disabled || page <= 1} onPress={() => go(1)} wide />
           <PageButton label="صفحه قبل" icon={ChevronRight} off={disabled || page <= 1} onPress={() => go(page - 1)} />
           <PageJump page={page} lastPage={lastPage} onJump={go} />
           <PageButton label="صفحه بعد" icon={ChevronLeft} off={disabled || page >= lastPage} onPress={() => go(page + 1)} />
-          <PageButton label="صفحه آخر" icon={ChevronsLeft} off={disabled || page >= lastPage} onPress={() => go(lastPage)} />
+          <PageButton label="صفحه آخر" icon={ChevronsLeft} off={disabled || page >= lastPage} onPress={() => go(lastPage)} wide />
         </nav>
       )}
     </div>
   )
 }
 
-function PageButton({ label, icon: Icon, off, onPress }: { label: string; icon: LucideIcon; off: boolean; onPress: () => void }) {
+/** A page's button; `wide` (the first and last pages') only where the row has room for it. */
+function PageButton({ label, icon: Icon, off, onPress, wide = false }: { label: string; icon: LucideIcon; off: boolean; onPress: () => void; wide?: boolean }) {
   return (
-    <Button variant="secondary" size="icon-sm" aria-label={label} aria-disabled={off} onClick={onPress} className="max-md:size-11">
+    <Button variant="secondary" size="icon-sm" aria-label={label} aria-disabled={off} onClick={onPress} className={cn('max-md:size-11', wide && 'max-sm:hidden')}>
       <Icon className="ltr:rotate-180" aria-hidden />
     </Button>
   )

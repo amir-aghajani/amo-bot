@@ -10,8 +10,8 @@ import { json, noContent, server, type Answer } from '@/test/server'
 /*
  * The gift codes screen (pages/gift-codes): whether customers may redeem codes (a group of the bot settings); every code
  * — the code, what it is worth, its batch, where it stands, who took it and the order a plan's service was given by —;
- * a batch made, its codes shown to copy; a batch picked, its counts with its unused codes copied or deleted; a code nobody
- * took deleted, asked first.
+ * a batch made, its codes shown to copy; a batch picked, its counts with its unused codes copied or deleted — one the
+ * address names said and undone once it is gone —; a code nobody took deleted, asked first.
  */
 
 function codes(rows: GiftCodeRow[] = [giftCodeRow()]): Answer {
@@ -145,6 +145,23 @@ describe('a batch', () => {
 
     await until(() => expect(server().sent('POST', '/api/admin/gift-codes/discard')[0]?.body).toEqual({ batch: 'نوروز' }))
     await until(() => expect(toast.success).toHaveBeenCalledWith('۷ کد استفاده‌نشده حذف شد'))
+  })
+})
+
+describe('a batch the address names', () => {
+  it('is said and can be undone once it is gone — its codes deleted, no batch left to list', async () => {
+    server()
+      .on('GET', '/api/admin/bot/settings', json(botSettingsResponse(botSettingsRow({ gift_codes_enabled: true }))))
+      .on('GET', '/api/admin/keyboards', json({ keyboards: [], actions: [], styles: [], limits: { rows: 10, per_row: 8, label: 64 } }))
+      .on('GET', '/api/admin/gift-codes/batches', json({ batches: [] } satisfies GiftCodeBatchesResponse))
+      .on('GET', '/api/admin/gift-codes', codes([]))
+    render(<GiftCodesPage />, { wrapper: providers({ at: '/gift-codes?batch=yalda' }).wrapper })
+
+    expect(await screen.findByText('با این جستجو یا فیلتر کدی نیست.')).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'سری yalda' }), { key: 'Enter' })
+    fireEvent.click(screen.getByRole('option', { name: 'همه' }))
+
+    await until(() => expect(server().sent('GET', '/api/admin/gift-codes').at(-1)?.query.has('batch')).toBe(false))
   })
 })
 

@@ -9,9 +9,11 @@ import { AppShell } from '@/components/shell/app-shell'
 import type { PanelShell } from '@/components/shell/shell-context'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, RequireAuth } from '@/lib/auth'
+import { idLabel } from '@/lib/direction'
 import { useTitleSubject } from '@/lib/document-title'
 import { FAILURE_KINDS } from '@/lib/failure'
 import { ThemeProvider } from '@/lib/theme'
+import { resizeWindow } from '@/test/browser'
 import { OWNER, testQueryClient, until } from '@/test/render'
 import { json, server } from '@/test/server'
 
@@ -42,6 +44,12 @@ function Subject() {
   return <p>صفحه سرور</p>
 }
 
+/** A page whose subject is named by its number, set apart in a sentence (idLabel). */
+function Numbered() {
+  useTitleSubject(`تیکت ${idLabel(12)}`)
+  return <p>صفحه تیکت</p>
+}
+
 /** A page that reads what it shows. */
 function Reading() {
   const { data } = useQuery({ queryKey: ['subscriptions'], queryFn: () => fetch('/api/admin/subscriptions').then((answer) => answer.json()) })
@@ -62,6 +70,7 @@ function open(at: string, panel: PanelShell = PANEL) {
                     <Route path="plans" element={<Broken />} />
                     <Route path="orders" element={<p>صفحه سفارش‌ها</p>} />
                     <Route path="payments" element={<Subject />} />
+                    <Route path="tickets/:id" element={<Numbered />} />
                     <Route path="subscriptions" element={<Reading />} />
                     <Route path="*" element={<NotFoundPage />} />
                   </Route>
@@ -102,6 +111,14 @@ describe('the shell', () => {
     await until(() => expect(document.title).toBe('سفارش‌ها · فروشگاه نماینده'))
   })
 
+  it('names the tab with no Unicode isolates, which a tab may draw as boxes — a number still read whole, by a mark of its direction', async () => {
+    open('/tickets/12')
+
+    await until(() => expect(document.title).toMatch(/^تیکت /))
+    expect(document.title).not.toMatch(/[\u{2066}-\u{2069}]/u)
+    expect(document.title.startsWith('تیکت \u{200E}#12 · ')).toBe(true)
+  })
+
   it('names the shop it shows in its brand — not the installation’s own name', async () => {
     open('/orders')
 
@@ -122,6 +139,7 @@ describe('the shell', () => {
   })
 
   it('says on the phone’s menu button whether the menu is open, and which it is', async () => {
+    resizeWindow(400)
     open('/orders')
 
     const menu = await screen.findByRole('button', { name: 'باز کردن منو' })
@@ -140,6 +158,17 @@ describe('the shell', () => {
 
     expect(await screen.findByText('صفحه سفارش‌ها')).toBeTruthy()
     expect(screen.queryByRole('heading', { name: FAILURE_KINDS.crash.title })).toBeNull()
+  })
+
+  it('skips to the page’s content in place — never to the panel’s folder, where a bare «#main» under its <base> would lead', async () => {
+    open('/orders')
+    const skip = await screen.findByRole('link', { name: 'پرش به محتوا' })
+
+    const followed = fireEvent.click(skip)
+
+    expect(followed).toBe(false)
+    expect(document.activeElement).toBe(document.getElementById('main'))
+    expect(screen.getByText('صفحه سفارش‌ها')).toBeTruthy()
   })
 
   it('keeps a page mounted across its sections — what was typed stays', async () => {

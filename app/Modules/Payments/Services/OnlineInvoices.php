@@ -11,6 +11,7 @@ use App\Modules\Payments\DTO\OnlineRequest;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Models\Payment;
+use App\Support\LocalTime;
 use App\Support\Money;
 use Psr\Log\LoggerInterface;
 
@@ -53,7 +54,8 @@ final class OnlineInvoices
             orderId: $this->orderId($payment),
             amount: (int) Money::digits($payment->amount),
             callbackUrl: $this->callbackUrl($payment),
-            description: sprintf('سفارش #%d', $payment->order_id),
+            // A left-to-right mark before the number: a gateway's right-to-left page would show «12# سفارش».
+            description: sprintf("سفارش \u{200E}#%d", $payment->order_id),
             telegramId: $customer->telegram_id === null ? null : (string) $customer->telegram_id,
             username: $customer->username,
         );
@@ -66,10 +68,12 @@ final class OnlineInvoices
             throw $e;
         }
 
+        // A page whose gateway gives no end is taken for an hour's: the shop needs one to know when to stop asking. One past
+        // the last moment the shop keeps (LocalTime::last()) is kept to it: no page of the shop takes money past it anyway.
+        $until = $invoice->expiresAt ?? now()->addMinutes(self::PAGE_MINUTES);
         $page = [
             'link' => $invoice->url,
-            // A page whose gateway gives no end is taken for an hour's: the shop needs one to know when to stop asking.
-            'link_expires_at' => $invoice->expiresAt ?? now()->addMinutes(self::PAGE_MINUTES),
+            'link_expires_at' => LocalTime::tooLate($until) ? LocalTime::last() : $until,
             'reference' => $invoice->reference,
             'invoice' => $invoice->details,
         ];

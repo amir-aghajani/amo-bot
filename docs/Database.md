@@ -1,3 +1,5 @@
+[فارسی](fa/Database.md)
+
 # Database
 
 The shop keeps everything in one database: MySQL or MariaDB on a live shop, SQLite for the test suite and a
@@ -58,14 +60,18 @@ An upgrade file:
 `Core\Database\Upgrades` runs, in version order, the upgrades newer than the version the database is at and not newer
 than the code's. The database's version lives in the installation lock (`storage/installed.lock`, `Core\Installation`):
 the installer writes the code's version, and the version moves after each upgrade, so a failed upgrade is where the
-next try starts. The owner's panel runs them as it installs a release (see [Upgrading](Upgrading.md)); files put in
-place by hand are followed by an upgrading run of their own. A fresh install makes `schema.php`'s tables as they stand
-and runs none.
+next try starts — the failure (`UpgradeFailedException`) names it, and the ones before it stand. A PHP file in
+`database/upgrades/` that no version names (`<major>.<minor>.<patch>.php`) stops the run, and so does one that returns
+no closure: an upgrade that would never run is a mistake, not something to skip. The owner's panel runs them as it
+installs a release ([Upgrading](Upgrading.md#from-the-panel)). When a release's files were put in place by hand, the
+panel's update screen shows an update under way, and its «ادامه به‌روزرسانی» runs the upgrades alone
+([Upgrading](Upgrading.md#by-hand)). A fresh install makes `schema.php`'s tables as they stand and runs none.
 
 `tests/Unit/Database/UpgradesTest` holds the rule. It installs the first release's database
 (`tests/Fixtures/schema-0.1.0.php`, kept exactly as it shipped — never edit it), runs every upgrade on it twice, and
 again after a simulated half-way stop, and requires the result to equal a fresh install of `schema.php` table by table:
-columns, indexes and foreign keys. A schema change without its upgrade, or an upgrade that cannot run twice, fails it.
+columns, indexes and foreign keys. A schema change without its upgrade, an upgrade that cannot run twice, or one named
+by a version newer than the code's (`Application::VERSION`) fails it; so do the data steps each upgrade has a case for.
 
 To change a table:
 
@@ -90,12 +96,19 @@ measured on MySQL and MariaDB:
 ## Kinds of data
 
 - **Time** is UTC in every column. `Support\LocalTime` turns it into the shop's zone for display; a query never gets a
-  Carbon in another zone (bindings are written in the value's own zone): `->utc()` first.
+  Carbon in another zone (bindings are written in the value's own zone): `->utc()` first. The columns are `TIMESTAMP`s,
+  which end in 2038 ([below](#time-and-the-2038-bound)).
 - **Money** is Toman in `decimal(14,2)` strings, handled through `Support\Money` (bcmath), never floats.
 - **Traffic** is bytes in an integer column; admins type gigabytes (`Support\Traffic`).
 - **Balances** are ledgers: a wallet (`wallet_transactions`) and an agent's traffic (`traffic_transactions`) keep a line
   per change with `balance_after`, and the last line is the balance — nothing else stores it (`Core\Database\Ledger`).
   A money write is tried again when MySQL aborts it for a deadlock ([Internals-Commerce](Internals-Commerce.md#ledgers)).
+- **A request sent again** under the same `Idempotency-Key` is answered by what the first one wrote, never done twice:
+  the website's orders through `request_keys` (kept a week), a balance transfer through its row's `request_key`, and —
+  since 0.7.0 (`database/upgrades/0.7.0.php`) — support's wallet credit or debit, an agent's traffic adjustment and a
+  ticket's answer through the `request_key` of the ledger line or the message they wrote. Each `request_key` is unique
+  with its owner (the customer, the sender, the shop, the ticket); a row written without a key holds null, which any
+  number of rows may share.
 - **States** (`orders.status`, `payments.status` …) are one column each, moved by compare-and-swap, and rows worked
   through over time carry a lease (`lease_token`, `leased_until`) — see [Conventions](Conventions.md#only-once).
 - **Shops**: every row of a shop carries `bot_id` and its model the `BelongsToBot` scope; servers, grants and the
@@ -104,6 +117,31 @@ measured on MySQL and MariaDB:
   `Encrypted` and `EncryptedArray` casts under `APP_KEY`; a value that no longer decrypts reads as empty and is logged.
 - **Settings** a panel changes live in the `settings` table, a JSON value per key and bot (`Settings\Services\Settings`);
   the installation's own configuration is `config.php`, never the database ([Configuration](Configuration.md)).
+
+### Time and the 2038 bound
+
+The shop's moments are `TIMESTAMP` columns, and MySQL keeps none past 2038-01-19 03:14:07 UTC: in strict mode it refuses
+a later one, so the write fails. The shop therefore keeps every moment to `Support\LocalTime::LAST_DAY`, 17 January 2038
+(«۲۸ دی ۱۴۱۶») — two days early, so it ends in time on any shop's clock. `LocalTime::last()` is the end of that day on
+the shop's clock: the latest moment kept.
+
+- **A moment an owner types** — a sale's or a discount code's window (`DiscountForm`), an agency's end
+  (`Agency\DTO\SellingTerms`), a gift code's last day (`GiftCodes`) — is refused past it. `LocalTime::tooLate()` judges
+  one, and `LocalTime::tooLateFor($what)` words the refusal under its field
+  («تاریخ پایان نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد…»). A form with a new far-future moment uses the same two.
+- **A service's end the shop works out** is held too (`Subscriptions\Services\ServiceTerms`). A purchase, a renewal,
+  extra time, days given or a prize that would end the service past it is refused in the words of
+  `TermTooLongException` — a 422, «تاریخ پایان سرویس نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد؛ مدت کوتاه‌تری انتخاب کنید.» —
+  before anything is charged or sent to a panel; a term still waiting for the first connection is judged as if it began
+  now. An order is judged again at its delivery, which fails with it for support to refund. Where the shop offers
+  rather than asks, it offers less: extra time up to the days left (`ServiceTerms::daysLeft()`), no test on a server
+  whose test would end too late, no automatic renewal (the customer is reminded of the service's end instead), and a
+  gift to many services skips the ones it would carry past. An agency's end worked out from its term is refused when
+  the request is approved.
+- **A moment from outside** is kept as `LocalTime::last()`: a deadline a panel reports past it (a long term first
+  connected late, a client extended on its panel by hand) when the sync copies it, and the end of a gateway's page.
+
+Moving the columns to `DATETIME` is on the [Roadmap](Roadmap.md).
 
 ## Indexes
 

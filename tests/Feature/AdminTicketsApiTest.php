@@ -89,6 +89,7 @@ final class AdminTicketsApiTest extends HttpTestCase
             ['support', '@boss', 'group', ['name' => 'photo.jpg', 'kept' => true]],
             ['support', self::ADMIN_USERNAME, 'panel', null],
         ], array_map(static fn(array $message): array => [$message['author'], $message['reviewer'], $message['channel'], $message['attachment']], $detail['messages']));
+        self::assertSame([null, 'Boss', null], array_column($detail['messages'], 'reviewer_name'), "the admin's name beside their handle; none for the owner or the customer");
 
         // An agent reads their shop's: the owner's login is «پشتیبانی» there.
         $bot = $this->agentBot();
@@ -102,6 +103,30 @@ final class AdminTicketsApiTest extends HttpTestCase
         $this->loginAsAgent($bot);
         $messages = $this->decode($this->get("/api/agent/tickets/{$theirs->id}"))['ticket']['messages'];
         self::assertSame([null, 'پشتیبانی', '@agent_shop_bot'], array_column($messages, 'reviewer'));
+        self::assertSame([null, null, null], array_column($messages, 'reviewer_name'), "neither the owner nor the agent's bot is an admin's account");
+    }
+
+    /**
+     * Who of the shop's admins wrote each answer, by their name — kept by a number (`user#12`, `tg:<id>`) or a handle —;
+     * a handle another customer has now names nobody, nor does a name that shows nothing, nor an account gone.
+     */
+    public function testEachAdminsAnswerCarriesTheirName(): void
+    {
+        $ticket = $this->ticket($this->ali, 'قطعی اتصال', 'سلام');
+        $sara = $this->webCustomer(['role' => 'admin', 'first_name' => 'سارا', 'last_name' => 'احمدی']);
+        $this->admin(['telegram_id' => 7101, 'first_name' => 'Reza', 'last_name' => null]);
+        $this->admin(['telegram_id' => 7102, 'first_name' => "\u{3164}"]);
+        $this->admin(['telegram_id' => 7103, 'username' => 'nima', 'first_name' => 'Nima']);
+        $this->customer(['telegram_id' => 7104, 'username' => 'old_admin', 'first_name' => 'Not An Admin']);
+        $kept = ["user#{$sara->id}", 'tg:7101', 'tg:7102', '@nima', '@old_admin', 'user#999'];
+        foreach ($kept as $reviewer) {
+            TicketMessage::query()->create(['ticket_id' => $ticket->id, 'author' => 'support', 'reviewer' => $reviewer, 'body' => 'پاسخ', 'channel' => 'staff']);
+        }
+
+        $messages = $this->decode($this->get("/api/admin/tickets/{$ticket->id}"))['ticket']['messages'];
+
+        self::assertSame([null, 'سارا احمدی', 'Reza', null, 'Nima', null, null], array_column($messages, 'reviewer_name'));
+        self::assertSame($kept, array_slice(array_column($messages, 'reviewer'), 1), 'each as kept, beside it');
     }
 
     public function testSupportAnswersAndTheCustomerIsToldAndTheGroupHearsItUnderTheTicket(): void
@@ -119,7 +144,7 @@ final class AdminTicketsApiTest extends HttpTestCase
 
         $report = ReportMessage::query()->sole();
         self::assertSame(["ticket:{$ticket->id}", "ticket:{$ticket->id}", true], [$report->ref, $report->reply_ref, $report->clears_buttons], 'under the ticket, its close button handed down');
-        self::assertStringContainsString("↩️ <b>پاسخ پشتیبانی</b> · تیکت #{$ticket->id} · از پنل", $report->text);
+        self::assertStringContainsString("↩️ <b>پاسخ پشتیبانی</b> · تیکت \u{200E}#{$ticket->id} · از پنل", $report->text);
         self::assertStringNotContainsString(self::ADMIN_USERNAME, $report->text, "the owner's login is no group's to read");
 
         // With a picture, as a form.

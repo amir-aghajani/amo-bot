@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { WalletPanel } from '@/components/users/wallet-modal'
 import type { UserWalletResponse, WalletTransactionRow } from '@/lib/api-types'
+import { idLabel } from '@/lib/direction'
 import { providers } from '@/test/render'
 import { userRow } from '@/test/rows'
 import { json, server } from '@/test/server'
@@ -17,7 +18,18 @@ const CUSTOMER = userRow()
 
 /** A ledger line: a credit by hand unless `overrides` say otherwise. */
 function line(overrides: Partial<WalletTransactionRow>): WalletTransactionRow {
-  return { id: 1, type: 'credit', amount: '50000.00', balance_after: '50000.00', description: 'شارژ دستی', reviewer: null, counterpart: null, created_at: '2026-09-01T10:00:00Z', ...overrides }
+  return {
+    id: 1,
+    type: 'credit',
+    amount: '50000.00',
+    balance_after: '50000.00',
+    description: 'شارژ دستی',
+    reviewer: null,
+    reviewer_name: null,
+    counterpart: null,
+    created_at: '2026-09-01T10:00:00Z',
+    ...overrides,
+  }
 }
 
 describe('a wallet’s ledger', () => {
@@ -32,12 +44,22 @@ describe('a wallet’s ledger', () => {
     expect(screen.getByText('خرید سرویس').closest('li')?.querySelector('bdi')).toBeNull()
   })
 
+  it('names one of the shop’s admins by their name where the server read it, not by the number they are kept by', async () => {
+    const transactions = [line({ id: 5, reviewer: 'user#12', reviewer_name: 'سارا احمدی' })]
+    server().on('GET', '/api/admin/users/10/wallet', json({ user: CUSTOMER, transactions } satisfies UserWalletResponse))
+    render(<WalletPanel user={CUSTOMER} onChanged={() => undefined} />, { wrapper: providers().wrapper })
+
+    expect(await screen.findByText('سارا احمدی')).toBeTruthy()
+    expect(screen.queryByText(/کاربر/)).toBeNull()
+  })
+
   it('shows an online payment that came after its order closed as the shop wrote it: money in, by nobody’s hand', async () => {
     const transactions = [line({ id: 4, description: 'پرداخت آنلاین #12 پس از بسته شدن سفارش #7', balance_after: '100000.00' })]
     server().on('GET', '/api/admin/users/10/wallet', json({ user: CUSTOMER, transactions } satisfies UserWalletResponse))
     render(<WalletPanel user={CUSTOMER} onChanged={() => undefined} />, { wrapper: providers().wrapper })
 
-    const entry = (await screen.findByText('پرداخت آنلاین #12 پس از بسته شدن سفارش #7')).closest('li')
+    // Its numbers each kept whole: bare, right to left, «سفارش #7» reads «7# سفارش».
+    const entry = (await screen.findByText(`پرداخت آنلاین ${idLabel(12)} پس از بسته شدن سفارش ${idLabel(7)}`)).closest('li')
     expect(entry?.textContent).toContain('افزایش')
     expect(entry?.querySelector('a, bdi')).toBeNull()
   })
@@ -59,6 +81,11 @@ describe('a wallet’s ledger', () => {
     const from = screen.getByRole('link', { name: '@reza' })
     expect(from.getAttribute('href')).toBe('/users/13')
     expect(from.closest('div')?.textContent).toContain(' · از @reza')
-    expect(screen.getByText('شارژ کیف پول (سفارش #4)').closest('li')?.querySelector('a')).toBeNull()
+    expect(
+      screen
+        .getByText(`شارژ کیف پول (سفارش ${idLabel(4)})`)
+        .closest('li')
+        ?.querySelector('a'),
+    ).toBeNull()
   })
 })

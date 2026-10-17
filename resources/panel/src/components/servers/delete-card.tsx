@@ -38,7 +38,7 @@ export function DeleteCard({ page, server }: { page: ServerPage; server: ServerR
         open={asking}
         onClose={close}
         title="حذف سرور"
-        description={`«${server.name}» و اینباندهای ذخیره‌شده آن حذف می‌شوند. این کار برگشت‌پذیر نیست.`}
+        description={`«${server.name}» حذف می‌شود؛ این کار برگشت‌پذیر نیست.`}
         confirmLabel="حذف"
         destructive
         pending={remove.isPending}
@@ -52,7 +52,8 @@ export function DeleteCard({ page, server }: { page: ServerPage; server: ServerR
           })
         }
       >
-        اطلاعات اتصال و توکن این سرور از دیتابیس پاک می‌شود. خود پنل دست نمی‌خورد.
+        اینباندهایش، جایش در پلن‌ها، تاریخچه هدیه‌ها و انتقال‌هایش و فهرست کلاینت‌هایی که انتقال‌ها روی پنلش گذاشته‌اند هم پاک می‌شود، با اطلاعات اتصال و توکنش؛ سفارش‌ها سابقه‌شان را نگه می‌دارند. خود
+        پنل دست نمی‌خورد.
       </ConfirmModal>
     </Card>
   )

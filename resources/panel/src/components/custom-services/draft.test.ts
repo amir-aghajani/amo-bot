@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { customPrice, customServicesDraft, customServicesRead, customServicesRequest, optionsOf, tierOf, tiersOf, type TierDraft } from '@/components/custom-services/draft'
+import { customPrice, customServicesDraft, customServicesRead, customServicesRequest, offeredOf, optionsOf, tierOf, tiersOf, type TierDraft } from '@/components/custom-services/draft'
 import { botSettingsRow } from '@/test/rows'
 
 /*
@@ -51,6 +51,24 @@ describe('the custom builder’s draft', () => {
     expect(customServicesRead(turned)).toEqual(customServicesRead(draft()))
   })
 
+  it('is no change while a number is written otherwise, an amount offered comes twice or in another order, or the servers are ticked in another order', () => {
+    const start = { ...draft(), custom_servers: [1, 2] }
+    const retyped = {
+      ...start,
+      custom_traffic_tiers: rows(['۱', '۳٬۰۰۰'], ['50', '2,500 تومان']),
+      custom_traffic_max: '۵۰۰',
+      custom_traffic_options: '100 50, 20 ,10، 10',
+      custom_days_min: ' 1 ',
+      custom_devices: '۲',
+      custom_servers: [2, 1],
+    }
+
+    expect(customServicesRead(retyped)).toEqual(customServicesRead(start))
+    expect(customServicesRead({ ...start, custom_traffic_tiers: rows(['1', '3500'], ['50', '2500']) })).not.toEqual(customServicesRead(start))
+    expect(customServicesRead({ ...start, custom_days_options: '30, 60' })).not.toEqual(customServicesRead(start))
+    expect(customServicesRead({ ...start, custom_servers: [1] })).not.toEqual(customServicesRead(start))
+  })
+
   it('reads the tiers and the amounts as the server does', () => {
     expect(tiersOf(rows(['50', '۲٬۵۰۰'], ['1', '3000 تومان']))).toEqual([
       { from: 1, price: 3000 },
@@ -60,6 +78,18 @@ describe('the custom builder’s draft', () => {
     expect(tiersOf(rows(['a', '3000']))).toBeNull()
     expect(optionsOf('10, ۲۰ 50')).toEqual([10, 20, 50])
     expect(optionsOf('10, x')).toBeNull()
+  })
+})
+
+describe('the amounts offered as buttons', () => {
+  it('are those the bot shows — within the bounds, the least never below the first tier —, each once and the smallest first, beside those it leaves out', () => {
+    expect(offeredOf(rows(['5', '3000']), '1', '500', '1000, 10, 2, 10, 50')).toEqual({ shown: [10, 50], left: [2, 1000], bounds: { least: 5, most: 500 } })
+  })
+
+  it('are all shown while no tier bounds them yet, and are none while none is typed or one is no number', () => {
+    expect(offeredOf([], '1', '500', '20, 10')).toEqual({ shown: [10, 20], left: [], bounds: null })
+    expect(offeredOf(rows(['1', '3000']), '1', '500', ' ')).toBeNull()
+    expect(offeredOf(rows(['1', '3000']), '1', '500', '10, x')).toBeNull()
   })
 })
 

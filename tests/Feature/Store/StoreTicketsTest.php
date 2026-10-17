@@ -76,7 +76,7 @@ final class StoreTicketsTest extends HttpTestCase
 
         $report = ReportMessage::query()->sole();
         self::assertSame([Topic::Tickets, "ticket:{$ticket['id']}", TicketClose::buttons($ticket['id'])], [$report->topic, $report->ref, $report->keyboard]);
-        self::assertStringContainsString("🎫 <b>تیکت جدید</b> · #{$ticket['id']}", $report->text);
+        self::assertStringContainsString("🎫 <b>تیکت جدید</b> · \u{200E}#{$ticket['id']}", $report->text);
         self::assertStringContainsString('🔖 سرویس: <code>ali_1</code>', $report->text);
         self::assertStringContainsString('📨 از وب‌سایت', $report->text);
         self::assertSame([], $this->telegram()->calls(), 'the customer is told nothing of their own doing');
@@ -213,7 +213,7 @@ final class StoreTicketsTest extends HttpTestCase
         self::assertSame(['subject' => ['موضوع حداکثر 120 کاراکتر است.'], 'body' => ['متن پیام را بنویسید.']], $this->decode($empty)['errors']);
 
         $notAPicture = $this->upload($this->storeApi($this->website, '/tickets'), 'file', 'note.png', 'just some words', ['subject' => 'قطعی اتصال', 'body' => 'سلام']);
-        self::assertSame(['file' => ['تصویر باید JPG، PNG یا WebP باشد.']], $this->decode($notAPicture)['errors']);
+        self::assertSame(['file' => ["تصویر باید \u{2068}JPG\u{2069}، \u{2068}PNG\u{2069} یا \u{2068}WebP\u{2069} باشد."]], $this->decode($notAPicture)['errors'], 'each format isolated: right to left reads them in order');
 
         self::assertSame(0, Ticket::query()->count(), 'nothing opened');
         self::assertSame([], glob($this->tickets() . '/*') ?: [], 'nothing kept');

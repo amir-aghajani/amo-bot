@@ -24,9 +24,7 @@ final class Sorting
      */
     public static function reorder(string $model, array $ids): void
     {
-        if (count($ids) > self::MAX_IDS) {
-            throw ValidationException::on('ids', 'لیست شناسه‌ها بلندتر از حد است؛ حداکثر ' . Persian::number(self::MAX_IDS) . ' شناسه.');
-        }
+        self::refuseTooMany($ids);
 
         $ids = array_values(array_unique(array_map(intval(...), $ids)));
         $rest = $model::query()->whereNotIn('id', $ids)->oldest('sort')->oldest('id')->pluck('id')->all();
@@ -36,6 +34,19 @@ final class Sorting
                 $model::query()->whereKey($id)->update(['sort' => $position + 1]);
             }
         });
+    }
+
+    /**
+     * Refuse a list of more ids than one reorder takes (MAX_IDS), before any of them is read.
+     *
+     * @param array<mixed> $ids
+     * @throws ValidationException 422 on `ids`
+     */
+    public static function refuseTooMany(array $ids): void
+    {
+        if (count($ids) > self::MAX_IDS) {
+            throw ValidationException::on('ids', 'لیست شناسه‌ها بلندتر از حد است؛ حداکثر ' . Persian::number(self::MAX_IDS) . ' شناسه.');
+        }
     }
 
     /**

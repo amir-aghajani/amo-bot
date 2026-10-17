@@ -1,5 +1,6 @@
 import { CircleCheck, TriangleAlert } from 'lucide-react'
 import { Callout } from '@/components/callout'
+import { inboundName } from '@/components/servers/inbounds-card'
 import { StatusDot } from '@/components/status-badge'
 import type { PanelStatusInfo, Probe } from '@/lib/api-types'
 import { formatBytes, formatNumber, formatPercent, formatSpan } from '@/lib/format'
@@ -45,7 +46,8 @@ export function ProbeResult({ probe }: { probe: Probe }) {
   const enabled = inbounds.filter((inbound) => inbound.enabled).length
 
   return (
-    <Callout tone="success" className="py-3">
+    // Said as it appears, as a failure is (an alert): the test's verdict is the answer to the button just pressed.
+    <Callout tone="success" role="status" className="py-3">
       <div className="grid gap-3">
         <div className="flex items-center gap-2">
           <CircleCheck className="size-4 shrink-0 text-success" aria-hidden />
@@ -67,7 +69,9 @@ export function ProbeResult({ probe }: { probe: Probe }) {
             {inbounds.slice(0, 6).map((inbound) => (
               <li key={inbound.remote_key} className="flex items-center gap-2">
                 <StatusDot tone={inbound.enabled ? 'success' : 'neutral'} className="size-1.5" />
-                <span className="truncate font-medium">{inbound.remark || inbound.tag}</span>
+                <span className="truncate font-medium" dir="auto">
+                  {inboundName(inbound)}
+                </span>
                 <span className="text-muted-foreground" dir="ltr">
                   {inbound.protocol}
                   {inbound.network && `/${inbound.network}`}

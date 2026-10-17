@@ -157,6 +157,21 @@ final class BotDiscountCodesTest extends BotTestCase
         self::assertSame([$this->checkoutText('100000')], $this->said(), 'the checkout without it');
     }
 
+    public function testACodeTheirOtherUnpaidOrderHoldsSaysSoAndWhichOrder(): void
+    {
+        $this->discountCode('ONE', 50, ['per_user' => 1]);
+        $other = $this->plan(['name' => 'دوماهه', 'price' => '200000.00'], $this->server);
+        $held = $this->service(OrderService::class)->openPurchase($this->ali, $this->plan, $this->server, quote: $this->service(\App\Modules\Orders\Services\Pricing::class)->purchase($this->ali, $this->plan, $this->server, 'ONE'));
+
+        $this->send($this->tap($this->checkoutOf($other, $this->server)));
+        $this->send($this->tap(DiscountCodeHandler::askCallback($this->checkoutOf($other, $this->server))));
+        $this->send($this->message('ONE'));
+        $this->send($this->tap($this->payButton($other, $this->server, $this->wallet)));
+
+        self::assertSame([self::text(BotText::DiscountCodeLost, ['reason' => sprintf(DiscountCodes::HELD_BY_YOU, $held->id)])], $this->said());
+        self::assertSame([$held->id], Order::query()->where('user_id', $this->ali->id)->pluck('id')->all(), 'nothing more ordered');
+    }
+
     public function testAFreeCodeTakesItFree(): void
     {
         $this->discountCode('GIFT', 0, ['type' => DiscountType::Free]);

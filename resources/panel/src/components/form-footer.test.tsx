@@ -145,6 +145,19 @@ describe('a dialog’s form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ذخیره' }))
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
+
+  it('on a phone keeps its buttons at the sheet’s foot, in reach however long the form — a finger’s size each', () => {
+    render(<GroupDialog onClose={vi.fn()} onSubmit={vi.fn()} />, { wrapper: providers().wrapper })
+    const save = screen.getByRole('button', { name: 'ذخیره' })
+    const row = save.parentElement?.parentElement as HTMLElement
+
+    // On the sheet's very edge: a sticky box stays clear of its scroller's padding (the dialog body's 20px), so the row
+    // is pulled down into it — at `bottom: 0` it floated 20px above the edge, the form scrolling by under it.
+    expect(row.className.split(' ')).toEqual(expect.arrayContaining(['max-md:in-[.app-modal]:sticky', 'max-md:in-[.app-modal]:-bottom-5', 'max-md:in-[.app-modal]:bg-popover']))
+    expect(row.className).not.toContain(':bottom-0')
+    expect(row.closest('.overflow-y-auto')?.className).toContain('pb-5')
+    for (const name of ['ذخیره', 'انصراف', 'بازگردانی تغییرات']) expect(screen.getByRole('button', { name }).className).toContain('max-md:h-11')
+  })
 })
 
 describe('a dialog’s form that cannot go yet', () => {

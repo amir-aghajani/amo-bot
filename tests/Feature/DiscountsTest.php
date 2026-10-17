@@ -11,15 +11,18 @@ use App\Modules\Discounts\DTO\CodeTarget;
 use App\Modules\Discounts\Enums\DiscountSource;
 use App\Modules\Discounts\Enums\DiscountType;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
+use App\Modules\Discounts\Exceptions\DiscountInUseException;
 use App\Modules\Discounts\Models\DiscountCode;
 use App\Modules\Discounts\Services\DiscountCodes;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Orders\Exceptions\FirstPurchaseUsedException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Orders\Services\Pricing;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
+use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\ExtraKind;
@@ -27,6 +30,7 @@ use App\Modules\Subscriptions\Services\AutoRenewal;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\Topic;
+use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
 use Illuminate\Support\Carbon;
@@ -36,7 +40,8 @@ use Tests\Fakes\FakeProvider;
 
 /**
  * The pricing pipeline and discounts: the base, the largest automatic discount (sale, own percent, tier — never added), then
- * the code; each code rule and refusal; uses taken under the code's lock and given back when an unpaid order goes; automatic
+ * the code; each code rule and refusal (a first-purchase code asked again at delivery); uses taken under the code's lock,
+ * a use their own unpaid order holds said so, and given back when an unpaid order goes or a paid one is refunded; automatic
  * renewal at the automatic price; agents' shops with their own codes and sales.
  */
 final class DiscountsTest extends DatabaseTestCase
@@ -252,6 +257,85 @@ final class DiscountsTest extends DatabaseTestCase
 
         $this->service(OrderService::class)->cancel($taken, OrderService::NOTE_CANCELLED_BY_SUPPORT);
         self::assertSame('90000.00', $quote($this->customer(['telegram_id' => 7003]))->amount(), 'an order cancelled unpaid gave its use back');
+    }
+
+    public function testARefundedOrderGivesItsCodesUseBackButKeepsTheCodeFromBeingDeleted(): void
+    {
+        $code = $this->discountCode('ONCE', 10, ['max_uses' => 1, 'per_user' => 1]);
+        $codes = $this->service(DiscountCodes::class);
+        $order = $this->service(OrderService::class)->openPurchase($this->ali, $this->plan, $this->server, quote: $this->pricing()->purchase($this->ali, $this->plan, $this->server, 'ONCE'));
+        $this->buyWith($order);
+        $sara = $this->customer(['telegram_id' => 7001]);
+        $this->assertRefused(DiscountCodes::USED_UP, fn() => $this->pricing()->purchase($sara, $this->plan, $this->server, 'ONCE'));
+
+        self::assertTrue($this->service(PaymentService::class)->refund($order->payments()->firstOrFail(), 'admin', null));
+
+        self::assertSame('90000.00', $this->pricing()->purchase($sara, $this->plan, $this->server, 'ONCE')->amount(), 'its use given back');
+        self::assertSame('90000.00', $this->pricing()->purchase($this->ali->refresh(), $this->plan, $this->server, 'ONCE')->amount(), 'theirs too');
+        self::assertSame(0, $codes->present($code)['uses']);
+        $this->expectExceptionObject(DiscountInUseException::refunded());
+        $codes->delete($code);
+    }
+
+    public function testAUseTheirOwnOtherUnpaidOrderHoldsIsSaidSoWithThatOrder(): void
+    {
+        $this->discountCode('ONE', 10, ['per_user' => 1]);
+        $this->discountCode('LAST', 10, ['max_uses' => 1]);
+        $other = $this->plan(['name' => 'دوماهه', 'price' => '200000.00'], $this->server);
+        $orders = $this->service(OrderService::class);
+
+        foreach (['ONE', 'LAST'] as $text) {
+            $held = $orders->openPurchase($this->ali, $this->plan, $this->server, quote: $this->pricing()->purchase($this->ali, $this->plan, $this->server, $text));
+            $quote = $this->pricing()->purchase($this->ali, $other, $this->server, $text);
+            self::assertSame('180000.00', $quote->amount(), "{$text}: the quote spares their own unpaid order, which a checkout may be reopening");
+
+            $this->assertRefused(sprintf(DiscountCodes::HELD_BY_YOU, $held->id), fn() => $orders->openPurchase($this->ali, $other, $this->server, quote: $quote), $text);
+            $orders->cancel($held, OrderService::NOTE_CANCELLED_BY_SUPPORT);
+        }
+
+        // Someone else's unpaid order holding the last use is no hold of theirs: the code is used up.
+        $quote = $this->pricing()->purchase($this->ali, $other, $this->server, 'LAST');
+        $sara = $this->customer(['telegram_id' => 7001]);
+        $orders->openPurchase($sara, $this->plan, $this->server, quote: $this->pricing()->purchase($sara, $this->plan, $this->server, 'LAST'));
+        $this->assertRefused(DiscountCodes::USED_UP, fn() => $orders->openPurchase($this->ali, $other, $this->server, quote: $quote));
+    }
+
+    public function testAFirstPurchaseCodeIsAskedAgainAsItsOrderIsDelivered(): void
+    {
+        $this->telegram();
+        $this->discountCode('WELCOME', 50, ['first_purchase_only' => true]);
+        $other = $this->plan(['name' => 'دوماهه', 'price' => '200000.00'], $this->server);
+        $orders = $this->service(OrderService::class);
+        // Both ordered with the code before either was paid.
+        $first = $orders->openPurchase($this->ali, $this->plan, $this->server, quote: $this->pricing()->purchase($this->ali, $this->plan, $this->server, 'WELCOME'));
+        $second = $orders->openPurchase($this->ali, $other, $this->server, quote: $this->pricing()->purchase($this->ali, $other, $this->server, 'WELCOME'));
+        self::assertTrue($first->codeLine()?->firstOnly);
+
+        $this->paidByCard($first);
+        // Support approves the other's receipt.
+        $this->service(PaymentActions::class)->approve($this->receipt($this->cardPayment($second, $this->cardMethod())), $this->panelActor());
+
+        self::assertSame(OrderStatus::Fulfilled, $first->refresh()->status, 'the first paid is their first purchase');
+        self::assertSame([OrderStatus::Failed, FirstPurchaseUsedException::code('WELCOME')->getMessage()], [$second->refresh()->status, $second->notes], 'the other fails for support to give its money back');
+        self::assertCount(1, FakeProvider::$created);
+        self::assertSame([self::text(BotText::PayFirstPurchaseUsed, ['order' => $second->id])], $this->telegram()->sentTo(self::TELEGRAM_ID), 'its customer told why, as for the first-purchase price');
+    }
+
+    public function testAFirstPurchaseCodeHoldsAgainOnceTheFirstPurchaseWasRefunded(): void
+    {
+        $this->discountCode('WELCOME', 50, ['first_purchase_only' => true]);
+        $orders = $this->service(OrderService::class);
+        $bought = $orders->openPurchase($this->ali, $this->plan, $this->server);
+        $this->buyWith($bought);
+        $this->assertRefused(DiscountCodes::FIRST_ONLY, fn() => $this->pricing()->purchase($this->ali, $this->plan, $this->server, 'WELCOME'));
+
+        self::assertTrue($this->service(PaymentService::class)->refund($bought->payments()->firstOrFail(), 'admin', null));
+
+        $quote = $this->pricing()->purchase($this->ali->refresh(), $this->plan, $this->server, 'WELCOME');
+        self::assertSame('50000.00', $quote->amount(), 'the refund undid the purchase: a newcomer still');
+        $again = $orders->openPurchase($this->ali, $this->plan, $this->server, quote: $quote);
+        $this->buyWith($again);
+        self::assertSame(OrderStatus::Fulfilled, $again->refresh()->status, 'asked again at its delivery: the refunded one is no purchase paid before it');
     }
 
     public function testOfTwoCustomersTakingTheLastUseOneDoes(): void

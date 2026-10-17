@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Ban, EyeOff, Handshake, HardDrive, Pencil, Play, Search, Store, UserX } from 'lucide-react'
 import { toast } from 'sonner'
-import { useOpenShop } from '@/apps/admin/owner'
+import { useOpenShop, type ShopLink } from '@/apps/admin/owner'
 import { StandingBadge, SUSPENDED_SALES } from '@/components/agency/agency-standing'
 import { AgentBotName } from '@/components/agency/agent-bot-name'
 import { AgentModal, TrafficModal } from '@/components/agency/agent-modal'
@@ -13,7 +13,7 @@ import { Balance } from '@/components/balance'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
-import { Dash, ListView, RowMenu, RowTitleButton, SortableHead } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, RowMenu, RowTitleButton, SortableHead } from '@/components/list-view'
 import { SearchBox } from '@/components/search-box'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -40,6 +40,7 @@ export function AgentsList() {
     read: (query) => api.get<AgentsResponse>('/agency/agents', query),
     list: 'agents',
     params: ['level'],
+    ids: ['level'],
     sorts: SORTS,
     address: '/agents/list',
   })
@@ -110,7 +111,7 @@ export function AgentsList() {
               <SortableHead list={list} by="traffic" label="حجم ربات">
                 ربات
               </SortableHead>
-              <TableHead>سطح</TableHead>
+              <TableHead className="hidden md:table-cell">سطح</TableHead>
               <SortableHead list={list} by="balance" className="hidden md:table-cell">
                 موجودی
               </SortableHead>
@@ -127,8 +128,14 @@ export function AgentsList() {
               <TableRow key={agent.id}>
                 <TableCell>
                   <UserIdentity user={agent.user} status={agent.status} to={mainShop ? userPage(agent.id) : undefined} />
+                  {/* The level's column is the menu's first item on a phone: its words here. */}
+                  <PhoneFacts>
+                    <span>
+                      {agent.level.name} · {formatPricePerGb(agent.level.price_per_gb)}
+                    </span>
+                  </PhoneFacts>
                 </TableCell>
-                <TableCell>
+                <TableCell className="max-md:whitespace-normal">
                   {agent.bot ? (
                     <div className="grid">
                       <AgentBotName bot={agent.bot} /> <span className="text-footnote text-muted-foreground">حجم: {formatBytes(agent.bot.traffic_balance)}</span>
@@ -143,7 +150,7 @@ export function AgentsList() {
                     <Dash />
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <RowTitleButton onClick={() => setEditing(agent)}>{agent.level.name}</RowTitleButton>
                   <span className="block text-footnote text-muted-foreground">{formatPricePerGb(agent.level.price_per_gb)}</span>
                 </TableCell>
@@ -196,14 +203,7 @@ export function AgentsList() {
                         ادامه فروش
                       </DropdownMenuItem>
                     )}
-                    {agent.bot && (
-                      <DropdownMenuItem asChild>
-                        <a {...shopLink(agent.bot.id)}>
-                          <Store aria-hidden />
-                          باز کردن فروشگاه
-                        </a>
-                      </DropdownMenuItem>
-                    )}
+                    {agent.bot && <ShopItem link={shopLink(agent.bot.id)} />}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onSelect={() => setRevoking(agent)}>
                       <UserX aria-hidden />
@@ -280,5 +280,17 @@ export function AgentsList() {
         onConfirm={(note) => revoking && revoke.mutate({ agent: revoking, note })}
       />
     </>
+  )
+}
+
+/** «باز کردن فروشگاه» in a row's menu: the agent's shop as a real link (useOpenShop's `link`). */
+function ShopItem({ link: { onSelect, ...anchor } }: { link: ShopLink }) {
+  return (
+    <DropdownMenuItem asChild onSelect={onSelect}>
+      <a {...anchor}>
+        <Store aria-hidden />
+        باز کردن فروشگاه
+      </a>
+    </DropdownMenuItem>
   )
 }

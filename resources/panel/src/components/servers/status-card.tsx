@@ -3,7 +3,7 @@ import { Callout } from '@/components/callout'
 import { isSecretState } from '@/components/driver-form/draft'
 import { Fact, FactList } from '@/components/fact-list'
 import { ProbeResult } from '@/components/servers/probe-result'
-import { ServerStatus } from '@/components/servers/server-status'
+import { LastError, ServerStatus } from '@/components/servers/server-status'
 import { TextLink } from '@/components/text-link'
 import { Card, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import type { DriverDescription, DriverValues, Probe, ServerRow } from '@/lib/api-types'
@@ -67,8 +67,8 @@ export function StatusCard({ server, probe, driver }: { server: ServerRow; probe
           <ProbeResult probe={probe} />
         ) : (
           server.last_error && (
-            <Callout tone="danger" className="text-footnote wrap-anywhere">
-              <span dir="auto">{server.last_error}</span>
+            <Callout tone="danger" className="text-footnote">
+              <LastError server={server} />
             </Callout>
           )
         )}

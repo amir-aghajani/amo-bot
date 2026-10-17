@@ -40,6 +40,9 @@ final class MainMenu
     public const WHEEL = 'menu:wheel';
     public const HOME = 'menu:home';
 
+    /** The actions whose buttons come and go with their program (markup()). */
+    private const SWITCHED = ['affiliates', 'agency', 'gift', 'wheel', 'test'];
+
     /** Every action a menu button can stand for: key => admin-facing title, default label, the screen it opens. */
     public const ACTIONS = [
         'buy' => ['title' => 'خرید اشتراک', 'label' => Messages::MENU_BUY, 'screen' => self::PLANS],
@@ -180,7 +183,9 @@ final class MainMenu
 
     /**
      * The menu's `reply_markup` for a customer, without the buttons of programs switched off (an agent keeps
-     * «نمایندگی»: it is their account). They stay on the admin's layout and come back with their program.
+     * «نمایندگی»: it is their account). They stay on the admin's layout and come back with their program. A layout of
+     * nothing but such buttons, all off, gives the built-in menu in its form — never an empty keyboard, which Telegram
+     * refuses —, as KeyboardLayouts::get() does for one with nothing left in this shop.
      *
      * @return array<string, mixed>
      */
@@ -193,21 +198,43 @@ final class MainMenu
             'wheel' => !$this->wheel->enabled(),
             'test' => !$this->tests->enabled(),
         ]));
+        $layout = $this->layout();
+        $shown = $layout->without(...$off);
 
-        return $this->layout()->without(...$off)->markup();
+        return ($shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown)->markup();
     }
 
     /** @return list<string> The reply-keyboard labels to route as messages. */
     public function labels(): array
     {
-        return $this->layout()->labels();
+        return $this->routed()->labels();
     }
 
     /** The screen a keyboard label opens (null for any other text). */
     public function screenFor(?string $text): ?string
     {
-        $action = $this->layout()->actionFor($text);
+        $action = $this->routed()->actionFor($text);
 
         return $action === null ? null : self::callbackFor($action);
+    }
+
+    /**
+     * The layout whose labels route: the admin's — and, while every button of it belongs to a program that may be
+     * switched off (markup()), the built-in menu's after it, which stands in once they all are.
+     */
+    private function routed(): KeyboardLayout
+    {
+        $layout = $this->layout();
+        if ($layout->without(...self::SWITCHED)->rows !== []) {
+            return $layout;
+        }
+
+        return new KeyboardLayout($layout->type, [...$layout->rows, ...self::builtIn($layout)->rows]);
+    }
+
+    /** The built-in menu (defaultLayout()) in the form `$layout` takes: a reply keyboard or inline buttons. */
+    private static function builtIn(KeyboardLayout $layout): KeyboardLayout
+    {
+        return new KeyboardLayout($layout->type, self::defaultLayout()->rows);
     }
 }

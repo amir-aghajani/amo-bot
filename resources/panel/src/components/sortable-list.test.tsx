@@ -51,7 +51,14 @@ async function showCategories() {
 }
 
 const arrow = (name: string) => screen.getByRole('button', { name })
-const order = () => screen.getAllByRole('row').map((row) => row.textContent)
+/** The rows' names, in their order (the name's cell: the order cell also holds what a move said). */
+const order = () => screen.getAllByRole('row').map((row) => row.lastElementChild?.textContent)
+/** What the order cell of `name`'s row last said of a move. */
+const saidOf = (name: string) =>
+  screen
+    .getAllByRole('row')
+    .find((row) => row.lastElementChild?.textContent === name)
+    ?.querySelector('[aria-live="polite"]')?.textContent
 
 describe('a row’s ▲▼', () => {
   it('keeps the focus on the arrow pressed as its row moves — the other arrow once the row reached the end', async () => {
@@ -65,9 +72,34 @@ describe('a row’s ▲▼', () => {
     await until(() => expect(order()).toEqual(['ماهانه', 'سالانه', 'سه‌ماهه']))
     expect(document.activeElement).toBe(arrow('انتقال سه‌ماهه به بالا'))
     expect(arrow('انتقال سه‌ماهه به پایین')).toHaveProperty('disabled', true)
+    // Said to assistive tech, politely, where it went.
+    const said = [...document.querySelectorAll('[aria-live="polite"]')].map((region) => region.textContent).filter(Boolean)
+    expect(said).toEqual(['سه‌ماهه به ردیف ۳ رفت'])
 
     saved.answer(json({ categories: [CATEGORIES[0], CATEGORIES[2], CATEGORIES[1]] }))
     await until(() => expect(saved.waiting).toBe(0))
+  })
+
+  it('says each move as it lands — its line emptied at the press —, a row back at a place it was said to reach too', async () => {
+    await showCategories()
+    const saved = server().hold('POST', '/api/admin/plans/categories/reorder')
+    /** A press on `name`'s ▼, the server answering with the categories in `ids`' order. */
+    const down = async (name: string, ids: number[]) => {
+      fireEvent.click(arrow(`انتقال ${name} به پایین`))
+      expect(saidOf(name)).toBe('')
+      await until(() => expect(saved.waiting).toBe(1))
+      saved.answer(json({ categories: ids.map((id) => CATEGORIES.find((category) => category.id === id)) }))
+      await until(() => expect(arrow(`انتقال ${name} به بالا`).getAttribute('aria-disabled')).toBeNull())
+    }
+
+    await down('سه‌ماهه', [1, 3, 2])
+    expect(saidOf('سه‌ماهه')).toBe('سه‌ماهه به ردیف ۳ رفت')
+    // Another row's move takes it back up a place: nothing said of it.
+    await down('سالانه', [1, 2, 3])
+    expect([order(), saidOf('سه‌ماهه')]).toEqual([['ماهانه', 'سه‌ماهه', 'سالانه'], 'سه‌ماهه به ردیف ۳ رفت'])
+
+    await down('سه‌ماهه', [1, 3, 2])
+    expect(saidOf('سه‌ماهه')).toBe('سه‌ماهه به ردیف ۳ رفت')
   })
 
   it('holds every arrow while a move runs: a press then sends nothing, and the focus stays', async () => {

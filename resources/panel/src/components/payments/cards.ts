@@ -1,6 +1,7 @@
 import { nextKey } from '@/components/add-row'
 import type { PaymentCardInput, PaymentCardRow } from '@/lib/api-types'
 import { amountDraft } from '@/lib/format'
+import { asAmount } from '@/lib/use-form'
 
 /*
  * A card method's cards as its form holds them (components/payments/cards-editor) and sends them: the list is the cards'
@@ -42,6 +43,11 @@ export function cardsDraft(cards: readonly PaymentCardRow[]): CardDraft[] {
 export function newCard(cards: readonly CardDraft[]): CardDraft {
   const key = nextKey(cards.map((card) => card.key))
   return { key, id: null, number: '', holder: '', bank: '', enabled: true, daily_cap: '', payments: 0, today: null }
+}
+
+/** The cards as the server reads them, for the form's `reads`: each in its order, its text trimmed, its cap as whole Toman («۳۰۰٬۰۰۰» is 300000). */
+export function cardsRead(cards: readonly CardDraft[]) {
+  return cards.map((card) => ({ id: card.id, number: card.number, holder: card.holder.trim(), bank: card.bank.trim(), enabled: card.enabled, daily_cap: asAmount(card.daily_cap) }))
 }
 
 /** What the form sends: every card in its order, a kept one by its id. */

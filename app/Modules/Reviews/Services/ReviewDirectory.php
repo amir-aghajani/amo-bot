@@ -12,12 +12,14 @@ use App\Modules\Reviews\Models\Review;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * The reviews as they are read: the moderation screen («نظرات», both panels and the website's admin API) — every review,
  * newest first, by status (pending ones are support's queue, counted) and search, with who decided each (Reviewers: the
- * owner's login reads «پشتیبانی» to anyone but the owner) — and the website: the approved ones, newest first, with their
- * count and average rating, showing nothing of who wrote them or of support.
+ * owner's login reads «پشتیبانی» to anyone but the owner; one of the shop's admins with their name too) — and the
+ * website: the approved ones, newest first, with their count and average rating, showing nothing of who wrote them or
+ * of support.
  */
 final class ReviewDirectory
 {
@@ -33,14 +35,27 @@ final class ReviewDirectory
         }
         $list->search($query, self::applySearch(...));
 
-        return Page::fetch($query->with('user')->orderByDesc('id'), $list, $this->present(...))
+        return Page::fetchTogether($query->with('user')->orderByDesc('id'), $list, $this->presentAll(...))
             ->with(['pending' => Review::query()->where('status', ReviewStatus::Pending->value)->count()]);
     }
 
     /** @return array<string, mixed> One row of the screen, its writer loaded with it. */
     public function present(Review $review): array
     {
-        return [
+        return $this->presentAll(new Collection([$review]))[0];
+    }
+
+    /**
+     * Rows of the screen, the names of the shop's admins who decided them read once for them all (Reviewers::names()).
+     *
+     * @param Collection<int, Review> $reviews
+     * @return list<array<string, mixed>>
+     */
+    private function presentAll(Collection $reviews): array
+    {
+        $names = $this->reviewers->names($reviews->pluck('reviewer'));
+
+        return array_values($reviews->map(fn(Review $review): array => [
             'id' => $review->id,
             'name' => $review->name,
             'rating' => $review->rating,
@@ -49,10 +64,11 @@ final class ReviewDirectory
             'status' => $review->status->value,
             'customer' => $review->user === null ? null : UserDirectory::presentRef($review->user),
             'reviewer' => $this->reviewers->present($review->reviewer),
+            'reviewer_name' => $names[$review->reviewer ?? ''] ?? null,
             'decided_at' => $review->decided_at?->toIso8601String(),
             'created_at' => $review->created_at->toIso8601String(),
             'actions' => Reviews::allowed($review),
-        ];
+        ])->all());
     }
 
     /** What the shop's website shows: the approved reviews, the newest first, a page of them. */

@@ -6,7 +6,7 @@ import { agencyLevelsQuery, agencySettingsQuery } from '@/components/agency/quer
 import { RejectModal } from '@/components/agency/reject-modal'
 import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
-import { Dash, ListView, SortableHead } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, SortableHead } from '@/components/list-view'
 import { Reviewer } from '@/components/reviewer'
 import { SearchBox } from '@/components/search-box'
 import { StatusBadge } from '@/components/status-badge'
@@ -71,8 +71,8 @@ export function RequestsList() {
           <TableHeader>
             <TableRow>
               <TableHead>مشتری</TableHead>
-              <TableHead>توضیح</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">توضیح</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <SortableHead list={list} by="created" className="hidden md:table-cell">
                 زمان
               </SortableHead>
@@ -86,33 +86,16 @@ export function RequestsList() {
               <TableRow key={request.id}>
                 <TableCell>
                   <UserIdentity user={request.user} status={request.user_status} />
+                  <PhoneFacts className="grid">
+                    <RequestState request={request} />
+                    <RequestNote request={request} />
+                  </PhoneFacts>
                 </TableCell>
-                <TableCell className="max-w-72">
-                  {request.note ? <p className="line-clamp-2 whitespace-pre-line">{request.note}</p> : <Dash />}
-                  {request.status === 'rejected' && request.reason && <p className="mt-1 line-clamp-1 text-footnote text-muted-foreground">پشتیبانی: {request.reason}</p>}
+                <TableCell className="hidden max-w-72 md:table-cell">
+                  <RequestNote request={request} />
                 </TableCell>
-                <TableCell>
-                  {/* The spaces between the lines keep them words apart for assistive tech, not one. */}
-                  <div className="grid justify-items-start gap-1">
-                    <StatusBadge status={AGENCY_REQUEST_STATUS[request.status]} />{' '}
-                    {request.level && (
-                      <span className="text-footnote text-muted-foreground">
-                        {request.level.name} · {formatPricePerGb(request.level.price_per_gb)}
-                      </span>
-                    )}{' '}
-                    {/* Who decided, and when: the time column is when the request came, which the list sorts by. */}
-                    {request.decided_at && (
-                      <span className="text-footnote text-muted-foreground">
-                        {request.reviewer && (
-                          <>
-                            <Reviewer name={request.reviewer} />
-                            {' · '}
-                          </>
-                        )}
-                        {timeAgo(request.decided_at)}
-                      </span>
-                    )}
-                  </div>
+                <TableCell className="hidden md:table-cell">
+                  <RequestState request={request} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground md:table-cell">{timeAgo(request.created_at)}</TableCell>
                 <TableCell>
@@ -149,5 +132,42 @@ export function RequestsList() {
       />
       <RejectModal request={rejecting} onClose={() => setRejecting(null)} onDone={list.replace} />
     </>
+  )
+}
+
+/** What the applicant wrote — and, refused, support's reason. */
+function RequestNote({ request }: { request: AgencyRequestRow }) {
+  return (
+    <>
+      {request.note ? <p className="line-clamp-2 whitespace-pre-line">{request.note}</p> : <Dash />}
+      {request.status === 'rejected' && request.reason && <p className="mt-1 line-clamp-1 text-footnote text-muted-foreground">پشتیبانی: {request.reason}</p>}
+    </>
+  )
+}
+
+/** The request's state, the level it was given, and who decided it when. */
+function RequestState({ request }: { request: AgencyRequestRow }) {
+  return (
+    // The spaces between the lines keep them words apart for assistive tech, not one.
+    <div className="grid justify-items-start gap-1">
+      <StatusBadge status={AGENCY_REQUEST_STATUS[request.status]} />{' '}
+      {request.level && (
+        <span className="text-footnote text-muted-foreground">
+          {request.level.name} · {formatPricePerGb(request.level.price_per_gb)}
+        </span>
+      )}{' '}
+      {/* Who decided, and when: the time column is when the request came, which the list sorts by. */}
+      {request.decided_at && (
+        <span className="text-footnote text-muted-foreground">
+          {request.reviewer && (
+            <>
+              <Reviewer name={request.reviewer} person={request.reviewer_name} />
+              {' · '}
+            </>
+          )}
+          {timeAgo(request.decided_at)}
+        </span>
+      )}
+    </div>
   )
 }

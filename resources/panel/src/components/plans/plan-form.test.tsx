@@ -249,7 +249,7 @@ describe('its extra traffic and time', () => {
     pricing('قیمت‌های این پلن')
     expect(screen.getByText('با این قیمت‌ها حجم اضافه فروخته نمی‌شود.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('قیمت هر روز (تومان)'), { target: { value: '2000' } })
-    fireEvent.change(screen.getByLabelText('قیمت هر کاربر برای 30 روز (تومان)'), { target: { value: '30000' } })
+    fireEvent.change(screen.getByLabelText('قیمت هر کاربر برای ۳۰ روز (تومان)'), { target: { value: '30000' } })
     fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
 
     await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
@@ -470,6 +470,9 @@ describe('its term', () => {
   })
 })
 
+/** The line under a field: its hint (no refusal on it). */
+const hintOf = (field: HTMLElement) => document.getElementById(`${field.id}-hint`)?.textContent
+
 describe('its price', () => {
   it('is measured by its digits: typed again with its thousands set apart, it is no change', async () => {
     showPlan(planRow())
@@ -481,6 +484,30 @@ describe('its price', () => {
     expect(save.getAttribute('aria-disabled')).toBe('true')
     fireEvent.change(price, { target: { value: '125000' } })
     expect(save.getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('is typed on a phone’s number pad, as its first-purchase and agent prices are: whole Toman, no decimal point', async () => {
+    showPlan(planRow())
+    await openQuota()
+
+    expect([screen.getByLabelText('قیمت (تومان)'), firstPurchaseField(), agentPriceField()].map((field) => field.getAttribute('inputmode'))).toEqual(['numeric', 'numeric', 'numeric'])
+  })
+
+  it('says what the amount typed comes to, as its first-purchase and agent prices do, with what each is for', async () => {
+    showPlan(planRow())
+    await openQuota()
+
+    const price = screen.getByLabelText('قیمت (تومان)')
+    expect(hintOf(price)).toBe('= ۱۲۰٬۰۰۰ تومان؛ قیمت عادی پلن، برای هر خرید و تمدید.')
+    fireEvent.change(price, { target: { value: '0' } })
+    expect(hintOf(price)).toBe('رایگان، برای هر خرید و تمدید.')
+
+    fireEvent.change(firstPurchaseField(), { target: { value: '۹۰۰۰۰' } })
+    expect(hintOf(firstPurchaseField())).toMatch(/^= ۹۰٬۰۰۰ تومان؛ مشتری‌ای که هنوز سرویسی از فروشگاه نخریده/)
+    fireEvent.change(agentPriceField(), { target: { value: '100,000' } })
+    expect(hintOf(agentPriceField())).toMatch(/^= ۱۰۰٬۰۰۰ تومان؛ نماینده‌ها و مشتری‌های گروه‌های همکار/)
+    fireEvent.change(agentPriceField(), { target: { value: '' } })
+    expect(hintOf(agentPriceField())).toMatch(/خالی یعنی ندارد\.$/)
   })
 })
 

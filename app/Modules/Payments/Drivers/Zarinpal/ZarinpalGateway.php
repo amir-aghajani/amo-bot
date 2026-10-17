@@ -6,12 +6,11 @@ namespace App\Modules\Payments\Drivers\Zarinpal;
 
 use App\Modules\Payments\Contracts\OnlineGateway;
 use App\Modules\Payments\Drivers\GatewayHttp;
+use App\Modules\Payments\Drivers\OnlinePage;
 use App\Modules\Payments\DTO\OnlineInvoice;
 use App\Modules\Payments\DTO\OnlineRequest;
 use App\Modules\Payments\DTO\OnlineVerdict;
-use App\Modules\Payments\DTO\PayLink;
 use App\Modules\Payments\DTO\PaymentInitiation;
-use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Models\Payment;
 use App\Support\Money;
@@ -27,10 +26,12 @@ use GuzzleHttp\ClientInterface;
  * (sandbox.zarinpal.com) takes any code and moves no money; a payment is always asked of the host it was opened on,
  * whatever the method's switch says now. Its details kept on the payment (`payments.invoice`): the authority, the amount
  * asked in Rial, Zarinpal's fee when its merchant has the customer pay it (`fee`, Rial), and whether it was opened in
- * the sandbox.
+ * the sandbox. A verified payment's bank reference (`ref_id`) is its reference.
  */
 final class ZarinpalGateway implements OnlineGateway
 {
+    use OnlinePage;
+
     public const LIVE = 'https://payment.zarinpal.com';
     public const SANDBOX = 'https://sandbox.zarinpal.com';
     public const REQUEST = '/pg/v4/payment/request.json';
@@ -59,9 +60,6 @@ final class ZarinpalGateway implements OnlineGateway
     /** inquiry.json: an authority Zarinpal does not know (-54), or a payment request it cannot find (-55) — nothing comes of it. */
     private const UNKNOWN = [-54, -55];
 
-    /** The longest of Zarinpal's own words a log line keeps. */
-    private const SAID_MAX = 200;
-
     public function __construct(
         private readonly string $merchantId,
         private readonly bool $sandbox,
@@ -77,24 +75,10 @@ final class ZarinpalGateway implements OnlineGateway
     /** Its StartPay page, and the sum it asks: the payment's, and Zarinpal's fee when the customer pays it. */
     public function initiate(Payment $payment): PaymentInitiation
     {
-        if ($payment->link === null) {
-            return PaymentInitiation::instant();
-        }
         $rial = $payment->invoice['fee'] ?? null;
         $fee = is_int($rial) && $rial > 0 ? self::toman($rial) : null;
 
-        return PaymentInitiation::link(new PayLink(
-            $payment->link,
-            $payment->link_expires_at?->toDateTimeImmutable(),
-            $fee === null ? $payment->amount : Money::add($payment->amount, $fee),
-            fee: $fee,
-        ));
-    }
-
-    /** Zarinpal said it was paid before this runs (Services\OnlinePayments): its bank reference is the reference. */
-    public function settle(Payment $payment): PaymentResult
-    {
-        return PaymentResult::success($payment->reference);
+        return $this->page($payment, $fee === null ? null : Money::add($payment->amount, $fee), fee: $fee);
     }
 
     public function open(Payment $payment, OnlineRequest $request): OnlineInvoice
@@ -229,7 +213,7 @@ final class ZarinpalGateway implements OnlineGateway
     private static function refusal(string $what, int $status, array $answer): string
     {
         $errors = is_array($answer['errors'] ?? null) ? $answer['errors'] : [];
-        $said = is_string($errors['message'] ?? null) ? mb_substr($errors['message'], 0, self::SAID_MAX) : '';
+        $said = GatewayHttp::said($errors['message'] ?? null);
         $code = self::errorCode($answer);
         $meaning = match ($code) {
             -9 => ' — an amount out of Zarinpal\'s bounds (100 to 100,000,000 Toman), or a request it would not take',

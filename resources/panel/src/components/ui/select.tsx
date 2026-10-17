@@ -31,7 +31,7 @@ function SelectTrigger({
       data-size={size}
       className={cn(
         fieldClasses,
-        "flex w-fit items-center justify-between gap-2 px-3 whitespace-nowrap data-[placeholder]:text-faint data-[size=default]:h-8 data-[size=sm]:h-7 data-[size=sm]:rounded-md data-[size=sm]:px-2.5 data-[size=sm]:text-footnote *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-faint",
+        "flex w-fit items-center justify-between gap-2 px-3 whitespace-nowrap data-[placeholder]:text-faint data-[size=default]:h-8 max-md:data-[size=default]:h-11 data-[size=sm]:h-7 data-[size=sm]:rounded-md data-[size=sm]:px-2.5 data-[size=sm]:text-footnote *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-faint",
         className,
       )}
       {...props}
@@ -77,14 +77,14 @@ function SelectLabel({ className, ...props }: React.ComponentProps<typeof Select
 
 /**
  * An option: its label (what the field shows once picked) and, a local addition, a `hint` under it in secondary ink
- * (why a server cannot take a service), which wraps in the list and stays out of the field.
+ * (why a server cannot take a service), which wraps in the list and stays out of the field. A finger's 44px on a phone.
  */
 function SelectItem({ className, children, hint, ...props }: React.ComponentProps<typeof SelectPrimitive.Item> & { hint?: React.ReactNode }) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex min-h-8 w-full cursor-default items-center gap-2 rounded-md py-1 ps-2 pe-8 text-body outline-hidden select-none focus:bg-fill-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-faint *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "relative flex min-h-8 w-full cursor-default max-md:min-h-11 items-center gap-2 rounded-md py-1 ps-2 pe-8 text-body outline-hidden select-none focus:bg-fill-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-faint *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className,
       )}
       {...props}

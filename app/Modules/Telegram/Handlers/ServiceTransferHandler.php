@@ -68,7 +68,7 @@ final class ServiceTransferHandler implements Handler
         }
 
         $args = $ctx->update->callbackArgs(self::PREFIX) ?? [];
-        $service = $this->services->find($ctx, (int) ($args[0] ?? 0), MenuHandler::subscriptionsCallback(1));
+        $service = $this->services->find($ctx, (int) ($args[0] ?? 0));
         if ($service === null) {
             return;
         }

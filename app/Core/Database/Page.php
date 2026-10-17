@@ -24,6 +24,9 @@ final class Page
     /** Longer search terms are cut: nothing anyone looks for is longer, and LIKE patterns stay cheap. */
     private const TERM_MAX = 64;
 
+    /** The marks that set a text's direction and draw nothing: U+061C, U+200E/U+200F, the embeddings and the isolates. */
+    private const DIRECTION_MARKS = '/[\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u';
+
     /** What a search term's own `%` and `_` (and this character itself) are escaped with in a LIKE pattern. */
     private const LIKE_ESCAPE = '!';
 
@@ -127,13 +130,16 @@ final class Page
     }
 
     /**
-     * The search box's text: trimmed, Persian digits made Latin, cut to TERM_MAX; "" when there is none.
+     * The search box's text: without its invisible direction marks (a «#12» copied from a bot message carries one before
+     * it), trimmed, Persian digits made Latin, cut to TERM_MAX; "" when there is none.
      *
      * @param array<string, mixed> $query The request's query string
      */
     public static function term(array $query): string
     {
-        return mb_substr(Persian::latinDigits(Input::text($query, 'search')), 0, self::TERM_MAX);
+        $typed = (string) preg_replace(self::DIRECTION_MARKS, '', Input::text($query, 'search'));
+
+        return mb_substr(Persian::latinDigits(trim($typed)), 0, self::TERM_MAX);
     }
 
     /**

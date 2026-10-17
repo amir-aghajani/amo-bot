@@ -18,6 +18,7 @@ use App\Support\Input;
 use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\Text;
+use App\Support\Unit;
 use App\Support\Validation;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -62,9 +63,12 @@ final class WalletTransfers
     public const DAILY_SPENT = 'سقف انتقال روزانه شما (%s) امروز پر شده است؛ فردا دوباره امتحان کنید.';
     public const KEY_REUSED = 'این Idempotency-Key پیش‌تر برای انتقال دیگری به کار رفته است.';
 
-    /** The two ledger lines, each naming the other customer (User::shownAs()). */
-    public const LINE_SENT = 'انتقال موجودی به %s';
-    public const LINE_RECEIVED = 'دریافت موجودی از %s';
+    /**
+     * The two ledger lines, each naming the other customer (User::shownAs()) after a left-to-right mark (U+200E): one
+     * named by handle or number alone would read «sara@», «12#» after the Persian words, wherever the line is shown.
+     */
+    public const LINE_SENT = "انتقال موجودی به \u{200E}%s";
+    public const LINE_RECEIVED = "دریافت موجودی از \u{200E}%s";
 
     /** The refusal past the limit; TooManyAttemptsException::wait() adds the wait. */
     private const TOO_MANY_TRANSFERS = 'انتقال‌های زیادی انجام داده‌اید';
@@ -186,7 +190,7 @@ final class WalletTransfers
     {
         $earlier = $this->earlier($from, $key);
         if ($earlier !== null) {
-            return self::same($earlier, Input::telegramIdOf($telegramId), Input::amountOf($amount));
+            return self::same($earlier, Input::telegramIdOf($telegramId), Input::amountOf($amount, Unit::Toman));
         }
 
         return $this->transfer($from, $this->recipient($from, $telegramId), $amount, $key);
@@ -267,7 +271,7 @@ final class WalletTransfers
      */
     private function amountOf(mixed $amount): string
     {
-        $whole = Input::amountOf($amount);
+        $whole = Input::amountOf($amount, Unit::Toman);
         if ($whole === null || $whole <= 0) {
             throw ValidationException::on('amount', Validation::notWholeToman('مبلغ'));
         }

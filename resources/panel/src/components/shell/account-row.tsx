@@ -53,11 +53,11 @@ export function AccountRow() {
     }
   }
 
-  // While the sign-out runs the button waits (busy): a second press sends nothing more.
+  // While the sign-out runs the button waits (busy): a second press sends nothing more. A finger's 44px in the phone's drawer.
   const button = (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="danger-outline" size="icon" icon={LogOut} aria-label={SIGN_OUT} busy={leaving} onClick={() => void signOut()} className={collapsed ? 'mx-auto' : undefined} />
+        <Button variant="danger-outline" size="icon" icon={LogOut} aria-label={SIGN_OUT} busy={leaving} onClick={() => void signOut()} className={collapsed ? 'mx-auto' : 'max-md:size-11'} />
       </TooltipTrigger>
       <TooltipContent side={collapsed ? contentSide() : 'top'}>{SIGN_OUT}</TooltipContent>
     </Tooltip>

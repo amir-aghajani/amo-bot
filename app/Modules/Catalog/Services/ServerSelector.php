@@ -32,10 +32,10 @@ final class ServerSelector
     private const NOT_COVERED = 'حجم باقی‌مانده نمایندگی کمتر از حجم این پلن است؛ با خرید حجم، پلن دوباره در ربات دیده می‌شود.';
 
     /** An agent's plan the owner keeps from sale (Plan::$hidden_by_owner). */
-    public const HIDDEN_PLAN = 'مدیر فروشگاه اصلی این پلن را پنهان کرده است؛ تا آن را آزاد نکند، به مشتری‌ها فروخته نمی‌شود.';
+    public const HIDDEN_PLAN = 'پشتیبانی فروشگاه اصلی این پلن را پنهان کرده است؛ تا آن را آزاد نکند، به مشتری‌ها فروخته نمی‌شود.';
 
     /** A server the owner keeps from an agent's shop (Bot::hiddenServerIds()). */
-    public const HIDDEN_SERVER = 'مدیر فروشگاه اصلی این سرور را برای این فروشگاه پنهان کرده است؛ سرویس تازه‌ای روی آن ساخته نمی‌شود.';
+    public const HIDDEN_SERVER = 'پشتیبانی فروشگاه اصلی این سرور را برای این فروشگاه پنهان کرده است؛ سرویس تازه‌ای روی آن ساخته نمی‌شود.';
 
     public function __construct(
         private readonly ProviderRegistry $providers,
@@ -216,7 +216,8 @@ final class ServerSelector
             }
         }
 
-        throw new NoServerAvailableException("سرور #{$serverId} برای پلن «{$plan->name}» در دسترس نیست.");
+        // A left-to-right mark before the number: a failed delivery's report says it in Telegram, where «#12» reads «12#».
+        throw new NoServerAvailableException("سرور \u{200E}#{$serverId} برای پلن «{$plan->name}» در دسترس نیست.");
     }
 
     /**

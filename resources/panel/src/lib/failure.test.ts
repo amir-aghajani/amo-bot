@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type FailureFacts } from '@/lib/api'
 import { panelBuild } from '@/lib/config'
+import { idLabel } from '@/lib/direction'
 import { describeFailure, FAILURE_KINDS, failureFacts, failureReport, messageOf, notFoundReason, toastFailure, type FailureKind } from '@/lib/failure'
 import { setShopTimeZone } from '@/lib/format'
 import { STORAGE_KEYS } from '@/lib/storage'
@@ -61,6 +62,13 @@ describe('reading a failure', () => {
     expect(failure.message).toBe(words)
   })
 
+  it('keeps whole the rows the server’s words name by number, as written otherwise', () => {
+    const refused = failed(409, 'سفارش #12 این سرویس هنوز تمام نشده است.', {}, { order: ['سفارش #7 باز است.'] })
+
+    expect(describeFailure(refused).message).toBe(`سفارش ${idLabel(12)} این سرویس هنوز تمام نشده است.`)
+    expect(describeFailure(refused, 'order').message).toBe(`سفارش ${idLabel(7)} باز است.`)
+  })
+
   it('says the first message the API put under one of the fields asked about, else its own', () => {
     const refused = failed(422, 'Refused.', {}, { note: ['Too long.'], status: ['Paid meanwhile.'] })
 
@@ -76,6 +84,14 @@ describe('reading a failure', () => {
     expect(describeFailure(bug).at).toBe(first)
     const answer = failed(500, 'x')
     expect(describeFailure(answer).at).toBe(answer.at)
+  })
+
+  it('reads a page’s file that did not load while the browser is offline as the network’s failure, not a new build’s', () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+
+    const failure = describeFailure(new TypeError('Failed to fetch dynamically imported module: https://shop.example/admin/assets/plans-Bx1.js'))
+
+    expect([failure.kind, failure.message]).toEqual(['offline', FAILURE_KINDS.offline.description])
   })
 
   it('says once the one reload a stale build gets did not help, and what that means', () => {

@@ -1,3 +1,5 @@
+[فارسی](fa/Internals-Website-API.md)
+
 # Internals: website API
 
 The Store API that a shop's own website talks to, the customers' accounts on it, the shop's admins working from it, and
@@ -59,7 +61,8 @@ password), a Google account, or any mix (`Enums\WayIn`). The ways in:
   `prove()` runs any proof under the address's sign-in throttle and turns a failed proof into a 422 on its field for a
   signed-in customer (a 401 would tell the site their session ended); `open()` refuses a banned customer and opens the
   session. `Oidc\IdTokenVerifier` checks signature, issuer, audience and times; `Oidc\Jwks` keeps each provider's keys
-  in a file and refreshes for an unknown `kid` at most once a minute.
+  in a file and refreshes for an unknown `kid` at most once a minute. A website with neither Telegram's nor Google's
+  sign-in on is handed no nonce (`POST /auth/nonce`: a 422, `SignInRefusedException::idTokenOff()`).
 - **Telegram's redirect flow** is code + PKCE with the verifier kept by the browser: the shop stores only the challenge
   under a one-time `state`. A code and state carried to another browser come without the verifier and open nothing. A
   state belongs to whoever asked: a sign-in's is spent only by a sign-in, a signed-in customer's only by that session.
@@ -102,9 +105,14 @@ removes the last one, again by a conditional UPDATE.
 `AccountMerger` keeps the older account and moves everything the other owned by `REFERENCES` — every column that points
 at `users`. `tests/Unit/Accounts/AccountMergerReferencesTest` reads database/schema.php and fails when a new such
 column is missing there, so a merge never leaves rows behind. Both rows are locked in id order and the rules judged
-again under the locks. After the commit, each service whose client on its panel names its owner otherwise than the
-survivor now is relabelled (`ProvisioningService::relabel()`: its Telegram id and comment), a panel that fails it
-logged ([Services](Internals-Services.md#service-transfers)). A Telegram account linked or taken off relabels every
+again under the locks. The survivor keeps its referrer, else takes the other's — never one that would make a loop of
+referrals ([Internals: commerce](Internals-Commerce.md#referrals)). A merge never brings a «همکار» group, which sets
+agent prices, into a shop admin's or an agent's account (`AccountMerger::leaveAgentGroups()`): while one side is an
+admin or an agent and the other neither, the other side's «همکار» memberships go before the groups are joined — the
+plain groups join as ever — so an admin's second account put in one and then merged is no way around the website's
+rule (below). After the commit, each service whose client on its panel names its owner otherwise than the survivor now
+is relabelled (`ProvisioningService::relabel()`: its Telegram id and comment), a panel that fails it logged
+([a change of owner](Internals-Services.md#service-transfers)). A Telegram account linked or taken off relabels every
 service of the account the same way.
 
 ## The shop on the website
@@ -116,7 +124,15 @@ website's shape and limits.
   reader by `Pricing`, in a few queries however many plans.
 - **Checkout** (`CustomerCheckout`) is the bot's checkout (`Payments\Services\Checkout`) under the bot's rules. Every
   ordering request carries an `Idempotency-Key`; a repeat is answered by that key's order as it stands, before any rule
-  is asked again — the rules may say otherwise a moment later, and a retry must never order or charge twice. While the
+  is asked again — the rules may say otherwise a moment later, and a retry must never order or charge twice. A
+  purchase, a built service, a renewal or an extra may name the amount the site showed (`expected_amount`): `asShown()`,
+  just before `Checkout::pay()`, holds it to what the request would be charged — the key's unpaid order's own amount,
+  else the quote — and refuses another with a 409 naming the price now (`CheckoutRefusedException::repriced()`),
+  nothing ordered, as the bot pays only the checkout on screen; a top-up takes none. The prices the website lists are
+  those same quotes — a plan's `offer_price`, an extra's `offer_price` and each extra option's
+  (`SubscriptionPresenter::extras()`, by `CustomerCheckout::extras()` for the customer), a renewal's `price` — so a
+  price shown is the price charged. A purchase or a renewal that would end the service past the last day the shop keeps
+  is a 422 (`TermTooLongException`). While the
   bot's master switch is off the website takes no orders (`takingOrders()`), nor while an agent's selling is suspended
   (`ordering()`: both a 503 — a renewal's preview and an extra's quote, which order nothing, say the suspension as a
   422 on `status`). A renewal names what it is with as the
@@ -151,9 +167,27 @@ Customers with the bot's admin role can work the shop from its website: `/admin/
 again behind `StaffMiddleware`, whose checks run in a fixed order (an admin; the website lets admins in; a strong
 sign-in while asked; a sign-in within a working day; the operation's grant; a recent sign-in for a granted operation or
 a payment approval). A leaked admin token therefore works for hours, not months. Each operation that needs a grant names
-it on its route (`StaffGrant::ARGUMENT`) and in the API description (`x-staff`); `ApiDescriptionTest` holds the two
-together. Decisions carry an `Auth\Actor`, and the services refuse an admin deciding about themselves, another admin's
-or an agent's account. See [Store API: admins](Store-API-Admins.md).
+it on its route (`Auth\StaffGrant::ARGUMENT`) and in the API description (`x-staff`); `ApiDescriptionTest` holds the
+two together. The request then carries the staff `Principal` — with the website's grants only while the sign-in is
+recent — and every change it asks is logged with them on the line, a refused one too, a 404 included. Decisions carry
+an `Auth\Actor`, and the services refuse an admin deciding about themselves, another admin's or an agent's account
+(`UserActions::mayTouch()`). A grant that only some requests of an operation need is asked in the service by
+`Actor::holds()` (always true for anyone but a website's admin); refused for a grant the website does give, the
+answer is the recent-sign-in 403, since only the sign-in's age stood in the way.
+
+That covers the customer groups, since a «همکار» group sets agent prices. Creating, changing, deleting and reordering
+groups need the `catalog` grant; putting a customer into a «همکار» group they are not in needs it too
+(`CustomerGroups::assign()`), while plain groups need none. From the website, `UserActions::assignGroups()` puts no
+admin's or agent's account in any group, and `CustomerGroups::update()` refuses switching «همکار» on for a group an
+admin is in; a merge does not carry one into such an account either ([above](#ways-in-and-merging-accounts)). The
+admins' live view is their own shop's (`GET …/admin/changes`: [the change feed](Architecture.md#the-change-feed)). See
+[Store API: admins](Store-API-Admins.md).
+
+Support's changes by hand through this door and the panels — a wallet's credit or debit, an agent's traffic
+adjustment, a ticket's answer — may carry an `Idempotency-Key` (`Store\Http\IdempotencyKey::optional()`; the panels
+always send one): the same request again is answered by the line or the message the key wrote, never made twice
+([Internals: commerce](Internals-Commerce.md#ledgers), [Internals: services](Internals-Services.md#support-tickets)).
+An order support makes by hand needs one (`IdempotencyKey::of()`).
 
 ## Website settings
 
@@ -169,8 +203,12 @@ are the same `$operations` and `$configuration`. The request's `Principal` (`Pri
 decides. The panel-only services:
 
 - `DashboardStats` — figures against the period before (one query each), days in the shop's zone with UTC queries,
-  revenue as money that came in, never wallet spending.
-- `Queues` — what waits on a human; the sidebar's badges and the dashboard's attention card read the same counts.
+  revenue as money that came in, never wallet spending; and the attention counts (below).
+- `Queues` — what waits on a human: receipts to review, paid orders not delivered, tickets waiting on an answer,
+  reviews waiting (`GET /queues`, the sidebar's badges). The dashboard's attention card reads them from
+  `GET /dashboard`'s `attention`, with online payments held for support (`Payment::whereHeld()`), failing servers (the
+  main shop's) and what waits on customers — unpaid orders and services ending soon —, which the card lists apart and
+  does not count.
 - `CustomerProfile` — a customer's page, including their website account and merges.
 - `ClientErrors` — a panel's own crash, logged as one redacted line with every stack line indented (no forged log
   lines) and rate-limited per principal and address.

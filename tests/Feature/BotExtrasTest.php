@@ -19,6 +19,7 @@ use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ServiceTerms;
+use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Telegram\Handlers\ExtrasHandler;
 use App\Modules\Telegram\Handlers\MenuHandler;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
@@ -147,9 +148,21 @@ final class BotExtrasTest extends BotTestCase
             'typed' => self::text(BotText::ExtraTrafficTyped, ['least' => Persian::number(1), 'most' => Persian::number(100), 'unit_price' => Money::format('2000')]),
         ])], $this->said());
         self::assertSame([
-            [$this->option(ExtraKind::Traffic, 10, '18000'), $this->option(ExtraKind::Traffic, 50, '100000')],
+            [$this->option(ExtraKind::Traffic, 50, '100000'), $this->option(ExtraKind::Traffic, 10, '18000')],
             [['text' => self::text(BotText::Back), 'callback_data' => $this->serviceScreen()]],
-        ], $this->inlineKeyboard(0), 'its amounts two a row, each at its price — 50 GB at the price of a GB —, and back to the service');
+        ], $this->inlineKeyboard(0), 'its amounts two a row, the first on the right, each at its price — 50 GB at the price of a GB —, and back to the service');
+    }
+
+    public function testASaleTakesOffTheAmountsAsTheirCheckoutCharges(): void
+    {
+        $this->sale(percent: 20);
+
+        $this->send($this->tap($this->screen(ExtraKind::Traffic)));
+        self::assertSame([$this->option(ExtraKind::Traffic, 50, '80000'), $this->option(ExtraKind::Traffic, 10, '14400')], $this->inlineKeyboard(0)[0], '20% off each, by the one rule of an extra\'s price');
+        self::assertStringContainsString(self::text(BotText::ExtraTrafficTyped, ['least' => Persian::number(1), 'most' => Persian::number(100), 'unit_price' => Money::format('1600')]), $this->said()[0], 'and off the price of a GB typed, as beside it');
+
+        $this->send($this->tap($this->checkout(ExtraKind::Traffic, 10)));
+        self::assertStringStartsWith($this->trafficCheckout(10, '14400', 22), $this->said()[0], 'what its button said');
     }
 
     public function testATypedAmountOpensItsCheckoutAsANewMessage(): void
@@ -168,9 +181,9 @@ final class BotExtrasTest extends BotTestCase
     {
         $this->send($this->tap($this->screen(ExtraKind::Traffic)));
 
-        foreach (['۵۰۰', 'سلام', '0'] as $typed) {
+        foreach (['۵۰۰', 'سلام', '0', '۵۰ روز', '۵۰ کاربر'] as $typed) {
             $this->send($this->message($typed));
-            self::assertSame([self::text(BotText::ExtraInvalid, ['least' => Persian::number(1), 'most' => Persian::number(100)])], $this->said(), $typed);
+            self::assertSame([self::text(BotText::ExtraInvalid, ['least' => Persian::number(1), 'most' => Persian::number(100)])], $this->said(), $typed . ' (GB are awaited, in no other unit)');
             self::assertSame([$this->screen(ExtraKind::Traffic)], $this->callbacks(0), 'back to the amounts');
         }
         self::assertSame(0, Order::query()->count());
@@ -277,8 +290,8 @@ final class BotExtrasTest extends BotTestCase
             'typed' => self::text(BotText::ExtraTimeTyped, ['least' => Persian::number(1), 'most' => Persian::number(60), 'unit_price' => Money::format('1000')]),
         ])], $this->said(), 'its days will count from its next connection');
         self::assertSame([
-            ExtrasHandler::checkoutCallback($ended->id, ExtraKind::Time, 7),
             ExtrasHandler::checkoutCallback($ended->id, ExtraKind::Time, 30),
+            ExtrasHandler::checkoutCallback($ended->id, ExtraKind::Time, 7),
             SubscriptionHandler::serviceCallback($ended->id),
         ], $this->callbacks(0));
 
@@ -462,7 +475,7 @@ final class BotExtrasTest extends BotTestCase
             'typed' => self::text(BotText::ExtraDevicesTyped, ['least' => Persian::number(1), 'most' => Persian::number(5), 'unit_price' => Money::format('15000')]),
         ])], $this->said());
         self::assertSame([
-            [$this->option(ExtraKind::Devices, 1, '15000'), $this->option(ExtraKind::Devices, 2, '25000')],
+            [$this->option(ExtraKind::Devices, 2, '25000'), $this->option(ExtraKind::Devices, 1, '15000')],
             [['text' => self::text(BotText::Back), 'callback_data' => $this->serviceScreen()]],
         ], $this->inlineKeyboard(0), "half the 30,000 of a device, half the two's own 50,000");
 
@@ -540,6 +553,18 @@ final class BotExtrasTest extends BotTestCase
 
         self::assertSame([self::text(BotText::ServiceNotFound)], $this->said());
         self::assertSame([MenuHandler::subscriptionsCallback(1)], $this->callbacks(0));
+    }
+
+    public function testAServiceHandedOnBetweenItsCheckoutAndTheTapIsSaidSoAndNothingIsOrdered(): void
+    {
+        $this->send($this->tap($this->checkout(ExtraKind::Traffic, 10)));
+        $sara = $this->customer(['telegram_id' => 9999, 'first_name' => 'Sara']);
+
+        $this->sendWhileTheServiceMovesOn($this->tap($this->pay(ExtraKind::Traffic, 10, $this->wallet)), $sara);
+
+        self::assertSame([ServiceTransfers::MOVED_ON], $this->said(), 'not the error every failure gets');
+        self::assertSame([MenuHandler::subscriptionsCallback(1)], $this->callbacks(0));
+        self::assertSame([0, '500000.00'], [Order::query()->count(), $this->ali->balance()], 'nothing ordered, nothing charged');
     }
 
     public function testSomeoneElsesServiceIsNotFound(): void

@@ -18,6 +18,7 @@ use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\CustomerLookup;
 use App\Modules\Users\Services\WalletTransfers;
 use App\Support\Money;
+use App\Support\Unit;
 
 /**
  * «💸 انتقال موجودی» on the wallet's screen, while the shop lets its customers send money (WalletTransfers):
@@ -128,7 +129,7 @@ final class WalletTransferHandler implements Handler
         }
 
         $refusal = $this->texts->render(BotText::WalletSendAmountInvalid, $this->range($ctx->user));
-        $amount = $this->amounts->read($ctx, fn(int $amount): bool => $this->transfers->allows($ctx->user, $amount), $refusal, MainMenu::WALLET);
+        $amount = $this->amounts->read($ctx, Unit::Toman, fn(int $amount): bool => $this->transfers->allows($ctx->user, $amount), $refusal, MainMenu::WALLET);
         if ($amount === null) {
             return;
         }

@@ -16,12 +16,15 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Orders\Services\Pricing;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Services\PaymentActions;
+use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Services\AutoRenewal;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\Topic;
+use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
@@ -29,7 +32,8 @@ use Tests\DatabaseTestCase;
 use Tests\Fakes\FakeProvider;
 
 /**
- * First-purchase prices: paid until the customer has bought (Order::boughtBy()) and marked on the order; a keyed request
+ * First-purchase prices: paid until the customer has bought (Order::boughtBy(): a purchase refunded since is none) and
+ * marked on the order; a keyed request
  * made again keeps its order's price; of two ordered at that price before either was paid, the one paid second fails at
  * delivery for support to refund (a retried first purchase stays first); renewals pay the plan's price; shops count their
  * own purchases.
@@ -53,7 +57,7 @@ final class FirstPurchasePricesTest extends DatabaseTestCase
         $this->ali = $this->customer(['username' => 'ali']);
     }
 
-    public function testHavingBoughtIsAPurchasePaidAtSomePointWhateverCameOfItSince(): void
+    public function testHavingBoughtIsAPurchasePaidAndNotGivenBack(): void
     {
         $bought = fn(): bool => Order::boughtBy($this->ali->id)->exists();
 
@@ -64,11 +68,24 @@ final class FirstPurchasePricesTest extends DatabaseTestCase
         self::assertFalse($bought(), "a purchase still to be paid, one cancelled unpaid, a wallet top-up, someone else's purchase");
 
         $order = $this->purchaseOrder($this->ali, $this->plain, $this->server, ['status' => OrderStatus::Paid]);
-        foreach ([OrderStatus::Paid, OrderStatus::Processing, OrderStatus::Fulfilled, OrderStatus::Failed, OrderStatus::Refunded] as $status) {
+        foreach ([OrderStatus::Paid, OrderStatus::Processing, OrderStatus::Fulfilled, OrderStatus::Failed] as $status) {
             $order->forceFill(['status' => $status])->save();
 
             self::assertTrue($bought(), "a purchase {$status->value}: the money came in");
         }
+
+        $order->forceFill(['status' => OrderStatus::Refunded])->save();
+        self::assertFalse($bought(), 'a purchase refunded: undone, its money back in the wallet');
+    }
+
+    public function testANewcomerWhoseFirstPurchaseWasRefundedPaysTheFirstPurchasePriceAgain(): void
+    {
+        $first = $this->buy($this->ali, $this->plan, $this->server);
+        self::assertTrue($this->service(PaymentService::class)->refund($first->payments()->firstOrFail(), 'admin', null));
+
+        self::assertTrue($this->pricing()->buyer($this->ali, $this->plan)->firstPurchase, 'a newcomer still');
+        $again = $this->buy($this->ali, $this->plan, $this->server);
+        self::assertSame(['50000.00', OrderPricing::FirstPurchase, OrderStatus::Fulfilled], [$again->amount, $again->pricing, $again->status], 'delivered at that price: the refunded one is no purchase paid before it');
     }
 
     public function testANewcomerPaysTheFirstPurchasePriceThenThePrice(): void
@@ -175,6 +192,7 @@ final class FirstPurchasePricesTest extends DatabaseTestCase
 
     public function testOneWaitingForItsReceiptWhileTheWalletBuysAnotherIsNoLongerTheFirst(): void
     {
+        $this->telegram();
         // Ordered first at the first-purchase price, by card — then, its receipt still with support, another plan bought
         // from the wallet.
         $first = $this->service(OrderService::class)->openPurchase($this->ali, $this->plan, $this->server);
@@ -182,10 +200,12 @@ final class FirstPurchasePricesTest extends DatabaseTestCase
         $this->buy($this->ali, $this->plain, $this->server);
         Carbon::setTestNow('2026-10-08 12:30:00');
 
-        $this->paidByCard($first);
+        // Support approves its receipt.
+        $this->service(PaymentActions::class)->approve($this->receipt($this->cardPayment($first, $this->cardMethod())), $this->panelActor());
 
         self::assertSame([OrderStatus::Failed, FirstPurchaseUsedException::MESSAGE], [$first->refresh()->status, $first->notes], 'the wallet\'s was paid first: theirs is the first purchase, and support gives this one\'s money back');
         self::assertCount(1, FakeProvider::$created);
+        self::assertSame([self::text(BotText::PayFirstPurchaseUsed, ['order' => $first->id])], $this->telegram()->sentTo(self::TELEGRAM_ID), 'the customer told why, never that support will deliver it');
     }
 
     public function testAPurchaseAtThePriceIsHeldToNothing(): void

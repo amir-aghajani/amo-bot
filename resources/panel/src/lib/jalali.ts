@@ -3,7 +3,8 @@ import { shownTimeZone } from '@/lib/format'
 /*
  * The Jalali calendar for the date filters, on the browser's own Intl `persian` calendar — no date library. A day
  * travels as the API takes it, a Gregorian "2026-10-06" (`Day`); a Jalali date is {year, month 1–12, day}. The
- * arithmetic runs on UTC midnights, so no zone or daylight saving ever moves a day. "Today" is the shop's day.
+ * arithmetic runs on UTC midnights, so no zone or daylight saving ever moves a day. A moment is read on the shop's clock
+ * (`shopClock`), and "today" is the shop's day.
  */
 
 /** A calendar day as the API takes it: "YYYY-MM-DD", Gregorian. */
@@ -36,20 +37,25 @@ export function isDay(text: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) && dayAt(midnight(text)) === text
 }
 
-/** A moment's Gregorian date in a zone, in Latin digits — made once per zone. */
-const datesIn = new Map<string, Intl.DateTimeFormat>()
+/** A moment's Gregorian date and hour in a zone, in Latin digits — made once per zone. */
+const clocksIn = new Map<string, Intl.DateTimeFormat>()
+
+/** A moment (a Date, or the API's ISO text) on the shop's clock, whatever the browser's zone: its Gregorian day and its hour, 0–23. */
+export function shopClock(moment: Date | string): { day: Day; hour: number } {
+  const { zone } = shownTimeZone()
+  let clock = clocksIn.get(zone)
+  if (!clock) {
+    clock = new Intl.DateTimeFormat('en-u-ca-gregory-nu-latn', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+    clocksIn.set(zone, clock)
+  }
+  const parts = clock.formatToParts(typeof moment === 'string' ? new Date(moment) : moment)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((piece) => piece.type === type)?.value ?? ''
+  return { day: `${part('year')}-${part('month')}-${part('day')}`, hour: Number(part('hour')) % 24 }
+}
 
 /** Today in the shop's zone, whatever the browser's: the day the server bounds a list's `from`/`to` by. */
 export function today(): Day {
-  const { zone } = shownTimeZone()
-  let dates = datesIn.get(zone)
-  if (!dates) {
-    dates = new Intl.DateTimeFormat('en-u-ca-gregory-nu-latn', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' })
-    datesIn.set(zone, dates)
-  }
-  const parts = dates.formatToParts(new Date())
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((piece) => piece.type === type)?.value ?? ''
-  return `${part('year')}-${part('month')}-${part('day')}`
+  return shopClock(new Date()).day
 }
 
 export function addDays(day: Day, days: number): Day {

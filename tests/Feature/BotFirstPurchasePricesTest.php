@@ -25,7 +25,8 @@ use Tests\BotTestCase;
  * A plan's first-purchase price in the bot: a customer who has bought no service yet sees it as the plan's price — on its
  * button in «خرید اشتراک», in its details with the plan's own price beside it, at its checkout — and pays it; once they
  * have, every screen says the plan's price. A purchase of theirs paid elsewhere in the same moment leaves this one at the
- * plan's price. Its service renews at the plan's price, «تمدید سرویس» and «تمدید خودکار» on its screen as on any.
+ * plan's price — its checkout drawn again at it before the wallet pays. Its service renews at the plan's price, «تمدید
+ * سرویس» and «تمدید خودکار» on its screen as on any.
  */
 final class BotFirstPurchasePricesTest extends BotTestCase
 {
@@ -102,9 +103,29 @@ final class BotFirstPurchasePricesTest extends BotTestCase
         }, fn() => $this->send($this->tap($this->payButton($this->plan, $this->server, $this->wallet))));
 
         self::assertTrue($paid);
+        self::assertSame([$this->checkoutText('150000')], $this->said(), 'not their first purchase any more: the checkout again, at the plan\'s price');
+        self::assertSame(0, Order::query()->where('plan_id', $this->plan->id)->count(), 'the wallet pays no price the customer did not see');
+        self::assertSame('500000.00', $this->ali->balance());
+
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $this->wallet)));
         $order = Order::query()->where('plan_id', $this->plan->id)->sole();
-        self::assertSame([OrderStatus::Fulfilled, '150000.00', OrderPricing::Regular], [$order->status, $order->amount, $order->pricing], 'not their first purchase any more: the plan\'s price');
+        self::assertSame([OrderStatus::Fulfilled, '150000.00', OrderPricing::Regular], [$order->status, $order->amount, $order->pricing]);
         self::assertSame('350000.00', $this->ali->balance());
+    }
+
+    public function testAFreeFirstPurchaseWhoseFirstPurchaseWasMadeMeanwhileTakesNothingUnseen(): void
+    {
+        $this->plan->forceFill(['first_purchase_price' => '0.00'])->save();
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->server)));
+        $take = $this->inlineKeyboard(0)[0][0]['callback_data'];
+
+        // Their first purchase is paid on the website while «🎁 دریافت رایگان» is on screen.
+        $this->purchaseOrder($this->ali, $this->plain, $this->server, ['status' => OrderStatus::Fulfilled]);
+        $this->send($this->tap($take));
+
+        self::assertSame([$this->checkoutText('150000')], $this->said(), 'not free any more: its price, and the ways to pay');
+        self::assertSame(0, Order::query()->where('plan_id', $this->plan->id)->count(), 'nothing ordered');
+        self::assertSame('500000.00', $this->ali->balance(), 'nothing taken from the wallet');
     }
 
     public function testAFreeFirstPurchaseIsTakenWithOneButton(): void

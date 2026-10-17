@@ -4,7 +4,7 @@ import { BadgePercent, Copy, Package, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
 import { InfoBadge } from '@/components/info-tip'
-import { Dash, ListView, RowTitleButton } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { BulkPricesModal } from '@/components/plans/bulk-prices-modal'
@@ -40,9 +40,11 @@ export function PlansPage({ addServers }: { addServers?: string }) {
   })
   const plans = list.rows
 
-  // The copy is made switched off, and opens in its form at once.
+  // The copy is made switched off, and opens in its form at once. The server puts it right after its plan, so the list
+  // is read again for its place.
   const duplicate = useMutation({
     mutationFn: (plan: PlanRow) => api.post(`/plans/${plan.id}/duplicate`),
+    meta: { invalidates: [plansQuery.queryKey] },
     onSuccess: ({ plan }) => {
       toast.success('کپی پلن ساخته شد (غیرفعال)')
       list.upsert(plan)
@@ -90,9 +92,10 @@ export function PlansPage({ addServers }: { addServers?: string }) {
               <TableHead className="hidden md:table-cell">مدت</TableHead>
               <TableHead className="hidden xl:table-cell">کاربر</TableHead>
               <TableHead>قیمت</TableHead>
-              <TableHead className="hidden lg:table-cell">سرورها</TableHead>
-              <TableHead className="hidden lg:table-cell">اشتراک</TableHead>
-              <TableHead>قابل خرید</TableHead>
+              {/* With the widest screens: a tablet has a phone's room and a half. */}
+              <TableHead className="hidden xl:table-cell">سرورها</TableHead>
+              <TableHead className="hidden xl:table-cell">اشتراک</TableHead>
+              <TableHead className="hidden md:table-cell">قابل خرید</TableHead>
               <ActionsHead />
             </TableRow>
           </TableHeader>
@@ -114,8 +117,8 @@ export function PlansPage({ addServers }: { addServers?: string }) {
                     {/* Kept from sale by the main shop's owner (an agent's plan): no switch here shows it again. */}
                     {plan.hidden_by_owner ? (
                       <span className="mt-1 flex">
-                        <InfoBadge variant="danger" info={plan.unsellable_reason ?? 'مدیر فروشگاه اصلی این پلن را پنهان کرده است.'}>
-                          پنهان‌شده توسط مدیر
+                        <InfoBadge variant="danger" info={plan.unsellable_reason ?? 'پشتیبانی فروشگاه اصلی این پلن را پنهان کرده است.'}>
+                          پنهان‌شده توسط پشتیبانی
                         </InfoBadge>
                       </span>
                     ) : (
@@ -127,8 +130,14 @@ export function PlansPage({ addServers }: { addServers?: string }) {
                         </span>
                       )
                     )}
-                    <Placement plan={plan} problems className="mt-1 lg:hidden" />
+                    <Placement plan={plan} problems className="mt-1 xl:hidden" />
                   </div>
+                  <PhoneFacts>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Sellable plan={plan} onChange={(is_active) => list.patch.mutate({ row: plan, changes: { is_active } })} />
+                      قابل خرید
+                    </span>
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell className="hidden xl:table-cell">
                   {plan.category ? plan.category.is_active ? <Badge variant="outline">{plan.category.name}</Badge> : <InactiveCategory name={plan.category.name} /> : <Dash />}
@@ -136,28 +145,29 @@ export function PlansPage({ addServers }: { addServers?: string }) {
                 <TableCell className="hidden tabular md:table-cell">{formatGb(plan.traffic_gb)}</TableCell>
                 <TableCell className="hidden tabular md:table-cell">{formatDuration(plan.duration_hours)}</TableCell>
                 <TableCell className="hidden tabular xl:table-cell">{formatDevices(plan.ip_limit)}</TableCell>
-                <TableCell className="tabular">
+                <TableCell className="tabular max-md:whitespace-normal">
                   <div className="grid">
-                    <span className="font-medium">{formatMoney(plan.price)}</span>
+                    <span className="font-medium whitespace-nowrap">{formatMoney(plan.price)}</span>
                     {plan.first_purchase_price !== null && <span className="text-footnote text-muted-foreground">خرید اول: {priceWords(plan.first_purchase_price)}</span>}
                     {plan.agent_price !== null && <span className="text-footnote text-muted-foreground">نماینده: {priceWords(plan.agent_price)}</span>}
                   </div>
                 </TableCell>
-                <TableCell className="hidden lg:table-cell">
+                <TableCell className="hidden xl:table-cell">
                   <Placement plan={plan} />
                 </TableCell>
-                <TableCell className="hidden tabular lg:table-cell">
+                <TableCell className="hidden tabular xl:table-cell">
                   <div className="grid">
                     <span className="text-foreground">{formatNumber(plan.counts.active_subscriptions)} فعال</span>
                     <span className="text-footnote text-muted-foreground">{formatNumber(plan.counts.sales)} فروش</span>
                   </div>
                 </TableCell>
-                <TableCell>
-                  <Switch checked={plan.is_active} onCheckedChange={(is_active) => list.patch.mutate({ row: plan, changes: { is_active } })} aria-label={`قابل خرید بودن ${plan.name}`} />
+                <TableCell className="hidden md:table-cell">
+                  <Sellable plan={plan} onChange={(is_active) => list.patch.mutate({ row: plan, changes: { is_active } })} />
                 </TableCell>
                 <TableCell>
                   <EditMenu label={plan.name} onEdit={() => editor.edit(plan)} onRemove={() => setRemoving(plan)}>
-                    <DropdownMenuItem onSelect={() => duplicate.mutate(plan)}>
+                    {/* One copy at a time: a second press while one is made would make two. */}
+                    <DropdownMenuItem disabled={duplicate.isPending} onSelect={() => duplicate.mutate(plan)}>
                       <Copy aria-hidden />
                       ساخت کپی
                     </DropdownMenuItem>
@@ -213,6 +223,11 @@ export function PlansPage({ addServers }: { addServers?: string }) {
       />
     </Page>
   )
+}
+
+/** A plan's «قابل خرید» switch: its column's, or under its name on a phone. */
+function Sellable({ plan, onChange }: { plan: PlanRow; onChange: (sellable: boolean) => void }) {
+  return <Switch checked={plan.is_active} onCheckedChange={onChange} aria-label={`قابل خرید بودن ${plan.name}`} />
 }
 
 /** What a plan costs some customers — a first purchase, an agent —, in words: its amount, or «رایگان» for a free one. */

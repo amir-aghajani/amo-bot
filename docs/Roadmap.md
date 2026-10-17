@@ -1,17 +1,19 @@
+[فارسی](fa/Roadmap.md)
+
 # Roadmap
 
 Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 
 ## Foundation
-- ✅ Project skeleton, DI container, the shop's configuration in one `config.php` (no environment, no `.env`), logging (secrets taken out), sessions; PHP answers JSON only (one error shape) — the panels are static files
+- ✅ Project skeleton, DI container, the shop's configuration in one `config.php` (no environment, no `.env`), logging (secrets taken out of the shop's log), sessions; PHP answers JSON only (one error shape) — the panels are static files
 - ✅ Persian-only UI (bots, panels, installer), RTL panels with Vazirmatn, Persian digits and Jalali dates
 - ✅ The schema in one file, `database/schema.php`, `db:rebuild` to follow an edit with the rows carried over, and from the first release on an upgrade for every change (`database/upgrades/`)
 - ✅ Drivers, one family each — VPN panels, payment gateways, databases, mail, captchas: a new one is a class and its registration
 - ✅ Database drivers: MySQL / MariaDB for a shop, SQLite for the tests and a developer
 - ✅ CLI, a developer's tools (and the shop's, on a host with a terminal): db:rebuild, bot:poll, bot:webhook:set/delete, bot:info, panel:probe, schedule:run
-- ✅ Panel connectors: the provider contract, 3x-ui and PasarGuard drivers
+- ✅ Panel connectors: the provider contract, 3X-UI and PasarGuard drivers
 - ✅ Gateway contract + wallet & manual (card-to-card) drivers, and online gateways — CubePay first (card-to-card confirmed from the bank's text message, and crypto)
-- ✅ Order / payment / provisioning services, every state change a compare-and-swap; one checkout for the bot and the website
+- ✅ Order / payment / provisioning services, every state change a compare-and-swap; one checkout for the bot and the website; support's wallet credits and debits, an agent's traffic adjustments and ticket answers made once however often the panel sends them (`Idempotency-Key`)
 - ✅ Telegram: Bot API client, dispatcher (each update served once), session state, gates, webhook + long polling for every bot at once
 - ✅ PHPUnit (SQLite), PHPStan level 6 with dead-code detection (code only the tests call counts as dead), PHP-CS-Fixer; every route walked for its guards
 - ✅ API contract: `resources/api/openapi.yaml` describes every operation, request body and answer; every request and response of the HTTP tests (and of the panels' tests) is validated against it, and the panels' TypeScript types — each write typed by its path — are generated from it (`pnpm api:types`)
@@ -21,6 +23,7 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ The shop's time zone: times kept in UTC, shown in `APP_TIMEZONE` by the bot and both panels
 - ✅ Email: SMTP, the host's own mail or Resend, set from the panel with a test send
 - ✅ Documentation: one tree in `docs/` for the repository, the wiki and GitHub Pages, its references generated from the code — `config.php`, the bot's texts and the API (with `docs/openapi.json`)
+- [ ] The time columns moved from `TIMESTAMP` to `DATETIME` (an upgrade that keeps them in UTC): MySQL's `TIMESTAMP` ends at 2038-01-19, so until then no moment past `LocalTime::LAST_DAY` is kept — a purchase, a renewal, extra time, a prize, days given or an agent's term that would end later is refused with a message naming that day ([Database](Database.md#time-and-the-2038-bound))
 
 ## Customer flows (bot)
 - ✅ Buy plan: plan details → choose server → choose how to pay (wallet / card receipt / an online gateway's page) → the subscription link (the one thing a customer gets); clients named by the owner's pattern (`username_n` / `USER_n` by default) or the buyer's choice, with the Telegram id in the comment
@@ -44,7 +47,7 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Card-to-card payments: buttons that copy the card and the amount, the card's message protected from forwarding and
   saving, one receipt waiting at a time, a card drawn at random among the method's cards with room today, support's
   private chat in place of a card; top-up buttons of random amounts, and a sum of its own for every card top-up
-- ✅ Online payments (CubePay, Zarinpal, AtlasPay, AbanGateway): the gateway's page — or its card in the bot —, «🔄 بررسی پرداخت», delivered as soon as the gateway says it was paid, a payment that does not fit held for support
+- ✅ Online payments (CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht, Variza): the gateway's page — or its card in the bot —, «🔄 بررسی پرداخت», delivered as soon as the gateway says it was paid, a payment that does not fit held for support
 - [ ] Subscription link endpoint `/sub/{uuid}` of our own (today the panel's native subscription URL is handed out)
 
 ## The shop's website
@@ -52,7 +55,7 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ A captcha on the website's forms — Cloudflare Turnstile or ALTCHA (open source, no third party) — and for the site's own forms, judged by the shop for its backend
 - ✅ Customers without Telegram, reached by email
 - ✅ Reviews: switched on per website, written there by a customer or — behind the captcha — a guest, decided by support in the panels (or the website's admin side), the approved ones shown with their average — a captcha, a pace and a cap on what waits
-- ✅ The shop's admins on the website: the panels' daily work under `/admin` for the bot's admins — let in, a strong sign-in asked and grants given from the panel, a sign-in good for 12 hours (15 minutes for a grant or a payment's approval); no admin decides about themselves, every change logged with who made it
+- ✅ The shop's admins on the website: the panels' daily work under `/admin` for the bot's admins — let in, a strong sign-in asked and grants given from the panel; an admin's sign-in works for 12 hours, and a granted operation or a payment's approval asks one made in the last 15 minutes; no admin decides about themselves, every change logged with who made it
 - ✅ Online payment gateways at the website's checkout: the gateway's page, the payment asked about on the customer's word
 - ✅ Discount codes at the website's checkout (`discount_code`, priced first with `POST /discount-codes/check`), gift codes
   redeemed there, and loyalty standing in `GET /me`
@@ -61,13 +64,13 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 
 ## Panels
 - ✅ Two panels from one React project: the owner's (`/admin/`, each tab in the shop its address names) and an agent's (`/agent/`, their shop only, signed in by a one-time link from the main bot) — the Claude Console's design language, light and dark
-- ✅ Live: lists, counts, the dashboard and open detail modals follow changes made anywhere within seconds (the change feed)
+- ✅ Live: lists, counts, the dashboard and open detail modals follow changes within seconds (the change feed) — the owner's panel every shop's, an agent's panel and the website's admins their own shop's
 - ✅ Dashboard; servers (checks, inbounds for sale, «افزودن زمان و حجم»); plans and categories; custom services; payment methods; users and their groups; orders, payments (receipts reviewed one after another with «بعدی», approve / reject / refund / retry, «استعلام از درگاه» for an online one) and subscriptions (sync, extend, switch, move, transfer, delete); referrals; agents; support tickets
 - ✅ Lists: paged on the server, sorted by a column, filtered (status, customer, server, a range of days in the Jalali calendar), searched (`#12` is that row), the view kept in the address; the stuck-orders queue («نیازمند رسیدگی»), the receipts to review and the tickets waiting on an answer counted in the menu
 - ✅ A customer's page: their services, payments, orders and tickets, wallet, referrals, groups, agency, website account
 - ✅ Extend one service: days and traffic on top of what it has (an agent's GB from their traffic)
-- ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked, live preview), settings (master switch, phone, required channels, wallet, wallet transfers («انتقال موجودی»), card-to-card payments («پرداخت کارت به کارت»), renewal, extras, reminders, the removal of ended services, client usernames, services added by their link, service transfers, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
-- ✅ Settings: the panel's own configuration in `config.php` (application, database, Telegram, email, advanced), the bots' webhooks set or removed, the owner's login changed and recovered without a shell; the website's settings in both panels
+- ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked as Telegram reads it, live preview), settings (master switch, phone, required channels, wallet, wallet transfers («انتقال موجودی»), card-to-card payments («پرداخت کارت به کارت»), renewal, extras, reminders, the removal of ended services, client usernames, services added by their link, service transfers, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
+- ✅ Settings: the panel's own configuration in `config.php` (application, database, Telegram, email, advanced), the cron line for cPanel's Cron Jobs ready to copy, the bots' webhooks set or removed, the owner's login changed and recovered without a shell; the website's settings in both panels
 - ✅ Failures drawn one way (what failed, why, what to do, the request's id), offline and stale-build handling
 - ✅ «تخفیف و جوایز»: discount codes, sales, loyalty tiers, cashback, gift codes, the lucky wheel and the nightly draw;
   a customer's own discount on their page; several plans' prices changed at once
@@ -89,11 +92,14 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Zarinpal (Iran's bank cards), an online gateway
 - ✅ AtlasPay (card-to-card it confirms from the bank's text, paid in its Telegram mini app), an online gateway
 - ✅ AbanGateway (card-to-card to the merchant's own cards, confirmed from the bank's text), an online gateway
+- ✅ Plisio (crypto: the customer's coin of choice, the order priced in dollars at the owner's rate), an online gateway
+- ✅ AqayePardakht (Iran's bank cards through Shaparak), an online gateway
+- ✅ Variza (card-to-card it confirms from the bank's text, its word a signed webhook), an online gateway
 - [ ] Gateways: crypto of its own (NowPayments / direct TRX-USDT), IDPay-style IRR gateways, Telegram Stars — each an online gateway's driver now
 - [ ] Databases: PostgreSQL (a driver; the schema tooling's sequences after a rebuild, a case-insensitive search)
 
 ## Installers and operations
-- ✅ Shared hosting (cPanel, DirectAdmin…) as the one supported way: the host's cron (or the cron address) runs the scheduler, Telegram's webhooks bring the updates
+- ✅ Shared hosting (cPanel, DirectAdmin…) as the one supported way: the host's cron (the line the panel prepares) or an outside service calling the cron address runs the scheduler, Telegram's webhooks bring the updates
 - ✅ Web installer at `/admin/install` (install key → requirements → database → tables → panel login → site and bot → finish) over `/api/install`: the one way to install, no shell needed
 - ✅ Release zips with `vendor/` and the built panels bundled (`scripts/release.php`, a GitHub release per tag)
 - ✅ The owner's one-press update («تنظیمات پنل › به‌روزرسانی»): only a release signed with the key built into the shop, a step a request, the shop held a moment, taken back by itself when it fails; database upgrades from the first release on ([Upgrading](Upgrading.md))

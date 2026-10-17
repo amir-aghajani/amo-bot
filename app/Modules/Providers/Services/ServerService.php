@@ -33,6 +33,7 @@ use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Support\Input;
 use App\Support\Persian;
+use App\Support\Text as Words;
 use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
 
@@ -51,14 +52,15 @@ final class ServerService
 
     /** Where a field is kept when the server has no column of its name: `meta.<name>`. */
     private const META = 'meta.';
-    private const BUTTON_STYLE_REFUSED = 'رنگ دکمه را از میان آبی، سبز و قرمز انتخاب کنید، یا پیش‌فرض تلگرام.';
-    private const BUTTON_ROW_REFUSED = 'جای دکمه یک ردیف کامل، دو یا سه دکمه در ردیف است.';
 
     /** A form naming no connector this installation has. */
     private const NO_DRIVER = 'کانکتور انتخاب‌شده وجود ندارد.';
 
     /** A saved server's form for another connector than its own. */
     private const DRIVER_FIXED = 'کانکتور سرور عوض نمی‌شود؛ برای پنلی از نوع دیگر، سرور تازه‌ای اضافه کنید.';
+
+    /** The longest words of an inbound the shop's copy keeps (server_inbounds), as the panel's admin typed them. */
+    private const INBOUND_WORDS = ['tag' => 128, 'remark' => 255];
 
     /** What a probe reports when the connection itself failed: nothing beyond the error. */
     private const NOT_PROBED = ['ok' => false, 'status' => null, 'inbounds' => null, 'serves_subscriptions' => null, 'subscription_probed' => false];
@@ -102,6 +104,8 @@ final class ServerService
             $server = self::withCounts(Server::query())->findOrFail($server->id);
         }
         $about = $this->providers->find($server->driver)?->describe();
+        // Kept on one line (ProviderErrorPresenter::join()), shown on two: the diagnosis, and the panel's or cURL's words.
+        $lastError = $server->last_error === null ? null : ProviderErrorPresenter::split($server->last_error);
 
         return [
             'id' => $server->id,
@@ -116,7 +120,8 @@ final class ServerService
             'sort' => $server->sort,
             'notes' => $server->notes,
             'last_checked_at' => $server->last_checked_at?->toIso8601String(),
-            'last_error' => $server->last_error,
+            'last_error' => $lastError['message'] ?? null,
+            'last_error_detail' => ($lastError['detail'] ?? '') !== '' ? $lastError['detail'] : null,
             'serves_subscriptions' => $server->serves_subscriptions,
             'unsellable_reason' => $this->readiness->problem($server),
             'counts' => [
@@ -364,13 +369,13 @@ final class ServerService
             new Capacity('capacity', 'capacity', spec: new FieldSpec('ظرفیت', hint: 'حداکثر اشتراک فعال روی این سرور؛ خالی = نامحدود.', placeholder: '200', advanced: true)),
             new Text('notes', 'notes', '', label: 'یادداشت', max: self::NOTES_MAX, type: FieldType::Textarea, spec: new FieldSpec('یادداشت', placeholder: 'مثلا محل دیتاسنتر، تاریخ تمدید، …', advanced: true)),
             new Toggle('is_active', 'is_active', true, spec: new FieldSpec('فعال', hint: 'سرورهای غیرفعال برای اشتراک‌های جدید انتخاب نمی‌شوند.', advanced: true)),
-            new Choice('button_style', self::META . 'button_style', '', ['', ...KeyboardLayout::STYLES], self::BUTTON_STYLE_REFUSED, required: false, spec: new FieldSpec(
+            new Choice('button_style', self::META . 'button_style', '', ['', ...KeyboardLayout::STYLES], KeyboardLayout::STYLE_REFUSED, required: false, spec: new FieldSpec(
                 'رنگ دکمه در ربات',
                 hint: 'دکمه این لوکیشن در صفحه انتخاب سرور هر پلن، در ربات همه فروشگاه‌ها.',
                 advanced: true,
                 options: ['' => 'پیش‌فرض تلگرام', 'primary' => 'آبی', 'success' => 'سبز', 'danger' => 'قرمز'],
             )),
-            new Choice('button_row', self::META . 'button_row', '1', ['1', '2', '3'], self::BUTTON_ROW_REFUSED, required: false, spec: new FieldSpec(
+            new Choice('button_row', self::META . 'button_row', '1', array_map(strval(...), range(1, KeyboardLayout::ROW_MOST)), KeyboardLayout::ROW_REFUSED, required: false, spec: new FieldSpec(
                 'جای دکمه در ربات',
                 hint: 'دکمه‌های پشت سر هم با یک اندازه کنار هم در یک ردیف می‌نشینند.',
                 advanced: true,
@@ -446,7 +451,8 @@ final class ServerService
     /**
      * Store the panel's inbounds: new ones added (not for sale until the owner opts them in), known ones refreshed, and
      * one the panel no longer lists switched off — kept with the owner's choice, since services and plans may point at
-     * it, and sold again should it come back.
+     * it, and sold again should it come back. Their words are cut to what the copy keeps (INBOUND_WORDS): a panel sets
+     * no such limit.
      *
      * @param list<array<string, mixed>> $inbounds As presentInbound() makes them
      */
@@ -454,6 +460,9 @@ final class ServerService
     {
         $now = now();
         foreach ($inbounds as $inbound) {
+            foreach (self::INBOUND_WORDS as $column => $max) {
+                $inbound[$column] = Words::fit((string) $inbound[$column], $max);
+            }
             ServerInbound::query()->updateOrCreate(
                 ['server_id' => $server->id, 'remote_key' => $inbound['remote_key']],
                 array_diff_key($inbound, ['remote_key' => true]) + ['synced_at' => $now],

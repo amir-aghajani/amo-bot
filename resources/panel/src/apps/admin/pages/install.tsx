@@ -11,6 +11,7 @@ import { SiteStep } from '@/apps/admin/install/site-step'
 import { StepBar } from '@/apps/admin/install/step-bar'
 import { firstOpen, type Step } from '@/apps/admin/install/steps'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { PublicPanel, PublicScreen } from '@/components/public-screen'
 import type { InstallStatus } from '@/lib/api-types'
 import { useAppName } from '@/lib/app-info'
@@ -27,9 +28,11 @@ export function InstallPage() {
   const appName = useAppName()
   useDocumentTitle('نصب')
   const status = useQuery({ queryKey: queryKeys.installStatus, queryFn: readStatus })
+  // Kept while it is asked again: a key refused stays the key's step, a failure its panel, the retry spinning.
+  const failure = useReadFailure(status)
   const [picked, setPicked] = useState<Step | null>(null)
   const step = picked ?? (status.data ? firstOpen(status.data) : null)
-  const refusal = keyRefusal(status.error)
+  const refusal = keyRefusal(failure.error)
 
   const done = (fresh: InstallStatus, next: Step) => {
     queryClient.setQueryData(queryKeys.installStatus, fresh)
@@ -40,9 +43,9 @@ export function InstallPage() {
     <PublicScreen title={`نصب ${appName}`} description="چند قدم تا راه افتادن فروشگاه" wide>
       {refusal !== undefined ? (
         <KeyStep refusal={refusal} tried={hasKey()} checking={status.isFetching} recheck={() => void status.refetch()} />
-      ) : status.error ? (
+      ) : failure.error ? (
         <PublicPanel>
-          <ErrorState what="وضعیت نصب" error={status.error} onRetry={() => void status.refetch()} retrying={status.isFetching} />
+          <ErrorState what="وضعیت نصب" error={failure.error} onRetry={() => void status.refetch()} retrying={failure.retrying} />
         </PublicPanel>
       ) : !status.data || step === null ? (
         <PublicPanel>

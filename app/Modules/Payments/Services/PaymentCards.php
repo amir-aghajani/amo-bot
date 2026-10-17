@@ -34,7 +34,8 @@ use Illuminate\Database\Eloquent\Builder;
  * While the shop takes card payments in support's private chat (toSupport()), no card is picked: a payment is shown none
  * (payments.card_id null — "sent to support's chat" wherever it is shown), takes no card's room, and the method is
  * offered whatever its cards' switches and caps. A top-up still asks its few Toman more, a sum no other open payment of
- * the method shown no card asks: support tells the receipts sent to their chat apart by it.
+ * the method shown no card asks: support tells the receipts sent to their chat apart by it. Shown a card later, it keeps
+ * that sum unless another open payment to the card asks it — then it is given a fresh one.
  */
 final class PaymentCards
 {
@@ -99,15 +100,16 @@ final class PaymentCards
     /**
      * What a new payment of the method shown `$card` asks for a `$type` order of `$amount`: the amount itself — or, for a
      * top-up, the amount and 1 to extra() Toman more at random, a sum no other open payment to the card asks (any, should
-     * every one be asked). Shown no card (toSupport()), no other open payment of the method shown none. In the caller's
-     * transaction, after pick(): those payments are read as they stand — with no card to hold, the method's row is
-     * locked first, so of two payments at once the second waits for the first's sum.
+     * every one be asked). Shown no card (toSupport()), no other open payment of the method shown none. `$keeping`: the
+     * sum a payment shown no card asked before it is shown `$card` now — kept, unless another open payment to the card
+     * asks it too. In the caller's transaction, after pick(): those payments are read as they stand — with no card to
+     * hold, the method's row is locked first, so of two payments at once the second waits for the first's sum.
      */
-    public function amountFor(PaymentMethod $method, ?PaymentCard $card, OrderType $type, string $amount): string
+    public function amountFor(PaymentMethod $method, ?PaymentCard $card, OrderType $type, string $amount, ?string $keeping = null): string
     {
         $most = $this->extra($method, $type, $amount);
         if ($most <= 0) {
-            return Money::normalize($amount);
+            return Money::normalize($keeping ?? $amount);
         }
 
         if ($card === null) {
@@ -116,6 +118,9 @@ final class PaymentCards
         $open = $card === null ? $method->payments()->whereNull('card_id') : $card->payments();
         $asked = array_flip($open->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::AwaitingReview->value])
             ->lockForUpdate()->pluck('amount')->map(static fn(mixed $sum): string => Money::normalize((string) $sum))->all());
+        if ($keeping !== null && !isset($asked[Money::normalize($keeping)])) {
+            return Money::normalize($keeping);
+        }
         $free = array_values(array_filter(range(1, $most), static fn(int $extra): bool => !isset($asked[Money::add($amount, $extra)])));
         $extra = $free === [] ? random_int(1, $most) : $free[random_int(0, count($free) - 1)];
 

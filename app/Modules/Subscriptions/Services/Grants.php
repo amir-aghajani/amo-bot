@@ -8,6 +8,7 @@ use App\Core\Database\Lease;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Scheduling\Budget;
 use App\Modules\Auth\Actor;
+use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Notifications\Services\CustomerNotifier;
@@ -20,6 +21,7 @@ use App\Modules\Subscriptions\DTO\Gift;
 use App\Modules\Subscriptions\Enums\GrantAudience;
 use App\Modules\Subscriptions\Enums\GrantStatus;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Grant;
 use App\Modules\Subscriptions\Models\GrantPart;
 use App\Modules\Subscriptions\Models\Subscription;
@@ -28,6 +30,7 @@ use App\Support\Input;
 use App\Support\Text;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Psr\Log\LoggerInterface;
@@ -39,7 +42,8 @@ use Psr\Log\LoggerInterface;
  * Who gets it: the active services that existed when it was issued (every bot's, free tests aside), narrowed by its
  * audience (every server, the agents' bots, one customer group, one server), and running when their turn comes by the
  * panel's word (share()). Services still waiting for their first connection only when the owner ticks
- * `include_unstarted`; ended or switched-off services never.
+ * `include_unstarted`; ended or switched-off services never, nor one its days would end past the last day the shop keeps
+ * (LocalTime::LAST_DAY) — each passed by, and counted.
  *
  * How it runs: one part per server it reaches, each worked through one service at a time past a cursor by whoever holds
  * the part's lease — the open screen, or Tasks\GrantsTask every minute — so it finishes however many services there are,
@@ -63,6 +67,7 @@ final class Grants
         private readonly CustomerNotifier $notifier,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
+        private readonly Reviewers $reviewers,
     ) {}
 
     /**
@@ -253,22 +258,31 @@ final class Grants
     /** @return list<array<string, mixed>> The latest grants, newest first (the broadcasts page). */
     public function history(): array
     {
-        return Grant::query()->with(['parts.server', 'customerGroup'])->latest('id')->limit(self::HISTORY)->get()->map($this->present(...))->values()->all();
+        $grants = Grant::query()->with(['parts.server', 'customerGroup'])->latest('id')->limit(self::HISTORY)->get();
+        $names = $this->reviewers->names($grants->pluck('reviewer'));
+
+        return $grants->map(fn(Grant $grant): array => $this->present($grant, $names))->values()->all();
     }
 
     /** @return list<array<string, mixed>> The latest grants' parts on the server, newest first (its page). */
     public function historyOn(Server $server): array
     {
-        return GrantPart::query()->where('server_id', $server->id)->with('grant')->latest('id')->limit(self::HISTORY)->get()->map($this->presentPart(...))->values()->all();
+        $parts = GrantPart::query()->where('server_id', $server->id)->with('grant')->latest('id')->limit(self::HISTORY)->get();
+        $names = $this->reviewers->names($parts->map(static fn(GrantPart $part): ?string => $part->grant->reviewer));
+
+        return $parts->map(fn(GrantPart $part): array => $this->presentPart($part, $names))->values()->all();
     }
 
     /**
      * A grant with its parts' numbers added up, and each part. Its parts and their servers, and its group, loaded.
      *
+     * @param array<string, string>|null $names The names of the admins who issued grants, by reviewer (Reviewers::names()):
+     *                                          read with the list (history()), else now
      * @return array<string, mixed>
      */
-    public function present(Grant $grant): array
+    public function present(Grant $grant, ?array $names = null): array
     {
+        $names ??= $this->reviewers->names([$grant->reviewer]);
         $parts = $grant->parts;
         $sum = static fn(string $tally): int => (int) $parts->sum($tally);
         $server = $grant->audience === GrantAudience::Server ? $parts->first()?->server : null;
@@ -288,6 +302,7 @@ final class Grants
                 'server' => ['id' => $part->server_id, 'name' => $part->server->name ?? ''],
             ] + self::progress($part))->values()->all(),
             'reviewer' => $grant->reviewer,
+            'reviewer_name' => $names[$grant->reviewer ?? ''] ?? null,
             'created_at' => $grant->created_at->toIso8601String(),
             'finished_at' => $grant->finishedAt()?->toIso8601String(),
         ];
@@ -297,11 +312,13 @@ final class Grants
      * A part as its server's page shows it: the grant's terms and how far it got there. `mass_grant_id` is set when the
      * grant reaches beyond this server (it is on the broadcasts page too).
      *
+     * @param array<string, string>|null $names As for present(): read with the list (historyOn()), else now
      * @return array<string, mixed>
      */
-    public function presentPart(GrantPart $part): array
+    public function presentPart(GrantPart $part, ?array $names = null): array
     {
         $grant = $part->grant;
+        $names ??= $this->reviewers->names([$grant->reviewer]);
 
         return [
             'id' => $part->id,
@@ -309,6 +326,7 @@ final class Grants
             'agents_only' => $grant->audience === GrantAudience::Agents,
         ] + self::terms($grant) + self::progress($part) + [
             'reviewer' => $grant->reviewer,
+            'reviewer_name' => $names[$grant->reviewer ?? ''] ?? null,
             'created_at' => $grant->created_at->toIso8601String(),
             'finished_at' => $part->finished_at?->toIso8601String(),
         ];
@@ -372,8 +390,9 @@ final class Grants
             $lease->move('last_subscription_id', $subscription->id, $previous);
 
             return false;
-        } catch (NotFoundException) {
-            // Gone from the panel since it was read.
+        } catch (NotFoundException|ModelNotFoundException|TermTooLongException) {
+            // Gone from the panel, or from the shop, since it was read — or moved on since so far that the days would end
+            // it past the last day the shop keeps.
             GrantPart::query()->whereKey($part->id)->increment('skipped');
 
             return true;
@@ -404,13 +423,17 @@ final class Grants
     /**
      * What the service takes of the grant, by the panel's word just read: the days when it has a term, the traffic when
      * it has a quota. Null when the grant is not for it: not running (ended, or switched off on the panel itself), still
-     * waiting for its first connection without the owner's tick, or able to take neither.
+     * waiting for its first connection without the owner's tick, able to take neither — or its days would end it past
+     * the last day the shop keeps (ServiceTerms::daysLeft()).
      *
      * @return array{int, int}|null [days, bytes]
      */
     private static function share(Grant $grant, Subscription $subscription, ClientInfo $client): ?array
     {
         if (!$subscription->isActive() || !$client->enabled || ($subscription->awaitsFirstUse() && !$grant->include_unstarted)) {
+            return null;
+        }
+        if ($grant->days > 0 && $subscription->hasTerm() && ServiceTerms::daysLeft($subscription) < $grant->days) {
             return null;
         }
 

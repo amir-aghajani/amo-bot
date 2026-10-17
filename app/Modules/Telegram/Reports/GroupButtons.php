@@ -25,6 +25,12 @@ final class GroupButtons
         private readonly LoggerInterface $logger,
     ) {}
 
+    /** To anyone but a bot admin who pressed or wrote: who may (`$may`: «تیکت را ببندند»), and where that role is given. */
+    public static function onlyAdmins(string $may): string
+    {
+        return "فقط مدیرهای ربات می‌توانند {$may}؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.";
+    }
+
     /**
      * The bot admin behind a Telegram account (role admin, not banned), or null for anyone else.
      *
@@ -86,16 +92,14 @@ final class GroupButtons
     }
 
     /**
-     * The message `$message` replies to, when that is one of the bot's own; null otherwise.
+     * The message of the bot's own the group's message replies to — never its topic's first message, which every
+     * message written there replies to (Update::repliedToBot()) —; null otherwise.
      *
-     * @param array<string, mixed> $message
      * @return array<string, mixed>|null
      */
-    public function botReplied(array $message): ?array
+    public function botReplied(Update $update): ?array
     {
-        $replied = $message['reply_to_message'] ?? null;
-
-        return is_array($replied) && (int) ($replied['from']['id'] ?? 0) === $this->api->botId() ? $replied : null;
+        return $update->repliedToBot($this->api->botId());
     }
 
     /**

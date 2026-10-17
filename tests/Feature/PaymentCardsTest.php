@@ -30,7 +30,7 @@ use Tests\DatabaseTestCase;
  * none left, and the method is not offered. A card-to-card top-up asks a few Toman more, a sum no other open payment to
  * its card asks and never past its method's most, and the whole of it is credited — and taken back by its refund. While the shop takes card payments in
  * support's private chat, no card is picked: none's room is taken, the method is offered whatever its cards, and the
- * payment says it went there.
+ * payment says it went there — shown a card later, it keeps its sum unless another open payment to the card asks it.
  */
 final class PaymentCardsTest extends DatabaseTestCase
 {
@@ -273,6 +273,27 @@ final class PaymentCardsTest extends DatabaseTestCase
         $this->mellat->forceFill(['enabled' => true, 'daily_cap' => null])->save();
         self::assertSame([$second->id, $this->mellat->id], [$this->pay($second->order)->id, $this->pay($second->order)->card_id]);
         self::assertFalse($methods->presentOne($this->method)['to_support']);
+    }
+
+    public function testAPaymentShownNoCardKeepsItsSumOnTheCardItIsShownLaterUnlessAnotherOpenPaymentThereAsksIt(): void
+    {
+        $this->botSettings('general', ['support_contact' => '@amo_support']);
+        $this->botSettings('payments', ['card_to_support' => true]);
+        $this->botSettings('wallet', ['topup_unique_max' => 3]);
+        $first = $this->pay($this->topUpOrder($this->customer, '100000'));
+        $second = $this->pay($this->topUpOrder($this->customer(['telegram_id' => 7002]), '100000'));
+        $this->botSettings('payments', ['card_to_support' => false]);
+
+        $kept = $this->pay($second->order);
+        self::assertSame([$second->id, $this->mellat->id, $second->amount], [$kept->id, $kept->card_id, $kept->amount], 'no other open payment to the card asks its sum: kept');
+
+        // Another top-up on the card meanwhile asks the first one's sum.
+        $this->cardPayment($this->topUpOrder($this->customer(['telegram_id' => 7003]), '100000'), $this->method, ['card_id' => $this->mellat->id, 'amount' => $first->amount]);
+        $moved = $this->pay($first->order);
+
+        $left = array_values(array_diff(['100001.00', '100002.00', '100003.00'], [$first->amount, $second->amount]));
+        self::assertSame([$first->id, $this->mellat->id, $left], [$moved->id, $moved->card_id, [$moved->amount]], 'a fresh sum, the one no open payment to the card asks');
+        self::assertSame($moved->amount, $this->pay($first->order)->amount, 'and kept from then on');
     }
 
     /** The order's card payment, as the checkout makes it (PaymentService::createForOrder()). */

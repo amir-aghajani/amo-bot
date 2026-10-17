@@ -9,6 +9,7 @@ use App\Modules\Catalog\Services\ServerSelector;
 use App\Modules\Rewards\DTO\Reward;
 use App\Modules\Rewards\Enums\RewardKind;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\ServiceTerms;
 use App\Modules\Users\Models\User;
 
 /**
@@ -35,12 +36,13 @@ final class Eligibility
      */
     public function givable(User $user, array $rewards): array
     {
-        $sells = $user->shop()->sells();
+        // Asked of the shop once — read afresh (Bot::sellsNow()) —, and only for a reward it sells.
+        $sells = null;
         /** @var array<string, Subscription|null> $services */
         $services = [];
         $givable = [];
         foreach ($rewards as $key => $reward) {
-            if ($reward->kind->isSold() && !$sells) {
+            if ($reward->kind->isSold() && !($sells ??= $user->shop()->sellsNow())) {
                 continue;
             }
             if ($reward->kind->onService() && !array_key_exists($reward->kind->value, $services)) {
@@ -59,10 +61,13 @@ final class Eligibility
         return $givable;
     }
 
-    /** Whether a server delivers the plan today, and — in an agent's shop — the agent's traffic covers it. */
+    /**
+     * Whether a server delivers the plan today — its term ending by the last day the shop keeps
+     * (ServiceTerms::startsInTime()) —, and in an agent's shop the agent's traffic covers it.
+     */
     private function delivers(Plan $plan): bool
     {
-        return $this->selector->choices($plan) !== [] && $this->selector->covers($plan);
+        return ServiceTerms::startsInTime($plan->duration_hours) && $this->selector->choices($plan) !== [] && $this->selector->covers($plan);
     }
 
     private function onService(?Subscription $service, Reward $reward): bool

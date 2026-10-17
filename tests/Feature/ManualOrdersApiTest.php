@@ -9,6 +9,7 @@ use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Bots\Models\Bot;
@@ -26,14 +27,15 @@ use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Referrals\Models\ReferralCommission;
 use App\Modules\Rewards\Models\Cashback;
-use App\Modules\Store\Enums\StaffGrant;
 use App\Modules\Store\Http\IdempotencyKey;
 use App\Modules\Store\Http\StaffMiddleware;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ClientNaming;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Users\Models\User;
+use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
@@ -79,7 +81,7 @@ final class ManualOrdersApiTest extends HttpTestCase
         self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
         ['order' => $order, 'subscription' => $service] = $this->decode($response);
         self::assertSame(['fulfilled', '0.00', 'gift'], [$order['status'], $order['amount'], $order['pricing']]);
-        self::assertSame(['by' => 'root', 'payment' => 'free', 'note' => 'جبران قطعی'], $order['manual']);
+        self::assertSame(['by' => 'root', 'by_name' => null, 'payment' => 'free', 'note' => 'جبران قطعی'], $order['manual'], "the owner's login, by no name");
         self::assertSame([$this->plan->id, 'ali_r_1', 30 * Traffic::GIGABYTE], [$service['plan']['id'], $service['name'], $service['traffic']['limit']]);
         self::assertSame('0.00', $this->ali->balance(), 'nothing taken');
         self::assertFalse(Order::boughtBy($this->ali->id)->exists(), 'a gift is no purchase of theirs');
@@ -87,6 +89,20 @@ final class ManualOrdersApiTest extends HttpTestCase
         self::assertCount(1, $this->telegram()->sentTo(self::TELEGRAM_ID), 'the customer is told, as of any delivered purchase');
         self::assertStringContainsString("🎧 ثبت دستی توسط پشتیبانی · رایگان\n📝 توضیح پشتیبانی: جبران قطعی", $this->purchaseReport());
         self::assertStringNotContainsString('root', $this->purchaseReport(), 'the group never reads the owner\'s login');
+    }
+
+    public function testAnOrderThatWouldEndPastTheLastDayTheShopKeepsIsRefusedBeforeAnythingIsMadeOrCharged(): void
+    {
+        // The plan's 30 days, 20 days before the TIMESTAMP columns' last moment (MySQL refuses a later one).
+        Carbon::setTestNow(LocalTime::last()->subDays(20));
+        $this->loginAsAdmin();
+        $this->wallet($this->ali, '500000');
+
+        foreach (['a plan' => ['plan_id' => $this->plan->id], 'its own numbers' => ['traffic_gb' => '10', 'days' => '21', 'devices' => '1']] as $case => $what) {
+            $refused = $this->order($this->ali, $what + ['server_id' => $this->server->id, 'payment' => 'wallet', 'amount' => '120000']);
+            self::assertSame([422, TermTooLongException::message()], [$refused->getStatusCode(), $this->decode($refused)['message']], $case);
+        }
+        self::assertSame([0, '500000.00', []], [Order::query()->count(), $this->ali->balance(), FakeProvider::$created]);
     }
 
     public function testAWalletOrderOfItsOwnNumbersChargesTheWalletAndIsAPurchaseWithoutTakings(): void
@@ -99,7 +115,7 @@ final class ManualOrdersApiTest extends HttpTestCase
         self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
         ['order' => $order, 'subscription' => $service] = $this->decode($response);
         self::assertSame(['fulfilled', '150000.00', 'regular', null, 'سرویس دلخواه · ۵۰ گیگ · ۳۰ روز'], [$order['status'], $order['amount'], $order['pricing'], $order['plan'], $order['package_name']]);
-        self::assertSame(['by' => 'root', 'payment' => 'wallet', 'note' => null], $order['manual']);
+        self::assertSame(['by' => 'root', 'by_name' => null, 'payment' => 'wallet', 'note' => null], $order['manual']);
         $row = Subscription::query()->findOrFail($service['id']);
         self::assertSame(['sara_vip', null, 50 * Traffic::GIGABYTE, 720, 2], [$row->remote_name, $row->plan_id, $row->traffic_limit_bytes, $row->duration_hours, $row->ip_limit]);
         self::assertSame('50000.00', $sara->balance());
@@ -118,7 +134,7 @@ final class ManualOrdersApiTest extends HttpTestCase
         self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
         ['order' => $order] = $this->decode($response);
         self::assertSame(['fulfilled', '100000.00', 'outside', OutsideGateway::label(), 'root'], [$order['status'], $order['amount'], $order['payments'][0]['gateway'], $order['payments'][0]['method'], Payment::query()->value('reviewer')]);
-        self::assertSame(['by' => 'root', 'payment' => 'outside', 'note' => 'نقدی در دفتر'], $order['manual']);
+        self::assertSame(['by' => 'root', 'by_name' => null, 'payment' => 'outside', 'note' => 'نقدی در دفتر'], $order['manual']);
         self::assertSame('0.00', $sara->balance(), 'the wallet untouched');
         self::assertSame(100000.0, (float) Payment::moneyIn()->sum('amount'), 'counted in the takings');
         self::assertSame('10000.00', ReferralCommission::query()->value('commission'), 'money in earns the referrer');
@@ -192,7 +208,7 @@ final class ManualOrdersApiTest extends HttpTestCase
         self::assertSame([sprintf(ManualOrders::NOT_GB, 10000)], $form['traffic_gb']);
         $this->assertRefusedUnder('payment', ManualOrders::NO_PAYMENT, $this->unchecked()->order($this->ali, ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'payment' => 'card']));
         $this->assertRefusedUnder('plan_id', ManualOrders::NO_PLAN, $this->order($this->ali, ['plan_id' => 999999, 'server_id' => $this->server->id, 'payment' => 'free']));
-        $this->assertRefusedUnder('server_id', "سرور #{$elsewhere->id} برای پلن «{$this->plan->name}» در دسترس نیست.", $this->order($this->ali, ['plan_id' => $this->plan->id, 'server_id' => $elsewhere->id, 'payment' => 'free']));
+        $this->assertRefusedUnder('server_id', "سرور \u{200E}#{$elsewhere->id} برای پلن «{$this->plan->name}» در دسترس نیست.", $this->order($this->ali, ['plan_id' => $this->plan->id, 'server_id' => $elsewhere->id, 'payment' => 'free']));
         $this->assertRefusedUnder('client_name', ClientNaming::NOT_A_NAME, $this->order($this->ali, ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'client_name' => 'ab', 'payment' => 'free']));
         $this->assertRefusedUnder('client_name', ClientNaming::TAKEN, $this->order($this->ali, ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'client_name' => 'taken_1', 'payment' => 'free']));
         $this->assertRefusedUnder('idempotency_key', IdempotencyKey::MISSING, $this->unchecked()->json('POST', "/api/admin/users/{$this->ali->id}/orders", ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'payment' => 'free']));
@@ -345,13 +361,16 @@ final class ManualOrdersApiTest extends HttpTestCase
         self::assertSame([403, ActorRefusedException::OWN_ORDER], [$own->getStatusCode(), $this->decode($own)['message']]);
         $made = $order($this->ali);
         self::assertSame(201, $made->getStatusCode(), (string) $made->getBody());
-        self::assertSame('@boss', $this->decode($made)['order']['manual']['by']);
-        self::assertStringContainsString('🎧 ثبت دستی توسط پشتیبانی: @boss · رایگان', $this->purchaseReport(), 'an admin by name');
+        self::assertSame(['@boss', 'Boss'], [$this->decode($made)['order']['manual']['by'], $this->decode($made)['order']['manual']['by_name']], 'by their handle and their name');
+        self::assertStringContainsString("🎧 ثبت دستی توسط پشتیبانی: \u{200E}@boss · رایگان", $this->purchaseReport(), 'an admin by name');
 
         Carbon::setTestNow(now()->addSeconds(CustomerSessions::RECENT_SECONDS + 1));
         $stale = $order($this->ali);
         self::assertSame([403, RecentSignInMiddleware::SIGN_IN_AGAIN], [$stale->getStatusCode(), $this->decode($stale)['message']]);
         self::assertSame(1, Order::query()->count());
+
+        $this->loginAsAdmin();
+        self::assertSame([['by' => '@boss', 'by_name' => 'Boss', 'payment' => 'free', 'note' => null]], array_column($this->decode($this->get('/api/admin/orders'))['orders'], 'manual'), "the owner's list names them too");
     }
 
     public function testTheOutsideRowIsNeverOfferedNorListedAmongTheMethods(): void

@@ -5,18 +5,25 @@ declare(strict_types=1);
 /*
  * The documentation's tool. docs/ is the one tree the repository's own view, GitHub's wiki and GitHub Pages (Docsify,
  * docs/index.html) all read: flat Markdown pages, one a subject, linked to each other as `[words](Page-Name.md)` or
- * `(Page-Name.md#anchor)`.
+ * `(Page-Name.md#anchor)` — English at the top of docs/, each other language of LANGUAGES in its own folder (docs/fa/)
+ * with the same pages under the same names, its own _Sidebar.md and _Footer.md.
  *
- *   php scripts/docs.php               # write what is generated from the code: the config.php and bot texts references,
- *                                      # the API's references and docs/openapi.json
- *   php scripts/docs.php --check       # fail while a generated page is stale, or a link or a page is wrong (CI runs it)
+ *   php scripts/docs.php               # write what is generated from the code — the config.php and bot texts
+ *                                      # references, the API's references and docs/openapi.json — and the line atop each
+ *                                      # page that links its other languages' versions
+ *   php scripts/docs.php --check       # fail while a generated page is stale, or a link, a page or a translation is
+ *                                      # wrong (CI runs it); list the pages each language has not translated yet
+ *   php scripts/docs.php --check --require-translations
+ *                                      # the same, and fail while a language lacks a page English has
  *   php scripts/docs.php --wiki <dir>  # write the tree as GitHub's wiki has it into a checkout of <repo>.wiki
  *
  * A generated page says so at its top and is never edited by hand: change what it is made from, then run the script.
- * The check also follows every link between pages — to the page and to its heading, under the anchors GitHub and Docsify
- * both give it —, holds every page to its name's form and to the sidebar, and every link of README.md.
- * The wiki's form is the same pages with their links to each other written without `.md`; .github/workflows/wiki.yml
- * publishes it.
+ * The check also follows every link between pages — to the page and to its heading, under the anchor GitHub gives it
+ * (and Docsify: docs/index.html gives every heading GitHub's) —, holds every page to its name's form and to its
+ * language's sidebar, every translation to its English page and to its language's direction, and every link of
+ * README.md. The wiki's form is the same pages with their links to each other written without `.md`, a language's in its
+ * folder under names of their own (fa/fa-Page-Name.md: the wiki's page names are one namespace);
+ * .github/workflows/wiki.yml publishes it.
  */
 
 use App\Core\Application;
@@ -36,12 +43,26 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
+/**
+ * The documentation's languages besides English, which is the tree's own (docs/): by its code — the folder of docs/
+ * its pages are in —, its name as its readers write it (the words of the links to its pages atop the other versions)
+ * and its direction. docs/index.html lists the same languages (the check compares them).
+ */
+const LANGUAGES = ['fa' => ['name' => 'فارسی', 'dir' => 'rtl']];
+
+/** English's name, in the line atop a translated page that links its English version. */
+const ENGLISH = 'English';
+
 $root = dirname(__DIR__);
 $docs = $root . '/docs';
-$options = getopt('', ['check', 'wiki:']) ?: [];
+$options = getopt('', ['check', 'require-translations', 'wiki:']) ?: [];
 
 if (isset($options['check'])) {
-    $problems = [...stalePages($root, $docs), ...linkProblems($root, $docs)];
+    [$translations, $notes] = languageProblems($docs, isset($options['require-translations']));
+    $problems = [...stalePages($root, $docs), ...linkProblems($root, $docs), ...$translations];
+    foreach ($notes as $note) {
+        fwrite(STDOUT, $note . "\n");
+    }
     foreach ($problems as $problem) {
         fwrite(STDERR, $problem . "\n");
     }
@@ -61,6 +82,10 @@ if (isset($options['wiki'])) {
     exit(0);
 }
 
+foreach (languageLineFixes(pages($docs)) as $page => $markdown) {
+    file_put_contents($docs . '/' . $page, $markdown);
+    fwrite(STDOUT, "Wrote docs/{$page} (the line to its other languages)\n");
+}
 foreach (generatedPages($root) as $name => $markdown) {
     if (readPage($docs . '/' . $name) !== $markdown) {
         file_put_contents($docs . '/' . $name, $markdown);
@@ -1018,10 +1043,11 @@ function stalePages(string $root, string $docs): array
 // --- the links -------------------------------------------------------------------------------------------------------
 
 /**
- * What is wrong with the tree's pages and links: a page whose name is not of the tree's form, or that the sidebar does
- * not list; a heading GitHub and Docsify would give two anchors; a link between pages to a page or a heading that is
- * not there, or one that leaves the tree (the wiki and Pages have nothing but docs/); and the links of the repository's
- * front page (README.md) to its files.
+ * What is wrong with the tree's pages and links: a page whose name is not of the tree's form, or that its language's
+ * sidebar does not list; a language's sidebar out of the English one's order; an English heading GitHub and Docsify
+ * would give two anchors; a link between pages to a page or a heading that is not there, to another language's page
+ * that is neither the same page nor a generated reference, or one that leaves the tree (the wiki and Pages have nothing
+ * but docs/); and the links of the repository's front page (README.md) to its files.
  *
  * @return list<string>
  */
@@ -1031,54 +1057,68 @@ function linkProblems(string $root, string $docs): array
     $pages = pages($docs);
     $anchors = [];
     $folded = [];
-    foreach ($pages as $name => $markdown) {
-        if (preg_match('/^(_Sidebar|_Footer|[A-Z][A-Za-z0-9]*(-[A-Za-z0-9]+)*)\.md$/', $name) !== 1) {
-            $problems[] = "docs/{$name}: a page's name is Title-Case-With-Dashes.md (the wiki has one namespace, and Docsify a route a page).";
+    foreach ($pages as $page => $markdown) {
+        if (preg_match('/^(_Sidebar|_Footer|[A-Z][A-Za-z0-9]*(-[A-Za-z0-9]+)*)\.md$/', basename($page)) !== 1) {
+            $problems[] = "docs/{$page}: a page's name is Title-Case-With-Dashes.md (the wiki has one namespace, and Docsify a route a page).";
         }
-        if (isset($folded[strtolower($name)])) {
-            $problems[] = "docs/{$name}: another page has this name in another case ({$folded[strtolower($name)]}).";
+        if (isset($folded[strtolower($page)])) {
+            $problems[] = "docs/{$page}: another page has this name in another case ({$folded[strtolower($page)]}).";
         }
-        $folded[strtolower($name)] = $name;
-        $anchors[$name] = [];
+        $folded[strtolower($page)] = $page;
+        $anchors[$page] = [];
         foreach (headings($markdown) as [$line, $text]) {
             $github = githubSlug($text);
+            // Docsify gives a language's headings GitHub's anchors (docs/index.html); English's keep to the one both make.
             $docsify = docsifySlug($text);
-            if ($github !== $docsify) {
-                $problems[] = "docs/{$name}:{$line}: the heading \"{$text}\" is #{$github} on GitHub but #{$docsify} in Docsify: leave out what one drops and the other keeps (a dash or a slash between spaces, a leading digit, «»).";
+            if (languageOf($page) === '' && $github !== $docsify) {
+                $problems[] = "docs/{$page}:{$line}: the heading \"{$text}\" is #{$github} on GitHub but #{$docsify} in Docsify: leave out what one drops and the other keeps (a dash or a slash between spaces, a leading digit, «»).";
             }
-            $anchors[$name][] = $github;
+            $anchors[$page][] = $github;
         }
-        $anchors[$name] = numbered($anchors[$name]);
+        $anchors[$page] = numbered($anchors[$page]);
     }
 
-    $sidebar = [];
-    foreach ($pages as $name => $markdown) {
+    // Each language's sidebar: the pages it lists, in its order.
+    $listed = [];
+    foreach ($pages as $page => $markdown) {
         foreach (links($markdown) as [$line, $target]) {
             if (isExternal($target)) {
                 continue;
             }
-            if (preg_match('/^([A-Za-z0-9-]+\.md)?(?:#(.*))?$/', $target, $match) !== 1 || $target === '') {
-                $problems[] = "docs/{$name}:{$line}: ({$target}) leaves the tree — a page links to a page of docs/ as Page-Name.md, and to anything else by its full https:// address.";
+            $link = resolveLink($page, $target);
+            if ($link === null) {
+                $problems[] = "docs/{$page}:{$line}: ({$target}) leaves the tree — a page links to a page of its language as Page-Name.md, to its English version or a generated reference as ../Page-Name.md (from a language's folder), and to anything else by its full https:// address.";
 
                 continue;
             }
-            $page = ($match[1] ?? '') === '' ? $name : $match[1];
-            if ($name === '_Sidebar.md') {
-                $sidebar[$page] = true;
+            [$to, $anchor] = $link;
+            if (basename($page) === '_Sidebar.md') {
+                $listed[languageOf($page)][$to] = true;
             }
-            $problem = targetProblem($anchors, $page, $match[2] ?? null);
+            $problem = targetProblem($anchors, $to, $anchor) ?? crossingProblem($pages, $page, $to);
             if ($problem !== null) {
-                $problems[] = "docs/{$name}:{$line}: ({$target}) {$problem}";
+                $problems[] = "docs/{$page}:{$line}: ({$target}) {$problem}";
             }
         }
     }
-    foreach (array_keys($pages) as $name) {
-        if (!str_starts_with($name, '_') && !isset($sidebar[$name])) {
-            $problems[] = "docs/{$name}: _Sidebar.md does not list it — every page is in the navigation.";
+    foreach (array_keys($pages) as $page) {
+        $language = languageOf($page);
+        if (!str_starts_with(basename($page), '_') && !isset($listed[$language][$page])) {
+            $problems[] = "docs/{$page}: " . folderOf($language) . "_Sidebar.md does not list it — every page is in its language's navigation.";
+        }
+    }
+    // A language's sidebar is the English one's, as far as it goes: the pages it lists in the same order.
+    $english = array_values(array_unique(array_map('basename', array_keys($listed[''] ?? []))));
+    foreach (array_keys(LANGUAGES) as $code) {
+        $own = array_values(array_unique(array_map('basename', array_keys($listed[$code] ?? []))));
+        $order = array_values(array_intersect($english, $own));
+        if ($own !== $order) {
+            $problems[] = "docs/{$code}/_Sidebar.md: its pages are not in _Sidebar.md's order, which lists them " . implode(', ', $order) . '.';
         }
     }
 
-    // The repository's front page links to its files, to the tree's pages (docs/Page-Name.md#anchor) and to itself.
+    // The repository's front page links to its files, to the tree's pages (docs/Page-Name.md#anchor, a language's
+    // docs/fa/Page-Name.md) and to itself.
     foreach (['README.md'] as $file) {
         $markdown = readPage($root . '/' . $file);
         $anchors[$file] = numbered(array_map(static fn(array $heading): string => githubSlug($heading[1]), headings($markdown)));
@@ -1087,7 +1127,7 @@ function linkProblems(string $root, string $docs): array
                 continue;
             }
             [$path, $anchor] = array_pad(explode('#', $target, 2), 2, null);
-            $page = $path === '' ? $file : (preg_match('#^docs/([^/]+\.md)$#', $path, $match) === 1 ? $match[1] : null);
+            $page = $path === '' ? $file : (preg_match('#^docs/((?:[a-z]{2,3}(?:-[a-z0-9]+)?/)?[^/]+\.md)$#', $path, $match) === 1 ? $match[1] : null);
             if ($page !== null) {
                 $problem = targetProblem($anchors, $page, $anchor);
                 if ($problem !== null) {
@@ -1119,23 +1159,83 @@ function targetProblem(array $anchors, string $page, ?string $anchor): ?string
     return null;
 }
 
+/**
+ * Where a link of the page `$from` leads, as a page's path under docs/ and the heading's anchor it names (null for
+ * none); null for a link the tree does not write. A page links to its language's pages as `Page-Name.md`, to a heading
+ * of its own as `#anchor`; an English page to its version in a language as `fa/Page-Name.md`, a language's page to
+ * English's as `../Page-Name.md` and to another language's as `../de/Page-Name.md`.
+ *
+ * @return array{0: string, 1: ?string}|null
+ */
+function resolveLink(string $from, string $target): ?array
+{
+    if ($target === '' || preg_match('~^(?:(\.\./)?([a-z]{2,3}(?:-[a-z0-9]+)?/)?([A-Za-z0-9-]+\.md))?(?:#(.*))?$~', $target, $match, PREG_UNMATCHED_AS_NULL) !== 1) {
+        return null;
+    }
+    $up = $match[1] ?? null;
+    $language = $match[2] ?? null;
+    $name = $match[3] ?? null;
+    $anchor = $match[4] ?? null;
+    if ($name === null) {
+        return [$from, $anchor];
+    }
+    $folder = folderOf(languageOf($from));
+    if ($up !== null) {
+        // Up from a language's folder to English's, which is the top of the tree.
+        if ($folder === '') {
+            return null;
+        }
+        $folder = '';
+    } elseif ($language !== null && $folder !== '') {
+        return null;
+    }
+
+    return [$folder . ($language ?? '') . $name, $anchor];
+}
+
+/**
+ * Why a link from the page `$from` to `$to`, a page of another language, should not be there; null when it may be: a
+ * page links to its own language's pages, to its own version in another language (the line atop it), and a language's
+ * page to the generated references, which are English only.
+ *
+ * @param array<string, string> $pages
+ */
+function crossingProblem(array $pages, string $from, string $to): ?string
+{
+    $page = basename($from);
+    if (languageOf($from) === languageOf($to) || (basename($to) === $page && !str_starts_with($page, '_'))) {
+        return null;
+    }
+    if (languageOf($to) === '' && isGenerated($pages[$to] ?? '')) {
+        return null;
+    }
+
+    return 'is another language\'s page: a page links to its own language\'s pages, to its own version in another language, and (from a language\'s folder) to the generated references, which are English only.';
+}
+
 function isExternal(string $target): bool
 {
     return preg_match('#^(https?:|mailto:)#', $target) === 1;
 }
 
 /**
- * Every page of the tree, by name.
+ * Every page of the tree, by its path under docs/: English's (Page-Name.md), then each language's in its folder
+ * (fa/Page-Name.md).
  *
  * @return array<string, string>
  */
 function pages(string $docs): array
 {
     $pages = [];
-    foreach (glob($docs . '/*.md') ?: [] as $file) {
-        $pages[basename($file)] = readPage($file);
+    foreach (['', ...array_keys(LANGUAGES)] as $code) {
+        $folder = folderOf($code);
+        $here = [];
+        foreach (glob($docs . '/' . $folder . '*.md') ?: [] as $file) {
+            $here[$folder . basename($file)] = readPage($file);
+        }
+        ksort($here);
+        $pages += $here;
     }
-    ksort($pages);
 
     return $pages;
 }
@@ -1156,8 +1256,10 @@ function headings(string $markdown): array
     $headings = [];
     foreach (proseLines($markdown) as $number => $line) {
         if (preg_match('/^ {0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/', $line, $match) === 1) {
-            // What the reader sees of the heading: a link's words, code without its backticks, no emphasis marks.
-            $headings[] = [$number, str_replace(['`', '*'], '', (string) preg_replace('/!?\[([^\]]*)\]\([^)]*\)/', '$1', $match[1]))];
+            // What the reader sees of the heading: a link's words, code without its backticks, no emphasis marks, and
+            // outside code no tags (<code dir="ltr">), its entities (&rlm;) as their characters.
+            $text = outsideCode((string) preg_replace('/!?\[([^\]]*)\]\([^)]*\)/', '$1', $match[1]), static fn(string $prose): string => html_entity_decode(strip_tags($prose), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $headings[] = [$number, str_replace(['`', '*'], '', $text)];
         }
     }
 
@@ -1182,10 +1284,31 @@ function numbered(array $slugs): array
     return $anchors;
 }
 
-/** A heading's anchor as GitHub makes it (github-slugger): lower case, every mark but letters, digits, _ and - dropped, each space a dash. */
+/**
+ * A heading's anchor as GitHub makes it: lower case, every mark but letters, digits, _ and - dropped, each space a dash.
+ * The zero-width non-joiner Persian writes inside words (می‌شود) and the joiner stay, as GitHub keeps them; the right-to-left
+ * mark, «», ؟ and ، go.
+ */
 function githubSlug(string $text): string
 {
-    return str_replace(' ', '-', (string) preg_replace('/[^\p{L}\p{M}\p{N}\p{Pc} -]/u', '', mb_strtolower($text)));
+    return str_replace(' ', '-', (string) preg_replace('/[^\p{L}\p{M}\p{N}\p{Pc}\x{200C}\x{200D} -]/u', '', mb_strtolower($text)));
+}
+
+/**
+ * The text with `$prose` done to all of it but its code spans, which stay as they are.
+ *
+ * @param \Closure(string): string $prose
+ */
+function outsideCode(string $text, \Closure $prose): string
+{
+    $spans = [];
+    $masked = (string) preg_replace_callback('/(`+)(?:(?!\1).)+?\1/u', static function (array $match) use (&$spans): string {
+        $spans[] = $match[0];
+
+        return "\u{E000}" . (count($spans) - 1) . "\u{E000}";
+    }, $text);
+
+    return (string) preg_replace_callback('/\x{E000}(\d+)\x{E000}/u', static fn(array $match): string => $spans[(int) $match[1]], $prose($masked));
 }
 
 /** A heading's anchor as Docsify makes it (its slugify): Latin letters lowered, its marks dropped, spaces and dash runs one dash. */
@@ -1261,12 +1384,364 @@ function proseLines(string $markdown): array
     return $prose;
 }
 
+// --- the languages ---------------------------------------------------------------------------------------------------
+
+/** The language of a page by its path under docs/: its folder's code, '' for English's at the top. */
+function languageOf(string $page): string
+{
+    return str_contains($page, '/') ? (string) strstr($page, '/', true) : '';
+}
+
+/** A language's direction by its code, 'ltr' or 'rtl' — English's ('') left to right. */
+function directionOf(string $code): string
+{
+    return LANGUAGES[$code]['dir'] ?? 'ltr';
+}
+
+/** A language's folder under docs/: `fa/`, '' for English. */
+function folderOf(string $code): string
+{
+    return $code === '' ? '' : $code . '/';
+}
+
+/** Whether a page is one scripts/docs.php writes (its notice atop it): those are English only. */
+function isGenerated(string $markdown): bool
+{
+    return str_starts_with($markdown, '<!-- Generated by scripts/docs.php ');
+}
+
+/**
+ * The line a page starts with that links its versions in the other languages — `[فارسی](fa/Page-Name.md)` atop an
+ * English page, `[English](../Page-Name.md)` atop a Persian one, more joined by ` · `, English first, then LANGUAGES'
+ * order —; null for a page no other language has, and for the sidebars, the footers and the generated pages.
+ *
+ * @param array<string, string> $pages
+ */
+function languageLine(array $pages, string $page): ?string
+{
+    $name = basename($page);
+    if (str_starts_with($name, '_') || isGenerated($pages[$page] ?? '')) {
+        return null;
+    }
+    $from = languageOf($page);
+    $links = [];
+    foreach (['' => ['name' => ENGLISH]] + LANGUAGES as $code => $language) {
+        $other = folderOf((string) $code) . $name;
+        if ((string) $code !== $from && isset($pages[$other])) {
+            $links[] = '[' . $language['name'] . '](' . ($from === '' ? '' : '../') . $other . ')';
+        }
+    }
+
+    return $links === [] ? null : implode(' · ', $links);
+}
+
+/** The line a page starts with that links its other languages' versions, as it is now: null for a page without one. */
+function currentLanguageLine(string $markdown): ?string
+{
+    $lines = explode("\n", $markdown, 3);
+
+    return count($lines) > 1 && $lines[1] === '' && preg_match('/^\[[^\]]+\]\([^)\s]+\)(?: · \[[^\]]+\]\([^)\s]+\))*$/u', $lines[0]) === 1 ? $lines[0] : null;
+}
+
+/** A page without the line to its other languages and the blank line after it. */
+function withoutLanguageLine(string $markdown): string
+{
+    $line = currentLanguageLine($markdown);
+
+    return $line === null ? $markdown : substr($markdown, strlen($line) + 2);
+}
+
+/**
+ * The pages whose line to their other languages is not the one they should start with, by their path under docs/,
+ * each as it should be: that line written (or taken out), the rest as it is.
+ *
+ * @param array<string, string> $pages
+ * @return array<string, string>
+ */
+function languageLineFixes(array $pages): array
+{
+    $fixes = [];
+    foreach ($pages as $page => $markdown) {
+        $line = languageLine($pages, $page);
+        if (currentLanguageLine($markdown) !== $line) {
+            $fixes[$page] = ($line === null ? '' : $line . "\n\n") . withoutLanguageLine($markdown);
+        }
+    }
+
+    return $fixes;
+}
+
+/**
+ * What is wrong with the languages, and the notes on them: a folder of docs/ with pages that is no language, a language
+ * without its front page, sidebar or footer, docs/index.html's languages not these; a translated page without its
+ * English page, or of a generated one; a page whose line to its other languages is not the one it should start with; on
+ * a right-to-left page, what keeps it from reading right to left (rtlProblems()); and the pages English has that a
+ * language does not have yet — a note, or with `$requireTranslations` a problem each.
+ *
+ * @return array{0: list<string>, 1: list<string>} The problems, and the notes
+ */
+function languageProblems(string $docs, bool $requireTranslations): array
+{
+    $problems = [];
+    $notes = [];
+    $pages = pages($docs);
+
+    foreach (glob($docs . '/*', GLOB_ONLYDIR) ?: [] as $folder) {
+        $code = basename($folder);
+        if (!isset(LANGUAGES[$code]) && (glob($folder . '/*.md') ?: []) !== []) {
+            $problems[] = "docs/{$code}/ has pages but is no language: a language is added to LANGUAGES in scripts/docs.php and to the languages of docs/index.html.";
+        }
+    }
+    foreach (array_keys(LANGUAGES) as $code) {
+        foreach (['Home.md', '_Sidebar.md', '_Footer.md'] as $name) {
+            if (!isset($pages[$code . '/' . $name])) {
+                $problems[] = "docs/{$code}/{$name} is not there: every language has its front page, its sidebar and its footer.";
+            }
+        }
+    }
+
+    // Docsify's languages, which docs/index.html lists as `{ path: '/fa/', name: 'فارسی', dir: 'rtl', … }`.
+    preg_match_all("~\\{ path: '/([a-z0-9-]+)/', name: '([^']+)', dir: '(ltr|rtl)'~u", readPage($docs . '/index.html'), $entries, PREG_SET_ORDER);
+    $site = [];
+    foreach ($entries as $entry) {
+        $site[$entry[1]] = ['name' => $entry[2], 'dir' => $entry[3]];
+    }
+    if ($site !== LANGUAGES) {
+        $problems[] = 'docs/index.html lists the languages ' . (json_encode($site, JSON_UNESCAPED_UNICODE) ?: '?') . ', and LANGUAGES in scripts/docs.php ' . (json_encode(LANGUAGES, JSON_UNESCAPED_UNICODE) ?: '?') . ': the two list the same, in the same order.';
+    }
+
+    foreach ($pages as $page => $markdown) {
+        $code = languageOf($page);
+        $name = basename($page);
+        if ($code !== '' && !str_starts_with($name, '_')) {
+            if (!isset($pages[$name])) {
+                $problems[] = "docs/{$page} translates no page: docs/{$name} is not there, and a language's page has the name of the English page it translates.";
+            } elseif (isGenerated($pages[$name])) {
+                $problems[] = "docs/{$page}: the generated references are English only — a language's pages link to ../{$name}.";
+            }
+        }
+        $line = languageLine($pages, $page);
+        $current = currentLanguageLine($markdown);
+        if ($current !== $line) {
+            $problems[] = "docs/{$page}: " . ($line === null ? 'it starts with a line to other languages, and none has this page' : "its first line, then a blank one, is the line to its other languages' versions, {$line}") . ': run `php scripts/docs.php`, which writes it.';
+        }
+        if (directionOf($code) === 'rtl') {
+            $problems = [...$problems, ...rtlProblems($page, $markdown, $code)];
+        }
+    }
+
+    $english = array_keys(array_filter($pages, static fn(string $markdown, string $page): bool => languageOf($page) === '' && !str_starts_with($page, '_') && !isGenerated($markdown), ARRAY_FILTER_USE_BOTH));
+    foreach (LANGUAGES as $code => $language) {
+        $missing = array_values(array_filter($english, static fn(string $page): bool => !isset($pages[$code . '/' . $page])));
+        if ($requireTranslations) {
+            foreach ($missing as $page) {
+                $problems[] = "docs/{$code}/{$page} is not there: every page but the generated references is translated (--require-translations).";
+            }
+        } elseif ($missing !== []) {
+            $notes[] = sprintf('docs/%s/ (%s) has %d of the %d pages to translate; not yet: %s.', $code, $language['name'], count($english) - count($missing), count($english), implode(', ', $missing));
+        }
+    }
+
+    return [$problems, $notes];
+}
+
+/**
+ * What keeps a right-to-left page from reading right to left in all three places: its text not wrapped, after the line
+ * to its other languages, in a <div> of its direction and language (the wiki and Docsify set a page's direction by
+ * it); a code block that names no language (GitHub's view gives one that names it `dir="auto"`, and one that does not
+ * the page's direction); a heading, a paragraph or a list item whose first letter is Latin (GitHub's view gives each
+ * `dir="auto"`, its direction its first letter's); and a code span that starts or ends with a mark beside a left-to-right
+ * word, which a right-to-left line moves to its other end (`--check` shown as `check--`) — beside a right-to-left word (a
+ * Persian message quoted) it stays where the line puts it (movesRightToLeft()).
+ *
+ * @return list<string>
+ */
+function rtlProblems(string $page, string $markdown, string $code): array
+{
+    $problems = [];
+    $body = withoutLanguageLine($markdown);
+    // The lines the line to its other languages takes, with the blank after it.
+    $offset = substr_count(substr($markdown, 0, strlen($markdown) - strlen($body)), "\n");
+    $open = '<div dir="rtl" lang="' . $code . '">';
+    if (!str_starts_with($body, $open . "\n\n") || !str_ends_with($body, "\n\n</div>\n")) {
+        $problems[] = "docs/{$page}: a right-to-left page's text is wrapped — after the line to its other languages — in {$open}, a blank line, the text, a blank line and </div> (docs/Contributing.md, \"Documentation\").";
+    }
+
+    $fence = null;
+    foreach (explode("\n", $body) as $index => $line) {
+        if (preg_match('/^ {0,3}(`{3,}|~{3,})[ \t]*(\S*)/', $line, $match) !== 1) {
+            continue;
+        }
+        if ($fence === null) {
+            $fence = $match[1];
+            if ($match[2] === '') {
+                $problems[] = sprintf('docs/%s:%d: a code block names its language (```bash, ```php, ```text): GitHub shows one that names none right to left on this page.', $page, $index + 1 + $offset);
+            }
+        } elseif ($match[1][0] === $fence[0] && strlen($match[1]) >= strlen($fence)) {
+            $fence = null;
+        }
+    }
+
+    // A loose list's text is in paragraphs of their own direction, which `dir="auto"` passes over: GitHub gives the list
+    // itself, its bullets, the left-to-right default.
+    $listed = false;
+    $blank = false;
+    $prose = proseLines($body);
+    foreach (explode("\n", $body) as $index => $line) {
+        // A fenced block is read by its opening line: in an item, it is indented.
+        if (!isset($prose[$index + 1]) && preg_match('/^\s*(`{3,}|~{3,})/', $line) !== 1) {
+            continue;
+        }
+        if (trim($line) === '') {
+            $blank = $listed;
+
+            continue;
+        }
+        $item = preg_match('/^\s*(?:[-*+]|\d{1,9}[.)])[ \t]+/', $line) === 1;
+        $within = preg_match('/^(?: {2,}|\t)\S/', $line) === 1;
+        if ($blank && ($item || $within)) {
+            $problems[] = sprintf('docs/%s:%d: a list has no blank line between its items nor within one (a code block in an item follows its text directly): GitHub shows a loose list\'s bullets left to right.', $page, $index + 1 + $offset);
+        }
+        $listed = $item || ($listed && $within);
+        $blank = false;
+    }
+
+    foreach (directionBlocks($body) as [$line, $text]) {
+        if (firstStrongDirection($text) === 'ltr') {
+            $problems[] = sprintf('docs/%s:%d: "%s" starts with a Latin letter, and GitHub sets a heading\'s, a paragraph\'s and a list item\'s direction by its first letter: start it with a word of the page\'s language (where none fits, with &rlm;).', $page, $line + $offset, mb_substr(trim($text), 0, 30));
+        }
+    }
+
+    foreach (proseLines($body) as $number => $line) {
+        preg_match_all('/(`+)((?:(?!\1).)+?)\1/u', $line, $spans, PREG_SET_ORDER);
+        foreach ($spans as $span) {
+            if (movesRightToLeft($span[2])) {
+                $problems[] = sprintf('docs/%s:%d: %s starts or ends with a mark a right-to-left line moves to its other end on GitHub: write it <code dir="ltr">%s</code>.', $page, $number + $offset, $span[0], htmlspecialchars(trim($span[2]), ENT_NOQUOTES));
+            }
+        }
+    }
+
+    return $problems;
+}
+
+/**
+ * The blocks of a page whose direction GitHub's view takes from their first letter (`dir="auto"`): each heading,
+ * paragraph and list item outside code — not a table's cells, nor HTML —, by its first line, its text as it reads.
+ *
+ * @return list<array{0: int, 1: string}>
+ */
+function directionBlocks(string $markdown): array
+{
+    $blocks = [];
+    $open = null;
+    $last = 0;
+    $quoted = false;
+    foreach (proseLines($markdown) as $number => $line) {
+        // After a fenced block, a block of its own.
+        $after = $number !== $last + 1;
+        $last = $number;
+        $quote = preg_match('/^ {0,3}>/', $line) === 1;
+        $line = (string) preg_replace('/^ {0,3}(?:> ?)+/', '', $line);
+        if (trim($line) === '' || preg_match('/^\s*(?:<|\||(?:[-*_][ \t]*){3,}$)/', $line) === 1) {
+            if ($open !== null) {
+                $blocks[] = $open;
+            }
+            $open = null;
+            $quoted = $quote;
+
+            continue;
+        }
+        $heading = preg_match('/^ {0,3}#{1,6}[ \t]+(.*)$/', $line, $title) === 1;
+        $item = preg_match('/^\s*(?:[-*+]|\d{1,9}[.)])[ \t]+(.*)$/', $line, $words) === 1;
+        if ($heading || $item || $after || $open === null || $quote !== $quoted) {
+            if ($open !== null) {
+                $blocks[] = $open;
+            }
+            $open = $heading ? null : [$number, $item ? $words[1] : $line];
+            if ($heading) {
+                $blocks[] = [$number, $title[1]];
+            }
+        } else {
+            $open[1] .= "\n" . $line;
+        }
+        $quoted = $quote;
+    }
+    if ($open !== null) {
+        $blocks[] = $open;
+    }
+
+    return array_map(static fn(array $block): array => [$block[0], shownText($block[1])], $blocks);
+}
+
+/**
+ * A block's Markdown as it reads, for its direction: a link's words, no image, no span with a direction of its own
+ * (`dir="auto"` passes over it), and outside code no tags, the entities (&rlm;) as their characters.
+ */
+function shownText(string $markdown): string
+{
+    $text = (string) preg_replace('~<(\w+)\b[^>]*\sdir="[^"]*"[^>]*>.*?</\1>~su', '', $markdown);
+    $text = (string) preg_replace('/!\[[^\]]*\]\([^)]*\)/u', '', $text);
+    $text = (string) preg_replace('/\[([^\]]*)\]\([^)]*\)/u', '$1', $text);
+
+    return outsideCode((string) preg_replace('~<(https?://[^>\s]+)>~', '$1', $text), static fn(string $prose): string => html_entity_decode(strip_tags($prose), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+}
+
+/**
+ * The direction a text's first strong letter gives it, as the Unicode bidirectional algorithm reads it (digits and
+ * marks are no strong letters): 'rtl' for one of a right-to-left script or the right-to-left mark, 'ltr' for any other
+ * letter or the left-to-right mark; null for a text with none.
+ */
+function firstStrongDirection(string $text): ?string
+{
+    if (preg_match('/[\p{L}\x{200E}\x{200F}\x{061C}]/u', $text, $match) !== 1) {
+        return null;
+    }
+
+    return preg_match('/^[\x{200F}\x{061C}\p{Arabic}\p{Hebrew}\p{Syriac}\p{Thaana}\p{Nko}\p{Samaritan}\p{Mandaic}\p{Adlam}]$/u', $match[0]) === 1 ? 'rtl' : 'ltr';
+}
+
+/**
+ * Whether a code span shows the wrong way round in a right-to-left line: one that starts or ends with a mark — not a
+ * letter nor a digit — beside a left-to-right word (or none), which the line takes as its own and moves to the span's
+ * other end (`--check` as `check--`). The same mark or a pair of brackets closing it on both ends shows as it is, so
+ * what they hold is judged in their place (`"--check"` shows as `"check--"`, `{ "order": … }` as `{ … :"order" }`; `(x)`
+ * and `"x"` as they are); a lone mark shows as it is too, and so does a mark beside a right-to-left word (a Persian message
+ * quoted, `متن نمی‌تواند خالی باشد.`): it belongs where the line puts it, and `dir="ltr"` would move it.
+ */
+function movesRightToLeft(string $code, bool $span = true): bool
+{
+    // A space on both ends of the span is not shown (CommonMark).
+    if ($span && strlen($code) > 2 && str_starts_with($code, ' ') && str_ends_with($code, ' ')) {
+        $code = substr($code, 1, -1);
+    }
+    if (mb_strlen($code) < 2) {
+        return false;
+    }
+    $first = mb_substr($code, 0, 1);
+    $last = mb_substr($code, -1);
+    $mark = static fn(string $character): bool => preg_match('/^[\p{L}\p{N}]$/u', $character) !== 1;
+    $pairs = ['(' => ')', '[' => ']', '{' => '}', '<' => '>', '«' => '»'];
+    if ($mark($first) && ($first === $last || ($pairs[$first] ?? null) === $last)) {
+        return movesRightToLeft(mb_substr($code, 1, -1), false);
+    }
+    if (!$mark($first) && !$mark($last)) {
+        return false;
+    }
+    // The word nearest each end: firstStrongDirection() of the span, and of it read backwards — its words alone, an
+    // invisible mark (&rlm;) being no word the mark could stay beside.
+    $words = (string) preg_replace('/[\x{200E}\x{200F}\x{061C}]/u', '', $code);
+    $backwards = implode('', array_reverse(mb_str_split($words)));
+
+    return ($mark($first) && firstStrongDirection($words) !== 'rtl') || ($mark($last) && firstStrongDirection($backwards) !== 'rtl');
+}
+
 // --- the wiki --------------------------------------------------------------------------------------------------------
 
 /**
  * The tree as GitHub's wiki has it, into `$dir` — a checkout of the wiki's repository: every page, its links to pages
- * written without `.md` (Page-Name, Page-Name#anchor); and a page the tree no longer has taken out of it, so the wiki is
- * the tree and nothing else.
+ * written as the wiki names them (Page-Name, fa-Page-Name#anchor); a language's pages, sidebar and footer in its folder
+ * (the wiki shows a folder's own _Sidebar.md and _Footer.md beside its pages, else the top's); and a page the tree no
+ * longer has taken out of it, so the wiki is the tree and nothing else.
  */
 function exportWiki(string $root, string $docs, string $dir): void
 {
@@ -1278,18 +1753,92 @@ function exportWiki(string $root, string $docs, string $dir): void
         fail("{$dir} is this repository: the wiki's pages go to a checkout of the wiki's own repository.");
     }
 
-    $pages = pages($docs);
-    foreach (glob($target . '/*.md') ?: [] as $file) {
-        if (!isset($pages[basename($file)])) {
-            unlink($file);
-            fwrite(STDOUT, 'Removed ' . basename($file) . "\n");
+    $files = [];
+    foreach (pages($docs) as $page => $markdown) {
+        $files[wikiFile($page)] = wikiMarkdown($page, $markdown);
+    }
+    // glob() leaves out the checkout's .git.
+    foreach (['', ...array_map(static fn(string $folder): string => basename($folder) . '/', glob($target . '/*', GLOB_ONLYDIR) ?: [])] as $folder) {
+        foreach (glob($target . '/' . $folder . '*.md') ?: [] as $file) {
+            if (!isset($files[$folder . basename($file)])) {
+                unlink($file);
+                fwrite(STDOUT, 'Removed ' . $folder . basename($file) . "\n");
+            }
+        }
+        $kept = array_filter(array_keys($files), static fn(string $file): bool => str_starts_with($file, $folder));
+        if ($folder !== '' && $kept === [] && (scandir($target . '/' . $folder) ?: []) === ['.', '..']) {
+            rmdir($target . '/' . $folder);
+            fwrite(STDOUT, 'Removed ' . $folder . "\n");
         }
     }
-    foreach ($pages as $name => $markdown) {
-        $wiki = mapLinks($markdown, static fn(string $target): string => (string) preg_replace('/^([A-Za-z0-9-]+)\.md(?=#|$)/', '$1', $target));
-        file_put_contents($target . '/' . $name, $wiki);
+    foreach ($files as $file => $markdown) {
+        if (!is_dir(dirname($target . '/' . $file))) {
+            mkdir(dirname($target . '/' . $file));
+        }
+        file_put_contents($target . '/' . $file, $markdown);
     }
-    fwrite(STDOUT, sprintf("%d pages written to %s\n", count($pages), $target));
+    fwrite(STDOUT, sprintf("%d pages written to %s\n", count($files), $target));
+}
+
+/**
+ * Where a page of the tree is in the wiki: English's at its top under its own name, a language's in its folder under a
+ * name of its own, its code before it (fa/fa-Page-Name.md) — a wiki's page names are one namespace, whatever its
+ * folders —, and a language's sidebar and footer in its folder as they are.
+ */
+function wikiFile(string $page): string
+{
+    $code = languageOf($page);
+    $name = basename($page);
+
+    return $code === '' ? $name : $code . '/' . (str_starts_with($name, '_') ? $name : $code . '-' . $name);
+}
+
+/** A page's name in the wiki, which its links are written with: Page-Name, fa-Page-Name. */
+function wikiName(string $page): string
+{
+    $code = languageOf($page);
+
+    return ($code === '' ? '' : $code . '-') . basename($page, '.md');
+}
+
+/**
+ * A page as the wiki has it: its links to pages written with their names there; and on a right-to-left page each code
+ * block in a left-to-right <div> — the wiki gives a page's paragraphs and blocks no direction of their own (GitHub's
+ * view gives a block that names its language `dir="auto"`), so its code would take the page's.
+ */
+function wikiMarkdown(string $page, string $markdown): string
+{
+    $wiki = mapLinks($markdown, static function (string $target) use ($page): string {
+        $link = isExternal($target) || str_starts_with($target, '#') ? null : resolveLink($page, $target);
+
+        return $link === null ? $target : wikiName($link[0]) . ($link[1] === null ? '' : '#' . $link[1]);
+    });
+    $code = languageOf($page);
+    if (directionOf($code) !== 'rtl') {
+        return $wiki;
+    }
+
+    $lines = [];
+    $fence = null;
+    foreach (explode("\n", $wiki) as $line) {
+        if (preg_match('/^( {0,3})(`{3,}|~{3,})/', $line, $match) === 1) {
+            if ($fence === null) {
+                $fence = $match;
+                $lines = [...$lines, $match[1] . '<div dir="ltr">', '', $line];
+
+                continue;
+            }
+            if ($match[2][0] === $fence[2][0] && strlen($match[2]) >= strlen($fence[2])) {
+                $lines = [...$lines, $line, '', $fence[1] . '</div>', ''];
+                $fence = null;
+
+                continue;
+            }
+        }
+        $lines[] = $line;
+    }
+
+    return implode("\n", $lines);
 }
 
 function fail(string $message): never

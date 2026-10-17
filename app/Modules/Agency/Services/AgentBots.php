@@ -29,7 +29,8 @@ final class AgentBots
 
     public const TOKEN_MAIN = 'این توکن ربات خود فروشگاه است؛ توکن ربات خودتان را بفرستید.';
     public const TOKEN_TAKEN = 'این ربات به نماینده دیگری وصل است.';
-    public const TOKEN_OTHER_BOT = 'ربات شما @%s است؛ برای عوض کردن توکن، توکن تازه همین ربات را بفرستید. برای جابه‌جایی به ربات دیگر با پشتیبانی هماهنگ کنید.';
+    /** %s: the agent's bot, a left-to-right mark before its «@» — after the Persian words it would read «my_bot@». */
+    public const TOKEN_OTHER_BOT = "ربات شما \u{200E}@%s است؛ برای عوض کردن توکن، توکن تازه همین ربات را بفرستید. برای جابه‌جایی به ربات دیگر با پشتیبانی هماهنگ کنید.";
     public const NO_SHOP = 'حساب نمایندگی شما هنوز باز نشده است.';
 
     public function __construct(

@@ -66,9 +66,10 @@ final class RefundedDeliveries implements RefundedOrders
     /** The purchase's service removed; its panel name. */
     private function remove(Order $order, Subscription $service, Actor $actor): string
     {
-        $other = Order::query()->where('subscription_id', $service->id)->whereKeyNot($order->id)->whereIn('status', self::HOLDING)->orderBy('id')->value('id');
-        if ($other !== null) {
-            throw RefundRefusedException::serviceInUse((int) $other);
+        $other = SubscriptionActions::orderHolding($service, self::HOLDING, except: $order);
+        $holding = $other === null ? null : Order::query()->find($other);
+        if ($holding !== null) {
+            throw RefundRefusedException::serviceInUse($holding);
         }
         $this->actions->delete($service, $actor, null, leavePanel: false, notify: false);
 

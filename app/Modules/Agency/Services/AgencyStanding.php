@@ -36,6 +36,9 @@ use Psr\Log\LoggerInterface;
  *   month in the main shop, refunds aside (purchased()). The month it was set or changed in is not judged. A shop
  *   suspended for it sells again as soon as the month it is in reaches the minimum — the traffic's delivery asks
  *   (bought()), the task too —, or by the owner's hand; none at all lifts it too.
+ * - While a passed end holds the shop, last month's minimum waits to be judged — an end that passes over a minimum's
+ *   suspension leaves last month to be judged again —, and lifting the end judges it: a month short with this one short
+ *   too keeps the shop suspended, for the minimum (liftEnd()).
  * - The owner suspends by hand (manual), and only the owner lifts it.
  *
  * One reason stands at a time: the owner's over an end's over a minimum's. Every move is a conditional write, so two
@@ -88,9 +91,9 @@ final class AgencyStanding
 
     /**
      * Gives the agent's shop new terms (the owner's agents page); false when they are the ones it has. A new end is warned
-     * of afresh, and lifts a suspension for an end passed when it lies ahead (or there is none); a new or changed minimum
-     * is first judged on the next whole month, and none lifts a suspension for one. What the new terms call for now — an
-     * end already passed or near — is done at once (judge()).
+     * of afresh, and lifts a suspension for an end passed when it lies ahead (or there is none) — but for last month's
+     * minimum, judged then (liftEnd()); a new or changed minimum is first judged on the next whole month, and none lifts a
+     * suspension for one. What the new terms call for now — an end already passed or near — is done at once (judge()).
      */
     public function change(Bot $bot, SellingTerms $terms): bool
     {
@@ -109,7 +112,7 @@ final class AgencyStanding
         $bot->forceFill($changes)->save();
 
         if ($terms->expiresAt === null || $terms->expiresAt->isFuture()) {
-            $this->lift($bot, SellingSuspension::Expired);
+            $this->liftEnd($bot, Carbon::now());
         }
         if ($terms->minimum === null) {
             $this->lift($bot, SellingSuspension::Minimum);
@@ -149,9 +152,9 @@ final class AgencyStanding
 
     /**
      * The hourly review of one agent's shop (Tasks\AgencyStandingTask): an end passed is written down, one near warned of
-     * once; a month over below the minimum suspends — unless this month's purchases reached it already —, this month's
-     * purchases reaching it lift that, and a month near its end below it is warned of once. Nothing for a shop whose
-     * agency ended.
+     * once; a month over below the minimum suspends — unless this month's purchases reached it already, and while a passed
+     * end holds the shop it waits for the end to lift (liftEnd()) —, this month's purchases reaching it lift that, and a
+     * month near its end below it is warned of once. Nothing for a shop whose agency ended.
      */
     public function judge(Bot $bot, Carbon $now): void
     {
@@ -160,10 +163,13 @@ final class AgencyStanding
             return;
         }
         $warn = $this->settings->warnDays();
+        $month = JalaliMonth::of($now);
+        $last = $month->previous();
 
         $expires = $bot->agency_expires_at;
         if ($expires !== null && $expires->lessThanOrEqualTo($now)) {
-            $this->suspend($bot, SellingSuspension::Expired);
+            // Over a minimum's suspension, last month is left to be judged again once the end lifts.
+            $this->suspend($bot, SellingSuspension::Expired, replacing: ['minimum_checked_month' => $last->previous()->key()]);
         } elseif ($expires !== null && $expires->copy()->subDays($warn)->lessThanOrEqualTo($now) && $bot->expiry_warned_at === null
             && Bot::query()->whereKey($bot->id)->whereNull('expiry_warned_at')->update(['expiry_warned_at' => $now]) === 1) {
             $this->notifier->agencyExpiring($agent, $expires);
@@ -173,8 +179,6 @@ final class AgencyStanding
         if ($minimum === null || !Money::isPositive($minimum)) {
             return;
         }
-        $month = JalaliMonth::of($now);
-        $last = $month->previous();
         $checked = $bot->minimum_checked_month;
         $purchased = $this->purchased($bot, $month);
         $short = Money::compare($purchased, $minimum) < 0;
@@ -182,7 +186,7 @@ final class AgencyStanding
             // Never judged: from the next month on.
             Bot::query()->whereKey($bot->id)->whereNull('minimum_checked_month')->update(['minimum_checked_month' => $month->key()]);
             $checked = $month->key();
-        } elseif (strcmp($checked, $last->key()) < 0
+        } elseif (strcmp($checked, $last->key()) < 0 && $bot->suspension_reason !== SellingSuspension::Expired
             && Bot::query()->whereKey($bot->id)->where('minimum_checked_month', $checked)->update(['minimum_checked_month' => $last->key()]) === 1) {
             $checked = $last->key();
             // A month short suspends — unless the one it is in reached the minimum already, which would lift it at once.
@@ -209,12 +213,13 @@ final class AgencyStanding
 
     /**
      * After an agent's traffic order was delivered: a shop suspended for its minimum sells again once this month's
-     * purchases reach it. Never throws — the order is delivered whatever this says.
+     * purchases reach it — the shop read as it is now, not as the order's delivery found it (the hourly task may have
+     * suspended it meanwhile). Never throws — the order is delivered whatever this says.
      */
     public function bought(Order $order): void
     {
         try {
-            $bot = $order->type === OrderType::Traffic ? $order->user->ownBot : null;
+            $bot = $order->type === OrderType::Traffic ? $order->user->ownBot()->first() : null;
             if ($bot === null || $bot->suspension_reason !== SellingSuspension::Minimum || $bot->monthly_minimum === null) {
                 return;
             }
@@ -278,9 +283,12 @@ final class AgencyStanding
 
     /**
      * Suspends the shop's selling for `$reason`, over a weaker reason that stands (the owner's over an end's over a
-     * minimum's); true when this call did. The agent is told — with the owner's note, by hand —, and the report group.
+     * minimum's) — writing `$replacing` with it then; true when this call did. The agent is told — with the owner's
+     * note, by hand —, and the report group.
+     *
+     * @param array<string, string> $replacing
      */
-    private function suspend(Bot $bot, SellingSuspension $reason, ?string $note = null): bool
+    private function suspend(Bot $bot, SellingSuspension $reason, ?string $note = null, array $replacing = []): bool
     {
         $over = match ($reason) {
             SellingSuspension::Manual => [SellingSuspension::Expired->value, SellingSuspension::Minimum->value],
@@ -288,11 +296,49 @@ final class AgencyStanding
             SellingSuspension::Minimum => [],
         };
         $suspended = Bot::query()->whereKey($bot->id)->whereNull('selling_suspended_at')->update(['selling_suspended_at' => Carbon::now(), 'suspension_reason' => $reason->value]) === 1
-            || ($over !== [] && Bot::query()->whereKey($bot->id)->whereIn('suspension_reason', $over)->update(['suspension_reason' => $reason->value]) === 1);
+            || ($over !== [] && Bot::query()->whereKey($bot->id)->whereIn('suspension_reason', $over)->update(['suspension_reason' => $reason->value] + $replacing) === 1);
         if (!$suspended) {
             return false;
         }
 
+        $this->suspended($bot, $reason, $note);
+
+        return true;
+    }
+
+    /**
+     * An end passed is lifted (change()): its suspension goes — unless last month's minimum, waiting while the end held
+     * the shop (judge()), fell short with this month short of it too: then, in one conditional write, the shop stays
+     * suspended for the minimum, last month judged, and the agent and the report group are told so.
+     */
+    private function liftEnd(Bot $bot, Carbon $now): void
+    {
+        $bot->refresh();
+        $month = JalaliMonth::of($now);
+        $last = $month->previous();
+        $minimum = $bot->monthly_minimum;
+        $checked = $bot->minimum_checked_month;
+        $due = $bot->suspension_reason === SellingSuspension::Expired
+            && $minimum !== null && Money::isPositive($minimum)
+            && $checked !== null && strcmp($checked, $last->key()) < 0
+            && Money::compare($this->purchased($bot, $last), $minimum) < 0
+            && Money::compare($this->purchased($bot, $month), $minimum) < 0;
+        if (!$due) {
+            $this->lift($bot, SellingSuspension::Expired);
+
+            return;
+        }
+
+        $kept = Bot::query()->whereKey($bot->id)->where('suspension_reason', SellingSuspension::Expired->value)
+            ->update(['suspension_reason' => SellingSuspension::Minimum->value, 'minimum_checked_month' => $last->key()]) === 1;
+        if ($kept) {
+            $this->suspended($bot, SellingSuspension::Minimum, null);
+        }
+    }
+
+    /** The shop was just suspended for `$reason`: logged, the agent told (with the owner's note), the report group too. */
+    private function suspended(Bot $bot, SellingSuspension $reason, ?string $note): void
+    {
         $bot->refresh();
         $this->logger->info('Selling of bot {bot} suspended: {reason}', ['bot' => $bot->id, 'reason' => $reason->value]);
         $agent = $bot->agent;
@@ -300,8 +346,6 @@ final class AgencyStanding
             $this->notifier->agencySuspended($agent, $reason, $note);
         }
         $this->reports->agencySuspended($bot, $reason);
-
-        return true;
     }
 
     /**

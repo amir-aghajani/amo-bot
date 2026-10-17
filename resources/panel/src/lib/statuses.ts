@@ -139,6 +139,12 @@ export const PAYMENT_STATUS: Record<PaymentStatus, Status> = {
   refunded: { label: 'بازپرداخت‌شده', tone: 'neutral' },
 }
 
+/**
+ * The payments' queue that waits on support — not a status of its own: online payments held for support (HELD) and still
+ * waiting, pending or failed with their page (the payments list's `held`; the dashboard's count).
+ */
+export const PAYMENT_HELD: Status = { label: 'نگه داشته شده', tone: 'warning' }
+
 export const SUBSCRIPTION_STATUS: Record<SubscriptionStatus, Status> = {
   active: { label: 'فعال', tone: 'success' },
   expired: { label: 'منقضی‌شده', tone: 'neutral' },
@@ -280,12 +286,19 @@ export const AGENCY_REQUEST_STATUS: Record<AgencyRequestStatus, Status> = {
   rejected: { label: 'ردشده', tone: 'danger' },
 }
 
-/** How a bot gets its updates (GET /system): Telegram calls its webhook, bot:poll asks for them, or nothing does. */
+/**
+ * How a bot gets its updates (GET /system): Telegram calls its webhook, a poller asks for them (a developer's bot:poll,
+ * said as what it does — the command is no owner's), or nothing does — a bot that does not work, in the word an agent's
+ * bot has for that on the agents list (agentBotStatus): one state, one word wherever the bot is shown.
+ */
 export const BOT_MODE: Record<BotMode, Status> = {
   webhook: { label: 'Webhook', tone: 'success' },
-  polling: { label: 'bot:poll', tone: 'success' },
-  offline: { label: 'خاموش', tone: 'warning' },
+  polling: { label: 'پولینگ', tone: 'success' },
+  offline: { label: 'مشکل دارد', tone: 'warning' },
 }
+
+/** A bot no token is set for yet — the main bot's, or an agent's they have not sent —, as the system card and the agents list say it. */
+export const BOT_NOT_CONNECTED: Status = { label: 'وصل نشده', tone: 'warning' }
 
 /** A server's connection in a word: switched off, its panel failing, answering, or never asked. */
 export function serverStatus(server: Pick<ServerRow, 'is_active' | 'last_error' | 'last_checked_at'>): Status {
@@ -314,6 +327,6 @@ export const SELLING_SUSPENSION: Record<SellingSuspension, Status> = {
 /** An agent's bot in a word: switched off (the agency ended), waiting for its token, kept from running, or running. */
 export function agentBotStatus(bot: AgentBot): Status {
   if (bot.status === 'disabled') return BOT_STATUS.disabled
-  if (!bot.connected) return { label: 'وصل نشده', tone: 'warning' }
-  return bot.problem !== null ? { label: 'مشکل دارد', tone: 'warning' } : BOT_STATUS.active
+  if (!bot.connected) return BOT_NOT_CONNECTED
+  return bot.problem !== null ? BOT_MODE.offline : BOT_STATUS.active
 }

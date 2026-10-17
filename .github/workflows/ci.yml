@@ -44,8 +44,9 @@ jobs:
 
       - run: composer install --no-interaction --no-progress
       - run: composer check
-      # The documentation: its pages generated from the code current, and every link between its pages leading somewhere.
-      - run: php scripts/docs.php --check
+      # The documentation: its pages generated from the code current, every link between its pages leading somewhere, and
+      # every English page translated into each language docs/ has (Contributing.md, "Languages").
+      - run: php scripts/docs.php --check --require-translations
 
   panels:
     name: Panels

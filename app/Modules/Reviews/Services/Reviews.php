@@ -86,7 +86,6 @@ final class Reviews
 
     private const NAME_MISSING = 'نام خود را بنویسید.';
     private const NAME_SHORT = 'نام حداقل ' . self::NAME_MIN . ' کاراکتر است.';
-    private const RATING_RANGE = 'امتیاز باید عددی بین 1 تا 5 باشد.';
     private const BODY_MISSING = 'متن نظر را بنویسید.';
     private const BODY_SHORT = 'متن نظر حداقل ' . self::BODY_MIN . ' کاراکتر است.';
     private const AVATAR_INVALID = 'آواتار باید کلید یکی از آواتارهای خود وب‌سایت باشد: 1 تا 32 حرف کوچک لاتین، عدد، - یا _.';
@@ -264,16 +263,16 @@ final class Reviews
     }
 
     /**
-     * Its stars, 1 to 5 (Persian digits too).
+     * Its stars, 1 to 5 (Validation::rating()).
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
      */
     private static function rating(array $input, array &$errors): int
     {
-        $rating = Input::integerOf($input['rating'] ?? null);
-        if ($rating === null || $rating < 1 || $rating > 5) {
-            $errors['rating'] = [self::RATING_RANGE];
+        $rating = Validation::rating($input['rating'] ?? null);
+        if ($rating === null) {
+            $errors['rating'] = [Validation::RATING_RANGE];
         }
 
         return (int) $rating;

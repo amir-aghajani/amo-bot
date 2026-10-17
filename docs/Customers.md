@@ -1,3 +1,5 @@
+[فارسی](fa/Customers.md)
+
 # Customers
 
 «فروش › کاربران», in both panels: the shop's customers, their groups, and each customer's own page.
@@ -10,16 +12,27 @@ to them, and the shop's notices reach them by email — when the shop's email go
 ## The list
 
 «کاربران» lists everyone who ever started the bot or signed up on the website, newest first; sort it by «کیف پول»,
-«سرویس‌ها» (running), «سفارش‌ها», «آخرین بازدید» or «عضویت» from their headers.
+«سرویس‌ها» (running), «سفارش‌ها», «آخرین بازدید» or «عضویت» from their headers, where the screen shows them.
 
 - **The search** finds a first or a last name (each on its own — not «first last» together), a handle with or without
   `@`, a piece of an email, an exact Telegram id, a phone number (4 digits or more) or a customer's number; `#12` is
   customer 12 alone.
 - **Filters**: «وضعیت» (active or banned), «نقش» — «مدیران ربات» or «مشتری‌ها» — and, once you have groups, «گروه».
-- **A row**: the name — a link to the customer's page; «بدون نام» when Telegram shows none —, the handle (or the email of
-  a website customer), their number, Telegram id and phone on wider screens, the wallet («… تومان بدهی» in red for a
-  debt), «n فعال از m» services, orders, groups, status, when they were last seen (in the bot or on the website) and
-  when they joined. A bot admin carries «مدیر».
+- **A row**: the name — a link to the customer's page —, and under it their @handle («بدون نام کاربری» without one), or
+  a website customer's email. A customer without a name — Telegram gives none, or one of invisible characters only — is
+  shown by their @handle, with their Telegram id under it, and as «بدون نام» when they have no handle either. Then their
+  number, Telegram id and phone, the wallet («… تومان بدهی» in red for a debt), «n فعال از m» services, orders, groups,
+  status, when they were last seen (in the bot or on the website) and when they joined. A bot admin carries «مدیر».
+
+**The columns** are those the screen has room for:
+
+| Screen | Columns |
+|---|---|
+| A phone | The name (its status under it), «کیف پول» and ⋮ |
+| A phone held sideways (640px and wider) | Those, with «شناسه تلگرام» and «سرویس‌ها» |
+| A tablet (768px and wider) | The name, «کیف پول», «سرویس‌ها», «وضعیت» and ⋮ |
+| A computer (1280px and wider) | Those, with «شناسه تلگرام», «موبایل», «سفارش‌ها», «گروه‌ها», «آخرین بازدید» and «عضویت» |
+| The widest screens (1536px and wider) | All of them, with the customer's number («شماره») too |
 
 The row's menu (⋮):
 
@@ -38,7 +51,7 @@ bring no referral. **They are not told** they were banned, nor when it is lifted
 an agent's own bot or panel: to end an agency, see [Agency](Agency.md).
 
 The shop's admins may ban and unban from its website too — a customer, never an admin nor an agent: their accounts —
-a ban, two-factor sign-in, the devices — are changed from the panel alone.
+a ban, the groups, two-factor sign-in, the devices — are changed from the panel alone.
 
 ## The bot's admins
 
@@ -61,8 +74,9 @@ admins only of people you trust.
 
 ## The wallet
 
-«کیف پول» shows the balance — a debt as «… تومان بدهی» —, a credit or a debit, and the ledger's latest 50 lines (top-ups,
-purchases, refunds, commissions, and support's own lines, each with who wrote it). A wallet transfer's line («انتقال
+«کیف پول» shows the balance («موجودی فعلی»; a debt as «… تومان بدهی»), the form to add to it or take from it, and the
+ledger's latest 50 lines («تراکنش‌ها»: top-ups, purchases, refunds, commissions, and support's own lines, each with who
+wrote it — a bot admin by their account's first and last name where it has one, as on the payments screen). A wallet transfer's line («انتقال
 موجودی», [Bot settings](Bot-Settings.md#wallet-transfers)) links the other customer — «به …» whom the money went to,
 «از …» whom it came from.
 
@@ -72,6 +86,7 @@ purchases, refunds, commissions, and support's own lines, each with who wrote it
 - A decrease never takes the balance below zero — an agent's credit included: it is refused («موجودی کاربر … است و از
   این بیشتر نمی‌شود کم کرد.»). An increase always lands, a debt or not.
 - The customer is not sent a message about it: the line in their history is what they see.
+- Pressing «افزایش موجودی» or «کاهش موجودی» again after the panel got no answer never writes the line twice.
 
 An agent's credit — how far below zero their wallet may go when they buy traffic — is set on the agents page
 ([Agency](Agency.md)), and shown on their customer page's wallet card.
@@ -89,9 +104,26 @@ pays the plans' prices from then on.
 A broadcast may go to one group ([Broadcasts](Broadcasts.md)). Deleting a group takes nothing from its customers — they
 leave it —, but a broadcast aimed at it then reaches nobody.
 
+**From the shop's website**, its admins may work the groups too, within limits that keep agent prices out of their own
+reach:
+
+- making, changing, reordering or deleting a group needs the website's «پلن‌ها و دسته‌بندی‌ها» grant
+  ([Website](Website.md#the-shops-admins)), since a «همکار» group sets prices as plans do;
+- putting a customer in a «همکار» group needs that grant too: «فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران
+  وب‌سایت نسپرده است.» A plain group needs none, and taking a customer out of any group needs none;
+- they cannot put an admin's or an agent's account in a group (or take one out): «حساب مدیران فروشگاه فقط از پنل تغییر
+  می‌کند.» (or, for an agent, «حساب نماینده‌ها فقط از پنل تغییر می‌کند.»);
+- they cannot switch «همکار» on for a group an admin is in: «گروه «همکاران» حساب یکی از مدیران فروشگاه را دارد؛ «همکار»
+  کردن آن فقط از پنل ممکن است.», naming the group.
+
+Two accounts merged on the website never bring a «همکار» group into an admin's or an agent's account: when one side is
+an admin or an agent and the other is neither, the other side's «همکار» groups are left before the two are joined (its
+plain groups join as ever).
+
 ## A customer's page
 
-`/users/<id>` — the one place support answers a customer from. A name anywhere in the panel leads here.
+`/users/<id>` — everything about one customer, and what support does for them, on one page. A name anywhere in the
+panel leads here.
 
 **The header**: their name and status, «مدیر», «نماینده» for an agent; «مشتری #12»; their handle and Telegram id (or
 «بدون تلگرام»), their email, their verified phone; when they joined and were last seen. «گفتگو در تلگرام», and the ⋮ with
@@ -130,6 +162,6 @@ role and the ban.
 - **Nothing tells the customer** of a ban or its end, a role, a wallet change made by hand, or «خروج از همه دستگاه‌ها».
   Say it yourself, from «گفتگو در تلگرام» or a ticket, when it matters.
 - **A customer's number can change** when they merge two accounts of theirs on the website: the older account stays,
-  with the other's orders, services, wallet, tickets and reviews; on the panels, the services' clients then carry its
-  Telegram id and comment.
+  with the other's orders, services, wallet, tickets and reviews; on the servers' VPN panels, the services' clients then
+  carry the Telegram id and comment of the account that stays.
 - **«آخرین بازدید»** counts the website too: a customer who never writes to the bot may still be active.

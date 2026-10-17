@@ -20,7 +20,6 @@ use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
-use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
@@ -69,10 +68,16 @@ final class MenuHandler implements Handler
         private readonly ServiceClaims $claims,
     ) {}
 
-    /** The plan list of a category, or of the uncategorised plans ("سایر پلن‌ها") for null. */
-    public static function categoryCallback(?int $categoryId): string
+    /** The plan list of a category, or of the uncategorised plans ("سایر پلن‌ها") for null — at that page. */
+    public static function categoryCallback(?int $categoryId, int $page = 1): string
     {
-        return CallbackData::build(self::CATEGORY, $categoryId ?? 0);
+        return CallbackData::build(self::CATEGORY, $categoryId ?? 0, ...$page > 1 ? [$page] : []);
+    }
+
+    /** «خرید اشتراک» at that page: the categories, or the plans of a shop without any. */
+    public static function plansCallback(int $page): string
+    {
+        return $page > 1 ? CallbackData::build(MainMenu::PLANS, $page) : MainMenu::PLANS;
     }
 
     /** "سرویس‌های من" at that page. */
@@ -103,18 +108,20 @@ final class MenuHandler implements Handler
         $category = CallbackData::args($screen, self::CATEGORY);
         $page = CallbackData::args($screen, MainMenu::SUBSCRIPTIONS);
         $renewals = CallbackData::args($screen, MainMenu::RENEW);
+        $plans = CallbackData::args($screen, MainMenu::PLANS);
+        $tests = CallbackData::args($screen, MainMenu::TEST);
         match (true) {
-            $category !== null => $this->category($ctx, (int) ($category[0] ?? 0)),
+            $category !== null => $this->category($ctx, (int) ($category[0] ?? 0), (int) ($category[1] ?? 1)),
             $page !== null => $this->subscriptions($ctx, (int) ($page[0] ?? 1)),
             $renewals !== null => $this->renewals($ctx, (int) ($renewals[0] ?? 1)),
-            $screen === MainMenu::PLANS => $this->plans($ctx),
+            $plans !== null => $this->plans($ctx, (int) ($plans[0] ?? 1)),
             $screen === MainMenu::WALLET => $this->wallet($ctx),
             $screen === MainMenu::AFFILIATES => $this->referral($ctx),
             $screen === MainMenu::AGENCY => $this->agencyScreens->home($ctx),
             $screen === MainMenu::SUPPORT => $this->supportScreens->home($ctx),
             $screen === MainMenu::GIFT => $this->giftScreens->home($ctx),
             $screen === MainMenu::WHEEL => $this->wheelScreens->home($ctx),
-            $screen === MainMenu::TEST => $this->testScreens->home($ctx),
+            $tests !== null => $this->testScreens->home($ctx, page: (int) ($tests[0] ?? 1)),
             $screen === MainMenu::TUTORIAL => $this->menu->screen($ctx, $this->texts->get(BotText::Tutorial)),
             default => $this->home($ctx),
         };
@@ -128,12 +135,12 @@ final class MenuHandler implements Handler
     }
 
     /**
-     * «خرید اشتراک»: the categories when the shop has any, otherwise straight to the plans — and under them, while the
-     * custom builder is offered, «🛠 ساخت سرویس دلخواه» (CustomServiceHandler), even with no plan on sale. An agent's shop
-     * whose selling is suspended offers no plan, whatever its categories: it says so, politely (the builder is the main
-     * shop's alone).
+     * «خرید اشتراک» at `$page`: the categories when the shop has any, otherwise straight to the plans — and under them,
+     * while the custom builder is offered, «🛠 ساخت سرویس دلخواه» (CustomServiceHandler), even with no plan on sale. Either
+     * list is paged past one keyboard's worth (Buttons::LIST_PAGE). An agent's shop whose selling is suspended offers no
+     * plan, whatever its categories: it says so, politely (the builder is the main shop's alone).
      */
-    private function plans(Context $ctx): void
+    private function plans(Context $ctx, int $page = 1): void
     {
         if (!CurrentBot::get()->sells()) {
             $this->menu->screen($ctx, $this->texts->get(BotText::SellingPaused));
@@ -147,26 +154,29 @@ final class MenuHandler implements Handler
             if ($groups === []) {
                 $this->menu->screen($ctx, $this->texts->get(BotText::PlansEmpty), $custom === [] ? null : InlineKeyboard::make()->row(...$custom));
             } else {
-                $this->planList($ctx, $groups[0]['plans'], null, grouped: false, below: $custom);
+                $this->planList($ctx, $groups[0]['plans'], null, $page, grouped: false, below: $custom);
             }
 
             return;
         }
 
+        [$shown, $page, $pages] = Buttons::slice($groups, $page);
         $buttons = [];
-        foreach ($groups as $group) {
+        foreach ($shown as $group) {
             $category = $group['category'];
             $buttons[] = InlineKeyboard::callback($category->name ?? $this->texts->get(BotText::CategoryOther), self::categoryCallback($category?->id));
         }
 
-        $this->menu->screen($ctx, $this->texts->get(BotText::CategoriesTitle), InlineKeyboard::make()->grid($buttons, 1)->row(...$custom));
+        $keyboard = InlineKeyboard::make()->grid($buttons, 1);
+        $text = $this->buttons->paged($keyboard, $this->texts->get(BotText::CategoriesTitle), $page, $pages, self::plansCallback(...));
+        $this->menu->screen($ctx, $text, $keyboard->row(...$custom));
     }
 
     /**
-     * `cat:{id}` — the plans of one category (0 = the uncategorised ones), with a way back to the categories; a category
-     * of an old message in a shop whose selling is suspended says so (plans()), not that it is empty.
+     * `cat:{id}[:{page}]` — the plans of one category (0 = the uncategorised ones), with a way back to the categories; a
+     * category of an old message in a shop whose selling is suspended says so (plans()), not that it is empty.
      */
-    private function category(Context $ctx, int $categoryId): void
+    private function category(Context $ctx, int $categoryId, int $page): void
     {
         if (!CurrentBot::get()->sells()) {
             $this->plans($ctx);
@@ -185,7 +195,7 @@ final class MenuHandler implements Handler
 
                 return;
             }
-            $this->planList($ctx, $group['plans'], $group['category'], self::isGrouped($groups));
+            $this->planList($ctx, $group['plans'], $group['category'], $page, self::isGrouped($groups));
 
             return;
         }
@@ -195,31 +205,28 @@ final class MenuHandler implements Handler
     }
 
     /**
-     * The plans to pick from — a category's (with «بازگشت» to the categories) or the whole shop's — each at the
-     * customer's price (Pricing::offers(), asked once for the list), in the plan's own button colour and row, then the row
-     * `$below`.
+     * The plans to pick from at `$page` — a category's (with «بازگشت» to the categories) or the whole shop's, paged past
+     * one keyboard's worth — each at the customer's price (Pricing::offers(), asked once for the page), in the plan's own
+     * button colour and row, then the row `$below`.
      *
      * @param Collection<int, Plan> $plans
      * @param list<array<string, mixed>> $below
      */
-    private function planList(Context $ctx, Collection $plans, ?PlanCategory $category, bool $grouped, array $below = []): void
+    private function planList(Context $ctx, Collection $plans, ?PlanCategory $category, int $page, bool $grouped, array $below = []): void
     {
-        $prices = $this->pricing->offers($ctx->user, ...$plans->all());
-        $buttons = [];
-        foreach ($plans as $plan) {
-            $label = $this->texts->render(BotText::PlanButton, [
-                'plan' => $plan->name,
-                'traffic' => Messages::traffic($plan->trafficBytes()),
-                'duration' => Messages::duration($plan->duration_hours),
-                'price' => Money::format($prices[$plan->id]->amount()),
-            ]);
-            $buttons[] = [InlineKeyboard::callback($label, PurchaseHandler::planCallback($plan->id), KeyboardLayout::style($plan->button_style)), $plan->button_row];
-        }
-        $keyboard = InlineKeyboard::make()->flow($buttons)->row(...$below);
+        [$shown, $page, $pages] = Buttons::slice($plans->all(), $page);
+        $prices = $this->pricing->offers($ctx->user, ...$shown);
+        $buttons = array_map(fn(Plan $plan): array => $this->buttons->plan($plan, $prices[$plan->id]->amount(), PurchaseHandler::planCallback($plan->id)), $shown);
+        $keyboard = InlineKeyboard::make()->flow($buttons);
 
-        $title = $category !== null
-            ? $this->texts->render(BotText::CategoryPlans, ['category' => $category->name])
-            : $this->texts->get(BotText::PlansTitle);
+        $title = $this->buttons->paged(
+            $keyboard,
+            $category !== null ? $this->texts->render(BotText::CategoryPlans, ['category' => $category->name]) : $this->texts->get(BotText::PlansTitle),
+            $page,
+            $pages,
+            $grouped ? static fn(int $at): string => self::categoryCallback($category?->id, $at) : self::plansCallback(...),
+        );
+        $keyboard->row(...$below);
         if ($grouped) {
             $ctx->edit($title, ['reply_markup' => $keyboard->row($this->buttons->back(MainMenu::PLANS))->build()]);
         } else {
@@ -297,8 +304,7 @@ final class MenuHandler implements Handler
             return;
         }
 
-        $pages = (int) ceil($total / self::SUBSCRIPTIONS_PER_PAGE);
-        $page = max(1, min($page, $pages));
+        [$page, $pages] = Buttons::page($total, $page, self::SUBSCRIPTIONS_PER_PAGE);
 
         $keyboard = InlineKeyboard::make();
         foreach ($services->forPage($page, self::SUBSCRIPTIONS_PER_PAGE)->get() as $subscription) {
@@ -306,11 +312,7 @@ final class MenuHandler implements Handler
             $keyboard->row(InlineKeyboard::callback($label, $open($subscription, $page)));
         }
 
-        $text = $this->texts->get($title);
-        if ($pages > 1) {
-            $keyboard->row(...$this->buttons->pages($page, $pages, $at));
-            $text .= $this->texts->part(BotText::SubscriptionsPage, ['page' => Persian::digits($page), 'pages' => Persian::digits($pages)]);
-        }
+        $text = $this->buttons->paged($keyboard, $this->texts->get($title), $page, $pages, $at);
         $keyboard->row(...$below);
 
         $this->menu->screen($ctx, $text, $keyboard, backStyle: 'danger');
@@ -336,14 +338,15 @@ final class MenuHandler implements Handler
             ->get()
             ->map(fn(WalletTransaction $line): Html => $this->texts->part($line->type === WalletTransactionType::Credit ? BotText::WalletHistoryCredit : BotText::WalletHistoryDebit, [
                 'amount' => Money::format($line->amount),
-                'entry' => (string) $line->description,
+                'entry' => Messages::rowNumbers((string) $line->description),
                 'when' => Persian::date($line->created_at),
             ]))
             ->all();
         $text .= $lines === [] ? $this->texts->part(BotText::WalletNoHistory) : $this->texts->part(BotText::WalletHistory, ['history' => Html::lines(...$lines)]);
 
+        // One row in reading order: the top-up first, on the right.
         $topUp = CurrentBot::get()->sells() ? [$this->buttons->topUp()] : [];
-        $this->menu->screen($ctx, $text, InlineKeyboard::make()->row(...$topUp, ...$this->walletSends->button()));
+        $this->menu->screen($ctx, $text, InlineKeyboard::make()->grid([...$topUp, ...$this->walletSends->button()]));
     }
 
     /**

@@ -66,7 +66,7 @@ final class Smtp implements MailDriver
                     '',
                     pattern: '/^[^\x00-\x1f\x7f]{1,255}$/u',
                     mismatch: 'رمز SMTP حداکثر 255 کاراکتر است، بدون کاراکترهای کنترلی.',
-                    hint: static fn(string $password): string => '••••••••',
+                    hint: Secret::hidden(),
                     boundTo: ['host' => null, 'port' => null, 'encryption' => null, 'username' => null],
                     moved: self::PASSWORD_MOVED,
                     spec: new FieldSpec('رمز عبور', hint: 'رمز همان حساب ایمیل.'),

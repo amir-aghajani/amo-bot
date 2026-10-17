@@ -17,6 +17,7 @@ use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use App\Support\LocalTime;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
@@ -109,6 +110,21 @@ final class ServiceRemindersTest extends BotTestCase
         $this->service(AutoRenewTask::class)->run();
 
         self::assertSame([$this->endsSoon($switched, hint: false), $this->endsSoon($off, hint: false)], $this->telegram()->sentTo(self::CHAT), 'the wallet takes 100,000 Toman at most: nothing renews them, so each is reminded — without the switch');
+        self::assertSame([0, '300000.00'], [Order::query()->count(), $this->ali->balance()], 'nothing ordered, nothing charged');
+    }
+
+    public function testAServiceWhoseRenewalWouldEndPastTheLastDayTheShopKeepsIsRemindedWithoutTheSwitch(): void
+    {
+        // Twenty days before the TIMESTAMP columns' last moment: the plan's 30 days on its deadline would pass it.
+        Carbon::setTestNow(LocalTime::last()->subDays(20));
+        $this->enable(expiry: true);
+        $switched = $this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['expires_at' => now()->addDays(2), 'auto_renew' => true]);
+        $this->wallet($this->ali, '300000');
+
+        $this->remind();
+        $this->service(AutoRenewTask::class)->run();
+
+        self::assertSame([$this->endsSoon($switched, hint: false)], $this->telegram()->sentTo(self::CHAT), 'nothing will renew it by itself: its customer is reminded of its end');
         self::assertSame([0, '300000.00'], [Order::query()->count(), $this->ali->balance()], 'nothing ordered, nothing charged');
     }
 

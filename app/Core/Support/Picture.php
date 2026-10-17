@@ -16,6 +16,13 @@ final class Picture
     /** The type of bytes that are no known picture: a file to save, never to show. */
     public const UNKNOWN = 'application/octet-stream';
 
+    /**
+     * The formats a picture is taken in, as a Persian sentence names them (a refusal's): each Latin name in Unicode's
+     * isolates (U+2068 … U+2069), so right to left reads them in this order with «،» after the first — bare, the
+     * names and the comma between them make one left-to-right run that reads «PNG ،JPG».
+     */
+    public const FORMATS = "\u{2068}JPG\u{2069}، \u{2068}PNG\u{2069} یا \u{2068}WebP\u{2069}";
+
     /** The most pixels decoded when PHP's memory has no limit; with one, the free memory decides. */
     private const MAX_PIXELS = 50_000_000;
 
@@ -85,12 +92,18 @@ final class Picture
      */
     public static function fitted(\GdImage $image, int $side): ?\GdImage
     {
-        [$width, $height] = [imagesx($image), imagesy($image)];
-        [$toWidth, $toHeight] = self::fit($width, $height, $side);
-        if ($toWidth === $width && $toHeight === $height) {
-            return $image;
-        }
+        [$toWidth, $toHeight] = self::fit(imagesx($image), imagesy($image), $side);
 
+        return $toWidth === imagesx($image) && $toHeight === imagesy($image) ? $image : self::resized($image, $toWidth, $toHeight);
+    }
+
+    /**
+     * The image drawn anew at `$toWidth` × `$toHeight`, larger or smaller, its transparency kept; the one given is
+     * destroyed. Null when GD failed. By imagecopyresampled(), as fitted() says.
+     */
+    public static function resized(\GdImage $image, int $toWidth, int $toHeight): ?\GdImage
+    {
+        [$width, $height] = [imagesx($image), imagesy($image)];
         $scaled = imagecreatetruecolor($toWidth, $toHeight);
         // Its transparency written as it is, never blended onto the black a new image starts as.
         $drawn = $scaled !== false

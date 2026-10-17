@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Core\Database\ChangeFeed;
+use App\Core\Database\Transitions;
 use App\Core\Scheduling\Budget;
 use App\Core\Scheduling\Scheduler;
 use App\Modules\Bots\CurrentBot;
@@ -16,6 +18,9 @@ use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Providers\Support\PanelConnection;
+use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Texts\BotText;
@@ -63,11 +68,11 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
         $purchase = $this->paidOrder($this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Paid]));
         $topUp = $this->paidOrder($this->topUpOrder($this->customer, '20000.00', ['status' => OrderStatus::Paid]));
 
-        $this->runAfter(OrderService::STALE_PROCESSING_MINUTES - 1);
+        $this->runAfter(OrderService::STALE_PAID_MINUTES - 1);
         self::assertSame([OrderStatus::Paid, OrderStatus::Paid], [$purchase->refresh()->status, $topUp->refresh()->status], 'its delivery may still be on its way');
         self::assertSame([], $this->telegram()->calls());
 
-        $this->runAfter(OrderService::STALE_PROCESSING_MINUTES);
+        $this->runAfter(OrderService::STALE_PAID_MINUTES);
         self::assertSame([OrderStatus::Fulfilled, OrderStatus::Fulfilled], [$purchase->refresh()->status, $topUp->refresh()->status]);
         self::assertCount(1, FakeProvider::$created, 'the client was made on the panel');
         self::assertSame('20000.00', $this->customer->balance(), 'the wallet charged');
@@ -79,7 +84,7 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
         self::assertSame(self::RECEIPT_MESSAGE, $this->telegram()->replyTarget(0), 'as a reply to the receipt');
 
         $this->telegram()->reset();
-        $this->runAfter(OrderService::STALE_PROCESSING_MINUTES * 3);
+        $this->runAfter(OrderService::STALE_PAID_MINUTES * 3);
         self::assertSame([], $this->telegram()->calls(), 'delivered once');
         self::assertCount(1, FakeProvider::$created);
     }
@@ -97,6 +102,64 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
         self::assertCount(1, FakeProvider::$created);
     }
 
+    public function testADeliveryAtWorkOnTheSlowestPanelShowsItIsAliveSoItIsNeverTakenOver(): void
+    {
+        $this->server->forceFill(['meta' => ['timeout' => PanelConnection::MAX_TIMEOUT] + (array) $this->server->meta])->save();
+        self::assertGreaterThanOrEqual(ProvisioningService::holdSeconds($this->server), OrderService::STALE_PROCESSING_MINUTES * 60, 'as long as one call to that panel may take');
+        $purchase = $this->paidOrder($this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Paid]));
+        $service = $this->mirrored($this->subscription($this->customer, $this->plan, $this->server, 'ali_renewed'));
+        $renewal = $this->paidOrder(Order::query()->create(['user_id' => $this->customer->id, 'type' => OrderType::Renewal, 'status' => OrderStatus::Paid, 'plan_id' => $this->plan->id, 'subscription_id' => $service->id, 'amount' => $this->plan->price]));
+        $feed = $this->service(ChangeFeed::class);
+
+        foreach ([$purchase, $renewal] as $order) {
+            $seen = [];
+            // Each call takes nearly the whole window, so the delivery as a whole outlasts it.
+            FakeProvider::$onCall = static function () use ($order, $feed, &$seen): void {
+                Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PROCESSING_MINUTES - 1));
+                $seen[] = [Order::stale()->whereKey($order->id)->exists(), $feed->versions()['orders'] ?? 0];
+            };
+            self::assertTrue($this->service(OrderService::class)->deliver($order));
+
+            self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status, "{$order->type->value}: delivered by the process that began it");
+            self::assertGreaterThanOrEqual(2, count($seen), 'several calls in a row');
+            self::assertSame([false], array_values(array_unique(array_column($seen, 0))), 'never stale while its calls go on: no second process takes it over');
+            self::assertCount(1, array_unique(array_column($seen, 1)), 'showing it is alive is no news for the panels');
+        }
+        self::assertCount(1, FakeProvider::$created);
+
+        $paid = $this->paidOrder($this->topUpOrder($this->customer, '20000.00', ['status' => OrderStatus::Paid]));
+        Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PAID_MINUTES));
+        self::assertTrue(OrderService::isStale($paid), 'one nobody began delivering waits no longer than before');
+    }
+
+    public function testADeliveryThatWentQuietPastTheWindowStopsOnceAnotherTookItOver(): void
+    {
+        // This process stalls past the window at its first call, and the order is claimed again meanwhile: by a process
+        // still at work on it, then by one that delivers it there and then (the task's resume).
+        foreach (['at work' => false, 'delivered' => true] as $case => $delivers) {
+            $order = $this->paidOrder($this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Paid]));
+            $stalled = false;
+            FakeProvider::$onCall = function () use ($order, $delivers, &$stalled): void {
+                if ($stalled) {
+                    return;
+                }
+                $stalled = true;
+                Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PROCESSING_MINUTES));
+                $other = Order::query()->with(OrderService::DELIVERY_RELATIONS)->findOrFail($order->id);
+                self::assertTrue($delivers
+                    ? $this->service(OrderService::class)->resume($other)
+                    : Transitions::reclaim($other, 'status', OrderStatus::Processing, OrderService::STALE_PROCESSING_MINUTES * 60));
+            };
+            $created = count(FakeProvider::$created);
+
+            self::assertFalse($this->service(OrderService::class)->deliver($order), "{$case}: another process has it");
+
+            self::assertSame($delivers ? OrderStatus::Fulfilled : OrderStatus::Processing, $order->refresh()->status, "{$case}: the other's to fulfil or fail, never failed by this one");
+            self::assertCount($created + ($delivers ? 1 : 0), FakeProvider::$created, "{$case}: this one stopped before its own client");
+        }
+        self::assertSame(1, Subscription::query()->count());
+    }
+
     public function testAFailedDeliveryWaitsForSupport(): void
     {
         $order = $this->paidOrder($this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Failed, 'notes' => 'پنل جواب نداد.']));
@@ -111,7 +174,7 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
     public function testAnOrderThatFailedAfterItWasReadIsNotTakenUp(): void
     {
         $read = $this->paidOrder($this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Paid]));
-        Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PROCESSING_MINUTES));
+        Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PAID_MINUTES));
         // Read as paid and stale; another process (support's retry) took it and failed it before this one claimed it.
         Order::query()->whereKey($read->id)->update(['status' => OrderStatus::Failed->value]);
 
@@ -125,13 +188,13 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
         $order = $this->paidOrder($this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Paid]));
         $this->server->forceFill(['is_active' => false])->save();
 
-        $this->runAfter(OrderService::STALE_PROCESSING_MINUTES);
+        $this->runAfter(OrderService::STALE_PAID_MINUTES);
         self::assertSame(OrderStatus::Failed, $order->refresh()->status);
         self::assertNotNull($order->notes, 'support reads why');
         self::assertSame([], $this->telegram()->sentTo(self::TELEGRAM_ID), 'told only when it worked');
 
         $this->server->forceFill(['is_active' => true])->save();
-        $this->runAfter(OrderService::STALE_PROCESSING_MINUTES * 3);
+        $this->runAfter(OrderService::STALE_PAID_MINUTES * 3);
         self::assertSame(OrderStatus::Failed, $order->refresh()->status, 'a failure is never taken up again');
     }
 
@@ -142,7 +205,7 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
         $topUp = $this->paidOrder($this->topUpOrder($this->customer, '20000.00', ['status' => OrderStatus::Paid]));
         $logs = $this->logs();
 
-        $this->runAfter(OrderService::STALE_PROCESSING_MINUTES);
+        $this->runAfter(OrderService::STALE_PAID_MINUTES);
 
         self::assertSame([OrderStatus::Failed, OrderService::DELIVERY_BROKEN], [$broken->refresh()->status, $broken->notes]);
         self::assertTrue($logs->hasErrorThatContains('Resuming the delivery of order'), 'the fault is the log\'s');
@@ -152,7 +215,7 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
     public function testTheRunStopsAtItsShareOfTime(): void
     {
         $order = $this->paidOrder($this->topUpOrder($this->customer, '20000.00', ['status' => OrderStatus::Paid]));
-        Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PROCESSING_MINUTES));
+        Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PAID_MINUTES));
         $budget = $this->service(Budget::class);
 
         $budget->turn(0.0);
@@ -169,7 +232,7 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
     {
         $bot = $this->agentBot();
         $order = CurrentBot::run($bot, fn(): Order => $this->paidOrder($this->topUpOrder($this->customer(['telegram_id' => 31]), '20000.00', ['status' => OrderStatus::Paid]), $this->cardMethod()));
-        Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PROCESSING_MINUTES));
+        Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PAID_MINUTES));
 
         $this->service(ResumeDeliveriesTask::class)->run();
         self::assertSame(OrderStatus::Paid, $order->refresh()->status, "the main bot's run is the main bot's shop");

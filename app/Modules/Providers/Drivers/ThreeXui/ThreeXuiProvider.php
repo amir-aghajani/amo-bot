@@ -18,6 +18,7 @@ use App\Modules\Providers\DTO\InboundInfo;
 use App\Modules\Providers\DTO\PanelStatus;
 use App\Modules\Providers\Enums\CoreState;
 use App\Modules\Providers\Exceptions\NotFoundException;
+use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Support\PanelConnection;
 use App\Modules\Providers\Support\Raw;
 use Ramsey\Uuid\Uuid;
@@ -102,6 +103,7 @@ final class ThreeXuiProvider implements ProviderInterface
         // The subscription id is left blank: the panel mints one, and the read-back learns it.
         $payload = new ClientPayload(
             email: $spec->name,
+            enable: $spec->enabled,
             totalBytes: $spec->totalBytes,
             expiryTime: ExpiryTime::of($spec->expiry),
             limitIp: $spec->ipLimit,
@@ -110,11 +112,7 @@ final class ThreeXuiProvider implements ProviderInterface
         );
         $this->api->addClient($payload, array_values(array_unique(array_map(intval(...), $inboundKeys))));
 
-        // A client the panel took but cannot show is answered as sent, without a link (only the panel knows the one it
-        // minted), so the caller does not sell it and takes it back.
-        $record = $this->api->client($spec->name) ?? ClientRecord::fromArray($payload->toArray() + ['traffic' => ['up' => 0, 'down' => 0]]);
-
-        return $this->clientOf($record, null);
+        return $this->readBack($spec->name, $payload);
     }
 
     public function updateClient(ClientSpec $spec): ClientInfo
@@ -210,10 +208,21 @@ final class ThreeXuiProvider implements ProviderInterface
         $this->api->resetClientTraffic($name);
     }
 
-    /** The client a write left, as the panel stored it (its secrets, subscription id and counters). */
-    private function readBack(string $name): ClientInfo
+    /**
+     * The client a write left, as the panel stored it (its secrets, subscription id and counters). A new client the panel
+     * took but cannot show is answered as `$added` was sent, without a link (only the panel knows the one it minted), so
+     * the caller does not sell it and takes it back. The write was done: a failure of this read is one after it
+     * (ProviderException::afterWrite()).
+     */
+    private function readBack(string $name, ?ClientPayload $added = null): ClientInfo
     {
-        return $this->clientOf($this->existing($name), null);
+        try {
+            $record = $added === null ? $this->existing($name) : ($this->api->client($name) ?? ClientRecord::fromArray($added->toArray() + ['traffic' => ['up' => 0, 'down' => 0]]));
+
+            return $this->clientOf($record, null);
+        } catch (ProviderException $e) {
+            throw $e->afterWrite();
+        }
     }
 
     /** @throws NotFoundException */

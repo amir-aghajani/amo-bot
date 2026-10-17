@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { ErrorState } from '@/components/error-state'
 import { FormActions } from '@/components/form-footer'
 import { Modal } from '@/components/modal'
+import { useReadFailure } from '@/components/page'
 import { TextLink } from '@/components/text-link'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -51,13 +52,14 @@ function GroupsForm({ user, invalidates, onCancel, onSaved }: { user: UserRow; i
   })
 
   const { data } = groups
+  const failure = useReadFailure(groups)
   // Nothing to choose — no group yet, or none read —: nothing to save.
   const choosable = data !== undefined && data.groups.length > 0
 
   return (
     <form onSubmit={save} noValidate className="grid gap-4">
-      {groups.error ? (
-        <ErrorState what="گروه‌ها" error={groups.error} onRetry={() => void groups.refetch()} retrying={groups.isFetching} />
+      {failure.error && !data ? (
+        <ErrorState what="گروه‌ها" error={failure.error} onRetry={() => void groups.refetch()} retrying={failure.retrying} />
       ) : !data ? (
         <Skeleton className="h-24 w-full" />
       ) : data.groups.length === 0 ? (

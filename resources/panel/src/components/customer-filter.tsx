@@ -24,7 +24,7 @@ export function customerList(path: string, id: number, param: 'user' | 'referrer
 }
 
 /** A customer's id as a list's address carries it, when it is one (anything else narrows nothing, at the API too). */
-function customerId(value: string): number | null {
+export function customerId(value: string): number | null {
   const id = Number(value)
   return value !== '' && Number.isSafeInteger(id) && id > 0 ? id : null
 }

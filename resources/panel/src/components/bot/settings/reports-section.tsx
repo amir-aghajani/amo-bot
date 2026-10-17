@@ -2,6 +2,7 @@ import { ReportGroupCard } from '@/components/bot/report-group-card'
 import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
 import { useReportGroup } from '@/components/bot/use-report-group'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { SectionCard } from '@/components/section-card'
 import { SwitchRow } from '@/components/switch-row'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -27,7 +28,9 @@ function switchesOf(settings: BotSettingsData): BotReportsSettingsRequest {
 
 /** Which subjects the report group gets: a switch per topic. A topic switched off gets nothing but stays in the group. */
 function TopicsCard({ settings }: { settings: BotSettingsData }) {
-  const { data: group, error: failure, refetch } = useReportGroup()
+  const read = useReportGroup()
+  const { data: group, refetch } = read
+  const failure = useReadFailure(read)
   // The group card shows which topics are on.
   const form = useBotSettingsGroup(switchesOf(settings), (values) => api.put('/bot/settings/reports', values), { invalidates: [queryKeys.reportGroup] })
   const { values, set, error } = form
@@ -41,8 +44,8 @@ function TopicsCard({ settings }: { settings: BotSettingsData }) {
 
           return checked === undefined ? null : <SwitchRow key={topic.key} label={topic.title} hint={topic.about} checked={checked} onCheckedChange={(on) => set(field, on)} error={error(field)} />
         })
-      ) : failure ? (
-        <ErrorState what="بخش‌های گزارش" error={failure} onRetry={() => void refetch()} />
+      ) : failure.error ? (
+        <ErrorState what="بخش‌های گزارش" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />
       ) : (
         <Skeleton className="h-64 w-full" />
       )}

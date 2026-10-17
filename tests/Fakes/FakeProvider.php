@@ -57,6 +57,15 @@ final class FakeProvider implements ProviderInterface
     /** @var array<int, array<string, ConnectionFailure>> Per server, the calls whose connection fails, and how */
     public static array $failing = [];
 
+    /** @var array<int, list<string>> Per server, the calls its panel carries out though their answer never comes (a timeout once sent) */
+    public static array $unanswered = [];
+
+    /**
+     * @var array<int, list<string>> Per server, the writes its panel carries out whose read of the client after them is
+     *                               refused: a failure after the write, as a connector marks one (ProviderException::afterWrite())
+     */
+    public static array $unread = [];
+
     /** @var array<int, array<string, ClientInfo>> The clients on each panel: server id → name → client */
     public static array $clients = [];
 
@@ -117,6 +126,8 @@ final class FakeProvider implements ProviderInterface
         self::$down = [];
         self::$refusing = [];
         self::$failing = [];
+        self::$unanswered = [];
+        self::$unread = [];
         self::$clients = [];
         self::$credentials = [];
         self::$online = [];
@@ -201,7 +212,8 @@ final class FakeProvider implements ProviderInterface
 
     /**
      * Like a real panel: a name its rule (Capabilities::$names) does not allow is refused, and so is one a client there
-     * has already (3x-ui's "Duplicate email", PasarGuard's 409); the IP limit kept where it holds one.
+     * has already (3x-ui's "Duplicate email", PasarGuard's 409); made switched on or off as the spec says, the IP limit
+     * kept where it holds one.
      */
     public function createClient(array $inboundKeys, ClientSpec $spec): ClientInfo
     {
@@ -219,14 +231,17 @@ final class FakeProvider implements ProviderInterface
             self::$subIds[$this->server->id][$spec->name] = 'sub-' . count(self::$created);
         }
 
-        return self::$clients[$this->server->id][$spec->name] = new ClientInfo(
+        $made = self::$clients[$this->server->id][$spec->name] = new ClientInfo(
             name: $spec->name,
-            enabled: true,
+            enabled: $spec->enabled,
             totalBytes: $spec->totalBytes,
             expiry: self::kept($spec->expiry),
             subscriptionUrl: $this->linkOf($spec->name),
             ipLimit: self::ipLimitOf($spec),
         );
+        $this->unread(__FUNCTION__);
+
+        return $made;
     }
 
     public function updateClient(ClientSpec $spec): ClientInfo
@@ -234,8 +249,11 @@ final class FakeProvider implements ProviderInterface
         $this->answer(__FUNCTION__);
         $client = $this->existing($spec->name);
         self::$updated[] = $spec;
+        $updated = self::$clients[$this->server->id][$spec->name] = self::changed($client, ['enabled' => $spec->enabled, 'totalBytes' => $spec->totalBytes, 'expiry' => self::kept($spec->expiry), 'ipLimit' => self::ipLimitOf($spec)]);
+        $this->unanswered(__FUNCTION__);
+        $this->unread(__FUNCTION__);
 
-        return self::$clients[$this->server->id][$spec->name] = self::changed($client, ['enabled' => $spec->enabled, 'totalBytes' => $spec->totalBytes, 'expiry' => self::kept($spec->expiry), 'ipLimit' => self::ipLimitOf($spec)]);
+        return $updated;
     }
 
     public function rotateClientCredentials(string $name): ClientInfo
@@ -350,6 +368,22 @@ final class FakeProvider implements ProviderInterface
         $subId = self::$subIds[$this->server->id][$name] ?? null;
 
         return self::$subscriptionBase === null || $subId === null ? null : self::$subscriptionBase . $subId;
+    }
+
+    /** A call the panel carried out whose answer never comes (`$unanswered`): the connection timed out once it was sent. */
+    private function unanswered(string $call): void
+    {
+        if (in_array($call, self::$unanswered[$this->server->id] ?? [], true)) {
+            throw new ConnectionException(ConnectionFailure::Timeout, 'Operation timed out after the request was sent');
+        }
+    }
+
+    /** A write the panel carried out whose read of the client after it is refused (`$unread`): a failure after the write. */
+    private function unread(string $call): void
+    {
+        if (in_array($call, self::$unread[$this->server->id] ?? [], true)) {
+            throw (new PanelApiException("The fake panel refused the read after {$call}.", 200, 'refused by the test'))->afterWrite();
+        }
     }
 
     /** What every call meets first: a panel that cannot be reached, a call whose connection fails, or one the panel refuses. */

@@ -19,7 +19,7 @@ use Psr\Log\LoggerInterface;
  * Fake-referral alerts («هشدار زیرمجموعه‌گیری فیک»), checked as each referral joins:
  * - burst: the join is exactly the N-th through the link within the window (counting referral ids up to it, so of two
  *   joining at once only one is the N-th);
- * - idle: the join brings the referrals to a multiple of N while none of them ever bought anything with a price.
+ * - idle: the join brings the referrals to a multiple of N while none of them bought anything with a price and kept it.
  * Each reason is raised at most once per window, and reported to the group in the same transaction. While an alert
  * stands, the referrer gets no start gift or plan reward (commissions still count: that money came in). Clearing an
  * alert deletes it: no history is kept.
@@ -111,9 +111,12 @@ final class ReferralAlerts
         $this->logger->warning('Referral alert on user {referrer}: {reason}, {count}', ['referrer' => $referrer->id, 'reason' => $reason->value, 'count' => $count]);
     }
 
-    /** Whether any of the referrer's referrals ever bought something with a price (a free plan is no purchase here). */
+    /**
+     * Whether any of the referrer's referrals bought something with a price and kept it (Order::keptPurchases(): a free
+     * plan is no purchase here, nor one refunded since).
+     */
     private static function anyBought(User $referrer): bool
     {
-        return Order::paidPurchases()->whereIn('user_id', $referrer->referrals()->select('id'))->exists();
+        return Order::keptPurchases()->whereIn('user_id', $referrer->referrals()->select('id'))->exists();
     }
 }

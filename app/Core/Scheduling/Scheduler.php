@@ -113,11 +113,15 @@ final class Scheduler
                 continue;
             }
 
+            // A shop's task ran once it went through in a shop; one that failed in every shop did not.
+            $wentThrough = false;
             foreach ($shops as $shop) {
                 $this->budget->turn(($deadline - microtime(true)) / max(1, $turns--));
-                $this->attempt($name, $shop, fn() => $this->shops->in($shop, static fn() => $task->run()));
+                $wentThrough = $this->attempt($name, $shop, fn() => $this->shops->in($shop, static fn() => $task->run())) || $wentThrough;
             }
-            $ran[] = $name;
+            if ($wentThrough) {
+                $ran[] = $name;
+            }
         }
 
         $state[self::LAST_RUN_KEY] = time();

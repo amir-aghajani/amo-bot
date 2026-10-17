@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { userLabel } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { UserRow } from '@/lib/api-types'
-import { formatNumber, wholeOf } from '@/lib/format'
+import { formatPercent, wholeNumberOf } from '@/lib/format'
 import { useForm } from '@/lib/use-form'
 
 interface DiscountCardProps {
@@ -45,7 +45,7 @@ export function DiscountCard({ customer, invalidates, onSaved }: DiscountCardPro
         <p className="text-body text-muted-foreground">
           {percent > 0 ? (
             <>
-              <span className="font-medium text-foreground tabular">{formatNumber(percent)}٪</span> روی هر خرید، تمدید و حجم، زمان و کاربر اضافه — اگر فروش ویژه یا سطح وفاداری‌اش بیشتر باشد، همان
+              <span className="font-medium text-foreground tabular">{formatPercent(percent)}</span> روی هر خرید، تمدید و حجم، زمان و کاربر اضافه — اگر فروش ویژه یا سطح وفاداری‌اش بیشتر باشد، همان
               بیشتر.
             </>
           ) : (
@@ -73,7 +73,7 @@ export function DiscountCard({ customer, invalidates, onSaved }: DiscountCardPro
 
 function DiscountForm({ customer, invalidates, onCancel, onSaved }: DiscountCardProps & { onCancel: () => void }) {
   const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm({ percent: String(customer.discount_percent) })
-  const percent = wholeOf(values.percent)
+  const percent = wholeNumberOf(values.percent)
 
   const save = handleSubmit(async () => {
     const result = await submit(() => api.put(`/users/${customer.id}/discount`, values), { invalidates })
@@ -89,7 +89,7 @@ function DiscountForm({ customer, invalidates, onCancel, onSaved }: DiscountCard
         id="customer_discount"
         label="درصد تخفیف"
         error={error('percent')}
-        hint={percent !== null && Number(percent) > 0 ? `${formatNumber(Number(percent))}٪ از هر خریدش کم می‌شود، تا وقتی برش دارید.` : '0 یعنی بدون تخفیف اختصاصی؛ بین 0 تا 100.'}
+        hint={percent !== null && percent > 0 ? `${formatPercent(percent)} از هر خریدش کم می‌شود، تا وقتی برش دارید.` : '0 یعنی بدون تخفیف اختصاصی؛ بین 0 تا 100.'}
       >
         <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values.percent} onChange={(e) => set('percent', e.target.value)} className="sm:max-w-28" autoFocus />
       </Field>

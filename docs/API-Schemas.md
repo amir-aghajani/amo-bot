@@ -32,7 +32,7 @@ The session's sign-in is too old to change how the account signs in, or to hand 
 
 ### Response: StaffRefused
 
-The website's admin API refused the request. The reasons: the customer is not an admin of the shop («این بخش فقط برای پشتیبانی فروشگاه است.»); the website lets no admins in; the session was signed in with a password alone while the website asks for a strong sign-in (`WWW-Authenticate` names the strong ways, and `POST /me/reauthenticate` can prove one); the session's sign-in is older than 12 hours (any operation; SignInAgain's challenge); the website has not granted the operation; a granted operation, or a payment approval, with a sign-in older than 15 minutes (SignInAgain's challenge); a decision about the admin themselves (their own payment approved or refunded, their own wallet, their own service changed: days and traffic, switched off or on, moved, deleted); another admin's or an agent's account; a payment approved without a receipt in review; or a banned customer.
+The website's admin API refused the request. The reasons: the customer is not an admin of the shop («این بخش فقط برای پشتیبانی فروشگاه است.»); the website lets no admins in; the session was signed in with a password alone while the website asks for a strong sign-in (`WWW-Authenticate` names the strong ways, and `POST /me/reauthenticate` can prove one); the session's sign-in is older than 12 hours (any operation; SignInAgain's challenge); the website has not granted the operation; a granted operation, or a payment approval, with a sign-in older than 15 minutes (SignInAgain's challenge); a decision about the admin themselves (their own payment approved or refunded, their own wallet, an order made by hand for them, their own service changed: days and traffic, switched off or on, moved, handed on, deleted; their own review moderated; an alert on their own referrals cleared); an admin's account, their own included, or an agent's (banned, put in a customer group, its two-factor sign-in turned off, its sessions ended); «همکار» switched on for a customer group an admin is in; a payment approved without a receipt in review; or a banned customer.
 
 - Header `WWW-Authenticate`: `Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa"` (RFC 9470) for a sign-in that is too weak; `Bearer error="insufficient_user_authentication", max_age=900` for one that is too old; absent otherwise.
 - Body: [ErrorResponse](#errorresponse).
@@ -45,9 +45,9 @@ Done; no body
 
 ### Response: Picture
 
-A picture's bytes
+A picture's bytes: a JPEG, PNG or WebP
 
-- Body: the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`.
+- Body: the bytes, as `image/jpeg`, `image/png`, `image/webp`.
 
 ### Response: Receipt
 
@@ -58,6 +58,12 @@ A receipt's bytes: inline for a picture the panel can show, otherwise a download
 ### Response: TicketPicture
 
 A ticket message's picture: inline for a picture type, otherwise a download (attachment)
+
+- Body: the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/octet-stream`.
+
+### Response: EmojiPicture
+
+A premium emoji's still picture, as Telegram has it: inline for a picture type; any other file type Telegram returns is a download, never rendered
 
 - Body: the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/octet-stream`.
 
@@ -172,7 +178,7 @@ A broadcast run («ارسال همگانی»): a message a bot admin sent with /
 | `pin` | boolean | yes | Each message is pinned in its chat. |
 | `pinned` | integer | yes | Chats where its message is still pinned (what unpin, «لغو پین», would remove). |
 | `buttons` | list of list of [BroadcastButton](#broadcastbutton) | yes | The link buttons under a copied message, as rows in reading order. |
-| `content` | string or null | yes | The message type: text, photo, video, animation, document, audio, voice, video_note, sticker, poll, other. |
+| `content` | string or null | yes | The message type, as Telegram names it: text, photo, video, animation, document, audio, voice, video_note, sticker, live_photo, paid_media, poll, location or contact; null for any other, and for an unpin run. |
 | `excerpt` | string or null | yes | Its text or caption, shortened. |
 | `status` | [BroadcastStatus](#broadcaststatus) | yes |  |
 | `total` | integer | yes | Recipients when it started; sent + blocked + failed is the progress. |
@@ -181,6 +187,7 @@ A broadcast run («ارسال همگانی»): a message a bot admin sent with /
 | `failed` | integer | yes |  |
 | `admin` | [UserRef](#userref) or null | yes | The bot admin who sent it; null for a run started from the panel. |
 | `reviewer` | string or null | yes | Who started it from a panel or the website: the agent's @bot, a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt;, or the owner's login (which anyone but the owner sees as «پشتیبانی»). |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `created_at` | string (date-time) | yes |  |
 | `finished_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes |  |
@@ -208,23 +215,23 @@ String: `primary`, `success`, `danger`.
 
 ### ChangesResponse
 
-Each area's version number from the change feed. An area nothing was written to yet is absent.
+Each area's version number from the change feed. The owner's panel counts every shop's writes. An agent's panel and the website's admins count their own shop's writes and those made for every shop; the installation's areas (`servers`, `grants`, `migrations`) have one number for all, and `agency` counts the main shop's writes too, since the owner decides about an agent's shop there. An area nothing was written to yet is absent.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `versions` | object | yes |  |
-| `versions.users` | integer | no | Customers, their wallets and their groups. |
-| `versions.servers` | integer | no | The servers and their inbounds. |
-| `versions.grants` | integer | no | Grants and their per-server parts. A running grant's cursor moves every second. |
-| `versions.migrations` | integer | no | Moves of a server's services to another server, their failures, and the old clients rescues left behind. One under way moves its cursor every second. |
-| `versions.plans` | integer | no | The plans, their categories and their server entries. |
-| `versions.payment_methods` | integer | no |  |
+| `versions.users` | integer | no | Customers, their wallets, their groups and the accounts merged into them. |
+| `versions.servers` | integer | no | The servers and their inbounds. The installation's: one number, whichever shop asks. |
+| `versions.grants` | integer | no | Grants and their per-server parts. A running grant's cursor moves every second. The installation's: one number, whichever shop asks. |
+| `versions.migrations` | integer | no | Moves of a server's services to another server, their failures, and the old clients rescues left behind. One under way moves its cursor every second. The installation's: one number, whichever shop asks. |
+| `versions.plans` | integer | no | The plans, their categories and their server entries, and the servers the owner keeps from an agent's shop. |
+| `versions.payment_methods` | integer | no | The payment methods and their cards. |
 | `versions.orders` | integer | no |  |
 | `versions.payments` | integer | no |  |
 | `versions.subscriptions` | integer | no |  |
 | `versions.tests` | integer | no | The free test accounts given. |
 | `versions.referrals` | integer | no | Referral commissions, bonuses, rewards and alerts. |
-| `versions.agency` | integer | no | The agency's levels and requests, the agents' bots and their traffic. |
+| `versions.agency` | integer | no | The agency's levels and requests, the agents' bots and their traffic. An agent's shop counts the main shop's writes here too: the owner's decisions about it are made there. |
 | `versions.channels` | integer | no | The channels a customer must join. |
 | `versions.broadcasts` | integer | no | The broadcasts and their pins. |
 | `versions.reports` | integer | no | The report group, its topics and its queue. |
@@ -259,15 +266,6 @@ The customer's website account, as support sees it: how they sign in, whether pa
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `account` | [CustomerAccount](#customeraccount) | yes |  |
-
-### CustomerGroupRef
-
-A customer group, as a customer's row lists it.
-
-| Field | Type | Required | What it is |
-|---|---|---|---|
-| `id` | integer | yes |  |
-| `name` | string | yes |  |
 
 ### CustomerGroupResponse
 
@@ -338,13 +336,14 @@ A customer's referral details: who referred them, how many customers they referr
 | `kpis.active_subscriptions` | integer | yes | Active services, free test accounts aside. |
 | `kpis.users_total` | integer | yes |  |
 | `series` | list of [SeriesPoint](#seriespoint) | yes |  |
-| `attention` | object | yes |  |
+| `attention` | object | yes | What waits on support — the queues, `held_payments` and `servers_with_errors` —, then what waits on customers: `pending_orders` and `expiring_soon`. |
 | `attention.payments_to_review` | integer | yes | Receipts waiting for review. |
 | `attention.stuck_orders` | integer | yes | Paid orders not delivered because the delivery failed or stalled (the orders list's `stuck` tab). |
 | `attention.open_tickets` | integer | yes | Support tickets waiting for an answer (the tickets list's `open` tab). |
 | `attention.pending_reviews` | integer | yes | Reviews waiting for approval (the reviews list's `pending` tab). |
-| `attention.pending_orders` | integer | yes |  |
+| `attention.held_payments` | integer | yes | Online payments held for support and still waiting (the payments list's `held` tab). |
 | `attention.servers_with_errors` | integer | yes | Servers whose panel failed its last check. Always 0 in an agent's shop. |
+| `attention.pending_orders` | integer | yes | Orders waiting for the customer to pay. |
 | `attention.expiring_soon` | integer | yes | Active services ending within `expiring_days`, free test accounts aside. |
 | `traffic_shortage` | [TrafficShortage](#trafficshortage) or null | yes | Set when an agent's shop has too little traffic to sell anything; null otherwise, and always null in the main shop. |
 | `agency_standing` | [AgencyStanding](#agencystanding) or null | yes | An agent's shop's terms of selling with the main shop (its end, its monthly minimum, a suspension), for the owner's panel and the agent's; always null in the main shop, and for the shop's admins on its website (`/admin/dashboard`). |
@@ -530,7 +529,7 @@ String: `free`, `wallet`, `outside`.
 
 ### NamedRef
 
-A reference by id and name (a plan, a server).
+A reference by id and name: a plan, a server, a customer group, or a service by its client's name on its panel.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -568,6 +567,7 @@ An order support made by hand for its customer.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `by` | string or null | yes | Who made it: the panel login, or an admin's @username / tg:&lt;id&gt; (the owner's login reads «پشتیبانی» to anyone but the owner). |
+| `by_name` | string or null | yes | The name of the bot admin `by` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, and a handle no admin of the shop has now. |
 | `payment` | [ManualPayment](#manualpayment) | yes |  |
 | `note` | string or null | yes | Support's note on it; null for none. |
 
@@ -584,11 +584,11 @@ String or null.
 | `id` | integer | yes |  |
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
-| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made). |
+| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", "plisio", "aqayepardakht", "variza", or "outside": money support took outside the shop for an order it made). |
 | `method` | string | yes | The payment method's label. A method with payments is never deleted. |
 | `paid_at` | string (date-time) or null | yes |  |
 | `to_wallet` | boolean | yes | Paid on its online gateway after the order had closed: its money went to the customer's wallet, and it paid nothing of the order (`PaymentRow.to_wallet`). |
-| `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit, or kept it unsettled (`PaymentRow.held`). |
+| `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit, kept it unsettled, or closed it after saying money had come in (`PaymentRow.held`). |
 | `created_at` | string (date-time) | yes |  |
 
 ### OrderPricing
@@ -618,10 +618,10 @@ An order, as a row of the orders screen: what the customer asked for, and how fa
 | `discounts` | list of [DiscountLine](#discountline) | yes | The discounts applied, the automatic one first. |
 | `discount_code` | [OrderDiscountCode](#orderdiscountcode) or null | yes | The discount code used; it counts as one of the code's uses unless the order is cancelled. Null for none. |
 | `user` | [UserRef](#userref) | yes |  |
-| `plan` | [NamedRef](#namedref) or null | yes | The plan of a purchase or renewal; for extras, the service's plan. |
+| `plan` | [NamedRef](#namedref) or null | yes | The plan of a purchase or renewal; for extras, the service's plan. Null for a top-up, an agent's traffic, a service the customer built and an extra of a service without a plan. A plan an order names is never deleted (`DELETE /plans/{id}` refuses it). |
 | `package_name` | [OrderPackageName](#orderpackagename) | yes |  |
 | `renewal_method` | [RenewalMethod](#renewalmethod) or null | yes | How a renewal adds its package (a renewal from before renewal methods, `extend`); null for any other order. |
-| `server` | [NamedRef](#namedref) or null | yes | The server the customer chose; for a renewal or extras, the service's server. |
+| `server` | [NamedRef](#namedref) or null | yes | The server the customer chose; for a renewal or extras, the service's server. Null for a top-up or an agent's traffic, and for a renewal or an extra once its service is deleted. |
 | `subscription` | object or null | yes | The service it bought, renewed or extended; null for a top-up, or once the service was deleted. |
 | `subscription.id` | integer | yes |  |
 | `subscription.name` | string | yes |  |
@@ -679,7 +679,7 @@ String: `purchase`, `renewal`, `extra_traffic`, `extra_time`, `extra_devices`.
 
 ### PageMeta
 
-A paged list's position. A sorted list's meta also has its order (`sort`, `dir`).
+A paged list's position: its page, the rows a page holds (25), how many rows there are, and its last page (1 for an empty list). A sorted list's meta also has its order (`sort`, `dir`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -710,12 +710,12 @@ A payment, as a row of the payments screen.
 | `id` | integer | yes |  |
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
-| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made). |
+| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", "plisio", "aqayepardakht", "variza", or "outside": money support took outside the shop for an order it made). |
 | `gateway_label` | string or null | yes | The driver's name («کارت به کارت», «کیف پول», «CubePay»); null when the driver is no longer installed. |
 | `kind` | [GatewayKind](#gatewaykind) or null | yes | How the driver settles; null when the driver is no longer installed. |
 | `method` | string | yes | The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. |
-| `summary` | string or null | yes | What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line (`PaymentMethodRow.summary`: an online gateway's fee passed on to customers, or its test mode); null when its method has none (the wallet, an online method with neither). |
-| `reference` | string or null | yes | The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id. Null when it has none (a card transfer, an online payment its gateway would not open). |
+| `summary` | string or null | yes | What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line as it reads now (`PaymentMethodRow.summary`: a fee passed on to customers, a test mode, Plisio's dollar rate and coins, Variza's card); null when its method has none (the wallet, an online method with none of these). |
+| `reference` | string or null | yes | The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id; Plisio: its invoice's id (once paid, the paid invoice's, when the customer switched coins); AqayePardakht: its transaction's id; Variza: its payment link's slug. Null when it has none (a card transfer, an online payment its gateway would not open). |
 | `description` | string or null | yes | The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, an online gateway's page closed unpaid — «مهلت پرداخت در درگاه تمام شد» —, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), a refund's note (also in `refund_note`), or on a payment `to_wallet` that its money went to the wallet. |
 | `user` | [UserRef](#userref) | yes |  |
 | `order` | object | yes |  |
@@ -723,8 +723,8 @@ A payment, as a row of the payments screen.
 | `order.type` | [OrderType](#ordertype) | yes |  |
 | `order.status` | [OrderStatus](#orderstatus) | yes |  |
 | `order.plan` | string or null | yes | What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order. |
-| `order.server` | string or null | yes |  |
-| `order.subscription_id` | integer or null | yes |  |
+| `order.server` | string or null | yes | The server the order is on, by its name: the one a purchase was bought on; for a renewal or an extra, its service's server, as the orders screen shows it (`OrderRow.server`). Null for a top-up or an agent's traffic, and for a renewal or an extra once its service is deleted. |
+| `order.subscription_id` | integer or null | yes | The service it bought, renewed or extended; null for none, or once the service is deleted. |
 | `order.traffic_bytes` | integer or null | yes | The traffic it adds, in bytes: an agent's traffic, a service's extra traffic, or a built service's traffic; null otherwise. |
 | `order.days` | integer or null | yes | The days it adds to a service (extra time), or a built service's term; null otherwise. |
 | `order.devices` | integer or null | yes | The devices it adds to a service's IP limit (extra devices), or a built service's limit; null otherwise. |
@@ -738,12 +738,13 @@ A payment, as a row of the payments screen.
 | `receipt.sent_at` | string (date-time) or null | yes |  |
 | `auto_approved` | boolean | yes |  |
 | `reviewer` | string or null | yes | Who decided it by hand: the agent's @bot, a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt; (in the report group or on the website), or the owner's login, which anyone but the owner sees as «پشتیبانی». |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `refund_note` | string or null | yes |  |
 | `paid_at` | string (date-time) or null | yes |  |
 | `link_expires_at` | string (date-time) or null | yes | An online payment's page on its gateway: until when it takes money — the gateway's own end, or the time the shop keeps its page when the gateway gives none. Null for any other payment, and for one its gateway would not open. |
 | `checked_at` | string (date-time) or null | yes | An online payment: when the shop last asked its gateway what came of it — its callback, the customer's question, «استعلام از درگاه» (`POST …/check`), or the scheduler every few minutes while it is open. Null until asked. |
 | `to_wallet` | boolean | yes | Paid after its order had closed (paid another way, cancelled or expired): the online gateway took the money when the order no longer waited for it, so it went to the customer's wallet («پرداخت آنلاین #12 پس از بسته شدن سفارش #7») and `description` says so. It paid nothing of the order: it is neither retried nor refunded here. |
-| `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) — or kept money on it unsettled for two days. `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. |
+| `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) —, kept money on it unsettled for two days after its page closed, or closed it after saying money had come in on it (held at once). `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. |
 | `created_at` | string (date-time) | yes |  |
 | `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.approve` | boolean | yes |  |
@@ -777,6 +778,7 @@ String: `pending`, `awaiting_review`, `paid`, `failed`, `cancelled`, `refunded`.
 | `meta.sort` | [PaymentSort](#paymentsort) | yes |  |
 | `meta.dir` | [SortDirection](#sortdirection) | yes |  |
 | `meta.awaiting_review` | integer | yes | Receipts waiting for review, regardless of the filters. |
+| `meta.held` | integer | yes | Online payments held for support and still waiting (the `held` tab), regardless of the filters. |
 | `meta.paid` | integer | yes | How many of the listed payments (tab, search and dates) are paid. |
 | `meta.paid_amount` | string | yes | Their total, in Toman. |
 
@@ -896,7 +898,7 @@ A plan, as the list shows it.
 | `servers` | list of [PlanServerEntry](#planserverentry) | yes |  |
 | `unsellable_reason` | string or null | yes | Why the bot does not offer the plan now, apart from its switch: it has no server, the owner keeps it from an agent's shop, an agent's selling is suspended, none of its servers can sell (each entry says why — a server the owner keeps from the shop among them), or an agent's traffic does not cover it. Null when it is offered. |
 | `is_active` | boolean | yes |  |
-| `hidden_by_owner` | boolean | yes | An agent's plan the owner keeps from sale («پنهان‌شده توسط مدیر»), whatever its switch: only the owner's agents page (`PUT /agency/agents/{id}/hidden`) changes it; a copy keeps it. Always false in the main shop. |
+| `hidden_by_owner` | boolean | yes | An agent's plan the owner keeps from sale (the agent's panel: «پنهان‌شده توسط پشتیبانی»), whatever its switch: only the owner's agents page (`PUT /agency/agents/{id}/hidden`) changes it; a copy keeps it. Always false in the main shop. |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.active_subscriptions` | integer | yes | Its active services. |
@@ -982,7 +984,7 @@ Integer: `7`, `30`, `90`.
 | `type` | [OrderType](#ordertype) | yes |  |
 | `status` | [OrderStatus](#orderstatus) | yes |  |
 | `amount` | string | yes |  |
-| `plan` | string or null | yes | Its plan's name — a service the customer built in words, «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز» —; null for an order of neither. |
+| `plan` | string or null | yes | What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order. |
 | `user` | [UserRef](#userref) | yes |  |
 | `created_at` | string (date-time) | yes |  |
 
@@ -1156,6 +1158,7 @@ A review written on the website, as the moderation screen lists it.
 | `status` | [ReviewStatus](#reviewstatus) | yes |  |
 | `customer` | [UserRef](#userref) or null | yes | The signed-in customer who wrote it; null for a guest, or when the account is gone. |
 | `reviewer` | string or null | yes | Who last approved or rejected it: a panel user, or a website admin (@username, tg:&lt;id&gt; or user#&lt;id&gt;). Anyone but the owner sees the owner's login as «پشتیبانی». Null while pending. |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `decided_at` | string (date-time) or null | yes | When it was last approved or rejected; null while pending. |
 | `created_at` | string (date-time) | yes |  |
 | `actions` | object | yes | Which decisions its status allows (deleting is always allowed). |
@@ -1203,7 +1206,7 @@ String: `asc`, `desc`.
 
 ### StaffGrant
 
-What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `payments` (reject receipts waiting for review in bulk), `extend` (add days and traffic to a service), `manual_orders` (make an order for a customer by hand, free, from their wallet or paid outside the shop, delivered at once), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
+What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories, and the customer groups: a customer put in a «همکار» group too), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `payments` (reject receipts waiting for review in bulk), `extend` (add days and traffic to a service), `manual_orders` (make an order for a customer by hand, free, from their wallet or paid outside the shop, delivered at once), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
 
 String: `catalog`, `wallet`, `refunds`, `payments`, `extend`, `manual_orders`, `delete`, `account_security`.
 
@@ -1232,7 +1235,7 @@ A service, as a row of the subscriptions screen: a client on a panel, as last re
 | `is_test` | boolean | yes | A free test account («اکانت تست»): no plan, never renewed, never counted as ending soon (`expiring_soon`); removed by the tests' own rule (`removes_at`). |
 | `claimed_at` | string (date-time) or null | yes | When the customer added it by sending its link («افزودن سرویس با لینک», `claim_enabled`): a client made by hand on its panel. Null for any other service. Such a service has no plan until a renewal on one the customer picks, sold on its server (a renewal with a package built leaves it without). |
 | `user` | [UserRef](#userref) | yes |  |
-| `plan` | [NamedRef](#namedref) or null | yes | Null for a service without a plan — a test account, a service added by its link (`claimed_at`) or built by the customer («سرویس دلخواه»), until a renewal on a plan; one renewed with a package built stays so — and once the plan is deleted. |
+| `plan` | [NamedRef](#namedref) or null | yes | Null for a service without a plan — a test account, a service added by its link (`claimed_at`) or built by the customer («سرویس دلخواه»), until a renewal on a plan; one renewed with a package built stays so. A plan a service names is never deleted (`DELETE /plans/{id}` refuses it). |
 | `server` | [NamedRef](#namedref) | yes |  |
 | `traffic` | object | yes | In bytes; a limit of 0 means unlimited. |
 | `traffic.limit` | integer | yes |  |
@@ -1342,6 +1345,7 @@ A ticket message.
 | `id` | integer | yes |  |
 | `author` | [TicketAuthor](#ticketauthor) | yes |  |
 | `reviewer` | string or null | yes | Which support person wrote it: a panel user, or a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt; (in the report group or on the website). Anyone but the owner sees the owner's login as «پشتیبانی». Null for the customer's messages. |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and the customer's messages. |
 | `body` | string | yes |  |
 | `attachment` | [TicketAttachment](#ticketattachment) or null | yes | Its picture; null for none. |
 | `channel` | [TicketChannel](#ticketchannel) | yes |  |
@@ -1453,7 +1457,7 @@ A customer, as a row of the users table. (The panel login is not a customer.)
 | `counts.orders` | integer | yes |  |
 | `counts.subscriptions` | integer | yes |  |
 | `counts.active_subscriptions` | integer | yes |  |
-| `groups` | list of [CustomerGroupRef](#customergroupref) | yes | The customer groups they are in, in the groups' order. |
+| `groups` | list of [NamedRef](#namedref) | yes | The customer groups they are in, in the groups' order. |
 | `created_at` | string (date-time) | yes |  |
 | `last_seen_at` | string (date-time) or null | yes |  |
 
@@ -1507,7 +1511,8 @@ One line of a customer's wallet ledger.
 | `balance_after` | string | yes |  |
 | `description` | string or null | yes |  |
 | `counterpart` | [UserRef](#userref) or null | yes | A wallet transfer's line («انتقال موجودی»): the other customer — whom the money went to (a debit) or came from (a credit). Null for every other line. |
-| `reviewer` | string or null | yes | Who added the line by hand: a panel user or a website admin. Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically. |
+| `reviewer` | string or null | yes | Who added the line by hand: a panel user or a website admin (@username, tg:&lt;id&gt; or user#&lt;id&gt;). Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically. |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `created_at` | string (date-time) | yes |  |
 
 ### WalletTransactionType

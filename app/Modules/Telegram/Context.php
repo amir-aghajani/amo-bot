@@ -176,6 +176,17 @@ final class Context
         $this->api->deleteMessage($this->chatId(), $messageId);
     }
 
+    /**
+     * The album (Telegram's media group) the customer's message came in, if any: Telegram sends an album a picture at a
+     * time, each an update of its own.
+     */
+    public function album(): ?string
+    {
+        $album = $this->update->isCallback() ? null : ($this->update->message() ?? [])['media_group_id'] ?? null;
+
+        return is_scalar($album) ? (string) $album : null;
+    }
+
     /** Whether the sender is a bot admin (role admin): admin-only commands, and exempt from the gates. */
     public function isAdmin(): bool
     {

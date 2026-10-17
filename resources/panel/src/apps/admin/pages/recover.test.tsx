@@ -1,10 +1,12 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
+import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RecoverPage } from '@/apps/admin/pages/recover'
 import type { Session } from '@/lib/api-types'
 import { AuthProvider } from '@/lib/auth'
+import { FAILURE_KINDS } from '@/lib/failure'
 import { ThemeProvider } from '@/lib/theme'
 import { testQueryClient, until } from '@/test/render'
 import { json, refusal, server, withHeaders } from '@/test/server'
@@ -66,6 +68,18 @@ describe('the way back in', () => {
     await until(() => expect(screen.getByRole('status').textContent).toBe('کلید در فایل storage/recovery-key.txt نوشته شد و تا ساعت ۱۲:۳۰ کار می‌کند.'))
     expect(screen.getByText('storage/recovery-key.txt').getAttribute('dir')).toBe('ltr')
     expect(server().sent('POST', '/api/admin/auth/recovery/key')).toHaveLength(1)
+  })
+
+  it('says in place why the key could not be written — not in a toast that is gone before the File Manager is open', async () => {
+    server().on('POST', '/api/admin/auth/recovery/key', refusal(500, 'خطایی در سرور رخ داد.'))
+    const shown = vi.spyOn(toast, 'error')
+    open()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ساختن کلید' }))
+
+    await until(() => expect(screen.getByRole('alert').textContent).toContain(FAILURE_KINDS.server.description))
+    expect(shown).not.toHaveBeenCalled()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('sets the new login with the key and opens the panel', async () => {

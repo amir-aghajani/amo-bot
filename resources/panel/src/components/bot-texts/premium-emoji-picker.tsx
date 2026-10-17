@@ -1,9 +1,11 @@
+import { useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { TriangleAlert, X } from 'lucide-react'
 import { useCustomEmojis } from '@/components/bot-texts/custom-emojis'
 import { PremiumEmoji } from '@/components/bot-texts/premium-emoji'
 import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import type { CustomEmojiRow, CustomEmojisResponse } from '@/lib/api-types'
@@ -28,14 +30,29 @@ interface PremiumEmojiPickerProps {
  */
 export function PremiumEmojiPicker({ onPick, selected }: PremiumEmojiPickerProps) {
   const queryClient = useQueryClient()
-  const { data, error, refetch } = useCustomEmojis()
+  const read = useCustomEmojis()
+  const { data, refetch } = read
+  const failure = useReadFailure(read)
   const choosing = selected !== undefined
+
+  /** The list item of the emoji being taken off. */
+  const leaving = useRef<HTMLElement | null>(null)
 
   const forget = useMutation({
     mutationFn: (emoji: CustomEmojiRow) => api.delete(`/bot/custom-emojis/${emoji.id}`),
-    onSuccess: (_, emoji) =>
-      queryClient.setQueryData<CustomEmojisResponse>(queryKeys.customEmojis, (current) => current && { ...current, emojis: current.emojis.filter((row) => row.id !== emoji.id) }),
+    onSuccess: (_, emoji) => {
+      // The focus on its cross goes to the emoji after it (or before it) before it leaves, never to the page.
+      const item = leaving.current
+      if (item?.contains(document.activeElement)) (item.nextElementSibling ?? item.previousElementSibling)?.querySelector('button')?.focus()
+      queryClient.setQueryData<CustomEmojisResponse>(queryKeys.customEmojis, (current) => current && { ...current, emojis: current.emojis.filter((row) => row.id !== emoji.id) })
+    },
   })
+
+  const remove = (emoji: CustomEmojiRow, item: HTMLElement | null) => {
+    if (forget.isPending) return
+    leaving.current = item
+    forget.mutate(emoji)
+  }
 
   return (
     <div className="grid gap-2.5 rounded-lg border border-border p-2.5">
@@ -47,8 +64,8 @@ export function PremiumEmojiPicker({ onPick, selected }: PremiumEmojiPickerProps
       )}
 
       {!data ? (
-        error ? (
-          <ErrorState what="ایموجی‌های پرمیوم" error={error} onRetry={() => void refetch()} />
+        failure.error ? (
+          <ErrorState what="ایموجی‌های پرمیوم" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />
         ) : (
           <Skeleton className="h-9 w-full" />
         )
@@ -74,11 +91,12 @@ export function PremiumEmojiPicker({ onPick, selected }: PremiumEmojiPickerProps
                 >
                   <PremiumEmoji id={emoji.id} fallback={emoji.emoji} className="size-6 text-lg leading-none" />
                 </button>
-                {/* A 24px target — what a finger needs — around the small cross drawn on the emoji's corner. */}
+                {/* A 24px target — what a finger needs — around the small cross drawn on the emoji's corner; held while a
+                    removal runs (not disabled: the focus stays on it). */}
                 <button
                   type="button"
-                  onClick={() => forget.mutate(emoji)}
-                  disabled={forget.isPending}
+                  onClick={(event) => remove(emoji, event.currentTarget.closest('li'))}
+                  aria-disabled={forget.isPending || undefined}
                   aria-label={`برداشتن ${emoji.emoji} از لیست`}
                   className="group/remove absolute -end-2 -top-2 hidden size-6 place-items-center rounded-full outline-none group-focus-within:grid group-hover:grid focus-visible:focus-ring"
                 >

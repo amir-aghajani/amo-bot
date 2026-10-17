@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Channels;
 
 use App\Modules\Telegram\Api\BotApi;
+use App\Modules\Telegram\Api\Refusal;
 use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Context;
@@ -15,7 +16,8 @@ use Psr\Log\LoggerInterface;
 /**
  * Whether a customer has joined the required channels, asked of Telegram per channel and trusted for RECHECK_AFTER
  * seconds (a session mark keyed on the list). The rule holds while on, for everyone but bot admins. A channel Telegram
- * cannot answer for counts as joined and is flagged for the admin: a broken channel must not lock the shop.
+ * cannot answer for counts as joined and, the channel itself the reason, is flagged for the admin: a broken channel must
+ * not lock the shop.
  */
 final class ChannelMembership
 {
@@ -57,8 +59,8 @@ final class ChannelMembership
     }
 
     /**
-     * One channel asked of Telegram. Unanswered counts as joined; when the channel itself is the reason (not a moment's
-     * outage), it is flagged for the admin.
+     * One channel asked of Telegram. Unanswered counts as joined; when the channel itself is the reason — not a moment's
+     * outage, nor a refusal about this one customer (an id Telegram does not know there) —, it is flagged for the admin.
      */
     private function isMember(BotChannel $channel, int $telegramId): bool
     {
@@ -66,7 +68,7 @@ final class ChannelMembership
             $member = $this->api->getChatMember($channel->chat_id, $telegramId);
         } catch (TelegramApiException $e) {
             $this->logger->warning('Membership check for channel {chat} failed: {message}', ['chat' => $channel->chat_id, 'message' => $e->getMessage()]);
-            if ($channel->bot_is_admin && !$e->refusal()->isTransient()) {
+            if ($channel->bot_is_admin && !$e->refusal()->isTransient() && !Refusal::aboutTheUser($e->getMessage())) {
                 $channel->forceFill(['bot_is_admin' => false, 'checked_at' => now()])->save();
             }
 

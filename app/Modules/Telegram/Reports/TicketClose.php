@@ -23,7 +23,6 @@ final class TicketClose implements GroupHandler
     public const PREFIX = 'tk:';
 
     private const LABEL = '🔒 بستن تیکت';
-    private const NOT_ADMIN = 'فقط مدیرهای ربات می‌توانند تیکت را ببندند؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.';
     private const NOT_FOUND = 'این تیکت پیدا نشد.';
     private const CLOSED = '🔒 تیکت بسته شد.';
 
@@ -48,7 +47,7 @@ final class TicketClose implements GroupHandler
             return;
         }
 
-        $admin = $this->groupButtons->presser($update, self::NOT_ADMIN);
+        $admin = $this->groupButtons->presser($update, GroupButtons::onlyAdmins('تیکت را ببندند'));
         if ($admin === null) {
             return;
         }

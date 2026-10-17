@@ -56,7 +56,7 @@ export function GrantTermsFields({ values, change, error, reach, choose = 'او�
             : `فعلا سرویسی${place} نیست که این به آن اضافه شود؛ ${untouched}${known.unstarted > 0 ? ' سرویس‌های در انتظار اولین اتصال را پایین‌تر می‌شود شامل کرد.' : ''}`}
       </p>
       <GrantAmountFields values={values} change={change} error={error} days={{ hint: 'به تاریخ پایان هر سرویس اضافه می‌شود.' }} traffic={{ hint: 'روی حجم هر سرویس اضافه می‌شود.' }} />
-      <Field id={`${id}-reason`} label="دلیل" optional error={error('reason')} hint="در پیام ربات به مشتری نشان داده می‌شود.">
+      <Field id={`${id}-reason`} label="دلیل" optional error={error('reason')} hint="در پیامی که مشتری در تلگرام یا با ایمیل می‌گیرد نشان داده می‌شود.">
         <NoteInput rows={2} value={values.reason} onChange={(e) => change({ reason: e.target.value })} placeholder={reasonPlaceholder} />
       </Field>
       <div className="grid gap-3">
@@ -69,7 +69,7 @@ export function GrantTermsFields({ values, change, error, reach, choose = 'او�
           onCheckedChange={(include_unstarted) => change({ include_unstarted })}
           disabled={known.unstarted === 0}
         />
-        <GrantOption label="پیام به مشتری‌ها" hint="هر مشتری در ربات می‌بیند چه چیزی به سرویسش اضافه شد." checked={values.notify} onCheckedChange={(notify) => change({ notify })} />
+        <GrantOption label="پیام به مشتری‌ها" hint="هر مشتری در تلگرام یا با ایمیل می‌بیند چه چیزی به سرویسش اضافه شد." checked={values.notify} onCheckedChange={(notify) => change({ notify })} />
       </div>
     </>
   )

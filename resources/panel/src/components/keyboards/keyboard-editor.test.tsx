@@ -1,15 +1,16 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { KeyboardEditor } from '@/components/keyboards/keyboard-editor'
-import type { CustomEmojisResponse, KeyboardAction, KeyboardButtonSpec, KeyboardLayoutData } from '@/lib/api-types'
+import type { CustomEmojisResponse, KeyboardAction, KeyboardButtonSpec, KeyboardLayoutData, KeyboardResponse } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
-import { providers } from '@/test/render'
+import { providers, until } from '@/test/render'
 import { json, server } from '@/test/server'
 
 /*
  * A keyboard in its editor (components/keyboards/keyboard-editor): a row moved by its ▲▼ keeps the focus on its arrow —
- * the row is the same row in its new place —; a button dragged has a new row to land on under the last; and «افزودن
- * دکمه» holds once every action is on the keyboard, saying why.
+ * the row is the same row in its new place —; a button dragged has a new row to land on under the last; «افزودن دکمه»
+ * holds once every action is on the keyboard, saying why, and «افزودن ردیف» once the keyboard has every row it may —
+ * both held, so the focus stays; and a reset to the default layout shows that layout, whatever was unsaved.
  */
 
 const ACTIONS: KeyboardAction[] = [
@@ -85,5 +86,39 @@ describe('adding a button', () => {
 
     expect(screen.getByRole('button', { name: 'افزودن دکمه' }).getAttribute('aria-disabled')).toBeNull()
     expect(screen.queryByText(/همه دکمه‌های ربات روی کیبورد هستند/)).toBeNull()
+  })
+})
+
+describe('adding a row', () => {
+  it('holds once the keyboard has every row it may — the focus staying on it, a press taking nothing', () => {
+    showEditor([[BUY], [WALLET]])
+    const add = screen.getByRole('button', { name: 'افزودن ردیف' })
+
+    add.focus()
+    fireEvent.click(add)
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+
+    expect([(add as HTMLButtonElement).disabled, add.getAttribute('aria-disabled')]).toEqual([false, 'true'])
+    expect(document.activeElement).toBe(add)
+    fireEvent.click(add)
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+  })
+})
+
+describe('the reset to the default layout', () => {
+  it('shows the layout it brought back, the unsaved edits gone — even when it is the layout that was saved', async () => {
+    const kept: KeyboardLayoutData = { name: 'start', title: 'منوی اصلی', is_default: true, type: 'reply', rows: [[BUY], [WALLET]] }
+    server().on('POST', '/api/admin/keyboards/start/reset', json({ keyboard: kept } satisfies KeyboardResponse))
+    showEditor([[BUY], [WALLET]])
+
+    fireEvent.click(screen.getByRole('button', { name: `انتقال ${rowName(1)} به پایین` }))
+    expect(screen.getByText('تغییرات ذخیره نشده')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'بازگشت به پیش‌فرض' }))
+    const dialog = await screen.findByRole('dialog', { name: 'بازگشت به چیدمان پیش‌فرض' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'بازگشت به پیش‌فرض' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/keyboards/start/reset')).toHaveLength(1))
+    await until(() => expect(screen.queryByText('تغییرات ذخیره نشده')).toBeNull())
+    expect(screen.getAllByRole('listitem').map((row) => row.textContent?.includes('🛍️ خرید'))).toEqual([true, false])
   })
 })

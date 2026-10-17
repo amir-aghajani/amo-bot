@@ -39,6 +39,9 @@ function form(props: { saved?: boolean } = {}) {
 
 const type = (label: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
 
+/** What the server says of a kept token left blank once the panel's address, its proxy or its TLS check changed. */
+const TOKEN_MOVED = 'آدرس پنل، پراکسی یا بررسی گواهی TLS عوض شده است؛ توکن API را دوباره وارد کنید.'
+
 describe('a saved server’s form', () => {
   it('changes the server at its own address with its connector and the fields shown — no id', async () => {
     server().on('PUT', '/api/admin/servers/1', json({ server: serverRow({ name: 'آلمان ۲' }) } satisfies ServerResponse))
@@ -59,6 +62,8 @@ describe('a saved server’s form', () => {
 
     await until(() => expect(server().sent('POST', '/api/admin/servers/test')).toHaveLength(1))
     expect(server().sent('POST', '/api/admin/servers/test')[0]?.body).toEqual({ ...SAVED, id: 1 })
+    // The verdict is said as it appears, a success as a failure is.
+    expect((await screen.findByRole('status')).textContent).toContain('اتصال برقرار شد')
   })
 
   it('reaches its panel through a SOCKS5 proxy once it is switched on: its fields shown and sent', async () => {
@@ -108,13 +113,60 @@ describe('a saved server’s form', () => {
 
   it('says a kept token is typed again once the address moves to another host, before it is asked', () => {
     form()
-    expect(screen.queryByText('آدرس پنل عوض شده است؛ توکن API را دوباره وارد کنید.')).toBeNull()
+    expect(screen.queryByText(TOKEN_MOVED)).toBeNull()
 
     type('آدرس پنل', 'https://de.example.com:2053/another-path')
-    expect(screen.queryByText('آدرس پنل عوض شده است؛ توکن API را دوباره وارد کنید.')).toBeNull()
+    expect(screen.queryByText(TOKEN_MOVED)).toBeNull()
 
     type('آدرس پنل', 'https://nl.example.com:2053/panel-path')
-    expect(screen.getByText('آدرس پنل عوض شده است؛ توکن API را دوباره وارد کنید.')).toBeTruthy()
+    expect(screen.getByText(TOKEN_MOVED)).toBeTruthy()
+    expect((screen.getByLabelText('توکن API') as HTMLInputElement).placeholder, 'asked as if none were kept').toBe('')
+  })
+
+  it('says a kept token is typed again once the way to its panel changes — the TLS check, a proxy —, before it is asked', () => {
+    form()
+    fireEvent.click(screen.getByRole('button', { name: 'تنظیمات پیشرفته' }))
+
+    fireEvent.click(screen.getByRole('switch', { name: /بررسی گواهی TLS/ }))
+    expect(screen.getByText(TOKEN_MOVED)).toBeTruthy()
+    fireEvent.click(screen.getByRole('switch', { name: /بررسی گواهی TLS/ }))
+    expect(screen.queryByText(TOKEN_MOVED)).toBeNull()
+
+    fireEvent.click(screen.getByRole('switch', { name: /اتصال از طریق پراکسی SOCKS5/ }))
+    type('آدرس پراکسی', 'proxy.example.com')
+    expect(screen.getByText(TOKEN_MOVED)).toBeTruthy()
+  })
+})
+
+/** Server 1 as another tab saved it meanwhile: its panel at another address. */
+function movedElsewhere() {
+  const row = serverRow()
+  return serverRow({ base_url: 'https://de2.example.com:2053/panel-path', form: { ...row.form, base_url: 'https://de2.example.com:2053/panel-path' } })
+}
+
+describe('a saved server changed elsewhere', () => {
+  it('takes the newer copy while nothing is typed', () => {
+    const { rerender } = render(<ServerForm driver={serverDriverRow()} server={serverRow()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+
+    rerender(<ServerForm driver={serverDriverRow()} server={movedElsewhere()} onSaved={vi.fn()} />)
+
+    expect((screen.getByLabelText('آدرس پنل') as HTMLInputElement).value).toBe('https://de2.example.com:2053/panel-path')
+    expect(screen.queryByRole('button', { name: 'دیدن نسخه تازه' })).toBeNull()
+  })
+
+  it('says so over a draft, which stays — and puts the newer copy on screen when asked, the draft set aside', () => {
+    const { rerender } = render(<ServerForm driver={serverDriverRow()} server={serverRow()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+    type('نام سرور', 'آلمان ۲')
+
+    rerender(<ServerForm driver={serverDriverRow()} server={movedElsewhere()} onSaved={vi.fn()} />)
+
+    expect((screen.getByLabelText('نام سرور') as HTMLInputElement).value).toBe('آلمان ۲')
+    expect((screen.getByLabelText('آدرس پنل') as HTMLInputElement).value).toBe('https://de.example.com:2053/panel-path')
+    fireEvent.click(screen.getByRole('button', { name: 'دیدن نسخه تازه' }))
+
+    expect((screen.getByLabelText('نام سرور') as HTMLInputElement).value).toBe('آلمان')
+    expect((screen.getByLabelText('آدرس پنل') as HTMLInputElement).value).toBe('https://de2.example.com:2053/panel-path')
+    expect(screen.queryByRole('button', { name: 'دیدن نسخه تازه' })).toBeNull()
   })
 })
 

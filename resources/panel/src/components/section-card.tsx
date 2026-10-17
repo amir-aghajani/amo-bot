@@ -1,11 +1,14 @@
 import type { FormEvent, ReactNode } from 'react'
-import { FormError, SaveFooter } from '@/components/form-footer'
+import { ChangedElsewhere, FormError, SaveFooter } from '@/components/form-footer'
 import { Card, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import type { SettingsGroup } from '@/lib/use-settings-group'
 
 interface SectionCardProps {
-  /** The group's form (useSettingsGroup): the card saves it, reverts it and says what failed — a wait the server asked for counting down. */
-  form: Pick<SettingsGroup<object>, 'save' | 'busy' | 'dirty' | 'revert' | 'formError' | 'failure'>
+  /**
+   * The group's form (useSettingsGroup): the card saves it, reverts it and says what failed — a wait the server asked
+   * for counting down —, and that the group was saved elsewhere under its draft.
+   */
+  form: Pick<SettingsGroup<object>, 'save' | 'busy' | 'dirty' | 'elsewhere' | 'revert' | 'formError' | 'failure'>
   title: string
   description: ReactNode
   /** Lock the save for another reason (config.php cannot be written). */
@@ -32,6 +35,7 @@ export function SectionCard({ form, title, description, disabled, actions, child
           </CardHeading>
         </CardHeader>
         <div className="grid gap-5 px-4 pb-5">
+          <ChangedElsewhere shown={form.elsewhere} onTake={form.revert} />
           {children}
           <FormError message={form.formError} failure={form.failure} />
         </div>

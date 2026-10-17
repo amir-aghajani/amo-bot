@@ -132,9 +132,19 @@ class Payment extends Model
                 ->where('status', PaymentStatus::Pending->value)
                 ->whereNull('card_id')
                 ->whereRelation('method', 'driver', ManualGateway::key()))
-            ->orWhere(static fn(Builder $held) => $held
-                ->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::Failed->value])
-                ->whereNotNull('invoice->held')));
+            ->orWhere(static fn(Builder $held) => self::whereHeld($held)));
+    }
+
+    /**
+     * Online payments held for support and still waiting (Services\OnlinePayments::awaitsSupport()), as a condition on
+     * `$payments`: the queue the dashboard counts and the payments screen's `held` tab lists.
+     *
+     * @param Builder<self> $payments
+     * @return Builder<self>
+     */
+    public static function whereHeld(Builder $payments): Builder
+    {
+        return $payments->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::Failed->value])->whereNotNull('invoice->held');
     }
 
     public function isPaid(): bool

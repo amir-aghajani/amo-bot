@@ -61,6 +61,23 @@ final class TestAccountsTest extends DatabaseTestCase
         self::assertNotNull($given->issued_at);
     }
 
+    public function testNoServerGivesATestThatWouldEndPastTheLastDayTheShopKeeps(): void
+    {
+        // The test's 24 hours would pass the TIMESTAMP columns' last moment, 12 hours away.
+        Carbon::setTestNow(LocalTime::last()->subHours(12));
+
+        try {
+            $this->tests()->issue($this->ali, $this->server->id);
+            self::fail('A test was made.');
+        } catch (TestAccountRefusedException $e) {
+            self::assertSame(TestRefusal::NoServer, $e->reason);
+        }
+        self::assertSame([[], 0], [FakeProvider::$created, TestAccount::query()->count()], 'nothing made, nothing of the quota spent');
+
+        $this->server->forceFill(['test_duration_hours' => 12])->save();
+        self::assertTrue($this->tests()->issue($this->ali, $this->server->id)->is_test, 'twelve hours end on the last moment: fine');
+    }
+
     public function testATestNotOnHoldRunsFromTheMomentItIsMade(): void
     {
         $this->server->forceFill(['test_on_hold' => false, 'test_duration_hours' => 3, 'test_traffic_bytes' => Traffic::GIGABYTE])->save();

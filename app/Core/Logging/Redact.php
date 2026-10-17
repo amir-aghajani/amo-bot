@@ -8,8 +8,9 @@ use App\Core\Http\Urls;
 
 /**
  * Takes secrets out of text bound for a log line or an error: bot tokens (Telegram's URLs carry them), the login of an
- * address (a panel's SOCKS5 proxy: socks5h://user:password@host) and the secret segment the machine addresses end with
- * (Urls::SECRET_PATHS). Logs get pasted into issues; a token there is the bot.
+ * address (a panel's SOCKS5 proxy: socks5h://user:password@host), a key an address carries in its query (a payment
+ * gateway's: …?api_key=…) and the secret segment the machine addresses end with (Urls::SECRET_PATHS). Logs get pasted
+ * into issues; a token there is the bot.
  */
 final class Redact
 {
@@ -20,6 +21,8 @@ final class Redact
         '~bot\d+:[A-Za-z0-9_-]+~' => 'bot***',
         // A bare token (123456789:AA…, 35 characters after the colon).
         '~\b\d{5,}:[A-Za-z0-9_-]{30,}~' => '***',
+        // A key in an address's query: ?api_key=…, &token=…
+        '~([?&](?:api_?key|secret|token|key)=)[^&\s#\'"<>]+~i' => '$1***',
     ];
 
     /** One segment of a path, as far as a log line shows it. */

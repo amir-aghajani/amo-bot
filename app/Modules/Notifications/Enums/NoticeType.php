@@ -79,6 +79,9 @@ enum NoticeType: string
     /** A referral's payment earned them a commission. */
     case ReferralCommission = 'referral_commission';
 
+    /** A referral's wallet top-up was refunded: the commission it had earned them came back out of their wallet. */
+    case ReferralCommissionTakenBack = 'referral_commission_back';
+
     /** «هدیه شروع»: a referral brought them a start gift — the referrer for the newcomer, the newcomer for joining by a link. */
     case ReferralStartGift = 'referral_start_gift';
 
@@ -178,6 +181,7 @@ enum NoticeType: string
             self::RenewalFailed => 'تمدید سرویس شما روی سرور انجام نشد',
             self::ReferralJoined => 'زیرمجموعه جدید با لینک دعوت شما',
             self::ReferralCommission => 'پورسانت زیرمجموعه به کیف پول شما اضافه شد',
+            self::ReferralCommissionTakenBack => 'پورسانت زیرمجموعه از کیف پول شما برداشته شد',
             self::ReferralStartGift => 'هدیه شروع به کیف پول شما اضافه شد',
             self::ReferralReward => 'جایزه دعوت: یک سرویس رایگان برای شما',
             self::AgencyApproved => 'درخواست نمایندگی شما تایید شد',

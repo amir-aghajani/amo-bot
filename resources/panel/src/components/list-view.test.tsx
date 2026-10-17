@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { ListView, SortableHead } from '@/components/list-view'
+import { ListView, PhoneFacts, SortableHead } from '@/components/list-view'
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
 import { ApiError } from '@/lib/api'
 import type { PageMeta, SortDirection } from '@/lib/api-types'
 import { FAILURE_KINDS } from '@/lib/failure'
 import type { ListOrder } from '@/lib/use-paged-list'
+import { resizeWindow } from '@/test/browser'
 
 /*
  * A list page's table in exactly one state (components/list-view): loading, its read's failure with a way to ask again,
@@ -18,8 +19,8 @@ const ROW = { id: 1 }
 const META: PageMeta = { page: 2, per_page: 20, total: 45, last_page: 3 }
 const NONE: PageMeta = { page: 1, per_page: 20, total: 0, last_page: 1 }
 
-function list(state: Partial<{ rows: readonly unknown[]; isPending: boolean; error: Error | null }> = {}) {
-  return { rows: [], isPending: false, error: null, refetch: vi.fn(), ...state }
+function list(state: Partial<{ rows: readonly unknown[]; isPending: boolean; isFetching: boolean; error: Error | null; readKey: string }> = {}) {
+  return { rows: [], isPending: false, isFetching: false, error: null, refetch: vi.fn(), ...state }
 }
 
 function paged(state: Partial<{ rows: readonly unknown[]; meta: PageMeta; filtered: boolean; isPlaceholderData: boolean }> = {}) {
@@ -58,6 +59,39 @@ describe('a list', () => {
     expect(screen.getByRole('table')).toBeTruthy()
   })
 
+  it('asked again while it shows rows under a failed refresh spins its «تلاش دوباره» — the failure staying meanwhile, as react-query keeps it', () => {
+    const failed = list({ rows: [ROW], error: new ApiError(0, 'ارتباط با سرور برقرار نشد.') })
+    const { rerender } = view(failed)
+    const retry = screen.getByRole('button', { name: 'تلاش دوباره' })
+    fireEvent.click(retry)
+    expect(failed.refetch).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <ListView list={{ ...failed, isFetching: true }} noun="کاربران" unit="کاربر">
+        <table aria-label="جدول" />
+      </ListView>,
+    )
+
+    expect([retry.getAttribute('aria-busy'), retry.getAttribute('aria-disabled')]).toEqual(['true', 'true'])
+    expect(screen.getByRole('table')).toBeTruthy()
+  })
+
+  it('keeps no failure for another view’s read: the next view loads as itself', () => {
+    const failed = { ...paged({ rows: [] }), error: new ApiError(500, 'خطای سرور'), readKey: 'page 2' }
+    const { rerender } = view(failed)
+    expect(screen.getByRole('alert')).toBeTruthy()
+
+    // Another view (a search typed): its read runs, the previous view's rows standing in.
+    rerender(
+      <ListView list={{ ...failed, error: null, isFetching: true, rows: [ROW], isPlaceholderData: true, readKey: 'search' }} noun="کاربران" unit="کاربر">
+        <table aria-label="جدول" />
+      </ListView>,
+    )
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('table').parentElement?.className).toContain('opacity-60')
+  })
+
   it('asked again after its read failed keeps the failure on screen, its «تلاش دوباره» turning with the focus on it, until the read answers', () => {
     const failed = list({ error: new ApiError(500, 'خطای سرور') })
     const { rerender } = view(failed)
@@ -67,7 +101,7 @@ describe('a list', () => {
     fireEvent.click(retry)
     expect(failed.refetch).toHaveBeenCalledTimes(1)
     // The read starts again as pending, its error gone (react-query's way with a read that has nothing to show).
-    const asking = { ...failed, isPending: true, error: null }
+    const asking = { ...failed, isPending: true, isFetching: true, error: null }
     rerender(
       <ListView list={asking} noun="کاربران" unit="کاربر" empty={<p>هنوز کاربری نیست</p>}>
         <table aria-label="جدول" />
@@ -80,7 +114,7 @@ describe('a list', () => {
     expect([retry.getAttribute('aria-busy'), retry.getAttribute('aria-disabled')]).toEqual(['true', 'true'])
 
     rerender(
-      <ListView list={{ ...asking, isPending: false, rows: [ROW] }} noun="کاربران" unit="کاربر">
+      <ListView list={{ ...asking, isPending: false, isFetching: false, rows: [ROW] }} noun="کاربران" unit="کاربر">
         <table aria-label="جدول" />
       </ListView>,
     )
@@ -97,7 +131,7 @@ describe('a list', () => {
     fireEvent.click(retry)
     expect(failed.refetch).toHaveBeenCalledTimes(1)
     // A paged list keeps the previous view's rows as react-query's placeholder while this view's read runs again.
-    const asking = { ...failed, error: null, rows: [ROW], isPlaceholderData: true }
+    const asking = { ...failed, error: null, isFetching: true, rows: [ROW], isPlaceholderData: true }
     rerender(
       <ListView list={asking} noun="کاربران" unit="کاربر" empty={<p>هنوز کاربری نیست</p>}>
         <table aria-label="جدول" />
@@ -111,7 +145,7 @@ describe('a list', () => {
 
     // Failed again: the same failure, the focus where it was.
     rerender(
-      <ListView list={{ ...asking, rows: [], isPlaceholderData: false, error: new ApiError(500, 'خطای سرور') }} noun="کاربران" unit="کاربر">
+      <ListView list={{ ...asking, rows: [], isFetching: false, isPlaceholderData: false, error: new ApiError(500, 'خطای سرور') }} noun="کاربران" unit="کاربر">
         <table aria-label="جدول" />
       </ListView>,
     )
@@ -121,7 +155,7 @@ describe('a list', () => {
 
     // Answered: this view's own rows.
     rerender(
-      <ListView list={{ ...asking, error: null, isPlaceholderData: false }} noun="کاربران" unit="کاربر">
+      <ListView list={{ ...asking, error: null, isFetching: false, isPlaceholderData: false }} noun="کاربران" unit="کاربر">
         <table aria-label="جدول" />
       </ListView>,
     )
@@ -136,6 +170,16 @@ describe('a list', () => {
 
     view(paged({ rows: [], meta: NONE, filtered: true }))
     expect(screen.getByText('کاربری پیدا نشد')).toBeTruthy()
+  })
+
+  it('narrowed by its address alone — no words of its own for nothing matching — says it has nothing, never a blank', () => {
+    render(
+      <ListView list={paged({ rows: [], meta: NONE, filtered: true })} noun="ارسال‌ها" empty={<p>هنوز ارسالی نیست</p>}>
+        <table aria-label="جدول" />
+      </ListView>,
+    )
+
+    expect(screen.getByText('هنوز ارسالی نیست')).toBeTruthy()
   })
 
   it('names its table after what it lists, for assistive tech', () => {
@@ -322,5 +366,70 @@ describe('a sortable header', () => {
     expect(button.getAttribute('type')).toBe('button')
     button.focus()
     expect(document.activeElement).toBe(button)
+  })
+})
+
+/** A row whose title says its status under it on a phone. */
+const row = () =>
+  render(
+    <Table>
+      <TableBody>
+        <TableRow>
+          <TableCell>
+            سفارش
+            <PhoneFacts>
+              <span>پرداخت‌شده</span>
+            </PhoneFacts>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>,
+  )
+
+describe('a row on a phone', () => {
+  it('says under its title what its hidden columns say — its status —, and only on a phone: nothing is said twice', () => {
+    resizeWindow(375)
+    row()
+    expect(screen.getByText('پرداخت‌شده')).toBeTruthy()
+    cleanup()
+
+    resizeWindow(1024)
+    row()
+    expect(screen.queryByText('پرداخت‌شده')).toBeNull()
+  })
+})
+
+/** A table's scroll box, as wide as given inside a box as wide as given (the test's window lays nothing out). */
+function sized(scrollWidth: number, clientWidth: number) {
+  render(
+    <Table>
+      <TableBody>
+        <TableRow>
+          <TableCell>ردیف</TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>,
+  )
+  const box = screen.getByRole('table').parentElement as HTMLElement
+  Object.defineProperty(box, 'scrollWidth', { configurable: true, value: scrollWidth })
+  Object.defineProperty(box, 'clientWidth', { configurable: true, value: clientWidth })
+  return box
+}
+
+describe('a table wider than its place', () => {
+  it('shadows the edge of its sticky last column while rows pass under it, and not once scrolled to its end (right to left)', () => {
+    const box = sized(600, 343)
+    fireEvent.scroll(box)
+    expect(box.hasAttribute('data-under')).toBe(true)
+
+    box.scrollLeft = -257
+    fireEvent.scroll(box)
+    expect(box.hasAttribute('data-under')).toBe(false)
+  })
+
+  it('casts none while it fits', () => {
+    const box = sized(343, 343)
+    fireEvent.scroll(box)
+    expect(box.hasAttribute('data-under')).toBe(false)
   })
 })

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Handlers;
 
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Catalog\DTO\CustomPrice;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
@@ -18,13 +19,13 @@ use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Subscriptions\DTO\RenewalPreview;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\RenewalRefusal;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
-use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Texts\BotText;
@@ -43,6 +44,7 @@ use App\Support\Money;
  *                                                       «بازگشت» goes: 0 the service's screen, n page n of the menu's
  *                                                       renewals list. A service without a plan gets the plans to pick
  *                                                       instead
+ *   renew:{service}:{from}:p:{page}                   → that page of the plans to pick, past one keyboard's worth
  *   renew:{service}:{from}:0:{plan}[:{method}]       → the checkout on the plan picked (0: its own), by the method
  *   renew:{service}:{from}:{pay}[:{plan}[:{method}]] → pay: the renewal ordered now, or the open one found
  * `{method}` is a renewal method's place among RenewalMethod's cases (CallbackData::place()), left out for «تمدید پلن
@@ -61,6 +63,9 @@ use App\Support\Money;
 final class RenewalHandler implements Handler, RedrawableCheckout
 {
     public const PREFIX = 'renew:';
+
+    /** `renew:{service}:{from}:p:{page}`: that page of the plans a service without one picks among. */
+    private const PAGE = 'p';
 
     public function __construct(
         private readonly CustomerRenewal $renewals,
@@ -90,6 +95,12 @@ final class RenewalHandler implements Handler, RedrawableCheckout
         $from = max(0, (int) ($args[1] ?? 0));
         $subscription = $this->service($ctx, (int) ($args[0] ?? 0), $from);
         if ($subscription === null) {
+            return;
+        }
+        if (($args[2] ?? null) === self::PAGE) {
+            // Another page of the plans to pick: judged as the checkout is, so one that picks none any more shows that.
+            $this->checkout($ctx, $subscription, $from, page: (int) ($args[3] ?? 1));
+
             return;
         }
 
@@ -131,7 +142,7 @@ final class RenewalHandler implements Handler, RedrawableCheckout
      */
     public function service(Context $ctx, int $id, int $from): ?Subscription
     {
-        return $this->services->find($ctx, $id, $from > 0 ? MenuHandler::renewalsCallback($from) : MenuHandler::subscriptionsCallback(1));
+        return $this->services->find($ctx, $id, $from > 0 ? MenuHandler::renewalsCallback($from) : null);
     }
 
     /** A renewal method as callbacks carry it (CallbackData::place()); 0 for none, and for extend. */
@@ -154,15 +165,16 @@ final class RenewalHandler implements Handler, RedrawableCheckout
      * renewed, the plan's note, the ways to pay, and — while the shop offers more than one — a button per method. A method
      * it does not offer (null among them) is its first. From the menu's list it also offers the service's extras: the way
      * to a service whose traffic or time ran out, which «سرویس‌های من» does not list. A service without a plan gets the
-     * plans to pick until `$planId` is one of them or a package is built; one with a plan is checked out on it, whatever
-     * `$planId` names. «بازگشت» leads to the plans picked among, or to the builder's days for a package built.
+     * plans to pick (at `$page` of them) until `$planId` is one of them or a package is built; one with a plan is checked
+     * out on it, whatever `$planId` names. «بازگشت» leads to the plans picked among, or to the builder's days for a
+     * package built.
      *
      * @throws DiscountCodeRefusedException when `$typed` does not hold
      */
-    public function checkout(Context $ctx, Subscription $subscription, int $from = 0, ?string $typed = null, int $planId = 0, ?RenewalMethod $method = null, ?CustomPrice $built = null): void
+    public function checkout(Context $ctx, Subscription $subscription, int $from = 0, ?string $typed = null, int $planId = 0, ?RenewalMethod $method = null, ?CustomPrice $built = null, int $page = 1): void
     {
         $method = $this->renewals->resolveMethod($method) ?? $this->renewals->methods()[0];
-        $preview = $this->preview($ctx, $subscription, $from, $built ?? ($subscription->plan_id !== null ? 0 : $planId), $method);
+        $preview = $this->preview($ctx, $subscription, $from, $built ?? ($subscription->plan_id !== null ? 0 : $planId), $method, $page);
         if ($preview === null) {
             return;
         }
@@ -197,10 +209,10 @@ final class RenewalHandler implements Handler, RedrawableCheckout
             $quote->amount(),
             static fn(PaymentMethod $way): string => self::payOf($subscription, $from, $preview, $way),
             $back,
+            self::checkoutOf($subscription, $from, $preview, $method),
             $from > 0 ? $this->extras->buttons($subscription) : [],
             free: !Money::isPositive($quote->amount()),
             quote: $quote,
-            checkout: self::checkoutOf($subscription, $from, $preview, $method),
             choices: $this->methodButtons($subscription, $from, $preview),
         );
     }
@@ -209,7 +221,7 @@ final class RenewalHandler implements Handler, RedrawableCheckout
      * A way to pay picked: the renewal by `$method` — on the plan `$planId` picked (0: its own), or with the package
      * `$built` — ordered (or the open one found) and paid, unless one is under way already. A method the shop no longer
      * offers, or a way to pay switched off since, shows the checkout as it is now instead, to be seen before anything is
-     * paid.
+     * paid; a service given away or gone meanwhile is said so (CustomerServices::movedOn()).
      */
     public function pay(Context $ctx, Subscription $subscription, int $from, int $wayId, RenewalMethod $method, int $planId = 0, ?CustomPrice $built = null): void
     {
@@ -238,17 +250,20 @@ final class RenewalHandler implements Handler, RedrawableCheckout
         } catch (RenewalUnderWayException) {
             // Another tap, or the automatic renewal, started one in the same moment.
             $this->refuse($ctx, $subscription, $from, $this->texts->get(BotText::RenewUnderWay));
+        } catch (ValidationException $e) {
+            // Given away or gone since the checkout was drawn: nothing ordered.
+            $this->services->movedOn($ctx, $e, $from > 0 ? MenuHandler::renewalsCallback($from) : null);
         }
     }
 
     /**
-     * A service without a plan: the plans on sale on its server to renew it on (CustomerRenewal::choices()), each at the
-     * customer's renewal price in the plan's own button colour and row, «🛠 تمدید با سرویس دلخواه» under them while the
-     * builder is offered (CustomerRenewal::buildable()) — alone when no plan is on sale there —, and «بازگشت» where its
-     * checkout's would lead; with nothing to pick (gone since its refusal was asked), RenewNoPlans. Showing it leaves
-     * whatever step the chat was at.
+     * A service without a plan: the plans on sale on its server to renew it on (CustomerRenewal::choices()), at `$page` of
+     * them past one keyboard's worth, each at the customer's renewal price in the plan's own button colour and row, «🛠
+     * تمدید با سرویس دلخواه» under them while the builder is offered (CustomerRenewal::buildable()) — alone when no plan is
+     * on sale there —, and «بازگشت» where its checkout's would lead; with nothing to pick (gone since its refusal was
+     * asked), RenewNoPlans. Showing it leaves whatever step the chat was at.
      */
-    private function plans(Context $ctx, Subscription $subscription, int $from): void
+    private function plans(Context $ctx, Subscription $subscription, int $from, int $page): void
     {
         $choices = $this->renewals->choices($subscription);
         $builds = $this->renewals->buildable($subscription);
@@ -258,26 +273,25 @@ final class RenewalHandler implements Handler, RedrawableCheckout
             return;
         }
 
-        $buttons = [];
-        $quotes = $this->pricing->renewalOffers($ctx->user, ...$choices->all());
-        foreach ($choices as $plan) {
-            $label = $this->texts->render(BotText::PlanButton, [
-                'plan' => $plan->name,
-                'traffic' => Messages::traffic($plan->trafficBytes()),
-                'duration' => Messages::duration($plan->duration_hours),
-                'price' => Money::format($quotes[$plan->id]->amount()),
-            ]);
-            $buttons[] = [InlineKeyboard::callback($label, self::checkoutCallback($subscription->id, $from, $plan->id), KeyboardLayout::style($plan->button_style)), $plan->button_row];
-        }
+        [$shown, $page, $pages] = Buttons::slice($choices->values()->all(), $page);
+        $quotes = $this->pricing->renewalOffers($ctx->user, ...$shown);
+        $buttons = array_map(fn(Plan $plan): array => $this->buttons->plan($plan, $quotes[$plan->id]->amount(), self::checkoutCallback($subscription->id, $from, $plan->id)), $shown);
         $build = InlineKeyboard::callback($this->texts->get(BotText::CustomRenewButton), CustomServiceHandler::renewalCallback($subscription->id, $from), 'primary');
-        $keyboard = InlineKeyboard::make()
-            ->flow($buttons)
+        $keyboard = InlineKeyboard::make()->flow($buttons);
+        $text = $this->buttons->paged(
+            $keyboard,
+            $this->texts->render(BotText::RenewPickPlan, ['client' => $subscription->remote_name]),
+            $page,
+            $pages,
+            static fn(int $at): string => $at > 1 ? CallbackData::build(self::PREFIX, $subscription->id, $from, self::PAGE, $at) : self::checkoutCallback($subscription->id, $from),
+        );
+        $keyboard
             ->row(...$builds ? [$build] : [])
             ->row(...$from > 0 ? $this->extras->buttons($subscription) : [])
             ->row($this->buttons->back($this->backFrom($subscription, $from)));
 
         $ctx->session->clear();
-        $ctx->edit($this->texts->render(BotText::RenewPickPlan, ['client' => $subscription->remote_name]), ['reply_markup' => $keyboard->build()]);
+        $ctx->edit($text, ['reply_markup' => $keyboard->build()]);
     }
 
     /**
@@ -313,14 +327,21 @@ final class RenewalHandler implements Handler, RedrawableCheckout
     /**
      * The renewal before it is paid by `$method`, on the service's own plan, on the plan `$with` picks among its choices
      * or with the package `$with` builds (CustomerRenewal::preview()); null once the customer was shown why not
-     * (refused()).
+     * (refused(): the plans to pick at `$page`, for one that picks; a renewal that would end the service past the last
+     * day the shop keeps, that refusal).
      */
-    private function preview(Context $ctx, Subscription $subscription, int $from, int|CustomPrice $with, RenewalMethod $method): ?RenewalPreview
+    private function preview(Context $ctx, Subscription $subscription, int $from, int|CustomPrice $with, RenewalMethod $method, int $page = 1): ?RenewalPreview
     {
         $with = $with === 0 ? null : $with;
-        $preview = $this->renewals->preview($subscription, $with, $method);
+        try {
+            $preview = $this->renewals->preview($subscription, $with, $method);
+        } catch (TermTooLongException $e) {
+            $this->refuse($ctx, $subscription, $from, $e->getMessage());
+
+            return null;
+        }
         if ($preview === null) {
-            $this->refused($ctx, $subscription, $from, $this->renewals->refusal($subscription, $with, $method));
+            $this->refused($ctx, $subscription, $from, $this->renewals->refusal($subscription, $with, $method), $page);
         }
 
         return $preview;
@@ -331,15 +352,15 @@ final class RenewalHandler implements Handler, RedrawableCheckout
      * from when —, a renewal of it under way (its receipt with support, or paid and being delivered), or nothing it
      * may be renewed with now; an agent's shop whose selling is suspended says so in place of the screen
      * (CheckoutScreen::paused()). A service without a plan that names nothing it may pick gets the plans (and the
-     * builder) to pick instead.
+     * builder) to pick instead, at `$page` of them.
      */
-    private function refused(Context $ctx, Subscription $subscription, int $from, ?RenewalRefusal $why): void
+    private function refused(Context $ctx, Subscription $subscription, int $from, ?RenewalRefusal $why, int $page): void
     {
         match (true) {
             $why === RenewalRefusal::NotYet => $this->refuse($ctx, $subscription, $from, $this->texts->render(BotText::RenewNotYet, ['opens' => $this->renewals->window($subscription)->when()])),
             $why === RenewalRefusal::UnderWay => $this->refuse($ctx, $subscription, $from, $this->texts->get(BotText::RenewUnderWay)),
             $why === RenewalRefusal::SellingSuspended => $this->screen->paused($ctx, $this->backFrom($subscription, $from)),
-            $why?->picking() === true, $why === RenewalRefusal::PlanNotOffered, $why === RenewalRefusal::BuilderOff => $this->plans($ctx, $subscription, $from),
+            $why?->picking() === true, $why === RenewalRefusal::PlanNotOffered, $why === RenewalRefusal::BuilderOff => $this->plans($ctx, $subscription, $from, $page),
             $why === RenewalRefusal::NotRenewable => $this->refuse($ctx, $subscription, $from, $this->texts->get(CustomerRenewal::picksPlan($subscription) ? BotText::RenewNoPlans : BotText::RenewUnavailable)),
             // A package named for a service on its own plan (its first renewal made it so): its checkout on that plan.
             $why === RenewalRefusal::RenewsOnItsPlan => $this->checkout($ctx, $subscription, $from),

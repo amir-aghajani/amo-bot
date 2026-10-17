@@ -56,6 +56,7 @@ use App\Modules\Admin\Api\TicketsController;
 use App\Modules\Admin\Api\UsersController;
 use App\Modules\Admin\Api\WebsiteController;
 use App\Modules\Admin\Api\WheelController;
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Installer\Controllers\InstallerController;
 use App\Modules\Installer\Middleware\InstallKeyMiddleware;
 use App\Modules\Store\Api\AuthController as StoreAuthController;
@@ -75,7 +76,6 @@ use App\Modules\Store\Api\SubscriptionsController as StoreSubscriptionsControlle
 use App\Modules\Store\Api\TicketsController as StoreTicketsController;
 use App\Modules\Store\Api\TwoFactorController;
 use App\Modules\Store\Api\WalletController;
-use App\Modules\Store\Enums\StaffGrant;
 use App\Modules\Store\Http\JsonBodiesMiddleware;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Http\StoreMiddleware;
@@ -148,11 +148,13 @@ return static function (App $app): void {
         $shop->post('/users/{id:[0-9]+}/two-factor/disable', [UsersController::class, 'disableTwoFactor'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::AccountSecurity->value);
         $shop->post('/users/{id:[0-9]+}/sessions/end', [UsersController::class, 'endSessions'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::AccountSecurity->value);
 
+        // A «همکار» group sets its customers' prices as the plans do: the groups are the catalogue's grant (and a customer
+        // put in such a group asks it too: CustomerGroups::assign()).
         $shop->get('/customer-groups', [CustomerGroupsController::class, 'index']);
-        $shop->post('/customer-groups', [CustomerGroupsController::class, 'store']);
-        $shop->post('/customer-groups/reorder', [CustomerGroupsController::class, 'reorder']);
-        $shop->put('/customer-groups/{id:[0-9]+}', [CustomerGroupsController::class, 'update']);
-        $shop->delete('/customer-groups/{id:[0-9]+}', [CustomerGroupsController::class, 'destroy']);
+        $shop->post('/customer-groups', [CustomerGroupsController::class, 'store'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
+        $shop->post('/customer-groups/reorder', [CustomerGroupsController::class, 'reorder'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
+        $shop->put('/customer-groups/{id:[0-9]+}', [CustomerGroupsController::class, 'update'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
+        $shop->delete('/customer-groups/{id:[0-9]+}', [CustomerGroupsController::class, 'destroy'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Catalog->value);
 
         $shop->get('/orders', [OrdersController::class, 'index']);
         $shop->get('/orders/{id:[0-9]+}', [OrdersController::class, 'show']);

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BotSettingsData } from '@/lib/api-types'
 import { botSettingsQuery } from '@/lib/queries'
@@ -16,10 +17,12 @@ interface WithBotSettingsProps {
  * the custom builder) once the settings are read: a placeholder meanwhile, the failure with a retry in its place.
  */
 export function WithBotSettings({ what, children }: WithBotSettingsProps) {
-  const { data, error, refetch, isRefetching } = useQuery(botSettingsQuery)
-  if (!data) {
-    return error ? <ErrorState what={what} error={error} onRetry={() => void refetch()} retrying={isRefetching} /> : <Skeleton className="h-40 w-full rounded-xl" />
+  const read = useQuery(botSettingsQuery)
+  const failure = useReadFailure(read)
+  if (!read.data) {
+    return failure.error ? <ErrorState what={what} error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} /> : <Skeleton className="h-40 w-full rounded-xl" />
   }
+  const { data } = read
 
   return children(data.settings)
 }

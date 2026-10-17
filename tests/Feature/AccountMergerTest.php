@@ -152,6 +152,77 @@ final class AccountMergerTest extends DatabaseTestCase
         self::assertTrue($logs->hasInfoThatContains('was merged into customer'));
     }
 
+    /** Nobody is brought by a customer they brought: a referrer whose own chain leads back to the survivor is not taken. */
+    public function testTheMergeNeverMakesAReferralLoop(): void
+    {
+        // Sara brought Reza, who brought Ali — Sara's own other account: Reza never becomes the one who brought her.
+        Carbon::setTestNow('2026-09-01 10:00:00');
+        $sara = $this->webCustomer();
+        Carbon::setTestNow('2026-09-02 10:00:00');
+        $reza = $this->customer(['telegram_id' => 7001, 'referred_by' => $sara->id]);
+        $ali = $this->customer(['telegram_id' => 7002, 'referred_by' => $reza->id]);
+
+        $this->merger->merge($sara, $ali, AccountMerger::BY_CUSTOMER);
+
+        self::assertNull($sara->refresh()->referred_by);
+        self::assertSame($sara->id, $reza->refresh()->referred_by, 'she brought him, as before');
+
+        // Nima was brought by Dara, whom Omid — Nima's other account — brought: Dara is Nima's now, so Omid's own referrer
+        // (Bita) brought Nima.
+        Carbon::setTestNow('2026-09-03 10:00:00');
+        $bita = $this->customer(['telegram_id' => 7003]);
+        $nima = $this->webCustomer(['email' => 'nima@example.com']);
+        Carbon::setTestNow('2026-09-04 10:00:00');
+        $omid = $this->customer(['telegram_id' => 7004, 'referred_by' => $bita->id]);
+        $dara = $this->customer(['telegram_id' => 7005, 'referred_by' => $omid->id]);
+        $nima->forceFill(['referred_by' => $dara->id])->save();
+
+        $this->merger->merge($nima, $omid, AccountMerger::BY_CUSTOMER);
+
+        self::assertSame([$bita->id, $nima->id], [$nima->refresh()->referred_by, $dara->refresh()->referred_by]);
+    }
+
+    /**
+     * A «همکار» group sets prices: a merge brings none into a shop admin's or an agent's account, whichever side is older —
+     * an account that is neither leaves its «همکار» groups, its plain ones join; the admin's own, the panel's choice, stays.
+     */
+    public function testAMergeBringsNoHamkarGroupIntoAnAdminsOrAnAgentsAccount(): void
+    {
+        $colleagues = $this->customerGroup('همکاران', overrides: ['agent_pricing' => true]);
+        $partners = $this->customerGroup('شرکا', overrides: ['agent_pricing' => true]);
+        $vip = $this->customerGroup('VIP');
+
+        // The customer's account is the older: it takes the admin's role on, and leaves «همکار».
+        Carbon::setTestNow('2026-09-01 10:00:00');
+        $web = $this->webCustomer();
+        Carbon::setTestNow('2026-09-02 10:00:00');
+        $admin = $this->admin(['telegram_id' => 7501]);
+        $colleagues->users()->attach($web->id);
+        $vip->users()->attach($web->id);
+        $partners->users()->attach($admin->id);
+
+        $survivor = $this->merger->merge($admin, $web, AccountMerger::BY_CUSTOMER);
+
+        self::assertSame([$web->id, true], [$survivor->id, $survivor->isAdmin()]);
+        self::assertSame(['شرکا', 'VIP'], $survivor->groups()->orderBy('customer_groups.id')->pluck('name')->all(), 'its plain group stays, the admin\'s own «همکار» comes along');
+
+        // An agent's: the customer's «همکار» group stays behind as well.
+        Carbon::setTestNow('2026-09-03 10:00:00');
+        $agent = $this->agent(overrides: ['telegram_id' => 7502]);
+        Carbon::setTestNow('2026-09-04 10:00:00');
+        $other = $this->webCustomer(['email' => 'other@example.com']);
+        $colleagues->users()->attach($other->id);
+        $this->merger->merge($other, $agent, AccountMerger::BY_CUSTOMER);
+        self::assertSame([], $agent->groups()->pluck('name')->all());
+
+        // Two customers: their groups join as ever.
+        Carbon::setTestNow('2026-09-05 10:00:00');
+        $ali = $this->customer(['telegram_id' => 7503]);
+        $reza = $this->webCustomer(['email' => 'reza@example.com']);
+        $colleagues->users()->attach($reza->id);
+        self::assertTrue($this->merger->merge($ali, $reza, AccountMerger::BY_CUSTOMER)->paysAgentPrices());
+    }
+
     public function testTheOlderAccountStaysWhicheverAsks(): void
     {
         Carbon::setTestNow('2026-09-01 10:00:00');

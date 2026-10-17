@@ -27,7 +27,8 @@ import { cn } from '@/lib/utils'
  * with «منوی اصلی» back to the menu; the switch between the two slides in.
  */
 
-const ITEM = 'flex h-9 w-full min-w-0 items-center gap-3 rounded-lg px-2 text-body transition-colors duration-100 outline-none focus-visible:focus-ring'
+/** A menu entry: 36px, a finger's 44px in the phone's drawer. */
+const ITEM = 'flex h-9 w-full min-w-0 items-center gap-3 rounded-lg px-2 text-body transition-colors duration-100 outline-none focus-visible:focus-ring max-md:h-11'
 const ITEM_IDLE = 'text-muted-foreground hover:bg-fill hover:text-foreground'
 const ITEM_ACTIVE = 'bg-fill-active font-medium text-foreground'
 const ICON = 'size-[18px] shrink-0'
@@ -135,7 +136,8 @@ function SidebarHead({ onClose }: { onClose?: () => void }) {
   const label = collapsed ? 'باز کردن سایدبار' : 'جمع کردن سایدبار'
 
   const toggle = onClose ? (
-    <IconButton onClick={onClose} aria-label="بستن منو" data-autofocus>
+    // The drawer's ✕, on a phone: a finger's 44px.
+    <IconButton onClick={onClose} aria-label="بستن منو" data-autofocus className="max-md:size-11">
       <X className="size-4" aria-hidden />
     </IconButton>
   ) : (

@@ -65,8 +65,8 @@ export function SellingNotice({ standing }: { standing: AgencyStanding | null | 
         {reason === 'minimum'
           ? `با خرید حجم در ربات اصلی تا رسیدن خرید ${standing.month.name} به کف (${monthWords(standing)})، فروش خودکار باز می‌شود.`
           : reason === 'expired'
-            ? 'برای تمدید نمایندگی با مدیر فروشگاه اصلی تماس بگیرید.'
-            : 'فقط مدیر فروشگاه اصلی آن را دوباره باز می‌کند.'}
+            ? 'برای تمدید نمایندگی با پشتیبانی فروشگاه اصلی تماس بگیرید.'
+            : 'فقط پشتیبانی فروشگاه اصلی آن را دوباره باز می‌کند.'}
       </Callout>
     )
   }
@@ -76,7 +76,7 @@ export function SellingNotice({ standing }: { standing: AgencyStanding | null | 
         <span className="font-medium">
           نمایندگی شما {formatDate(standing.expires_at)} به پایان می‌رسد ({timeLeft(standing.expires_at)}).
         </span>{' '}
-        از آن به بعد ربات شما فروش تازه‌ای ندارد؛ برای تمدید با مدیر فروشگاه اصلی تماس بگیرید.
+        از آن به بعد ربات شما فروش تازه‌ای ندارد؛ برای تمدید با پشتیبانی فروشگاه اصلی تماس بگیرید.
       </Callout>
     )
   }
@@ -93,9 +93,10 @@ export function SellingNotice({ standing }: { standing: AgencyStanding | null | 
 /**
  * The owner's word on an agent's terms, said of the agent — a badge, and what it means —: their selling stopped (and
  * why), their end near, or their month short; null while all is well. Their row on the agents list, and their shop's
- * dashboard in the owner's panel.
+ * dashboard in the owner's panel. `remedy` is what to do about it from the row (its «سطح، اعتبار و شرایط فروش»), which
+ * the dashboard's notice says its own way.
  */
-function ownerWord(standing: AgencyStanding): { concern: Concern; badge: string; info: string } | null {
+function ownerWord(standing: AgencyStanding): { concern: Concern; badge: string; info: string; remedy?: string } | null {
   const concern = standingConcern(standing)
   if (concern === 'suspended' && standing.suspension) {
     return { concern, badge: 'فروش متوقف', info: `${SELLING_SUSPENSION[standing.suspension.reason].label}. ربات، پنل و سرویس‌های فعلی مشتری‌هایش کار می‌کنند.` }
@@ -104,7 +105,8 @@ function ownerWord(standing: AgencyStanding): { concern: Concern; badge: string;
     return {
       concern,
       badge: `پایان: ${timeLeft(standing.expires_at)}`,
-      info: `نمایندگی ${formatDate(standing.expires_at)} به پایان می‌رسد؛ بعد از آن فروش رباتش متوقف می‌شود. با «سطح، اعتبار و شرایط فروش» تمدیدش کنید.`,
+      info: `نمایندگی ${formatDate(standing.expires_at)} به پایان می‌رسد؛ بعد از آن فروش رباتش متوقف می‌شود.`,
+      remedy: 'با «سطح، اعتبار و شرایط فروش» تمدیدش کنید.',
     }
   }
   if (concern === 'short') {
@@ -113,14 +115,14 @@ function ownerWord(standing: AgencyStanding): { concern: Concern; badge: string;
   return null
 }
 
-/** The owner's word on an agent's row (ownerWord): pressed, it says why; nothing while all is well. */
+/** The owner's word on an agent's row (ownerWord): pressed, it says why and what to do there; nothing while all is well. */
 export function StandingBadge({ standing }: { standing: AgencyStanding }) {
   const word = ownerWord(standing)
   if (word === null) return null
 
   return (
     <span className="mt-1 flex">
-      <InfoBadge variant={word.concern === 'suspended' ? 'danger' : 'warning'} info={word.info}>
+      <InfoBadge variant={word.concern === 'suspended' ? 'danger' : 'warning'} info={word.remedy ? `${word.info} ${word.remedy}` : word.info}>
         {word.badge}
       </InfoBadge>
     </span>
@@ -136,7 +138,8 @@ const OWNER_LEADS: Record<Concern, { lead: string; icon: LucideIcon }> = {
 
 /**
  * The owner's notice in an agent's shop opened in their panel (its dashboard's attention card): the agent's terms in
- * their row's words (ownerWord), and where to see to them, the panel's way (`help`) — nothing while all is well.
+ * their row's words (ownerWord), and where to see to them, the panel's way (`help`) — asked once: the row's own remedy
+ * gives way to it. Nothing while all is well.
  */
 export function OwnerSellingNotice({ standing, help }: { standing: AgencyStanding; help?: ReactNode }) {
   const word = ownerWord(standing)
@@ -146,7 +149,7 @@ export function OwnerSellingNotice({ standing, help }: { standing: AgencyStandin
   return (
     <Callout tone={word.concern === 'suspended' ? 'danger' : 'warning'} icon={icon}>
       <span className="font-medium">{lead}</span> {word.info}
-      {help && <> {help}</>}
+      {help ? <> {help}</> : word.remedy && <> {word.remedy}</>}
     </Callout>
   )
 }

@@ -13,10 +13,10 @@ use App\Modules\Providers\DTO\InboundInfo;
 use App\Modules\Providers\DTO\PanelStatus;
 use App\Modules\Providers\Enums\CoreState;
 use App\Modules\Providers\Exceptions\NotFoundException;
+use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 use App\Modules\Providers\Support\PanelConnection;
 use App\Modules\Providers\Support\Raw;
-use App\Support\Text;
 
 /**
  * ProviderInterface for PasarGuard panels (3.1 and later), on PasarGuardClient — the client of one server's panel,
@@ -43,9 +43,6 @@ final class PasarGuardProvider implements ProviderInterface
 
     /** The most pages one listing reads (50,000 users), so a misbehaving panel cannot keep a sync paging forever. */
     private const MAX_PAGES = 100;
-
-    /** The longest inbound tag the shop keeps (server_inbounds.tag). */
-    private const TAG_MAX = 128;
 
     private const USERS = '/api/user/by-username/';
 
@@ -97,9 +94,9 @@ final class PasarGuardProvider implements ProviderInterface
     {
         return array_map(static fn(array $group): InboundInfo => new InboundInfo(
             key: (string) Raw::int($group, 'id'),
-            tag: Text::fit(implode(', ', Raw::stringsOf($group['inbound_tags'] ?? null)), self::TAG_MAX),
+            tag: implode(', ', Raw::stringsOf($group['inbound_tags'] ?? null)),
             remark: Raw::string($group, 'name'),
-            enabled: ($group['is_disabled'] ?? false) !== true,
+            enabled: !Raw::bool($group, 'is_disabled'),
             clientCount: Raw::int($group, 'total_users'),
         ), Raw::objectsOf($this->client->get('/api/groups')['groups'] ?? null));
     }
@@ -122,8 +119,36 @@ final class PasarGuardProvider implements ProviderInterface
             'data_limit' => $spec->totalBytes,
             'data_limit_reset_strategy' => 'no_reset',
         ] + self::term($spec->expiry) + self::note($spec));
+        if (!$spec->enabled) {
+            $user = $this->switchedOff($spec->name);
+        }
 
         return $this->clientOf($user, online: null);
+    }
+
+    /**
+     * A user just made, switched off — PasarGuard makes a user active or on hold only —, its term kept as it was made (a
+     * duration still waiting stays on it, for setClientEnabled() to put back on hold). One the panel will not switch off
+     * is taken back: nothing was made. One it will not take back either is there switched on, a failure after the write
+     * (ProviderException::afterWrite()).
+     *
+     * @return array<string, mixed> The user as the panel has it then
+     * @throws ProviderException
+     */
+    private function switchedOff(string $name): array
+    {
+        $path = self::USERS . rawurlencode($name);
+        try {
+            return $this->client->put($path, ['status' => 'disabled']);
+        } catch (ProviderException $e) {
+            try {
+                $this->client->delete($path);
+            } catch (ProviderException) {
+                throw $e->afterWrite();
+            }
+
+            throw $e;
+        }
     }
 
     /** One PUT: the panel keeps the user's groups, credentials and link, and its own reset strategy. */
@@ -231,8 +256,8 @@ final class PasarGuardProvider implements ProviderInterface
 
     /**
      * Every user, page by page, ordered by the unique username so a page boundary never shifts on a stable panel, until a
-     * short page or the reported total. A panel past MAX_PAGES — or one that never stops answering full pages — is not
-     * listed at once: the sync then asks for each service on its own.
+     * short page or the total the answer reports (an answer without one pages on). A panel past MAX_PAGES — or one that
+     * never stops answering full pages — is not listed at once: the sync then asks for each service on its own.
      *
      * `$links`: with each user's subscription link (which PasarGuard signs for each answer), or without.
      *
@@ -250,7 +275,7 @@ final class PasarGuardProvider implements ProviderInterface
 
                 yield $user;
             }
-            if (count($users) < self::PAGE_SIZE || count($names) >= Raw::int($answer, 'total')) {
+            if (count($users) < self::PAGE_SIZE || count($names) >= Raw::int($answer, 'total', PHP_INT_MAX)) {
                 return;
             }
         }
@@ -333,7 +358,7 @@ final class PasarGuardProvider implements ProviderInterface
     private function clientOf(array $user, ?bool $online): ClientInfo
     {
         $pending = self::waitingTerm($user);
-        $deadline = self::moment($user['expire'] ?? null);
+        $deadline = self::deadline($user);
 
         return new ClientInfo(
             name: Raw::string($user, 'username'),
@@ -361,9 +386,25 @@ final class PasarGuardProvider implements ProviderInterface
     private static function waitingTerm(array $user): ?int
     {
         $seconds = Raw::int($user, 'on_hold_expire_duration');
-        $waits = $seconds > 0 && ($user['expire'] ?? null) === null && in_array(Raw::string($user, 'status'), ['on_hold', 'disabled'], true);
+        $waits = $seconds > 0 && self::deadline($user) === null && in_array(Raw::string($user, 'status'), ['on_hold', 'disabled'], true);
 
         return $waits ? $seconds : null;
+    }
+
+    /**
+     * The user's deadline: a moment as PasarGuard writes it (moment()), or unix seconds as the panel takes it; 0, null or
+     * nothing is none — `expire: 0`, what the shop sends for "none", reads back as none too.
+     *
+     * @param array<string, mixed> $user
+     */
+    private static function deadline(array $user): ?\DateTimeImmutable
+    {
+        $expire = $user['expire'] ?? null;
+        if (is_numeric($expire)) {
+            return (int) $expire > 0 ? new \DateTimeImmutable('@' . (int) $expire) : null;
+        }
+
+        return self::moment($expire);
     }
 
     /**

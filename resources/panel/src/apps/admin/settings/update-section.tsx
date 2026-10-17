@@ -5,6 +5,7 @@ import { Callout } from '@/components/callout'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { ErrorState } from '@/components/error-state'
 import { FormError } from '@/components/form-footer'
+import { useReadFailure } from '@/components/page'
 import { ProgressBar } from '@/components/progress-bar'
 import { useSectionShown } from '@/components/sectioned-page'
 import { TextLink } from '@/components/text-link'
@@ -57,6 +58,7 @@ export function UpdateSection() {
   const queryClient = useQueryClient()
   const shown = useSectionShown()
   const read = useQuery({ ...updateQuery, enabled: shown })
+  const failure = useReadFailure(read)
   const [asking, setAsking] = useState<'start' | 'rollback' | null>(null)
   const put = (answer: UpdateResponse) => queryClient.setQueryData(updateQuery.queryKey, answer.update)
 
@@ -103,7 +105,11 @@ export function UpdateSection() {
 
   const update = read.data
   if (!update) {
-    return read.error ? <ErrorState what="وضعیت به‌روزرسانی" error={read.error} onRetry={() => void read.refetch()} retrying={read.isFetching} /> : <Skeleton className="h-48 w-full rounded-xl" />
+    return failure.error ? (
+      <ErrorState what="وضعیت به‌روزرسانی" error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} />
+    ) : (
+      <Skeleton className="h-48 w-full rounded-xl" />
+    )
   }
   const { latest, run } = update
 

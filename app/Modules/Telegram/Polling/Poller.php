@@ -186,6 +186,8 @@ final class Poller
                 $next[$bot->id] = $kept;
                 continue;
             }
+            // A token handed over anew: the poll still open asks with the old one, and is let go.
+            $kept?->poll?->cancel();
 
             try {
                 $username = CurrentBot::run($bot, function () use ($dropPending): string {

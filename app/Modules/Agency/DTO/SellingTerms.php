@@ -43,8 +43,8 @@ final class SellingTerms
     }
 
     /**
-     * The terms the agents page gives, over `$kept`: `expires_at` — "2026-10-12T18:00" on the shop's clock, blank or null
-     * for never — and `monthly_minimum` — the program's own field, whole Toman, 0 for none (AgencySettings::minimumOf())
+     * The terms the agents page gives, over `$kept`: `expires_at` — "2026-10-12T18:00" on the shop's clock, no later than
+     * the shop keeps (LocalTime::LAST_DAY), blank or null for never — and `monthly_minimum` — the program's own field, whole Toman, 0 for none (AgencySettings::minimumOf())
      * —, each left out keeping `$kept`'s. Null while the input names neither. Each refusal goes under its field into
      * `$errors`.
      *
@@ -62,6 +62,9 @@ final class SellingTerms
             $expiresAt = LocalTime::moment($input['expires_at']);
             if ($expiresAt === false) {
                 $errors['expires_at'][] = self::NOT_A_MOMENT;
+                $expiresAt = null;
+            } elseif ($expiresAt !== null && LocalTime::tooLate($expiresAt)) {
+                $errors['expires_at'][] = LocalTime::tooLateFor('تاریخ پایان نمایندگی') . '؛ برای بدون پایان، خالی بگذارید.';
                 $expiresAt = null;
             }
         }

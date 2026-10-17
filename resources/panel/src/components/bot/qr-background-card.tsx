@@ -1,7 +1,8 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ImageUp, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { ConfirmModal } from '@/components/confirm-modal'
 import { FormError } from '@/components/form-footer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,11 +18,13 @@ const ACCEPT = 'image/png,image/jpeg,image/webp'
 
 /**
  * The picture QR codes are drawn on: a preview, an upload that replaces it at once (the size limit said up front) and a
- * way back to the shipped picture. Not a form: each action applies immediately and a refusal shows on the card.
+ * way back to the shipped picture, asked first. Not a form: each action applies immediately; a refused upload shows on
+ * the card, a refused way back in its question.
  */
 export function QrBackgroundCard({ background }: { background: QrBackgroundInfo }) {
   const queryClient = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
+  const uploadButton = useRef<HTMLButtonElement>(null)
 
   const apply = (result: QrBackgroundResponse) => queryClient.setQueryData<BotSettingsResponse>(queryKeys.botSettings, (current) => current && { ...current, qr_background: result.qr_background })
 
@@ -34,17 +37,29 @@ export function QrBackgroundCard({ background }: { background: QrBackgroundInfo 
     meta: { quiet: true },
   })
 
+  // The uploaded picture is deleted for good: asked first, as the keyboards' and the texts' way back to the default is.
+  const [confirming, setConfirming] = useState(false)
+  const handBack = useRef(false)
   const reset = useMutation({
     mutationFn: () => api.delete('/bot/qr-background'),
     onSuccess: (result) => {
+      handBack.current = true
+      setConfirming(false)
       apply(result)
       toast.success('پس‌زمینه به تصویر پیش‌فرض برگشت')
     },
     meta: { quiet: true },
   })
 
+  // The button that asked goes with the uploaded picture: as the question closes, the focus goes to the upload beside it
+  // (after the dialog hands it back — the dialog is a child, its effect runs first), never to the page.
+  useEffect(() => {
+    if (confirming || !handBack.current) return
+    handBack.current = false
+    uploadButton.current?.focus()
+  }, [confirming])
+
   const busy = upload.isPending || reset.isPending
-  const failure = upload.error ?? reset.error
   // The URL changes with the file, so the browser fetches the new picture instead of showing a cached one.
   const src = mediaUrl('/bot/qr-background', { v: String(background.updated_at) })
 
@@ -90,7 +105,8 @@ export function QrBackgroundCard({ background }: { background: QrBackgroundInfo 
                 upload.mutate(file)
               }}
             />
-            <Button variant="secondary" size="sm" icon={ImageUp} busy={upload.isPending} disabled={busy} onClick={() => input.current?.click()}>
+            {/* Held while either runs — held, not disabled, so the one pressed keeps the focus. */}
+            <Button ref={uploadButton} variant="secondary" size="sm" icon={ImageUp} busy={upload.isPending} aria-disabled={busy} onClick={() => input.current?.click()}>
               آپلود تصویر جدید
             </Button>
             {background.custom && (
@@ -98,11 +114,10 @@ export function QrBackgroundCard({ background }: { background: QrBackgroundInfo 
                 variant="ghost"
                 size="sm"
                 icon={Undo2}
-                busy={reset.isPending}
-                disabled={busy}
+                aria-disabled={busy}
                 onClick={() => {
-                  upload.reset()
-                  reset.mutate()
+                  reset.reset()
+                  setConfirming(true)
                 }}
               >
                 بازگشت به پیش‌فرض
@@ -110,10 +125,30 @@ export function QrBackgroundCard({ background }: { background: QrBackgroundInfo 
             )}
           </div>
 
-          <p className="text-footnote leading-relaxed text-muted-foreground">PNG، JPG یا WebP، حداکثر {formatBytes(background.max_bytes)}. تصویر همان لحظه جایگزین می‌شود.</p>
-          <FormError message={failure && messageOf(failure, 'file')} />
+          {/* Each format set apart: a run of Latin names in a Persian sentence would read in the wrong order. */}
+          <p className="text-footnote leading-relaxed text-muted-foreground">
+            <bdi dir="ltr">JPG</bdi>، <bdi dir="ltr">PNG</bdi> یا <bdi dir="ltr">WebP</bdi>، حداکثر {formatBytes(background.max_bytes)}. تصویر همان لحظه جایگزین می‌شود.
+          </p>
+          <FormError message={upload.error && messageOf(upload.error, 'file')} />
         </div>
       </CardContent>
+
+      <ConfirmModal
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title="بازگشت به پس‌زمینه پیش‌فرض"
+        description="تصویر آپلودشده حذف می‌شود و کدهای QR دوباره روی تصویر پیش‌فرض فروشگاه کشیده می‌شوند."
+        confirmLabel="بازگشت به پیش‌فرض"
+        destructive
+        pending={reset.isPending}
+        error={reset.error && messageOf(reset.error)}
+        onConfirm={() => {
+          upload.reset()
+          reset.mutate()
+        }}
+      >
+        این کار برگشت‌پذیر نیست؛ برای استفاده دوباره از همین تصویر باید آن را دوباره آپلود کنید.
+      </ConfirmModal>
     </Card>
   )
 }

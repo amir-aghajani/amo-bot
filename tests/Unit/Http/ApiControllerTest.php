@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Http;
 
+use App\Core\Database\Sorting;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Support\Validation;
@@ -14,9 +15,10 @@ use Slim\Psr7\Factory\ResponseFactory;
 use Slim\Psr7\Factory\ServerRequestFactory;
 
 /**
- * What every action shares besides the JSON: an on/off read strictly, and bytes answered with their length and caching
- * — shown when they are a picture the panels show, handed over to be saved otherwise. (load() is ErrorHandlingTest's: a
- * missing row is the handler's 404; the policy that lets nothing run is on every answer, SecurityHeadersTest.)
+ * What every action shares besides the JSON: an on/off read strictly, a reorder's ids held to what one takes, and
+ * bytes answered with their length and caching — shown when they are a picture the panels show, handed over to be saved
+ * otherwise. (load() is ErrorHandlingTest's: a missing row is the handler's 404; the policy that lets nothing run is on
+ * every answer, SecurityHeadersTest.)
  */
 final class ApiControllerTest extends TestCase
 {
@@ -39,6 +41,31 @@ final class ApiControllerTest extends TestCase
                 self::fail('read ' . json_encode($body) . ' as a switch');
             } catch (ValidationException $e) {
                 self::assertSame(['is_active' => [Validation::NOT_A_SWITCH]], $e->errors(), 'never read as "off"');
+                self::assertSame(422, $e->status());
+            }
+        }
+    }
+
+    public function testAReorderTakesAsManyIdsAsOneTakesAndNoMore(): void
+    {
+        $action = new class extends ApiController {
+            /** @return list<int> */
+            public function read(Request $request): array
+            {
+                return $this->reorderIds($request);
+            }
+        };
+
+        self::assertSame(range(1, Sorting::MAX_IDS), $action->read($this->patch(['ids' => array_map(strval(...), range(1, Sorting::MAX_IDS))])), 'as many as a list may have');
+
+        // One past them is refused before any is read: a garbled id among them is not what it is told.
+        foreach (['one more' => range(1, Sorting::MAX_IDS + 1), 'one more, garbled' => [...range(1, Sorting::MAX_IDS), '2abc']] as $why => $ids) {
+            try {
+                $action->read($this->patch(['ids' => $ids]));
+                self::fail("{$why}: taken");
+            } catch (ValidationException $e) {
+                self::assertSame(['ids'], array_keys($e->errors()), $why);
+                self::assertStringContainsString('بلندتر از حد', $e->getMessage(), $why);
                 self::assertSame(422, $e->status());
             }
         }

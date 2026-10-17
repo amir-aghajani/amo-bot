@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { handleLabel, idLabel, isolate, isolateMarkup } from '@/lib/direction'
+import { handleLabel, idLabel, isolate, isolateIds, isolateMarkup, unbrokenVersions } from '@/lib/direction'
 
 /*
  * A Latin run in a Persian plain string (lib/direction): a toast, a dialog's title, an aria-label, the tab's name. Left
@@ -23,6 +23,18 @@ describe('a run of text in a sentence', () => {
     expect(handleLabel('agent_shop_bot')).toBe(`${FSI}@agent_shop_bot${PDI}`)
     expect(idLabel(12)).toBe(`${FSI}#12${PDI}`)
     expect(`سفارش ${idLabel(12)} باز هم تحویل نشد`).toBe(`سفارش ${FSI}#12${PDI} باز هم تحویل نشد`)
+  })
+})
+
+describe('the rows’ numbers in a sentence of the server’s', () => {
+  it('are each set apart as idLabel() sets one — Persian digits too —, the rest of the sentence as written', () => {
+    expect(isolateIds('پرداخت آنلاین #12 پس از بسته شدن سفارش #7')).toBe(`پرداخت آنلاین ${idLabel(12)} پس از بسته شدن سفارش ${idLabel(7)}`)
+    expect(isolateIds('شارژ کیف پول (سفارش #۴)')).toBe(`شارژ کیف پول (سفارش ${FSI}#۴${PDI})`)
+    expect(isolateIds('اصلاح پشتیبانی')).toBe('اصلاح پشتیبانی')
+  })
+
+  it('leaves a number already set apart as it is', () => {
+    expect(isolateIds(`سفارش ${idLabel(12)}`)).toBe(`سفارش ${idLabel(12)}`)
   })
 })
 
@@ -53,5 +65,12 @@ describe('the markup in a sentence', () => {
 
   it('leaves a sentence with no markup as it is', () => {
     expect(isolateMarkup('متن نمی‌تواند خالی باشد.')).toBe('متن نمی‌تواند خالی باشد.')
+  })
+})
+
+describe('a version in a sentence', () => {
+  it('stays on the line of the name it belongs to — a no-break space between them —, every other space as it was', () => {
+    expect(unbrokenVersions('MySQL 5.7.8 یا بالاتر، یا MariaDB 10.3 یا بالاتر')).toBe('MySQL 5.7.8 یا بالاتر، یا MariaDB 10.3 یا بالاتر')
+    expect(unbrokenVersions('سرور SQLite روی همین هاست')).toBe('سرور SQLite روی همین هاست')
   })
 })

@@ -1,3 +1,5 @@
+[فارسی](fa/Internals-Panels.md)
+
 # Internals: panels
 
 The owner's panel (`/admin/`) and an agent's panel (`/agent/`) are one React project in `resources/panel`: Vite,
@@ -54,7 +56,11 @@ is a full page load at that shop's address: nothing of the last shop survives in
 Every page is a chunk of its own (`lib/lazy-page`), loaded ahead by `lib/prefetch` — the first page as the panel starts,
 a link's page when the pointer rests on it or a press starts. A tab opened before an upgrade asks for chunks that no
 longer exist; `lib/stale-build` reloads it once for the new build, and a second failure soon after is shown as
-incomplete files on the host instead of a reload loop.
+incomplete files on the host instead of a reload loop. It never reloads while the browser is offline — the file is
+missing because the network is, and a reload would leave only the browser's own offline page. Where the tab can keep
+nothing (storage refused), a page that is itself a reload of a moment ago counts as that one reload, so there is no
+loop either. A page loaded ahead of need (`lib/prefetch`) that fails reloads nothing; the
+load that is needed reports and reloads.
 
 ## Talking to the server
 
@@ -81,23 +87,46 @@ The hooks a screen is built from:
 
 | Hook | For |
 |---|---|
-| `useForm` | Any form talking to the API: values, field errors from a 422, a form error, `submit()` (a quiet mutation), and `dirty` |
-| `useSettingsGroup` | A settings card: a `useForm` that follows the server's copy and folds its save into the screen's cache |
+| `useForm` | Any form talking to the API: values, field errors from a 422, a form error, `submit()` (a quiet mutation), `dirty`, and — for a form that follows the server's copy — `elsewhere` |
+| `useSettingsGroup` | A settings card: a `useForm` that follows the server's copy — a dirty draft kept, `elsewhere` when that copy changed under it — and folds its save into the screen's cache |
 | `useRows` | An admin-ordered list (plans, categories…): optimistic patch, reorder and delete, one request at a time per list |
 | `usePagedList` | A server-paged list: search, status tab, filters, sort and page, kept in the list's address |
+| `useSelection` | Rows ticked across a paged list; `selection.follow()` keeps the ticked copies in step with the list |
 | `useOpenRow`, `useNextRow` | A list's detail dialog that follows its row as it changes, and «بعدی» through a queue |
+| `useReadFailure` | A failed read's «تلاش دوباره»: the failure and the focus kept while it retries, its button spinning |
+| `usePressHold` | A confirm button held from its press until the writes it started settle, so a double press sends once |
+| `useRequestKey` | The `Idempotency-Key` of a change support makes by hand (a wallet's credit or debit, an agent's traffic, a ticket's answer, an order): the same key while the same change is sent again — a retry after no answer or a failure is answered by what the first one did —, a new one once it went through (`done()`) or the form was edited |
 | `useProbe` | A "test the connection" button beside a form |
 
 **`dirty` means "the server would read something else"**: `useForm` compares the values as the request reads them
 (`reads`; by default every text trimmed), treats every kind of empty as equal and a number as equal to the text that
 writes it in any digits. A form whose request reads its values differently passes its own `reads` (a driver form's
-payload, a set). This keeps false "discard changes?" questions away.
+payload, a set; `asAmount()` and `asWhole()` read a typed amount or count as `Input::amountOf()` and `wholeOf()` do).
+This keeps false "discard changes?" questions away.
+
+**What is typed is never replaced.** A form that follows the server's copy (`follow`: a settings card, the keyboard
+editor, a server's connection form) starts again from a new copy only while nothing is typed. Under a dirty draft the new copy is held as `newer`
+and `elsewhere` is true: the card shows `ChangedElsewhere` (`components/form-footer`) — the draft stays as typed and,
+saved, takes the new copy's place; «دیدن نسخه تازه» puts the draft aside and shows the new copy (`revert()`). A save
+makes what was sent the new starting point, and a newer copy held meanwhile is gone under it.
+
+**A server-paged list's address** (`usePagedList`) holds only what the API takes: a filter that names a row by its id
+(`ids`: `server`, `user`, `referrer`, `group`…) is no filter when the address's value is no whole number, and a filter with a
+closed set of values (`choices`) ignores any other. A page past the list's end — an old link, a list that shrank, its
+last rows deleted — sends the view and its address to the list's last page, in one step that replaces the history
+entry.
 
 **Live updates** (`lib/use-live-updates`, mounted by the shell): every 4 seconds while the tab is visible the panel
 asks `/changes` which areas of the shop moved — by anyone, the bot, a scheduled task, another tab — and invalidates the
 reads `AREA_QUERIES` maps each area to; only what is on screen refetches. A new table a screen shows needs its area
-here. A section kept mounted but hidden reads with `subscribed: false` and refreshes when shown. Offline, react-query
-pauses reads, writes and the poll; `ConnectionBanner` says so, and also when the poll gets no answer.
+here. A section kept mounted but hidden reads with `subscribed: false` and refreshes when shown.
+
+**Offline**, reads and the live poll wait for the connection, as react-query's do; but **every write fails at once**
+(`mutations: { networkMode: 'always' }` in `lib/query-client`, and `runMutation()` for a form's save): a form's save and
+a row's operation alike go out then and there and fail with the offline words, rather than wait and go out minutes
+later, once the admin has left the screen that asked for them. `ConnectionBanner` (a `PageStrip` under the topbar) says
+so — «اتصال اینترنت قطع است؛ تا برگشتن آن صفحه‌ها به‌روز نمی‌شوند و تغییرها ذخیره نمی‌شوند.» — and says when the poll
+gets no answer from the server too.
 
 PHP serves one session's requests one at a time, so the shell's own reads (the menu's queue counts, the owner's shops)
 wait until the page has asked first (`useShellReads()`).
@@ -113,9 +142,17 @@ the shell), `page` (in the shell), `card` (in place of a failed read, the defaul
 the address and the build, with a copy button. A 429's wait counts down on the retry button and on a form's line.
 
 `ErrorBoundary` wraps the app and, in `AppShell`, each page (keyed on the page, reset by the address), so a page that
-throws leaves the sidebar working. The panel's own bugs — a screen that failed to draw, an error nothing handled —
-are reported to the shop's log (`lib/error-reporting`, `POST /client-errors`), throttled, with the address stripped of
-query values and the fragment.
+throws leaves the sidebar working. Its «تلاش دوباره» asks again for what failed (`onRetry`: the page's file, which did
+not load offline — `preloadPage()`) and draws the page again; drawn, the page's main column (`#main`) takes the focus
+the pressed button had. Outside the shell (the sign-in, the installer), the router's error screen (`RouteError`)
+offers «تلاش دوباره» where retrying can help: it loads the page's file again and follows the same history entry afresh,
+what it carries too (where a sign-in leads back to). The panel's own bugs — a screen that failed to draw, an error
+nothing handled — are reported to the shop's log (`lib/error-reporting`, `POST /client-errors`), throttled, with the
+address stripped of query values and the fragment.
+
+A read that failed keeps its failure on screen while «تلاش دوباره» asks again (`useReadFailure` in `components/page`,
+which `ListView` and the page-level reads use): otherwise the read would go back to "loading", taking the failure, its
+button and the focus on it away until the answer. The button spins meanwhile, so a second press asks nothing more.
 
 ## Sessions and unsaved changes
 
@@ -148,7 +185,23 @@ topbar's title and the document's title (`lib/document-title`).
 
 Dialogs are native `<dialog>` elements (`Modal`, the drawer) driven by `lib/use-native-dialog`, so the browser gives
 the focus trap, Escape and the top layer. While a modal is open the body is inert, so Radix's selects, menus and
-tooltips — and the toasts — portal into the topmost dialog (`components/portal-container`).
+tooltips — and the toasts — portal into the topmost dialog (`components/portal-container`). The focus:
+
+- **on opening** goes to a `[data-autofocus]` control, else the first field. On a phone, where a field's focus brings
+  up the keyboard over half the sheet, it goes to the dialog itself instead — read out by its name, the whole sheet in
+  sight — unless typing is the dialog's whole point (`Modal`'s `typing`: the bot text editor);
+- **on closing** goes back to what had it when the dialog opened (for a menu item, the menu's trigger) — or to the
+  page's main column (`#main`) when that control is gone, disabled or hidden by then, so it never falls to the
+  document.
+
+**On a phone** (below `md`) a `Modal` is a sheet rising from the bottom edge, and the head that stays is its title and ✕
+alone: the description scrolls with the content (`Modal` draws it in the body there), rather than keep a third of a
+short screen from it. A row that must stay in reach sticks to the sheet's foot, edge to edge, over what scrolls under it
+— `SHEET_FOOT` (`components/form-footer`), pulled down into the body's bottom padding so nothing scrolls by beneath it:
+`FormActions` always, and `OperationsSection` given `foot` — the dialog's very business, the receipt review's decisions
+(`ReviewModal`) — while no operation's strip is open (an open strip scrolls with the rest). The ✕ is a finger's 44px
+there; so is the press of every small control, its look unchanged (`touch-target` in `index.css`: `Button`, the filter
+pills, `Switch`, `Disclosure`, `InfoTip`), and inputs and selects are 44px tall.
 
 ## The component kit
 
@@ -157,13 +210,13 @@ A screen is built from the kit, never beside it:
 | Need | Components |
 |---|---|
 | A page | `Page` (its column width), `PageHeader`, `SectionedPage` (with a section picker on phones) |
-| A list | `ListView` (one state at a time), `SortableHead`, `Pagination`, `RowMenu`, `RowTitleButton`/`RowTitleLink`, `Dash` |
+| A list | `ListView` (one state at a time), `SortableHead`, `Pagination`, `RowMenu`, `RowTitleButton`/`RowTitleLink`, `PhoneFacts` (under a row's title on a phone), `Dash` |
 | Filters | `SearchBox`, `FilterSelect`, `DateFilter` + `DateRangePicker` (Jalali), `CustomerFilter`, `ListTotal` |
 | An admin-ordered list | `OrderHead`/`OrderCell`, `EditMenu`, `RemoveConfirm` (components/sortable-list), `useEditor` + `EditorModal` |
 | Dialogs | `Modal`, `ConfirmModal`, `DetailModal` + `DetailFooter`, `PickerModal` (pick a driver, then its form) |
 | A row's operations | `useOperations` + `OperationsSection` (components/operations) |
 | Forms | `Field`, `FieldGroup` (several controls that are one field), `FormPart`, `CheckList`, `HourSelect`, `FormActions`, `SaveFooter`, `SectionCard`, `Disclosure`, `SwitchRow`, `SecretField`, `NoteInput`, `DriverFields`/`DriverPicker` |
-| Feedback | `ErrorState`, `Callout`, `EmptyState`, `StatCard`/`StatGrid`, `StatusBadge`/`StatusDot`/`CountBadge`, `InfoTip`/`InfoBadge`, `ProgressBar` |
+| Feedback | `ErrorState`, `Callout`, `EmptyState`, `PageStrip` (the strip under the topbar: the connection, an agent's shop that sells nothing), `StatCard`/`StatGrid`, `StatusBadge`/`StatusDot`/`CountBadge`, `InfoTip`/`InfoBadge`, `ProgressBar`, `Rating` (a rating's five stars, reviews and tickets alike) |
 | People and links | `UserIdentity`, `CustomerFacts`, `TelegramChatLink`, `TextLink`, `BackLink`, `Reviewer`, `ApiPicture` |
 | Switching | `PageTabs` — the one tab/choice control (deliberately no segmented control) |
 
@@ -172,11 +225,31 @@ A few rules the kit enforces:
 - **Held, not disabled.** A control that cannot act right now but may have the focus (a submit while nothing changed,
   every operation while one runs, a pagination arrow with nowhere to go) is `aria-disabled`, so a press keeps the
   keyboard's focus instead of dropping it on the document. `Button` swallows the press when held.
+- **A press that writes sends once.** `ConfirmModal` and `ConfirmActions` hold their confirm button from its press
+  until the writes it started settle, or the dialog closes (`lib/use-press-hold`): react-query says a mutation runs
+  only a tick later, so without it a double click sends the write twice. A screen needs no guard of its own.
+- **A field waits while its program is off** — a bot-settings card's fields are held while the program's switch is
+  off (`useHeldWhile()`, `components/bot/settings/use-bot-settings-group`) — every reward program's card alike, the
+  lucky wheel's wait and cost too —, except one changed since the last save: the
+  save carries every field, and one the server refuses must be there to fix. A changed field stays open even when it
+  is typed back to the kept value, so it is never held under the typist's focus — until the program is switched on, or
+  the card is saved or reverted (the form's `touched`) and the focus has left the text field (a save sent with Enter
+  keeps it there).
+- **A table fits a phone** (`components/ui/table`). Below `md` it keeps its title column, its amount where it lists
+  money, and its controls; every other column is `hidden md:table-cell`. What a phone still needs of those columns —
+  the status first — goes under the row's title in `PhoneFacts`, which draws nothing from `md` up, so nothing is said
+  twice. A tablet (`md` to `xl`) has little more room — the rail or the sidebar takes its share, about 650px are left
+  for a list —, so the columns a list can do without come back at `xl` (`hidden xl:table-cell`: the customers',
+  payments', orders', subscriptions', tickets' and plans' lists), or at `lg` where a list has room to spare. The last
+  column — the row's controls, its header «عملیات» for screen readers alone — sticks to the end when
+  the table scrolls sideways, its edge shadowed while rows pass under it (`data-under`).
 - **The focus never falls to the document**: a refused form focuses its first invalid field, opening a closed
   `Disclosure` for it; operations move the focus to the next sensible control; a closed dialog returns it to its opener.
 - **Drivers are drawn from their description**: `components/driver-form` draws any driver's form from the API's
   `DriverDescription` and sends it back as the server reads it — a new driver needs nothing in the panels
-  ([Drivers](Drivers.md)).
+  ([Drivers](Drivers.md)). A kept secret whose bound field has changed (a server's address, proxy or TLS check) is
+  drawn as one to type again (`SecretField`'s `stays` false), with the server's own words for why, before anything is
+  sent.
 - `components/ui` holds shadcn primitives restyled to the design; reinstall one with `pnpm dlx shadcn@latest add -o`
   (components.json has `"rtl": true`), then re-apply the `PortalContainerContext` container prop on portalled ones.
 
@@ -189,15 +262,27 @@ The look follows the design language of Anthropic's Claude Console (code comment
 component copies one of its patterns). `index.css` defines every colour once per theme on `:root` and `.dark`, mapped
 to Tailwind names in `@theme inline`: four near-neutral surfaces, hairlines and fills as alpha, three text inks (each at
 least 4.5:1), one inverted primary, blue only for links, focus and what is selected, and green, amber and red status
-families. The type scale has its own
+families — the red edge (`--danger-line`) at least 3:1 on the surfaces, which `src/index.css.test.ts` checks in both
+themes. The type scale has its own
 names (`text-caption` … `text-display`); `lib/utils`' `cn()` teaches tailwind-merge that they are sizes. Dark is the
 default theme and there is no "system" theme; each index.html applies the saved theme before the first paint.
 
 The panels are Persian and right to left: logical classes (`ps-`, `ms-`, `start-`), Radix in RTL, icons flipped with
 `rtl:`/`ltr:`. One typeface, Vazirmatn, self-hosted, for everything. Latin content (`dir="ltr"`) is nudged down a pixel
 because Vazirmatn's Latin glyphs sit higher than its Persian ones. In a plain string a Latin run is wrapped in Unicode
-isolates (`lib/direction`'s `isolate()`, `handleLabel()`, `idLabel()`) so «@amir» does not become «amir@». Numbers and
-dates go through `lib/format` (Persian digits, Jalali dates in the shop's time zone); identifiers keep Latin digits.
+isolates (`lib/direction`'s `isolate()`, `handleLabel()`, `idLabel()`) so «@amir» does not become «amir@»; the server's
+own words carry a row's number bare (a ledger line's note «شارژ کیف پول (سفارش #4)», a refusal), so `isolateIds()`
+isolates every «#12» in them, and the wallet's and an agent's traffic histories and `lib/failure` pass them through it.
+The browser's tab and history often draw an isolate as a box or a gap: `lib/document-title` opens each isolated run
+with the mark of its own direction instead (U+200E LRM, or U+200F RLM for a right-to-left run) and drops the isolates,
+so «تیکت #12» still reads «#12» in the tab.
+
+Numbers and dates go through `lib/format` (Persian digits, Jalali dates in the shop's time zone; `lib/jalali`'s `shopClock()` is a
+moment's day and hour on the shop's clock, whatever the browser's); identifiers keep Latin digits, and so do a form
+hint's bounds and a value as the owner types it («بین 5 تا 120», «0»,
+[Conventions](Conventions.md#money-time-and-numbers)).
+A typed price is read as the server reads money: `tomanOf()` takes «هزار», «میلیون» and Toman's words exactly as
+`Input::amountOf()` does for `Unit::Toman` — never another unit's word, so «۲۰ گیگ» is no price.
 
 ## Frontend conventions
 
@@ -226,7 +311,8 @@ has lives in `apps/<panel>/pages`, and the parts of a page in a domain folder of
 - **A server-paged list** — `usePagedList` + `ListView`, status tabs (`statusTabs()`, the tab that waits on a human first,
   counted from the list's `meta`), a `SearchBox` and filter pills. Its view lives in the address, so other screens link
   to a filtered list (`searchLink()` for `?search=#12`, `customerList()` for `?user=`).
-- **An admin-ordered list** — `useRows` + `ListView`, ▲▼ (`OrderCell`), an inline `Switch`, `useEditor` + `EditorModal`
+- **An admin-ordered list** — `useRows` + `ListView`, ▲▼ (`OrderCell`, each move said politely to assistive tech:
+  «… به ردیف ۲ رفت»), an inline `Switch`, `useEditor` + `EditorModal`
   for its form and `RemoveConfirm` for a delete; `kept` names the rows the server would refuse to delete.
 - **A row's dialog** — `useOpenRow` follows the row while the dialog is open; `DetailModal` + `useOperations` draw the
   operations the row's `actions` allow. Each dialog names the reads its operations change elsewhere in a `CHANGES`
@@ -244,15 +330,23 @@ on the shop shown (an agent's shop has no agency, needs traffic on every plan) a
 ### Sales and support queues
 
 Orders, payments, subscriptions, support tickets and reviews are server-paged lists whose first tab is the queue: stuck
-orders, receipts to review, services ending soon, tickets waiting on an answer, reviews waiting on support. The same
-counts feed the menu's badges and the dashboard's attention card (`GET /queues`).
+orders, receipts to review, services ending soon, tickets waiting on an answer, reviews waiting on support. The
+payments list has a «نگه داشته شده» tab beside the receipts: online payments held for support (`status=held`, counted
+in the list's `meta.held`). The menu's badges read `GET /queues`. The dashboard's attention card reads
+`GET /dashboard`'s `attention`: its «… مورد منتظر اقدام شماست» counts only what waits on the admin — receipts, held
+payments, failed deliveries, tickets and reviews waiting, failing servers (the main shop's), and an agent's selling
+notice and traffic shortage —, each linking to its filtered list; «در انتظار مشتری» (unpaid orders, services ending
+soon) is listed under them uncounted. With nothing to count the header's line is left out, and the card's empty state
+says it once («همه‌چیز مرتب است»). Failing servers are switched-on ones with a `last_error` (`DashboardStats`): a
+server switched off is no one's to see to.
 
 - The payments dialog (`ReviewModal`) words each operation by what the payment paid for, and «بعدی» (`useNextRow`) walks
   the list so a queue of receipts is reviewed in a row.
 - The subscriptions screen ticks rows across pages and moves them in a batch (`useMoveBatch`): one request per service,
   so each one's outcome shows; an old panel that does not answer pauses the batch on `SkipServerPrompt`.
-- A ticket has a page of its own (`pages/ticket.tsx`): `Conversation` and `ReplyForm`, which refuses a picture over the
-  server's limit before sending it.
+- A ticket has a page of its own (`pages/ticket.tsx`): `Conversation`, which names support's writer by their name
+  (`reviewer_name`) beside how they are kept, and `ReplyForm`, which refuses a picture over the server's limit before
+  sending it and sends each answer under its `useRequestKey()`.
 
 ### The customer page
 
@@ -311,16 +405,25 @@ beside a bot-settings card for the program's switch and rules. A program that is
 
 The owner's servers (`apps/admin/pages/servers.tsx` and `server-detail.tsx`, `components/servers`) are added through a
 `PickerModal` of the connectors; `ServerForm` draws the connector's form from its description and tests it with
-`useProbe`. A grant (a server's «افزودن زمان و حجم») and the mass gift share `components/grants`, and a server's
-«انتقال سرویس‌ها» is `components/servers/migrations-card`: while a grant or a move is under way and its card is on screen,
+`useProbe`. On the server's page it follows the server's copy (`follow`) as the settings cards do: a save elsewhere
+meanwhile (another tab, a live refresh) is said over the draft by `ChangedElsewhere`, whose «دیدن نسخه تازه» takes the
+newer copy. A server row's `last_error` is the diagnosis and `last_error_detail` the technical detail
+(`ProviderErrorPresenter::split()` takes apart the one line the server keeps); `LastError`
+(`components/servers/server-status`) draws the detail on a line of its own, left to right — in the list's ⓘ and on the
+status card, as `ProbeResult` draws a probe's.
+
+A grant (a server's «افزودن زمان و حجم») and the mass gift share `components/grants`, and a server's «انتقال سرویس‌ها» is `components/servers/migrations-card`: while a grant or a move is under way and its card is on screen,
 `useJobRunner` (`lib/use-job-runner`, through `useGrants` and `useMigrations`) works it a request at a time so it
 finishes without waiting for the scheduler, which carries on otherwise — the next a second after, half a minute while it
-waits for a panel, ten seconds after a request that got no answer.
+waits for a panel, ten seconds after a request that got no answer or a server error (a 5xx). The run ends once a turn
+no longer works the job, when a request is refused (a 4xx: the job gone, the session ended), or when the panel's own
+code fails — that one with a toast and a report, the scheduler carrying on.
 
 The owner's agency page (`/agents`) has requests, agents, levels and rules; «باز کردن فروشگاه» is a real link
 (`useOpenShop().link()`), so it opens the agent's shop in a new tab like any link. An agent's own account page
-(`apps/agent/pages/account.tsx`) reads `accountQuery`, which also tells extensions how much traffic is left. A bot whose
-traffic covers no plan shows `TrafficShortageNotice` on the dashboard and the account.
+(`apps/agent/pages/account.tsx`) reads `accountQuery`. The agent's services screen reads it too (`useBotTraffic()` in
+`apps/agent/app.tsx`), so «افزایش زمان و حجم» on a service knows how much traffic the agent's bot has left to give. A
+bot whose traffic covers no plan shows `TrafficShortageNotice` on the dashboard and the account.
 
 ### Website and panel settings
 

@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Modules\Agency\Services\AgencySettings;
+use App\Modules\Agency\Services\AgencyStanding;
+use App\Modules\Bots\CurrentBot;
+use App\Modules\Bots\Exceptions\SellingSuspendedException;
+use App\Modules\Bots\Models\Bot;
 use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Orders\Models\Order;
@@ -78,6 +83,29 @@ final class OrderOpeningTest extends DatabaseTestCase
         self::assertSame(RenewalMethod::Extend, $orders->createRenewal($ali, $service, $plan)->refresh()->renewal_method, 'an extension when none is given');
     }
 
+    public function testAnAgentsShopSuspendedSinceItWasReadOrdersNothing(): void
+    {
+        $this->telegram();
+        $server = $this->fakeServer('Berlin');
+        $bot = $this->agentBot();
+        // A request — a bot's polling process — holds its copy of the shop from before the owner suspended its selling.
+        $copy = Bot::query()->findOrFail($bot->id);
+        $this->service(AgencyStanding::class)->suspendByHand($bot, null);
+
+        CurrentBot::run($copy, function () use ($server): void {
+            $plan = $this->plan([], $server);
+            $reza = $this->customer(['telegram_id' => 7001]);
+            self::assertTrue(CurrentBot::get()->sells(), 'its copy still says it sells');
+
+            try {
+                $this->service(OrderService::class)->openPurchase($reza, $plan, $server);
+                self::fail('ordered in a shop whose selling is suspended');
+            } catch (SellingSuspendedException) {
+                self::assertSame(0, Order::query()->count(), 'nothing ordered');
+            }
+        });
+    }
+
     public function testATopUpOrTrafficOutsideTheShopsBoundsIsRefusedWhoeverAsks(): void
     {
         $orders = $this->service(OrderService::class);
@@ -86,6 +114,8 @@ final class OrderOpeningTest extends DatabaseTestCase
         self::assertSame(['amount'], array_keys($this->refusedWith(static fn() => $orders->openTopUp($ali, WalletSettings::TOPUP_MAX + 1))), 'past the most');
         $agent = $this->agent(overrides: ['telegram_id' => 7007]);
         self::assertSame(['gb'], array_keys($this->refusedWith(static fn() => $orders->openTraffic($agent, 9))), "below the agency program's least");
+        // Both bounds named, as the bot's own refusal of a typed amount names them (AgencyTrafficInvalid).
+        self::assertSame(['gb' => ['حجم باید بین ۱۰ و ۱۰۰٬۰۰۰ گیگابایت باشد.']], $this->refusedWith(static fn() => $orders->openTraffic($agent, AgencySettings::TRAFFIC_MAX_GB + 1)), 'past the most');
 
         self::assertSame(0, Order::query()->count());
     }

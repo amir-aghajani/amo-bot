@@ -43,7 +43,7 @@ final class AdminBotTextsApiTest extends HttpTestCase
             'limit' => TextKind::Message->limit(),
             'title' => $spec->title,
             'description' => $spec->description,
-            'variables' => [['name' => 'name', 'description' => $meaning, 'sample' => $sample, 'required' => false]],
+            'variables' => [['name' => 'name', 'description' => $meaning, 'sample' => $sample, 'html' => false, 'required' => false]],
             'default' => $spec->default,
             'value' => $spec->default,
             'customized' => false,

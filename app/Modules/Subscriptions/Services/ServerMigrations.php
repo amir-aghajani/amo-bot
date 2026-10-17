@@ -8,6 +8,7 @@ use App\Core\Database\Lease;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Scheduling\Budget;
 use App\Modules\Auth\Actor;
+use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Auth\Services\SessionPresenter;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
@@ -89,6 +90,7 @@ final class ServerMigrations
         private readonly Pacer $pacer,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
+        private readonly Reviewers $reviewers,
     ) {}
 
     /**
@@ -323,8 +325,9 @@ final class ServerMigrations
         $jobs = ServerMigration::query()->where('source_server_id', $source->id)->with(['source', 'target'])->withCount('leftovers')
             ->latest('id')->limit(self::HISTORY)->get();
         $plans = self::planNames($jobs);
+        $names = $this->reviewers->names($jobs->pluck('reviewer'));
 
-        return $jobs->map(fn(ServerMigration $job): array => $this->present($job, $plans))->values()->all();
+        return $jobs->map(fn(ServerMigration $job): array => $this->present($job, $plans, $names))->values()->all();
     }
 
     /**
@@ -347,11 +350,14 @@ final class ServerMigrations
      *
      * @param array<int, string>|null $plans The names of the plans jobs are narrowed to, by id: read with the list
      *                                       (historyOn()), else now
+     * @param array<string, string>|null $names The names of the admins who started jobs, by reviewer (Reviewers::names()):
+     *                                          the same
      * @return array<string, mixed>
      */
-    public function present(ServerMigration $job, ?array $plans = null): array
+    public function present(ServerMigration $job, ?array $plans = null, ?array $names = null): array
     {
         $plans ??= self::planNames([$job]);
+        $names ??= $this->reviewers->names([$job->reviewer]);
         // Counted with the list (historyOn()), else now.
         $left = $job->getAttributes()['leftovers_count'] ?? null;
 
@@ -371,9 +377,11 @@ final class ServerMigrations
             'skipped' => $job->skipped,
             'left_behind' => $left !== null ? (int) $left : $job->leftovers()->count(),
             'waiting_reason' => $job->waiting_reason,
+            'waiting_on' => self::waitingOn($job),
             'reason' => $job->reason,
             'last_failure' => $job->last_failure,
             'reviewer' => $job->reviewer,
+            'reviewer_name' => $names[$job->reviewer ?? ''] ?? null,
             'created_at' => $job->created_at->toIso8601String(),
             'started_at' => $job->started_at?->toIso8601String(),
             'finished_at' => $job->finished_at?->toIso8601String(),
@@ -683,6 +691,28 @@ final class ServerMigrations
         }
 
         return $ids === [] ? [] : Plan::query()->withoutGlobalScope(CurrentBot::SCOPE)->whereIn('id', array_unique($ids))->pluck('name', 'id')->all();
+    }
+
+    /**
+     * Which panel a waiting job waits for, `target` or `source`, as its next turn meets them (carry()): the target's,
+     * which every mode asks first, else a migration's source's (a rescue never asks it) — one in its backoff before
+     * one whose last contact merely failed. Null while it waits for none: moving, or that panel answered since.
+     */
+    private static function waitingOn(ServerMigration $job): ?string
+    {
+        if ($job->waiting_reason === null) {
+            return null;
+        }
+        $sides = array_filter(['target' => $job->target, 'source' => $job->mode === MigrationMode::Migrate ? $job->source : null]);
+        foreach ([static fn(Server $server): bool => $server->isBackingOff(), static fn(Server $server): bool => $server->last_error !== null] as $down) {
+            foreach ($sides as $side => $server) {
+                if ($down($server)) {
+                    return $side;
+                }
+            }
+        }
+
+        return null;
     }
 
     /** «سرور مقصد «هلند»: …», «سرور مبدا «آلمان»: …» — what is wrong, and with which of the two. */

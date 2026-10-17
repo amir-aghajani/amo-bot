@@ -75,6 +75,15 @@ enum Refusal
         return $this === self::Unreachable || $this === self::FloodWait;
     }
 
+    /**
+     * Whether a lookup of one user in a chat (getChatMember) was refused for that user — an id Telegram does not know
+     * there — rather than for the chat: by its description, as a 400 is told apart.
+     */
+    public static function aboutTheUser(string $description): bool
+    {
+        return preg_match('/user not found|participant_id_invalid|user_id_invalid|invalid user_id/i', $description) === 1;
+    }
+
     /** A 400, by what its description says — the first that fits, the most specific first. */
     private static function badRequest(string $description): self
     {

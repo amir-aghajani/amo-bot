@@ -3,7 +3,7 @@ import { Layers, Plus } from 'lucide-react'
 import { LevelForm } from '@/components/agency/level-form'
 import { agencyLevelsQuery } from '@/components/agency/queries'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowTitleButton } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { EditorModal, useEditor } from '@/components/row-editor'
 import { SectionActions } from '@/components/sectioned-page'
 import { ActionsHead, EditMenu, OrderCell, OrderHead, RemoveConfirm } from '@/components/sortable-list'
@@ -57,7 +57,7 @@ export function LevelsList() {
               <OrderHead />
               <TableHead>سطح</TableHead>
               <TableHead>هر گیگابایت</TableHead>
-              <TableHead>نماینده‌ها</TableHead>
+              <TableHead className="hidden md:table-cell">نماینده‌ها</TableHead>
               <ActionsHead />
             </TableRow>
           </TableHeader>
@@ -67,9 +67,10 @@ export function LevelsList() {
                 <OrderCell list={list} index={index} label={level.name} />
                 <TableCell>
                   <RowTitleButton onClick={() => editor.edit(level)}>{level.name}</RowTitleButton>
+                  <PhoneFacts>{formatNumber(level.counts.agents)} نماینده</PhoneFacts>
                 </TableCell>
                 <TableCell className="tabular">{formatMoney(level.price_per_gb)}</TableCell>
-                <TableCell className="tabular">{formatNumber(level.counts.agents)}</TableCell>
+                <TableCell className="hidden tabular md:table-cell">{formatNumber(level.counts.agents)}</TableCell>
                 <TableCell>
                   <EditMenu label={level.name} onEdit={() => editor.edit(level)} onRemove={() => setRemoving(level)} />
                 </TableCell>

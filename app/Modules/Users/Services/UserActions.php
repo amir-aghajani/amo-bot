@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Users\Services;
 
 use App\Core\Database\Ledger;
+use App\Core\Exceptions\KeyReusedException;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Accounts\Exceptions\AccountRefusedException;
 use App\Modules\Accounts\Services\CustomerSessions;
@@ -23,8 +24,9 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Support's decisions about a customer's account, from the panels or the website's admin side: ban, the admin role
- * (panels only), a wallet adjustment, turning two-factor sign-in off, signing out everywhere. An admin never adjusts
- * their own wallet, and from the website never touches an admin's or an agent's account. Each is logged with who did it.
+ * (panels only), their groups, a wallet adjustment, turning two-factor sign-in off, signing out everywhere. An admin
+ * never adjusts their own wallet, and from the website never touches an admin's or an agent's account. Each is logged
+ * with who did it.
  */
 final class UserActions
 {
@@ -32,6 +34,7 @@ final class UserActions
         private readonly WalletService $wallet,
         private readonly TwoFactor $twoFactor,
         private readonly CustomerSessions $sessions,
+        private readonly CustomerGroups $groups,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -71,13 +74,15 @@ final class UserActions
 
     /**
      * Credits or debits the wallet by hand (a debit no further than the balance), with a note the customer sees, under the
-     * actor's name.
+     * actor's name — and under the request's Idempotency-Key `$key` when it sent one: the same change asked again is
+     * answered by the line it wrote (`wasRecentlyCreated` false), never made twice.
      *
      * @param array<string, mixed> $input {type: credit|debit, amount, description?}
      * @throws ActorRefusedException 403 one of the shop's admins' own wallet
      * @throws ValidationException
+     * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another line
      */
-    public function adjustWallet(User $user, Actor $actor, array $input): WalletTransaction
+    public function adjustWallet(User $user, Actor $actor, array $input, ?string $key = null): WalletTransaction
     {
         $errors = [];
 
@@ -105,13 +110,30 @@ final class UserActions
         }
 
         if ($type === WalletTransactionType::Credit) {
-            return $this->wallet->credit($user, $amount, $note ?? WalletService::LINE_CREDIT_BY_SUPPORT, $actor->reviewer);
+            return $this->wallet->credit($user, $amount, $note ?? WalletService::LINE_CREDIT_BY_SUPPORT, $actor->reviewer, $key);
         }
         try {
-            return $this->wallet->debit($user, $amount, $note ?? WalletService::LINE_DEBIT_BY_SUPPORT, reviewer: $actor->reviewer);
+            return $this->wallet->debit($user, $amount, $note ?? WalletService::LINE_DEBIT_BY_SUPPORT, reviewer: $actor->reviewer, key: $key);
         } catch (InsufficientBalanceException $e) {
             throw ValidationException::on('amount', 'موجودی کاربر ' . Money::format($e->balance) . ' است و از این بیشتر نمی‌شود کم کرد.');
         }
+    }
+
+    /**
+     * Puts the customer in the groups the admin ticked, every one listed and no other (CustomerGroups::assign()) — from
+     * the website never an admin's account, their own included, nor an agent's: a «همکار» group would set their prices.
+     *
+     * @param mixed $ids The `group_ids` the panel sent
+     * @throws ActorRefusedException 403 from the website, an admin's account or an agent's — or a «همکار» group added
+     *                               without the `catalog` grant
+     * @throws ValidationException 422 on `group_ids` when one is not a group
+     */
+    public function assignGroups(User $user, Actor $actor, mixed $ids): void
+    {
+        $this->mayTouch($user, $actor);
+
+        $groups = $this->groups->assign($user, $actor, $ids);
+        $this->logger->info('Customer #{customer} put in groups {groups} by {reviewer}', ['customer' => $user->id, 'groups' => $groups, 'reviewer' => $actor->reviewer]);
     }
 
     /**

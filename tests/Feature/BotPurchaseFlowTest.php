@@ -13,19 +13,23 @@ use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Telegram\Handlers\MenuHandler;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Handlers\TopUpHandler;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
+use App\Modules\Telegram\Models\TelegramSession;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Users\Exceptions\InsufficientBalanceException;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
+use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\Traffic;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 use Tests\Fakes\FakeProvider;
 
@@ -94,6 +98,19 @@ final class BotPurchaseFlowTest extends BotTestCase
         self::assertSame('80000.00', $this->ali->balance());
     }
 
+    public function testAPurchaseThatWouldEndPastTheLastDayTheShopKeepsIsSaidSoAndNothingIsOrderedOrCharged(): void
+    {
+        // The plan's 30 days, bought 20 days before the TIMESTAMP columns' last moment.
+        Carbon::setTestNow(LocalTime::last()->subDays(20));
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
+
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
+
+        self::assertSame([TermTooLongException::message()], $this->said());
+        self::assertSame([$this->checkoutOf($this->plan, $this->berlin)], $this->callbacks(0), 'with the way back to the checkout');
+        self::assertSame([0, '200000.00', []], [Order::query()->count(), $this->ali->balance(), FakeProvider::$created]);
+    }
+
     public function testTheSameWalletButtonTwicePaysOnce(): void
     {
         $this->wallet($this->ali, '500000.00');
@@ -125,6 +142,42 @@ final class BotPurchaseFlowTest extends BotTestCase
         self::assertSame([$this->checkoutOf($this->plan, $this->berlin)], $this->callbacks(0), 'the way back to a fresh checkout');
         self::assertSame(0, Order::query()->count(), 'nothing ordered');
         self::assertSame('200000.00', $this->ali->balance(), 'nothing charged');
+    }
+
+    /**
+     * Two checkouts of one amount are still two: the older one's wallet button, repriced since to the newer's amount, is
+     * no tap on the checkout on screen — its checkout is drawn again, at what it costs now, before anything is paid.
+     */
+    public function testAWalletTapOnAnOlderCheckoutRepricedToTheNewersAmountDrawsItAgainFirst(): void
+    {
+        $bigger = $this->plan(['name' => 'سه‌ماهه', 'price' => '150000.00'], $this->berlin);
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
+        $this->send($this->tap($this->checkoutOf($bigger, $this->berlin)));
+        $this->plan->forceFill(['price' => '150000.00'])->save();
+
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
+
+        self::assertSame([self::text(BotText::Checkout, ['plan' => 'یک‌ماهه', 'server' => 'آلمان', 'amount' => Money::format('150000')])], $this->said(), 'the older checkout as it costs now');
+        self::assertSame(0, Order::query()->count(), 'nothing ordered');
+        self::assertSame('200000.00', $this->ali->balance(), 'nothing charged at a price never shown for it');
+
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
+        self::assertSame('50000.00', $this->ali->balance(), 'paid from the checkout drawn again, at the price it showed');
+        self::assertSame($this->plan->id, Order::query()->sole()->plan_id);
+    }
+
+    /** A chat whose checkout state was written before it named its checkout is drawn that checkout again once. */
+    public function testACheckoutStateOfTheOldFormIsACheckoutDrawnAgainOnce(): void
+    {
+        $this->send($this->tap($this->checkoutOf($this->plan, $this->berlin)));
+        TelegramSession::query()->where('chat_id', self::CHAT)->update(['state' => 'checkout.120000.00']);
+
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
+        self::assertSame([self::text(BotText::Checkout, ['plan' => 'یک‌ماهه', 'server' => 'آلمان', 'amount' => Money::format('120000')])], $this->said());
+        self::assertSame('200000.00', $this->ali->balance());
+
+        $this->send($this->tap($this->payButton($this->plan, $this->berlin, $this->wallet)));
+        self::assertSame('80000.00', $this->ali->balance());
     }
 
     public function testADescriptionIsItsOwnLineUnderTheName(): void

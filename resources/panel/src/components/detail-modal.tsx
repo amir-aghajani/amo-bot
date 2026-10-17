@@ -56,7 +56,8 @@ interface DetailFooterProps {
 
 /**
  * The foot of a detail dialog: a way to the customer in Telegram (when there is a customer, and they have a Telegram
- * account), and closing it — which, as the dialog's ✕ and Escape, waits while an operation runs (`busy`).
+ * account), and closing it — which, as the dialog's ✕ and Escape, waits while an operation runs (`busy`). Its buttons,
+ * and what a dialog adds there, are a finger's 44px on a phone.
  */
 export function DetailFooter({ user, busy, onClose, children }: DetailFooterProps) {
   useHoldOpen(busy)
@@ -64,13 +65,13 @@ export function DetailFooter({ user, busy, onClose, children }: DetailFooterProp
   return (
     <div className="flex items-center gap-2 border-t border-border pt-4">
       {user && (
-        <Button asChild variant="ghost" size="sm">
+        <Button asChild variant="ghost" size="sm" className="max-md:h-11">
           <TelegramChatLink user={user} />
         </Button>
       )}
       <div className="ms-auto flex items-center gap-2">
         {children}
-        <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+        <Button variant="ghost" size="sm" onClick={onClose} disabled={busy} className="max-md:h-11">
           بستن
         </Button>
       </div>

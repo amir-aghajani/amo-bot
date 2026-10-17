@@ -8,6 +8,7 @@ use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Support\Persian;
 use App\Support\Traffic;
+use App\Support\Unit;
 
 /**
  * An extra a customer may buy for a service («حجم، زمان و کاربر اضافه», Services\CustomerExtras): traffic in GB, time
@@ -32,6 +33,16 @@ enum ExtraKind: string
             self::Traffic => 'گیگابایت',
             self::Time => 'روز',
             self::Devices => 'کاربر',
+        };
+    }
+
+    /** The unit an amount of it is typed in: the words the bot reads after the number (Input::amountOf()). */
+    public function typedUnit(): Unit
+    {
+        return match ($this) {
+            self::Traffic => Unit::Gigabyte,
+            self::Time => Unit::Day,
+            self::Devices => Unit::Device,
         };
     }
 

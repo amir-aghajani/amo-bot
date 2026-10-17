@@ -3,9 +3,11 @@ import { agencyLevelsQuery } from '@/components/agency/queries'
 import { ErrorState } from '@/components/error-state'
 import { Field } from '@/components/field'
 import { MoneyField } from '@/components/money-field'
+import { useReadFailure } from '@/components/page'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { AgencyTermsRequest } from '@/lib/api-types'
 import { decimalInput, formatPricePerGb } from '@/lib/format'
+import { asAmount } from '@/lib/use-form'
 
 /**
  * What an agent is given — their level, and the credit their wallet may go below zero by —, as the form holds it: each
@@ -15,6 +17,9 @@ export type AgencyTerms = Record<'level_id' | 'credit_limit', string>
 
 /** The two as the API takes them. */
 export const termsBody = (values: AgencyTerms): Pick<AgencyTermsRequest, 'level_id' | 'credit_limit'> => ({ level_id: values.level_id, credit_limit: decimalInput(values.credit_limit) })
+
+/** The two as the server reads them, for a form's `reads`: the credit as whole Toman («۵۰۰٬۰۰۰» is 500000). */
+export const termsRead = (values: AgencyTerms) => ({ level_id: values.level_id.trim(), credit_limit: asAmount(values.credit_limit) })
 
 interface AgencyTermsFieldsProps {
   values: AgencyTerms
@@ -26,10 +31,11 @@ interface AgencyTermsFieldsProps {
 export function AgencyTermsFields({ values, set, error }: AgencyTermsFieldsProps) {
   const levels = useQuery(agencyLevelsQuery)
   const { data } = levels
+  const failure = useReadFailure(levels)
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {levels.error && !data && <ErrorState what="لیست سطح‌ها" error={levels.error} onRetry={() => void levels.refetch()} retrying={levels.isFetching} className="sm:col-span-2" />}
+      {failure.error && !data && <ErrorState what="لیست سطح‌ها" error={failure.error} onRetry={() => void levels.refetch()} retrying={failure.retrying} className="sm:col-span-2" />}
       <Field
         id="agency_level"
         label="سطح"

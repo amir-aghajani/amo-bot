@@ -3,16 +3,17 @@ import { Headset, Search } from 'lucide-react'
 import { Link } from 'react-router'
 import { CustomerFilter } from '@/components/customer-filter'
 import { EmptyState } from '@/components/empty-state'
-import { Dash, ListView } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
+import { Rating } from '@/components/rating'
 import { SearchBox } from '@/components/search-box'
 import { StatusBadge, statusTabs } from '@/components/status-badge'
-import { ticketPage, TicketRating, TicketSubject } from '@/components/tickets/ticket-cells'
+import { ticketPage, TicketSubject } from '@/components/tickets/ticket-cells'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { UserIdentity, userPage } from '@/components/user-identity'
+import { UserIdentity, UserLabel, userPage } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { TicketRow, TicketsResponse, TicketStatus } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
@@ -38,6 +39,7 @@ export function TicketsPage() {
     list: 'tickets',
     statuses: ['', ...QUEUE],
     params: ['user'],
+    ids: ['user'],
     address: '/tickets',
   })
 
@@ -83,36 +85,43 @@ function TicketsTable({ tickets }: { tickets: TicketRow[] }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>شماره</TableHead>
+          {/* The number, the messages and the rating come with the widest screens: a tablet has a phone's room and a half. */}
+          <TableHead className="hidden xl:table-cell">شماره</TableHead>
           <TableHead>موضوع</TableHead>
-          <TableHead>مشتری</TableHead>
-          <TableHead>وضعیت</TableHead>
+          <TableHead className="hidden md:table-cell">مشتری</TableHead>
+          <TableHead className="hidden md:table-cell">وضعیت</TableHead>
           <TableHead className="hidden sm:table-cell">آخرین فعالیت</TableHead>
-          <TableHead className="hidden md:table-cell">پیام‌ها</TableHead>
-          <TableHead className="hidden lg:table-cell">امتیاز</TableHead>
-          <TableHead className="w-24">
-            <span className="sr-only">پاسخ</span>
+          <TableHead className="hidden xl:table-cell">پیام‌ها</TableHead>
+          <TableHead className="hidden xl:table-cell">امتیاز</TableHead>
+          {/* Its button says «پاسخ» or «مشاهده», by the ticket: the column is named for both. */}
+          <TableHead className="md:w-24">
+            <span className="sr-only">عملیات</span>
           </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {tickets.map((ticket) => (
           <TableRow key={ticket.id}>
-            <TableCell className="text-muted-foreground tabular">
+            <TableCell className="hidden text-muted-foreground tabular xl:table-cell">
               <span dir="ltr">#{ticket.id}</span>
             </TableCell>
             <TableCell>
               <TicketSubject ticket={ticket} />
+              <PhoneFacts>
+                <StatusBadge status={TICKET_STATUS[ticket.status]} />
+                <bdi dir="ltr">#{ticket.id}</bdi>
+                <UserLabel user={ticket.customer} />
+              </PhoneFacts>
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden md:table-cell">
               <UserIdentity user={ticket.customer} to={userPage(ticket.customer.id)} />
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden md:table-cell">
               <StatusBadge status={TICKET_STATUS[ticket.status]} />
             </TableCell>
             <TableCell className="hidden text-muted-foreground sm:table-cell">{timeAgo(ticket.last_message_at)}</TableCell>
-            <TableCell className="hidden tabular md:table-cell">{formatNumber(ticket.messages_count)}</TableCell>
-            <TableCell className="hidden lg:table-cell">{ticket.rating === null ? <Dash /> : <TicketRating rating={ticket.rating} />}</TableCell>
+            <TableCell className="hidden tabular xl:table-cell">{formatNumber(ticket.messages_count)}</TableCell>
+            <TableCell className="hidden xl:table-cell">{ticket.rating === null ? <Dash /> : <Rating rating={ticket.rating} />}</TableCell>
             <TableCell>
               <div className="flex justify-end">
                 {/* What waits on support is answered: that row's way in is the primary one — named by its ticket, one of many. */}

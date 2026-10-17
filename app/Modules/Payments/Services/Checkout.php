@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Services;
 
+use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
 use App\Modules\Orders\DTO\OrderKey;
@@ -94,6 +95,8 @@ final class Checkout
      * @throws MethodUnavailableException 422 on `method_id`: the amount is outside the method's bounds, or no card of it
      *                                    has room for it today — nothing left ordered, nothing paid
      * @throws PaymentHeldException 422 on `status`: the order's online payment is held for support — nothing paid
+     * @throws DomainRuleException 422: any other refusal of the order `$open` makes (a purchase whose term would end its
+     *                             service past the last day the shop keeps) — nothing ordered, nothing paid
      */
     public function pay(User $user, PaymentMethod $method, OrderType $type, string $price, \Closure $open, ?string $key = null, ?\Closure $guard = null): CheckoutResult
     {

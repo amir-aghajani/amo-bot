@@ -9,6 +9,8 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Services\ServerSelector;
+use App\Modules\Orders\DTO\Quote;
+use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
@@ -22,11 +24,13 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Models\ServerInbound;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ClientNaming;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
+use App\Support\LocalTime;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
@@ -127,6 +131,36 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
         self::assertSame([null, null], [$expiry->deadline(), $expiry->pendingSeconds()], 'never: no deadline, no term');
         self::assertSame(0, $subscription->duration_hours);
         self::assertFalse($subscription->awaitsFirstUse());
+    }
+
+    public function testAPurchaseThatWouldEndPastTheLastDayTheShopKeepsIsRefusedBeforeAnythingIsOrderedOrMade(): void
+    {
+        // 20 days before the TIMESTAMP columns' last moment: a 30-day plan's service could not be kept (MySQL refuses it).
+        Carbon::setTestNow(LocalTime::last()->subDays(20));
+        $this->service(WalletService::class)->credit($this->customer, '100000', 'test');
+        $orders = $this->service(OrderService::class);
+
+        $quote = new Quote('10000.00', OrderPricing::Regular);
+        foreach (['a plan' => fn() => $orders->openPurchase($this->customer, $this->plan, $this->berlin), 'a gift' => fn() => $orders->openGift($this->customer, $this->plan, $this->berlin), 'a built one' => fn() => $orders->openCustomPurchase($this->customer, 10, 21, $this->berlin, quote: $quote)] as $case => $open) {
+            try {
+                $open();
+                self::fail("Ordered: {$case}.");
+            } catch (TermTooLongException $e) {
+                self::assertSame(TermTooLongException::message(), $e->getMessage(), $case);
+            }
+        }
+        self::assertSame(0, Order::query()->count(), 'nothing ordered');
+        self::assertSame(OrderStatus::Pending, $orders->openCustomPurchase($this->customer, 10, 20, $this->berlin, quote: $quote)->status, 'twenty days end on the last day: fine');
+
+        // Ordered in time, paid once it no longer is (a receipt reviewed late): its delivery fails with the reason, no
+        // client made — never a database error halfway.
+        Carbon::setTestNow(LocalTime::last()->subDays(40));
+        $order = $orders->openPurchase($this->customer, $this->plan, $this->berlin);
+        Carbon::setTestNow(LocalTime::last()->subDays(20));
+        $this->service(PaymentService::class)->createForOrder($order, $this->walletMethod());
+
+        self::assertSame([OrderStatus::Failed, TermTooLongException::message()], [$order->refresh()->status, $order->notes]);
+        self::assertSame([], FakeProvider::$created, 'no panel asked');
     }
 
     public function testAPanelThatCannotWaitForTheFirstConnectionAnswersWithADeadlineAndTheServiceTakesIt(): void
@@ -396,7 +430,7 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
             $selector->resolve($this->plan, $other->id);
             self::fail('expected NoServerAvailableException');
         } catch (NoServerAvailableException $e) {
-            self::assertStringContainsString("سرور #{$other->id}", $e->getMessage());
+            self::assertStringContainsString("سرور \u{200E}#{$other->id}", $e->getMessage());
         }
 
         $this->berlin->forceFill(['is_active' => false])->save();
@@ -487,6 +521,47 @@ final class PurchaseProvisioningTest extends DatabaseTestCase
         self::assertSame(OrderStatus::Fulfilled, $order->status, (string) $order->notes);
         self::assertSame(['customer_1', 'https://fake.test/sub/made'], [$order->subscription?->remote_name, $order->subscription?->subscription_url], 'the client it made, found by its name');
         self::assertSame(['customer_1'], array_keys(FakeProvider::$clients[$this->berlin->id]), 'no second client under the next name, nor one left behind');
+    }
+
+    public function testAClientThePanelMadeThoughItsReadBackFailedIsDeliveredRatherThanLeftUnrecorded(): void
+    {
+        // Berlin makes the client, then refuses the read of it that follows (no "may have been done" of its own).
+        FakeProvider::$unread = [$this->berlin->id => ['createClient']];
+
+        $order = $this->checkout($this->customer, $this->plan, $this->berlin);
+
+        self::assertSame(OrderStatus::Fulfilled, $order->status, (string) $order->notes);
+        self::assertSame('customer_1', $order->subscription?->remote_name, 'the client it made, found by its name');
+        self::assertSame(['customer_1'], array_keys(FakeProvider::$clients[$this->berlin->id]), 'none left on the panel unrecorded, none made twice');
+    }
+
+    public function testAClientMadeWhoseReadBackFailedIsLeftToTheAdminWhileThePanelCannotBeAsked(): void
+    {
+        $logs = $this->logs();
+        FakeProvider::$unread = [$this->berlin->id => ['createClient']];
+        FakeProvider::$refusing = [$this->berlin->id => ['findClient']];
+
+        $order = $this->checkout($this->customer, $this->plan, $this->berlin);
+
+        self::assertSame(OrderStatus::Failed, $order->status);
+        self::assertTrue($logs->hasWarningThatContains('Berlin did not say whether it made client customer_1'), 'the admin learns of it');
+    }
+
+    public function testAFailedReadAfterTheMakingIsNoRefusedNameToTryTheNextFor(): void
+    {
+        FakeProvider::$unread = [$this->berlin->id => ['createClient']];
+        // Found otherwise than it was asked for (used already): not taken for the one made, and no other made.
+        FakeProvider::$onCall = function (int $server, string $call): void {
+            $made = FakeProvider::$clients[$server]['customer_1'] ?? null;
+            if ($call === 'findClient' && $made !== null) {
+                FakeProvider::put($this->berlin, new ClientInfo(name: 'customer_1', enabled: true, downloadBytes: 1, totalBytes: $made->totalBytes, expiry: $made->expiry, subscriptionUrl: $made->subscriptionUrl));
+            }
+        };
+
+        $order = $this->checkout($this->customer, $this->plan, $this->berlin);
+
+        self::assertSame(OrderStatus::Failed, $order->status);
+        self::assertSame(['customer_1'], $this->names(), 'never a second client under the next name');
     }
 
     public function testAClientByTheNameThatIsNotTheOneAskedForIsNeverDeliveredForIt(): void

@@ -4,9 +4,9 @@ import { Field } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
-import type { LoyaltyTierRow } from '@/lib/api-types'
+import type { LoyaltyTierRequest, LoyaltyTierRow } from '@/lib/api-types'
 import { amountDraft, decimalInput } from '@/lib/format'
-import { useForm } from '@/lib/use-form'
+import { trimmed, useForm } from '@/lib/use-form'
 
 interface TierFormProps {
   tier: LoyaltyTierRow | null
@@ -16,17 +16,32 @@ interface TierFormProps {
   onCancel: () => void
 }
 
+/** The form's draft: each figure as typed. */
+interface Draft {
+  name: string
+  min_spent: string
+  discount_percent: string
+  cashback_percent: string
+}
+
+/** The tier as the API takes it: the threshold in the API's form, «۵۰۰٬۰۰۰» as "500000". */
+const requestOf = (draft: Draft): LoyaltyTierRequest => ({ ...draft, min_spent: decimalInput(draft.min_spent) })
+
 /** Create/edit form for one loyalty tier: its name, its spending threshold, its discount and its extra cashback. */
 export function TierForm({ tier, invalidates, onSaved, onCancel }: TierFormProps) {
-  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm({
-    name: tier?.name ?? '',
-    min_spent: tier ? amountDraft(tier.min_spent) : '',
-    discount_percent: tier ? String(tier.discount_percent) : '0',
-    cashback_percent: tier ? String(tier.cashback_percent) : '0',
-  })
+  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(
+    {
+      name: tier?.name ?? '',
+      min_spent: tier ? amountDraft(tier.min_spent) : '',
+      discount_percent: tier ? String(tier.discount_percent) : '0',
+      cashback_percent: tier ? String(tier.cashback_percent) : '0',
+    },
+    // As the request reads it: a threshold typed back with its separators is no change.
+    { reads: (draft) => trimmed(requestOf(draft)) },
+  )
 
   const save = handleSubmit(async () => {
-    const body = { ...values, min_spent: decimalInput(values.min_spent) }
+    const body = requestOf(values)
     const data = await submit(() => (tier ? api.put(`/loyalty/tiers/${tier.id}`, body) : api.post('/loyalty/tiers', body)), { invalidates })
     if (data) {
       toast.success(tier ? 'سطح ذخیره شد' : 'سطح اضافه شد')
@@ -50,7 +65,7 @@ export function TierForm({ tier, invalidates, onSaved, onCancel }: TierFormProps
       </Field>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field id="tier_discount" label="درصد تخفیف" error={error('discount_percent')} hint="روی هر خرید و تمدید؛ از تخفیف‌های خودکار فقط بزرگ‌ترین اعمال می‌شود.">
+        <Field id="tier_discount" label="درصد تخفیف" error={error('discount_percent')} hint="روی هر خرید، تمدید و حجم، زمان و کاربر اضافه؛ از تخفیف‌های خودکار فقط بزرگ‌ترین اعمال می‌شود.">
           <Input dir="ltr" inputMode="numeric" value={values.discount_percent} onChange={(e) => set('discount_percent', e.target.value)} className="sm:max-w-28" />
         </Field>
         <Field id="tier_cashback" label="درصد کش‌بک اضافه" error={error('cashback_percent')} hint="روی درصد قانون‌های کش‌بک اضافه می‌شود، تا وقتی کش‌بک روشن است.">

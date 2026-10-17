@@ -73,6 +73,23 @@ final class DriverFormsTest extends TestCase
         }
     }
 
+    /** The panels draw a field's unit after its label («نرخ هر دلار (تومان)»): no driver's label says it again. */
+    public function testNoFieldsLabelSaysItsOwnUnit(): void
+    {
+        $united = 0;
+        foreach (['database.drivers', 'mail.drivers', 'captcha.drivers', 'panel.drivers', 'payment.drivers'] as $entry) {
+            foreach ($this->drivers($entry) as $driver) {
+                foreach ($driver->describe()->form->describe() as $field) {
+                    if ($field['unit'] !== null) {
+                        $united++;
+                        self::assertStringNotContainsString("({$field['unit']})", $field['label'], "{$driver->key()}: {$field['name']}'s label, which the panels follow with «({$field['unit']})»");
+                    }
+                }
+            }
+        }
+        self::assertGreaterThan(0, $united, 'fields with a unit were read');
+    }
+
     public function testTheWaysEmailGoesOutAreNoneAndTheMailDrivers(): void
     {
         $keys = array_map(static fn(Driver $driver): string => $driver->key(), $this->drivers('mail.drivers'));

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Handlers;
 
 use App\Core\Exceptions\DomainRuleException;
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Orders\Services\Pricing;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\Exceptions\ProviderException;
@@ -15,6 +16,7 @@ use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\AutoRenewal;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Subscriptions\Services\RenewalSettings;
+use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
@@ -61,6 +63,7 @@ final class SubscriptionHandler implements Handler
         private readonly ServiceTransferHandler $transfer,
         private readonly Pricing $pricing,
         private readonly ServiceCard $card,
+        private readonly CustomerServices $services,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
         private readonly LoggerInterface $logger,
@@ -79,7 +82,7 @@ final class SubscriptionHandler implements Handler
 
         $subscription = CustomerServices::of($ctx->user)->find((int) ($args[0] ?? 0));
         if ($subscription === null) {
-            $ctx->edit($this->texts->get(BotText::ServiceNotFound), ['reply_markup' => InlineKeyboard::make()->row($this->backToList(MenuHandler::subscriptionsCallback(1)))->build()]);
+            $this->notFound($ctx);
 
             return;
         }
@@ -99,7 +102,9 @@ final class SubscriptionHandler implements Handler
     /**
      * The screen, read from the panel with presence (ProvisioningService::look(), which skips a panel in backoff so the
      * customer never waits out its timeout). Unread, it shows the row's last numbers, flagged — but a `$refresh` promises
-     * the panel's numbers, so then a popup says the panel was not reached and the screen stays as it was.
+     * the panel's numbers, so then a popup says the panel was not reached and the screen stays as it was. A service the
+     * panel turns out to have lost (look() marks it deleted) shows what it was with the way back alone: any other button
+     * of it would find nothing.
      */
     private function show(Context $ctx, Subscription $subscription, bool $refresh = false): void
     {
@@ -118,11 +123,13 @@ final class SubscriptionHandler implements Handler
             return;
         }
 
-        $rotates = $this->provisioning->rotates($subscription);
+        $gone = $subscription->status === SubscriptionStatus::Deleted;
+        $rotates = !$gone && $this->provisioning->rotates($subscription);
         if ($refresh) {
             $ctx->answer($this->texts->get(BotText::ServiceRefreshed));
         }
-        $ctx->edit($this->details($subscription, $client, $live, $rotates), ['reply_markup' => $this->keyboard($subscription, $rotates)]);
+        $keyboard = $gone ? InlineKeyboard::make()->row($this->backToList(MenuHandler::subscriptionsCallbackFor($subscription)))->build() : $this->keyboard($subscription, $rotates);
+        $ctx->edit($this->details($subscription, $client, $live, $rotates), ['reply_markup' => $keyboard]);
     }
 
     /** «لینک اشتراک»: the kept link in place of the screen, with «بازگشت» to it — no panel asked, so it works while one is down. */
@@ -131,7 +138,11 @@ final class SubscriptionHandler implements Handler
         $this->card->show($ctx, $subscription, BotText::LinkRequested, ['reply_markup' => $this->buttons->backOnly(self::serviceCallback($subscription->id))]);
     }
 
-    /** «تمدید خودکار» flipped: only the buttons are redrawn. Turning it on says when it renews and what the wallet pays. */
+    /**
+     * «تمدید خودکار» flipped: only the buttons are redrawn. Turning it on says when it renews and what the wallet pays.
+     * Refused, the popup says so: the buttons are redrawn without the switch — or, the service handed to someone else
+     * meanwhile, nothing of it is drawn: the screen says it was not found, as any of its buttons would.
+     */
     private function toggleAutoRenew(Context $ctx, Subscription $subscription): void
     {
         $on = !$subscription->auto_renew;
@@ -139,7 +150,8 @@ final class SubscriptionHandler implements Handler
             $this->autoRenewal->set($subscription, $on);
         } catch (AutoRenewUnavailableException) {
             $ctx->answer($this->texts->get(BotText::AutoRenewUnavailable), alert: true);
-            $ctx->editKeyboard($this->keyboard($subscription, $this->provisioning->rotates($subscription)));
+            $still = CustomerServices::of($ctx->user)->find($subscription->id);
+            $still === null ? $this->notFound($ctx) : $ctx->editKeyboard($this->keyboard($still, $this->provisioning->rotates($still)));
 
             return;
         }
@@ -189,6 +201,12 @@ final class SubscriptionHandler implements Handler
         try {
             $this->provisioning->rotateLink($subscription);
         } catch (ProviderException | DomainRuleException $e) {
+            if ($e instanceof ValidationException && ($e->errors()['status'][0] ?? null) === ServiceTransfers::MOVED_ON) {
+                // Handed to another account since the screen was drawn: said so, as a renewal or an extra says it.
+                $this->services->movedOn($ctx, $e);
+
+                return;
+            }
             $this->logger->warning('Could not rotate the link of subscription {id} on {server}: {message}', ['id' => $subscription->id, 'server' => $subscription->server->name, 'message' => $e->getMessage()]);
             $ctx->edit($this->texts->get(BotText::ServiceRotateFailed), ['reply_markup' => $this->buttons->backOnly(self::serviceCallback($subscription->id))]);
 
@@ -287,6 +305,12 @@ final class SubscriptionHandler implements Handler
     private function linkButton(Subscription $subscription): array
     {
         return InlineKeyboard::callback($this->texts->get(BotText::ServiceLink), self::serviceCallback($subscription->id, 'link'), 'primary');
+    }
+
+    /** The service is not the customer's (any more): it was not found, with the way back to the list's first page. */
+    private function notFound(Context $ctx): void
+    {
+        $ctx->edit($this->texts->get(BotText::ServiceNotFound), ['reply_markup' => InlineKeyboard::make()->row($this->backToList(MenuHandler::subscriptionsCallback(1)))->build()]);
     }
 
     /** @return array<string, mixed> The red «بازگشت به لیست سرویس‌ها» button. */

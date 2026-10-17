@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { queryOptions } from '@tanstack/react-query'
 import { FerrisWheel, Plus } from 'lucide-react'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowTitleButton } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { EditorModal, useEditor } from '@/components/row-editor'
 import { SectionActions } from '@/components/sectioned-page'
 import { ActionsHead, EditMenu, OrderCell, OrderHead, RemoveConfirm } from '@/components/sortable-list'
@@ -77,7 +77,7 @@ export function PrizesList() {
             <TableRow>
               <OrderHead />
               <TableHead>جایزه</TableHead>
-              <TableHead>وزن</TableHead>
+              <TableHead className="hidden md:table-cell">وزن</TableHead>
               <TableHead>شانس</TableHead>
               <TableHead>فعال</TableHead>
               <ActionsHead />
@@ -92,9 +92,10 @@ export function PrizesList() {
                     <RowTitleButton onClick={() => editor.edit(prize)}>{prize.label}</RowTitleButton>
                     <span className="text-footnote text-muted-foreground">{prizeWorth(prize)}</span>
                   </div>
+                  <PhoneFacts>وزن {formatNumber(prize.weight)}</PhoneFacts>
                 </TableCell>
-                <TableCell className="tabular">{formatNumber(prize.weight)}</TableCell>
-                <TableCell className="tabular">{prize.enabled && total > 0 ? formatPercent((prize.weight / total) * 100) : <span className="text-faint">—</span>}</TableCell>
+                <TableCell className="hidden tabular md:table-cell">{formatNumber(prize.weight)}</TableCell>
+                <TableCell className="tabular">{prize.enabled && total > 0 ? formatPercent((prize.weight / total) * 100) : <Dash />}</TableCell>
                 <TableCell>
                   <Switch checked={prize.enabled} onCheckedChange={(enabled) => list.patch.mutate({ row: prize, changes: { enabled } })} aria-label={`فعال بودن ${prize.label}`} />
                 </TableCell>

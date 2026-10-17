@@ -15,7 +15,8 @@ interface SwitchProps {
 
 /**
  * An on/off control (role="switch"), blue while on; the thumb moves along the inline axis so it reads correctly in RTL.
- * `held` is `aria-disabled`, not `disabled`, which would drop the keyboard on the document.
+ * `held` is `aria-disabled`, not `disabled`, which would drop the keyboard on the document. A finger's 44px press on a
+ * phone (`touch-target`), where its 36×20 is drawn.
  */
 export function Switch({ checked, onCheckedChange, disabled, held = false, ...rest }: SwitchProps) {
   return (
@@ -29,7 +30,7 @@ export function Switch({ checked, onCheckedChange, disabled, held = false, ...re
         if (!held) onCheckedChange(!checked)
       }}
       className={cn(
-        'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-150 outline-none focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+        'touch-target inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-150 outline-none focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
         checked ? 'bg-selected' : 'bg-border-strong',
       )}
       {...rest}

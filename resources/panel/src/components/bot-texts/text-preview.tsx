@@ -1,5 +1,5 @@
 import { QrCode } from 'lucide-react'
-import { TelegramHtml } from '@/components/bot-texts/telegram-html'
+import { TelegramText } from '@/components/bot-texts/telegram-html'
 import type { BotTextKind } from '@/lib/api-types'
 
 interface TextPreviewProps {
@@ -14,7 +14,7 @@ interface TextPreviewProps {
  */
 export function TextPreview({ kind, text }: TextPreviewProps) {
   return (
-    <div className="tg-preview overflow-hidden rounded-xl border border-white/10 text-footnote" aria-label="پیش‌نمایش در تلگرام">
+    <div role="figure" className="tg-preview overflow-hidden rounded-xl border border-white/10 text-footnote" aria-label="پیش‌نمایش در تلگرام">
       <div className="tg-chat flex min-h-72 flex-col justify-end gap-1 px-3 pt-4 pb-3" dir="ltr">
         {kind === 'popup' ? <Popup text={text} /> : kind === 'button' ? <InlineButton label={text} /> : <Bubble kind={kind} text={text} />}
       </div>
@@ -44,7 +44,7 @@ function Bubble({ kind, text }: { kind: BotTextKind; text: string }) {
             …
           </span>
         )}
-        {text === '' ? <span style={{ color: 'var(--tg-muted)' }}>این بخش خالی است و نشان داده نمی‌شود.</span> : <TelegramHtml html={kind === 'part' ? text : text.trim()} />}
+        {text === '' ? <span style={{ color: 'var(--tg-muted)' }}>این بخش خالی است و نشان داده نمی‌شود.</span> : <TelegramText html={kind === 'part' ? text : text.trim()} />}
         <span className="mt-0.5 block text-left text-caption" style={{ color: 'var(--tg-muted)' }} dir="ltr">
           12:00
         </span>

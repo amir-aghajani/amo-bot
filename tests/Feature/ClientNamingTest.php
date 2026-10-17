@@ -181,6 +181,18 @@ final class ClientNamingTest extends DatabaseTestCase
         self::assertSame(str_repeat('z', 32), $naming->requested(ClientNameMode::Custom, str_repeat('z', 32), $this->berlin));
     }
 
+    public function testATypedNamesPersianDigitsAreTakenAsLatinOnes(): void
+    {
+        $this->botSettings('client_names', ['name_custom' => true]);
+        $this->subscription($this->customer, $this->plan, $this->berlin, 'vpn12');
+        $naming = $this->naming();
+
+        self::assertSame('ali2024', $naming->requested(ClientNameMode::Custom, ' ali۲۰۲۴ ', $this->berlin), 'as a Persian keyboard types them');
+        self::assertSame('vpn3', $naming->requested(ClientNameMode::Custom, 'vpn٣', $this->berlin), 'Arabic ones too');
+        self::assertSame(['client_name' => [ClientNaming::TAKEN]], $this->refusedWith(fn() => $naming->requested(ClientNameMode::Custom, 'vpn۱۲', $this->berlin)), 'the name it is');
+        self::assertSame('ali2', $naming->chosen('ali۲', $this->berlin), "support's typed name alike");
+    }
+
     public function testAPurchaseGetsTheNameItsBuyerAskedFor(): void
     {
         $asked = [];

@@ -25,7 +25,7 @@ final class BotWebhooks
     public const ENABLED = 'Webhook ثبت شد؛ تلگرام پیام‌ها را مستقیم به فروشگاه می‌فرستد.';
 
     /** What the owner reads of a bot taken off its webhook. */
-    public const DISABLED = 'Webhook برداشته شد؛ پیام‌ها فقط وقتی می‌رسند که bot:poll روی سرور اجرا باشد.';
+    public const DISABLED = 'Webhook برداشته شد؛ ربات تا Webhook دوباره ثبت نشود پیامی روی هاست نمی‌گیرد: در همین کارت «ثبت Webhook» را بزنید.';
 
     /** A failure in the shop itself (its config.php, the database): the log has it. */
     private const FAILED = 'انجام نشد؛ جزئیات در لاگ برنامه است.';

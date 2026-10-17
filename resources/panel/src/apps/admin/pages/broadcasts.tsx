@@ -5,7 +5,7 @@ import { BroadcastsPage, type BroadcastsSection } from '@/pages/broadcasts'
 /** «هدیه همگانی»: the owner's — the gift reaches every bot's services. */
 const GIFTS: BroadcastsSection = {
   section: GIFTS_SECTION,
-  description: 'روز و حجم اضافه برای سرویس‌های فعال همه سرورها یکجا — یا فقط نماینده‌ها، یا یک سرور — با پیامی که هر مشتری در ربات می‌گیرد.',
+  description: 'روز و حجم اضافه برای سرویس‌های فعال همه سرورها یکجا — یا فقط نماینده‌ها، یا یک سرور — با پیامی که هر مشتری در تلگرام یا با ایمیل می‌گیرد.',
   content: <MassGrantsCard />,
 }
 

@@ -11,11 +11,17 @@ use App\Modules\Bots\Services\Bots;
 
 /**
  * The scheduler's shops are the bots' (Bots::shops()): a shop's task runs in each with CurrentBot::run(), and the
- * installation's tasks run once everywhere(). Core\Scheduling names no module, so this is how it reaches the bots.
+ * installation's tasks run once everywhere(); the shop a write is made in, for the change feed, is CurrentBot's. Core
+ * names no module, so this is how it reaches the bots.
  */
 final class BotShops implements Shops
 {
     public function __construct(private readonly Bots $bots) {}
+
+    public function current(): ?int
+    {
+        return CurrentBot::scope();
+    }
 
     public function ids(): array
     {

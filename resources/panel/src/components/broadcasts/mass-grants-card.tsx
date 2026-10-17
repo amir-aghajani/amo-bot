@@ -21,6 +21,9 @@ const AUDIENCES: Record<MassGrantAudience, string> = {
   group: 'سرویس‌های مشتری‌های یک گروه',
 }
 
+/** Whether a select's value names an audience. */
+const isAudience = (value: string): value is MassGrantAudience => Object.hasOwn(AUDIENCES, value)
+
 const massGrantsQuery = queryOptions({ queryKey: queryKeys.massGrants, queryFn: () => api.get<MassGrantsResponse>('/mass-grants') })
 
 /** Every server still under way waits for its panel: the runner asks again in half a minute. */
@@ -137,7 +140,7 @@ function MassGrantForm({ audience, onCancel, onStarted }: MassGrantFormProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <Field id="mass_audience" label="به چه سرویس‌هایی" error={error('audience')}>
           {(control) => (
-            <Select value={values.audience} onValueChange={(value) => set('audience', value as MassGrantAudience)}>
+            <Select value={values.audience} onValueChange={(value) => isAudience(value) && set('audience', value)}>
               <SelectTrigger {...control} className="w-full">
                 <SelectValue />
               </SelectTrigger>

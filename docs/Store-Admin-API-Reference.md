@@ -21,7 +21,7 @@ Every operation may also return the common error shape ([errors](Store-API.md#er
 
 ## Grants
 
-The website's `staff_grants` setting holds any of `catalog`, `wallet`, `refunds`, `payments`, `extend`, `manual_orders`, `delete`, `account_security`. What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `payments` (reject receipts waiting for review in bulk), `extend` (add days and traffic to a service), `manual_orders` (make an order for a customer by hand, free, from their wallet or paid outside the shop, delivered at once), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
+The website's `staff_grants` setting holds any of `catalog`, `wallet`, `refunds`, `payments`, `extend`, `manual_orders`, `delete`, `account_security`. What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories, and the customer groups: a customer put in a «همکار» group too), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `payments` (reject receipts waiting for review in bulk), `extend` (add days and traffic to a service), `manual_orders` (make an order for a customer by hand, free, from their wallet or paid outside the shop, delivered at once), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device).
 An operation that needs a grant says which, and also needs a sign-in from the last 15 minutes, as approving a payment
 does without a grant (`x-staff-recent`).
 
@@ -113,7 +113,7 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 
 ### GET /changes
 
-The change feed's version of each area. The panel reloads what an area shows when its number moves.
+The change feed's version of each area. The panel reloads what an area shows when its number moves. The owner's panel counts every shop's writes; an agent's panel and the website's admins count their own shop's, and what is written for every shop (`ChangesResponse`).
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/changes`](Panels-API-Reference.md#get-apipanelchanges).
@@ -154,7 +154,7 @@ The dashboard. The period's figures, compared with the period before.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `range` | query | [RangeDays](API-Schemas.md#rangedays) | no |  |
+| `range` | query | [RangeDays](API-Schemas.md#rangedays) | no | The period, in days up to today; left out, 30 |
 
 **Answers**
 
@@ -176,7 +176,7 @@ All broadcast («ارسال همگانی») runs, newest first. Broadcasts are c
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -198,7 +198,7 @@ Pause a broadcast that is sending.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -222,7 +222,7 @@ Resume a paused broadcast. The scheduler continues sending it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -246,7 +246,7 @@ Cancel a broadcast. Messages already sent stay.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -270,7 +270,7 @@ Unpin a finished pinned broadcast. Starts and returns a new unpin («لغو پی
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -363,7 +363,7 @@ Reorder the plans.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -447,7 +447,7 @@ Update a plan.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -492,7 +492,7 @@ Switch a plan on or off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -513,7 +513,7 @@ A row's on/off switch (a plan, a category). A JSON boolean only.
 
 ### DELETE /plans/{id}
 
-Delete a plan. Only a plan nothing was sold with.
+Delete a plan. Only a plan no order or service was ever made with; otherwise a 409 (switch it off instead).
 
 - **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`DELETE /api/{panel}/plans/{id}`](Panels-API-Reference.md#delete-apipanelplansid).
@@ -522,7 +522,7 @@ Delete a plan. Only a plan nothing was sold with.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -544,7 +544,7 @@ Duplicate a plan. The copy starts switched off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -607,7 +607,7 @@ Reorder the categories.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -633,7 +633,7 @@ Update a category.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -664,7 +664,7 @@ Switch a category on or off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -694,7 +694,7 @@ Delete a category. Its plans become uncategorised.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -717,10 +717,10 @@ The shop's customers. Newest first, or sorted by `sort` and `dir`.
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `status` | query | string | no | The status tab. Empty for all |
+| `status` | query | [UserStatus](API-Schemas.md#userstatus) | no | Only the banned customers (`banned`), or only the others (`active`). Empty for all |
 | `role` | query | [UserRole](API-Schemas.md#userrole) | no | Only the bot's admins (`admin`), or only everyone else (`customer`) |
 | `group` | query | integer | no | A customer group's id: only its members |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [UserSort](API-Schemas.md#usersort) | no | What to sort by. Anything else sorts by sign-up time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -744,7 +744,7 @@ One customer, as their page shows them. Their row, referral numbers and, for an 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -766,7 +766,7 @@ Ban or unban a customer. On the website's admin API, an admin's account (their o
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -796,7 +796,7 @@ A customer's wallet balance and ledger.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -818,7 +818,8 @@ Credit or debit a customer's wallet.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each credit or debit (a UUID; the panels send one with every change, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is a change of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the line the key wrote (a 200) and the wallet as it is now: never a second credit or debit, even when two arrive at the same moment, and never refused for what changed since (a debit the balance no longer covers). The same key with another `type`, `amount` or `description` is a 422 on `idempotency_key`; so is a malformed key. A key is the customer's for good: the next change takes a new key. |
 
 **Body**, as JSON:
 
@@ -834,6 +835,7 @@ A manual credit or debit, with the line the customer sees in their ledger. A deb
 
 | Status | What it is | Body |
 |---|---|---|
+| `200` | The line the key wrote before, with the wallet as it is now | [WalletAdjustmentResponse](API-Schemas.md#walletadjustmentresponse) |
 | `201` | Written | [WalletAdjustmentResponse](API-Schemas.md#walletadjustmentresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
@@ -850,7 +852,7 @@ Make an order for a customer by hand («افزودن سفارش»), paid and del
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the panel makes for each order support makes by hand (a UUID), and a new one after a refusal: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key (a network retry) returns the order the key made, as it is now: never a second order or charge, and never refused for what changed since (the wallet it charged, the name it took). Two identical requests at the same moment get one order. A key already used for another order of the customer's, or for another way to pay, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week. |
 
 **Body**, as JSON:
@@ -881,7 +883,7 @@ An order support makes for a customer by hand: a plan (`plan_id`), or — withou
 
 ### PUT /users/{id}/groups
 
-Set a customer's groups. Replaces their groups with the ones listed.
+Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. A 422 on `group_ids` when one is not a group of the shop.
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`PUT /api/{panel}/users/{id}/groups`](Panels-API-Reference.md#put-apipanelusersidgroups).
@@ -890,7 +892,7 @@ Set a customer's groups. Replaces their groups with the ones listed.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -920,7 +922,7 @@ Turn off a customer's two-factor sign-in on the website. For a customer who lost
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -944,7 +946,7 @@ Sign a customer out of the website on every device. All their sessions end; the 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -977,7 +979,7 @@ All customer groups, in their order, with each group's member count.
 
 Add a customer group.
 
-- **Who:** an admin of the shop, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/customer-groups`](Panels-API-Reference.md#post-apipanelcustomer-groups).
 
 **Body**, as JSON:
@@ -1002,12 +1004,12 @@ A customer group to add or update.
 
 Reorder the customer groups.
 
-- **Who:** an admin of the shop, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/customer-groups/reorder`](Panels-API-Reference.md#post-apipanelcustomer-groupsreorder).
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1024,16 +1026,16 @@ The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 ### PUT /customer-groups/{id}
 
-Update a customer group.
+Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can.
 
-- **Who:** an admin of the shop, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`PUT /api/{panel}/customer-groups/{id}`](Panels-API-Reference.md#put-apipanelcustomer-groupsid).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1057,14 +1059,14 @@ A customer group to add or update.
 
 Delete a customer group. Its members just leave it.
 
-- **Who:** an admin of the shop, signed in on its website.
+- **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`DELETE /api/{panel}/customer-groups/{id}`](Panels-API-Reference.md#delete-apipanelcustomer-groupsid).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1088,11 +1090,11 @@ All orders. Newest first, or sorted by `sort` and `dir`; with the count of stuck
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `status` | query | string | no | The status tab: an OrderStatus, or `stuck` (paid but not delivered, because the delivery failed or stalled). Empty for all |
-| `type` | query | string | no |  |
+| `type` | query | [OrderType](API-Schemas.md#ordertype) | no | Only the orders of this type. Empty for all |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `from` | query | string (date) | no | The first day to include, in the shop's time zone |
 | `to` | query | string (date) | no | The last day to include, in the shop's time zone |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [OrderSort](API-Schemas.md#ordersort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -1116,7 +1118,7 @@ One order, as the list shows it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1138,7 +1140,7 @@ Retry delivering a paid order whose delivery failed or stalled.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1162,7 +1164,7 @@ Cancel an unpaid order. Its open payments are cancelled with it, including one w
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1183,7 +1185,7 @@ Support's note to the customer with a decision (a cancellation, a rejection, a s
 
 ### GET /payments
 
-All payments. Newest first, or sorted by `sort` and `dir`; with the count of receipts to review and the list's paid total.
+All payments. Newest first, or sorted by `sort` and `dir`; with the counts of receipts to review and of payments held for support, and the list's paid total.
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/payments`](Panels-API-Reference.md#get-apipanelpayments).
@@ -1193,11 +1195,11 @@ All payments. Newest first, or sorted by `sort` and `dir`; with the count of rec
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `status` | query | string | no | The status tab. Empty for all |
+| `status` | query | string | no | The status tab: a PaymentStatus, or `held` (online payments held for support and still waiting: pending, or failed with their page). Empty for all payments |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `from` | query | string (date) | no | The first day to include, in the shop's time zone |
 | `to` | query | string (date) | no | The last day to include, in the shop's time zone |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [PaymentSort](API-Schemas.md#paymentsort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -1248,7 +1250,7 @@ One payment, as the list shows it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1261,7 +1263,7 @@ One payment, as the list shows it.
 
 ### GET /payments/{id}/receipt
 
-The payment's receipt picture. A receipt sent in the bot is fetched from Telegram. A picture the browser can show is sent inline; anything else (a HEIC photo) as a download.
+The payment's receipt picture. A receipt sent in the bot is fetched from Telegram. A picture the browser can show is sent inline; anything else (a HEIC photo) as a download. A 404 when there is none (none sent, or Telegram no longer has it); a 502 while Telegram cannot be reached.
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/payments/{id}/receipt`](Panels-API-Reference.md#get-apipanelpaymentsidreceipt).
@@ -1270,7 +1272,7 @@ The payment's receipt picture. A receipt sent in the bot is fetched from Telegra
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1292,7 +1294,7 @@ Approve a payment and deliver what it paid for. With a receipt in review, or by 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1316,7 +1318,7 @@ Reject a receipt.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1346,7 +1348,7 @@ Cancel an unpaid payment and its open order. If another payment of the order has
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1376,7 +1378,7 @@ Remind the customer to pay. The answer says whether the reminder reached them.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1400,7 +1402,7 @@ Ask an online payment's gateway what came of it, and act on its word: paid, the 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1424,7 +1426,7 @@ Retry the delivery of what a paid payment bought.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1439,7 +1441,7 @@ Retry the delivery of what a paid payment bought.
 
 ### POST /payments/{id}/refund
 
-Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are.
+Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet, and the commission it earned the customer's referrer out of theirs (any other refund's commission stands: its money stays in the shop). What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, or its commission by the referrer, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are.
 
 - **Who:** an admin of the shop, signed in on its website, when the website grants `refunds` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/payments/{id}/refund`](Panels-API-Reference.md#post-apipanelpaymentsidrefund).
@@ -1448,7 +1450,7 @@ Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amou
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1479,11 +1481,11 @@ All the shop's services: sold, renewed or given, the free test accounts, and tho
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `status` | query | string | no | The status tab. Empty for all |
+| `status` | query | string | no | The status tab: a SubscriptionStatus, or `expiring` (active services ending within `meta.expiring_days`, free test accounts aside). Empty for all |
 | `kind` | query | [SubscriptionKind](API-Schemas.md#subscriptionkind) | no | Only the services of this kind. Empty for all |
-| `server` | query | integer | no |  |
+| `server` | query | integer | no | A server's id: only the services on it |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [SubscriptionSort](API-Schemas.md#subscriptionsort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -1507,7 +1509,7 @@ One service, as the list shows it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1529,7 +1531,7 @@ Refresh a service's usage and term from its panel.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1553,7 +1555,7 @@ Add days and traffic to a service, on top of what it has.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1586,7 +1588,7 @@ Switch a service off on its panel.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1616,7 +1618,7 @@ Switch a service back on.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1640,7 +1642,7 @@ Move a service to another server. It keeps its remaining days and traffic.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1662,7 +1664,7 @@ Move an active service to another server, keeping its remaining days and traffic
 
 ### POST /subscriptions/{id}/delete
 
-Delete a service from its panel and from the shop.
+Delete a service from its panel and from the shop. A 422 on `status` while an order of the service is not finished with — unpaid, being delivered, or failed and waiting for a retry (`pending`, `paid`, `processing`, `failed`) —, which it names: «سفارش #142 این سرویس هنوز تمام نشده است …»; deliver, cancel or refund that order first. A 403 for a shop admin's own service.
 
 - **Who:** an admin of the shop, signed in on its website, when the website grants `delete` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/subscriptions/{id}/delete`](Panels-API-Reference.md#post-apipanelsubscriptionsiddelete).
@@ -1671,7 +1673,7 @@ Delete a service from its panel and from the shop.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1702,7 +1704,7 @@ Delete a service from its panel and from the shop, permanently. The customer is 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `telegram_id` | query | string | yes | The recipient's numeric Telegram id (Persian digits are read too). |
 
 **Answers**
@@ -1725,7 +1727,7 @@ Hand a service to another customer of the shop («انتقال سرویس»), fo
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1758,7 +1760,7 @@ All support tickets. Latest activity first; searchable by customer, subject or n
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `status` | query | [TicketStatus](API-Schemas.md#ticketstatus) | no | The status tab. Empty for all tickets |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -1780,7 +1782,7 @@ One ticket, with its whole conversation.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1802,7 +1804,8 @@ Answer a ticket as support. Send JSON, or a form to attach a picture. The ticket
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each answer (a UUID; the panels send one with every answer, and a new one once it went or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is an answer of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the ticket as it is now, the key's answer in it once: never a second message, nor the customer told twice, even when two arrive at the same moment, and never refused for the messages the ticket took since. The same key with another `body`, or another picture (told by its file name; none is another too), is a 422 on `idempotency_key`; so is a malformed key. A key is the ticket's for good: the next answer takes a new key. |
 
 **Body**, as JSON:
 
@@ -1825,7 +1828,7 @@ A ticket message with a picture, as a browser form uploads it. A form without a 
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Answered | [TicketResponse](API-Schemas.md#ticketresponse) |
+| `200` | Answered — or, again with its key, the ticket as it is now with the key's answer in it once | [TicketResponse](API-Schemas.md#ticketresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
@@ -1841,7 +1844,7 @@ A ticket message's picture. Served from the shop's files or fetched from Telegra
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `message` | path | integer | yes | A message of the ticket (`TicketMessageRow.id`) |
 
 **Answers**
@@ -1864,7 +1867,7 @@ Close a ticket. The customer and the report group are notified. A 422 on `status
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1888,7 +1891,7 @@ Reopen a closed ticket. It waits for support again, and its rating is cleared. A
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1914,7 +1917,7 @@ All reviews written on the website. Newest first; searchable by the signed name,
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `status` | query | [ReviewStatus](API-Schemas.md#reviewstatus) | no | The status tab. Empty for all reviews |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -1936,7 +1939,7 @@ Approve a pending or rejected review. The website shows it from now on (the Stor
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1960,7 +1963,7 @@ Reject a pending or approved review. It is kept but no longer shown on the websi
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1984,7 +1987,7 @@ Delete a review, whatever its status. A 403 for an admin's own review.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -2023,7 +2026,7 @@ Customers whose referral link brought someone. Most referrals first, or sorted b
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [ReferrerSort](API-Schemas.md#referrersort) | no | What to sort by. Anything else sorts by number of referrals |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -2049,7 +2052,7 @@ Who brought whom. Newest first, or sorted by `sort` and `dir`.
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `referrer` | query | integer | no | A customer's id: only the customers their link brought (not the referrer themselves) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [InviteeSort](API-Schemas.md#inviteesort) | no | What to sort by. Anything else sorts by sign-up time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -2074,7 +2077,7 @@ Referral commissions paid. Newest first, or sorted by `sort` and `dir`.
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [ReferralCommissionSort](API-Schemas.md#referralcommissionsort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -2099,7 +2102,7 @@ Alerts on referrers whose referrals look fake. Newest first. An alert stays unti
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -2121,7 +2124,7 @@ Clear a referral alert. The referrer earns start gifts and plan rewards again fr
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -2129,7 +2132,7 @@ Clear a referral alert. The referrer earns start gifts and plan rewards again fr
 
 | Status | What it is | Body |
 |---|---|---|
-| `204` | Cleared | none |
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |

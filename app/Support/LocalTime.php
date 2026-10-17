@@ -16,6 +16,13 @@ final class LocalTime
     /** A moment as the panels send it: a day and a minute on the shop's clock, whatever the browser's zone. */
     public const MOMENT = 'Y-m-d\TH:i';
 
+    /**
+     * The last day a moment an owner types may fall on (a sale's or a discount code's window, an agency's end, a gift
+     * code's last day): the shop's times are TIMESTAMP columns, which MySQL ends at 2038-01-19 03:14:07 UTC and refuses
+     * past (strict mode) — two days before, which ends in time on any shop's clock (UTC−12 too).
+     */
+    public const LAST_DAY = '2038-01-17';
+
     private static ?\DateTimeZone $zone = null;
 
     /** Set once at boot; a name PHP does not know falls back to UTC. */
@@ -66,5 +73,26 @@ final class LocalTime
 
         // A day that does not exist parses into another one: compared back, it is not the text sent.
         return $moment instanceof Carbon && $moment->format(self::MOMENT) === $text ? $moment->utc() : false;
+    }
+
+    /** The latest moment the shop keeps: the end of LAST_DAY on its clock, in UTC. */
+    public static function last(): Carbon
+    {
+        return Carbon::instance(new \DateTimeImmutable(self::LAST_DAY, self::zone()))->addDay()->utc();
+    }
+
+    /** Whether `$moment` is later than the shop can keep: past the end of LAST_DAY on its clock (last()). */
+    public static function tooLate(\DateTimeInterface $moment): bool
+    {
+        return $moment > self::last();
+    }
+
+    /**
+     * «تاریخ پایان نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد» — the refusal of a moment tooLate() for `$what` (the field's name),
+     * for the caller to end as its field's guidance goes on.
+     */
+    public static function tooLateFor(string $what): string
+    {
+        return sprintf('%s نمی‌تواند بعد از %s باشد', $what, Persian::date(new \DateTimeImmutable(self::LAST_DAY . ' 12:00', self::zone())));
     }
 }

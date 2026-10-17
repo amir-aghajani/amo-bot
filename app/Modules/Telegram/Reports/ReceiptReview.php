@@ -43,9 +43,10 @@ final class ReceiptReview implements GroupHandler
 
     /** The `ref` a recorded prompt for a reason carries: `prompt:<payment id>`. */
     private const PROMPT_REF = 'prompt:';
-    private const PROMPT = '✍️ دلیل رد رسید پرداخت #%d را در پاسخ به همین پیام بنویسید؛ مشتری آن را به عنوان توضیح پشتیبانی می‌بیند.%s';
+    private const PROMPT = "✍️ دلیل رد رسید پرداخت \u{200E}#%d را در پاسخ به همین پیام بنویسید؛ مشتری آن را به عنوان توضیح پشتیبانی می‌بیند.%s";
 
-    private const NOT_ADMIN = 'فقط مدیرهای ربات می‌توانند رسید را تایید یا رد کنند؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.';
+    /** What only the bot's admins may do here, as the refusal says it (GroupButtons::onlyAdmins()). */
+    private const MAY = 'رسید را تایید یا رد کنند';
     private const NOT_FOUND = 'این پرداخت پیدا نشد.';
     private const APPROVED = '✅ رسید تایید شد.';
     /** The retry first: Telegram cuts a popup at 200 characters, and the reason is in the errors topic in full. */
@@ -85,7 +86,7 @@ final class ReceiptReview implements GroupHandler
         }
         [$action, $paymentId] = $args;
 
-        $admin = $this->groupButtons->presser($update, self::NOT_ADMIN);
+        $admin = $this->groupButtons->presser($update, GroupButtons::onlyAdmins(self::MAY));
         if ($admin === null) {
             return;
         }
@@ -113,8 +114,8 @@ final class ReceiptReview implements GroupHandler
     public function reason(Update $update): bool
     {
         $message = $update->raw['message'] ?? null;
-        $prompt = is_array($message) ? $this->groupButtons->botReplied($message) : null;
-        if ($prompt === null) {
+        $prompt = $this->groupButtons->botReplied($update);
+        if (!is_array($message) || $prompt === null) {
             return false;
         }
 
@@ -125,7 +126,7 @@ final class ReceiptReview implements GroupHandler
             return false;
         }
 
-        $admin = $this->groupButtons->writer($chatId, $message, self::NOT_ADMIN);
+        $admin = $this->groupButtons->writer($chatId, $message, GroupButtons::onlyAdmins(self::MAY));
         if ($admin === null) {
             return true;
         }
@@ -207,8 +208,8 @@ final class ReceiptReview implements GroupHandler
 
     /**
      * «رد با نوشتن دلیل»: the bot asks under the receipt for the reason as a reply to its prompt (a ForceReply that
-     * mentions the admin when they have a @username), recorded so the reply can be told apart; the receipt keeps its
-     * two buttons meanwhile.
+     * mentions the admin when they have a @username — after a left-to-right mark, or the Persian words before it would
+     * show it «sara@»), recorded so the reply can be told apart; the receipt keeps its two buttons meanwhile.
      */
     private function askReason(Update $update, Payment $payment, User $admin): void
     {
@@ -220,7 +221,7 @@ final class ReceiptReview implements GroupHandler
         $chatId = (int) $update->chatId();
         $messageId = (int) $update->messageId();
 
-        $mention = $admin->handle() === null ? '' : ' @' . $admin->handle();
+        $mention = $admin->handle() === null ? '' : " \u{200E}@" . $admin->handle();
         $text = sprintf(self::PROMPT, $payment->id, $mention);
         $promptId = $this->groupButtons->say($chatId, $messageId, GroupButtons::threadOf($update->message() ?? []), $text, [
             'force_reply' => true,

@@ -2,16 +2,15 @@ import { CreditCard } from 'lucide-react'
 import { customerList } from '@/components/customer-filter'
 import { LatestCard, useLatestRows } from '@/components/customer/latest-rows'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowTitleButton } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { PaidFor } from '@/components/orders/order-subject'
+import { PaymentStatusCell } from '@/components/payments/payment-status-cell'
 import { ReviewModal } from '@/components/payments/review-modal'
-import { StatusBadge } from '@/components/status-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import type { PaymentResponse, PaymentsResponse, UserRow } from '@/lib/api-types'
 import { formatMoney, formatNumber, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { HELD, PAYMENT_STATUS, TO_WALLET } from '@/lib/statuses'
 import { useNextRow } from '@/lib/use-next-row'
 import { useOpenRow } from '@/lib/use-open-row'
 
@@ -41,7 +40,7 @@ export function PaymentsCard({ customer }: { customer: UserRow }) {
               <TableHead>پرداخت</TableHead>
               <TableHead className="hidden md:table-cell">بابت</TableHead>
               <TableHead>مبلغ</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <TableHead className="hidden sm:table-cell">زمان</TableHead>
             </TableRow>
           </TableHeader>
@@ -55,17 +54,16 @@ export function PaymentsCard({ customer }: { customer: UserRow }) {
                     </RowTitleButton>
                     <span className="max-w-40 truncate text-footnote text-muted-foreground">{payment.method}</span>
                   </div>
+                  <PhoneFacts>
+                    <PaymentStatusCell payment={payment} />
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   <PaidFor order={payment.order} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap tabular">{formatMoney(payment.amount)}</TableCell>
-                <TableCell>
-                  {/* The spaces between the lines keep them words apart for assistive tech, not one. */}
-                  <div className="grid justify-items-start gap-0.5">
-                    <StatusBadge status={PAYMENT_STATUS[payment.status]} /> {payment.to_wallet && <span className="text-caption text-warning">{TO_WALLET}</span>}{' '}
-                    {payment.held && <span className="text-caption text-warning">{HELD}</span>}
-                  </div>
+                <TableCell className="hidden md:table-cell">
+                  <PaymentStatusCell payment={payment} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">{timeAgo(payment.created_at)}</TableCell>
               </TableRow>

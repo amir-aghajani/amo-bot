@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Store;
 
+use App\Modules\Accounts\Models\AuthChallenge;
 use App\Modules\Accounts\Models\CustomerSession;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Auth\Services\SignInThrottle;
@@ -205,6 +206,20 @@ final class GoogleSignInTest extends HttpTestCase
 
         self::assertSame([422, SignInRefusedException::GOOGLE_OFF], [$response->getStatusCode(), $this->decode($response)['message']]);
         self::assertSame([], $this->googleLogin()->calls(), 'Google is not even asked');
+    }
+
+    /** A nonce is for a sign-in that brings it back — Telegram's or Google's: with neither on, none is handed out. */
+    public function testNoNonceWhileNeitherSignInThatTakesOneIsOn(): void
+    {
+        $this->website->forceFill(['telegram_login' => false])->save();
+        self::assertSame(200, $this->postJson($this->storeApi($this->website, '/auth/nonce'))->getStatusCode(), 'Google alone takes one');
+        $issued = AuthChallenge::query()->count();
+
+        $this->website->forceFill(['google_client_id' => null])->save();
+        $refused = $this->postJson($this->storeApi($this->website, '/auth/nonce'));
+
+        self::assertSame([422, SignInRefusedException::ID_TOKEN_OFF], [$refused->getStatusCode(), $this->decode($refused)['message']]);
+        self::assertSame($issued, AuthChallenge::query()->count(), 'nothing kept for it');
     }
 
     public function testGoogleOutOfReachIsA502ThatCountsForNothingAndAFailureCounts(): void

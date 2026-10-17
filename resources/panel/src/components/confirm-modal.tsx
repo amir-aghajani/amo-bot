@@ -5,6 +5,7 @@ import { Modal, useHoldOpen } from '@/components/modal'
 import { NoteInput } from '@/components/note-input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { usePressHold } from '@/lib/use-press-hold'
 
 /** A decision's note — what the customer reads beside it (a rejection's reason, why an agency ended), or a ledger line. */
 export interface NoteSpec {
@@ -88,7 +89,8 @@ interface ConfirmActionsProps {
 
 /**
  * The second look's row — cancel, then the confirm (red when it takes something away) — of every "are you sure" in the
- * panels. While the decision runs, the dialog it is in waits for it.
+ * panels. A confirm whose press starts a write is held from that press until the write settles (usePressHold), so a
+ * double click sends it once; while the decision runs, the dialog it is in waits for it.
  */
 export function ConfirmActions({
   confirmLabel,
@@ -102,14 +104,25 @@ export function ConfirmActions({
   onCancel,
   onConfirm,
 }: ConfirmActionsProps) {
-  useHoldOpen(busy || waiting)
+  const pressed = usePressHold()
+  const running = busy || pressed.held
+  useHoldOpen(running || waiting)
 
+  // A finger's 44px on a phone, either size.
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button variant="secondary" size={size} onClick={onCancel} disabled={busy || waiting} data-autofocus autoFocus={focusCancel}>
+      <Button variant="secondary" size={size} onClick={onCancel} disabled={running || waiting} data-autofocus autoFocus={focusCancel} className="max-md:h-11">
         {cancelLabel}
       </Button>
-      <Button variant={destructive ? 'destructive' : 'default'} size={size} icon={icon} busy={busy} aria-disabled={waiting || undefined} onClick={onConfirm}>
+      <Button
+        variant={destructive ? 'destructive' : 'default'}
+        size={size}
+        icon={icon}
+        busy={running}
+        aria-disabled={waiting || undefined}
+        onClick={() => pressed.press(onConfirm)}
+        className="max-md:h-11"
+      >
         {confirmLabel}
       </Button>
     </div>

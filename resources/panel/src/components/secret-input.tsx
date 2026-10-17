@@ -15,10 +15,11 @@ export function SecretInput({ className, ...props }: Omit<ComponentProps<typeof 
   return (
     <div className="relative" dir="ltr">
       <Input type={reveal ? 'text' : 'password'} autoComplete="new-password" spellCheck={false} className={cn('pe-9', className)} {...props} />
+      {/* A toggle keeps one name — its pressed state says whether the value shows —, as the icon alone changes. */}
       <button
         type="button"
         onClick={() => setReveal((value) => !value)}
-        aria-label={reveal ? 'پنهان کردن' : 'نمایش'}
+        aria-label="نمایش"
         aria-pressed={reveal}
         className="absolute inset-y-0 end-0 flex w-9 items-center justify-center rounded-e-lg text-faint transition-colors outline-none hover:text-foreground focus-visible:focus-ring"
       >

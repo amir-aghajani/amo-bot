@@ -54,7 +54,9 @@ final class CubePayDriverTest extends TestCase
         $hint = (string) $fields['fee_percent']['hint'];
 
         // CubePay takes a percent of the whole sum: 3% is passed on in full at 3 ÷ 97 — 3.1.
-        self::assertStringContainsString('برای ۳ درصد، 3.1', $hint);
+        // What the owner types is quoted as typed, in Latin digits; a quantity in words is in Persian ones.
+        self::assertStringContainsString('برای کارمزد ۳ درصدی، «3.1»', $hint);
+        self::assertStringContainsString('خالی یا «0» یعنی هیچ', $hint);
         self::assertStringContainsString('کارمزد کارت به کارت CubePay مبلغی ثابت است', $hint);
         self::assertStringNotContainsString('9.9', $hint, 'no word of a VIP fee most merchants never pay');
     }

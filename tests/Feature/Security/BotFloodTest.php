@@ -42,6 +42,23 @@ final class BotFloodTest extends BotTestCase
         self::assertSame(['sendMessage'], $this->calls(), 'slowed down, it is answered again');
     }
 
+    public function testInAGroupOnlyWhatIsMeantForTheBotCountsAgainstItsPace(): void
+    {
+        Carbon::setTestNow(now());
+
+        // The admins talk among themselves — the bot, an admin there, is sent all of it.
+        for ($i = 1; $i <= ReceivedUpdates::FLOOD_UPDATES * 2; $i++) {
+            $this->send($this->groupText("گپ {$i}"));
+        }
+        for ($i = 1; $i <= ReceivedUpdates::FLOOD_UPDATES; $i++) {
+            $this->send($this->groupTap('nobody:knows', 9, self::FIRST_THREAD));
+            self::assertSame(['answerCallbackQuery'], $this->calls(), "press {$i} is answered: the talk counted for nothing");
+        }
+
+        $this->send($this->groupTap('nobody:knows', 9, self::FIRST_THREAD));
+        self::assertSame([], $this->calls(), "past the limit the group's presses go unanswered, as a chat's do");
+    }
+
     public function testWhatTelegramHeldBackIsServedAsItComes(): void
     {
         Carbon::setTestNow(now());

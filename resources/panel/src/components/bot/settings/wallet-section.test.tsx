@@ -35,7 +35,7 @@ describe('the random amounts and the card top-up’s random sum', () => {
 
     expect(screen.getByRole('group', { name: 'دکمه‌های مبلغ تصادفی' })).toBeTruthy()
     expect(screen.getByText(/هیچ‌کدام تکراری یا برابر یک مبلغ پیشنهادی نیست/)).toBeTruthy()
-    expect(screen.getByText(/۰ یعنی خاموش. روشن که باشد، به هر شارژ کیف پول با کارت به کارت مبلغی تصادفی/)).toBeTruthy()
+    expect(screen.getByText(/0 یعنی خاموش. روشن که باشد، به هر شارژ کیف پول با کارت به کارت مبلغی تصادفی/)).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('تعداد دکمه‌ها'), { target: { value: '3' } })
     fireEvent.change(screen.getByLabelText('گرد کردن (تومان)'), { target: { value: '5000' } })
@@ -54,5 +54,13 @@ describe('the random amounts and the card top-up’s random sum', () => {
       topup_random_round: '5000',
       topup_unique_max: '500',
     })
+  })
+
+  it('write their bounds and the numbers to type in Latin digits, as the owner types them', () => {
+    render(<WalletSection settings={botSettingsRow({ topup_random_round: 0 })} />, { wrapper: providers().wrapper })
+
+    expect(screen.getByText('0 یعنی بدون دکمه تصادفی؛ حداکثر 8.')).toBeTruthy()
+    expect(screen.getByText('مثلا 1000 یعنی مبلغ‌ها هزار تومانی گرد می‌شوند.')).toBeTruthy()
+    expect(screen.getByText(/^0 یعنی خاموش\. .* مبلغی تصادفی \(تا 9999 تومان\) اضافه می‌شود/)).toBeTruthy()
   })
 })

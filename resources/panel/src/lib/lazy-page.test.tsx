@@ -1,5 +1,5 @@
 import { setImmediate } from 'node:timers'
-import { Suspense, type ReactElement } from 'react'
+import { Component, Suspense, type ReactElement, type ReactNode } from 'react'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { lazyPage } from '@/lib/lazy-page'
@@ -16,6 +16,19 @@ const usersModule: UsersModule = { Users: ({ title }) => <h1>{title}</h1> }
 
 /** The event loop turns once: what a load settled has been taken in. */
 const settled = () => new Promise<void>((resolve) => setImmediate(resolve))
+
+/** What drawing the page left when it failed: «خطا» in its place. */
+class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  render() {
+    return this.state.failed ? <p>خطا</p> : this.props.children
+  }
+}
 
 const drawn = (Page: (props: { title: string }) => ReactElement) =>
   render(
@@ -71,6 +84,33 @@ describe('a page of its own chunk', () => {
 
     await until(() => expect(reload).toHaveBeenCalledTimes(1))
     expect(screen.getByText('در حال بارگذاری')).toBeTruthy()
+  })
+
+  it('does not reload while the browser is offline, and loads its chunk once a link to it is about to be followed again', async () => {
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const load = vi.fn(() => (navigator.onLine ? Promise.resolve(usersModule) : Promise.reject(new TypeError('Failed to fetch dynamically imported module: /admin/assets/users-Bx1.js'))))
+    const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => undefined)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const Page = lazyPage(load, (module) => module.Users)
+
+    const failed = render(
+      <Boundary>
+        <Suspense fallback={<p>در حال بارگذاری</p>}>
+          <Page title="کاربران" />
+        </Suspense>
+      </Boundary>,
+    )
+    expect(await screen.findByText('خطا')).toBeTruthy()
+    expect(reload).not.toHaveBeenCalled()
+    failed.unmount()
+
+    // Back online, the admin presses the page's link: it is asked for at the press, and drawn while that load runs.
+    online.mockReturnValue(true)
+    Page.preload()
+    drawn(Page)
+
+    await until(() => expect(screen.getByRole('heading', { name: 'کاربران' })).toBeTruthy())
+    expect(load).toHaveBeenCalledTimes(2)
   })
 
   it('waits for the reload, drawing no failure, when the chunk came back as nothing — the preload error was taken over for it', async () => {

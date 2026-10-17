@@ -16,10 +16,13 @@ use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Payments\Contracts\GatewayDriver;
 use App\Modules\Payments\Contracts\GatewayInterface;
 use App\Modules\Payments\Drivers\Aban\AbanGateway;
+use App\Modules\Payments\Drivers\AqayePardakht\AqayePardakhtGateway;
 use App\Modules\Payments\Drivers\AtlasPay\AtlasPayGateway;
 use App\Modules\Payments\Drivers\CubePay\CubePayGateway;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
 use App\Modules\Payments\Drivers\Outside\OutsideGateway;
+use App\Modules\Payments\Drivers\Plisio\PlisioGateway;
+use App\Modules\Payments\Drivers\Variza\VarizaGateway;
 use App\Modules\Payments\Drivers\Wallet\WalletGateway;
 use App\Modules\Payments\Drivers\Zarinpal\ZarinpalGateway;
 use App\Modules\Payments\Enums\PaymentStatus;
@@ -35,8 +38,11 @@ use App\Support\Validation;
 use Illuminate\Database\ConnectionInterface;
 use Tests\HttpTestCase;
 use Tests\Support\FakeAban;
+use Tests\Support\FakeAqayePardakht;
 use Tests\Support\FakeAtlasPay;
 use Tests\Support\FakeCubePay;
+use Tests\Support\FakePlisio;
+use Tests\Support\FakeVariza;
 use Tests\Support\FakeZarinpal;
 
 /**
@@ -67,7 +73,7 @@ final class AdminPaymentMethodsApiTest extends HttpTestCase
         self::assertSame([WalletGateway::key(), WalletGateway::label(), true, true, 'instant', null, null], [$methods[0]['driver'], $methods[0]['label'], $methods[0]['builtin'], $methods[0]['enabled'], $methods[0]['kind'], $methods[0]['min_amount'], $methods[0]['max_amount']]);
 
         $drivers = array_column($this->decode($this->get('/api/admin/payment-methods/drivers'))['drivers'], null, 'key');
-        self::assertSame([WalletGateway::key(), ManualGateway::key(), CubePayGateway::key(), ZarinpalGateway::key(), AtlasPayGateway::key(), AbanGateway::key()], array_keys($drivers), 'in the order they are registered');
+        self::assertSame([WalletGateway::key(), ManualGateway::key(), CubePayGateway::key(), ZarinpalGateway::key(), AtlasPayGateway::key(), AbanGateway::key(), PlisioGateway::key(), AqayePardakhtGateway::key(), VarizaGateway::key()], array_keys($drivers), 'in the order they are registered');
         self::assertSame([WalletGateway::label(), [], ['kind' => 'instant', 'builtin' => true]], [$drivers['wallet']['label'], $drivers['wallet']['fields'], $drivers['wallet']['traits']], 'the wallet: nothing to set');
         self::assertSame(['کارت به کارت', ['kind' => 'manual', 'builtin' => false]], [$drivers['manual']['label'], $drivers['manual']['traits']]);
         self::assertSame(['instructions', 'auto_approve_after'], array_column($drivers['manual']['fields'], 'name'), "a card method's settings are its driver's form; its cards a list of their own");
@@ -408,7 +414,7 @@ final class AdminPaymentMethodsApiTest extends HttpTestCase
         self::assertStringNotContainsString('secret1', json_encode($kept, JSON_THROW_ON_ERROR));
         self::assertSame(['merchant' => 'm-1', 'api_key' => 'secret1', 'test_mode' => false, 'test_key' => 'tk-1'], $settings->read($driver, $kept), 'a secret left blank keeps the one kept, a field not shown what it holds');
         self::assertEquals(
-            (object) ['merchant' => 'm-1', 'api_key' => ['set' => true, 'hint' => '••••••ret1'], 'test_mode' => false, 'test_key' => 'tk-1'],
+            (object) ['merchant' => 'm-1', 'api_key' => ['set' => true, 'hint' => '••••••••'], 'test_mode' => false, 'test_key' => 'tk-1'],
             $methods->presentOne($method)['config'],
             'the secret shown as kept, never itself',
         );
@@ -540,6 +546,73 @@ final class AdminPaymentMethodsApiTest extends HttpTestCase
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         $row = $this->decode($response)['method'];
         self::assertSame(['حالت آزمایشی: پولی جابه‌جا نمی‌شود', false], [$row['summary'], $row['config']['show_card']]);
+    }
+
+    /** Plisio through the panels' API: its key kept encrypted, its dollar's rate required in bounds, its coins tidied. */
+    public function testAPlisioMethodKeepsItsKeyEncryptedAndItsRateAndCoins(): void
+    {
+        $add = fn(array $form) => $this->postJson('/api/admin/payment-methods', $form + ['driver' => 'plisio', 'label' => 'Plisio', 'clear_api_key' => false, 'usd_rate' => '100000', 'currencies' => '']);
+
+        self::assertSame(['api_key' => ['کلید مخفی Plisio را وارد کنید.']], $this->decode($add([]))['errors']);
+        self::assertSame(['usd_rate'], array_keys($this->decode($add(['api_key' => FakePlisio::KEY, 'usd_rate' => '500']))['errors']), 'a rate below 1,000 Toman is a mistyped one');
+        self::assertSame(['currencies'], array_keys($this->decode($add(['api_key' => FakePlisio::KEY, 'currencies' => 'تتر']))['errors']));
+
+        $response = $add(['api_key' => FakePlisio::KEY, 'currencies' => ' usdt_trx، trx ,ton ']);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['plisio', 'online', 'هر دلار ۱۰۰٬۰۰۰ تومان · USDT_TRX، TRX، TON'], [$row['driver'], $row['kind'], $row['summary']]);
+        self::assertSame(['api_key' => ['set' => true, 'hint' => '••••••k0Ps'], 'usd_rate' => 100000, 'currencies' => 'USDT_TRX,TRX,TON'], $row['config']);
+        $method = PaymentMethod::query()->findOrFail($row['id']);
+        self::assertStringNotContainsString(FakePlisio::KEY, json_encode($method->config, JSON_THROW_ON_ERROR), 'kept encrypted');
+    }
+
+    /** AqayePardakht through the panels' API: its pin kept encrypted and never shown; the sandbox's said on its row. */
+    public function testAnAqayePardakhtMethodKeepsItsPinEncryptedAndSaysWhenItIsTheSandbox(): void
+    {
+        $add = fn(array $form) => $this->postJson('/api/admin/payment-methods', $form + ['driver' => 'aqayepardakht', 'label' => 'آقای پرداخت', 'clear_pin' => false]);
+
+        self::assertSame(['pin' => ['کد پین درگاه آقای پرداخت را وارد کنید.']], $this->decode($add([]))['errors']);
+        self::assertSame(['pin'], array_keys($this->decode($add(['pin' => 'پین من']))['errors']));
+
+        $response = $add(['pin' => FakeAqayePardakht::PIN]);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['aqayepardakht', 'online', null], [$row['driver'], $row['kind'], $row['summary']]);
+        self::assertSame(['pin' => ['set' => true, 'hint' => '••••••c9d0']], $row['config']);
+        $method = PaymentMethod::query()->findOrFail($row['id']);
+        self::assertStringNotContainsString(FakeAqayePardakht::PIN, json_encode($method->config, JSON_THROW_ON_ERROR), 'kept encrypted');
+
+        $response = $this->putJson("/api/admin/payment-methods/{$method->id}", ['label' => 'آقای پرداخت', 'enabled' => true, 'min_amount' => '', 'max_amount' => '', 'pin' => 'sandbox', 'clear_pin' => false]);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame('حالت آزمایشی: پولی جابه‌جا نمی‌شود', $this->decode($response)['method']['summary']);
+    }
+
+    /** Variza through the panels' API: its key and webhook secret kept encrypted and never shown; its card said on its row. */
+    public function testAVarizaMethodKeepsBothSecretsEncryptedAndSaysItsCard(): void
+    {
+        $add = fn(array $form) => $this->postJson('/api/admin/payment-methods', $form + ['driver' => 'variza', 'label' => 'واریزا', 'clear_api_key' => false, 'clear_webhook_secret' => false]);
+
+        self::assertSame([
+            'api_key' => ['کلید API واریزا را وارد کنید.'],
+            'webhook_secret' => ['کلید امضای وب‌هوک واریزا را وارد کنید.'],
+        ], $this->decode($add(['card' => 'random']))['errors']);
+        self::assertSame(['card'], array_keys($this->decode($add(['api_key' => FakeVariza::KEY, 'webhook_secret' => FakeVariza::SECRET, 'card' => '12345']))['errors']));
+
+        $response = $add(['api_key' => FakeVariza::KEY, 'webhook_secret' => FakeVariza::SECRET, 'card' => '۶۰۳۷']);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['variza', 'online', 'کارت مقصد: •••• 6037'], [$row['driver'], $row['kind'], $row['summary']]);
+        self::assertSame(['api_key' => ['set' => true, 'hint' => '••••••1d0c'], 'webhook_secret' => ['set' => true, 'hint' => '••••••5e6f'], 'card' => '6037'], $row['config']);
+        $method = PaymentMethod::query()->findOrFail($row['id']);
+        $kept = json_encode($method->config, JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString(FakeVariza::KEY, $kept, 'kept encrypted');
+        self::assertStringNotContainsString(FakeVariza::SECRET, $kept, 'kept encrypted');
+
+        // Saved again with both secrets blank: kept; the card another.
+        $response = $this->putJson("/api/admin/payment-methods/{$method->id}", ['label' => 'واریزا', 'enabled' => true, 'min_amount' => '', 'max_amount' => '', 'api_key' => '', 'clear_api_key' => false, 'webhook_secret' => '', 'clear_webhook_secret' => false, 'card' => 'Variza']);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['کارت مقصد: کارت‌های واریزا (تسویه تتر)', true, true], [$row['summary'], $row['config']['api_key']['set'], $row['config']['webhook_secret']['set']]);
     }
 
     private function addMethod(string $label, string $card): int

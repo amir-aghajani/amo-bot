@@ -220,6 +220,18 @@ final class BotOnlinePaymentTest extends BotTestCase
         self::assertSame('100000.00', $this->ali->balance(), 'the top-up, not the Toman CubePay added');
     }
 
+    public function testARefundedPaymentIsPaidAlreadyAndItsGatewayIsNotAsked(): void
+    {
+        $payment = $this->onlinePage();
+        $payment->forceFill(['status' => PaymentStatus::Refunded])->save();
+
+        $this->send($this->tap(OnlinePaymentHandler::checkCallback($payment)));
+
+        self::assertSame(self::text(BotText::PayOnlineAlreadyPaid), $this->popup(), 'its money came in once: settled (PaymentStatus::isSettled())');
+        self::assertSame([self::text(BotText::PayOnlineDone, ['order' => $payment->order_id])], $this->said());
+        self::assertCount(0, $this->cubePay->callsTo(CubePayGateway::VERIFY));
+    }
+
     public function testAPageWhoseTimeRanOutSaysSoAndLeadsBackToANewPage(): void
     {
         $payment = $this->onlinePage();

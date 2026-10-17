@@ -28,7 +28,7 @@ use Psr\Log\LoggerInterface;
  *   goes to the wallet, all the same;
  * - an unpaid one past that: once more, then closed for good — unless its gateway holds money on it it has not settled
  *   (OnlinePayments::hasMoneyIn(): a part paid, a receipt in the gateway's review), asked on as often until REVIEW_HOURS
- *   after its page closed, then held for support.
+ *   after its page closed, then held for support — at once, should the gateway close it meanwhile (OnlinePayments).
  * Never one held for support (OnlinePayments::isHeld()): that is theirs. A few per run (BATCH), the longest unasked
  * first, within the run's share of time (Budget). Every minute, in every shop.
  */

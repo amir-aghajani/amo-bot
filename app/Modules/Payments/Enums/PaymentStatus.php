@@ -24,4 +24,10 @@ enum PaymentStatus: string
     {
         return in_array($this, self::open(), true);
     }
+
+    /** Paid — or refunded since —: the money came in, and its gateway has nothing more to say of it. */
+    public function isSettled(): bool
+    {
+        return $this === self::Paid || $this === self::Refunded;
+    }
 }

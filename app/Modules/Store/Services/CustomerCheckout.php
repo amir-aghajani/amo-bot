@@ -37,7 +37,7 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Store\Exceptions\CheckoutRefusedException;
 use App\Modules\Store\Presenters\OrderPresenter;
 use App\Modules\Store\Presenters\PlanPresenter;
-use App\Modules\Subscriptions\DTO\ExtraOffer;
+use App\Modules\Store\Presenters\SubscriptionPresenter;
 use App\Modules\Subscriptions\DTO\RenewalPreview;
 use App\Modules\Subscriptions\Enums\ClientNameMode;
 use App\Modules\Subscriptions\Enums\ExtraKind;
@@ -51,6 +51,7 @@ use App\Modules\Telegram\BotSettings;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
 use App\Support\Money;
+use App\Support\Unit;
 use App\Support\Validation;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -64,6 +65,11 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * Idempotency: every ordering request carries a key (the Idempotency-Key header). A request made again — the same key
  * and way to pay — is answered by the order that key came to, as it stands now, before any rule is asked again
  * (Checkout::replayed()), since the rules may say otherwise a moment later; a key reused for something else is refused.
+ *
+ * The price shown: a purchase (of a plan, or of a service built), a renewal or an extra may name the amount the website
+ * showed (`expected_amount`), and is then paid at that amount alone — another now (a sale over, a first purchase paid
+ * elsewhere) is refused, nothing ordered (asShown()), as the bot pays only the checkout on screen at the amount it
+ * showed. Left out, it is paid at the price of the moment. A top-up is paid at the amount it names.
  *
  * Limits: a customer sends CHECKOUTS ordering requests per CHECKOUT_WINDOW and keeps OrderService::UNPAID_MAX unpaid
  * orders at most. While the bot's master switch is off the website takes no orders either (takingOrders()).
@@ -157,7 +163,7 @@ final class CustomerCheckout
         }
         $amount = null;
         if (($query['amount'] ?? '') !== '') {
-            $amount = Input::amountOf($query['amount']) ?? throw ValidationException::on('amount', Validation::notWholeToman('مبلغ (amount)'));
+            $amount = Input::amountOf($query['amount'], Unit::Toman) ?? throw ValidationException::on('amount', Validation::notWholeToman('مبلغ (amount)'));
         }
 
         return array_map($this->presenter->method(...), $this->methods->forOrder($kind, $amount === null ? null : Money::normalize($amount), $customer));
@@ -166,16 +172,18 @@ final class CustomerCheckout
     /**
      * Buy `plan_id` on `server_id`, paid with `method_id`: the plan on sale now (onSale()), a server it sells on today
      * (ServerSelector::resolve()), at the customer's price (Pricing: a first-purchase or agent price when theirs); its
-     * service named as `name_mode` asks (clientName()).
+     * service named as `name_mode` asks (clientName()); at the amount the website showed, when it says (asShown()).
      *
      * @param array<string, mixed> $input
-     * @throws ValidationException 422 on `plan_id`, `server_id`, `name_mode`, `client_name` or `method_id`
+     * @throws ValidationException 422 on `plan_id`, `server_id`, `name_mode`, `client_name`, `method_id` or
+     *                             `expected_amount`
      * @throws NoServerAvailableException 422 on `server_id`: another server of the plan sells, not this one
      * @throws RequestKeyReusedException 422 on `idempotency_key`
      * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
-     * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
+     * @throws CheckoutRefusedException 409 on `expected_amount`: another price now; 503: the shop takes no orders while
+     *                                  its bot is switched off
      */
     public function purchase(User $customer, array $input, string $key): CheckoutResult
     {
@@ -196,6 +204,7 @@ final class CustomerCheckout
         $name = $this->clientName($customer, $key, $input, $server);
         $method = $this->method($customer, $input, OrderType::Purchase);
         $quote = $this->quote($customer, $key, $input, fn(?string $code): Quote => $this->pricing->purchase($customer, $plan, $server, $code));
+        $this->asShown($customer, $key, $input, $quote->amount());
 
         return $this->checkout->pay($customer, $method, OrderType::Purchase, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openPurchase($customer, $plan, $server, $key, $quote, $name), $key);
     }
@@ -261,16 +270,17 @@ final class CustomerCheckout
      * Buy a service the customer builds: `gb` GB for `days` days on `server_id` (it may be left out while the builder
      * sells on one server), paid with `method_id` — while the builder is offered, within its bounds, at the customer's
      * price (Pricing::custom()), a purchase without a plan (OrderService::openCustomPurchase()); its service named as
-     * `name_mode` asks, as a plan's purchase (clientName()).
+     * `name_mode` asks, as a plan's purchase (clientName()); at the amount the website showed, when it says (asShown()).
      *
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `status` while the builder is not offered; on `gb`, `days`, `server_id`,
-     *                             `name_mode`, `client_name` or `method_id`
+     *                             `name_mode`, `client_name`, `method_id` or `expected_amount`
      * @throws RequestKeyReusedException 422 on `idempotency_key`
      * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
-     * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
+     * @throws CheckoutRefusedException 409 on `expected_amount`: another price now; 503: the shop takes no orders while
+     *                                  its bot is switched off
      */
     public function buildService(User $customer, array $input, string $key): CheckoutResult
     {
@@ -290,6 +300,7 @@ final class CustomerCheckout
         $name = $this->clientName($customer, $key, $input, $server);
         $method = $this->method($customer, $input, OrderType::Purchase);
         $quote = $this->quote($customer, $key, $input, fn(?string $code): Quote => $this->pricing->custom($customer, $price, $server, $code));
+        $this->asShown($customer, $key, $input, $quote->amount());
 
         return $this->checkout->pay($customer, $method, OrderType::Purchase, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openCustomPurchase($customer, $price->gb, $price->days, $server, $key, $quote, $name), $key);
     }
@@ -338,16 +349,17 @@ final class CustomerCheckout
 
     /**
      * Renew the customer's service as renewal() previews it — by `method`, on a plan or with a package built
-     * (OrderService::openPreviewed()) —, paid with `method_id`.
+     * (OrderService::openPreviewed()) —, paid with `method_id`; at the amount the website showed, when it says (asShown()).
      *
      * @param array<string, mixed> $input
-     * @throws ValidationException 422 on `method`, `status`, `plan_id`, `gb`, `days` or `method_id`
+     * @throws ValidationException 422 on `method`, `status`, `plan_id`, `gb`, `days`, `method_id` or `expected_amount`
      * @throws RenewalUnderWayException 422 on `status`
      * @throws RequestKeyReusedException 422 on `idempotency_key`
      * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
-     * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
+     * @throws CheckoutRefusedException 409 on `expected_amount`: another price now; 503: the shop takes no orders while
+     *                                  its bot is switched off
      */
     public function renew(User $customer, Subscription $subscription, array $input, string $key): CheckoutResult
     {
@@ -372,33 +384,43 @@ final class CustomerCheckout
         $preview = $this->renewal($subscription, $input);
         $method = $this->method($customer, $input, OrderType::Renewal);
         $quote = $this->quote($customer, $key, $input, fn(?string $code): Quote => $this->renewals->priced($subscription, $preview, $code));
+        $this->asShown($customer, $key, $input, $quote->amount());
 
         return $this->checkout->pay($customer, $method, OrderType::Renewal, $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openPreviewed($customer, $subscription, $preview, $key, $quote), $key);
     }
 
     /**
-     * The extra traffic, time and devices the service may buy now, at its plan's prices or the shop's (devices prorated
-     * to what it has left); a kind is null when none may be bought (CustomerExtras::offersFor()).
+     * The extra traffic, time and devices the customer's service may buy now, as the website shows them: at its plan's
+     * prices or the shop's (devices prorated to what it has left), each beside what the order is charged for it — less
+     * the customer's largest automatic discount (Pricing::extraOffer(), the customer read once), as the bot's buttons
+     * show it; a kind is null when none may be bought (CustomerExtras::offersFor()).
      *
-     * @return array{traffic: ExtraOffer|null, time: ExtraOffer|null, devices: ExtraOffer|null}
+     * @return array{traffic: array<string, mixed>|null, time: array<string, mixed>|null, devices: array<string, mixed>|null}
      */
-    public function extras(Subscription $subscription): array
+    public function extras(User $customer, Subscription $subscription): array
     {
-        return $this->extras->offersFor([$subscription])[$subscription->id];
+        $automatic = $this->pricing->automatic($customer);
+
+        return SubscriptionPresenter::extras(
+            $this->extras->offersFor([$subscription])[$subscription->id],
+            static fn(ExtraKind $kind, string $price): Quote => Pricing::extraOffer($automatic, $subscription, $kind, $price),
+        );
     }
 
     /**
      * Buy extra traffic, time or devices for the customer's service — the amount under the kind's field (`gb`, `days`,
-     * `devices`, a whole number as typed) — at what it costs now (CustomerExtras::quote()), paid with `method_id`.
+     * `devices`, a whole number as typed) — at what it costs now (CustomerExtras::quote()), paid with `method_id`; at the
+     * amount the website showed, when it says (asShown()).
      *
      * @param array<string, mixed> $input
      * @throws ValidationException 422 on `status` while the service cannot take it; on `gb`/`days`/`devices` for an
-     *                             amount that is no whole number or not on sale; on `method_id`
+     *                             amount that is no whole number or not on sale; on `method_id` or `expected_amount`
      * @throws RequestKeyReusedException 422 on `idempotency_key`
      * @throws MethodUnavailableException 422 on `method_id`: the price outside its bounds, or its cards full today
      * @throws TooManyUnpaidOrdersException 422
      * @throws TooManyAttemptsException 429
-     * @throws CheckoutRefusedException 503: the shop takes no orders while its bot is switched off
+     * @throws CheckoutRefusedException 409 on `expected_amount`: another price now; 503: the shop takes no orders while
+     *                                  its bot is switched off
      */
     public function extra(User $customer, Subscription $subscription, ExtraKind $kind, array $input, string $key): CheckoutResult
     {
@@ -413,6 +435,7 @@ final class CustomerCheckout
         $price = $this->extras->quote($subscription, $kind, $quantity);
         $method = $this->method($customer, $input, $kind->orderType());
         $quote = $this->quote($customer, $key, $input, fn(?string $code): Quote => $this->pricing->extra($customer, $subscription, $kind, $price, $code));
+        $this->asShown($customer, $key, $input, $quote->amount());
 
         return $this->checkout->pay($customer, $method, $kind->orderType(), $quote->amount(), fn(?OrderKey $key): Order => $this->orders->openExtra($customer, $subscription, $kind, $quantity, $price, $key, $quote), $key);
     }
@@ -432,7 +455,7 @@ final class CustomerCheckout
     public function topUp(User $customer, array $input, string $key): CheckoutResult
     {
         $this->ordering($customer);
-        $amount = Input::amountOf($input['amount'] ?? null);
+        $amount = Input::amountOf($input['amount'] ?? null, Unit::Toman);
         $replayed = $amount === null ? null : $this->replayed($customer, $key, $input, fn(?OrderKey $key): Order => $this->orders->openTopUp($customer, $amount, $key));
         if ($replayed !== null) {
             return $replayed;
@@ -755,6 +778,29 @@ final class CustomerCheckout
         }
 
         return $this->codes->tried($customer, static fn(): Quote => $price($code));
+    }
+
+    /**
+     * Refuse to charge what the website did not show: with `expected_amount` (read as the API's amounts are, null or
+     * blank for none), what the request would be charged — the order its key came to at its own amount (Checkout::pay()
+     * pays that one), else `$price` — must be that amount, or nothing is ordered. Sent before a sale ended or a first
+     * purchase was paid elsewhere, the request is told the price now.
+     *
+     * @param array<string, mixed> $input
+     * @throws ValidationException 422 on `expected_amount`: no whole Toman
+     * @throws CheckoutRefusedException 409 on `expected_amount`: another price now
+     */
+    private function asShown(User $customer, string $key, array $input, string $price): void
+    {
+        $sent = $input['expected_amount'] ?? null;
+        if ($sent === null || (is_string($sent) && trim($sent) === '')) {
+            return;
+        }
+        $shown = Input::amountOf($sent, Unit::Toman) ?? throw ValidationException::on('expected_amount', Validation::notWholeToman('مبلغ نمایش‌داده‌شده (expected_amount)'));
+        $charged = $this->orders->keyed($customer, $key)->amount ?? $price;
+        if (Money::compare($shown, $charged) !== 0) {
+            throw CheckoutRefusedException::repriced($charged);
+        }
     }
 
     /**

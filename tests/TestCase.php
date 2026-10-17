@@ -36,20 +36,23 @@ use Tests\Fakes\NullSleeper;
 use Tests\Fakes\ProbedDriver;
 use Tests\Fakes\RecordingMailTransport;
 use Tests\Support\FakeAban;
+use Tests\Support\FakeAqayePardakht;
 use Tests\Support\FakeAtlasPay;
 use Tests\Support\FakeCubePay;
 use Tests\Support\FakeGoogleLogin;
 use Tests\Support\FakePanel;
+use Tests\Support\FakePlisio;
 use Tests\Support\FakeTelegram;
 use Tests\Support\FakeTelegramLogin;
 use Tests\Support\FakeTurnstile;
+use Tests\Support\FakeVariza;
 use Tests\Support\FakeZarinpal;
 
 /**
  * The base of every test: one booted application per process, kept off this machine (its own config.php, files and
  * no network). A test gets its doubles by swapping a leaf, never what was built around it: a fake transport under the
- * HTTP clients (panelHttp(), telegramLogin(), googleLogin(), turnstile(), cubePay(), zarinpal(), atlasPay(),
- * aban(), telegram()), the mail server (mail()), a log
+ * HTTP clients (panelHttp(), telegramLogin(), googleLogin(), turnstile(), cubePay(), zarinpal(), atlasPay(), aban(),
+ * plisio(), aqayePardakht(), variza() — outgoingFake() for any other —, telegram()), the mail server (mail()), a log
  * handler (logs()), config.php (configFile()), a database probe (probedDatabase()), configuration (config()).
  * Everything is put back in tearDown.
  */
@@ -127,21 +130,8 @@ abstract class TestCase extends BaseTestCase
 
     private ?FakeTelegram $telegram = null;
 
-    private ?FakePanel $panelHttp = null;
-
-    private ?FakeTelegramLogin $telegramLogin = null;
-
-    private ?FakeGoogleLogin $googleLogin = null;
-
-    private ?FakeTurnstile $turnstile = null;
-
-    private ?FakeCubePay $cubePay = null;
-
-    private ?FakeZarinpal $zarinpal = null;
-
-    private ?FakeAtlasPay $atlasPay = null;
-
-    private ?FakeAban $aban = null;
+    /** @var array<class-string, object> The fakes this test put under the outgoing client (outgoingFake()), by class */
+    private array $outgoing = [];
 
     private ?TestHandler $logs = null;
 
@@ -165,16 +155,9 @@ abstract class TestCase extends BaseTestCase
             }
             $this->telegram = null;
         }
-        if ($this->panelHttp !== null || $this->telegramLogin !== null || $this->googleLogin !== null || $this->turnstile !== null || $this->cubePay !== null || $this->zarinpal !== null || $this->atlasPay !== null || $this->aban !== null) {
+        if ($this->outgoing !== []) {
             self::transport('http.transport')->setHandler(self::offline(...));
-            $this->panelHttp = null;
-            $this->telegramLogin = null;
-            $this->googleLogin = null;
-            $this->turnstile = null;
-            $this->cubePay = null;
-            $this->zarinpal = null;
-            $this->atlasPay = null;
-            $this->aban = null;
+            $this->outgoing = [];
         }
         if (self::$app !== null) {
             self::mailServer()->reset();
@@ -345,92 +328,90 @@ abstract class TestCase extends BaseTestCase
         return Messages::fill($text->spec()->default, $values);
     }
 
-    /** The fake panel (any outgoing HTTP: a panel, Resend, GitHub) as the outgoing client's transport for this test. */
+    /** The fake panel (any outgoing HTTP: a panel, Resend) as the outgoing client's transport for this test. */
     protected function panelHttp(): FakePanel
     {
-        if ($this->panelHttp === null) {
-            $this->panelHttp = new FakePanel();
-            self::transport('http.transport')->setHandler($this->panelHttp);
-        }
-
-        return $this->panelHttp;
+        return $this->outgoingFake(FakePanel::class);
     }
 
     /** Telegram's sign-in service (oauth.telegram.org) as the outgoing client's transport for this test. */
     protected function telegramLogin(): FakeTelegramLogin
     {
-        if ($this->telegramLogin === null) {
-            $this->telegramLogin = new FakeTelegramLogin();
-            self::transport('http.transport')->setHandler($this->telegramLogin);
-        }
-
-        return $this->telegramLogin;
+        return $this->outgoingFake(FakeTelegramLogin::class);
     }
 
     /** Google's sign-in service (its published keys) as the outgoing client's transport for this test. */
     protected function googleLogin(): FakeGoogleLogin
     {
-        if ($this->googleLogin === null) {
-            $this->googleLogin = new FakeGoogleLogin();
-            self::transport('http.transport')->setHandler($this->googleLogin);
-        }
-
-        return $this->googleLogin;
+        return $this->outgoingFake(FakeGoogleLogin::class);
     }
 
     /** Cloudflare Turnstile's siteverify as the outgoing client's transport for this test. */
     protected function turnstile(): FakeTurnstile
     {
-        if ($this->turnstile === null) {
-            $this->turnstile = new FakeTurnstile();
-            self::transport('http.transport')->setHandler($this->turnstile);
-        }
-
-        return $this->turnstile;
+        return $this->outgoingFake(FakeTurnstile::class);
     }
 
     /** CubePay's API as the outgoing client's transport for this test. */
     protected function cubePay(): FakeCubePay
     {
-        if ($this->cubePay === null) {
-            $this->cubePay = new FakeCubePay();
-            self::transport('http.transport')->setHandler($this->cubePay);
-        }
-
-        return $this->cubePay;
+        return $this->outgoingFake(FakeCubePay::class);
     }
 
     /** Zarinpal's API (live and sandbox) as the outgoing client's transport for this test. */
     protected function zarinpal(): FakeZarinpal
     {
-        if ($this->zarinpal === null) {
-            $this->zarinpal = new FakeZarinpal();
-            self::transport('http.transport')->setHandler($this->zarinpal);
-        }
-
-        return $this->zarinpal;
+        return $this->outgoingFake(FakeZarinpal::class);
     }
 
     /** AtlasPay's API as the outgoing client's transport for this test. */
     protected function atlasPay(): FakeAtlasPay
     {
-        if ($this->atlasPay === null) {
-            $this->atlasPay = new FakeAtlasPay();
-            self::transport('http.transport')->setHandler($this->atlasPay);
-        }
-
-        return $this->atlasPay;
+        return $this->outgoingFake(FakeAtlasPay::class);
     }
 
     /** AbanGateway's API as the outgoing client's transport for this test. */
     protected function aban(): FakeAban
     {
-        if ($this->aban === null) {
-            $this->aban = new FakeAban();
-            self::transport('http.transport')->setHandler($this->aban);
+        return $this->outgoingFake(FakeAban::class);
+    }
+
+    /** Plisio's API as the outgoing client's transport for this test. */
+    protected function plisio(): FakePlisio
+    {
+        return $this->outgoingFake(FakePlisio::class);
+    }
+
+    /** AqayePardakht's API (live and sandbox) as the outgoing client's transport for this test. */
+    protected function aqayePardakht(): FakeAqayePardakht
+    {
+        return $this->outgoingFake(FakeAqayePardakht::class);
+    }
+
+    /** Variza's API as the outgoing client's transport for this test; its webhooks are the test's to send. */
+    protected function variza(): FakeVariza
+    {
+        return $this->outgoingFake(FakeVariza::class);
+    }
+
+    /**
+     * The fake `$class` (a Guzzle handler: FakePanel, FakeGitHub, a gateway's) as the outgoing client's transport for this
+     * test, made — and put under the client — the first time the test asks for it; offline again in tearDown.
+     *
+     * @template T of callable-object
+     * @param class-string<T> $class
+     * @return T
+     */
+    protected function outgoingFake(string $class): object
+    {
+        $fake = $this->outgoing[$class] ?? null;
+        if (!$fake instanceof $class) {
+            $fake = new $class();
+            $this->outgoing[$class] = $fake;
+            self::transport('http.transport')->setHandler($fake);
         }
 
-        return $this->aban;
+        return $fake;
     }
 
     /**

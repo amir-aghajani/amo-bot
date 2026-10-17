@@ -8,8 +8,8 @@ use App\Core\Database\Casts\Encrypted;
 use App\Core\Database\Casts\EncryptedArray;
 use App\Core\Http\Origin;
 use App\Modules\Accounts\Contracts\SignInSite;
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
-use App\Modules\Store\Enums\StaffGrant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
@@ -33,7 +33,7 @@ use Illuminate\Support\Carbon;
  * @property bool $reviews_enabled Whether it shows the reviews support approved and takes new ones (GET and POST /reviews)
  * @property bool $staff_enabled Whether the shop's admins work it from the website (its admin API, Http\StaffMiddleware)
  * @property bool $staff_strong_sign_in Whether they must have signed in strongly: Telegram, Google, or a password with its second step
- * @property list<string>|null $staff_grants What they may do beyond the shop's daily work (Enums\StaffGrant values)
+ * @property list<string>|null $staff_grants What they may do beyond the shop's daily work (Auth\StaffGrant values)
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */

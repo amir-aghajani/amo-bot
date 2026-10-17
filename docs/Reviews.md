@@ -1,3 +1,5 @@
+[فارسی](fa/Reviews.md)
+
 # Reviews
 
 «نظرات», in both panels, right after «پشتیبانی»: what customers write about the shop on its website. A review is a name,
@@ -25,17 +27,18 @@ then «⏳ در انتظار بررسی؛ …». The group has no buttons for it
 
 The tabs are «همه», «در انتظار بررسی» — counted —, «تاییدشده» and «ردشده»; the newest first. Search by a review's number
 (`#12` is review 12 alone), the name it is signed with, its text, or the customer who wrote it. A row: its number, the
-name and who wrote it (their customer page, or «مهمان»), the stars, the words whole with where they use the service from,
-its status with who decided and when, and when it was written. Its menu:
+name and who wrote it (their customer page, or «مهمان»), the stars (five, as many filled as given), the words whole
+with where they use the service from, its status with who decided and when, and when it was written. Its menu:
 
 - **«تایید»** — at once: the website shows it.
 - **«رد»** — at once: the website does not show it — an approved one is hidden again.
 - **«حذف»** — asks first: the review is gone for good. To keep it off the website, rejecting is enough.
 
-A decision can be taken back the other way at any time — a rejected review approved, an approved one rejected —; one
-already taken, a moment ago from elsewhere, is refused in the words of where the review stands («این نظر تایید شده
-است.», «این نظر رد شده است.»). **Nobody is told**: not the writer, whichever you decide. Who
-decided is kept on the review; anyone but you reads your login as «پشتیبانی». The bot's admins may work this page from
+A decision can be taken back the other way at any time — a rejected review approved, an approved one rejected. A
+decision the review already has — someone took it a moment ago from elsewhere — is refused with where the review now
+stands: «این نظر تایید شده است.» or «این نظر رد شده است.». **Nobody is told**: not the writer, whichever you decide. Who
+decided is kept on the review, and shows by the admin's name as their account has it (else their handle, or «کاربر #12»);
+anyone but you reads your login as «پشتیبانی». The bot's admins may work this page from
 the shop's website too, while it lets them in ([Website](Website.md#the-shops-admins)) — but never decide their own
 review: another admin, or you, does.
 

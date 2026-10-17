@@ -60,6 +60,16 @@ final class ReferralTest extends BotTestCase
         self::assertSame($this->owner->id, User::query()->where('telegram_id', self::NEWCOMER)->firstOrFail()->referred_by);
     }
 
+    public function testACodeTypedWithPersianDigitsIsReadAsItsDigits(): void
+    {
+        $this->owner->forceFill(['referral_code' => 'k7m2xq9p'])->save();
+        // A sign-up on the shop's website, its invite code typed by hand on a Persian keyboard.
+        $newcomer = $this->customer(['telegram_id' => self::NEWCOMER]);
+
+        self::assertSame($this->owner->id, $this->service(ReferralService::class)->attribute($newcomer, ' K۷M۲XQ۹P ')?->id);
+        self::assertSame($this->owner->id, $newcomer->refresh()->referred_by);
+    }
+
     public function testACustomerAlreadyInTheDatabaseNeverBecomesAReferral(): void
     {
         $this->send($this->message('/start', [], self::NEWCOMER));

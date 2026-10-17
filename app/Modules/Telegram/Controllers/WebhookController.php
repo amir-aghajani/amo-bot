@@ -82,7 +82,7 @@ final class WebhookController
         return $this->serve($response, $bot, $update);
     }
 
-    /** Serve the update in its bot's shop, then the bot's queued reports; always 200. */
+    /** Serve the update in its bot's shop, then the bot's queued reports; always 200, whatever fails on the way (it is logged). */
     private function serve(Response $response, Bot $bot, Update $update): Response
     {
         // A slow panel may keep this past Telegram's patience: finish what was started (half a purchase is worse than a
@@ -91,7 +91,12 @@ final class WebhookController
 
         CurrentBot::run($bot, function () use ($update): void {
             $this->dispatcher->dispatch($update);
-            $this->reports->flush();
+            try {
+                $this->reports->flush();
+            } catch (\Throwable $e) {
+                // The update is served: what the queue could not send now waits for the scheduler's round.
+                $this->logger->error('The report group\'s queue failed after update {id}: {message}', ['id' => $update->id(), 'message' => $e->getMessage(), 'exception' => $e]);
+            }
         });
 
         // Always 200: Telegram retries anything else, which would replay the same update.

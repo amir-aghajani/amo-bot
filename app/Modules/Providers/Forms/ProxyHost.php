@@ -9,11 +9,13 @@ use App\Core\Forms\Fields\FieldRefused;
 use App\Core\Forms\FieldSpec;
 use App\Core\Forms\FieldType;
 use App\Support\Input;
+use App\Support\Persian;
 use App\Support\Validation;
 
 /**
  * The host of a panel's SOCKS5 proxy: a host name or an IP address, without a scheme or a port (the port has a field of
- * its own). An IPv6 address may be typed in brackets; it is kept without them, the name in lower case. Required.
+ * its own). An IPv6 address may be typed in brackets, an IPv4 one in Persian digits; it is kept without them, the name
+ * in lower case. Required.
  *
  * @extends Field<string>
  */
@@ -43,7 +45,8 @@ final class ProxyHost extends Field
 
     public function read(array $input, mixed $kept): string
     {
-        $host = strtolower(Input::text($input, $this->name));
+        // An address typed on a Persian keyboard: its digits (and «٫») Latin, as no host name has them.
+        $host = strtolower(Persian::latinDigits(Input::text($input, $this->name)));
         if (str_starts_with($host, '[') && str_ends_with($host, ']')) {
             $host = substr($host, 1, -1);
         }

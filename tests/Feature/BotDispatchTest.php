@@ -324,6 +324,13 @@ final class BotDispatchTest extends BotTestCase
 
         self::assertSame([self::text(BotText::WelcomeNameless)], $this->said());
         self::assertNull(User::query()->where('telegram_id', self::CHAT)->firstOrFail()->name());
+
+        // Or a no-break space, a zero-width space, a Hangul filler: no name either, the next update says.
+        foreach (["\u{00A0}", "\u{200B}\u{00A0}", "\u{3164}"] as $invisible) {
+            $this->send($this->message('hi', ['from' => ['id' => self::CHAT, 'first_name' => 'Ali']]));
+            $this->send($this->message('hi', ['from' => ['id' => self::CHAT, 'first_name' => $invisible]]));
+            self::assertNull(User::query()->where('telegram_id', self::CHAT)->firstOrFail()->name(), (string) json_encode($invisible));
+        }
     }
 
     public function testOfTwoFirstUpdatesAtOnceOnlyTheOneThatMadeTheCustomerReportsThem(): void

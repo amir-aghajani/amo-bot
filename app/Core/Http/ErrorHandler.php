@@ -12,6 +12,7 @@ use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 use Slim\Exception\HttpException;
+use Slim\Exception\HttpMethodNotAllowedException;
 use Slim\Handlers\ErrorHandler as SlimErrorHandler;
 use Slim\Interfaces\CallableResolverInterface;
 
@@ -83,8 +84,12 @@ final class ErrorHandler extends SlimErrorHandler
 
         $response = Json::error($this->responseFactory->createResponse($this->statusCode), $message, $this->statusCode, $errors, $this->debug());
 
-        // A refusal to try again yet says for how long, as a client reads it.
-        return $exception instanceof TooManyAttemptsException ? $response->withHeader('Retry-After', (string) $exception->retryAfter) : $response;
+        // A refusal to try again yet says for how long, and a wrong method which the address takes, as a client reads them.
+        return match (true) {
+            $exception instanceof TooManyAttemptsException => $response->withHeader('Retry-After', (string) $exception->retryAfter),
+            $exception instanceof HttpMethodNotAllowedException => $response->withHeader('Allow', implode(', ', $exception->getAllowedMethods())),
+            default => $response,
+        };
     }
 
     /** Whether the server failed, as opposed to answering a refusal, a missing row or a client error. */

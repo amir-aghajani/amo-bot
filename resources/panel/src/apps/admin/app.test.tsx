@@ -4,14 +4,18 @@ import { render } from '@testing-library/react'
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { ADMIN_ROUTES } from '@/apps/admin/app'
+import { ADMIN_NAV } from '@/apps/admin/nav'
+import { navOfShop } from '@/components/shell/nav'
 import type { AppInfo } from '@/lib/api-types'
 import { AuthProvider } from '@/lib/auth'
 import { testQueryClient, until } from '@/test/render'
+import { navAddresses, pageAt } from '@/test/routes'
 import { json, refusal, server } from '@/test/server'
 
 /*
- * The owner's routes (apps/admin/app): before the shop is installed nothing but the installer, from any address; once it
- * is, the installer's address goes to the sign-in, and everything else waits behind it with the address to come back to.
+ * The owner's routes (apps/admin/app): every address the menu leads to is a page of the panel's; before the shop is
+ * installed nothing but the installer, from any address; once it is, the installer's address goes to the sign-in, and
+ * everything else waits behind it with the address to come back to.
  */
 
 function open(at: string, installed: boolean) {
@@ -41,6 +45,16 @@ function open(at: string, installed: boolean) {
   )
   return router
 }
+
+describe('the owner’s menu', () => {
+  it('leads to pages the panel has — its pages, their sections and the settings’, none to the not-found page — in the main shop and in an agent’s', () => {
+    const addresses = [...navAddresses(navOfShop(ADMIN_NAV, true)), ...navAddresses(navOfShop(ADMIN_NAV, false))]
+
+    expect(addresses).toContain('/broadcasts/gifts')
+    expect(addresses).toContain('/custom-services')
+    for (const address of addresses) expect(pageAt(ADMIN_ROUTES, address), address).not.toBe('*')
+  })
+})
 
 describe('a shop not installed yet', () => {
   it('opens the installer, whatever the address', async () => {

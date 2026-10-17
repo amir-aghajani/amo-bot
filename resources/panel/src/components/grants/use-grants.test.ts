@@ -36,6 +36,7 @@ function grant(overrides: Partial<ServerGrantRow> = {}): ServerGrantRow {
     waiting_reason: null,
     last_failure: null,
     reviewer: 'owner',
+    reviewer_name: null,
     created_at: '2026-10-06T09:00:00Z',
     finished_at: null,
     ...overrides,

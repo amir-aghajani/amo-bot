@@ -201,7 +201,8 @@ function BulkPricesForm({ plans, invalidates, onClose, onSaved }: Omit<BulkPrice
         >
           {(control) => (
             <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-              <Input {...control} dir="ltr" inputMode="decimal" value={values.value} onChange={(e) => set('value', e.target.value)} placeholder={percent ? '10' : '5000'} />
+              {/* A percent may have decimals; an amount is whole Toman — a phone's number pad, without the point the server refuses. */}
+              <Input {...control} dir="ltr" inputMode={percent ? 'decimal' : 'numeric'} value={values.value} onChange={(e) => set('value', e.target.value)} placeholder={percent ? '10' : '5000'} />
               <span className="text-body text-muted-foreground">{percent ? '٪' : MONEY_UNIT}</span>
             </div>
           )}

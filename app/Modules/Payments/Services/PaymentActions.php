@@ -22,6 +22,7 @@ use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Referrals\Services\ReferralService;
 
 /**
  * Support's decisions about a payment, wherever they are made (the panels, the website's admins, the report group's
@@ -48,6 +49,7 @@ final class PaymentActions
         private readonly CustomerNotifier $notifier,
         private readonly RefundedOrders $refunded,
         private readonly OnlinePayments $online,
+        private readonly ReferralService $referrals,
     ) {}
 
     /**
@@ -87,7 +89,9 @@ final class PaymentActions
 
     /**
      * Accepts a card payment: the order is delivered and the customer told. An admin never approves their own payment,
-     * and the website's admins only a receipt still in review (approving without one would give a service away).
+     * and the website's admins only a receipt still in review (approving without one would give a service away). One
+     * judged as a receipt in review — always so on the website and by the review window — is approved only while it
+     * still is: a rejection or a cancel in the same moment stands, never approved over.
      *
      * @param Actor $actor A panel's principal, one of the shop's admins on its website or in its report group, or the
      *                     review window's timer (autoApprove())
@@ -104,7 +108,7 @@ final class PaymentActions
         if ($actor->isStaff() && $payment->status !== PaymentStatus::AwaitingReview) {
             throw ActorRefusedException::receiptFirst();
         }
-        if (!$this->payments->approve($payment, $actor->reviewer, receiptOnly: $actor->isStaff())) {
+        if (!$this->payments->approve($payment, $actor->reviewer, receiptOnly: $payment->status === PaymentStatus::AwaitingReview)) {
             throw ValidationException::on('status', self::DECIDED_MEANWHILE);
         }
         $this->notifier->paymentSettled($payment);
@@ -164,11 +168,14 @@ final class PaymentActions
      * Gives a paid payment back and tells the customer: what a delivered order gave a service goes first — a purchase's
      * service off its panel and the shop, a renewal's or an extra's term and traffic (RefundedOrders) —, then the money
      * (PaymentService::refund()), only while the order is in the state it was judged by: one delivered meanwhile is
-     * refused, never refunded with what it gave. An admin never refunds their own.
+     * refused, never refunded with what it gave. A top-up's refund takes back the commission it earned the customer's
+     * referrer, and the referrer is told (ReferralService::refundTakesBack(); one they spent refuses the refund, nothing
+     * taken); any other refund's money stays in the shop, and its commission stands. An admin never refunds their own.
      *
      * @throws ActorRefusedException 403 their own payment
      * @throws ValidationException 422 on `status`
-     * @throws RefundRefusedException what the order put in the shop is no longer there, or its service cannot go
+     * @throws RefundRefusedException what the order put in the shop is no longer there, its service cannot go, or the
+     *                                referrer spent a top-up's commission
      * @throws DomainRuleException the service's change refused (busy, too many panel operations): nothing refunded
      */
     public function refund(Payment $payment, Actor $actor, ?string $note): Payment
@@ -178,12 +185,18 @@ final class PaymentActions
         if ($actor->is($order->user_id)) {
             throw ActorRefusedException::ownPayment();
         }
+        // Read before the refund deletes it, for the notice: a top-up has no service to take back first, so the refund's
+        // own transaction is where a commission spent refuses it.
+        $commission = ReferralService::refundTakesBack($order) ? $this->referrals->commissionOf($payment) : null;
         $state = $order->status;
         $removed = $state === OrderStatus::Fulfilled ? $this->refunded->takeBack($order, $actor) : null;
         if (!$this->payments->refund($payment, $actor->name(), $note, $state)) {
             throw ValidationException::on('status', self::DECIDED_MEANWHILE);
         }
         $this->notifier->paymentRefunded($payment, $removed);
+        if ($commission !== null) {
+            $this->notifier->commissionTakenBack($commission);
+        }
 
         return $payment;
     }
@@ -251,12 +264,13 @@ final class PaymentActions
         $order = $payment->order;
         $online = $this->isOnline($payment);
 
-        // Held for support — what its gateway said does not fit it, or it kept the money unsettled —: its own note says which.
+        // Held for support — what its gateway said does not fit it, it kept the money unsettled, or closed it with money
+        // in —: its own note says which.
         if ($action === 'check' && OnlinePayments::isHeld($payment)) {
-            return (in_array($payment->note, [PaymentService::NOTE_HELD, PaymentService::NOTE_UNSETTLED], true) ? $payment->note : PaymentService::NOTE_HELD) . '.';
+            return (in_array($payment->note, PaymentService::HELD_NOTES, true) ? $payment->note : PaymentService::NOTE_HELD) . '.';
         }
         // Unpaid, and no online payment opened on its gateway: nothing to ask it.
-        if ($action === 'check' && $status !== PaymentStatus::Paid && $status !== PaymentStatus::Refunded) {
+        if ($action === 'check' && !$status->isSettled()) {
             return $online ? 'این پرداخت در درگاه باز نشد؛ چیزی برای استعلام ندارد.' : 'استعلام از درگاه فقط برای پرداخت آنلاین است.';
         }
         if ($status === PaymentStatus::Paid) {

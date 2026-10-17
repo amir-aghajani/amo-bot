@@ -11,6 +11,7 @@ use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Subscriptions\Tasks\SyncSubscriptionsTask;
 use App\Modules\Support\Enums\TicketChannel;
 use App\Modules\Support\Models\Ticket;
@@ -253,6 +254,42 @@ final class BotSubscriptionDetailTest extends BotTestCase
         self::assertSame(self::text(BotText::ServiceNotFound), $this->params(0)['text']);
     }
 
+    public function testAServiceItsPanelLostShowsWhatItWasWithTheWayBackAlone(): void
+    {
+        unset(FakeProvider::$clients[$this->server->id]['ali_1']);
+
+        $this->send($this->tap($this->screenButton()));
+
+        self::assertSame(SubscriptionStatus::Deleted, $this->subscription->refresh()->status, 'the panel said it has no such client');
+        self::assertSame($this->screen([
+            'status' => self::text(BotText::ServiceStatusDeleted),
+            'traffic' => Messages::traffic(30 * Traffic::GIGABYTE),
+            'used' => self::text(BotText::ServiceUnused),
+            'remaining' => Messages::bytes(30 * Traffic::GIGABYTE) . ' (' . Messages::percent(30 * Traffic::GIGABYTE, 30 * Traffic::GIGABYTE) . ')',
+            'expires' => Messages::expiry($this->subscription->expires_at, 30 * 24),
+            'last_online' => self::text(BotText::ServiceUnknown),
+            'connection' => self::text(BotText::ServiceUnknown),
+        ], rotates: false), $this->params(0)['text'], 'no hint at a link it cannot change');
+        self::assertSame(
+            [[['text' => self::text(BotText::ServiceBack), 'callback_data' => MenuHandler::subscriptionsCallback(1), 'style' => 'danger']]],
+            $this->inlineKeyboard(0),
+            'none of its buttons, which would only find nothing',
+        );
+    }
+
+    public function testTheSwitchOfAServiceHandedOnMeanwhileDrawsNothingOfIt(): void
+    {
+        $sara = $this->customer(['telegram_id' => 9999, 'first_name' => 'Sara']);
+
+        $this->sendWhileTheServiceMovesOn($this->tap($this->screenButton('autorenew')), $sara);
+
+        self::assertSame(['answerCallbackQuery', 'editMessageText'], $this->calls());
+        self::assertSame([self::text(BotText::AutoRenewUnavailable), 'true'], [$this->popup(), $this->params(0)['show_alert'] ?? null]);
+        self::assertSame([self::text(BotText::ServiceNotFound)], $this->said(), 'its keyboard is not drawn again: it is not theirs');
+        self::assertSame([MenuHandler::subscriptionsCallback(1)], $this->callbacks(1));
+        self::assertFalse($this->subscription->refresh()->auto_renew, 'nothing changed on it');
+    }
+
     public function testAnOutageReportIsASupportTicketAboutTheService(): void
     {
         $this->send($this->tap($this->screenButton('report')));
@@ -433,6 +470,19 @@ final class BotSubscriptionDetailTest extends BotTestCase
 
         self::assertSame(['ali_1'], FakeProvider::$rotated);
         self::assertSame(self::text(BotText::ServiceRotateFailed), $this->params(0)['text'], 'without a new link there is nothing to hand over');
+        self::assertSame(self::LINK, $this->subscription->refresh()->subscription_url);
+    }
+
+    public function testALinkChangeConfirmedAsTheServiceIsHandedOnIsSaidSoAndChangesNothing(): void
+    {
+        $this->send($this->tap($this->screenButton('rotate')));
+        $sara = $this->customer(['telegram_id' => 9999, 'first_name' => 'Sara']);
+
+        $this->sendWhileTheServiceMovesOn($this->tap($this->screenButton('rotate', 'yes')), $sara);
+
+        self::assertSame([ServiceTransfers::MOVED_ON], $this->said(), 'as a renewal or an extra says it, not the failure every panel error gets');
+        self::assertSame([MenuHandler::subscriptionsCallback(1)], $this->callbacks(0), 'back to the services, nothing of this one drawn');
+        self::assertSame([], FakeProvider::$rotated, 'the new owner\'s link untouched');
         self::assertSame(self::LINK, $this->subscription->refresh()->subscription_url);
     }
 

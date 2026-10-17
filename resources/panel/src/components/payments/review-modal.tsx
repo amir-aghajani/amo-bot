@@ -233,10 +233,11 @@ function ReviewBody({ payment, onClose, onReviewed, onDecided, onStale, next, fo
         <ReceiptView payment={payment} />
         <Facts payment={payment} />
       </div>
-      <OperationsSection ops={ops} specs={specs} subject="این پرداخت" />
+      {/* The review is the dialog's business: on a phone, its decisions stay at the sheet's foot under a tall receipt. */}
+      <OperationsSection ops={ops} specs={specs} subject="این پرداخت" foot />
       <DetailFooter user={payment.user} busy={ops.running !== null} onClose={onClose}>
-        {/* aria-disabled, not disabled: with no next payment it keeps the focus it was given, and says why it does nothing. */}
-        <Button variant="secondary" size="sm" busy={next.busy} aria-disabled={!onward} autoFocus={focusNext} className="aria-disabled:opacity-45" onClick={() => onward && next.go()}>
+        {/* Held (aria-disabled), not disabled: with no next payment it keeps the focus it was given, and a press does nothing. */}
+        <Button variant="secondary" size="sm" busy={next.busy} aria-disabled={!onward} autoFocus={focusNext} onClick={next.go} className="max-md:h-11">
           بعدی
           <ChevronRight className="rtl:rotate-180" aria-hidden />
         </Button>
@@ -261,7 +262,7 @@ function Facts({ payment }: { payment: PaymentRow }) {
         {payment.held && <span className="ms-1 text-footnote text-warning">{HELD}</span>}{' '}
         {payment.reviewer && !payment.auto_approved && (
           <span className="ms-1 text-footnote text-muted-foreground">
-            توسط <Reviewer name={payment.reviewer} />
+            توسط <Reviewer name={payment.reviewer} person={payment.reviewer_name} />
           </span>
         )}
       </Fact>
@@ -359,17 +360,23 @@ function Facts({ payment }: { payment: PaymentRow }) {
 /** A picture every browser draws, by its file name; a photo Telegram sent as a photo has none and is a JPEG. */
 const DRAWABLE = /\.(jpe?g|png|webp|gif)$/i
 
+/** Support's own record of money paid outside the shop, for an order it made by hand (Payments\Drivers\Outside). */
+const OUTSIDE = 'outside'
+
 /** The receipt picture (ApiPicture), or why the payment has none. */
 function ReceiptView({ payment }: { payment: PaymentRow }) {
   if (!payment.receipt) {
+    // The outside method settles at once as the wallet does — but no wallet paid it.
     const why =
-      payment.kind === 'instant'
-        ? 'پرداخت از کیف پول؛ رسیدی در کار نیست'
-        : payment.kind === 'online'
-          ? 'پرداخت آنلاین در صفحه درگاه؛ رسیدی در کار نیست و نتیجه‌اش را درگاه می‌گوید'
-          : payment.status === 'pending'
-            ? 'مشتری هنوز رسیدی نفرستاده است'
-            : 'این پرداخت رسیدی ندارد'
+      payment.gateway === OUTSIDE
+        ? 'پرداخت خارج از فروشگاه که پشتیبانی ثبت کرده؛ رسیدی در کار نیست'
+        : payment.kind === 'instant'
+          ? 'پرداخت از کیف پول؛ رسیدی در کار نیست'
+          : payment.kind === 'online'
+            ? 'پرداخت آنلاین در صفحه درگاه؛ رسیدی در کار نیست و نتیجه‌اش را درگاه می‌گوید'
+            : payment.status === 'pending'
+              ? 'مشتری هنوز رسیدی نفرستاده است'
+              : 'این پرداخت رسیدی ندارد'
     return <PictureNote place="column">{why}</PictureNote>
   }
 

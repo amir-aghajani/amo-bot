@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Keyboard;
 
 /**
- * Fluent builder for inline keyboards (buttons under a message). A row's buttons go left to right as Telegram lays
- * them out, so for a Persian reader the first one sits on the left.
+ * Fluent builder for inline keyboards (buttons under a message). Telegram lays a row out left to right: row() takes its
+ * buttons in that order, so for a Persian reader the first one sits on the left; grid() and flow() take theirs in
+ * reading order, the first on the right.
  *
  *   InlineKeyboard::make()
  *       ->row(InlineKeyboard::callback('Plans', 'menu:plans'), InlineKeyboard::callback('Wallet', 'menu:wallet'))
@@ -62,14 +63,14 @@ final class InlineKeyboard
     }
 
     /**
-     * Lay buttons out N per row.
+     * Lay buttons out N per row, in reading order: each row's first button rightmost.
      *
      * @param list<array<string, mixed>> $buttons
      */
     public function grid(array $buttons, int $perRow = 2): self
     {
         foreach (array_chunk($buttons, max(1, $perRow)) as $chunk) {
-            $this->row(...$chunk);
+            $this->row(...array_reverse($chunk));
         }
 
         return $this;

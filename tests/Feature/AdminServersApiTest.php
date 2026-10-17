@@ -11,7 +11,10 @@ use App\Modules\Providers\Services\ServerReadiness;
 use App\Modules\Providers\Services\ServerService;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Support\Validation;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
@@ -63,7 +66,11 @@ final class AdminServersApiTest extends HttpTestCase
         self::assertSame(['danger', 2], [$kept->buttonStyle(), $kept->buttonRow()]);
 
         $refused = $this->unchecked()->postJson('/api/admin/servers', ['button_style' => 'purple', 'button_row' => '4'] + self::tokenForm());
-        self::assertSame(['button_style', 'button_row'], array_keys($this->decode($refused)['errors'] ?? []));
+        self::assertSame(
+            ['button_style' => [KeyboardLayout::STYLE_REFUSED], 'button_row' => [KeyboardLayout::ROW_REFUSED]],
+            $this->decode($refused)['errors'] ?? null,
+            'in the words a plan\'s button is refused with',
+        );
     }
 
     public function testAServersFormReportsEveryRefusalAtOnce(): void
@@ -147,7 +154,7 @@ final class AdminServersApiTest extends HttpTestCase
             'name' => 'DE-1',
             'base_url' => 'https://panel.example:2053/base',
             'auth_mode' => 'token',
-            'api_token' => ['set' => true, 'hint' => '••••••ok-1'],
+            'api_token' => ['set' => true, 'hint' => '••••••••'],
             'username' => '',
             'password' => ['set' => false, 'hint' => ''],
             'totp_secret' => ['set' => false, 'hint' => ''],
@@ -340,6 +347,24 @@ final class AdminServersApiTest extends HttpTestCase
         self::assertSame([null, false], [$data['probe']['serves_subscriptions'], $data['probe']['subscription_probed']]);
         self::assertTrue($data['server']['serves_subscriptions'], 'what the check could not ask, it does not forget');
         self::assertNull($data['server']['last_error']);
+    }
+
+    public function testAFailedCheckIsKeptOnOneLineAndShownAsTheDiagnosisAndItsDetailApart(): void
+    {
+        $server = $this->panelServer();
+        $curl = 'cURL error 7: Failed to connect to de-1.example port 2053 after 3 ms: Connection refused (see https://curl.se/libcurl/c/libcurl-errors.html)';
+        $this->panelHttp()->refuse(new ConnectException($curl, new Request('GET', 'x')));
+
+        $data = $this->decode($this->postJson("/api/admin/servers/{$server->id}/test"));
+
+        self::assertSame([$data['probe']['error'], $data['probe']['error_detail']], [$data['server']['last_error'], $data['server']['last_error_detail']], "the server's last error, as the check found it");
+        self::assertStringNotContainsString('cURL', (string) $data['server']['last_error'], 'the diagnosis is Persian alone');
+        self::assertStringContainsString('Connection refused', (string) $data['server']['last_error_detail']);
+        self::assertSame("{$data['server']['last_error']} ({$data['server']['last_error_detail']})", $server->refresh()->last_error, 'kept on one line, as the reports and the tasks read it');
+
+        $server->forceFill(['last_error' => 'پنل جواب نداد.'])->save();
+        $shown = $this->decode($this->get("/api/admin/servers/{$server->id}"))['server'];
+        self::assertSame(['پنل جواب نداد.', null], [$shown['last_error'], $shown['last_error_detail']], 'no detail: none to show');
     }
 
     public function testTheOwnersCheckAsksAPanelTheShopLeavesAloneAWhile(): void

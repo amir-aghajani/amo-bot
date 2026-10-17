@@ -8,6 +8,7 @@ import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdow
 import { userLabel } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { UserRole, UserRow, UserStatus } from '@/lib/api-types'
+import { isolate } from '@/lib/direction'
 
 /*
  * What is done to a customer's account from the panel — banning and reinstating, giving and taking the bot's admin
@@ -15,8 +16,8 @@ import type { UserRole, UserRow, UserStatus } from '@/lib/api-types'
  * ban or a role changes, and the bot admin's mark.
  */
 
-/** What a bot admin may do — said on their mark, and asked about before an account gets it. */
-const BOT_ADMIN = 'مدیر ربات دستور /broadcast را دارد، رسیدها را در گروه گزارش‌ها تایید و رد می‌کند و از شرط‌های ربات (خاموش بودن، شماره موبایل، کانال‌ها) معاف است.'
+/** What a bot admin may do — said on their mark, and asked about before an account gets it (a plain string: its command isolated). */
+const BOT_ADMIN = `مدیر ربات دستور ${isolate('/broadcast')} را دارد، رسیدها را در گروه گزارش‌ها تایید و رد می‌کند و از شرط‌های ربات (خاموش بودن، شماره موبایل، کانال‌ها) معاف است.`
 
 /** A change of a customer's account. */
 type AccountChange = { user: UserRow; status: UserStatus } | { user: UserRow; role: UserRole }

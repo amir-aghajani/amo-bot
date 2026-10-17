@@ -101,17 +101,20 @@ export function PageTabs<T extends string>({ value, tabs, onChange, size = 'md',
     }
   }, [value])
 
+  // The tab the keyboard reaches the row on: the selected one — or, while the value is none of them (a mode not chosen
+  // yet), the first, where the arrows start too.
+  const chosen = tabs.findIndex((tab) => tab.value === value)
+  const stop = chosen === -1 ? 0 : chosen
+
   // Arrow keys move along the row in its reading direction (Home and End to its ends), picking as they go.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const index = tabs.findIndex((tab) => tab.value === value)
-    if (index === -1) return
     const rtl = getComputedStyle(event.currentTarget).direction === 'rtl'
     const forward = rtl ? 'ArrowLeft' : 'ArrowRight'
     const backward = rtl ? 'ArrowRight' : 'ArrowLeft'
 
-    let next = index
-    if (event.key === forward) next = (index + 1) % tabs.length
-    else if (event.key === backward) next = (index - 1 + tabs.length) % tabs.length
+    let next = stop
+    if (event.key === forward) next = (stop + 1) % tabs.length
+    else if (event.key === backward) next = (stop - 1 + tabs.length) % tabs.length
     else if (event.key === 'Home') next = 0
     else if (event.key === 'End') next = tabs.length - 1
     else return
@@ -135,7 +138,7 @@ export function PageTabs<T extends string>({ value, tabs, onChange, size = 'md',
       className={cn('relative -mx-1 scrollbar-none flex items-center gap-5 overflow-x-auto overflow-y-hidden border-b border-border p-1', size === 'sm' && 'gap-4', className)}
       style={{ maskImage: fade(hidden) }}
     >
-      {tabs.map(({ value: tabValue, label, icon: Icon }) => {
+      {tabs.map(({ value: tabValue, label, icon: Icon }, place) => {
         const selected = tabValue === value
         return (
           <button
@@ -150,11 +153,13 @@ export function PageTabs<T extends string>({ value, tabs, onChange, size = 'md',
             {...(choice
               ? { role: 'radio', 'aria-checked': selected }
               : { role: 'tab', 'aria-selected': selected, id: `${id}-tab-${tabValue}`, 'aria-controls': selected ? `${id}-panel-${tabValue}` : undefined })}
-            tabIndex={selected ? 0 : -1}
+            tabIndex={place === stop ? 0 : -1}
             onClick={() => onChange(tabValue)}
             className={cn(
               'flex shrink-0 items-center gap-1.5 rounded-sm whitespace-nowrap transition-colors duration-150 outline-none focus-visible:focus-ring',
+              // A finger's 44px on a phone, either size.
               size === 'sm' ? 'h-6 text-footnote' : 'h-8 text-body',
+              'max-md:h-11',
               selected ? 'font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >

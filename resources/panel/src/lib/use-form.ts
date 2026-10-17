@@ -2,7 +2,7 @@ import { useCallback, useState, type FormEvent } from 'react'
 import { useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { ApiError, type FieldErrors } from '@/lib/api'
 import { messageOf } from '@/lib/failure'
-import { toLatinDigits, wholeOf } from '@/lib/format'
+import { toLatinDigits, tomanOf, wholeOf } from '@/lib/format'
 import { runMutation } from '@/lib/query-client'
 import { sameData } from '@/lib/utils'
 
@@ -15,8 +15,9 @@ interface SubmitOptions {
 
 interface FormOptions<T> {
   /**
-   * The values come from the server: whenever they change by value (not merely by identity), the form starts again
-   * from them.
+   * The values come from the server: whenever they change by value (not merely by identity), a form with nothing typed
+   * starts again from them. What is typed is never replaced: a dirty draft stays, and `elsewhere` says the server's copy
+   * changed under it (another tab saved, a live refresh), until it is saved or the admin takes the new copy (`revert`).
    */
   follow?: boolean
   /**
@@ -40,6 +41,21 @@ export function trimmed(value: unknown): unknown {
  */
 export function asNumbers(values: object): unknown {
   return trimmed(Object.fromEntries(Object.entries(values).map(([name, value]: [string, unknown]) => [name, typeof value === 'string' ? (wholeOf(value) ?? value) : value])))
+}
+
+/**
+ * One typed amount of Toman as the server reads it (Input::amountOf()), for a form's `reads`: blank is none (null), else
+ * whole Toman — «۵۰٬۰۰۰ تومان», "50,000" and "50000.00" are 50000 — or, the text being none, the text trimmed, for the
+ * server to refuse.
+ */
+export function asAmount(text: string): number | string | null {
+  return text.trim() === '' ? null : (tomanOf(text) ?? text.trim())
+}
+
+/** One typed whole number as the server reads it (Input::wholeOf()), for a form's `reads`: the number, or the text trimmed. */
+export function asWhole(text: string): number | string {
+  const number = wholeOf(text)
+  return number === null ? text.trim() : Number(number)
 }
 
 /** A list read as a set (each item once, in no order), for a field the server keeps as one: a customer's groups. */
@@ -92,21 +108,25 @@ interface Draft<T> {
   refusal: { message: string; failure: unknown } | null
   /** The values a submit's refusal was about; null for an error the screen set itself (setErrors, setFormError). */
   refused: T | null
+  /** The server's copy, changed under a dirty draft (a form that follows it): what `revert` goes to. */
+  newer: T | null
+  /** Something was typed since the draft last started from a copy or was saved — even typed back to it. */
+  touched: boolean
 }
 
-/** A form with nothing refused. */
+/** A form with nothing refused, nothing typed. */
 function fresh<T>(values: T, baseline: T = values): Draft<T> {
-  return { values, baseline, errors: {}, refusal: null, refused: null }
+  return { values, baseline, errors: {}, refusal: null, refused: null, newer: null, touched: false }
 }
 
 /** The draft with `changes` typed in; the errors of the changed fields go, since the admin is fixing them. */
 function typed<T extends object>(current: Draft<T>, changes: Partial<T>): Draft<T> {
   const values = { ...current.values, ...changes }
   const fixed = Object.keys(changes).filter((key) => key in current.errors)
-  if (fixed.length === 0) return { ...current, values }
+  if (fixed.length === 0) return { ...current, values, touched: true }
   const errors = { ...current.errors }
   for (const key of fixed) delete errors[key]
-  return { ...current, values, errors }
+  return { ...current, values, errors, touched: true }
 }
 
 /**
@@ -124,14 +144,21 @@ export function useForm<T extends object>(initial: T | (() => T), { follow = fal
   const [busy, setBusy] = useState(false)
   const same = (a: T, b: T) => sameValues(reads(a), reads(b))
 
-  // Adjusted during render (React's way to follow a prop): the server's copy moved — start again from it; or the values
-  // are back at the baseline and no longer what was refused — the refusal was about values no longer on screen.
+  // Adjusted during render (React's way to follow a prop): the server's copy moved — start again from it, or keep what is
+  // typed and hold the new copy; a draft typed back to where it started takes the new copy it held; or the values are
+  // back at the baseline and no longer what was refused — the refusal was about values no longer on screen.
   const [source, setSource] = useState<unknown>(() => (follow ? initial : null))
+  const clean = same(draft.values, draft.baseline)
   if (follow && !sameData(source, initial)) {
     setSource(initial)
-    setDraft(fresh(initial as T))
-  } else if (draft.refused !== null && same(draft.values, draft.baseline) && !same(draft.values, draft.refused)) {
-    setDraft(fresh(draft.values, draft.baseline))
+    const next = initial as T
+    // Typed on: the copy as the server reads it is still where the draft started (this form's own save, a refresh that
+    // changed nothing it reads) — it becomes the baseline; else it waits, said, for the admin to take it.
+    setDraft(clean ? fresh(next) : same(next, draft.baseline) ? { ...draft, baseline: next, newer: null } : { ...draft, newer: next })
+  } else if (draft.newer !== null && clean) {
+    setDraft(fresh(draft.newer))
+  } else if (draft.refused !== null && clean && !same(draft.values, draft.refused)) {
+    setDraft({ ...draft, errors: {}, refusal: null, refused: null })
   }
 
   /** Field errors of the screen's own (a probe's refusal), about the values on screen. */
@@ -149,14 +176,14 @@ export function useForm<T extends object>(initial: T | (() => T), { follow = fal
   /** Start again from `next`: on screen, and what revert() goes back to. */
   const reset = useCallback((next: T) => setDraft(fresh(next)), [])
 
-  /** Drop every unsaved change. */
-  const revert = useCallback(() => setDraft((current) => fresh(current.baseline)), [])
+  /** Drop every unsaved change: back to where the form started — or to the server's newer copy, when one came meanwhile. */
+  const revert = useCallback(() => setDraft((current) => fresh(current.newer ?? current.baseline)), [])
 
   const error = useCallback((field: string) => errors[field]?.[0], [errors])
 
   /**
    * Run a request as a quiet mutation of the panels' cache (the form shows its own failure); `invalidates` is refetched
-   * once it succeeds. Success makes what was sent the new baseline. A 422 becomes field errors — a refusal under a name
+   * once it succeeds. Success makes what was sent the new baseline (a newer copy held is gone). A 422 becomes field errors — a refusal under a name
    * the form has no field for (the connection, the subject's state) becomes the form error —; any other failure the form
    * error. Resolves to the result, or undefined when it failed.
    */
@@ -167,7 +194,9 @@ export function useForm<T extends object>(initial: T | (() => T), { follow = fal
       setDraft((current) => ({ ...current, errors: {}, refusal: null, refused: null }))
       try {
         const result = await runMutation(queryClient, request, { quiet: true, invalidates })
-        setDraft((current) => ({ ...current, baseline: sent }))
+        // What was sent is the server's copy now: a newer one held meanwhile is gone under it; it is touched only when
+        // typed in since it was sent.
+        setDraft((current) => ({ ...current, baseline: sent, newer: null, touched: current.touched && current.values !== sent }))
         return result
       } catch (e) {
         if (e instanceof ApiError && e.status === 422) {
@@ -209,7 +238,9 @@ export function useForm<T extends object>(initial: T | (() => T), { follow = fal
     failure: refusal?.failure ?? null,
     setFormError,
     busy,
-    dirty: !same(draft.values, draft.baseline),
+    dirty: !clean,
+    touched: draft.touched,
+    elsewhere: draft.newer !== null,
     submit,
     handleSubmit,
   }
@@ -231,6 +262,13 @@ export interface Form<T extends object> {
   busy: boolean
   /** The values differ from where the form started, as the server reads them (`reads`). */
   dirty: boolean
+  /**
+   * Something was typed since the form last started from a copy (opened, reset, reverted, a newer copy taken) or was
+   * saved — even typed back to it, which leaves it clean.
+   */
+  touched: boolean
+  /** A form that follows the server's copy: that copy changed under the draft, which stays; `revert` takes the new copy. */
+  elsewhere: boolean
   submit: <R>(request: () => Promise<R>, options?: SubmitOptions) => Promise<R | undefined>
   handleSubmit: (run: () => unknown) => (event: FormEvent) => void
 }

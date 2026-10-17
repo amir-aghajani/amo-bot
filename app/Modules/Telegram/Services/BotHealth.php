@@ -16,7 +16,7 @@ use Psr\Log\LoggerInterface;
 final class BotHealth
 {
     /** Telegram refuses the token (revoked in @BotFather): the agent hands over a new one from the main bot. */
-    public const TOKEN_REFUSED = 'تلگرام توکن این ربات را نمی‌پذیرد؛ توکن تازه را از @BotFather بگیرید و از ربات اصلی، بخش «ربات من»، بفرستید.';
+    public const TOKEN_REFUSED = "تلگرام توکن این ربات را نمی‌پذیرد؛ توکن تازه را از \u{200E}@BotFather بگیرید و از ربات اصلی، بخش «ربات من»، بفرستید.";
 
     /** Another program takes the bot's updates: a second poller, or a webhook set for it elsewhere. */
     public const TOKEN_IN_USE = 'این ربات جای دیگری هم اجرا می‌شود (برنامه دیگری با همین توکن به‌روزرسانی‌ها را می‌گیرد)؛ آن را متوقف کنید.';

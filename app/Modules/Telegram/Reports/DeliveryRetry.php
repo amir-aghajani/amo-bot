@@ -25,7 +25,6 @@ final class DeliveryRetry implements GroupHandler
     public const PREFIX = 'rt:';
 
     private const LABEL = '🔁 تلاش دوباره برای تحویل';
-    private const NOT_ADMIN = 'فقط مدیرهای ربات می‌توانند تحویل را دوباره امتحان کنند؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.';
     private const NOT_FOUND = 'این سفارش پیدا نشد.';
     private const DELIVERED = '✅ سفارش تحویل شد.';
 
@@ -54,7 +53,7 @@ final class DeliveryRetry implements GroupHandler
             return;
         }
 
-        $admin = $this->groupButtons->presser($update, self::NOT_ADMIN);
+        $admin = $this->groupButtons->presser($update, GroupButtons::onlyAdmins('تحویل را دوباره امتحان کنند'));
         if ($admin === null) {
             return;
         }

@@ -1,3 +1,5 @@
+[فارسی](fa/Extending.md)
+
 # Extending
 
 Where a new piece goes, and what comes with it. A new VPN panel, payment gateway, database, mail service or captcha is
@@ -17,13 +19,16 @@ Every shop feature is an API endpoint and a screen:
    Then `pnpm api:types` regenerates the panels' types, and `php scripts/docs.php` the API's reference and
    `docs/openapi.json` (CI fails while they are stale).
    - The shop's daily work is the website's admins' too: its operation says so — `x-staff: true`, or the grant the shop
-     must give for it (`x-staff: refunds`, the route's `StaffGrant::ARGUMENT` naming the same); one that asks a sign-in
-     of the last 15 minutes without a grant — approving a payment, which delivers on the admin's word alone — adds
-     `x-staff-recent: true` (the route's `StaffMiddleware::RECENT_SIGN_IN`) — and `tests/Support/ApiDescription.php`
-     gives it its path under `/api/store/v1/{store}/admin`; `ApiDescriptionTest` holds the markers to the routes,
-     `RouteGuardsTest` walks the admins' routes. A decision takes the request's `Actor` —
-     who decided, kept as the reviewer — and its rules hold whoever asks: an admin never decides about themselves
-     ([the shop's admins](Store-API-Admins.md)). Configuration stays in `$configuration`, the panels' alone.
+     must give for it (`x-staff: refunds`, the route's `Auth\StaffGrant::ARGUMENT` naming the same), which asks a
+     sign-in of the last 15 minutes as well; one that asks that recent sign-in without a grant — approving a payment,
+     which delivers on the admin's word alone — adds `x-staff-recent: true` (the route's
+     `StaffMiddleware::RECENT_SIGN_IN`) — and `tests/Support/ApiDescription.php` gives it its path under
+     `/api/store/v1/{store}/admin`; `ApiDescriptionTest` holds the markers to the routes, `RouteGuardsTest` walks the
+     admins' routes. A decision takes the request's `Actor` — who decided, kept as the reviewer — and its rules hold
+     whoever asks: an admin never decides about themselves ([the shop's admins](Store-API-Admins.md)). A grant that only
+     some requests of an operation need — putting a customer into a «همکار» group needs `catalog` — is asked in the
+     service with `Actor::holds()`, where what the request holds is known. Configuration stays in `$configuration`, the
+     panels' alone.
 3. The React page — `resources/panel/src/pages` for both panels (each its own chunk, through `pages/lazy.ts`), or an
    app's own (`src/apps/<panel>/pages`) — built from the shared components, its route in each app's `app.tsx` and its
    entry in each app's `nav.ts`.
@@ -32,7 +37,14 @@ Every shop feature is an API endpoint and a screen:
    `ROW_KINDS`, which tries it with another shop's row — and a Vitest test beside the page.
 
 A table the panels show joins the change feed — its area in `ChangeFeed::AREAS` and `ChangesResponse`, and the queries
-it moves in `AREA_QUERIES` (`lib/use-live-updates.ts`) —, so open screens follow it.
+it moves in `AREA_QUERIES` (`lib/use-live-updates.ts`) —, so open screens follow it. A write counts for the shop it is
+made in by itself; a table that is the installation's rather than a shop's (as the servers are) puts its area among
+`ChangeFeed`'s installation areas too ([the change feed](Architecture.md#the-change-feed)).
+
+A moment the owner types far into the future (an end date) is held to what the database keeps: refuse one past
+`LocalTime::LAST_DAY` with `LocalTime::tooLate()` and `tooLateFor()`. A new way to lengthen a service goes through
+`ServiceTerms`, which refuses a term past it with `TermTooLongException`
+([Database](Database.md#time-and-the-2038-bound)).
 
 ## A bot command or screen
 

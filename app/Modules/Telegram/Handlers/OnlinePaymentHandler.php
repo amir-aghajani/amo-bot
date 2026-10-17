@@ -8,7 +8,6 @@ use App\Core\Security\RateLimiter;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Payments\Enums\GatewayKind;
 use App\Modules\Payments\Enums\OnlineState;
-use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Models\Payment;
@@ -59,7 +58,7 @@ final class OnlinePaymentHandler implements Handler
         if ($payment === null || $this->gateways->kind($payment->method->driver) !== GatewayKind::Online) {
             return;
         }
-        if (in_array($payment->status, [PaymentStatus::Paid, PaymentStatus::Refunded], true)) {
+        if ($payment->status->isSettled()) {
             $ctx->answer($this->texts->get(BotText::PayOnlineAlreadyPaid), alert: true);
             $this->done($ctx, $payment);
 

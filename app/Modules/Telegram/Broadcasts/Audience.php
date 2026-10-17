@@ -55,10 +55,16 @@ final class Audience
     {
         return match ($key) {
             self::ALL, self::BUYERS, self::NON_BUYERS, self::INACTIVE, self::AGENTS => new self($key, null, null),
-            self::GROUP => ($group = CustomerGroup::query()->find((int) $id)) !== null ? new self($key, $group->id, $group->name) : null,
-            self::SERVER => ($server = self::serversQuery()->find((int) $id)) !== null ? new self($key, $server->id, $server->name) : null,
+            self::GROUP => ($group = CustomerGroup::query()->find((int) $id)) !== null ? self::ofOne($group) : null,
+            self::SERVER => ($server = self::serversQuery()->find((int) $id)) !== null ? self::ofOne($server) : null,
             default => null,
         };
+    }
+
+    /** The customers of a group, or of a server among servers(), as read already: a list to pick from asks nothing more. */
+    public static function ofOne(CustomerGroup|Server $named): self
+    {
+        return new self($named instanceof CustomerGroup ? self::GROUP : self::SERVER, $named->id, $named->name);
     }
 
     /**

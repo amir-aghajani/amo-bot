@@ -36,7 +36,7 @@ const OPERATIONS: Record<Action, OperationSpec> = {
     icon: PowerOff,
     tone: 'danger',
     done: 'غیرفعال شد',
-    confirm: 'کلاینت روی پنل خاموش می‌شود و تا فعال شدن دوباره وصل نمی‌شود. مشتری در ربات خبردار می‌شود.',
+    confirm: 'کلاینت روی پنل خاموش می‌شود و تا فعال شدن دوباره وصل نمی‌شود. مشتری در تلگرام یا با ایمیل خبردار می‌شود.',
     note: { label: 'توضیح برای مشتری', placeholder: 'اختیاری؛ مثلا: استفاده خارج از قوانین' },
   },
   // Not run from here: it opens the move dialog, which picks the server and shows how the move went.
@@ -48,7 +48,7 @@ const OPERATIONS: Record<Action, OperationSpec> = {
     tone: 'neutral',
     done: 'به مشتری دیگر منتقل شد',
     confirm:
-      'سرویس با همین لینک، زمان و حجم به حساب مشتری دیگری می‌رود و «تمدید خودکار» آن خاموش می‌شود. هر دو مشتری در ربات خبردار می‌شوند. دستگاه‌های مشتری قبلی تا وقتی مشتری جدید «تغییر لینک» را نزند وصل می‌مانند.',
+      'سرویس با همین لینک، زمان و حجم به حساب مشتری دیگری می‌رود و «تمدید خودکار» آن خاموش می‌شود. هر دو مشتری در تلگرام یا با ایمیل خبردار می‌شوند. دستگاه‌های مشتری قبلی تا وقتی مشتری جدید «تغییر لینک» را نزند وصل می‌مانند.',
     form: true,
   },
   delete: {
@@ -56,9 +56,26 @@ const OPERATIONS: Record<Action, OperationSpec> = {
     icon: Trash2,
     tone: 'danger',
     done: 'حذف شد',
-    confirm: 'کلاینت از پنل و سرویس از فروشگاه کامل حذف می‌شود و لینکش دیگر کار نمی‌کند؛ این کار برگشت ندارد. اگر سرویس فعال باشد، مشتری در ربات خبردار می‌شود.',
+    confirm: 'کلاینت از پنل و سرویس از فروشگاه کامل حذف می‌شود و لینکش دیگر کار نمی‌کند؛ این کار برگشت ندارد. اگر سرویس فعال باشد، مشتری در تلگرام یا با ایمیل خبردار می‌شود.',
     note: { label: 'توضیح برای مشتری', placeholder: 'اختیاری؛ فقط برای سرویسی که هنوز فعال است فرستاده می‌شود' },
   },
+}
+
+/**
+ * The delete of a service gone from its panel («حذف‌شده», where it is all the server offers): no client left to remove
+ * and no customer told — the service leaves the shop, said as it is, with no note to write.
+ */
+const DELETE_GONE: OperationSpec = {
+  label: 'حذف سرویس',
+  icon: Trash2,
+  tone: 'danger',
+  done: 'حذف شد',
+  confirm: 'کلاینت این سرویس دیگر روی پنل نیست؛ سرویس از فروشگاه کامل حذف می‌شود و این کار برگشت ندارد. به مشتری چیزی گفته نمی‌شود.',
+}
+
+/** The operations of a service, worded for its state. */
+function operationsOf(subscription: SubscriptionRow): Record<Action, OperationSpec> {
+  return subscription.status === 'deleted' ? { ...OPERATIONS, delete: DELETE_GONE } : OPERATIONS
 }
 
 /**
@@ -126,9 +143,10 @@ function SubscriptionBody({ subscription, onClose, onChanged, onDeleted, onStale
   const [panelDown, setPanelDown] = useState<string | null>(null)
   // A claimed service may leave the shop alone, its client kept for the customer it belongs to (KEEP_CLIENT).
   const keeps = subscription.claimed_at !== null && !agentShop
+  const specs = operationsOf(subscription)
 
   const ops = useOperations({
-    specs: OPERATIONS,
+    specs,
     allowed: subscription.actions,
     // The fresh row — or null after a delete, which leaves no row behind (204); `force` deletes without the panel.
     perform: async ({ action, note, force }) =>
@@ -183,7 +201,7 @@ function SubscriptionBody({ subscription, onClose, onChanged, onDeleted, onStale
       <Facts subscription={subscription} serverPage={serverPage} />
       <OperationsSection
         ops={ops}
-        specs={OPERATIONS}
+        specs={specs}
         subject="این سرویس"
         alternative={(action) => (action === 'delete' && keeps ? KEEP_CLIENT : null)}
         form={(action) =>
@@ -260,7 +278,11 @@ function LinkBox({ link, dead }: { link: string; dead: boolean }) {
   )
 }
 
-/** Everything known about the service, as of the panel's last answer — and when the shop removes it by itself, if it does. */
+/**
+ * Everything known about the service, as of the panel's last answer — and when the shop removes it by itself, if it does
+ * —, as every detail dialog's facts read: a value in the text's own ink, a moment something happened in the quieter one,
+ * what a value says more on a smaller line of its own.
+ */
 function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; serverPage?: (id: number) => string }) {
   return (
     <FactList>
@@ -283,7 +305,7 @@ function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; se
         </Fact>
       )}
       <Fact label="مدت">{formatDuration(subscription.duration_hours)}</Fact>
-      {subscription.duration_hours > 0 && !subscription.is_test && <Fact label="تمدید خودکار">{subscription.auto_renew ? 'روشن' : <span className="text-muted-foreground">خاموش</span>}</Fact>}
+      {subscription.duration_hours > 0 && !subscription.is_test && <Fact label="تمدید خودکار">{subscription.auto_renew ? 'روشن' : 'خاموش'}</Fact>}
       {subscription.next_period && (
         <Fact label="دوره بعدی">
           از {formatDate(subscription.next_period.starts_at, { dateStyle: 'medium' })}، حداکثر {formatBytes(subscription.next_period.traffic)}
@@ -309,8 +331,8 @@ function Facts({ subscription, serverPage }: { subscription: SubscriptionRow; se
           <span className="text-muted-foreground">{formatDate(subscription.created_at)}</span>
         </Fact>
       ) : (
-        <Fact label="افزودن">
-          <span className="text-muted-foreground">افزوده‌شده با لینک مشتری در {formatDate(subscription.claimed_at)}</span>
+        <Fact label="افزودن با لینک">
+          <span className="text-muted-foreground">{formatDate(subscription.claimed_at)}</span>
         </Fact>
       )}
       <Fact label="آخرین پرسش از پنل">

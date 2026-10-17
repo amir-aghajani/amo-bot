@@ -7,8 +7,8 @@ namespace Tests\Unit\Http;
 use App\Core\Http\Urls;
 use App\Modules\Accounts\Enums\CaptchaAction;
 use App\Modules\Auth\NamedShop;
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Reviews\Services\Reviews;
-use App\Modules\Store\Enums\StaffGrant;
 use App\Modules\Store\Http\StaffMiddleware;
 use cebe\openapi\spec\MediaType;
 use cebe\openapi\spec\OpenApi;
@@ -17,7 +17,7 @@ use cebe\openapi\spec\PathItem;
 use cebe\openapi\spec\RequestBody;
 use cebe\openapi\spec\Schema;
 use League\OpenAPIValidation\PSR7\PathFinder;
-use Symfony\Component\Yaml\Yaml;
+use League\OpenAPIValidation\PSR7\ValidatorBuilder;
 use Tests\HttpTestCase;
 use Tests\Support\ApiDescription;
 use Tests\TestCase;
@@ -65,6 +65,18 @@ final class ApiDescriptionTest extends TestCase
         $description = self::description();
 
         self::assertTrue($description->validate(), implode("\n", $description->getErrors()));
+    }
+
+    /**
+     * A website's developer reads the file with the tools of their own: league/openapi-psr7-validator straight from the
+     * YAML takes it with the YAML parser's guard as it comes (at most 128 aliases of a shared mapping or list), so a
+     * field repeated elsewhere shares its wording by an anchor on its text, never on the whole field.
+     */
+    public function testAWebsitesOwnValidatorReadsTheFileAsItIs(): void
+    {
+        $validator = (new ValidatorBuilder())->fromYamlFile(ApiDescription::FILE)->getResponseValidator();
+
+        self::assertArrayHasKey('/api/store/v1/{store}/me', $validator->getSchema()->paths->getPaths());
     }
 
     public function testEveryRouteIsDescribedAndNothingElse(): void
@@ -201,6 +213,43 @@ final class ApiDescriptionTest extends TestCase
     }
 
     /**
+     * Objects are closed: every object the file describes with fields says it takes no other
+     * (`additionalProperties: false`), so a field the server sends, or a request carries, that the file lacks fails the
+     * validators — never a silent extra. One without fields is a map of what it says (`additionalProperties`), or empty.
+     */
+    public function testEveryObjectIsClosed(): void
+    {
+        $open = [];
+        $walk = static function (mixed $schema, string $where) use (&$walk, &$open): void {
+            if (!is_array($schema)) {
+                return;
+            }
+            $object = ($schema['type'] ?? null) === 'object' || isset($schema['properties']);
+            if ($object && !array_key_exists('additionalProperties', $schema)) {
+                $open[] = $where;
+            } elseif ($object && ($schema['properties'] ?? []) !== [] && $schema['additionalProperties'] !== false) {
+                $open[] = $where;
+            }
+            foreach ($schema['properties'] ?? [] as $name => $property) {
+                $walk($property, "{$where}.{$name}");
+            }
+            foreach (['items', 'additionalProperties', 'not'] as $keyword) {
+                $walk($schema[$keyword] ?? null, "{$where}/{$keyword}");
+            }
+            foreach (['allOf', 'oneOf', 'anyOf'] as $keyword) {
+                foreach ($schema[$keyword] ?? [] as $i => $part) {
+                    $walk($part, "{$where}/{$keyword}/{$i}");
+                }
+            }
+        };
+        foreach (ApiDescription::read()['components']['schemas'] as $name => $schema) {
+            $walk($schema, (string) $name);
+        }
+
+        self::assertSame([], $open, 'every object of resources/api/openapi.yaml is closed, or a map');
+    }
+
+    /**
      * A body that carries a captcha's token (`captcha`, the widget's string) says the action its widget must name
      * (`x-captcha`: a sign-in form's CaptchaAction, or a review's — Reviews::CAPTCHA_ACTION), and only such a body does —
      * each form the captcha guards once: a website's developer reads there which action each form's widget names.
@@ -248,7 +297,7 @@ final class ApiDescriptionTest extends TestCase
         }
 
         $marked = [];
-        foreach (Yaml::parseFile(ApiDescription::FILE)['paths'] as $path => $item) {
+        foreach (ApiDescription::read()['paths'] as $path => $item) {
             foreach ($item as $method => $operation) {
                 $marker = is_array($operation) ? $operation[ApiDescription::MARKER] ?? null : null;
                 if ($marker !== null) {
@@ -272,7 +321,7 @@ final class ApiDescriptionTest extends TestCase
     public function testOnlyThePanelsSharedOperationsAreMarkedAndWithAGrantThereIs(): void
     {
         $grants = array_map(static fn(StaffGrant $grant): string => $grant->value, StaffGrant::cases());
-        foreach (Yaml::parseFile(ApiDescription::FILE)['paths'] as $path => $item) {
+        foreach (ApiDescription::read()['paths'] as $path => $item) {
             foreach ($item as $method => $operation) {
                 $marker = is_array($operation) ? $operation[ApiDescription::MARKER] ?? null : null;
                 $recent = is_array($operation) ? $operation[ApiDescription::RECENT] ?? null : null;

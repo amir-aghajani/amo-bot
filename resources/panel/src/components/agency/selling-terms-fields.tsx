@@ -3,6 +3,7 @@ import { WindowField } from '@/components/discounts/window-field'
 import { MoneyField } from '@/components/money-field'
 import type { AgencyTermsRequest } from '@/lib/api-types'
 import { amountDraft, decimalInput } from '@/lib/format'
+import { asAmount } from '@/lib/use-form'
 
 /**
  * An agent's terms of selling as a form holds them: when their agency ends (a Jalali day and an hour on the shop's clock;
@@ -14,9 +15,12 @@ export interface SellingTermsDraft {
   monthly_minimum: string
 }
 
-/** The terms an agent has (or are given by default) as the form starts from them. */
+/**
+ * The terms an agent has (or are given by default) as the form starts from them. Without an end, a day typed ends at its
+ * last hour (23), as a discount's or a sale's end does — not at its first.
+ */
 export function sellingTermsDraft(expiresAt: string | null, minimum: string | null): SellingTermsDraft {
-  return { expires: windowEnd(expiresAt), monthly_minimum: amountDraft(minimum ?? '0') }
+  return { expires: windowEnd(expiresAt, '23'), monthly_minimum: amountDraft(minimum ?? '0') }
 }
 
 /** The two as the API takes them: a blank end is never, a 0 minimum none. */
@@ -24,6 +28,9 @@ export const sellingTermsBody = (values: SellingTermsDraft): Pick<AgencyTermsReq
   expires_at: windowRequest(values.expires),
   monthly_minimum: decimalInput(values.monthly_minimum),
 })
+
+/** The two as the server reads them, for a form's `reads`: the end as the day and hour sent, the minimum as whole Toman. */
+export const sellingTermsRead = (values: SellingTermsDraft) => ({ expires_at: windowRequest(values.expires), monthly_minimum: asAmount(values.monthly_minimum) })
 
 /**
  * sellingTermsBody() of those changed from `kept` (what the form started from) — one left out is kept. The field keeps an

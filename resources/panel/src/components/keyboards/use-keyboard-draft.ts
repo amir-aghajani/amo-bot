@@ -60,10 +60,18 @@ export function useKeyboardDraft(keyboard: KeyboardLayoutData, limits: Keyboards
     return true
   }
 
+  /**
+   * Start again from `next`, the layout the server kept (a save's, a reset's): following the server's copy alone leaves
+   * the draft as it was when that copy did not move — an emptied row the save dropped, edits a reset to the very layout
+   * saved threw away.
+   */
+  const restart = (next: KeyboardLayoutData) => form.reset(draftOf(next))
+
   return {
     form,
     /** The rows as the keyboard has them: buttons alone, row by row. */
     buttons: rows.map((row) => row.buttons),
+    restart,
     addRow: () => {
       if (!noRoom()) change([...rows, newRow()])
     },
@@ -104,6 +112,7 @@ export function useKeyboardDraft(keyboard: KeyboardLayoutData, limits: Keyboards
       })
       if (data) {
         toast.success('کیبورد ذخیره شد؛ از این به بعد ربات همین را نشان می‌دهد')
+        restart(data.keyboard)
         onSaved(data.keyboard)
       }
     },

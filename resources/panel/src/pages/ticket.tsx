@@ -8,13 +8,13 @@ import { ConfirmModal } from '@/components/confirm-modal'
 import { ErrorState } from '@/components/error-state'
 import { Fact, FactList } from '@/components/fact-list'
 import { NotFoundPage } from '@/components/not-found'
-import { Page } from '@/components/page'
+import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
+import { Rating } from '@/components/rating'
 import { StatusBadge } from '@/components/status-badge'
 import { searchLink, TextLink } from '@/components/text-link'
 import { Conversation } from '@/components/tickets/conversation'
 import { ReplyForm } from '@/components/tickets/reply-form'
-import { TicketRating } from '@/components/tickets/ticket-cells'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -50,6 +50,7 @@ function TicketView({ id }: { id: number }) {
   const queryClient = useQueryClient()
   const query = ticketQuery(id)
   const detail = useQuery(query)
+  const failed = useReadFailure(detail)
   const [closing, setClosing] = useState(false)
   const [reopening, setReopening] = useState(false)
   useTitleSubject(detail.data && `تیکت ${idLabel(id)}`)
@@ -85,7 +86,7 @@ function TicketView({ id }: { id: number }) {
     onError: recover,
   })
 
-  if (detail.isPending) {
+  if (detail.isPending && failed.error === null) {
     return (
       <Page width="default">
         <div className="grid gap-3" aria-busy="true" aria-label="در حال بارگذاری تیکت">
@@ -101,7 +102,7 @@ function TicketView({ id }: { id: number }) {
     )
   }
 
-  const failure = detail.error && <ErrorState what="تیکت" error={detail.error} onRetry={() => void detail.refetch()} retrying={detail.isFetching} />
+  const failure = failed.error && <ErrorState what="تیکت" error={failed.error} onRetry={() => void detail.refetch()} retrying={failed.retrying} />
 
   if (!detail.data) {
     return (
@@ -245,9 +246,10 @@ function TicketFacts({ ticket }: { ticket: TicketDetail }) {
           {ticket.rating !== null && (
             <Fact label="امتیاز مشتری">
               <div className="grid gap-1">
-                <TicketRating rating={ticket.rating} />
+                <Rating rating={ticket.rating} />
+                {/* The customer's words: a long one with no space to break at breaks anywhere, inside the card. */}
                 {ticket.rating_note && (
-                  <p dir="auto" className="text-footnote whitespace-pre-wrap text-muted-foreground [unicode-bidi:plaintext]">
+                  <p dir="auto" className="text-footnote wrap-anywhere whitespace-pre-wrap text-muted-foreground [unicode-bidi:plaintext]">
                     {ticket.rating_note}
                   </p>
                 )}

@@ -2,7 +2,7 @@ import { ShoppingCart } from 'lucide-react'
 import { customerList } from '@/components/customer-filter'
 import { LatestCard, useLatestRows } from '@/components/customer/latest-rows'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowTitleButton } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { OrderAmount } from '@/components/orders/order-amount'
 import { OrderModal } from '@/components/orders/order-modal'
 import { OrderSubject } from '@/components/orders/order-subject'
@@ -35,7 +35,7 @@ export function OrdersCard({ customer }: { customer: UserRow }) {
               <TableHead>سفارش</TableHead>
               <TableHead className="hidden md:table-cell">بابت</TableHead>
               <TableHead>مبلغ</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <TableHead className="hidden sm:table-cell">زمان</TableHead>
             </TableRow>
           </TableHeader>
@@ -49,14 +49,17 @@ export function OrdersCard({ customer }: { customer: UserRow }) {
                     </RowTitleButton>
                     <span className="text-footnote text-muted-foreground">{ORDER_TYPE[order.type]}</span>
                   </div>
+                  <PhoneFacts>
+                    <StatusBadge status={ORDER_STATUS[order.status]} />
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   <OrderSubject order={order} />
                 </TableCell>
-                <TableCell className="whitespace-nowrap tabular">
+                <TableCell className="tabular max-md:whitespace-normal">
                   <OrderAmount order={order} />
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <StatusBadge status={ORDER_STATUS[order.status]} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">{timeAgo(order.created_at)}</TableCell>

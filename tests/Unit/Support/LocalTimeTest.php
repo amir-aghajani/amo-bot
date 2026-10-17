@@ -48,4 +48,26 @@ final class LocalTimeTest extends TestCase
             self::assertFalse(LocalTime::moment($refused), 'refused: ' . var_export($refused, true));
         }
     }
+
+    /** An end typed past LAST_DAY is too late on any shop's clock, and the last it may be is one MySQL's TIMESTAMP keeps. */
+    public function testAMomentPastTheLastDayIsTooLateOnAnyClock(): void
+    {
+        $timestampEnds = new \DateTimeImmutable('2038-01-19 03:14:07', new \DateTimeZone('UTC'));
+        foreach (['Asia/Tehran', 'Pacific/Kiritimati', 'Etc/GMT+12', 'UTC'] as $zone) {
+            LocalTime::use($zone);
+            $last = LocalTime::moment(LocalTime::LAST_DAY . 'T23:59');
+            $next = LocalTime::moment('2038-01-18T00:01');
+            self::assertInstanceOf(Carbon::class, $last);
+            self::assertInstanceOf(Carbon::class, $next);
+
+            self::assertFalse(LocalTime::tooLate($last), "{$zone}: the last day's last minute");
+            self::assertTrue($last < $timestampEnds, "{$zone}: kept before the TIMESTAMP ends");
+            self::assertTrue(LocalTime::tooLate($next), "{$zone}: the next day");
+            self::assertTrue(LocalTime::tooLate(new \DateTimeImmutable('9999-12-31 00:00')));
+            self::assertFalse(LocalTime::tooLate(new \DateTimeImmutable('2026-10-16 12:00')));
+        }
+
+        LocalTime::use('Asia/Tehran');
+        self::assertSame('زمان پایان نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد', LocalTime::tooLateFor('زمان پایان'));
+    }
 }

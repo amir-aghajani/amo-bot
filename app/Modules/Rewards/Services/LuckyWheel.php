@@ -29,7 +29,7 @@ use Psr\Log\LoggerInterface;
  * two taps never spin twice: the cooldown since their last given spin, the slices that can reach them now
  * (Eligibility), the cost from the wallet (an agent's credit does not count). The prize is given after the commit; if
  * that fails, the cost is refunded and the spin keeps why, counting for no cooldown. A buyers-only wheel needs a
- * purchase with a price (Order::paidPurchases()); bot admins spin either way.
+ * purchase with a price, kept (Order::keptPurchases()); bot admins spin either way.
  */
 final class LuckyWheel
 {
@@ -128,11 +128,14 @@ final class LuckyWheel
             $given = $this->rewards->give($customer, $reward, self::REASON, tell: $tell);
         } catch (\Throwable $e) {
             $why = self::why($e);
-            if ($cost > 0) {
-                $this->wallet->credit($customer, $cost, self::LINE_REFUND);
-            }
-            $spin->forceFill(['outcome' => mb_substr($why, 0, self::OUTCOME_MAX)])->save();
-            $this->logger->log($e instanceof DomainRuleException || $e instanceof ProviderException ? 'warning' : 'error', 'The lucky wheel could not give user {user} its prize «{prize}» (spin {spin}): {why}', [
+            // The cost back and the spin kept as not given (no cooldown) together, or neither.
+            $this->db->transaction(function () use ($customer, $cost, $spin, $why): void {
+                if ($cost > 0) {
+                    $this->wallet->credit($customer, $cost, self::LINE_REFUND);
+                }
+                $spin->forceFill(['outcome' => mb_substr($why, 0, self::OUTCOME_MAX)])->save();
+            }, Ledger::ATTEMPTS);
+            $this->logger->log(Rewards::failureLevel($e), 'The lucky wheel could not give user {user} its prize «{prize}» (spin {spin}): {why}', [
                 'user' => $customer->id,
                 'prize' => $prize->label,
                 'spin' => $spin->id,
@@ -164,7 +167,7 @@ final class LuckyWheel
         if (!$this->settings->enabled()) {
             throw WheelRefusedException::because(WheelRefusal::Off);
         }
-        if ($this->settings->buyersOnly() && !$customer->isAdmin() && !Order::paidPurchases()->where('user_id', $customer->id)->exists()) {
+        if ($this->settings->buyersOnly() && !$customer->isAdmin() && !Order::keptPurchases()->where('user_id', $customer->id)->exists()) {
             throw WheelRefusedException::because(WheelRefusal::BuyersOnly);
         }
     }

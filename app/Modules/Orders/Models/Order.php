@@ -80,7 +80,7 @@ use Illuminate\Support\Carbon;
  * @property OrderPricing $pricing Which of the plan's prices it was made at
  * @property string $discount_amount The Toman all its discounts took off
  * @property list<array<string, mixed>>|null $discounts Its discount lines as kept (discountLines())
- * @property int|null $discount_code_id The code it was made with: one of the code's uses while it is not cancelled
+ * @property int|null $discount_code_id The code it was made with: one of the code's uses while it is neither cancelled nor refunded
  * @property string|null $notes Why the delivery failed (safe for any reader of the shop) or why it was cancelled
  * @property string|null $diagnosis The owner-only detail of a panel that failed the delivery (OrderDirectory::notes())
  * @property string|null $created_by Who made it by hand for its customer (Services\ManualOrders): the name a decision
@@ -206,8 +206,10 @@ class Order extends Model
     }
 
     /**
-     * The customer's purchases that were ever paid: "has bought a service in the shop" for first-purchase prices and
-     * codes — a free plan counts, a service given free does not. Rewards read paidPurchases() instead.
+     * The customer's purchases paid and not given back: "has bought a service in the shop" for first-purchase prices and
+     * codes — a free plan counts, a service given free does not, and a refund undoes the purchase (its money back in the
+     * wallet, its service gone), so a newcomer whose first purchase was refunded is one still. Rewards read
+     * keptPurchases() instead.
      *
      * @return Builder<static>
      */
@@ -223,22 +225,30 @@ class Order extends Model
      */
     public static function bought(): Builder
     {
-        return static::query()
-            ->where('type', OrderType::Purchase->value)
-            ->whereIn('status', self::EVER_PAID)
-            ->where('pricing', '!=', OrderPricing::Gift->value);
+        return self::purchases(self::KEPT);
     }
 
     /**
-     * Purchases with a price that were ever paid: what money-like rewards count as "bought" (referral gifts, the
-     * fake-referral alert, the wheel's buyers-only rule), since a free plan must not unlock them — and what makes a
-     * customer no newcomer for free test accounts (their newcomers-only rule, the tests list's «خرید کرد»).
+     * Purchases with a price, paid and not given back: what money-like rewards count as "bought" (referral gifts, the
+     * fake-referral alert, the wheel's buyers-only rule), since neither a free plan nor a purchase refunded since may
+     * unlock them.
+     *
+     * @return Builder<static>
+     */
+    public static function keptPurchases(): Builder
+    {
+        return static::bought()->where('amount', '>', 0);
+    }
+
+    /**
+     * Purchases with a price that were ever paid, refunded since or not: what makes a customer no newcomer for free test
+     * accounts (their newcomers-only rule, the tests list's «خرید کرد») — they have had a paid service.
      *
      * @return Builder<static>
      */
     public static function paidPurchases(): Builder
     {
-        return static::bought()->where('amount', '>', 0);
+        return self::purchases(self::EVER_PAID)->where('amount', '>', 0);
     }
 
     /**
@@ -253,8 +263,8 @@ class Order extends Model
     }
 
     /**
-     * Paid, and nobody is delivering them: untouched for OrderService::STALE_PROCESSING_MINUTES while paid or processing
-     * (OrderService::isStale() is the same rule for one order).
+     * Paid, and nobody is delivering them: untouched for OrderService::STALE_PAID_MINUTES while paid, or for
+     * OrderService::STALE_PROCESSING_MINUTES while processing (OrderService::isStale() is the same rule for one order).
      *
      * @return Builder<static>
      */
@@ -447,12 +457,26 @@ class Order extends Model
     }
 
     /**
+     * Purchases in one of `$statuses`, but a service given free (`pricing` gift: a prize, a reward, support's free one).
+     *
+     * @param list<string> $statuses
+     * @return Builder<static>
+     */
+    private static function purchases(array $statuses): Builder
+    {
+        return static::query()
+            ->where('type', OrderType::Purchase->value)
+            ->whereIn('status', $statuses)
+            ->where('pricing', '!=', OrderPricing::Gift->value);
+    }
+
+    /**
      * @template TModel of Model
      * @param Builder<TModel> $query
      */
     private static function whereStale(Builder $query): void
     {
-        $query->whereIn('status', [OrderStatus::Paid->value, OrderStatus::Processing->value])
-            ->where('updated_at', '<=', now()->subMinutes(OrderService::STALE_PROCESSING_MINUTES));
+        $query->where(static fn(Builder $paid) => $paid->where('status', OrderStatus::Paid->value)->where('updated_at', '<=', now()->subMinutes(OrderService::STALE_PAID_MINUTES)))
+            ->orWhere(static fn(Builder $processing) => $processing->where('status', OrderStatus::Processing->value)->where('updated_at', '<=', now()->subMinutes(OrderService::STALE_PROCESSING_MINUTES)));
     }
 }

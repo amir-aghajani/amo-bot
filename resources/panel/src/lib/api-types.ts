@@ -20,7 +20,7 @@ export interface ErrorResponse {
   }
 }
 
-/** A paged list's position. A sorted list's meta also has its order (`sort`, `dir`). */
+/** A paged list's position: its page, the rows a page holds (25), how many rows there are, and its last page (1 for an empty list). A sorted list's meta also has its order (`sort`, `dir`). */
 export interface PageMeta {
   page: number
   per_page: number
@@ -63,7 +63,7 @@ export interface RefundRequest {
   note?: string
 }
 
-/** The rows of an admin-ordered list in their new order, by id. At most 1000. */
+/** The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones. */
 export interface ReorderRequest {
   ids: number[]
 }
@@ -314,19 +314,20 @@ export interface AgentLinkRequest {
   replace?: boolean
 }
 
-/** Each area's version number from the change feed. An area nothing was written to yet is absent. */
+/** Each area's version number from the change feed. The owner's panel counts every shop's writes. An agent's panel and the website's admins count their own shop's writes and those made for every shop; the installation's areas (`servers`, `grants`, `migrations`) have one number for all, and `agency` counts the main shop's writes too, since the owner decides about an agent's shop there. An area nothing was written to yet is absent. */
 export interface ChangesResponse {
   versions: {
-    /** Customers, their wallets and their groups. */
+    /** Customers, their wallets, their groups and the accounts merged into them. */
     users?: number
-    /** The servers and their inbounds. */
+    /** The servers and their inbounds. The installation's: one number, whichever shop asks. */
     servers?: number
-    /** Grants and their per-server parts. A running grant's cursor moves every second. */
+    /** Grants and their per-server parts. A running grant's cursor moves every second. The installation's: one number, whichever shop asks. */
     grants?: number
-    /** Moves of a server's services to another server, their failures, and the old clients rescues left behind. One under way moves its cursor every second. */
+    /** Moves of a server's services to another server, their failures, and the old clients rescues left behind. One under way moves its cursor every second. The installation's: one number, whichever shop asks. */
     migrations?: number
-    /** The plans, their categories and their server entries. */
+    /** The plans, their categories and their server entries, and the servers the owner keeps from an agent's shop. */
     plans?: number
+    /** The payment methods and their cards. */
     payment_methods?: number
     orders?: number
     payments?: number
@@ -335,7 +336,7 @@ export interface ChangesResponse {
     tests?: number
     /** Referral commissions, bonuses, rewards and alerts. */
     referrals?: number
-    /** The agency's levels and requests, the agents' bots and their traffic. */
+    /** The agency's levels and requests, the agents' bots and their traffic. An agent's shop counts the main shop's writes here too: the owner's decisions about it are made there. */
     agency?: number
     /** The channels a customer must join. */
     channels?: number
@@ -417,7 +418,7 @@ export interface UserRow {
     active_subscriptions: number
   }
   /** The customer groups they are in, in the groups' order. */
-  groups: CustomerGroupRef[]
+  groups: NamedRef[]
   created_at: string
   last_seen_at: string | null
 }
@@ -521,12 +522,6 @@ export interface CustomerReferral {
   earned: string
 }
 
-/** A customer group, as a customer's row lists it. */
-export interface CustomerGroupRef {
-  id: number
-  name: string
-}
-
 /** A customer group («گروه»), in the admin's order. A broadcast can target one. */
 export interface CustomerGroupRow {
   id: number
@@ -567,8 +562,10 @@ export interface WalletTransactionRow {
   description: string | null
   /** A wallet transfer's line («انتقال موجودی»): the other customer — whom the money went to (a debit) or came from (a credit). Null for every other line. */
   counterpart: UserRef | null
-  /** Who added the line by hand: a panel user or a website admin. Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically. */
+  /** Who added the line by hand: a panel user or a website admin (@username, tg:<id> or user#<id>). Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically. */
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   created_at: string
 }
 
@@ -614,6 +611,7 @@ export interface DashboardResponse {
     users_total: number
   }
   series: SeriesPoint[]
+  /** What waits on support — the queues, `held_payments` and `servers_with_errors` —, then what waits on customers: `pending_orders` and `expiring_soon`. */
   attention: {
     /** Receipts waiting for review. */
     payments_to_review: number
@@ -623,9 +621,12 @@ export interface DashboardResponse {
     open_tickets: number
     /** Reviews waiting for approval (the reviews list's `pending` tab). */
     pending_reviews: number
-    pending_orders: number
+    /** Online payments held for support and still waiting (the payments list's `held` tab). */
+    held_payments: number
     /** Servers whose panel failed its last check. Always 0 in an agent's shop. */
     servers_with_errors: number
+    /** Orders waiting for the customer to pay. */
+    pending_orders: number
     /** Active services ending within `expiring_days`, free test accounts aside. */
     expiring_soon: number
   }
@@ -664,7 +665,7 @@ export interface RecentOrder {
   type: OrderType
   status: OrderStatus
   amount: string
-  /** Its plan's name — a service the customer built in words, «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز» —; null for an order of neither. */
+  /** What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order. */
   plan: string | null
   user: UserRef
   created_at: string
@@ -812,7 +813,7 @@ export interface PaymentRow {
   id: number
   status: PaymentStatus
   amount: string
-  /** Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made). */
+  /** Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", "plisio", "aqayepardakht", "variza", or "outside": money support took outside the shop for an order it made). */
   gateway: string
   /** The driver's name («کارت به کارت», «کیف پول», «CubePay»); null when the driver is no longer installed. */
   gateway_label: string | null
@@ -820,9 +821,9 @@ export interface PaymentRow {
   kind: GatewayKind | null
   /** The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. */
   method: string
-  /** What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line (`PaymentMethodRow.summary`: an online gateway's fee passed on to customers, or its test mode); null when its method has none (the wallet, an online method with neither). */
+  /** What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line as it reads now (`PaymentMethodRow.summary`: a fee passed on to customers, a test mode, Plisio's dollar rate and coins, Variza's card); null when its method has none (the wallet, an online method with none of these). */
   summary: string | null
-  /** The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id. Null when it has none (a card transfer, an online payment its gateway would not open). */
+  /** The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id; Plisio: its invoice's id (once paid, the paid invoice's, when the customer switched coins); AqayePardakht: its transaction's id; Variza: its payment link's slug. Null when it has none (a card transfer, an online payment its gateway would not open). */
   reference: string | null
   /** The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, an online gateway's page closed unpaid — «مهلت پرداخت در درگاه تمام شد» —, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), a refund's note (also in `refund_note`), or on a payment `to_wallet` that its money went to the wallet. */
   description: string | null
@@ -833,7 +834,9 @@ export interface PaymentRow {
     status: OrderStatus
     /** What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order. */
     plan: string | null
+    /** The server the order is on, by its name: the one a purchase was bought on; for a renewal or an extra, its service's server, as the orders screen shows it (`OrderRow.server`). Null for a top-up or an agent's traffic, and for a renewal or an extra once its service is deleted. */
     server: string | null
+    /** The service it bought, renewed or extended; null for none, or once the service is deleted. */
     subscription_id: number | null
     /** The traffic it adds, in bytes: an agent's traffic, a service's extra traffic, or a built service's traffic; null otherwise. */
     traffic_bytes: number | null
@@ -859,6 +862,8 @@ export interface PaymentRow {
   auto_approved: boolean
   /** Who decided it by hand: the agent's @bot, a bot admin's @username, tg:<id> or user#<id> (in the report group or on the website), or the owner's login, which anyone but the owner sees as «پشتیبانی». */
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   refund_note: string | null
   paid_at: string | null
   /** An online payment's page on its gateway: until when it takes money — the gateway's own end, or the time the shop keeps its page when the gateway gives none. Null for any other payment, and for one its gateway would not open. */
@@ -867,7 +872,7 @@ export interface PaymentRow {
   checked_at: string | null
   /** Paid after its order had closed (paid another way, cancelled or expired): the online gateway took the money when the order no longer waited for it, so it went to the customer's wallet («پرداخت آنلاین #12 پس از بسته شدن سفارش #7») and `description` says so. It paid nothing of the order: it is neither retried nor refunded here. */
   to_wallet: boolean
-  /** An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) — or kept money on it unsettled for two days. `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. */
+  /** An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) —, kept money on it unsettled for two days after its page closed, or closed it after saying money had come in on it (held at once). `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. */
   held: boolean
   created_at: string
   /** Which operations its current state allows (the server decides). */
@@ -897,6 +902,8 @@ export interface PaymentsResponse {
     dir: SortDirection
     /** Receipts waiting for review, regardless of the filters. */
     awaiting_review: number
+    /** Online payments held for support and still waiting (the `held` tab), regardless of the filters. */
+    held: number
     /** How many of the listed payments (tab, search and dates) are paid. */
     paid: number
     /** Their total, in Toman. */
@@ -960,12 +967,12 @@ export interface OrderRow {
   /** The discount code used; it counts as one of the code's uses unless the order is cancelled. Null for none. */
   discount_code: OrderDiscountCode | null
   user: UserRef
-  /** The plan of a purchase or renewal; for extras, the service's plan. */
+  /** The plan of a purchase or renewal; for extras, the service's plan. Null for a top-up, an agent's traffic, a service the customer built and an extra of a service without a plan. A plan an order names is never deleted (`DELETE /plans/{id}` refuses it). */
   plan: NamedRef | null
   package_name: OrderPackageName
   /** How a renewal adds its package (a renewal from before renewal methods, `extend`); null for any other order. */
   renewal_method: RenewalMethod | null
-  /** The server the customer chose; for a renewal or extras, the service's server. */
+  /** The server the customer chose; for a renewal or extras, the service's server. Null for a top-up or an agent's traffic, and for a renewal or an extra once its service is deleted. */
   server: NamedRef | null
   /** The service it bought, renewed or extended; null for a top-up, or once the service was deleted. */
   subscription: {
@@ -994,7 +1001,7 @@ export interface OrderRow {
   }
 }
 
-/** A reference by id and name (a plan, a server). */
+/** A reference by id and name: a plan, a server, a customer group, or a service by its client's name on its panel. */
 export interface NamedRef {
   id: number
   name: string
@@ -1004,14 +1011,14 @@ export interface OrderPayment {
   id: number
   status: PaymentStatus
   amount: string
-  /** Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", or "outside": money support took outside the shop for an order it made). */
+  /** Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", "plisio", "aqayepardakht", "variza", or "outside": money support took outside the shop for an order it made). */
   gateway: string
   /** The payment method's label. A method with payments is never deleted. */
   method: string
   paid_at: string | null
   /** Paid on its online gateway after the order had closed: its money went to the customer's wallet, and it paid nothing of the order (`PaymentRow.to_wallet`). */
   to_wallet: boolean
-  /** An online payment held for support: its gateway took money on it that does not fit, or kept it unsettled (`PaymentRow.held`). */
+  /** An online payment held for support: its gateway took money on it that does not fit, kept it unsettled, or closed it after saying money had come in (`PaymentRow.held`). */
   held: boolean
   created_at: string
 }
@@ -1048,6 +1055,8 @@ export type ManualPayment = 'free' | 'wallet' | 'outside'
 export interface OrderManual {
   /** Who made it: the panel login, or an admin's @username / tg:<id> (the owner's login reads «پشتیبانی» to anyone but the owner). */
   by: string | null
+  /** The name of the bot admin `by` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, and a handle no admin of the shop has now. */
+  by_name: string | null
   payment: ManualPayment
   /** Support's note on it; null for none. */
   note: string | null
@@ -1095,7 +1104,7 @@ export interface SubscriptionRow {
   /** When the customer added it by sending its link («افزودن سرویس با لینک», `claim_enabled`): a client made by hand on its panel. Null for any other service. Such a service has no plan until a renewal on one the customer picks, sold on its server (a renewal with a package built leaves it without). */
   claimed_at: string | null
   user: UserRef
-  /** Null for a service without a plan — a test account, a service added by its link (`claimed_at`) or built by the customer («سرویس دلخواه»), until a renewal on a plan; one renewed with a package built stays so — and once the plan is deleted. */
+  /** Null for a service without a plan — a test account, a service added by its link (`claimed_at`) or built by the customer («سرویس دلخواه»), until a renewal on a plan; one renewed with a package built stays so. A plan a service names is never deleted (`DELETE /plans/{id}` refuses it). */
   plan: NamedRef | null
   server: NamedRef
   /** In bytes; a limit of 0 means unlimited. */
@@ -1246,6 +1255,8 @@ export interface TicketMessageRow {
   author: TicketAuthor
   /** Which support person wrote it: a panel user, or a bot admin's @username, tg:<id> or user#<id> (in the report group or on the website). Anyone but the owner sees the owner's login as «پشتیبانی». Null for the customer's messages. */
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and the customer's messages. */
+  reviewer_name: string | null
   body: string
   /** Its picture; null for none. */
   attachment: TicketAttachment | null
@@ -1323,6 +1334,8 @@ export interface ReviewRow {
   customer: UserRef | null
   /** Who last approved or rejected it: a panel user, or a website admin (@username, tg:<id> or user#<id>). Anyone but the owner sees the owner's login as «پشتیبانی». Null while pending. */
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   /** When it was last approved or rejected; null while pending. */
   decided_at: string | null
   created_at: string
@@ -1367,7 +1380,10 @@ export interface ServerRow {
   sort: number
   notes: string | null
   last_checked_at: string | null
+  /** Why the last contact with the panel failed, a Persian sentence (as a probe's `error`); null when it answered. */
   last_error: string | null
+  /** The technical detail behind `last_error` (the panel's message, cURL's text, as a probe's `error_detail`), in English; null when it has none. */
+  last_error_detail: string | null
   /** Whether the panel served subscription links at the last check; null if never checked. A server without them cannot be sold. */
   serves_subscriptions: boolean | null
   /** Why nothing can be sold on or moved to the server now (switched off, no subscription links, full, connector missing…); null when it can. */
@@ -1756,6 +1772,8 @@ export interface ServerGrantRow {
   /** The last service the panel refused, and why. */
   last_failure: string | null
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   created_at: string
   finished_at: string | null
 }
@@ -1763,10 +1781,7 @@ export interface ServerGrantRow {
 /** A server's grants card: its latest grants, and how many services a new grant would reach (from the stored data). */
 export interface ServerGrantsResponse {
   grants: ServerGrantRow[]
-  audience: {
-    running: number
-    unstarted: number
-  }
+  audience: GrantReach
 }
 
 export interface ServerGrantResponse {
@@ -1816,26 +1831,30 @@ export interface ServerMigrationRow {
   left_behind: number
   /** Why it is held at its current service: a panel out of reach (the target's, or the source's in a migration). It tries again by itself. Null while it moves. */
   waiting_reason: string | null
+  /** Whose panel it waits for: `target`, or — in a migration only — `source`. When both are down, a panel in backoff is named before one whose last request failed, and the target before the source. Only a wait on the source is helped by «ادامه با حالت نجات» (`POST …/rescue`), since a rescue never asks the source. Null while it moves, or once the panel it waited for answers again (it goes on at its next turn). */
+  waiting_on: 'source' | 'target' | null
   /** Why it failed: what keeps the target from taking more. */
   reason: string | null
   /** The latest service it could not move, and why. */
   last_failure: string | null
   /** Who started it. */
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   created_at: string
   /** When its first turn began. */
   started_at: string | null
   finished_at: string | null
 }
 
-/** The clients moves of services left on the server's panel (a rescue's old ones, mostly), still to remove: they would work again once it answers. The scheduler removes them once the panel answers again. */
+/** The old clients that moves of services left on the server's panel (a rescue's, mostly), still to remove: they would work again once it answers. The scheduler removes them once the panel answers again. */
 export interface ServerMigrationLeftovers {
   pending: number
   /** Why the last try to remove one failed. */
   last_error: string | null
 }
 
-/** A server's «انتقال سرویس‌ها» card: its latest moves (from it), newest first, and the clients moves left on its panel. */
+/** A server's «انتقال سرویس‌ها» card: its latest moves (from it), newest first, and the old clients that moves left on its panel. */
 export interface ServerMigrationsResponse {
   migrations: ServerMigrationRow[]
   leftovers: ServerMigrationLeftovers
@@ -1961,6 +1980,8 @@ export interface MassGrantRow {
   failed: number
   parts: MassGrantPart[]
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   created_at: string
   finished_at: string | null
 }
@@ -2038,7 +2059,7 @@ export interface BroadcastRow {
   pinned: number
   /** The link buttons under a copied message, as rows in reading order. */
   buttons: BroadcastButton[][]
-  /** The message type: text, photo, video, animation, document, audio, voice, video_note, sticker, poll, other. */
+  /** The message type, as Telegram names it: text, photo, video, animation, document, audio, voice, video_note, sticker, live_photo, paid_media, poll, location or contact; null for any other, and for an unpin run. */
   content: string | null
   /** Its text or caption, shortened. */
   excerpt: string | null
@@ -2053,6 +2074,8 @@ export interface BroadcastRow {
   admin: UserRef | null
   /** Who started it from a panel or the website: the agent's @bot, a bot admin's @username, tg:<id> or user#<id>, or the owner's login (which anyone but the owner sees as «پشتیبانی»). */
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   created_at: string
   finished_at: string | null
   actions: {
@@ -2072,7 +2095,7 @@ export interface BroadcastResponse {
   broadcast: BroadcastRow
 }
 
-/** A secret as a settings screen sees it: never the value, only whether one is stored and a short hint to recognise it. */
+/** A secret as a settings screen sees it: never the value, only whether one is stored and a short hint to recognise it — dots, and the last four characters of a token or key at least 12 characters long (a password, or a shorter secret, shows dots alone). Empty while none is stored. */
 export interface SecretState {
   set: boolean
   hint: string
@@ -2366,7 +2389,7 @@ export interface PlanRow {
   /** Why the bot does not offer the plan now, apart from its switch: it has no server, the owner keeps it from an agent's shop, an agent's selling is suspended, none of its servers can sell (each entry says why — a server the owner keeps from the shop among them), or an agent's traffic does not cover it. Null when it is offered. */
   unsellable_reason: string | null
   is_active: boolean
-  /** An agent's plan the owner keeps from sale («پنهان‌شده توسط مدیر»), whatever its switch: only the owner's agents page (`PUT /agency/agents/{id}/hidden`) changes it; a copy keeps it. Always false in the main shop. */
+  /** An agent's plan the owner keeps from sale (the agent's panel: «پنهان‌شده توسط پشتیبانی»), whatever its switch: only the owner's agents page (`PUT /agency/agents/{id}/hidden`) changes it; a copy keeps it. Always false in the main shop. */
   hidden_by_owner: boolean
   sort: number
   counts: {
@@ -2508,7 +2531,8 @@ export interface PaymentDriversResponse {
 }
 
 /** A payment method, in checkout order, as its driver describes it. `config` holds the driver's form values as stored (one closed shape per driver). Never «خارج از فروشگاه», support's alone. */
-export type PaymentMethodRow = ManualMethodRow | WalletMethodRow | CubePayMethodRow | ZarinpalMethodRow | AtlasPayMethodRow | AbanMethodRow | UnregisteredMethodRow
+export type PaymentMethodRow =
+  ManualMethodRow | WalletMethodRow | CubePayMethodRow | ZarinpalMethodRow | AtlasPayMethodRow | AbanMethodRow | PlisioMethodRow | AqayePardakhtMethodRow | VarizaMethodRow | UnregisteredMethodRow
 
 /** The wallet, the built-in method. */
 export interface WalletMethodRow {
@@ -2519,7 +2543,7 @@ export interface WalletMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
   summary: string | null
   /** Nothing to configure. */
   config: Record<string, never>
@@ -2546,7 +2570,7 @@ export interface ManualMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
   summary: string | null
   config: ManualGatewayConfig
   /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
@@ -2576,7 +2600,7 @@ export interface CubePayMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
   summary: string | null
   config: CubePayGatewayConfig
   /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
@@ -2602,7 +2626,7 @@ export interface ZarinpalMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
   summary: string | null
   config: ZarinpalGatewayConfig
   /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
@@ -2628,7 +2652,7 @@ export interface AtlasPayMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
   summary: string | null
   config: AtlasPayGatewayConfig
   /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
@@ -2654,9 +2678,87 @@ export interface AbanMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
   summary: string | null
   config: AbanGatewayConfig
+  /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
+  min_amount: string | null
+  /** The most amount to pay it is offered for, in Toman; null for no most. */
+  max_amount: string | null
+  enabled: boolean
+  sort: number
+  counts: {
+    /** The number of payments made with it. A method with payments cannot be deleted. */
+    payments: number
+  }
+  created_at: string
+  updated_at: string
+}
+
+/** A Plisio method (plisio.net), an online gateway for crypto: the customer pays a coin of their choice on Plisio's page and Plisio confirms it on its chain, with no receipt and no review. An order is asked of Plisio in US dollars, at the owner's rate. */
+export interface PlisioMethodRow {
+  id: number
+  driver: 'plisio'
+  driver_label: string
+  kind: GatewayKind
+  builtin: boolean
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
+  label: string
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
+  summary: string | null
+  config: PlisioGatewayConfig
+  /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
+  min_amount: string | null
+  /** The most amount to pay it is offered for, in Toman; null for no most. */
+  max_amount: string | null
+  enabled: boolean
+  sort: number
+  counts: {
+    /** The number of payments made with it. A method with payments cannot be deleted. */
+    payments: number
+  }
+  created_at: string
+  updated_at: string
+}
+
+/** An AqayePardakht method (aqayepardakht.ir), an online gateway: the customer pays with any bank card on the bank's page through Shaparak — reached from a page on the shop's own address — and is sent back to the shop; AqayePardakht confirms it, with no receipt and no review. */
+export interface AqayePardakhtMethodRow {
+  id: number
+  driver: 'aqayepardakht'
+  driver_label: string
+  kind: GatewayKind
+  builtin: boolean
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
+  label: string
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
+  summary: string | null
+  config: AqayePardakhtGatewayConfig
+  /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
+  min_amount: string | null
+  /** The most amount to pay it is offered for, in Toman; null for no most. */
+  max_amount: string | null
+  enabled: boolean
+  sort: number
+  counts: {
+    /** The number of payments made with it. A method with payments cannot be deleted. */
+    payments: number
+  }
+  created_at: string
+  updated_at: string
+}
+
+/** A Variza method (variza.ir), an online gateway: the customer transfers the exact sum its page asks to the merchant's card (or Variza's), and Variza confirms it from the bank's text message — its word a webhook it signs, to the shop's address for it —, with no receipt and no review. */
+export interface VarizaMethodRow {
+  id: number
+  driver: 'variza'
+  driver_label: string
+  kind: GatewayKind
+  builtin: boolean
+  /** The button text customers see, such as "کارت به کارت (ملت)". */
+  label: string
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
+  summary: string | null
+  config: VarizaGatewayConfig
   /** The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. */
   min_amount: string | null
   /** The most amount to pay it is offered for, in Toman; null for no most. */
@@ -2681,7 +2783,7 @@ export interface UnregisteredMethodRow {
   builtin: boolean
   /** The button text customers see, such as "کارت به کارت (ملت)". */
   label: string
-  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). */
+  /** The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. */
   summary: string | null
   /** Not shown, since without the driver it is unknown which settings are secrets. */
   config: Record<string, never>
@@ -2725,6 +2827,28 @@ export interface ZarinpalGatewayConfig {
 /** An AtlasPay method's settings (`AtlasPayMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it. */
 export interface AtlasPayGatewayConfig {
   api_key: SecretState
+}
+
+/** A Variza method's settings (`VarizaMethodRow.config`): the merchant's API key and the webhook's signing secret, kept encrypted and never shown — only whether each is kept and a hint to recognise it —, and the card its payments go to. */
+export interface VarizaGatewayConfig {
+  api_key: SecretState
+  webhook_secret: SecretState
+  /** `random` (the active card of the merchant's with fewest payments today), `variza` (Variza's cards, settled to a wallet and on in Tether), or the last four digits of one of the merchant's cards at Variza. */
+  card: string
+}
+
+/** An AqayePardakht method's settings (`AqayePardakhtMethodRow.config`): the gateway's pin, kept encrypted and never shown — only whether one is kept and a hint to recognise it (`sandbox` is its test service). */
+export interface AqayePardakhtGatewayConfig {
+  pin: SecretState
+}
+
+/** A Plisio method's settings (`PlisioMethodRow.config`): the merchant's secret key, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, how many Toman a US dollar is, and the coins offered. */
+export interface PlisioGatewayConfig {
+  api_key: SecretState
+  /** Toman a US dollar is: an order's Toman are asked of Plisio in dollars at this rate, a cent rounded up. The owner keeps it up with the market; 0 for a method saved without one, which opens no invoice. */
+  usd_rate: number
+  /** The coins offered, Plisio's ids comma-separated ("USDT_TRX,TRX,TON"); "" for every coin switched on in Plisio's panel. */
+  currencies: string
 }
 
 /** An AbanGateway method's settings (`AbanMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and whether the bot and the site show the card under the page. */
@@ -2860,6 +2984,64 @@ export interface AtlasPayMethodRequest {
   clear_api_key?: boolean
 }
 
+/** A Variza method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API key and webhook signing secret from Variza's profile, and the card its payments go to. It names each secret (blank keeps the kept one) or its `clear_*`, as the panels' form does with every save. */
+export interface VarizaMethodRequest {
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label?: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The API key as Variza's profile shows it: 16 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). */
+  api_key?: string
+  /** True empties the kept key, which is refused: a Variza method cannot go without one (type another instead). */
+  clear_api_key?: boolean
+  /** The secret Variza signs its webhooks with, as its profile shows it: 8 to 255 Latin letters, digits and signs. Only a webhook it signs is believed. Kept encrypted, never shown back; left blank or out, the kept one stays; required as `api_key` is. */
+  webhook_secret?: string
+  /** True empties the kept secret, which is refused: a Variza method cannot go without one (type another instead). */
+  clear_webhook_secret?: boolean
+  /** `random` (or «تصادفی»), `variza` (or «واریزا»), or the last four digits of one of the merchant's cards at Variza — any case, Persian digits taken; kept as `random`, `variza` or the digits. */
+  card: string
+}
+
+/** An AqayePardakht method's form: the label customers pick it by, its switch, the amounts it is offered for (AqayePardakht takes 1,000 to 400,000,000 Toman), and the gateway's pin from AqayePardakht's panel. It names `pin` (blank keeps the kept one) or `clear_pin`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form. */
+export interface AqayePardakhtMethodRequest {
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label?: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The gateway's pin as AqayePardakht's panel shows it: 4 to 128 Latin letters, digits, `_` and `-`; `sandbox` for its test service, where no money moves — a payment there still delivers its order. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `pin`). */
+  pin?: string
+  /** True empties the kept pin, which is refused: an AqayePardakht method cannot go without one (type another instead). */
+  clear_pin?: boolean
+}
+
+/** A Plisio method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's secret key from Plisio's panel (API › API settings), how many Toman a dollar is, and the coins offered. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save. */
+export interface PlisioMethodRequest {
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label?: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The secret key as Plisio's panel shows it: 16 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). */
+  api_key?: string
+  /** True empties the kept key, which is refused: a Plisio method cannot go without one (type another instead). */
+  clear_api_key?: boolean
+  /** Toman a US dollar is, 1,000 to 100,000,000: what each order is converted at to be asked of Plisio in dollars. */
+  usd_rate: WholeNumberInput
+  /** Plisio's ids of the coins offered, comma-separated — any case, spaces or Persian commas taken ("usdt_trx، trx" is "USDT_TRX,TRX") —; blank for every coin switched on in Plisio's panel. At most 300 characters. */
+  currencies?: string
+}
+
 /** An AbanGateway method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API key from AbanGateway's panel, and whether the card is shown in the bot and on the site. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save. */
 export interface AbanMethodRequest {
   /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
@@ -2958,6 +3140,70 @@ export interface AtlasPayMethodCreateRequest {
   clear_api_key?: boolean
 }
 
+/** A new Variza method: its driver and its form (VarizaMethodRequest), with the label, both secrets and the card required. */
+export interface VarizaMethodCreateRequest {
+  /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
+  driver: 'variza'
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The API key as Variza's profile shows it: 16 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). */
+  api_key?: string
+  /** True empties the kept key, which is refused: a Variza method cannot go without one (type another instead). */
+  clear_api_key?: boolean
+  /** The secret Variza signs its webhooks with, as its profile shows it: 8 to 255 Latin letters, digits and signs. Only a webhook it signs is believed. Kept encrypted, never shown back; left blank or out, the kept one stays; required as `api_key` is. */
+  webhook_secret?: string
+  /** True empties the kept secret, which is refused: a Variza method cannot go without one (type another instead). */
+  clear_webhook_secret?: boolean
+  /** `random` (or «تصادفی»), `variza` (or «واریزا»), or the last four digits of one of the merchant's cards at Variza — any case, Persian digits taken; kept as `random`, `variza` or the digits. */
+  card: string
+}
+
+/** A new AqayePardakht method: its driver and its form (AqayePardakhtMethodRequest), with the label and the pin required. */
+export interface AqayePardakhtMethodCreateRequest {
+  /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
+  driver: 'aqayepardakht'
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The gateway's pin as AqayePardakht's panel shows it: 4 to 128 Latin letters, digits, `_` and `-`; `sandbox` for its test service, where no money moves — a payment there still delivers its order. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `pin`). */
+  pin?: string
+  /** True empties the kept pin, which is refused: an AqayePardakht method cannot go without one (type another instead). */
+  clear_pin?: boolean
+}
+
+/** A new Plisio method: its driver and its form (PlisioMethodRequest), with the label, the secret key and the dollar's rate required. */
+export interface PlisioMethodCreateRequest {
+  /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
+  driver: 'plisio'
+  /** The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. */
+  label: string
+  /** Left out: on for a new method, unchanged for an existing one. */
+  enabled?: boolean
+  /** The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. */
+  min_amount?: AmountInput | null
+  /** The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. */
+  max_amount?: AmountInput | null
+  /** The secret key as Plisio's panel shows it: 16 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). */
+  api_key?: string
+  /** True empties the kept key, which is refused: a Plisio method cannot go without one (type another instead). */
+  clear_api_key?: boolean
+  /** Toman a US dollar is, 1,000 to 100,000,000: what each order is converted at to be asked of Plisio in dollars. */
+  usd_rate: WholeNumberInput
+  /** Plisio's ids of the coins offered, comma-separated — any case, spaces or Persian commas taken ("usdt_trx، trx" is "USDT_TRX,TRX") —; blank for every coin switched on in Plisio's panel. At most 300 characters. */
+  currencies?: string
+}
+
 /** A new AbanGateway method: its driver and its form (AbanMethodRequest), with the label and the API key required. */
 export interface AbanMethodCreateRequest {
   /** A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. */
@@ -2979,12 +3225,29 @@ export interface AbanMethodCreateRequest {
 }
 
 /** A new payment method for a driver that is not built in: the driver's key, the label customers pick it by, the switch and the driver's form (`DriverDescription.fields`). One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest. */
-export type PaymentMethodCreateRequest = ManualMethodCreateRequest | CubePayMethodCreateRequest | ZarinpalMethodCreateRequest | AtlasPayMethodCreateRequest | AbanMethodCreateRequest
+export type PaymentMethodCreateRequest =
+  | ManualMethodCreateRequest
+  | CubePayMethodCreateRequest
+  | ZarinpalMethodCreateRequest
+  | AtlasPayMethodCreateRequest
+  | AbanMethodCreateRequest
+  | PlisioMethodCreateRequest
+  | AqayePardakhtMethodCreateRequest
+  | VarizaMethodCreateRequest
 
 /** A payment method's form, as its driver takes it. One closed shape per driver, checked against its form by tests/Unit/Drivers/DriverFormsTest. A method whose driver is no longer installed cannot be updated (switch it off or delete it). */
-export type PaymentMethodUpdateRequest = ManualMethodRequest | WalletMethodRequest | CubePayMethodRequest | ZarinpalMethodRequest | AtlasPayMethodRequest | AbanMethodRequest
+export type PaymentMethodUpdateRequest =
+  | ManualMethodRequest
+  | WalletMethodRequest
+  | CubePayMethodRequest
+  | ZarinpalMethodRequest
+  | AtlasPayMethodRequest
+  | AbanMethodRequest
+  | PlisioMethodRequest
+  | AqayePardakhtMethodRequest
+  | VarizaMethodRequest
 
-/** A payment method's on/off switch. A JSON boolean only. */
+/** A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise). */
 export interface PaymentMethodSwitchRequest {
   enabled: boolean
 }
@@ -3065,6 +3328,8 @@ export interface BotTextVariable {
   description: string
   /** The sample value the screen's preview uses. */
   sample: string
+  /** True: the bot fills it with Telegram HTML (another text's wording, or lines of them) and never escapes it, so its `sample` is HTML too and a preview inserts it as it is. False: plain text, which the bot escapes in an HTML text (`BotTextRow.html`); a preview escapes its sample the same way. */
+  html: boolean
   /** The wording must contain it (a delivery message needs its link). */
   required: boolean
 }
@@ -3148,7 +3413,7 @@ export interface GiftCodeRow {
   /** Toman, for the wallet; null for a plan. */
   amount: string | null
   /** The plan it gives; null for a Toman code, or when the plan was deleted (then nobody can redeem it). */
-  plan: RewardPlanRef | null
+  plan: NamedRef | null
   /** When it expires (the first moment it can no longer be redeemed); null for never. */
   expires_at: string | null
   status: GiftCodeStatus
@@ -3158,11 +3423,6 @@ export interface GiftCodeRow {
   /** For a redeemed plan code: the order that delivered its service. */
   order: RewardOrderRef | null
   created_at: string
-}
-
-export interface RewardPlanRef {
-  id: number
-  name: string
 }
 
 export interface RewardOrderRef {
@@ -3188,7 +3448,7 @@ export interface GiftCodeBatchRequest {
   batch: string
   /** A prefix for every code: Latin letters and digits, at most 12 (dashes and spaces are dropped, letters upper-cased). Blank for none. */
   prefix?: string
-  /** The last day the codes can be redeemed, in the shop's time zone (YYYY-MM-DD, today or later). Blank or left out: never expires. */
+  /** The last day the codes can be redeemed, in the shop's time zone (YYYY-MM-DD): today or later, and no later than 2038-01-17 — the last day the database's timestamps hold on any shop's clock (MySQL's end at 2038-01-19 03:14:07 UTC); a later one is a 422 on `expires_on` that names it. Blank or left out: never expires. */
   expires_on?: string
 }
 
@@ -3239,7 +3499,7 @@ export interface WheelPrizeRow {
   /** Toman (wallet), GB (traffic) or days (days); null for nothing and plan. */
   amount: string | null
   /** For a plan slice: the plan; null once the plan is deleted (then nobody can win it). */
-  plan: RewardPlanRef | null
+  plan: NamedRef | null
   weight: number
   enabled: boolean
   sort: number
@@ -3268,6 +3528,7 @@ export interface WheelPrizeRequest {
   enabled?: boolean
 }
 
+/** A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise). */
 export interface WheelPrizeSwitchRequest {
   enabled: boolean
 }
@@ -3285,15 +3546,9 @@ export interface WheelSpinRow {
   outcome: string | null
   /** For a plan slice: the order that delivered its service. */
   order: RewardOrderRef | null
-  /** The service that got the traffic or days, or the plan's new service. */
-  subscription: RewardServiceRef | null
+  /** The service that got the traffic or days, or the plan's new service, by its client's name on the panel. */
+  subscription: NamedRef | null
   created_at: string
-}
-
-export interface RewardServiceRef {
-  id: number
-  /** The client's name on the panel. */
-  name: string
 }
 
 export interface WheelSpinsResponse {
@@ -3429,10 +3684,9 @@ export interface CashbackRuleRow {
   id: number
   percent: number
   order_types: OwnOrderType[]
-  customer_group: {
-    id: number
-    name: string
-  } | null
+  /** Only its members; null for anyone. */
+  customer_group: NamedRef | null
+  /** Only orders paid with it, by its label; null for any. */
   payment_method: {
     id: number
     label: string
@@ -3462,6 +3716,7 @@ export interface CashbackRuleRequest {
   enabled?: boolean
 }
 
+/** A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise). */
 export interface CashbackRuleSwitchRequest {
   enabled: boolean
 }
@@ -3481,7 +3736,7 @@ export interface LotteryDrawRow {
     /** Toman (wallet), GB (traffic) or days (days); null for a plan. */
     amount: string | null
     /** For a plan prize: the plan; null once it is deleted. */
-    plan: RewardPlanRef | null
+    plan: NamedRef | null
     /** What it gives, as the customer reads it. */
     words: string
   }
@@ -3563,8 +3818,10 @@ export interface DiscountCodeRow {
   /** Uses allowed per customer; null for no limit. */
   per_user: number | null
   enabled: boolean
-  /** Orders made with it that are not cancelled. An unpaid order frees its use when it is cancelled or expires (see the `hold_minutes` bot setting). */
+  /** Orders made with it that are neither cancelled nor refunded. An unpaid order frees its use when it is cancelled or expires (see the `hold_minutes` bot setting); a refunded one gives it back. */
   uses: number
+  /** Whether `DELETE /discount-codes/{id}` would delete it: false while any order but a cancelled one names it — refunded ones too, which count no use — and it is kept for their history (switch it off instead). The delete is a 409 then. */
+  deletable: boolean
   state: DiscountState
   created_at: string
 }
@@ -3609,6 +3866,7 @@ export interface DiscountCodeRequest {
   enabled: boolean
 }
 
+/** A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise). */
 export interface DiscountSwitchRequest {
   enabled: boolean
 }
@@ -4625,6 +4883,8 @@ export interface AgencyRequestRow {
   reason: string | null
   /** Who decided it: the panel login, or a bot admin (@username or tg:<id>). */
   reviewer: string | null
+  /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   decided_at: string | null
   created_at: string
   actions: {
@@ -4810,6 +5070,8 @@ export interface TrafficLine {
   order_id: number | null
   /** Who made the change, for an adjustment or extension: the agent's bot, the owner's login (which anyone but the owner sees as «پشتیبانی»), or a website admin. */
   reviewer: string | null
+  /** The name of the admin of the bot's shop (its website's) `reviewer` is, as their account has it (their first and last name), to show beside it — read in that shop whichever panel lists the line. Null for the owner, the agent's bot, an admin whose account is gone or shows no name, a handle no admin of that shop has now, and while `reviewer` is null. */
+  reviewer_name: string | null
   created_at: string | null
 }
 
@@ -4906,7 +5168,7 @@ export interface Website {
   }
 }
 
-/** What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `payments` (reject receipts waiting for review in bulk), `extend` (add days and traffic to a service), `manual_orders` (make an order for a customer by hand, free, from their wallet or paid outside the shop, delivered at once), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device). */
+/** What each grant lets the website's admins do beyond the daily work: `catalog` (plans and categories, and the customer groups: a customer put in a «همکار» group too), `wallet` (credit or debit a customer's wallet), `refunds` (refund a payment), `payments` (reject receipts waiting for review in bulk), `extend` (add days and traffic to a service), `manual_orders` (make an order for a customer by hand, free, from their wallet or paid outside the shop, delivered at once), `delete` (delete a service permanently, or hand it to another customer), `account_security` (turn off a customer's two-factor sign-in, sign them out of every device). */
 export type StaffGrant = 'catalog' | 'wallet' | 'refunds' | 'payments' | 'extend' | 'manual_orders' | 'delete' | 'account_security'
 
 export interface WebsiteResponse {
@@ -5456,7 +5718,7 @@ export interface StorePlan {
   locations: NamedRef[]
 }
 
-/** The automatic discount on a plan for this reader: its source, its label («فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪»), its percent and, for a sale, when it ends. */
+/** The automatic discount on a plan (or on a service's extras: `StoreExtraOffer.discount`) for this reader: its source, its label («فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪»), its percent and, for a sale, when it ends. */
 export interface StorePlanDiscount {
   source: 'sale' | 'personal' | 'tier'
   label: string
@@ -5499,7 +5761,7 @@ export interface StoreSubscription {
   is_test: boolean
   /** When the customer added it to their account by its link (`POST /subscriptions/claim`, or in the bot): a service support made on the panel by hand, not sold by the shop. It has no plan until a renewal on a plan the customer picks (`GET …/renewal-plans`; a renewal with a package built leaves it without). Null for every other service. */
   claimed_at: string | null
-  /** The plan it was sold or last renewed on; null for a service without one — a test account, a service added by its link (`claimed_at`) or built by the customer (`POST /custom-services/orders`), until a renewal on a plan (a renewal with a package built leaves it null) — or once that plan is deleted. */
+  /** The plan it was sold or last renewed on; null for a service without one — a test account, a service added by its link (`claimed_at`) or built by the customer (`POST /custom-services/orders`), until a renewal on a plan (a renewal with a package built leaves it null). The shop never deletes a plan a service names. */
   plan: NamedRef | null
   /** The server it is on («لوکیشن» in the bot). */
   server: NamedRef
@@ -5654,11 +5916,11 @@ export interface StorePayment {
 export interface StorePayLink {
   /** The payment it pays: the one to ask about (`POST /payments/{id}/check`). */
   payment_id: number
-  /** The gateway's page: open it (a link or a redirect) for the customer to pay there. */
+  /** The gateway's page: open it (a link or a redirect) for the customer to pay there. For AqayePardakht, a page on the shop's own address that leads on to the bank's (the bank opens its page only for a visitor coming from the gateway's verified address). */
   url: string
   /** Until when the page takes money: the gateway's own end, or the time the shop keeps its page when the gateway gives none. A request made again with its `Idempotency-Key` answers the same page while it has more than 3 minutes left, else a new one. */
   expires_at: string | null
-  /** The exact sum the page asks, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart or the customer pays the gateway's fee (`fee`). Show this one as what to pay. */
+  /** The sum to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart (CubePay, AbanGateway) or the customer pays the gateway's fee (`fee`). Show this one as what to pay. A page may still ask it otherwise: Variza's asks a few Toman more of its own, and Plisio's the same in a coin the customer picks there (at the shop's dollar rate). */
   amount: string
   /** Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount. */
   fee: string | null
@@ -5678,6 +5940,8 @@ export interface StoreOrder {
   id: number
   type: OrderType
   status: OrderStatus
+  /** Why a `failed` order failed, for the website to tell its customer (support's own notes on it are never sent). `first_purchase_used`: made at the first-purchase price or with a code for a first purchase only, and another purchase of theirs was paid before it — no longer their first purchase, it is never delivered; support settles its payment with them. `service_changed_hands`: a renewal or an extra whose service was handed to another customer since it was ordered — nothing is added to it; support settles its payment with them. `delivery`: its delivery failed (a server out of reach…) — support finishes it, nothing to pay again. Null for an order that did not fail. */
+  failure: 'first_purchase_used' | 'service_changed_hands' | 'delivery' | null
   /** Toman. */
   amount: string
   pricing: OrderPricing
@@ -5689,7 +5953,7 @@ export interface StoreOrder {
   discount_code: OrderDiscountCode | null
   created_at: string
   fulfilled_at: string | null
-  /** The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up, a service the customer built, or once the plan is deleted. */
+  /** The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up or a service the customer built. The shop never deletes a plan an order names. */
   plan: NamedRef | null
   package_name: OrderPackageName
   /** Where a purchase was bought; for a renewal or extras, the service's server. Null for none. */
@@ -5744,6 +6008,8 @@ export interface StoreOrderRequest {
   client_name?: StoreClientNameInput
   /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
   discount_code?: string | null
+  /** The amount the website showed the customer for this order, in Toman: its quote's `amount` (or the price it showed: a plan's or an extra's `offer_price`, a renewal's `price`) as the API gave it, "120000.00" (whole Toman as a JSON number, or with Persian digits and separators, is read too). Sent, the order is paid at that amount alone: when it costs another now — a sale ended, a first purchase paid elsewhere, a discount gone or a day of extra devices passed since the page was drawn — it is a 409 on `expected_amount` saying the price now («قیمت این سفارش تغییر کرده و الان ۱۲۰٬۰۰۰ تومان است؛ اگر هنوز می‌خواهید، دوباره پرداخت کنید.»), with nothing ordered or charged: show the new price and let the customer pay again. A request repeated with its `Idempotency-Key` is held to the amount of the order that key made while it is still to be paid (once paid or closed, it is answered as it stands). A 422 on `expected_amount` for an amount that is no whole Toman. Blank, null or left out: paid at the price of the moment. */
+  expected_amount?: AmountInput | null
 }
 
 /** How the new service is named on its panel: `sequential` (left out: the default) by the shop's pattern; `random`, a name drawn now; `custom`, `client_name`. Only a way `shop.name_modes` of `GET /` offers; another is a 422 on `name_mode`. A random name is worked out from the `Idempotency-Key`, so two requests sent with one key at once ask the same; a request repeated with its key asks the name its order was made with, and is not refused for what took that name since. */
@@ -5863,6 +6129,8 @@ export interface StoreCustomOrderRequest {
   client_name?: StoreClientNameInput
   /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
   discount_code?: string | null
+  /** The amount the website showed the customer for this order, in Toman: its quote's `amount` (or the price it showed: a plan's or an extra's `offer_price`, a renewal's `price`) as the API gave it, "120000.00" (whole Toman as a JSON number, or with Persian digits and separators, is read too). Sent, the order is paid at that amount alone: when it costs another now — a sale ended, a first purchase paid elsewhere, a discount gone or a day of extra devices passed since the page was drawn — it is a 409 on `expected_amount` saying the price now («قیمت این سفارش تغییر کرده و الان ۱۲۰٬۰۰۰ تومان است؛ اگر هنوز می‌خواهید، دوباره پرداخت کنید.»), with nothing ordered or charged: show the new price and let the customer pay again. A request repeated with its `Idempotency-Key` is held to the amount of the order that key made while it is still to be paid (once paid or closed, it is answered as it stands). A 422 on `expected_amount` for an amount that is no whole Toman. Blank, null or left out: paid at the price of the moment. */
+  expected_amount?: AmountInput | null
 }
 
 /** A service's renewal: the payment method, the plan (or a package built) for a service without one, and the renewal method. */
@@ -5879,6 +6147,8 @@ export interface StoreRenewalRequest {
   days?: WholeNumberInput
   /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
   discount_code?: string | null
+  /** The amount the website showed the customer for this order, in Toman: its quote's `amount` (or the price it showed: a plan's or an extra's `offer_price`, a renewal's `price`) as the API gave it, "120000.00" (whole Toman as a JSON number, or with Persian digits and separators, is read too). Sent, the order is paid at that amount alone: when it costs another now — a sale ended, a first purchase paid elsewhere, a discount gone or a day of extra devices passed since the page was drawn — it is a 409 on `expected_amount` saying the price now («قیمت این سفارش تغییر کرده و الان ۱۲۰٬۰۰۰ تومان است؛ اگر هنوز می‌خواهید، دوباره پرداخت کنید.»), with nothing ordered or charged: show the new price and let the customer pay again. A request repeated with its `Idempotency-Key` is held to the amount of the order that key made while it is still to be paid (once paid or closed, it is answered as it stands). A 422 on `expected_amount` for an amount that is no whole Toman. Blank, null or left out: paid at the price of the moment. */
+  expected_amount?: AmountInput | null
 }
 
 /** Extra traffic for a service: how much, and the payment method. */
@@ -5889,6 +6159,8 @@ export interface StoreExtraTrafficRequest {
   method_id: number
   /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
   discount_code?: string | null
+  /** The amount the website showed the customer for this order, in Toman: its quote's `amount` (or the price it showed: a plan's or an extra's `offer_price`, a renewal's `price`) as the API gave it, "120000.00" (whole Toman as a JSON number, or with Persian digits and separators, is read too). Sent, the order is paid at that amount alone: when it costs another now — a sale ended, a first purchase paid elsewhere, a discount gone or a day of extra devices passed since the page was drawn — it is a 409 on `expected_amount` saying the price now («قیمت این سفارش تغییر کرده و الان ۱۲۰٬۰۰۰ تومان است؛ اگر هنوز می‌خواهید، دوباره پرداخت کنید.»), with nothing ordered or charged: show the new price and let the customer pay again. A request repeated with its `Idempotency-Key` is held to the amount of the order that key made while it is still to be paid (once paid or closed, it is answered as it stands). A 422 on `expected_amount` for an amount that is no whole Toman. Blank, null or left out: paid at the price of the moment. */
+  expected_amount?: AmountInput | null
 }
 
 /** Extra time for a service: how many days, and the payment method. */
@@ -5899,6 +6171,8 @@ export interface StoreExtraTimeRequest {
   method_id: number
   /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
   discount_code?: string | null
+  /** The amount the website showed the customer for this order, in Toman: its quote's `amount` (or the price it showed: a plan's or an extra's `offer_price`, a renewal's `price`) as the API gave it, "120000.00" (whole Toman as a JSON number, or with Persian digits and separators, is read too). Sent, the order is paid at that amount alone: when it costs another now — a sale ended, a first purchase paid elsewhere, a discount gone or a day of extra devices passed since the page was drawn — it is a 409 on `expected_amount` saying the price now («قیمت این سفارش تغییر کرده و الان ۱۲۰٬۰۰۰ تومان است؛ اگر هنوز می‌خواهید، دوباره پرداخت کنید.»), with nothing ordered or charged: show the new price and let the customer pay again. A request repeated with its `Idempotency-Key` is held to the amount of the order that key made while it is still to be paid (once paid or closed, it is answered as it stands). A 422 on `expected_amount` for an amount that is no whole Toman. Blank, null or left out: paid at the price of the moment. */
+  expected_amount?: AmountInput | null
 }
 
 /** Extra devices for a service: how many, and the payment method. */
@@ -5909,6 +6183,8 @@ export interface StoreExtraDevicesRequest {
   method_id: number
   /** A discount code the customer typed (any case, Persian digits accepted), applied after the automatic discount. A 422 on `discount_code` when it does not apply to this order. Blank, null or left out for none. Each code that does not apply uses one of the customer's 20 tries an hour (then a 429). A repeated request with the same key returns its order, whatever the code says now. */
   discount_code?: string | null
+  /** The amount the website showed the customer for this order, in Toman: its quote's `amount` (or the price it showed: a plan's or an extra's `offer_price`, a renewal's `price`) as the API gave it, "120000.00" (whole Toman as a JSON number, or with Persian digits and separators, is read too). Sent, the order is paid at that amount alone: when it costs another now — a sale ended, a first purchase paid elsewhere, a discount gone or a day of extra devices passed since the page was drawn — it is a 409 on `expected_amount` saying the price now («قیمت این سفارش تغییر کرده و الان ۱۲۰٬۰۰۰ تومان است؛ اگر هنوز می‌خواهید، دوباره پرداخت کنید.»), with nothing ordered or charged: show the new price and let the customer pay again. A request repeated with its `Idempotency-Key` is held to the amount of the order that key made while it is still to be paid (once paid or closed, it is answered as it stands). A 422 on `expected_amount` for an amount that is no whole Toman. Blank, null or left out: paid at the price of the moment. */
+  expected_amount?: AmountInput | null
 }
 
 export interface StoreExtrasResponse {
@@ -5922,18 +6198,24 @@ export interface StoreExtrasResponse {
   }
 }
 
-/** What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`. Devices are priced for 30 days and charged for the days left of the period in use (`days`), which they last: every price here is already that share, rounded up to whole Toman. */
+/** What a service can buy of one extra: the preset amounts with their prices and, when there is a unit price, any amount within `custom`. Every price comes twice, as a plan's does: as the shop sets it (`price`) and as the customer's order is charged (`offer_price`: less their largest automatic discount, `discount`, as the bot's buttons show it; a discount code comes off that at checkout). Devices are priced for 30 days and charged for the days left of the period in use (`days`), which they last: every price here is already that share, rounded up to whole Toman. */
 export interface StoreExtraOffer {
-  /** Toman per GB, per day or per device (for the days left of the period in use); null when only the preset amounts are sold. A custom count of devices is prorated as a whole, so it may cost a few Toman less than this times the count. */
+  /** Toman per GB, per day or per device (for the days left of the period in use), before the customer's automatic discount; null when only the preset amounts are sold. A custom count of devices is prorated as a whole, so it may cost a few Toman less than this times the count. */
   price: string | null
+  /** What the customer pays per GB, day or device: `price` less their automatic discount (`discount`); equal to `price` when none applies, null with it. An amount typed is priced as a whole — `price` times it (a custom count of devices prorated as a whole), less `discount.percent` of that rounded down to whole Toman —, so it may cost a few Toman less than this times the amount. */
+  offer_price: string | null
+  /** The automatic discount in the `offer_price`s: a sale on extras of the service's plan (for a service without a plan, a sale of every plan), the customer's personal percent or their loyalty tier's, whichever takes most (never two together). Null for none. */
+  discount: StorePlanDiscount | null
   /** The preset amounts, smallest first. */
   options: {
     /** GB, days or devices. */
     quantity: number
-    /** Its price in Toman. */
+    /** Its price in Toman, before the customer's automatic discount. */
     price: string
+    /** What the customer's order is charged for it, in Toman: `price` less their automatic discount (`discount`). The amount to show, and to send as `expected_amount` (with a discount code, the `amount` of `POST /discount-codes/check` instead). */
+    offer_price: string
   }[]
-  /** Any amount in this range can be bought at `price` per unit; null when only the preset amounts are sold. */
+  /** Any amount in this range can be bought at `price` per unit (`offer_price` after the automatic discount); null when only the preset amounts are sold. */
   custom: {
     min: number
     max: number
@@ -5958,7 +6240,7 @@ export interface StoreReceiptRequest {
   note?: string
 }
 
-/** The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), an online gateway that would not open the payment (a 422 on `method_id`, in the customer's words; the order stays open), an order whose online payment is held for support (a 422 on `status`, naming the order), or an order paid or closed at the same moment elsewhere (a 409). */
+/** The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), a price another than the website showed (a 409 on `expected_amount`, saying the price now), an online gateway that would not open the payment (a 422 on `method_id`, in the customer's words; the order stays open), an order whose online payment is held for support (a 422 on `status`, naming the order), or an order paid or closed at the same moment elsewhere (a 409). */
 export interface StoreCheckout {
   /** `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card or online too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `link`: pay on the online gateway's page in `link`; the gateway tells the shop by itself, and `POST /payments/{id}/check` asks it now. `processing`: paid, and the delivery is in progress. */
   outcome: 'settled' | 'transfer' | 'link' | 'processing'
@@ -6220,7 +6502,7 @@ export interface StoreReferralResponse {
   rewards: number
 }
 
-/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). */
+/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a commission taken back (the wallet top-up that earned it refunded), a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). */
 export type StoreNoticeType =
   | 'payment_settled'
   | 'payment_credited'
@@ -6245,6 +6527,7 @@ export type StoreNoticeType =
   | 'renewal_failed'
   | 'referral_joined'
   | 'referral_commission'
+  | 'referral_commission_back'
   | 'referral_start_gift'
   | 'referral_reward'
   | 'agency_approved'
@@ -6465,19 +6748,19 @@ export interface StoreReviewWrittenResponse {
 
 /** Every write of a panel's API (the owner's `/api/admin`, an agent's `/api/agent`, and `/api/{panel}` for what both have): its method, its path under the panel's API (a path parameter typed as its value: `/plans/${number}`), the body it takes (`undefined`: none) and its answer (`void`: none). lib/api types every POST, PUT, PATCH and DELETE with it. */
 export type PanelWrite =
-  /** Sign the owner in. The session works in the shop named by `X-Shop`; if that shop does not exist, even the right credentials get a 404. */
+  /** Sign the owner in. The session works in the shop named by `X-Shop`; if that shop does not exist, even the right credentials get a 404. A 401 for a wrong username or password (one answer for both); a 422 for a field left blank; a 429 while this address or this username must wait after failures; a 503 while no login is set up in config.php. */
   | { method: 'POST'; path: '/auth/login'; body: LoginRequest; answer: SessionResponse }
   /** Start recovering a lost login. Writes a one-time key into the host's files, where only someone with access to them can read it. Asking again while the key is still valid returns the same key. */
   | { method: 'POST'; path: '/auth/recovery/key'; body: undefined; answer: RecoveryKeyResponse }
-  /** Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends. A wrong key counts as a failed sign-in. */
+  /** Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends. A 422 under the field refused — a wrong or expired key on `key`, which counts as a failed sign-in —, or on `file` while the server may not write config.php; a 429 while this address must wait after failures. */
   | { method: 'POST'; path: '/auth/recovery'; body: RecoveryRequest; answer: SessionResponse }
-  /** Sign an agent in with the code from their one-time link. The main bot gives the link; the session works in the agent's own shop. If another agent is signed in in this browser, the request needs `replace: true`; without it the answer is a 409 on `replace` and the link stays unused, so the panel can ask first. */
+  /** Sign an agent in with the code from their one-time link. The main bot gives the link; the session works in the agent's own shop. If another agent is signed in in this browser, the request needs `replace: true`; without it the answer is a 409 on `replace` and the link stays unused, so the panel can ask first. A 401 for a code no link carries now (used, expired or never made, or the agency ended); a 429 while this address must wait after failures. */
   | { method: 'POST'; path: '/auth/link'; body: AgentLinkRequest; answer: SessionResponse }
   /** Sign out of this panel. A session of the other panel in the same browser stays signed in. */
   | { method: 'POST'; path: '/auth/logout'; body: undefined; answer: void }
   /** Sign the agent out of every other browser. This browser stays signed in. If this session was itself ended meanwhile from another browser, the answer is a 401. */
   | { method: 'POST'; path: '/auth/sessions/end'; body: undefined; answer: void }
-  /** Change the panel's login. Every other session ends; this one stays signed in. */
+  /** Change the panel's login. Every other session ends; this one stays signed in. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures. */
   | { method: 'PUT'; path: '/auth/credentials'; body: CredentialsRequest; answer: SessionResponse }
   /** Report a panel error to the server log. For errors in the panel's own code, such as a page that failed to render or an unhandled error. */
   | { method: 'POST'; path: '/client-errors'; body: ClientErrorRequest; answer: void }
@@ -6505,7 +6788,7 @@ export type PanelWrite =
   | { method: 'DELETE'; path: `/servers/${number}`; body: undefined; answer: void }
   /** Check a saved server's panel. Also records whether it serves subscription links. */
   | { method: 'POST'; path: `/servers/${number}/test`; body: undefined; answer: ServerCheckResponse }
-  /** Read the panel's inbounds again. */
+  /** Read the panel's inbounds again. A 502 when the panel cannot list them; the stored ones stay. */
   | { method: 'POST'; path: `/servers/${number}/inbounds/sync`; body: undefined; answer: ServerDetailResponse }
   /** Switch whether an inbound is sold. */
   | { method: 'PATCH'; path: `/servers/${number}/inbounds/${number}`; body: InboundSellableRequest; answer: InboundsResponse }
@@ -6531,9 +6814,9 @@ export type PanelWrite =
   | { method: 'POST'; path: `/servers/${number}/migrations/${number}/cancel`; body: undefined; answer: ServerMigrationResponse }
   /** Go on with a migration as a rescue («نجات»): the source is no longer asked, and each old client is left on its panel for removal once it answers. A 422 on `status` when it is a rescue already, or over. */
   | { method: 'POST'; path: `/servers/${number}/migrations/${number}/rescue`; body: undefined; answer: ServerMigrationResponse }
-  /** Remove the clients moves of services left on the server's panel now, for a few seconds. The panel is asked even while it is in backoff; once it cannot be reached, it stops. */
+  /** Remove the old clients that moves of services left on the server's panel now, for a few seconds. The panel is asked even while it is in backoff; once it cannot be reached, it stops. */
   | { method: 'POST'; path: `/servers/${number}/leftovers/clean`; body: undefined; answer: ServerMigrationLeftoversResponse }
-  /** Forget the clients moves of services left on the server's panel, for a panel that is gone for good. None is removed from it. */
+  /** Forget the old clients that moves of services left on the server's panel, for a panel that is gone for good. None is removed from it. */
   | { method: 'DELETE'; path: `/servers/${number}/leftovers`; body: undefined; answer: ServerMigrationLeftoversResponse }
   /** Give days and traffic to running services. On every server, or only the agents' services, one customer group's, or one server's. */
   | { method: 'POST'; path: '/mass-grants'; body: MassGrantRequest; answer: MassGrantResponse }
@@ -6561,7 +6844,7 @@ export type PanelWrite =
   | { method: 'PUT'; path: `/plans/${number}`; body: PlanRequest; answer: PlanResponse }
   /** Switch a plan on or off. */
   | { method: 'PATCH'; path: `/plans/${number}`; body: ActivationRequest; answer: PlanResponse }
-  /** Delete a plan. Only a plan nothing was sold with. */
+  /** Delete a plan. Only a plan no order or service was ever made with; otherwise a 409 (switch it off instead). */
   | { method: 'DELETE'; path: `/plans/${number}`; body: undefined; answer: void }
   /** Duplicate a plan. The copy starts switched off. */
   | { method: 'POST'; path: `/plans/${number}/duplicate`; body: undefined; answer: PlanResponse }
@@ -6585,7 +6868,7 @@ export type PanelWrite =
   | { method: 'POST'; path: `/users/${number}/wallet`; body: WalletAdjustmentRequest; answer: WalletAdjustmentResponse }
   /** Make an order for a customer by hand («افزودن سفارش»), paid and delivered at once. */
   | { method: 'POST'; path: `/users/${number}/orders`; body: ManualOrderRequest; answer: ManualOrderResponse }
-  /** Set a customer's groups. Replaces their groups with the ones listed. */
+  /** Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. A 422 on `group_ids` when one is not a group of the shop. */
   | { method: 'PUT'; path: `/users/${number}/groups`; body: UserGroupsRequest; answer: UserResponse }
   /** Turn off a customer's two-factor sign-in on the website. For a customer who lost the phone it was on: afterwards the password alone signs them in. The customer is notified and the log records who did it. A 422 when it is not on. */
   | { method: 'POST'; path: `/users/${number}/two-factor/disable`; body: undefined; answer: CustomerAccountResponse }
@@ -6595,7 +6878,7 @@ export type PanelWrite =
   | { method: 'POST'; path: '/customer-groups'; body: CustomerGroupRequest; answer: CustomerGroupResponse }
   /** Reorder the customer groups. */
   | { method: 'POST'; path: '/customer-groups/reorder'; body: ReorderRequest; answer: CustomerGroupsResponse }
-  /** Update a customer group. */
+  /** Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can. */
   | { method: 'PUT'; path: `/customer-groups/${number}`; body: CustomerGroupRequest; answer: CustomerGroupResponse }
   /** Delete a customer group. Its members just leave it. */
   | { method: 'DELETE'; path: `/customer-groups/${number}`; body: undefined; answer: void }
@@ -6617,7 +6900,7 @@ export type PanelWrite =
   | { method: 'POST'; path: `/payments/${number}/check`; body: undefined; answer: PaymentCheckResponse }
   /** Retry the delivery of what a paid payment bought. */
   | { method: 'POST'; path: `/payments/${number}/retry`; body: undefined; answer: PaymentResponse }
-  /** Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are. */
+  /** Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet, and the commission it earned the customer's referrer out of theirs (any other refund's commission stands: its money stays in the shop). What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, or its commission by the referrer, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are. */
   | { method: 'POST'; path: `/payments/${number}/refund`; body: RefundRequest; answer: PaymentResponse }
   /** Refresh a service's usage and term from its panel. */
   | { method: 'POST'; path: `/subscriptions/${number}/sync`; body: undefined; answer: SubscriptionResponse }
@@ -6629,7 +6912,7 @@ export type PanelWrite =
   | { method: 'POST'; path: `/subscriptions/${number}/enable`; body: undefined; answer: SubscriptionResponse }
   /** Move a service to another server. It keeps its remaining days and traffic. */
   | { method: 'POST'; path: `/subscriptions/${number}/move`; body: SubscriptionMoveRequest; answer: SubscriptionResponse }
-  /** Delete a service from its panel and from the shop. */
+  /** Delete a service from its panel and from the shop. A 422 on `status` while an order of the service is not finished with — unpaid, being delivered, or failed and waiting for a retry (`pending`, `paid`, `processing`, `failed`) —, which it names: «سفارش #142 این سرویس هنوز تمام نشده است …»; deliver, cancel or refund that order first. A 403 for a shop admin's own service. */
   | { method: 'POST'; path: `/subscriptions/${number}/delete`; body: SubscriptionDeleteRequest; answer: void }
   /** Hand a service to another customer of the shop («انتقال سرویس»), found by their numeric Telegram id — support may whatever `transfer_enabled` says. The service keeps its link, term and traffic; its «تمدید خودکار» goes off; both customers are told in the bot — the new one, where its panel can change the link, that the previous one keeps it until they do; a renewal or an extra of it the previous customer left unpaid is cancelled, noted «سرویس این سفارش به حساب دیگری منتقل شد» (one whose receipt waits for review stays, and fails at its delivery), and the previous customer's message names them; the report group's «خریدها» topic hears of it; and its client on the panel takes the new customer's Telegram id and comment, its name unchanged (a panel that fails that is logged, and the transfer stands). A 422 on `status` for a free test account, a service gone from its panel, or one being changed on its panel right then (a delivery under way: try again in a moment); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the service's own customer, a banned account, or the admin themselves. A 403 for a shop admin's own service. */
   | { method: 'POST'; path: `/subscriptions/${number}/transfer`; body: SubscriptionTransferRequest; answer: SubscriptionResponse }
@@ -6653,15 +6936,15 @@ export type PanelWrite =
   | { method: 'PUT'; path: `/payment-methods/${number}`; body: PaymentMethodUpdateRequest; answer: PaymentMethodResponse }
   /** Switch a payment method on or off. A 404 for «خارج از فروشگاه». */
   | { method: 'PATCH'; path: `/payment-methods/${number}`; body: PaymentMethodSwitchRequest; answer: PaymentMethodResponse }
-  /** Delete a payment method. The wallet cannot be deleted; «خارج از فروشگاه» is not found (404). */
+  /** Delete a payment method. A 409 for the wallet, which cannot be deleted, and for a method payments were made with (switch it off instead); «خارج از فروشگاه» is not found (404). */
   | { method: 'DELETE'; path: `/payment-methods/${number}`; body: undefined; answer: void }
-  /** Save one group of the bot's settings. */
+  /** Save one group of the bot's settings, whole. Answers every setting as saved. */
   | { method: 'PUT'; path: `/bot/settings/${BotSettingsGroup}`; body: BotSettingsRequest; answer: BotSettingsSaved }
   /** Upload a custom QR background. */
   | { method: 'POST'; path: '/bot/qr-background'; body: QrBackgroundRequest; answer: QrBackgroundResponse }
   /** Reset the QR background to the default picture. */
   | { method: 'DELETE'; path: '/bot/qr-background'; body: undefined; answer: QrBackgroundResponse }
-  /** Add a required channel by its link, @handle or id. */
+  /** Add a required channel by its link, @handle or id. It is looked up with Telegram: a 422 on `link` when it is not found, already listed, or the bot is not an admin there; a 502 while Telegram cannot be reached. */
   | { method: 'POST'; path: '/bot/channels'; body: BotChannelRequest; answer: BotChannelResponse }
   /** Reorder the required channels. */
   | { method: 'POST'; path: '/bot/channels/reorder'; body: ReorderRequest; answer: BotChannelsResponse }
@@ -6671,11 +6954,11 @@ export type PanelWrite =
   | { method: 'DELETE'; path: `/bot/channels/${number}`; body: undefined; answer: void }
   /** Disconnect the report group. The bot stays in the group. */
   | { method: 'DELETE'; path: '/bot/report-group'; body: undefined; answer: ReportGroupResponse }
-  /** Make a one-time link that adds the bot to a group with topics. */
+  /** Make a one-time link that adds the bot to a group with topics. Any older link stops working. A 422 on `link` while the bot's username is not known yet. */
   | { method: 'POST'; path: '/bot/report-group/link'; body: undefined; answer: ReportGroupResponse }
-  /** Check the report group with Telegram again. */
+  /** Check the report group with Telegram again: its title, its topics and the bot's rights; when all is well, the topics it lacks are made. A 422 on `group` while none is connected; a 502 while Telegram cannot be reached (nothing changes). */
   | { method: 'POST'; path: '/bot/report-group/check'; body: undefined; answer: ReportGroupResponse }
-  /** Send a test message to every topic. */
+  /** Send a test message to every topic whose reports are on. They are queued, and sent at once as far as Telegram allows. A 422 on `group` while none is connected. */
   | { method: 'POST'; path: '/bot/report-group/test'; body: undefined; answer: ReportGroupTestResponse }
   /** Save a keyboard. */
   | { method: 'PUT'; path: `/keyboards/${string}`; body: KeyboardRequest; answer: KeyboardResponse }
@@ -6699,7 +6982,7 @@ export type PanelWrite =
   | { method: 'POST'; path: `/agency/agents/${number}/suspend`; body: NoteRequest; answer: AgentResponse }
   /** Resume an agent's selling, whatever suspended it. The agent is notified. A 422 on `status` while their agency's end has passed (extend it with `PUT /agency/agents/{id}` instead), while it is not suspended, or for a customer who is no agent. */
   | { method: 'POST'; path: `/agency/agents/${number}/resume`; body: undefined; answer: AgentResponse }
-  /** Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط مدیر» in their panel), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan). */
+  /** Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط پشتیبانی» in their panel, which calls the owner «پشتیبانی فروشگاه اصلی»), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan). */
   | { method: 'PUT'; path: `/agency/agents/${number}/hidden`; body: AgentHiddenRequest; answer: AgentHiddenSavedResponse }
   /** Add an agency level. */
   | { method: 'POST'; path: '/agency/levels'; body: AgencyLevelRequest; answer: AgencyLevelResponse }
@@ -6709,7 +6992,7 @@ export type PanelWrite =
   | { method: 'PUT'; path: `/agency/levels/${number}`; body: AgencyLevelRequest; answer: AgencyLevelResponse }
   /** Delete an agency level. Refused (409) while agents are on it. */
   | { method: 'DELETE'; path: `/agency/levels/${number}`; body: undefined; answer: void }
-  /** Remove a premium emoji from the picker. */
+  /** Remove a premium emoji from the picker. Texts that use it keep it. A 404 for one the picker does not have. */
   | { method: 'DELETE'; path: `/bot/custom-emojis/${string}`; body: undefined; answer: void }
   /** Save a text's wording. */
   | { method: 'PUT'; path: `/bot/texts/${string}`; body: BotTextRequest; answer: BotTextResponse }
@@ -6789,7 +7072,7 @@ export type InstallWrite =
 
 /** Every write of the Store API, a shop website's API under its store key (`/api/store/v1/{store}`), in the same form as PanelWrite. */
 export type StoreWrite =
-  /** Get a nonce for an id_token sign-in. For Telegram's popup or Google, when signing in, adding a way in or proving one again: the site opens the provider's sign-in with the nonce and sends it back once, with the token. A 429 once this address network asked for 120 nonces, states and codes in 10 minutes (one address can be many customers on a mobile network). A 503 while the shop already holds its maximum of open sign-ins (5000 nonces, each valid for half an hour). */
+  /** Get a nonce for an id_token sign-in. For Telegram's popup or Google, when signing in, adding a way in or proving one again: the site opens the provider's sign-in with the nonce and sends it back once, with the token. A 422 while neither Telegram nor Google sign-in is on for the website («ورود با تلگرام و Google برای این وب‌سایت فعال نیست.»): no sign-in would take it. A 429 once this address network asked for 120 nonces, states and codes in 10 minutes (one address can be many customers on a mobile network). A 503 while the shop already holds its maximum of open sign-ins (5000 nonces, each valid for half an hour). */
   | { method: 'POST'; path: '/auth/nonce'; body: undefined; answer: StoreNonceResponse }
   /** Start a Telegram sign-in by redirect. Returns the address to send the browser to. The site makes the PKCE verifier, keeps it in this browser and sends only its challenge; the shop makes the state (which keeps the challenge) and the nonce. Only `POST /auth/telegram` accepts this state back, together with the verifier (a signed-in customer uses `POST /me/telegram/authorize` instead). A 422 while the website has no client secret, or on `redirect_uri` or `code_challenge`; a 429 once this address network asked for 120 nonces, states and codes in 10 minutes; a 503 while the shop holds its maximum of open sign-ins. */
   | { method: 'POST'; path: '/auth/telegram/authorize'; body: StoreTelegramAuthorizeRequest; answer: StoreAuthorizeResponse }
@@ -6843,11 +7126,11 @@ export type StoreWrite =
   | { method: 'POST'; path: '/me/merge'; body: StoreMergeRequest; answer: StoreMeResponse }
   /** What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. */
   | { method: 'POST'; path: '/custom-services/quote'; body: StoreCustomQuoteRequest; answer: StoreCustomQuoteResponse }
-  /** Buy a service the customer builds, paid with `method_id`: the same checkout as `POST /orders`, as the bot's «🛠 ساخت سرویس دلخواه» buys it, at `POST /custom-services/quote`'s price. The order is a purchase without a plan (`plan` null) carrying its own `traffic_bytes`, `days` and `devices`; once delivered, its service has no plan either. `server_id` may be left out while the builder sells on one server. The service is named as `POST /orders` names one (`name_mode`, `client_name`). A 422 on `status` while nothing may be built; on `gb` or `days` for an amount that is no whole number or outside its bounds; on `server_id` for none picked among several servers, or a server not on offer now; on `name_mode` or `client_name` as `POST /orders` refuses them; on `method_id` for a method that cannot pay it, or a wallet short of the price; on `discount_code` when it does not apply; on `idempotency_key` for a key used for a different order or first sent with another `method_id`. The 5 unpaid orders, a receipt still in review, the 409s, the 429 past 30 ordering requests in 10 minutes and the 503 while the bot is switched off are `POST /orders`' own. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
+  /** Buy a service the customer builds, paid with `method_id`: the same checkout as `POST /orders`, as the bot's «🛠 ساخت سرویس دلخواه» buys it, at `POST /custom-services/quote`'s price. The order is a purchase without a plan (`plan` null) carrying its own `traffic_bytes`, `days` and `devices`; once delivered, its service has no plan either. `server_id` may be left out while the builder sells on one server. The service is named as `POST /orders` names one (`name_mode`, `client_name`). A 422 on `status` while nothing may be built; on `gb` or `days` for an amount that is no whole number or outside its bounds; on `server_id` for none picked among several servers, or a server not on offer now; on `name_mode` or `client_name` as `POST /orders` refuses them; on `method_id` for a method that cannot pay it, or a wallet short of the price; on `discount_code` when it does not apply; on `idempotency_key` for a key used for a different order or first sent with another `method_id`. The 5 unpaid orders, a receipt still in review, the 409s (`expected_amount` among them), the 429 past 30 ordering requests in 10 minutes and the 503 while the bot is switched off are `POST /orders`' own. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
   | { method: 'POST'; path: '/custom-services/orders'; body: StoreCustomOrderRequest; answer: StoreCheckoutResponse }
   /** Write a review. Send the signed name, 1 to 5 stars, the text, an optional line on where the service is used, and an optional avatar from the website's own set. It waits for support to approve it (then `GET /reviews` shows it) or reject it; the report group is notified. Guests may write while the website asks for a captcha; without one, a guest gets a 403 (sign in first). With a bearer token the review is that customer's; a token that is not valid is a 401 (never a guest review instead), and a banned customer gets a 403. A 404 while the website takes no reviews (`reviews_enabled`, off by default). A 422 lists every invalid field at once: `name` (2 to 64 characters), `rating` (1 to 5), `body` (10 to 600), `context` (at most 100) or `avatar` (1 to 32 of a-z, 0-9, - and _: a key, never an address); then `captcha` while the website asks for one. A 429 with `Retry-After` past 20 reviews an hour from one address network (IPv6 counted by /48; refused captchas included), 3 a day from one customer, or 20 an hour from all guests together (refused captchas not included). A 503 while 200 reviews wait for support (no new review is accepted until support decides some), or when the captcha could not be checked. */
   | { method: 'POST'; path: '/reviews'; body: StoreReviewRequest; answer: StoreReviewWrittenResponse }
-  /** Add a service to the customer's account by its link («افزودن سرویس با لینک»), as the bot does. `link` is the text the customer sent: a subscription link or one of the service's configs (vless://, vmess://, trojan://, ss://, hysteria2://, tuic://), alone or among other words; its links are read together, five at most. The shop asks its panels whose client it is and adds it as its panel has it, with no plan (`plan` null, `claimed_at` set) until its first renewal (`GET …/renewal-plans`); the report group is told. The first customer to send it gets it. Only while the shop offers it (`shop.service_claims` of `GET /`): the main shop's alone, off by default. Refusals are on `link`: a 422 while it is off, for text with no link in it (or longer than 2000 characters), for a link no panel has, for a service already the customer's own, or one whose panel serves it no subscription link; a 409 for a service already in another customer's account; a 502 when a panel that might have it did not answer. Each link sent asks every panel: at most 10 links in 10 minutes per customer, then a 429 with `Retry-After`. */
+  /** Add a service to the customer's account by its link («افزودن سرویس با لینک»), as the bot does. `link` is the text the customer sent: a subscription link (http:// or https://) or one of the service's configs (vless://, vmess://, trojan://, ss://, hysteria2:// or hy2://, tuic://), alone or among other words; its links are read together, five at most. The shop asks its panels whose client it is and adds it as its panel has it, with no plan (`plan` null, `claimed_at` set) until its first renewal (`GET …/renewal-plans`); the report group is told. The first customer to send it gets it. Only while the shop offers it (`shop.service_claims` of `GET /`): the main shop's alone, off by default. Refusals are on `link`: a 422 while it is off, for text with no link in it (or longer than 2000 characters), for a link no panel has, for a service already the customer's own, or one whose panel serves it no subscription link; a 409 for a service already in another customer's account; a 502 when a panel that might have it did not answer. Each link sent asks every panel: at most 10 links in 10 minutes per customer, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: '/subscriptions/claim'; body: StoreClaimRequest; answer: StoreSubscriptionResponse }
   /** Switch the service's auto-renewal («تمدید خودکار») on or off. When on, the service is renewed from the wallet before it ends. A 422 on `auto_renew` while auto-renewal is not offered (`auto_renew.offered`), or for anything but a boolean. */
   | { method: 'PATCH'; path: `/subscriptions/${number}`; body: StoreSubscriptionRequest; answer: StoreSubscriptionResponse }
@@ -6857,19 +7140,19 @@ export type StoreWrite =
   | { method: 'POST'; path: `/subscriptions/${number}/rotate-link`; body: undefined; answer: StoreSubscriptionResponse }
   /** «انتقال سرویس»: hand the service to another customer of the shop, found by their numeric Telegram id, for free — as the bot does it. Only while the shop lets customers (`shop.service_transfers` of `GET /`, off by default). The service keeps its link, term and traffic and is the recipient's from now on (this customer's `GET /subscriptions/{id}` is a 404 after it); its «تمدید خودکار» goes off; the link goes with it, so this customer's devices stay connected until the recipient changes it (`POST /subscriptions/{id}/rotate-link`); the recipient is told in the bot and among their notices (`service_received`, which says so where the link can change) — this customer is not: the answer is theirs; the report group hears of it. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first): a bearer token alone gives no service away. A 422 on `status` while the shop does not offer it, for a free test account, a service gone from its panel or being changed on it right then (try again in a moment), or one with an order this customer made not finished with (a renewal or an extra awaiting its payment or receipt, or being delivered; an unpaid one is dropped by itself after 48 hours, unless its card transfer went to support's private chat, which support approves or cancels; one whose delivery failed waits for support, and its message says to ask them); on `telegram_id` for an id that is no number, that names no customer of this shop (they must have started the bot once), the customer themselves, or a banned account. It looks the recipient up as `GET` does (one of its 10 in 10 minutes); at most 5 services handed on an hour per customer, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: `/subscriptions/${number}/transfer`; body: SubscriptionTransferRequest; answer: StoreTransferRecipientResponse }
-  /** Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders, or on `status` with a receipt still in review; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders — its bot switched off, or its selling suspended, which the GET answers with a 422 on `status`). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now. */
+  /** Renew a service, paid with `method_id`, as the GET previews it: by the renewal method `method`, and a service without a plan on the plan `plan_id` picks, which becomes its plan once the renewal is delivered — or with the package `gb` and `days` build, an order without a plan carrying its own `traffic_bytes`, `days` and `devices`, after which the service still has none (so «تمدید خودکار» never renews it). The wallet renews it at once; a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Refused for the same reasons as the GET, and as `POST /orders` (a 422 on `method_id` when the wallet is short; a 422 with too many unpaid orders, or on `status` with a receipt still in review; a 409 on `expected_amount` when it costs another than the website showed; a 409 when the order was paid or closed at the same moment elsewhere; a 429 past the checkout's rate limit; a 503 while the shop takes no orders — its bot switched off, or its selling suspended, which the GET answers with a 422 on `status`). Repeated with the same `Idempotency-Key` (and the same `plan_id`, or `gb` and `days`, and `method`), it returns the renewal that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/renewal`; body: StoreRenewalRequest; answer: StoreCheckoutResponse }
-  /** Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  /** Buy extra traffic for a service. `gb` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once (a service whose traffic ran out runs again); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, unlimited, or its time ran out); on `gb` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409s (`expected_amount` among them), 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-traffic`; body: StoreExtraTrafficRequest; answer: StoreCheckoutResponse }
-  /** Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  /** Buy extra time for a service. `days` paid with `method_id`, through the same checkout as every purchase. The wallet adds it at once: onto the service's end, or, if its time ran out, as a new term starting at its next connection. A card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take it (switched off by support, gone from its panel, a free test account, never expiring, or its traffic ran out); on `days` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409s (`expected_amount` among them), 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-time`; body: StoreExtraTimeRequest; answer: StoreCheckoutResponse }
-  /** Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409, 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
+  /** Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409s (`expected_amount` among them), 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-devices`; body: StoreExtraDevicesRequest; answer: StoreCheckoutResponse }
-  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
+  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 on `expected_amount` when the request names the amount the website showed and the order costs another now (nothing ordered; the message says the price now). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
   | { method: 'POST'; path: '/orders'; body: StoreOrderRequest; answer: StoreCheckoutResponse }
   /** Upload the receipt of a card transfer. For the payment the checkout returned (`transfer.payment_id`): a picture, with an optional note from the customer. Support always reviews it (in the panel or the report group): a card method's automatic approval window applies only to receipts sent in the bot, never to uploads. Returns the order, with the payment awaiting review. A 404 for another customer's payment; a 422 on `status` while the payment awaits no receipt (one was already sent, or it was rejected, paid, cancelled, or is not a card transfer), or while the shop takes one receipt at a time and another receipt of the customer's is still in review (the message names its order), on `file` when it is not a JPEG, PNG or WebP of at most 10 MB, or on `note` when it is too long. A 429 with `Retry-After` past 10 pictures in an hour (receipts and ticket pictures share this budget). A 503 while the host has less than 200 MB of free disk, once the shop's uploads for the day reach 1024 MB, or while the shop takes no orders (its bot is switched off). A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: `/payments/${number}/receipt`; body: StoreReceiptRequest; answer: StoreOrderResponse }
-  /** Ask an online payment's gateway what came of it now — when the customer comes back from the gateway's page, or presses a «I paid» button. The gateway tells the shop by itself as well, and the shop asks it every few minutes until its page has been closed a while: this only makes it sooner. A payment the gateway says was paid is settled at once — its order paid and delivered (or, its order closed meanwhile, the money put in the wallet) — and the customer gets the notice of it; one whose page closed unpaid fails, its order left open to pay again. Answers what the gateway said, the order as it stands now and, once delivered, its service. A 404 for another customer's payment; a 422 on `status` for a payment that is not an online one (a card transfer, the wallet), and for one held for support and still waiting — the gateway's answer did not fit it (another order or amount), or it kept money on it unsettled for two days —, the message naming its order: tell the customer not to pay again but to write to support. A 503 while the gateway cannot be asked, saying so (nothing changed: if they paid, ask again a little later). At most 10 a minute per customer, then a 429 with `Retry-After`. */
+  /** Ask an online payment's gateway what came of it now — when the customer comes back from the gateway's page, or presses a «I paid» button. The gateway tells the shop by itself as well, and the shop asks it every few minutes until its page has been closed a while: this only makes it sooner. A payment the gateway says was paid is settled at once — its order paid and delivered (or, its order closed meanwhile, the money put in the wallet) — and the customer gets the notice of it; one whose page closed unpaid fails, its order left open to pay again. Answers what the gateway said, the order as it stands now and, once delivered, its service. A 404 for another customer's payment; a 422 on `status` for a payment that is not an online one (a card transfer, the wallet), and for one held for support and still waiting, before or by this very ask — the gateway's answer did not fit it (another order or amount), it kept money on it unsettled for two days, or it closed it after saying money had come in on it —, the message naming its order: tell the customer not to pay again but to write to support. A 503 while the gateway cannot be asked, saying so (nothing changed: if they paid, ask again a little later). At most 10 a minute per customer, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: `/payments/${number}/check`; body: undefined; answer: StorePaymentCheckResponse }
   /** Top up the wallet by `amount`, paid with `method_id`. The amount must be within the `top_up` limits of `GET /wallet` (else a 422 on `amount` stating them). Any method but the wallet itself (else a 422 on `method_id`). A card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page (`link`). Once paid, the amount is added to the balance. Refused like `POST /orders` for too many unpaid orders or a receipt still in review (422), past the checkout's rate limit (429) and while the shop takes no orders (503). Repeated with the same `Idempotency-Key`, it returns the top-up that key made, as it is now. */
   | { method: 'POST'; path: '/wallet/top-up'; body: StoreTopUpRequest; answer: StoreCheckoutResponse }

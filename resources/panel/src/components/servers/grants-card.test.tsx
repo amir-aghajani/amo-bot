@@ -4,7 +4,7 @@ import { GrantsCard } from '@/components/servers/grants-card'
 import type { ServerGrantRow, ServerGrantsResponse } from '@/lib/api-types'
 import { providers, until } from '@/test/render'
 import { serverRow } from '@/test/rows'
-import { json, server } from '@/test/server'
+import { json, refusal, server } from '@/test/server'
 
 /*
  * A server's «افزودن زمان و حجم» (components/servers/grants-card): a grant that would reach no service is not started —
@@ -38,6 +38,7 @@ function grantRow(overrides: Partial<ServerGrantRow> = {}): ServerGrantRow {
     waiting_reason: null,
     last_failure: null,
     reviewer: 'owner',
+    reviewer_name: null,
     created_at: '2026-10-06T09:00:00Z',
     finished_at: null,
     ...overrides,
@@ -90,5 +91,41 @@ describe('a server’s grant', () => {
     expect(screen.getByText('کار روی این سرور تا رفع این مشکل پنل منتظر می‌ماند؛ خودکار دوباره تلاش می‌شود.')).toBeTruthy()
     expect(screen.queryByText(/جواب نمی‌دهد/)).toBeNull()
     await until(() => expect(run.waiting).toBe(1))
+  })
+
+  it('names who issued it as their account has it where the server read it', async () => {
+    showCard({ running: 2, unstarted: 0 }, [grantRow({ status: 'done', granted: 3, reviewer: '@boss', reviewer_name: 'سارا احمدی', finished_at: '2026-10-06T09:05:00Z' })])
+
+    expect(await screen.findByText('سارا احمدی')).toBeTruthy()
+    expect(screen.queryByText('@boss')).toBeNull()
+  })
+
+  it('says the latest service a panel refused, as a status of its line', async () => {
+    server().hold('POST', '/api/admin/servers/1/grants/7/run')
+    showCard({ running: 2, unstarted: 0 }, [grantRow({ granted: 1, failed: 1, last_failure: 'amir_1: client not found' })])
+
+    const line = (await screen.findByText('amir_1: client not found')).closest('[role]')
+    expect(line?.getAttribute('role')).toBe('status')
+    expect(line?.textContent).toBe('آخرین خطا: amir_1: client not found')
+  })
+})
+
+describe('the grants’ read', () => {
+  it('failed, stays said while it is asked again — its button spinning, asking once —, until the answer', async () => {
+    server().on('GET', '/api/admin/servers/1/grants', refusal(500, 'خطای سرور.'))
+    render(<GrantsCard server={serverRow()} />, { wrapper: providers().wrapper })
+    const retry = await screen.findByRole('button', { name: 'تلاش دوباره' })
+    const again = server().hold('GET', '/api/admin/servers/1/grants')
+
+    fireEvent.click(retry)
+    await until(() => expect(retry.getAttribute('aria-busy')).toBe('true'))
+    expect(screen.getByText('لیست بارگذاری نشد.')).toBeTruthy()
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0)
+    fireEvent.click(retry)
+    expect(server().sent('GET', '/api/admin/servers/1/grants')).toHaveLength(2)
+
+    again.answer(json({ grants: [], audience: { running: 1, unstarted: 0 } } satisfies ServerGrantsResponse))
+    await until(() => expect(screen.queryByText('لیست بارگذاری نشد.')).toBeNull())
+    expect((screen.getByRole('button', { name: 'افزودن به سرویس‌ها' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

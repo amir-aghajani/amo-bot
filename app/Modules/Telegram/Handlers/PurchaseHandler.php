@@ -25,7 +25,6 @@ use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
-use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
@@ -36,7 +35,7 @@ use App\Support\Traffic;
 
 /**
  * From a plan to a subscription:
- *   plan:{plan}                       → the plan's details and a button per location (its servers)
+ *   plan:{plan}[:{page}]              → the plan's details and a button per location (its servers), paged
  *   plan:{plan}:srv:{server}          → the checkout of the plan on that server
  *   plan:{plan}:srv:{server}:{method} → pay: the order is made now, or the open one of the same is found
  *   checkout:{order}                  → a payment reminder's «پرداخت دوباره» (and «بازگشت» from an online page whose time
@@ -68,10 +67,10 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
         private readonly BotTexts $texts,
     ) {}
 
-    /** The plan's details and locations. */
-    public static function planCallback(int $planId): string
+    /** The plan's details and locations, at that page of them. */
+    public static function planCallback(int $planId, int $page = 1): string
     {
-        return CallbackData::build(self::PLAN, $planId);
+        return CallbackData::build(self::PLAN, $planId, ...$page > 1 ? [$page] : []);
     }
 
     /** The checkout of the plan on that server. */
@@ -92,7 +91,7 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
         $reopen = $ctx->update->callbackArgs(self::CHECKOUT);
 
         match (true) {
-            $plan !== null && count($plan) === 1 => $this->plan($ctx, (int) $plan[0]),
+            $plan !== null && in_array(count($plan), [1, 2], true) => $this->plan($ctx, (int) $plan[0], (int) ($plan[1] ?? 1)),
             $plan !== null && count($plan) === 3 && $plan[1] === self::SERVER => $this->checkout($ctx, (int) $plan[0], (int) $plan[2]),
             $plan !== null && count($plan) === 4 && $plan[1] === self::SERVER => $this->buy($ctx, (int) $plan[0], (int) $plan[2], (int) $plan[3]),
             $reopen !== null && count($reopen) === 1 => $this->reopen($ctx, (int) $reopen[0]),
@@ -120,9 +119,9 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
 
     /**
      * The plan's details at the customer's price — a line saying why it differs from the regular price — and a button
-     * per location in its server's colour and row; or that no location can sell it now.
+     * per location in its server's colour and row, paged past one keyboard's worth; or that no location can sell it now.
      */
-    private function plan(Context $ctx, int $planId): void
+    private function plan(Context $ctx, int $planId, int $page): void
     {
         $plan = Plan::active()->find($planId);
         if ($plan === null) {
@@ -164,14 +163,12 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
             return;
         }
 
-        $servers = array_map(fn(array $choice): array => [InlineKeyboard::callback(
-            $this->texts->render(BotText::ServerButton, ['server' => $choice['server']->name]),
-            self::serverCallback($plan->id, $choice['server']->id),
-            KeyboardLayout::style($choice['server']->buttonStyle()),
-        ), $choice['server']->buttonRow()], $choices);
-        $keyboard = InlineKeyboard::make()->flow($servers)->row($this->buttons->back($this->listOf($plan)));
+        [$shown, $page, $pages] = Buttons::slice($choices, $page);
+        $servers = array_map(fn(array $choice): array => $this->buttons->server($choice['server'], self::serverCallback($plan->id, $choice['server']->id)), $shown);
+        $keyboard = InlineKeyboard::make()->flow($servers);
+        $text = $this->buttons->paged($keyboard, BotTexts::paragraphs($text, $this->texts->part(BotText::PlanPickServer)), $page, $pages, static fn(int $at): string => self::planCallback($plan->id, $at));
 
-        $ctx->edit(BotTexts::paragraphs($text, $this->texts->part(BotText::PlanPickServer)), ['reply_markup' => $keyboard->build()]);
+        $ctx->edit($text, ['reply_markup' => $keyboard->row($this->buttons->back($this->listOf($plan)))->build()]);
     }
 
     /**
@@ -271,7 +268,7 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
     /** A renewal's checkout by the order's method (a service without a plan on the order's), unless its service went meanwhile. */
     private function renewal(Context $ctx, Order $order): void
     {
-        $subscription = $this->services->find($ctx, (int) $order->subscription_id, MenuHandler::subscriptionsCallback(1));
+        $subscription = $this->services->find($ctx, (int) $order->subscription_id);
         if ($subscription !== null) {
             $this->renewals->checkout($ctx, $subscription, planId: (int) $order->plan_id, method: $order->renewal_method);
         }
@@ -280,7 +277,7 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
     /** An extra's checkout for as much as the order buys, unless its service went meanwhile. */
     private function extra(Context $ctx, Order $order, ExtraKind $kind): void
     {
-        $subscription = $this->services->find($ctx, (int) $order->subscription_id, MenuHandler::subscriptionsCallback(1));
+        $subscription = $this->services->find($ctx, (int) $order->subscription_id);
         if ($subscription !== null) {
             $this->extras->checkout($ctx, $subscription, $kind, $kind->quantityOf($order));
         }

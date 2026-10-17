@@ -1,3 +1,5 @@
+[فارسی](fa/Referrals.md)
+
 # Referrals
 
 The referral program («زیرمجموعه‌گیری») pays a customer a share of what the customers they bring pay — and, when the shop
@@ -7,7 +9,8 @@ and each agent's in their bot.
 
 ## Switching it on
 
-«تنظیمات ربات › زیرمجموعه‌گیری» — off until switched on, one card in four parts saved together:
+«تنظیمات ربات › زیرمجموعه‌گیری» — off until switched on. It is one card, saved as a whole: the program's switch, then
+four parts.
 
 - «زیرمجموعه‌گیری فعال باشد» — the program. Off, the menu's button is taken away, links make nobody a referral and no
   payment earns a commission or a gift; switched on again, the button comes back, and the referrals and commissions of
@@ -15,23 +18,30 @@ and each agent's in their bot.
 - **«پورسانت»**: «درصد پورسانت» — 1 to 100 percent of each payment, 10 by default; «درصد پورسانت تمدید» — 0 to 100, what
   a renewal's payment earns in its place (0: renewals earn nothing), 10 by default; «فقط اولین پرداخت هر زیرمجموعه» —
   only each referral's first payment earns, instead of every one.
-- **«هدیه شروع»**: «هدیه معرف» and «هدیه زیرمجموعه» — Toman to each wallet, 0 for none (both 0 by default); «زمان هدیه» —
-  «با اولین خرید» (the default) or «با عضویت».
+- **«هدیه شروع»**: «هدیه معرف (تومان)» and «هدیه زیرمجموعه (تومان)» — Toman to each wallet, up to 10,000,000, 0 for
+  none (both 0 by default); «زمان هدیه» — «با اولین خرید» (the default) or «با عضویت».
 - **«جایزه دعوت»**: «به ازای هر چند زیرمجموعه خریدار» (0, the default, for none) and «پلن جایزه» — one of the shop's
   plans, required while the number is above 0.
-- **«هشدار زیرمجموعه‌گیری فیک»**: «عضویت پشت سر هم» (10), «بازه هشدار» in minutes (60) and «زیرمجموعه بدون خرید» (20)
-  — 0 switches either alert off.
+- **«هشدار زیرمجموعه‌گیری فیک»**: «عضویت پشت سر هم» (10), «بازه هشدار (دقیقه)» (60) and «زیرمجموعه بدون خرید» (20)
+  — 0 in «عضویت پشت سر هم» or «زیرمجموعه بدون خرید» switches that alert off.
 
 The menu's «👥 زیرمجموعه‌گیری» button must be on the bot's menu for customers to find their link: the settings section and
 the referrals page warn while the program runs and the menu lacks it, with a link to «کیبوردها».
 
 ## How a customer brings others
 
-In the bot, «👥 زیرمجموعه‌گیری» shows their invite link — `https://t.me/<bot>?start=ref_<code>`, a tap copies it —, the
-terms with the share (and a renewal's own, when it differs; the start gift and the plan reward while they are on, each a
-bot text the admin may reword), how many they brought and what it earned them, and «📤 ارسال لینک برای دوستان» to share it. While
-the program is off — or the bot's @username is not known yet — the screen says the program is not active. The shop's
-website gives the same code its own link and its sign-ups ([invite codes](Store-API-Sign-In.md#invite-codes-at-sign-up)).
+In the bot, «👥 زیرمجموعه‌گیری» shows:
+
+- their invite link, `https://t.me/<bot>?start=ref_<code>` (a tap copies it);
+- the terms with the share — and a renewal's own, when it differs; the start gift and the plan reward while they are
+  on —, each a bot text the admin may reword;
+- how many they brought, and what it earned them;
+- «📤 ارسال لینک برای دوستان», to share it.
+
+While the program is off — or the bot's @username is not known yet — the screen says the program is not active. The
+shop's website gives the same code its own link and its sign-ups
+([invite codes](Store-API-Sign-In.md#invite-codes-at-sign-up)); a code typed there by hand is read in any case, with
+Persian digits too.
 
 **Who becomes a referral: only a newcomer.** Someone the shop did not know, whose **first** contact carries the code —
 the first `/start` in the bot (even when the phone or channel rule then holds them up), or the sign-up on the website
@@ -43,17 +53,26 @@ nobody.
 
 ## What earns a commission
 
-Money that came in: a payment that is not from the wallet — a card transfer — for a service, a renewal, a top-up of the
-wallet or an agent's traffic, by a referral whose referrer is not banned, while the program is on at the moment it is
-settled. The commission is the share of it, in whole Toman rounded down (a tiny payment may earn nothing), and goes
-into the referrer's wallet as the payment settles — the line «پورسانت زیرمجموعه (پرداخت #N)» —; the referrer is told
-when the paying customer is told of their payment, and the report group's report of the purchase, renewal or top-up
-names it («👥 پورسانت معرف: …»).
+Money that came in: a payment that is not from the wallet — a card transfer, an online gateway's payment, or money
+support recorded as paid outside the shop ([Orders and payments](Orders-And-Payments.md#orders-support-makes)) — for a
+service, a renewal, extra traffic, time or devices, a top-up of the wallet, or an agent's traffic. It must be a
+referral's whose referrer is not banned, while the program is on at the moment it is settled.
+
+The commission is the share of it, in whole Toman rounded down (a tiny payment may earn nothing). It goes into the
+referrer's wallet as the payment settles, as the line «پورسانت زیرمجموعه (پرداخت #N)». The referrer is told when the
+paying customer is told of their payment, and the report group's report of the purchase, renewal or top-up names it
+(«👥 پورسانت معرف: …»).
 
 - A purchase **from the wallet** earns nothing: its money was counted when the wallet was charged.
-- A **refund** leaves the commission standing — it was earned for bringing a customer who paid.
+- A **refunded top-up** takes its commission back. Its money goes back to the customer outside the shop, so the
+  commission comes out of the referrer's wallet too, as the line «برگشت پورسانت زیرمجموعه (پرداخت #N)», and the
+  referrer is told. It leaves the page's «پورسانت‌ها» and the referrer's earnings. A referrer who has spent it stops the
+  refund: support is told the referrer's balance. (An agent's wallet may go below zero as far as their credit, as for
+  their own payments.)
+- **Every other refund** — a purchase, a renewal, an extra — leaves the commission standing: its money stays in the shop,
+  as the customer's wallet credit.
 - With «فقط اولین پرداخت…», a payment earns only when no money of that customer came in before it; one refunded since
-  still counts as their first (but a refunded top-up).
+  still counts as their first (but a refunded top-up, whose commission was taken back).
 - A **renewal** earns at «درصد پورسانت تمدید» — nothing at 0; every other payment at «درصد پورسانت».
 - **One level**: a referral's referrals earn the referrer nothing.
 
@@ -70,25 +89,35 @@ bot (and on their website, by email for one without Telegram). It is paid:
 - **«با عضویت»**: as the newcomer joins through the link — the bot's first `/start` or the website's sign-up.
 
 It is decided once a newcomer, whatever comes later: a later purchase, a setting changed since, two first purchases paid
-in the same moment.
+in the same moment. A refund takes it back from neither wallet, and the newcomer's next purchase after a refunded first
+one pays no second gift.
 
 ## The plan reward
 
-«جایزه دعوت»: each time the number of a referrer's referrals **who bought** something with a price (a free plan does not
-count) reaches another multiple of «به ازای هر چند زیرمجموعه خریدار» — checked as a referral's first paid purchase is
-paid —, the referrer is given a service of «پلن جایزه» free:
-an order at no price on the first server that sells the plan now, delivered and sent as any order, after a message that
-says what it is for. Once a milestone. A plan no server can deliver now gives nothing then: the next referral's first
-purchase tries again while that milestone is still the one reached. In an agent's shop the service's traffic comes out of
-the agent's pool, as any sale's. The customer's website says how many they were given.
+«جایزه دعوت»: each time the number of a referrer's referrals **who bought** something with a price and kept it (a free
+plan does not count, nor a purchase refunded since) reaches another multiple of «به ازای هر چند زیرمجموعه خریدار», the
+referrer is given a service of «پلن جایزه» free. It is checked as a referral's first paid purchase is paid.
+
+- Each such purchase gives at most one milestone: the next one above the last one given, when the count has reached it.
+  Two referrals buying at the same moment that cross two milestones give both. A number lowered later never gives
+  several at once.
+- The service is an order at no price on the first server that sells the plan now, delivered and sent as any order,
+  after a message that says what it is for. It is given once a milestone. A refund later does not take it back.
+- A plan no server can deliver now gives nothing then: the next referral's first purchase gives that milestone instead.
+- A service whose delivery fails (its panel down, a fault of the shop's own) is given all the same: its order waits under
+  «نیازمند رسیدگی» for support's retry ([Orders and payments](Orders-And-Payments.md#orders)), which sends it once it
+  works. The milestone is used: it is never given again.
+- In an agent's shop the service's traffic comes out of the agent's pool, as any sale's.
+
+The customer's website says how many they were given.
 
 ## Alerts on made-up referrals
 
 As a newcomer joins through a link, the shop raises an alert on the referrer when:
 
 - **a burst** — the newcomer is the «عضویت پشت سر هم»-th through that link within «بازه هشدار» minutes; or
-- **nobody buys** — the referrer's referrals reach «زیرمجموعه بدون خرید» (or as many again) and none of them ever bought
-  anything with a price (a free plan is no purchase here).
+- **nobody buys** — the referrer's referrals reach «زیرمجموعه بدون خرید» (or as many again) and none of them bought
+  anything with a price and kept it (a free plan is no purchase here, nor one refunded since).
 
 Each kind is raised at most once in the window — a burst that goes on raises no second alert. It is reported to the
 report group under «کاربران جدید» («⚠️ هشدار زیرمجموعه‌گیری»), and listed on the referrals page's «هشدارها». While an

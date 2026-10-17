@@ -102,7 +102,31 @@ final class AdminDashboardApiTest extends HttpTestCase
         self::assertSame(['id' => $customer->id, 'name' => 'Sara', 'username' => null, 'telegram_id' => 5001, 'email' => null], $data['recent_orders'][0]['user'], 'the customer as every screen points at them');
         self::assertSame('purchase', $data['recent_orders'][0]['type'], 'the panel words the type itself');
         self::assertSame(['id', 'name', 'username', 'telegram_id', 'email', 'balance', 'created_at'], array_keys($data['recent_users'][0]));
-        self::assertSame(['payments_to_review' => 1, 'stuck_orders' => 1, 'open_tickets' => 0, 'pending_reviews' => 0, 'pending_orders' => 1, 'servers_with_errors' => 1, 'expiring_soon' => 0], $data['attention']);
+        self::assertSame(['payments_to_review' => 1, 'stuck_orders' => 1, 'open_tickets' => 0, 'pending_reviews' => 0, 'held_payments' => 0, 'servers_with_errors' => 1, 'pending_orders' => 1, 'expiring_soon' => 0], $data['attention'], 'what waits on support, then what waits on customers');
+    }
+
+    public function testOnlyServersInUseAreCountedAsFailing(): void
+    {
+        $this->fakeServer('آلمان', ['last_error' => 'پنل جواب نداد.']);
+        // Switched off since its last check failed: the servers list calls it «غیرفعال», no one's to see to.
+        $this->fakeServer('هلند', ['is_active' => false, 'last_error' => 'پنل جواب نداد.']);
+        $this->fakeServer('فرانسه');
+
+        self::assertSame(1, $this->decode($this->get('/api/admin/dashboard'))['attention']['servers_with_errors']);
+    }
+
+    public function testOnlinePaymentsHeldForSupportAreCountedWhileTheyStillWait(): void
+    {
+        $customer = $this->customer();
+        $online = $this->cubePayMethod();
+        foreach ([PaymentStatus::Pending, PaymentStatus::Failed, PaymentStatus::Cancelled] as $status) {
+            $this->cardPayment($this->topUpOrder($customer, '50000.00'), $online, ['status' => $status, 'invoice' => ['held' => 'paid short']]);
+        }
+        $this->cardPayment($this->topUpOrder($customer, '50000.00'), $online);
+
+        $attention = $this->decode($this->get('/api/admin/dashboard'))['attention'];
+
+        self::assertSame(2, $attention['held_payments'], "pending, or failed with its page; one support cancelled holds nothing, one not held is the customer's to pay");
     }
 
     public function testRevenueIsMoneyThatCameInNeverWalletSpending(): void

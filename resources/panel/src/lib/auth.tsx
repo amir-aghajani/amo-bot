@@ -17,9 +17,9 @@ import { queryKeys } from '@/lib/query-keys'
 interface SessionState {
   /** Who is signed in, in the shop the panel shows; null while nobody is. */
   session: Session | null
-  /** True until the first `/auth/me` has answered. */
+  /** True while `/auth/me` is asked: until it first answers, and again after a failure (`retry`). */
   loading: boolean
-  /** Why `/auth/me` got no usable answer (the network, the server down) — not "signed out"; else null. */
+  /** Why `/auth/me` got no usable answer (the network, the server down) — not "signed out" —, kept while it is asked again; else null. */
   failure: unknown
   /** The session ended while the panel was open (a 401 mid-work): the login page says so. */
   expired: boolean
@@ -34,11 +34,12 @@ type SessionEvent =
   | { type: 'entered'; session: Session }
   | { type: 'left' }
 
-// Every event but `unreachable` is an answer of the server's, so it clears an earlier failure.
+// Every event but `asking` and `unreachable` is an answer of the server's, so it clears an earlier failure; asking again
+// keeps it on screen until the answer (its «تلاش دوباره» turning, the focus on it).
 function next(state: SessionState, event: SessionEvent): SessionState {
   switch (event.type) {
     case 'asking':
-      return { ...state, loading: true, failure: null }
+      return { ...state, loading: true }
     case 'answered':
       return { ...state, loading: false, failure: null, session: event.session }
     case 'unreachable':
@@ -175,12 +176,14 @@ export function RequireAuth() {
   const { session, loading, failure, retry, expired } = useAuth()
   const location = useLocation()
 
-  if (loading) {
-    return <AppLoading />
+  // Asked again after a failure, the failure stays until the answer: the loading screen would take the button pressed,
+  // and the focus with it.
+  if (failure !== null) {
+    return shopMissing(failure) ? <MissingShop failure={failure} /> : <ErrorState variant="screen" error={failure} onRetry={retry} retrying={loading} />
   }
 
-  if (failure !== null) {
-    return shopMissing(failure) ? <MissingShop failure={failure} /> : <ErrorState variant="screen" error={failure} onRetry={retry} />
+  if (loading) {
+    return <AppLoading />
   }
 
   if (!session) {

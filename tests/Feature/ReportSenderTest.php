@@ -18,6 +18,7 @@ use App\Modules\Telegram\Reports\Topic;
 use App\Modules\Telegram\Tasks\SendReportsTask;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Carbon;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\DatabaseTestCase;
 use Tests\Support\FakeTelegram;
 
@@ -380,8 +381,8 @@ final class ReportSenderTest extends DatabaseTestCase
         self::assertSame((string) self::RECEIPT_MESSAGE, $copy['message_id']);
         self::assertSame((string) $this->threads['receipts'], $copy['message_thread_id']);
         self::assertSame('HTML', $copy['parse_mode']);
-        self::assertStringContainsString("🧾 <b>رسید جدید</b> · پرداخت #{$payment->id}", $copy['caption']);
-        self::assertStringContainsString('<a href="tg://user?id=5151">Ali</a> · @ali · <code>5151</code>', $copy['caption']);
+        self::assertStringContainsString("🧾 <b>رسید جدید</b> · پرداخت \u{200E}#{$payment->id}", $copy['caption']);
+        self::assertStringContainsString('<a href="tg://user?id=5151">Ali</a> · ' . "\u{200E}@ali · <code>5151</code>", $copy['caption']);
         self::assertStringContainsString('📝 توضیح مشتری: از کارت پدرم', $copy['caption']);
         self::assertStringContainsString('۳۰ دقیقه', $copy['caption'], 'the window before it is accepted by itself');
         self::assertSame(ReceiptReview::buttons($payment->id), FakeTelegram::markupOf($copy)['inline_keyboard'] ?? null, 'the bot admins\' buttons under it');
@@ -392,7 +393,7 @@ final class ReportSenderTest extends DatabaseTestCase
 
         self::assertSame(['sendMessage', 'editMessageReplyMarkup', 'sendMessage'], $this->telegram()->calls(), 'the verdict — the receipt losing its buttons with it — then the charged wallet');
         $verdict = $this->telegram()->params(0);
-        self::assertSame("✅ رسید پرداخت #{$payment->id} تایید شد.", $verdict['text']);
+        self::assertSame("✅ رسید پرداخت \u{200E}#{$payment->id} تایید شد.", $verdict['text']);
         self::assertSame((string) $this->threads['receipts'], $verdict['message_thread_id']);
         self::assertSame(['message_id' => 101, 'allow_sending_without_reply' => true], json_decode($verdict['reply_parameters'], true), 'a reply to the copy');
         self::assertArrayNotHasKey('reply_markup', $verdict);
@@ -413,6 +414,49 @@ final class ReportSenderTest extends DatabaseTestCase
         self::assertStringContainsString('تصویر کپی نشد', $text['text']);
         self::assertSame((string) $this->threads['receipts'], $text['message_thread_id']);
         self::assertCount(2, FakeTelegram::markupOf($text)['inline_keyboard'][0] ?? [], 'the buttons come with the words');
+    }
+
+    /**
+     * A copy is refused for the chat it comes from as for the one it goes to: a customer who blocked the bot (or whose
+     * account is gone) costs their receipt its picture — never every report the group's «removed» and a pause.
+     */
+    #[DataProvider('customersChatRefusals')]
+    public function testAReceiptWhoseCustomersChatIsGoneGoesAsTextAndHoldsNothingBack(int $code, string $description): void
+    {
+        $this->receipt($this->cardPayment($this->topUpOrder($this->customer(), '250000'), $this->cardMethod()));
+        $this->reports()->notice(Topic::Errors, 'بعدی');
+        $this->telegram()->fail($code, $description);
+
+        self::assertSame(2, $this->sender()->flush());
+
+        self::assertSame(['copyMessage', 'sendMessage', 'sendMessage'], $this->telegram()->calls());
+        self::assertStringContainsString('تصویر کپی نشد', $this->telegram()->params(1)['text']);
+        $state = $this->service(ReportGroupState::class);
+        self::assertSame([null, null], [$state->problem(), $state->pausedUntil()], 'nothing is wrong with the group');
+    }
+
+    /** @return iterable<string, array{int, string}> */
+    public static function customersChatRefusals(): iterable
+    {
+        yield 'blocked the bot' => [403, 'Forbidden: bot was blocked by the user'];
+        yield 'account gone' => [400, 'Bad Request: chat not found'];
+    }
+
+    /** …while a group that turned the bot away refuses the words too: everything waits, the screen says why. */
+    public function testAReceiptCopyRefusedByTheGroupHoldsEveryReportBack(): void
+    {
+        $this->receipt($this->cardPayment($this->topUpOrder($this->customer(), '250000'), $this->cardMethod()));
+        $this->reports()->notice(Topic::Errors, 'بعدی');
+        $this->telegram()->fail(403, 'Forbidden: bot was kicked from the supergroup chat');
+        $this->telegram()->fail(403, 'Forbidden: bot was kicked from the supergroup chat');
+
+        self::assertSame(0, $this->sender()->flush());
+
+        self::assertSame(['copyMessage', 'sendMessage'], $this->telegram()->calls());
+        $state = $this->service(ReportGroupState::class);
+        self::assertSame(GroupProblem::Removed, $state->problem());
+        self::assertNotNull($state->pausedUntil());
+        self::assertSame(2, ReportMessage::waiting()->count(), 'nothing lost');
     }
 
     public function testAReportHeldByAnotherSenderIsNotSentTwice(): void

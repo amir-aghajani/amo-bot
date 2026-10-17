@@ -23,6 +23,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $attachment_path Its picture, uploaded: its name in the tickets' folder; null once it is no longer kept
  * @property string|null $attachment_name Its picture's name, as its sender's device gave it or one made up; null without a picture
  * @property TicketChannel $channel
+ * @property string|null $request_key The Idempotency-Key of support's answer that wrote it; null for every other message
  * @property Carbon $created_at
  */
 class TicketMessage extends Model
@@ -31,7 +32,7 @@ class TicketMessage extends Model
 
     protected $table = 'ticket_messages';
 
-    protected $fillable = ['ticket_id', 'author', 'reviewer', 'body', 'attachment_file_id', 'attachment_path', 'attachment_name', 'channel'];
+    protected $fillable = ['ticket_id', 'author', 'reviewer', 'body', 'attachment_file_id', 'attachment_path', 'attachment_name', 'channel', 'request_key'];
 
     /** @var array<string, string> */
     protected $casts = [

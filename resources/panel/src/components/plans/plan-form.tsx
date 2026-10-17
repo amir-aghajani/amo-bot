@@ -2,11 +2,12 @@ import { useId, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Coins, Package, PackagePlus, Server } from 'lucide-react'
 import { toast } from 'sonner'
-import { extraPricesAs, extraPricesDraft, extraPricesIn, extraPricesRead, extraPricesRequest, NO_EXTRA_PRICES, priceRead } from '@/components/extras/draft'
+import { extraPricesAs, extraPricesDraft, extraPricesIn, extraPricesRead, extraPricesRequest, NO_EXTRA_PRICES } from '@/components/extras/draft'
 import { Field, FieldGroup } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
 import { StylePicker } from '@/components/keyboards/style-picker'
 import { BUTTON_STYLES, styleOptions } from '@/components/keyboards/styles'
+import { MoneyField } from '@/components/money-field'
 import { NoteInput } from '@/components/note-input'
 import { PageTabs, tabPanel, type PageTab } from '@/components/page-tabs'
 import { PLAN_EXTRAS, PlanExtras, type PlanExtrasValues } from '@/components/plans/plan-extras'
@@ -20,7 +21,7 @@ import type { ButtonStyle, PlanRequest, PlanRow } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
 import { amountDraft, MONEY_UNIT, wholeOf } from '@/lib/format'
 import { planOptionsQuery } from '@/lib/queries'
-import { trimmed, useForm } from '@/lib/use-form'
+import { asAmount, trimmed, useForm } from '@/lib/use-form'
 import { cn } from '@/lib/utils'
 
 /** What a plan's term is typed in: days — a daily plan's, sent as days × 24 — or hours (an hourly plan's). */
@@ -173,9 +174,9 @@ function requestOf(values: Values): PlanRequest {
 function readOf(values: Values): unknown {
   return trimmed({
     ...requestOf(values),
-    price: priceRead(values.price),
-    first_purchase_price: priceRead(values.first_purchase_price),
-    agent_price: priceRead(values.agent_price),
+    price: asAmount(values.price),
+    first_purchase_price: asAmount(values.first_purchase_price),
+    agent_price: asAmount(values.agent_price),
     extras: values.extras === 'own' ? extraPricesRead(extraPricesIn(PLAN_EXTRAS, values)) : null,
   })
 }
@@ -318,28 +319,42 @@ export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps)
         {panel(
           'quota',
           <>
+            {/* Whole Toman, each: a phone's number pad, without the decimal point the server refuses in a price; under each,
+                what the amount typed comes to, with what the price is for. */}
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field id="plan_price" label={`قیمت (${MONEY_UNIT})`} error={error('price')} hint="قیمت عادی پلن، برای هر خرید و تمدید؛ 0 = رایگان.">
-                <Input dir="ltr" inputMode="decimal" value={values.price} onChange={(e) => set('price', e.target.value)} placeholder="120000" />
-              </Field>
-              <Field
+              <MoneyField
+                id="plan_price"
+                label={`قیمت (${MONEY_UNIT})`}
+                value={values.price}
+                onChange={(price) => set('price', price)}
+                error={error('price')}
+                placeholder="120000"
+                hint="قیمت عادی پلن، برای هر خرید و تمدید؛ 0 = رایگان."
+                zero="رایگان، برای هر خرید و تمدید."
+                says={(money) => `= ${money}؛ قیمت عادی پلن، برای هر خرید و تمدید.`}
+              />
+              <MoneyField
                 id="plan_first_purchase_price"
                 label={`قیمت خرید اول (${MONEY_UNIT})`}
                 optional
+                value={values.first_purchase_price}
+                onChange={(price) => set('first_purchase_price', price)}
                 error={error('first_purchase_price')}
                 hint="مشتری‌ای که هنوز سرویسی از فروشگاه نخریده، اولین بار این پلن را با این قیمت می‌خرد. باید کمتر از قیمت پلن باشد؛ 0 = خرید اول رایگان. تمدید همیشه با قیمت عادی است."
-              >
-                <Input dir="ltr" inputMode="decimal" value={values.first_purchase_price} onChange={(e) => set('first_purchase_price', e.target.value)} />
-              </Field>
-              <Field
+                zero="خرید اول رایگان: مشتری‌ای که هنوز سرویسی از فروشگاه نخریده، اولین بار این پلن را رایگان می‌گیرد. تمدید همیشه با قیمت عادی است."
+                says={(money) => `= ${money}؛ مشتری‌ای که هنوز سرویسی از فروشگاه نخریده، اولین بار این پلن را با این قیمت می‌خرد. باید کمتر از قیمت پلن باشد؛ تمدید همیشه با قیمت عادی است.`}
+              />
+              <MoneyField
                 id="plan_agent_price"
                 label={`قیمت نماینده (${MONEY_UNIT})`}
                 optional
+                value={values.agent_price}
+                onChange={(price) => set('agent_price', price)}
                 error={error('agent_price')}
                 hint="نماینده‌ها و مشتری‌های گروه‌های همکار این قیمت را می‌پردازند، در خرید و تمدید؛ باید کمتر از قیمت باشد. خالی یعنی ندارد."
-              >
-                <Input dir="ltr" inputMode="decimal" value={values.agent_price} onChange={(e) => set('agent_price', e.target.value)} />
-              </Field>
+                zero="رایگان برای نماینده‌ها و مشتری‌های گروه‌های همکار، در خرید و تمدید."
+                says={(money) => `= ${money}؛ نماینده‌ها و مشتری‌های گروه‌های همکار این قیمت را می‌پردازند، در خرید و تمدید؛ باید کمتر از قیمت باشد.`}
+              />
             </div>
 
             <div className="grid gap-5 sm:grid-cols-3">

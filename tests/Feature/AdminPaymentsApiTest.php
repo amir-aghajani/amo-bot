@@ -110,6 +110,56 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertSame(404, $this->get('/api/admin/payments/999999')->getStatusCode());
     }
 
+    /** Who of the shop's admins decided each, by their account's name — read once for the whole list, not once a row. */
+    public function testEachAdminsDecisionCarriesTheirNameReadOnceForTheList(): void
+    {
+        $this->admin(['telegram_id' => 7101, 'first_name' => 'Reza', 'last_name' => null]);
+        $this->admin(['telegram_id' => 7103, 'username' => 'nima', 'first_name' => 'Nima']);
+        $decided = function (string $reviewer): Payment {
+            $payment = $this->topUpAwaitingReview('50000.00');
+            $payment->forceFill(['status' => PaymentStatus::Cancelled, 'reviewer' => $reviewer])->save();
+
+            return $payment;
+        };
+        $byOwner = $decided(self::ADMIN_USERNAME);
+        // What the list reads (a request may also write down a change of its own).
+        $queries = function (): int {
+            $this->db()->flushQueryLog();
+            $this->get('/api/admin/payments');
+
+            return count(array_filter(array_column($this->db()->getQueryLog(), 'query'), static fn(string $query): bool => str_starts_with($query, 'select')));
+        };
+        $this->db()->enableQueryLog();
+        try {
+            $queries(); // whatever a first request reads once
+            $one = $queries();
+            $byReza = $decided('tg:7101');
+            $byNima = $decided('@nima');
+            $three = $queries();
+        } finally {
+            $this->db()->disableQueryLog();
+            $this->db()->flushQueryLog();
+        }
+
+        $rows = $this->decode($this->get('/api/admin/payments'))['payments'];
+        self::assertSame([$byNima->id => 'Nima', $byReza->id => 'Reza', $byOwner->id => null], array_column($rows, 'reviewer_name', 'id'), "the admins' names; none for the owner");
+        self::assertSame(['@nima', 'tg:7101', self::ADMIN_USERNAME], array_column($rows, 'reviewer'), 'each as kept, beside it');
+        self::assertSame($one + 1, $three, 'one query for the names of every row');
+        self::assertSame('Reza', $this->decode($this->get("/api/admin/payments/{$byReza->id}"))['payment']['reviewer_name'], 'one payment as the list shows it');
+    }
+
+    public function testARenewalIsShownOnItsServicesServerAsTheOrdersScreenShowsIt(): void
+    {
+        $server = $this->sellingServer();
+        $bought = $this->buy($this->ali, $this->plan(on: $server), $server);
+        $renewal = $this->renew($bought->refresh()->subscription ?? self::fail('The purchase made no service.'));
+        $topUp = $this->topUpAwaitingReview('50000.00');
+
+        $servers = array_column(array_column($this->decode($this->get('/api/admin/payments'))['payments'], 'order'), 'server', 'id');
+        self::assertSame([$topUp->order_id => null, $renewal->id => 'آلمان', $bought->id => 'آلمان'], $servers, 'a renewal names no server of its own: it is where its service is; a top-up is on none');
+        self::assertSame('آلمان', $this->decode($this->get("/api/admin/orders/{$renewal->id}"))['order']['server']['name'], 'as on the orders screen');
+    }
+
     public function testTheListNarrowsToTheShopsDaysAndSaysWhatItTookIn(): void
     {
         LocalTime::use('Asia/Tehran');
@@ -284,6 +334,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
 
         self::assertSame(200, $this->postJson("/api/admin/payments/{$payment->id}/reject", [])->getStatusCode());
         self::assertSame([self::text(BotText::ReceiptRejected, ['order' => $payment->order_id, 'note' => ''])], $this->telegram()->sentTo(1001), 'no note, no note line');
+        self::assertStringStartsWith("❌ رسید شما برای سفارش \u{200E}#{$payment->order_id} تایید نشد.", $this->telegram()->sentTo(1001)[0], 'the order\'s number marked to read left to right: bare, «سفارش #12» reads «12# سفارش»');
     }
 
     public function testAnUnpaidCardPaymentCanBeApprovedByHandRemindedOrCancelled(): void
@@ -631,6 +682,28 @@ final class AdminPaymentsApiTest extends HttpTestCase
         $again = $this->postJson("/api/admin/payments/{$payment->id}/check");
         self::assertSame([422, PaymentService::NOTE_HELD . '.'], [$again->getStatusCode(), $this->decode($again)['errors']['status'][0] ?? null], 'the same words');
         self::assertSame('0.00', $this->ali->balance(), 'nothing credited');
+    }
+
+    /**
+     * The online payments held for support and still waiting — pending, or failed with their page — are a tab of their
+     * own («نگه داشته شده»), counted whatever the tab; one support cancelled holds nothing more.
+     */
+    public function testThePaymentsHeldForSupportAndStillWaitingAreATabOfTheirOwn(): void
+    {
+        $online = $this->cubePayMethod();
+        $held = fn(PaymentStatus $status): Payment => $this->cardPayment($this->topUpOrder($this->ali, '50000.00'), $online, ['status' => $status, 'invoice' => ['held' => 'paid short']]);
+        $pending = $held(PaymentStatus::Pending);
+        $failed = $held(PaymentStatus::Failed);
+        $held(PaymentStatus::Cancelled);
+        $this->cardPayment($this->topUpOrder($this->ali, '50000.00'), $online);
+        $this->topUpAwaitingReview('50000.00');
+
+        $list = $this->decode($this->get('/api/admin/payments?status=held'));
+
+        self::assertSame([$failed->id, $pending->id], array_column($list['payments'], 'id'));
+        self::assertSame([true, true], array_column($list['payments'], 'held'));
+        self::assertSame([2, 1], [$list['meta']['held'], $list['meta']['awaiting_review']]);
+        self::assertSame(2, $this->decode($this->get('/api/admin/payments?status=paid'))['meta']['held'], 'whatever the tab');
     }
 
     public function testAPageClosedUnpaidFailsAndMayStillBeAskedAbout(): void

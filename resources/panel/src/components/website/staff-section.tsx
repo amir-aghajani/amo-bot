@@ -16,7 +16,11 @@ function draftOf({ staff }: Website): Draft {
 
 /** What each grant lets the shop's admins do on the website, in the grants' own order (the API's). */
 const GRANTS: { value: StaffGrant; label: string; hint: string }[] = [
-  { value: 'catalog', label: 'پلن‌ها و دسته‌بندی‌ها', hint: 'ساختن، ویرایش، مرتب کردن، روشن و خاموش کردن و حذف پلن‌ها و دسته‌بندی‌ها.' },
+  {
+    value: 'catalog',
+    label: 'پلن‌ها و دسته‌بندی‌ها',
+    hint: 'ساختن، ویرایش، مرتب کردن، روشن و خاموش کردن و حذف پلن‌ها و دسته‌بندی‌ها؛ و گروه‌های مشتری: ساختن، ویرایش، مرتب کردن و حذف آن‌ها و گذاشتن مشتری در گروه «همکار» (قیمت نماینده).',
+  },
   { value: 'wallet', label: 'کیف پول مشتری', hint: 'افزایش و کم کردن موجودی کیف پول مشتری.' },
   { value: 'refunds', label: 'بازپرداخت', hint: 'بازپرداخت پرداخت مشتری، همان «بازپرداخت» صفحه پرداخت‌ها.' },
   { value: 'payments', label: 'رد یکجای رسیدها', hint: 'رد کردن یکجای رسیدهای در انتظار بررسی و پاک کردن عکسشان؛ رد کردن رسیدها یکی‌یکی همیشه ممکن است.' },

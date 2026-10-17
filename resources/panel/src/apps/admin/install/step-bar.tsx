@@ -4,7 +4,10 @@ import type { InstallStatus } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-/** The steps in a row: the current one marked, the done ones ticked and open to go back to. */
+/**
+ * The steps in a row: the current one marked, the done ones ticked and open to go back to. The step picked becomes the
+ * current one under the focus that picked it: held then, not disabled, so the focus stays on it.
+ */
 export function StepBar({ current, status, onPick }: { current: Step; status: InstallStatus; onPick: (step: Step) => void }) {
   return (
     <ol className="mb-4 flex flex-wrap items-center justify-center gap-x-1 gap-y-2 text-footnote" aria-label="مراحل نصب">
@@ -16,8 +19,9 @@ export function StepBar({ current, status, onPick }: { current: Step; status: In
             {index > 0 && <span className="h-px w-4 bg-border" aria-hidden />}
             <button
               type="button"
-              disabled={!done || active}
-              onClick={() => onPick(key)}
+              disabled={!done && !active}
+              aria-disabled={active || undefined}
+              onClick={active ? undefined : () => onPick(key)}
               aria-current={active ? 'step' : undefined}
               className={cn(
                 'flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors duration-150 outline-none focus-visible:focus-ring',

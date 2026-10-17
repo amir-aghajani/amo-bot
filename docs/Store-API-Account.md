@@ -1,3 +1,5 @@
+[فارسی](fa/Store-API-Account.md)
+
 # Store API: the account
 
 The signed-in customer's own account: who they are, how they sign in, their devices — and two accounts of theirs made
@@ -49,13 +51,14 @@ token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
 | `loyalty` | their loyalty tier — `tier` (its name, the discount it gives at their checkouts and the extra cashback it adds) or `null` below the first —, what they `spent` (purchases, renewals and extras paid and not given back, Toman), and the `next` tier with what is still `missing` to reach it, `null` at the top; a shop with no tier has both `null` ([loyalty tiers](Loyalty-Cashback-And-Draws.md#loyalty-tiers)) |
 
 `PATCH /me` answers as `GET /me` does. `PUT /me/password`, `POST /me/2fa/disable`, a way in added or removed (the `200`s
-of `/me/identities/*`) and `POST /me/merge` answer `{ "customer": … }` — the same object, without the count. The rest
-answer what they make: a secret to set up, recovery codes, how long a code or a proof lasts, a merge offer.
+of `/me/identities/*`) and `POST /me/merge` answer `{ "customer": … }` alone — the same `customer` object, without
+the count, `staff` or `loyalty`. The rest answer what they make: a secret to set up, recovery codes, how long a code
+or a proof lasts, a merge offer.
 
 ## A recent sign-in
 
-What changes how the account is signed in to, and handing a service away, ask more of a session than its token, so a
-token that leaked takes no account over and gives no service away:
+What changes how the account is signed in to, and what gives a service or money to another customer, ask more of a
+session than its token, so a token that leaked takes no account over and gives nothing away:
 
 | Asks a recent sign-in | See |
 |---|---|
@@ -64,6 +67,7 @@ token that leaked takes no account over and gives no service away:
 | `POST /me/identities/telegram`, `…/google`, `…/email`, `…/email/verify`, and `DELETE /me/identities/{kind}` | [ways in](#ways-in-adding-and-removing) |
 | `POST /me/merge` | [the merge offer](#the-merge-offer) |
 | `POST /subscriptions/{id}/transfer`, which gives a service away | [handing a service to another customer](Store-API-After-Buying.md#handing-a-service-to-another-customer) |
+| `POST /wallet/transfer`, which sends money away | [sending money to another customer](Store-API-After-Buying.md#sending-money-to-another-customer) |
 
 The session's sign-in must be at most 15 minutes old, or a way into the account proven again on it since. Otherwise the
 answer is `403` with `WWW-Authenticate: Bearer error="insufficient_user_authentication", max_age=900` (RFC 9470), given
@@ -93,14 +97,22 @@ Offer the ways the account has:
 { "expires_in": 900 }
 ```
 
-Refusals are `422` under a field: a wrong password (`رمز عبور درست نیست.`) or code, or the code missing while two-factor
-sign-in is on (`کد برنامه احراز هویت یا یکی از کدهای بازیابی را وارد کنید.`); an account without a password, on
-`password` (`این حساب با رمز عبور وارد نمی‌شود؛ با روش ورود دیگری تایید کنید.`); a Telegram or Google proof that does
-not hold (on `id_token`, or the redirect's `code`), or that proves another account (`این ورود مال حساب دیگری است؛ با یکی
-از روش‌های ورود همین حساب تایید کنید.`); a `method` none of the three, on `method`. A way the website switched off since
-`GET /` was read is a `422` with no field (`ورود با تلگرام برای این وب‌سایت فعال نیست.`, `ورود با Google برای این وب‌سایت
-فعال نیست.`). Each failed proof counts as a failed sign-in — a code against the second step's budget too —, so `429`
-past the limits of [limits and lifetimes](Store-API-Sign-In.md#limits-and-lifetimes); `502` the provider out of reach.
+The refusals:
+
+- `422` under a field:
+  - the password left blank (`رمز عبور حساب را وارد کنید.`) or wrong (`رمز عبور درست نیست.`), a wrong code, or the
+    code missing while two-factor sign-in is on (`کد برنامه احراز هویت یا یکی از کدهای بازیابی را وارد کنید.`);
+  - an account without a password, on `password` (`این حساب با رمز عبور وارد نمی‌شود؛ با روش ورود دیگری تایید
+    کنید.`);
+  - a Telegram or Google proof that does not hold (on `id_token`, or the redirect's `code`), or that proves another
+    account (`این ورود مال حساب دیگری است؛ با یکی از روش‌های ورود همین حساب تایید کنید.`);
+  - a `method` none of the three, on `method`.
+- `422` with no field: a way the website switched off since `GET /` was read (`ورود با تلگرام برای این وب‌سایت فعال
+  نیست.`, `ورود با Google برای این وب‌سایت فعال نیست.`).
+- `429`: each failed proof counts as a failed sign-in — a code against the second step's budget too — under the
+  [limits and lifetimes](Store-API-Sign-In.md#limits-and-lifetimes).
+- `502`: the provider out of reach.
+
 Adding a way in ([ways in](#ways-in-adding-and-removing)) proves only the way being added: it does not renew the 15
 minutes.
 

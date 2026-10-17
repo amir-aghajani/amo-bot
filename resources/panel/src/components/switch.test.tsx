@@ -30,4 +30,10 @@ describe('a switch', () => {
     expect(toggle).toHaveProperty('disabled', false)
     expect(document.activeElement).toBe(toggle)
   })
+
+  it('presses as a finger’s 44px on a phone, drawn as its 36×20', () => {
+    render(<Switch checked={false} onCheckedChange={() => undefined} aria-label="قابل خرید بودن پلن" />)
+
+    expect(screen.getByRole('switch', { name: 'قابل خرید بودن پلن' }).className.split(' ')).toEqual(expect.arrayContaining(['h-5', 'w-9', 'touch-target']))
+  })
 })

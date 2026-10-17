@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { CheckCircle2, ChevronLeft, Clock, CreditCard, MessageSquare, ServerCrash, Star, TimerOff, XCircle, type LucideIcon } from 'lucide-react'
+import { useId, type ReactNode } from 'react'
+import { CheckCircle2, ChevronLeft, CirclePause, Clock, CreditCard, MessageSquare, ServerCrash, Star, TimerOff, XCircle, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { standingConcern } from '@/components/agency/agency-standing'
 import { TrafficShortageNotice } from '@/components/agency/traffic-shortage'
@@ -11,18 +11,32 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { AgencyStanding, DashboardResponse, TrafficShortage } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
 import { formatNumber } from '@/lib/format'
-import { ORDER_STATUS, ORDER_STUCK, PAYMENT_STATUS, REVIEW_STATUS, TICKET_STATUS, type Tone } from '@/lib/statuses'
+import { ORDER_STATUS, ORDER_STUCK, PAYMENT_HELD, PAYMENT_STATUS, REVIEW_STATUS, TICKET_STATUS, type Tone } from '@/lib/statuses'
 import { cn } from '@/lib/utils'
 
 type Attention = DashboardResponse['attention']
 
-/** Each queue in its list's words (the vocabularies of lib/statuses), linking to the list as the queue's tab shows it — the services ending soonest first. */
-const ITEMS: { key: keyof Attention; label: string; icon: LucideIcon; to: string; tone: Tone }[] = [
+/** A count in its list's words (the vocabularies of lib/statuses), linking to the list as the count's tab shows it. */
+interface Item {
+  key: keyof Attention
+  label: string
+  icon: LucideIcon
+  to: string
+  tone: Tone
+}
+
+/** What waits on support — the card's «… مورد منتظر اقدام شماست» counts these alone. */
+const QUEUES: Item[] = [
   { key: 'payments_to_review', label: `پرداخت‌های ${PAYMENT_STATUS.awaiting_review.label}`, icon: CreditCard, to: '/payments?status=awaiting_review', tone: PAYMENT_STATUS.awaiting_review.tone },
+  { key: 'held_payments', label: `پرداخت‌های ${PAYMENT_HELD.label}`, icon: CirclePause, to: '/payments?status=held', tone: PAYMENT_HELD.tone },
   { key: 'stuck_orders', label: `سفارش‌های ${ORDER_STUCK.label}`, icon: XCircle, to: '/orders?status=stuck', tone: ORDER_STUCK.tone },
   { key: 'open_tickets', label: `تیکت‌های ${TICKET_STATUS.open.label}`, icon: MessageSquare, to: '/tickets?status=open', tone: TICKET_STATUS.open.tone },
   { key: 'pending_reviews', label: `نظرات ${REVIEW_STATUS.pending.label}`, icon: Star, to: '/reviews?status=pending', tone: REVIEW_STATUS.pending.tone },
   { key: 'servers_with_errors', label: 'سرورهای دارای خطا', icon: ServerCrash, to: '/servers', tone: 'danger' },
+]
+
+/** What waits on customers, shown apart and never counted as waiting on support — the services ending soonest first. */
+const CUSTOMERS: Item[] = [
   { key: 'expiring_soon', label: 'اشتراک‌های رو به انقضا', icon: TimerOff, to: '/subscriptions?status=expiring&sort=expires&dir=asc', tone: 'neutral' },
   { key: 'pending_orders', label: `سفارش‌های ${ORDER_STATUS.pending.label}`, icon: Clock, to: '/orders?status=pending', tone: 'neutral' },
 ]
@@ -47,25 +61,31 @@ interface AttentionCardProps {
 }
 
 /**
- * The queues that need a human, each linking to its filtered list, with an agent's terms of selling (a suspension, an end
- * or a short month near) and traffic shortage above them. Counts that could not be read show «—»: "all clear" is only
- * said of counts that arrived.
+ * The queues that wait on support, each linking to its filtered list, with an agent's terms of selling (a suspension, an
+ * end or a short month near) and traffic shortage above them — what «… مورد منتظر اقدام شماست» counts —, and under them,
+ * apart and uncounted, what waits on customers (services ending soon, unpaid orders). Counts that could not be read show
+ * «—»: "all clear" is only said of counts that arrived.
  */
 export function AttentionCard({ attention, trafficShortage, trafficHelp, agencyStanding, standingNotice, expiringDays, loading }: AttentionCardProps) {
   const mainShop = useMainShop()
-  const items = ITEMS.filter((item) => (attention?.[item.key] ?? 0) > 0)
-  const labelOf = (item: (typeof ITEMS)[number]) => (item.key === 'expiring_soon' && expiringDays !== undefined ? `${item.label} (${formatNumber(expiringDays)} روز)` : item.label)
+  const customersHeading = useId()
+  const waiting = (items: Item[]) => items.filter((item) => (attention?.[item.key] ?? 0) > 0)
+  const queues = waiting(QUEUES)
+  const customers = waiting(CUSTOMERS)
+  const labelOf = (item: Item) => (item.key === 'expiring_soon' && expiringDays !== undefined ? `${item.label} (${formatNumber(expiringDays)} روز)` : item.label)
   // The terms needing an eye, in the panel's words: one more thing waiting.
   const selling = agencyStanding && standingNotice && standingConcern(agencyStanding) !== null ? standingNotice(agencyStanding) : null
-  const total = items.reduce((sum, item) => sum + (attention?.[item.key] ?? 0), (trafficShortage ? 1 : 0) + (selling ? 1 : 0))
+  const total = queues.reduce((sum, item) => sum + (attention?.[item.key] ?? 0), (trafficShortage ? 1 : 0) + (selling ? 1 : 0))
   const unknown = !loading && attention === undefined
+  const row = (item: Item) => <CountRow key={item.key} item={item} label={labelOf(item)} count={attention?.[item.key] ?? 0} />
 
   return (
     <Card>
       <CardHeader>
         <CardHeading>
           <CardTitle>نیازمند توجه</CardTitle>
-          <CardDescription>{loading ? 'در حال بررسی…' : unknown ? <Dash /> : total === 0 ? 'موردی برای پیگیری وجود ندارد.' : `${formatNumber(total)} مورد منتظر اقدام شماست`}</CardDescription>
+          {/* Nothing waiting is the empty state's to say, under the header: said once. */}
+          {(loading || unknown || total > 0) && <CardDescription>{loading ? 'در حال بررسی…' : unknown ? <Dash /> : `${formatNumber(total)} مورد منتظر اقدام شماست`}</CardDescription>}
         </CardHeading>
       </CardHeader>
       <div className="px-2 pb-2">
@@ -75,36 +95,56 @@ export function AttentionCard({ attention, trafficShortage, trafficHelp, agencyS
               <Skeleton key={i} className="h-9 w-full" />
             ))}
           </div>
-        ) : unknown ? null : total === 0 ? (
-          <EmptyState
-            compact
-            icon={CheckCircle2}
-            title="همه‌چیز مرتب است"
-            description={mainShop ? 'پرداخت‌ها، سفارش‌ها، تیکت‌ها، نظرات و سرورها در وضعیت عادی هستند.' : 'پرداخت‌ها، سفارش‌ها، تیکت‌ها و نظرات در وضعیت عادی هستند.'}
-          />
-        ) : (
-          <ul className="grid gap-px">
-            {selling && <li className="pb-2">{selling}</li>}
-            {trafficShortage && (
-              <li className="pb-2">
-                <TrafficShortageNotice shortage={trafficShortage} help={trafficHelp} />
-              </li>
+        ) : unknown ? null : (
+          <>
+            {total === 0 ? (
+              <EmptyState
+                compact
+                icon={CheckCircle2}
+                title="همه‌چیز مرتب است"
+                description={mainShop ? 'پرداخت‌ها، سفارش‌ها، تیکت‌ها، نظرات و سرورها در وضعیت عادی هستند.' : 'پرداخت‌ها، سفارش‌ها، تیکت‌ها و نظرات در وضعیت عادی هستند.'}
+              />
+            ) : (
+              <ul className="grid gap-px">
+                {selling && <li className="pb-2">{selling}</li>}
+                {trafficShortage && (
+                  <li className="pb-2">
+                    <TrafficShortageNotice shortage={trafficShortage} help={trafficHelp} />
+                  </li>
+                )}
+                {queues.map(row)}
+              </ul>
             )}
-            {items.map((item) => (
-              <li key={item.key}>
-                <Link to={item.to} className="group flex h-10 items-center gap-3 rounded-lg px-2.5 text-body transition-colors duration-100 outline-none hover:bg-fill focus-visible:focus-ring">
-                  <item.icon className={cn('size-4 shrink-0', ICON_TONE[item.tone])} strokeWidth={1.75} aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{labelOf(item)}</span>
-                  <Badge variant={item.tone} className="min-w-6 tabular">
-                    {formatNumber(attention?.[item.key] ?? 0)}
-                  </Badge>
-                  <ChevronLeft className="size-4 text-faint transition-colors group-hover:text-foreground ltr:rotate-180" aria-hidden />
-                </Link>
-              </li>
-            ))}
-          </ul>
+            {customers.length > 0 && (
+              <div className="mt-2 border-t border-border pt-2">
+                <p id={customersHeading} className="px-2.5 pb-1 text-caption text-faint">
+                  در انتظار مشتری
+                </p>
+                <ul aria-labelledby={customersHeading} className="grid gap-px">
+                  {customers.map(row)}
+                </ul>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Card>
+  )
+}
+
+/** One count's row: its icon, its words and its number, leading to its list. */
+function CountRow({ item, label, count }: { item: Item; label: string; count: number }) {
+  return (
+    <li>
+      {/* A finger's 44px on a phone. */}
+      <Link to={item.to} className="group flex h-10 items-center gap-3 rounded-lg px-2.5 text-body transition-colors duration-100 outline-none hover:bg-fill focus-visible:focus-ring max-md:h-11">
+        <item.icon className={cn('size-4 shrink-0', ICON_TONE[item.tone])} strokeWidth={1.75} aria-hidden />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <Badge variant={item.tone} className="min-w-6 tabular">
+          {formatNumber(count)}
+        </Badge>
+        <ChevronLeft className="size-4 text-faint transition-colors group-hover:text-foreground ltr:rotate-180" aria-hidden />
+      </Link>
+    </li>
   )
 }

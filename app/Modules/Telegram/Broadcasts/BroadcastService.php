@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Broadcasts;
 
+use App\Core\Config\Repository as Config;
 use App\Core\Database\Lease;
 use App\Core\Database\Transitions;
 use App\Core\Exceptions\ValidationException;
@@ -39,8 +40,8 @@ final class BroadcastService
 
     private const CHUNK = 100;
 
-    /** How long a worker holds a run without moving on — longer than one customer can take. */
-    private const LEASE_SECONDS = 60;
+    /** The most Telegram calls one customer takes: the message, and its pin. */
+    private const CALLS_A_CUSTOMER = 2;
 
     /** How often a worker redraws the admin's progress message. */
     private const PROGRESS_SECONDS = 4;
@@ -57,6 +58,7 @@ final class BroadcastService
         private readonly BotApi $api,
         private readonly CustomerChats $chats,
         private readonly Pacer $pacer,
+        private readonly Config $config,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -126,9 +128,19 @@ final class BroadcastService
         if (!$broadcast->isOpen()) {
             return true;
         }
-        $lease = Lease::take($broadcast, self::LEASE_SECONDS, static fn(Builder $query) => $query->where('status', BroadcastStatus::Sending->value));
+        // Held longer than one customer can take (each claimed customer holds it so much longer), so nobody takes it over mid-send.
+        $seconds = self::CALLS_A_CUSTOMER * BotApi::longestCall((float) $this->config->get('app.http_timeout', 30));
+        $lease = Lease::take($broadcast, $seconds, static fn(Builder $query) => $query->where('status', BroadcastStatus::Sending->value));
         if ($lease === null) {
             return false;
+        }
+        if (!$broadcast->isUnpin() && $broadcast->adminChat() === null) {
+            // Its admin's account is gone, or has no Telegram any more: the message has no chat to be copied from, now or
+            // ever — the run ends rather than stay «در حال ارسال» for good.
+            $lease->finish(['status' => BroadcastStatus::Cancelled, 'finished_at' => now()]);
+            $this->logger->warning('Broadcast {id} was cancelled: its admin has no Telegram chat to send its message from any more', ['id' => $broadcast->id]);
+
+            return true;
         }
 
         $late = static fn(): bool => $deadline !== null && microtime(true) >= $deadline;

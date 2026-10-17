@@ -132,9 +132,15 @@ describe('a driver’s form', () => {
     const password = screen.getByLabelText(/^رمز عبور/) as HTMLInputElement
     expect([password.value, password.placeholder]).toEqual(['', '••••••••'])
     expect(screen.getByText('رمز همان حساب.')).toBeTruthy()
+    expect(document.querySelector('label[for="t_password"]')?.textContent).toBe('رمز عبور(اختیاری)')
 
     type('سرور', 'smtp.elsewhere.example')
     expect(screen.getByText(MOVED)).toBeTruthy()
+    // Asked as if none were kept: no hint of the stored one, nothing said of keeping it, no «اختیاری»; clearing still offered.
+    expect(password.placeholder).toBe('')
+    expect(screen.queryByText('خالی بماند، همان مقدار ذخیره‌شده می‌ماند.')).toBeNull()
+    expect(document.querySelector('label[for="t_password"]')?.textContent).toBe('رمز عبور')
+    expect(screen.getByRole('button', { name: 'پاک کردن مقدار ذخیره‌شده' })).toBeTruthy()
 
     type(/^رمز عبور/, 'a new one')
     expect(screen.queryByText(MOVED)).toBeNull()

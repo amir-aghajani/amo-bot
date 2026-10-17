@@ -29,7 +29,7 @@ export function TestServersList({ serverPage }: { serverPage?: (id: number) => s
   // Read while hidden too: the page reads it for its notices in every section anyway.
   const read = useQuery(testServersQuery)
   const servers = read.data ?? []
-  const list = { rows: servers, isPending: read.isPending, error: read.error, refetch: () => void read.refetch() }
+  const list = { rows: servers, isPending: read.isPending, isFetching: read.isFetching, error: read.error, refetch: () => void read.refetch() }
 
   return (
     <ListView list={list} noun="سرورها" empty={<EmptyState framed icon={ServerIcon} title="هنوز سروری نیست" description="اکانت تست روی سرورهای فروشگاه ساخته می‌شود؛ اول سروری اضافه شود." />}>

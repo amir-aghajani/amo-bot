@@ -8,6 +8,7 @@ use App\Core\Forms\FieldSpec;
 use App\Core\Forms\FieldType;
 use App\Core\Http\Origin;
 use App\Support\Input;
+use App\Support\Persian;
 use App\Support\Validation;
 
 /**
@@ -52,7 +53,8 @@ final class Url extends Field
 
     public function read(array $input, mixed $kept): string
     {
-        $url = rtrim(Input::text($input, $this->name), '/');
+        // A port typed on a Persian keyboard («:۲۰۵۳») is the port.
+        $url = rtrim(Persian::latinDigits(Input::text($input, $this->name)), '/');
         $problem = match (true) {
             $url === '' => $this->required ? "{$this->label} را وارد کنید." : null,
             $this->max !== null && mb_strlen($url) > $this->max => Validation::tooLong($this->label, $this->max),

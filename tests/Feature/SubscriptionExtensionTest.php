@@ -9,6 +9,7 @@ use App\Modules\Agency\Enums\TrafficTransactionType;
 use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Models\TrafficTransaction;
 use App\Modules\Agency\Services\TrafficPool;
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Models\Plan;
@@ -17,13 +18,16 @@ use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Exceptions\PanelApiException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
+use App\Modules\Store\Models\Website;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
+use App\Support\LocalTime;
 use App\Support\Traffic;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
@@ -83,6 +87,19 @@ final class SubscriptionExtensionTest extends HttpTestCase
         ])], $this->telegram()->sentTo(1001), 'what it got, why, and where it stands now: the message a grant sends');
         self::assertTrue($logs->hasInfoThatContains('extended by ' . self::ADMIN_USERNAME), 'the log says who gave it');
         self::assertSame(0, TrafficTransaction::query()->count(), "the main bot's shop draws on nobody's traffic");
+    }
+
+    public function testDaysThatWouldEndTheServicePastTheLastDayTheShopKeepsAreRefusedUnderTheirField(): void
+    {
+        // Its deadline 5 days before the TIMESTAMP columns' last moment (MySQL refuses a later one).
+        Carbon::setTestNow(LocalTime::last()->subDays(10));
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['expires_at' => now()->addDays(5)]));
+
+        self::assertSame(['days' => [TermTooLongException::message()]], $this->errors($subscription, ['days' => '6', 'traffic_gb' => '10']));
+        self::assertSame([], FakeProvider::$updated, 'no panel changed');
+
+        self::assertSame(200, $this->extend($subscription, ['days' => '5'])->getStatusCode(), 'to the last day itself');
+        self::assertEquals(LocalTime::last(), $subscription->refresh()->expires_at);
     }
 
     public function testAServiceWaitingForItsFirstConnectionGetsALongerTerm(): void
@@ -269,6 +286,26 @@ final class SubscriptionExtensionTest extends HttpTestCase
         self::assertSame(40 * 24, $subscription->refresh()->duration_hours);
         self::assertSame(Traffic::bytesOfGb(15), $bot->trafficBalance(), 'days cost the agent nothing');
         self::assertCount(2, $this->lines($bot), 'and write no line');
+    }
+
+    public function testAnExtensionByTheAgentsWebsiteAdminIsListedUnderTheirNameInTheirShopOnBothPanels(): void
+    {
+        $bot = $this->agentBot(traffic: 20);
+        $subscription = $this->agentsService($bot);
+        $website = CurrentBot::run($bot, fn(): Website => $this->website(['staff_grants' => [StaffGrant::Extend->value]]));
+        $nima = CurrentBot::run($bot, fn(): User => $this->customer(['telegram_id' => 7272, 'username' => 'nima', 'first_name' => 'Nima']));
+        // The main shop's admin of the same handle is someone else: the agent's shop is where the name is read.
+        $this->admin(['telegram_id' => 7373, 'username' => 'nima', 'first_name' => 'Other']);
+        $this->loginAsStaff($website, $nima);
+
+        $extended = $this->send('POST', $this->storeApi($website, "/admin/subscriptions/{$subscription->id}/extend"), ['traffic_gb' => 5]);
+        self::assertSame(200, $extended->getStatusCode(), (string) $extended->getBody());
+
+        $line = static fn(array $lines): array => [$lines['lines'][0]['type'], $lines['lines'][0]['reviewer'], $lines['lines'][0]['reviewer_name']];
+        self::assertSame(['extension', '@nima', 'Nima'], $line($this->decode($this->get("/api/admin/agency/agents/{$bot->user_id}/traffic"))), "the owner reads it from the main shop's agency page");
+        $_SESSION = [];
+        $this->loginAsAgent($bot);
+        self::assertSame(['extension', '@nima', 'Nima'], $line($this->decode($this->get('/api/agent/account/traffic'))), 'the agent on their own ledger');
     }
 
     public function testTheOwnerExtendingInAnAgentsShopDrawsOnTheAgentsTrafficToo(): void

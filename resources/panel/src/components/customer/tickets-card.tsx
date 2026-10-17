@@ -2,7 +2,7 @@ import { Headset } from 'lucide-react'
 import { customerList } from '@/components/customer-filter'
 import { LatestCard, useLatestRows } from '@/components/customer/latest-rows'
 import { EmptyState } from '@/components/empty-state'
-import { ListView } from '@/components/list-view'
+import { ListView, PhoneFacts } from '@/components/list-view'
 import { StatusBadge } from '@/components/status-badge'
 import { TicketSubject } from '@/components/tickets/ticket-cells'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -29,7 +29,7 @@ export function TicketsCard({ customer }: { customer: UserRow }) {
             <TableRow>
               <TableHead>موضوع</TableHead>
               <TableHead className="hidden md:table-cell">شماره</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <TableHead className="hidden sm:table-cell">آخرین فعالیت</TableHead>
             </TableRow>
           </TableHeader>
@@ -38,11 +38,14 @@ export function TicketsCard({ customer }: { customer: UserRow }) {
               <TableRow key={ticket.id}>
                 <TableCell>
                   <TicketSubject ticket={ticket} />
+                  <PhoneFacts>
+                    <StatusBadge status={TICKET_STATUS[ticket.status]} />
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground tabular md:table-cell">
                   <span dir="ltr">#{ticket.id}</span>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <StatusBadge status={TICKET_STATUS[ticket.status]} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">{timeAgo(ticket.last_message_at)}</TableCell>

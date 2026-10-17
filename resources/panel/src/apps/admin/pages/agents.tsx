@@ -9,6 +9,7 @@ import { agencySettingsQuery, agencySummaryQuery } from '@/components/agency/que
 import { MenuButtonNotice } from '@/components/bot/menu-button-notice'
 import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { ProgramOff } from '@/components/program-off'
 import { SectionedPage } from '@/components/sectioned-page'
 import { StatCard, StatGrid } from '@/components/stat-card'
@@ -56,8 +57,10 @@ export function AgentsPage() {
   // The program's menu button is the main bot's: its notice reads the keyboards of the shop the panel shows.
   const mainShop = useMainShop()
   const pending = summary?.pending ?? 0
-  // Either read failing leaves the program's state unknown: one word for both, one retry.
-  const failure = summaryRead.error ?? rulesRead.error
+  // Either read failing leaves the program's state unknown: one word for both, one retry — said while it asks again.
+  const summaryFailure = useReadFailure(summaryRead)
+  const rulesFailure = useReadFailure(rulesRead)
+  const failure = summaryFailure.error ?? rulesFailure.error
 
   return (
     <SectionedPage
@@ -97,9 +100,10 @@ export function AgentsPage() {
                 what="وضعیت نمایندگی"
                 error={failure}
                 onRetry={() => {
-                  if (summaryRead.error) void summaryRead.refetch()
-                  if (rulesRead.error) void rulesRead.refetch()
+                  if (summaryFailure.error) void summaryRead.refetch()
+                  if (rulesFailure.error) void rulesRead.refetch()
                 }}
+                retrying={summaryFailure.retrying || rulesFailure.retrying}
               />
             )}
             <Numbers summary={summary} rules={rules} loading={summaryRead.isPending} />

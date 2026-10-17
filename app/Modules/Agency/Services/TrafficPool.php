@@ -7,17 +7,20 @@ namespace App\Modules\Agency\Services;
 use App\Core\Database\Ledger;
 use App\Core\Database\Page;
 use App\Core\Database\PageRequest;
+use App\Core\Exceptions\KeyReusedException;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Agency\Enums\TrafficTransactionType;
 use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Models\TrafficTransaction;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Services\Reviewers;
+use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Messages;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * An agent's prepaid traffic: the one writer of `traffic_transactions` (through Core\Database\Ledger), whose last line
@@ -79,19 +82,27 @@ final class TrafficPool
     }
 
     /**
-     * Adds (or, negative, removes) `$bytes` with the reason the agent reads, under the actor's name.
+     * Adds (or, negative, removes) `$bytes` with the reason the agent reads, under the actor's name — and under the
+     * request's Idempotency-Key `$key` when it sent one: the same adjustment asked again is answered by the line it wrote
+     * (`wasRecentlyCreated` false), never made twice.
      *
      * @throws ValidationException 422 on `gb` when it would take the pool below zero
+     * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another line
      */
-    public function adjust(Bot $bot, Actor $actor, int $bytes, ?string $description): void
+    public function adjust(Bot $bot, Actor $actor, int $bytes, ?string $description, ?string $key = null): TrafficTransaction
     {
-        $this->write($bot, static function (int $balance) use ($bytes, $description): array {
+        $description = mb_substr($description ?? self::LINE_ADJUSTED, 0, 255);
+        $line = $this->write($bot, static function (int $balance) use ($bytes, $description): array {
             if ($balance + $bytes < 0) {
                 throw ValidationException::on('gb', 'حجم باقی‌مانده نماینده از این کمتر است.');
             }
 
-            return [TrafficTransactionType::Adjust, $bytes, null, $description ?? self::LINE_ADJUSTED];
-        }, $actor->reviewer);
+            return [TrafficTransactionType::Adjust, $bytes, null, $description];
+        }, $actor->reviewer, $key) ?? throw new \LogicException('An adjustment writes its line.');
+
+        $same = $line->wasRecentlyCreated || ($line->type === TrafficTransactionType::Adjust && $line->bytes === $bytes && $line->description === $description);
+
+        return $same ? $line : throw new KeyReusedException();
     }
 
     /**
@@ -180,7 +191,22 @@ final class TrafficPool
     /** The pool's lines, newest first, each reviewer as its reader may see it (Reviewers). */
     public function ledger(Bot $bot, PageRequest $list): Page
     {
-        return Page::fetch(TrafficTransaction::query()->where('bot_id', $bot->id)->orderByDesc('id'), $list, fn(TrafficTransaction $line): array => [
+        return Page::fetchTogether(TrafficTransaction::query()->where('bot_id', $bot->id)->orderByDesc('id'), $list, fn(Collection $lines): array => $this->presentLines($bot, $lines));
+    }
+
+    /**
+     * A page of the bot's lines, with the name of the admin who wrote each by hand (Reviewers::names()) read once for them
+     * all in the bot's own shop, whoever reads it: an admin of its website gives its services more from the pool — the
+     * owner's login and the agent's bot have no name —, and the owner reads it from the main shop's agency page.
+     *
+     * @param Collection<int, TrafficTransaction> $lines
+     * @return list<array<string, mixed>>
+     */
+    private function presentLines(Bot $bot, Collection $lines): array
+    {
+        $names = CurrentBot::run($bot, fn(): array => $this->reviewers->names($lines->pluck('reviewer')));
+
+        return array_values($lines->map(fn(TrafficTransaction $line): array => [
             'id' => $line->id,
             'type' => $line->type->value,
             'bytes' => $line->bytes,
@@ -188,8 +214,9 @@ final class TrafficPool
             'description' => $line->description,
             'order_id' => $line->order_id,
             'reviewer' => $this->reviewers->present($line->reviewer),
+            'reviewer_name' => $names[$line->reviewer ?? ''] ?? null,
             'created_at' => $line->created_at?->toIso8601String(),
-        ]);
+        ])->all());
     }
 
     /** The sum of an order's delivery lines: below zero while its traffic is out of the pool. */
@@ -203,13 +230,18 @@ final class TrafficPool
 
     /**
      * Appends the bot's next line, which `$line` builds from the current balance ([type, bytes, order, description], or
-     * null for none), under the ledger's lock.
+     * null for none), under the ledger's lock — kept with the request's `$key`, whose line written before is the answer
+     * instead, read under the same lock (the same request again, or two at once), with nothing written.
      *
      * @param \Closure(int): (array{TrafficTransactionType, int, Order|null, string|null}|null) $line
      */
-    private function write(Bot $bot, \Closure $line, ?string $reviewer = null): ?TrafficTransaction
+    private function write(Bot $bot, \Closure $line, ?string $reviewer = null, ?string $key = null): ?TrafficTransaction
     {
-        return $this->ledger->append($bot, 'traffic_transactions', 'bot_id', static function (string $last) use ($bot, $line, $reviewer): ?TrafficTransaction {
+        return $this->ledger->append($bot, 'traffic_transactions', 'bot_id', static function (string $last) use ($bot, $line, $reviewer, $key): ?TrafficTransaction {
+            $earlier = $key === null ? null : TrafficTransaction::query()->where('bot_id', $bot->id)->where('request_key', $key)->lockForUpdate()->first();
+            if ($earlier !== null) {
+                return $earlier;
+            }
             $balance = (int) $last;
             $move = $line($balance);
             if ($move === null) {
@@ -225,6 +257,7 @@ final class TrafficPool
                 'description' => $description !== null ? mb_substr($description, 0, 255) : null,
                 'order_id' => $order?->id,
                 'reviewer' => $reviewer,
+                'request_key' => $key,
             ]);
         });
     }

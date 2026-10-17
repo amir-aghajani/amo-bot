@@ -1,7 +1,7 @@
 # The documentation, docs/, published to the project's GitHub wiki on every push to main that changes it (or by hand):
 # the wiki's own repository checked out, `php scripts/docs.php --wiki` writes the tree into it (its links between pages
-# written without `.md`, a page the tree no longer has taken out), and the result is committed and pushed with the
-# workflow's own token.
+# written without `.md`, a language's pages in its own folder as fa-Page-Name, a page the tree no longer has taken out),
+# and the result is committed and pushed with the workflow's own token.
 #
 # GitHub makes a wiki's repository only once its first page exists: switch the wiki on (Settings › Features › Wikis) and
 # create one page by hand — the export replaces it (docs/Contributing.md, "Documentation"). Until then a run says so in a

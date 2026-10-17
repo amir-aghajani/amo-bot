@@ -16,7 +16,8 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * A write that failed with no answer of the panel's may have been done all the same — what a move asks the panel about
- * and a grant never gives again: only once the request was on its way and nothing the panel said came back.
+ * and a grant never gives again: once the request was on its way and nothing the panel said came back, or whenever the
+ * read after a write the panel took failed.
  */
 final class ProviderExceptionTest extends TestCase
 {
@@ -36,6 +37,9 @@ final class ProviderExceptionTest extends TestCase
         yield "the panel's own refusal, a 500 too" => [new PanelApiException('The panel refused it.', 500, 'internal error'), false];
         yield 'its credentials refused' => [AuthenticationException::rejectedToken(401), false];
         yield 'no such client' => [new NotFoundException('The panel has no such client.'), false];
+        yield 'no connection for the read after a write' => [(new ConnectionException(ConnectionFailure::Refused, 'Connection refused'))->afterWrite(), true];
+        yield "the panel's refusal of the read after a write" => [(new PanelApiException('The panel refused it.', 200, 'database is locked'))->afterWrite(), true];
+        yield 'an unknown route for the read after a write' => [(new UnexpectedResponseException(404))->afterWrite(), true];
     }
 
     #[DataProvider('failures')]

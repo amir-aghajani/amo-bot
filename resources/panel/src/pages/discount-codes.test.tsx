@@ -10,7 +10,7 @@ import { json, noContent, refusal, server, type Answer } from '@/test/server'
 /*
  * The discount codes (pages/discount-codes): every code — the code, what it takes off and what it holds for, its uses of
  * its cap, how it stands and its switch —; a code made with every field the form has, its window on the shop's clock; a
- * code nobody used deleted, one with uses only switched off; the form's plans and servers while they are read, or could
+ * code nobody used deleted, one with uses only switched off, one used only in refunded orders refused in the dialog; the form's plans and servers while they are read, or could
  * not be; and how long an unpaid order made with a code holds its use (a group of the bot settings).
  */
 
@@ -165,7 +165,7 @@ describe('a code', () => {
   })
 
   it('nobody used is deleted once asked', async () => {
-    open('/discounts', codes([discountCodeRow({ uses: 0 })]))
+    open('/discounts', codes([discountCodeRow({ uses: 0, deletable: true })]))
     server().on('DELETE', '/api/admin/discount-codes/21', noContent)
 
     fireEvent.pointerDown(await screen.findByRole('button', { name: 'عملیات کد NOWRUZ' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
@@ -174,6 +174,32 @@ describe('a code', () => {
 
     await until(() => expect(server().sent('DELETE', '/api/admin/discount-codes/21')).toHaveLength(1))
     await until(() => expect(screen.queryByText('NOWRUZ')).toBeNull())
+  })
+
+  it('whose only orders were refunded counts no use, and says up front that it is kept — only switched off', async () => {
+    open('/discounts', codes([discountCodeRow({ uses: 0, deletable: false })]))
+
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'عملیات کد NOWRUZ' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'حذف' }))
+
+    expect(await screen.findByText(/فقط در سفارش‌هایی آمده که بازپرداخت شده‌اند/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'حذف' })).toBeNull()
+    expect(server().sent('DELETE', '/api/admin/discount-codes/21')).toHaveLength(0)
+  })
+
+  it('refused all the same — refunded since the list was read —, says why in the dialog, the code kept', async () => {
+    // As the server words it (DiscountInUseException::REFUNDED).
+    const refunded = 'این کد تخفیف فقط در سفارش‌هایی آمده که بازپرداخت شده‌اند؛ استفاده‌ای از آن حساب نمی‌شود، ولی برای سابقه آن سفارش‌ها می‌ماند و حذف نمی‌شود. به جای حذف، آن را غیرفعال کنید.'
+    open('/discounts', codes([discountCodeRow({ uses: 0, deletable: true })]))
+    server().on('DELETE', '/api/admin/discount-codes/21', refusal(409, refunded))
+
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'عملیات کد NOWRUZ' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'حذف' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'حذف کد تخفیف' })
+    expect(await within(dialog).findByText(refunded)).toBeTruthy()
+    expect(within(await table()).getByText('NOWRUZ')).toBeTruthy()
   })
 })
 

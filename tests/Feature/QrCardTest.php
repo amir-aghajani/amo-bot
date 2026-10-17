@@ -62,6 +62,54 @@ final class QrCardTest extends DatabaseTestCase
         self::assertFalse($logs->hasWarningThatContains('could not be read'));
     }
 
+    /** A background too small for the code's modules to be read is drawn larger first: the code is never a blur, nor nothing. */
+    public function testATinyBackgroundIsDrawnLargerSoTheCodeStaysReadable(): void
+    {
+        $tiny = imagecreatetruecolor(48, 32);
+        imagefill($tiny, 0, 0, (int) imagecolorallocate($tiny, 30, 90, 160));
+        ob_start();
+        imagepng($tiny);
+        $this->background((string) ob_get_clean());
+
+        $bytes = $this->service(QrCard::class)->render('https://example.com/sub/abcdef');
+
+        self::assertNotNull($bytes);
+        $size = getimagesizefromstring($bytes);
+        self::assertNotFalse($size);
+        self::assertSame(1.5, round($size[0] / $size[1], 1), 'its shape kept');
+        // 'https://example.com/sub/abcdef' is a version 3 code: 29 modules, 37 with its quiet zone, four pixels each.
+        self::assertGreaterThanOrEqual((int) ceil(37 * 4 / 0.57), $size[1], 'room for every module at four pixels');
+        $image = imagecreatefromstring($bytes);
+        self::assertNotFalse($image);
+        $dark = 0;
+        for ($x = 0; $x < $size[0]; $x++) {
+            $c = imagecolorsforindex($image, imagecolorat($image, $x, intdiv($size[1], 2)));
+            $dark += $c['red'] < 60 && $c['blue'] < 60 ? 1 : 0;
+        }
+        self::assertGreaterThan(20, $dark, 'the code is on it');
+    }
+
+    /** A banner Telegram would refuse as a photo — every delivery's message refused with it — makes no card: the text goes alone. */
+    public function testABackgroundTelegramWouldRefuseAsAPhotoGivesNoCard(): void
+    {
+        $banner = imagecreatetruecolor(2100, 100);
+        ob_start();
+        imagepng($banner);
+        $this->background((string) ob_get_clean());
+        $logs = $this->logs();
+
+        self::assertNull($this->service(QrCard::class)->render('https://example.com/sub/abcdef'));
+        self::assertTrue($logs->hasWarningThatContains('Telegram takes as a photo'));
+    }
+
+    public function testALinkNoCodeCanHoldGivesNoCardAndAWarning(): void
+    {
+        $logs = $this->logs();
+
+        self::assertNull($this->service(QrCard::class)->render(''), 'the text goes alone, the delivery with it');
+        self::assertTrue($logs->hasWarningThatContains('cannot be drawn as a code'));
+    }
+
     /** The bot's own background, as the uploads folder keeps one: these bytes. */
     private function background(string $bytes): void
     {

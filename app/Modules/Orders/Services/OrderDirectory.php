@@ -20,6 +20,7 @@ use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * The orders screen («سفارش‌ها»): orders filtered by status (or the STUCK queue), type, customer and days, searched by
@@ -58,12 +59,37 @@ final class OrderDirectory
         $list->search($query, self::applySearch(...));
         [$sold, $amount] = Page::tally((clone $query)->whereIn('status', Order::SOLD), 'amount');
 
-        return Page::fetch($query->with(self::RELATIONS), $list, $this->present(...), $list->sort(['created' => 'id', 'amount' => 'amount'], 'created'))
+        return Page::fetchTogether($query->with(self::RELATIONS), $list, $this->presentAll(...), $list->sort(['created' => 'id', 'amount' => 'amount'], 'created'))
             ->with(['stuck' => Order::stuck()->count(), 'sold' => $sold, 'sold_amount' => $amount]);
     }
 
     /** @return array<string, mixed> One row of the screen. */
     public function present(Order $order): array
+    {
+        return $this->presentAll(new Collection([$order]))[0];
+    }
+
+    /**
+     * Rows of the screen, the names of the shop's admins who made orders by hand read once for them all
+     * (Reviewers::names()).
+     *
+     * @param Collection<int, Order> $orders
+     * @return list<array<string, mixed>>
+     */
+    private function presentAll(Collection $orders): array
+    {
+        $names = $this->reviewers->names($orders->pluck('created_by'));
+
+        return array_values($orders->map(fn(Order $order): array => $this->row($order, $names))->all());
+    }
+
+    /**
+     * present(), with the names of the admins who made orders by hand (`$names`, by reviewer).
+     *
+     * @param array<string, string> $names
+     * @return array<string, mixed>
+     */
+    private function row(Order $order, array $names): array
     {
         $subscription = $order->subscription;
         // A renewal, and extras, name no server of their own: they are where their service is.
@@ -93,7 +119,7 @@ final class OrderDirectory
             // Why it failed, or why it was cancelled — as whoever reads the screen may read it.
             'notes' => self::notes($order),
             // One support made by hand for its customer: who, how it was paid, and their note.
-            'manual' => $this->manual($order),
+            'manual' => $this->manual($order, $names),
             'payments' => $order->payments->map(static fn(Payment $payment): array => [
                 'id' => $payment->id,
                 'status' => $payment->status->value,
@@ -132,16 +158,23 @@ final class OrderDirectory
     }
 
     /**
-     * An order support made by hand (ManualOrders): who made it, as whoever reads the screen may see them (Reviewers), how
-     * it was paid (Order::manualPayment()) and their note; null for an order the customer made.
+     * An order support made by hand (ManualOrders): who made it, as whoever reads the screen may see them (Reviewers), and
+     * the name of the admin that is (`$names`, Reviewers::names()), how it was paid (Order::manualPayment()) and their
+     * note; null for an order the customer made.
      *
-     * @return array{by: string|null, payment: string, note: string|null}|null
+     * @param array<string, string> $names
+     * @return array{by: string|null, by_name: string|null, payment: string, note: string|null}|null
      */
-    private function manual(Order $order): ?array
+    private function manual(Order $order, array $names): ?array
     {
         $payment = $order->manualPayment();
 
-        return $payment === null ? null : ['by' => $this->reviewers->present($order->created_by), 'payment' => $payment->value, 'note' => $order->support_note];
+        return $payment === null ? null : [
+            'by' => $this->reviewers->present($order->created_by),
+            'by_name' => $names[$order->created_by ?? ''] ?? null,
+            'payment' => $payment->value,
+            'note' => $order->support_note,
+        ];
     }
 
     /**

@@ -26,6 +26,7 @@ use App\Modules\Orders\Enums\ManualPayment;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Orders\Exceptions\DeliveryTakenOverException;
 use App\Modules\Orders\Exceptions\FirstPurchaseUsedException;
 use App\Modules\Orders\Exceptions\RenewalUnderWayException;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
@@ -42,8 +43,10 @@ use App\Modules\Rewards\Services\OrderRewards;
 use App\Modules\Subscriptions\DTO\RenewalPreview;
 use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ProvisioningService;
+use App\Modules\Subscriptions\Services\ServiceTerms;
 use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Telegram\Reports\ShopReports;
 use App\Modules\Users\Models\User;
@@ -75,8 +78,16 @@ final class OrderService
     public const NOTE_CANCELLED_BY_SUPPORT = 'لغو توسط پشتیبانی';
     public const NOTE_EXPIRED = 'پرداخت در مهلت کامل نشد';
 
-    /** A processing claim untouched for this long belongs to a process that died; the admin may retry it. */
-    public const STALE_PROCESSING_MINUTES = 10;
+    /** A paid order nobody claimed for delivery this long was left by a process that died before it began. */
+    public const STALE_PAID_MINUTES = 10;
+
+    /**
+     * A processing claim untouched for this long belongs to a process that died; the admin may retry it. A delivery
+     * touches its order on the way to its panel calls (ProvisioningService::delivering()), so this is the longest it
+     * leaves it untouched (ProvisioningService::LONGEST_SILENCE: about one call on the slowest panel), in whole minutes
+     * and one more: taken over sooner, a delivery still under way would be stopped for the second, which gives it again.
+     */
+    public const STALE_PROCESSING_MINUTES = (ProvisioningService::LONGEST_SILENCE - ProvisioningService::LONGEST_SILENCE % 60) / 60 + 1;
 
     /** A retry that found the order taken: another process is delivering it, or just did. */
     public const DELIVERY_TAKEN = 'تحویل این سفارش همین حالا جای دیگری انجام شد یا در حال انجام است.';
@@ -118,10 +129,11 @@ final class OrderService
      * @throws RequestKeyReusedException the key came to an order of something else
      * @throws TooManyUnpaidOrdersException
      * @throws DiscountCodeRefusedException the code's last use was taken meanwhile
+     * @throws TermTooLongException the plan's term would end the service past the last day the shop keeps
      */
     public function openPurchase(User $user, Plan $plan, Server $server, ?OrderKey $key = null, ?Quote $quote = null, ?string $clientName = null): Order
     {
-        return $this->open($user, OrderType::Purchase, fn(): Quote => $quote ?? $this->pricing->purchase($user, $plan, $server), ['plan_id' => $plan->id, 'server_id' => $server->id, 'client_name' => $clientName], key: $key);
+        return $this->open($user, OrderType::Purchase, fn(): Quote => $quote ?? $this->pricing->purchase($user, $plan, $server), ['plan_id' => $plan->id, 'server_id' => $server->id, 'client_name' => $clientName], static fn() => self::inTime($plan->duration_hours), $key);
     }
 
     /**
@@ -134,12 +146,13 @@ final class OrderService
      * @throws RequestKeyReusedException the key came to an order of something else
      * @throws TooManyUnpaidOrdersException
      * @throws DiscountCodeRefusedException the code's last use was taken meanwhile
+     * @throws TermTooLongException the days would end the service past the last day the shop keeps
      */
     public function openCustomPurchase(User $user, int $gb, int $days, Server $server, ?OrderKey $key = null, ?Quote $quote = null, ?string $clientName = null): Order
     {
         $shape = ['server_id' => $server->id] + self::built($gb, $days) + ['client_name' => $clientName];
 
-        return $this->open($user, OrderType::Purchase, fn(): Quote => $quote ?? $this->pricing->custom($user, $this->custom->quote($gb, $days), $server), $shape, key: $key, attributes: $this->builtDevices());
+        return $this->open($user, OrderType::Purchase, fn(): Quote => $quote ?? $this->pricing->custom($user, $this->custom->quote($gb, $days), $server), $shape, static fn() => self::inTime($days * ServiceTerms::HOURS_A_DAY), $key, $this->builtDevices());
     }
 
     /**
@@ -147,10 +160,12 @@ final class OrderService
      * gift (so it is no purchase of the customer's), settled by the wallet row and delivered as any purchase.
      *
      * @throws SellingSuspendedException in an agent's shop whose selling is suspended
+     * @throws TermTooLongException the plan's term would end the service past the last day the shop keeps
      */
     public function openGift(User $user, Plan $plan, Server $server): Order
     {
         SellingSuspendedException::unlessSelling($user->shop());
+        self::inTime($plan->duration_hours);
 
         return Order::query()->create([
             'user_id' => $user->id,
@@ -171,6 +186,7 @@ final class OrderService
      * transaction — or, made again with its key, the order that key came to, whatever became of it.
      *
      * @throws RequestKeyReusedException the key came to an order of something else, or was first sent with another way to pay
+     * @throws TermTooLongException its term would end the service past the last day the shop keeps
      */
     public function openManual(User $user, ManualOrder $manual, OrderKey $key): Order
     {
@@ -179,6 +195,7 @@ final class OrderService
         if ($keyed !== null) {
             return self::same($user, $keyed, $key, OrderType::Purchase, $shape);
         }
+        self::inTime($manual->package()->hours);
 
         try {
             return $this->db->transaction(function () use ($user, $manual, $key, $shape): Order {
@@ -247,7 +264,7 @@ final class OrderService
     {
         $level = $agent->agencyLevel ?? throw new \LogicException("User #{$agent->id} is not an agent.");
         if (!$this->trafficAllowed($gb)) {
-            throw ValidationException::on('gb', 'حجم باید دست‌کم ' . Persian::number($this->agencySettings->trafficMin()) . ' گیگابایت باشد.');
+            throw ValidationException::on('gb', 'حجم باید بین ' . Persian::number($this->agencySettings->trafficMin()) . ' و ' . Persian::number(AgencySettings::TRAFFIC_MAX_GB) . ' گیگابایت باشد.');
         }
 
         return $this->open($agent, OrderType::Traffic, static fn(): Quote => new Quote($level->priceOf($gb), OrderPricing::Regular), ['traffic_bytes' => Traffic::bytesOfGb($gb)]);
@@ -405,11 +422,19 @@ final class OrderService
         return Transitions::move($order, 'status', [OrderStatus::Pending], OrderStatus::Cancelled, ['notes' => $reason]);
     }
 
-    /** Paid or processing, and untouched for STALE_PROCESSING_MINUTES: its process died (Order::stale() as a query). */
+    /**
+     * Paid and untouched for STALE_PAID_MINUTES, or processing and untouched for STALE_PROCESSING_MINUTES: its process
+     * died (Order::stale() as a query).
+     */
     public static function isStale(Order $order): bool
     {
-        return in_array($order->status, [OrderStatus::Paid, OrderStatus::Processing], true)
-            && $order->updated_at->lessThanOrEqualTo(now()->subMinutes(self::STALE_PROCESSING_MINUTES));
+        $minutes = match ($order->status) {
+            OrderStatus::Paid => self::STALE_PAID_MINUTES,
+            OrderStatus::Processing => self::STALE_PROCESSING_MINUTES,
+            default => null,
+        };
+
+        return $minutes !== null && $order->updated_at->lessThanOrEqualTo(now()->subMinutes($minutes));
     }
 
     /** The order the customer's Idempotency-Key came to; null for none. */
@@ -475,6 +500,19 @@ final class OrderService
     }
 
     /**
+     * Refuse a purchase whose term of `$hours` would end its service past the last day the shop keeps, before anything is
+     * ordered or paid (ServiceTerms::startsInTime(); its delivery asks again, ProvisioningService::provision()).
+     *
+     * @throws TermTooLongException
+     */
+    private static function inTime(int $hours): void
+    {
+        if (!ServiceTerms::startsInTime($hours)) {
+            throw new TermTooLongException();
+        }
+    }
+
+    /**
      * What a new order of a built package carries besides: the builder's devices as they are now. A setting, not the
      * customer's choice, so no part of what the order is — a request made again after the admin changed it is the same
      * request, and an open order of the same package is still found.
@@ -488,8 +526,9 @@ final class OrderService
 
     /**
      * Finds the customer's payable order of this shape at the same price and code (touched, so its expiry restarts), or
-     * makes one — under a lock on the customer's row, so two taps make one order. A new order with a code takes one of
-     * its uses (DiscountCodes::reserve()). `$first` runs first in the same transaction (a lock and a check of its own).
+     * makes one — under a lock on the customer's row, so two taps make one order, and while an agent's shop still sells
+     * as the database has it then (Bot::sellsNow()). A new order with a code takes one of its uses
+     * (DiscountCodes::reserve()). `$first` runs first in the same transaction (a lock and a check of its own).
      *
      * With an Idempotency-Key, the key's order comes first whatever became of it, as long as it is the same request (type,
      * shape and method — never the price, which may have moved); otherwise RequestKeyReusedException. A new key is kept
@@ -511,6 +550,7 @@ final class OrderService
      * @throws RequestKeyReusedException
      * @throws TooManyUnpaidOrdersException
      * @throws DiscountCodeRefusedException the quote's code has no use left for a new order
+     * @throws SellingSuspendedException in an agent's shop whose selling is suspended (never for an agent's traffic)
      */
     private function open(User $user, OrderType $type, \Closure $price, array $shape = [], ?\Closure $first = null, ?OrderKey $key = null, array $attributes = []): Order
     {
@@ -530,6 +570,11 @@ final class OrderService
                     $first();
                 }
                 User::query()->whereKey($user->id)->lockForUpdate()->value('id');
+                // The shop as the database has it now (Bot::sellsNow(), no lock: a free test locks the shop's row before
+                // its customer's, the reverse of this transaction) — the request's copy may be older than a suspension.
+                if ($type !== OrderType::Traffic && !$user->shop()->sellsNow()) {
+                    throw new SellingSuspendedException();
+                }
 
                 $order = Order::payable()
                     ->where(['user_id' => $user->id, 'type' => $type->value, 'amount' => $priced['amount']] + $shape)
@@ -606,8 +651,9 @@ final class OrderService
     }
 
     /**
-     * Delivers an order this process claimed; true once it is fulfilled or failed with its reason. A renewal or an extra
-     * whose service was handed to another since it was ordered fails, adding nothing to someone else's service.
+     * Delivers an order this process claimed; true once it is fulfilled or failed with its reason, false when another
+     * process took the claim over meanwhile (DeliveryTakenOverException). A renewal or an extra whose service was handed
+     * to another since it was ordered fails, adding nothing to someone else's service.
      */
     private function carryOut(Order $order): bool
     {
@@ -615,9 +661,10 @@ final class OrderService
             if ($order->serviceChangedHands()) {
                 throw new ServiceChangedHandsException();
             }
+            self::assertFirstPurchase($order);
             match ($order->type) {
                 // The panel is talked to outside any transaction: a slow panel must not hold locks.
-                OrderType::Purchase => $this->deliverPurchase($order),
+                OrderType::Purchase => $this->withTraffic($order, fn() => $this->provisioning->provision($order, fn() => $this->fulfilled($order))),
                 OrderType::Renewal => $this->withTraffic($order, fn() => $this->provisioning->renew($order, fn() => $this->fulfilled($order))),
                 OrderType::ExtraTraffic => $this->withTraffic($order, fn() => $this->provisioning->addExtra($order, fn() => $this->fulfilled($order))),
                 // Days and devices cost an agent's pool nothing (as support's extension of a service does not).
@@ -635,6 +682,11 @@ final class OrderService
                     $this->fulfilled($order);
                 }, Ledger::ATTEMPTS),
             };
+        } catch (DeliveryTakenOverException $e) {
+            // Its claim went to another process while this one was quiet: the order is that one's to fulfil or fail.
+            $this->logger->warning('Delivery of order {id} stopped: {message}', ['id' => $order->id, 'message' => $e->getMessage()]);
+
+            return false;
         } catch (ProviderException $e) {
             $this->logger->warning('Delivery of order {id} failed: {message}', ['id' => $order->id, 'message' => $e->getMessage()]);
             // A safe summary for any reader of the order, and the owner's diagnosis (the panel's address) kept apart.
@@ -662,25 +714,26 @@ final class OrderService
     }
 
     /**
-     * Delivers a purchase. One made at the first-purchase price fails when another purchase of the customer's was paid
-     * before it (two ordered at that price before either was paid: only the first paid is the first purchase); a retry
-     * of a failed first purchase still counts as first, whatever was bought since.
+     * An order made for the customer's first purchase — at the first-purchase price, or with a code for a first purchase
+     * only (DiscountLine::$firstOnly) — fails when another purchase of theirs was paid before it (two ordered so before
+     * either was paid: only the first paid is the first purchase); a retry of a failed one still counts as first,
+     * whatever was bought since, and one paid after a purchase refunded since is the first all the same.
      *
      * @throws FirstPurchaseUsedException
      */
-    private function deliverPurchase(Order $order): void
+    private static function assertFirstPurchase(Order $order): void
     {
-        if ($order->pricing === OrderPricing::FirstPurchase && self::boughtBefore($order)) {
-            throw new FirstPurchaseUsedException();
+        $code = $order->codeLine();
+        $byPrice = $order->pricing === OrderPricing::FirstPurchase;
+        if (($byPrice || $code?->firstOnly === true) && self::boughtBefore($order)) {
+            throw $byPrice ? new FirstPurchaseUsedException() : FirstPurchaseUsedException::code((string) $code?->code);
         }
-
-        $this->withTraffic($order, fn() => $this->provisioning->provision($order, fn() => $this->fulfilled($order)));
     }
 
     /**
-     * Whether another purchase of the customer's was paid before this one (by `paid_at`, then id): any purchase
-     * (Order::bought(), the first-purchase price's rule), or with `$withPrice` one with a price (Order::paidPurchases(),
-     * which purchase is a referral's first — ReferralGifts).
+     * Whether another purchase of the customer's was paid before this one (by `paid_at`, then id) and not given back:
+     * any purchase (Order::bought(), the first-purchase price's rule), or with `$withPrice` one with a price
+     * (Order::keptPurchases(), which purchase is a referral's first — ReferralGifts).
      */
     public static function boughtBefore(Order $order, bool $withPrice = false): bool
     {
@@ -688,7 +741,7 @@ final class OrderService
         $before = Payment::query()->select('order_id')->whereNotNull('paid_at')->where(static fn(Builder $payment) => $payment
             ->where('paid_at', '<', $paidAt)
             ->orWhere(static fn(Builder $tie) => $tie->where('paid_at', $paidAt)->where('order_id', '<', $order->id)));
-        $purchases = $withPrice ? Order::paidPurchases() : Order::bought();
+        $purchases = $withPrice ? Order::keptPurchases() : Order::bought();
 
         return $purchases->where('user_id', $order->user_id)->whereKeyNot($order->id)->whereIn('id', $before)->exists();
     }
@@ -726,7 +779,8 @@ final class OrderService
 
     /**
      * In an agent's shop, draws the order's traffic from the agent's pool before delivering and gives it back if the
-     * delivery fails (TrafficPool::draw() never draws twice for one order).
+     * delivery fails (TrafficPool::draw() never draws twice for one order) — not when another process took it over: what
+     * was drawn is that delivery's.
      *
      * @param \Closure(): mixed $deliver
      */
@@ -742,6 +796,8 @@ final class OrderService
         $this->pool->draw($order, $bot);
         try {
             $deliver();
+        } catch (DeliveryTakenOverException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             $this->pool->giveBack($order, $bot);
             throw $e;

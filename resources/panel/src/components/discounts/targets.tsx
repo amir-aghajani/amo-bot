@@ -4,6 +4,7 @@ import type { OwnOrderType } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
 import { plansQuery } from '@/lib/queries'
 import { OWN_ORDER_TYPE } from '@/lib/statuses'
+import { asSet } from '@/lib/use-form'
 
 /*
  * What a discount code or a sale holds for, shared by both forms and both lists: the kinds of order and the plans, each
@@ -49,6 +50,11 @@ export function PlansField({ value, onChange, error }: TargetFieldProps<number>)
       {...optionsRead(plans, 'پلن‌ها')}
     />
   )
+}
+
+/** A target list as the server keeps it, for a form's `reads`: every one (null), or the ticked as a set — in no order. */
+export function targetsRead(value: readonly (string | number)[] | null): Record<string, true> | null {
+  return value === null ? null : asSet(value)
 }
 
 /** The kinds of order in words: «خرید، تمدید», or «همه سفارش‌ها». */

@@ -207,6 +207,9 @@ final class AgentHiddenOffersTest extends HttpTestCase
 
         $plans = $this->decode($this->get('/api/agent/plans'))['plans'];
         self::assertSame([[true, ServerSelector::HIDDEN_PLAN], [false, 'هیچ‌کدام از سرورهای این پلن الان قابل فروش نیست؛ دلیل هر کدام کنار نام همان سرور آمده است.']], array_map(static fn(array $plan): array => [$plan['hidden_by_owner'], $plan['unsellable_reason']], $plans));
+        foreach ([ServerSelector::HIDDEN_PLAN, ServerSelector::HIDDEN_SERVER] as $why) {
+            self::assertStringStartsWith('پشتیبانی فروشگاه اصلی ', $why, 'the owner, as the agent\'s panel names them');
+        }
 
         $input = ['name' => 'دو سرور', 'price' => '150000', 'duration_days' => 30, 'traffic_gb' => 20, 'ip_limit' => 0, 'is_active' => true];
         $kept = $this->putJson("/api/agent/plans/{$this->both->id}", $input + ['servers' => [['server_id' => $this->germany->id, 'all_inbounds' => true, 'inbound_ids' => []], ['server_id' => $this->holland->id, 'all_inbounds' => true, 'inbound_ids' => []]]]);

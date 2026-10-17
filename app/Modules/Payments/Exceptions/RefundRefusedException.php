@@ -5,20 +5,31 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
+use App\Modules\Orders\Enums\OrderStatus;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Telegram\Messages;
 use App\Support\Money;
 
 /**
- * A refund that must take back what the order added — a top-up's credit, an agent's traffic, a purchase's service — and
- * cannot: spent or sold since, held by another order, handed to another customer, or on a panel that failed. Nothing was
- * written (or refunded); the message says why and what to do.
+ * A refund that must take back what the order added — a top-up's credit and its referrer's commission, an agent's
+ * traffic, a purchase's service — and cannot: spent or sold since, held by another order, handed to another customer, or
+ * on a panel that failed. Nothing was written (or refunded); the message says why and what to do.
  */
 final class RefundRefusedException extends DomainRuleException
 {
-    /** The purchase's service carries another order (a renewal, an extra) that is paid or still open. */
-    public static function serviceInUse(int $orderId): self
+    /**
+     * The purchase's service carries another order (a renewal, an extra) that is paid or still open: what to do with it
+     * first, by its status. Only once that order is delivered may support delete the service by hand instead — the
+     * services screen refuses while an order of it is open (Subscriptions\Services\SubscriptionActions::delete()).
+     */
+    public static function serviceInUse(Order $other): self
     {
-        return new self(sprintf('سرویس این خرید سفارش دیگری هم دارد (سفارش #%d)؛ اول آن سفارش را بازپرداخت یا لغو کنید، یا سرویس را خودتان از صفحه اشتراک‌ها حذف کنید.', $orderId));
+        return new self(sprintf(match ($other->status) {
+            OrderStatus::Pending => 'سرویس این خرید سفارش پرداخت‌نشده دیگری دارد (سفارش #%d)؛ اول آن سفارش را لغو کنید، بعد دوباره بازپرداخت کنید.',
+            OrderStatus::Paid, OrderStatus::Processing => 'سفارش دیگری از سرویس این خرید در حال تحویل است (سفارش #%d)؛ وقتی تحویل شد، اول آن را بازپرداخت کنید، بعد این خرید را.',
+            OrderStatus::Failed => 'تحویل سفارش دیگری از سرویس این خرید ناموفق مانده است (سفارش #%d)؛ اول آن سفارش را بازپرداخت کنید، بعد این خرید را.',
+            default => 'سرویس این خرید سفارش دیگری هم دارد (سفارش #%d)؛ اول آن سفارش را بازپرداخت کنید، یا سرویس را خودتان از صفحه اشتراک‌ها حذف کنید و بعد دوباره بازپرداخت کنید.',
+        }, $other->id));
     }
 
     /**
@@ -45,6 +56,12 @@ final class RefundRefusedException extends DomainRuleException
     public static function topUpSpent(string $balance): self
     {
         return new self(sprintf('این شارژ خرج شده است: موجودی کیف پول مشتری %s است و مبلغ شارژ از آن کم نمی‌شود.', Money::format($balance)));
+    }
+
+    /** The commission the top-up earned the customer's referrer is spent: its refund takes it back, by the same rule. */
+    public static function commissionSpent(string $balance): self
+    {
+        return new self(sprintf('پورسانتی که این شارژ برای معرف مشتری آورد خرج شده است: موجودی کیف پول معرف %s است و پورسانت از آن کم نمی‌شود.', Money::format($balance)));
     }
 
     public static function trafficSold(int $left): self

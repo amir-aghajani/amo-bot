@@ -18,6 +18,11 @@ final class ListedShops implements Shops
     /** @var list<int> */
     public array $ids = [1];
 
+    public function current(): ?int
+    {
+        return null;
+    }
+
     public function ids(): array
     {
         return $this->unreadable ? throw new \RuntimeException('the database is down') : $this->ids;

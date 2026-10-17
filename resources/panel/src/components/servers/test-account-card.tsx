@@ -3,6 +3,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router'
 import { ErrorState } from '@/components/error-state'
 import { Field } from '@/components/field'
+import { useReadFailure } from '@/components/page'
 import { SectionCard } from '@/components/section-card'
 import { SwitchRow } from '@/components/switch-row'
 import { TextLink } from '@/components/text-link'
@@ -33,6 +34,7 @@ const testAccountQuery = (id: number) =>
  */
 export function TestAccountCard({ serverId }: { serverId: number }) {
   const read = useQuery(testAccountQuery(serverId))
+  const failure = useReadFailure(read)
   const ref = useRef<HTMLDivElement>(null)
   const { hash } = useLocation()
   const drawn = read.data !== undefined
@@ -46,8 +48,8 @@ export function TestAccountCard({ serverId }: { serverId: number }) {
     <div id={ANCHOR} ref={ref}>
       {read.data ? (
         <TestAccountForm key={serverId} serverId={serverId} terms={read.data} />
-      ) : read.error ? (
-        <ErrorState what="اکانت تست سرور" error={read.error} onRetry={() => void read.refetch()} retrying={read.isFetching} />
+      ) : failure.error ? (
+        <ErrorState what="اکانت تست سرور" error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} />
       ) : (
         <Skeleton className="h-64 w-full rounded-xl" />
       )}

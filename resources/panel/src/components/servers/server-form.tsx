@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Callout } from '@/components/callout'
 import { driverDraft, driverPayload, type DriverDraft } from '@/components/driver-form/draft'
 import { DriverFields } from '@/components/driver-form/driver-fields'
-import { FormActions } from '@/components/form-footer'
+import { ChangedElsewhere, FormActions } from '@/components/form-footer'
 import { ProbeResult } from '@/components/servers/probe-result'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
@@ -27,13 +27,15 @@ interface ServerFormProps {
 
 /**
  * Add or edit a server: its form is drawn from the connector's description (components/driver-form), with
- * «تست اتصال» beside it. A test of a saved server sends its id, so secrets left blank stand for the stored ones.
+ * «تست اتصال» beside it. A test of a saved server sends its id, so secrets left blank stand for the stored ones. An edit
+ * follows the server's copy as the settings cards do: one saved elsewhere meanwhile (another tab, a live refresh) is
+ * said over a draft, which a save puts in its place — or the newer copy is taken (ChangedElsewhere).
  */
 export function ServerForm({ driver, server, onSaved, onCancel }: ServerFormProps) {
   const editing = server !== undefined
   const stored = server?.form ?? undefined
   // What is unsaved is what a save would send: a field out of sight is not sent, a secret left blank keeps the one kept.
-  const form = useForm<DriverDraft>(() => driverDraft(driver, stored), { reads: (draft) => trimmed(driverPayload(driver, draft)) })
+  const form = useForm<DriverDraft>(driverDraft(driver, stored), { follow: true, reads: (draft) => trimmed(driverPayload(driver, draft)) })
   const { values, error, formError, busy, dirty, submit, handleSubmit } = form
   // The fields are the connector's form — the API's closed request of that connector (DriverFormsTest holds them together).
   const request = () => ({ ...driverPayload(driver, values), driver: driver.key }) as ServerRequest
@@ -93,6 +95,8 @@ export function ServerForm({ driver, server, onSaved, onCancel }: ServerFormProp
           </ul>
         </Callout>
       )}
+
+      <ChangedElsewhere shown={form.elsewhere} onTake={revert} />
 
       <DriverFields driver={driver} stored={stored} draft={values} set={set} error={error} idPrefix="server" />
 

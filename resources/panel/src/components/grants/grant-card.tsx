@@ -7,6 +7,7 @@ import { ErrorState } from '@/components/error-state'
 import { giftLabel, outcome, progress, reached } from '@/components/grants/grant-format'
 import type { GrantRowBase } from '@/components/grants/use-grants'
 import { Modal } from '@/components/modal'
+import { useReadFailure } from '@/components/page'
 import { ProgressBar } from '@/components/progress-bar'
 import { Reviewer } from '@/components/reviewer'
 import { StatusBadge } from '@/components/status-badge'
@@ -41,6 +42,7 @@ interface GrantCardProps<Row extends GrantRowBase> {
 export function GrantCard<Row extends GrantRowBase>({ title, description, noun, addLabel, listLabel, read, running, cancel, item, add, stopDetails }: GrantCardProps<Row>) {
   const [adding, setAdding] = useState(false)
   const [stopping, setStopping] = useState<Row | null>(null)
+  const failure = useReadFailure(read)
 
   return (
     <Card>
@@ -54,7 +56,7 @@ export function GrantCard<Row extends GrantRowBase>({ title, description, noun, 
         <Button variant="secondary" icon={Gift} className="w-fit" onClick={() => setAdding(true)} disabled={!read.data || running !== null}>
           {addLabel}
         </Button>
-        {read.error && <ErrorState what="لیست" error={read.error} onRetry={() => void read.refetch()} />}
+        {failure.error && <ErrorState what="لیست" error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} />}
         {read.data
           ? read.data.grants.length > 0 && (
               <ul className="grid divide-y divide-border overflow-hidden rounded-xl border border-border" aria-label={listLabel}>
@@ -63,7 +65,7 @@ export function GrantCard<Row extends GrantRowBase>({ title, description, noun, 
                 ))}
               </ul>
             )
-          : !read.error && <Skeleton className="h-20 w-full" />}
+          : !failure.error && <Skeleton className="h-20 w-full" />}
       </CardContent>
 
       <Modal open={adding} onClose={() => setAdding(false)} size="md" title={add.title} description={add.description}>
@@ -86,8 +88,26 @@ export function GrantCard<Row extends GrantRowBase>({ title, description, noun, 
   )
 }
 
+/**
+ * The latest refusal of a job that goes on in the background (a grant, a move of a server's services), in its line: the
+ * kit's danger strip — a status, not an alert, as the list is read again every few seconds while the job runs.
+ */
+export function LastFailure({ failure }: { failure: string }) {
+  return (
+    <Callout tone="danger" icon={CircleAlert} role="status" className="text-footnote">
+      <span className="break-words" dir="auto">
+        <span className="sr-only">آخرین خطا: </span>
+        {failure}
+      </span>
+    </Callout>
+  )
+}
+
 /** What a grant's line shows of it, whichever card lists it. */
-type GrantSummary = Pick<ServerGrantRow, 'days' | 'traffic_bytes' | 'reason' | 'status' | 'total' | 'granted' | 'skipped' | 'failed' | 'reviewer' | 'created_at' | 'include_unstarted' | 'notify'>
+type GrantSummary = Pick<
+  ServerGrantRow,
+  'days' | 'traffic_bytes' | 'reason' | 'status' | 'total' | 'granted' | 'skipped' | 'failed' | 'reviewer' | 'reviewer_name' | 'created_at' | 'include_unstarted' | 'notify'
+>
 
 interface GrantItemProps {
   grant: GrantSummary
@@ -146,15 +166,7 @@ export function GrantItem({ grant, audience, detail, waiting, waitingNote, failu
           </div>
         </Callout>
       )}
-      {failure && (
-        <p className="flex items-start gap-1.5 text-footnote text-danger">
-          <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
-          <span className="min-w-0 break-words" dir="auto">
-            <span className="sr-only">آخرین خطا: </span>
-            {failure}
-          </span>
-        </p>
-      )}
+      {failure && <LastFailure failure={failure} />}
       <div className="flex min-h-7 items-center justify-between gap-2 text-footnote text-muted-foreground">
         <span>
           <time dateTime={grant.created_at} title={formatDate(grant.created_at)}>
@@ -163,7 +175,7 @@ export function GrantItem({ grant, audience, detail, waiting, waitingNote, failu
           {grant.reviewer && (
             <>
               {' · '}
-              <Reviewer name={grant.reviewer} />
+              <Reviewer name={grant.reviewer} person={grant.reviewer_name} />
             </>
           )}
           {about.map((note) => ` · ${note}`)}

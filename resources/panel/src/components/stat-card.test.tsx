@@ -18,6 +18,14 @@ describe('a stat card', () => {
     expect(screen.getByText('نسبت به ۳۰ روز قبل از آن')).toBeTruthy()
   })
 
+  it('with nothing to compare against says so alone — never a comparison’s words beside no comparison', () => {
+    render(<StatCard label="درآمد" value="۰" unit="تومان" change={null} changeLabel="نسبت به ۳۰ روز قبل از آن" />)
+
+    expect(screen.getByText('دوره قبل رقمی برای مقایسه نداشت')).toBeTruthy()
+    expect(screen.queryByText('نسبت به ۳۰ روز قبل از آن')).toBeNull()
+    expect(screen.queryByText('بدون مقایسه')).toBeNull()
+  })
+
   it('is «—» without a figure, its comparison gone and its own hint kept', () => {
     render(<StatCard label="درآمد" value={undefined} unit="تومان" change={null} hint={undefined} />)
 

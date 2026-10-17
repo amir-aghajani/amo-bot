@@ -92,11 +92,11 @@ final class BotCustomRenewalTest extends BotTestCase
     {
         $this->send($this->tap($this->build()));
         self::assertSame([$this->trafficScreen()], $this->said());
-        self::assertSame([[$this->days(10), $this->days(50)], [$this->days(100)], [RenewalHandler::checkoutCallback($this->built->id)]], $this->rows(), "the builder's amounts, and back to the renewal");
+        self::assertSame([[$this->days(50), $this->days(10)], [$this->days(100)], [RenewalHandler::checkoutCallback($this->built->id)]], $this->rows(), "the builder's amounts, and back to the renewal");
 
         $this->send($this->tap($this->days(50)));
         self::assertSame([$this->daysScreen(50)], $this->said());
-        self::assertSame([[$this->checkout(50, 30), $this->checkout(50, 60)], [$this->build()]], $this->rows(), 'no server to pick: a renewal makes no new client');
+        self::assertSame([[$this->checkout(50, 60), $this->checkout(50, 30)], [$this->build()]], $this->rows(), 'no server to pick: a renewal makes no new client');
 
         $this->send($this->tap($this->checkout(50, 30)));
         self::assertSame([$this->checkoutText()], $this->said(), '50 GB at 2,500 and 30 days at 1,500, on top of what it has — the 32 GB left going when this period ends');
@@ -235,9 +235,9 @@ final class BotCustomRenewalTest extends BotTestCase
         self::assertSame([$this->checkoutText()], $this->said(), 'drawn by the first offered');
         self::assertSame([
             $this->pay($this->wallet),
-            $this->checkout(50, 30),
-            $this->checkout(50, 30, RenewalMethod::ResetTraffic),
             $this->checkout(50, 30, RenewalMethod::ResetTime),
+            $this->checkout(50, 30, RenewalMethod::ResetTraffic),
+            $this->checkout(50, 30),
             $this->days(50),
         ], $this->callbacks(0));
 

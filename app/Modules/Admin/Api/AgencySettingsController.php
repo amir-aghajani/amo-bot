@@ -23,7 +23,7 @@ final class AgencySettingsController extends ApiController
         return $this->json($response, ['settings' => $this->settings->present()]);
     }
 
-    /** PUT /agency/settings — {enabled, default_credit, traffic_presets, traffic_min} */
+    /** PUT /agency/settings — {enabled, default_credit, traffic_presets, traffic_min, term_days, monthly_minimum, warn_days} */
     public function update(Request $request, Response $response): Response
     {
         $this->settings->save($this->input($request));

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { queryOptions } from '@tanstack/react-query'
 import { Crown, Plus } from 'lucide-react'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowTitleButton } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { TierForm } from '@/components/loyalty/tier-form'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
@@ -18,8 +18,8 @@ import { useRows } from '@/lib/use-rows'
 
 const tiersQuery = queryOptions({ queryKey: queryKeys.loyaltyTiers, queryFn: () => api.get<LoyaltyTiersResponse>('/loyalty/tiers') })
 
-/** A percent of a tier, «۵٪», or a dash for none. */
-const percent = (value: number) => (value > 0 ? formatPercent(value) : '—')
+/** A percent of a tier, «۵٪», or the lists' empty cell for none. */
+const percent = (value: number) => (value > 0 ? formatPercent(value) : <Dash />)
 
 /**
  * «سطوح وفاداری»: the tiers by what a customer has spent, lowest threshold first, each with its discount, its extra
@@ -71,8 +71,8 @@ export function LoyaltyPage() {
             <TableRow>
               <TableHead>سطح</TableHead>
               <TableHead>حد خرید</TableHead>
-              <TableHead>تخفیف</TableHead>
-              <TableHead>کش‌بک اضافه</TableHead>
+              <TableHead className="hidden md:table-cell">تخفیف</TableHead>
+              <TableHead className="hidden md:table-cell">کش‌بک اضافه</TableHead>
               <TableHead className="hidden md:table-cell">مشتری‌ها</TableHead>
               <ActionsHead />
             </TableRow>
@@ -82,10 +82,14 @@ export function LoyaltyPage() {
               <TableRow key={tier.id}>
                 <TableCell>
                   <RowTitleButton onClick={() => editor.edit(tier)}>{tier.name}</RowTitleButton>
+                  <PhoneFacts>
+                    <span>تخفیف {percent(tier.discount_percent)}</span>
+                    <span>کش‌بک اضافه {percent(tier.cashback_percent)}</span>
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell className="tabular">{Number(tier.min_spent) > 0 ? `از ${formatMoney(tier.min_spent)}` : 'از ابتدا'}</TableCell>
-                <TableCell className="tabular">{percent(tier.discount_percent)}</TableCell>
-                <TableCell className="tabular">{percent(tier.cashback_percent)}</TableCell>
+                <TableCell className="hidden tabular md:table-cell">{percent(tier.discount_percent)}</TableCell>
+                <TableCell className="hidden tabular md:table-cell">{percent(tier.cashback_percent)}</TableCell>
                 <TableCell className="hidden tabular md:table-cell">{formatNumber(tier.customers)}</TableCell>
                 <TableCell>
                   <EditMenu label={tier.name} onEdit={() => editor.edit(tier)} onRemove={() => setRemoving(tier)} />

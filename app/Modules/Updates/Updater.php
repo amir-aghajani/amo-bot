@@ -647,9 +647,7 @@ final class Updater
         foreach (glob($this->routes . '/routes-*.php') ?: [] as $table) {
             Files::delete($table);
         }
-        // A host may keep opcache's API to some scripts (opcache.restrict_api): this one is asked only where it may.
-        $restricted = (string) ini_get('opcache.restrict_api');
-        if (function_exists('opcache_reset') && ($restricted === '' || str_starts_with((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''), $restricted))) {
+        if (function_exists('opcache_reset') && Files::mayUseOpcache()) {
             opcache_reset();
         }
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Catalog\Enums;
 
 use App\Modules\Catalog\DTO\Package;
+use App\Support\Unit;
 
 /**
  * One of the two quantities a customer builds a service of («سرویس دلخواه», Services\CustomServices): its traffic in GB
@@ -31,6 +32,15 @@ enum CustomQuantity: string
         return match ($this) {
             self::Traffic => 'گیگابایت',
             self::Days => 'روز',
+        };
+    }
+
+    /** The unit it is typed in: the words the bot reads after the number (Input::amountOf()). */
+    public function typedUnit(): Unit
+    {
+        return match ($this) {
+            self::Traffic => Unit::Gigabyte,
+            self::Days => Unit::Day,
         };
     }
 

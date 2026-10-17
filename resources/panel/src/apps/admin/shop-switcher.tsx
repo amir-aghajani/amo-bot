@@ -84,7 +84,13 @@ export function ShopSwitcher() {
               {held ? <LoaderCircle className="size-[18px] animate-spin" aria-hidden /> : <Store className="size-[18px]" strokeWidth={1.75} aria-hidden />}
             </IconButton>
           ) : (
-            <button type="button" aria-disabled={held || undefined} aria-busy={held || undefined} aria-label={`فروشگاه: ${said}`} className={cn(pillClasses, 'w-full aria-disabled:opacity-50')}>
+            <button
+              type="button"
+              aria-disabled={held || undefined}
+              aria-busy={held || undefined}
+              aria-label={`فروشگاه: ${said}`}
+              className={cn(pillClasses, 'w-full aria-disabled:opacity-50 max-md:h-11')}
+            >
               <Store className="size-4 shrink-0 text-faint" aria-hidden />
               <span className="min-w-0 flex-1 truncate text-start">{session.shop.name}</span>
               {off && <StatusBadge status={BOT_STATUS.disabled} />}

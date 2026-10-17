@@ -45,6 +45,9 @@ final class TicketMessageHandler implements Handler
     private const NEW = 'ticket.new';
     private const REPLY = 'ticket.reply.';
 
+    /** The scratch's album of the picture kept or taken last: its other pictures are not asked about (keep()). */
+    private const ALBUM = 'album';
+
     public function __construct(
         private readonly Tickets $tickets,
         private readonly CustomerPictures $pictures,
@@ -151,7 +154,7 @@ final class TicketMessageHandler implements Handler
             return;
         }
 
-        self::awaitReply($ctx->session, $ticket, 0);
+        $this->stay($ctx, $ticket, 0);
         $ctx->reply($this->texts->render(BotText::TicketOpened, ['ticket' => $ticket->id, 'subject' => $ticket->subject]), ['reply_markup' => $this->view($ticket, 0)]);
     }
 
@@ -201,8 +204,21 @@ final class TicketMessageHandler implements Handler
             return;
         }
 
-        self::awaitReply($ctx->session, $ticket, $from);
+        $this->stay($ctx, $ticket, $from);
         $ctx->reply($this->texts->render(BotText::TicketMessageSent, ['ticket' => $ticket->id]), ['reply_markup' => $this->view($ticket, $from)]);
+    }
+
+    /**
+     * A message taken: the chat stays on its ticket (awaitReply()), with the album it came in — whose later pictures a
+     * message took none of.
+     */
+    private function stay(Context $ctx, Ticket $ticket, int $from): void
+    {
+        self::awaitReply($ctx->session, $ticket, $from);
+        $album = $ctx->album();
+        if ($album !== null) {
+            $ctx->session->put(self::ALBUM, $album);
+        }
     }
 
     /**
@@ -225,7 +241,8 @@ final class TicketMessageHandler implements Handler
 
     /**
      * A picture without words: kept for the next text, which is asked for. Telegram sends an album a picture at a time;
-     * the album's later pictures are not asked about again — a message takes one picture, the first.
+     * the album's later pictures are not asked about again — a message takes one picture, the first: the one kept, or
+     * the one that went with the album's words (stay()).
      */
     private function keep(Context $ctx, ?Attachment $picture): void
     {
@@ -235,8 +252,8 @@ final class TicketMessageHandler implements Handler
             return;
         }
 
-        $album = $this->album($ctx);
-        if ($album !== null && $album === $ctx->session->get('album') && $this->kept($ctx) !== null) {
+        $album = $ctx->album();
+        if ($album !== null && $album === $ctx->session->get(self::ALBUM)) {
             return;
         }
 
@@ -258,15 +275,7 @@ final class TicketMessageHandler implements Handler
     {
         $ctx->session->put('picture', $picture->fileId);
         $ctx->session->put('picture_name', $picture->name);
-        $ctx->session->put('album', $this->album($ctx));
-    }
-
-    /** The album (Telegram's media group) the message came in, if any. */
-    private function album(Context $ctx): ?string
-    {
-        $album = ($ctx->update->message() ?? [])['media_group_id'] ?? null;
-
-        return is_scalar($album) ? (string) $album : null;
+        $ctx->session->put(self::ALBUM, $ctx->album());
     }
 
     /**

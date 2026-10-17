@@ -109,20 +109,22 @@ final class Messages
     public const BROADCAST_BUTTONS_TOO_MANY = '⚠️ حداکثر %rows% ردیف و در هر ردیف %per_row% دکمه.';
     public const BROADCAST_BUTTONS_CLEAR = '🗑️ حذف دکمه‌ها';
     public const BROADCAST_CANCELLED = 'ارسال همگانی لغو شد.';
-    public const BROADCAST_EXPIRED = 'این پیش‌نویس دیگر معتبر نیست؛ دوباره /broadcast را بزنید.';
-    public const BROADCAST_PROGRESS = '📣 <b>ارسال همگانی #%id%</b> — %status%
+    // A left-to-right mark (U+200E) before a command or a handle in Persian, and before a row's number after Persian
+    // words: bare, «/broadcast» reads «broadcast/», and «ارسال همگانی #12» reads «12#».
+    public const BROADCAST_EXPIRED = "این پیش‌نویس دیگر معتبر نیست؛ دوباره \u{200E}/broadcast را بزنید.";
+    public const BROADCAST_PROGRESS = "📣 <b>ارسال همگانی \u{200E}#%id%</b> — %status%
 👥 %audience%%pin%
 
 ✅ رسید: %sent%
 🚫 ربات را مسدود کرده‌اند: %blocked%
 ⚠️ نرسید: %failed%
-⏳ %done% از %total%';
+⏳ %done% از %total%";
     public const BROADCAST_PROGRESS_PINNED = ' · 📌 پین‌شده';
-    public const UNPIN_PROGRESS = '📌 <b>لغو پین ارسال #%source%</b> — %status%
+    public const UNPIN_PROGRESS = "📌 <b>لغو پین ارسال \u{200E}#%source%</b> — %status%
 
 ✅ برداشته شد: %sent%
 ⚠️ نشد: %failed%
-⏳ %done% از %total%';
+⏳ %done% از %total%";
     public const BROADCAST_PAUSE = '⏸️ توقف';
     public const BROADCAST_RESUME = '▶️ ادامه';
     public const BROADCAST_STOP = '✖️ لغو ارسال';
@@ -135,17 +137,17 @@ final class Messages
     public const BROADCAST_UNPIN_OPEN = 'اول ارسال باید تمام یا لغو شود.';
     public const BROADCAST_UNPIN_NOTHING = 'پینی برای برداشتن نمانده، یا برداشتنش در حال انجام است.';
     public const BROADCAST_UNCHANGED = 'این ارسال دیگر این کار را نمی‌پذیرد.';
-    public const BROADCAST_DONE = '📣 ارسال همگانی #%id% تمام شد.
+    public const BROADCAST_DONE = "📣 ارسال همگانی \u{200E}#%id% تمام شد.
 ✅ رسید: %sent%
 🚫 ربات را مسدود کرده‌اند: %blocked%
-⚠️ نرسید: %failed%';
+⚠️ نرسید: %failed%";
 
     // /emoji (admins only): premium emoji for the bot's texts, shown to the bot in a message.
     public const EMOJI_ASK = '✨ پیامی را که ایموجی پرمیوم دارد بفرستید — همان‌طور که می‌خواهید مشتری ببیند، با قالب‌بندی و متغیرها. ایموجی‌ها برای پنل ذخیره می‌شوند و متن آماده برای «متن‌های ربات» را برمی‌گردانم.';
     public const EMOJI_NONE = 'این پیام ایموجی پرمیوم ندارد. پیامی بفرستید که دست‌کم یک ایموجی پرمیوم داشته باشد، یا برای خروج یکی از دکمه‌های منو را بزنید.';
     public const EMOJI_SAVED = '✅ %count% ایموجی پرمیوم ذخیره شد (%new% تازه). در پنل، هنگام ویرایش «متن‌های ربات»، از دکمه «ایموجی پرمیوم» در دسترس است.';
     public const EMOJI_WORKS = 'پیام بالا را ربات خودش فرستاده و ایموجی‌ها پرمیوم مانده‌اند؛ ربات می‌تواند در پیام‌هایش از آن‌ها استفاده کند.';
-    public const EMOJI_BLOCKED = '⚠️ تلگرام ایموجی‌های پرمیوم را از پیام ربات برداشت و جایشان ایموجی معمولی گذاشت. ربات فقط وقتی ایموجی پرمیوم می‌فرستد که حسابی که ربات را در @BotFather ساخته اشتراک تلگرام پرمیوم داشته باشد؛ تا آن موقع مشتری‌ها ایموجی معمولی می‌بینند.';
+    public const EMOJI_BLOCKED = "⚠️ تلگرام ایموجی‌های پرمیوم را از پیام ربات برداشت و جایشان ایموجی معمولی گذاشت. ربات فقط وقتی ایموجی پرمیوم می‌فرستد که حسابی که ربات را در \u{200E}@BotFather ساخته اشتراک تلگرام پرمیوم داشته باشد؛ تا آن موقع مشتری‌ها ایموجی معمولی می‌بینند.";
     public const EMOJI_TEMPLATE = 'متن آماده برای «متن‌های ربات» (با لمس کپی می‌شود):';
     public const EMOJI_TEMPLATE_LONG = 'متن این پیام برای نشان دادن در این‌جا بلند است؛ ایموجی‌هایش در پنل هست.';
 
@@ -248,6 +250,32 @@ final class Messages
         };
 
         return Persian::date($at, withTime: $lastDay) . ' (' . $note . ')';
+    }
+
+    /**
+     * `$text` with a left-to-right mark (U+200E) before each row's number in it («#12», in either digits) that has words
+     * before it on its line and no mark yet — the bot's isolateIds() (the panel's): a ledger line's note, worded by the
+     * server («شارژ کیف پول (سفارش #4)») or by support, carries them bare, and right to left after Persian letters the
+     * number reads «4#». One with no words before it is left: the line takes the direction of its first letter, and the
+     * mark would be it.
+     */
+    public static function rowNumbers(string $text): string
+    {
+        return (string) preg_replace_callback('/(?<!\x{200E})#(?=[0-9۰-۹])/u', static function (array $hash) use ($text): string {
+            return self::wordsBefore(substr($text, 0, $hash[0][1])) ? "\u{200E}#" : '#';
+        }, $text, flags: PREG_OFFSET_CAPTURE);
+    }
+
+    /**
+     * Whether the last line of `$before` has a word in it — a letter outside markup (a tag, an entity, a `%variable%`):
+     * what follows it there reads in a Persian sentence, where a row's number or a handle needs a left-to-right mark
+     * (rowNumbers(), BotTexts). An emoji is no word.
+     */
+    public static function wordsBefore(string $before): bool
+    {
+        $line = substr($before, (int) strrpos("\n" . $before, "\n"));
+
+        return preg_match('/\p{L}/u', (string) preg_replace(['/<[^<>]*>/', '/&#?\w+;/', '/%[A-Za-z_][A-Za-z0-9_]*%/'], '', $line)) === 1;
     }
 
     /**

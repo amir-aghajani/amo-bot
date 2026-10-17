@@ -79,7 +79,10 @@ export function onUnauthorized(listener: Listener): () => void {
 interface RequestOptions {
   /** A sign-in (the owner's password, an agent's link): its 401 refuses the attempt only, and leaves an open session alone. */
   signIn?: boolean
-  /** An order's `Idempotency-Key` (support's order by hand): the same key again is answered by the order it made, never a second one. */
+  /**
+   * The change's `Idempotency-Key` (support's order by hand, a wallet's or an agent's traffic set right, a ticket's
+   * answer): the same key again is answered by what it did, never done a second time.
+   */
   idempotencyKey?: string
 }
 

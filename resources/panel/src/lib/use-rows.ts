@@ -103,5 +103,5 @@ export function useRows<R extends Record<K, readonly { id: number }[]>, K extend
     reorder.mutate(ids)
   }
 
-  return { rows, isPending: read.isPending, error: read.error, refetch, upsert, patch, reorder, remove, move, invalidates }
+  return { rows, isPending: read.isPending, isFetching: read.isFetching, error: read.error, refetch, upsert, patch, reorder, remove, move, invalidates }
 }

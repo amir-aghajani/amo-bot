@@ -10,7 +10,7 @@ import { json, server } from '@/test/server'
 /*
  * The owner's overview (apps/admin/pages/dashboard): an agent's shop opened in the owner's panel says the agent's terms
  * of selling of the agent — the agents list's words, leading there —, never as the agent's own panel says them to the
- * agent («… شما», «… با مدیر فروشگاه اصلی تماس بگیرید»).
+ * agent («… شما», «… با پشتیبانی فروشگاه اصلی تماس بگیرید»).
  */
 
 // The chart draws to its column's measured width, which a page without a layout lacks; the system card has its own test.
@@ -35,7 +35,7 @@ describe('an agent’s terms of selling, in their shop opened by the owner', () 
 
     expect(notice?.textContent).toContain('فروش ربات این نماینده متوقف است: تاریخ نمایندگی گذشته است. ربات، پنل و سرویس‌های فعلی مشتری‌هایش کار می‌کنند.')
     expect(screen.getByRole('link', { name: 'نمایندگان' }).getAttribute('href')).toBe('/agents/list')
-    expect(notice?.textContent).not.toMatch(/شما|مدیر فروشگاه اصلی/)
+    expect(notice?.textContent).not.toMatch(/شما|پشتیبانی فروشگاه اصلی/)
     expect(screen.getByText('۱ مورد منتظر اقدام شماست')).toBeTruthy()
   })
 
@@ -43,6 +43,6 @@ describe('an agent’s terms of selling, in their shop opened by the owner', () 
     const notice = await open(agencyStanding({ expires_at: new Date(Date.now() + 2 * 86_400_000).toISOString() }))
 
     expect(notice?.textContent).toMatch(/پایان نمایندگی این نماینده نزدیک است\. نمایندگی .* به پایان می‌رسد؛ بعد از آن فروش رباتش متوقف می‌شود\./)
-    expect(notice?.textContent).not.toMatch(/شما|مدیر فروشگاه اصلی/)
+    expect(notice?.textContent).not.toMatch(/شما|پشتیبانی فروشگاه اصلی/)
   })
 })

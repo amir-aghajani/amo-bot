@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { PHONE, useMediaQuery } from '@/lib/use-media-query'
+import { resizeWindow } from '@/test/browser'
 
 /*
  * A media query followed as it changes (lib/use-media-query): subscribed once — not again on every render of every
@@ -8,21 +9,13 @@ import { PHONE, useMediaQuery } from '@/lib/use-media-query'
  * for one: below Tailwind's `md` (48rem).
  */
 
-/** happy-dom's own handle on the test's window: what sizes it. */
-const browser = (window as unknown as { happyDOM: { setViewport: (size: { width: number; height: number }) => void } }).happyDOM
-
 describe('a phone', () => {
   it('is a window below the layout’s md, 48rem', () => {
-    const { innerWidth: width, innerHeight: height } = window
-    try {
-      browser.setViewport({ width: 767, height })
-      expect(window.matchMedia(PHONE).matches).toBe(true)
+    resizeWindow(767)
+    expect(window.matchMedia(PHONE).matches).toBe(true)
 
-      browser.setViewport({ width: 768, height })
-      expect(window.matchMedia(PHONE).matches).toBe(false)
-    } finally {
-      browser.setViewport({ width, height })
-    }
+    resizeWindow(768)
+    expect(window.matchMedia(PHONE).matches).toBe(false)
   })
 })
 

@@ -1,3 +1,5 @@
+[فارسی](fa/Store-API-After-Buying.md)
+
 # Store API: after buying
 
 A signed-in customer's services, orders and payments, wallet and referral program — the customer's own alone: another
@@ -68,8 +70,8 @@ every 15 minutes).
 | `presence` | whether it is connected — only in `POST …/refresh`'s answer, else `null` |
 
 **The term starts at the first connection.** A new service has `awaits_first_use: true`, `starts_at` and `expires_at`
-`null`: show "starts on first connection — 30 days" (or "— 1 hour": word the term from `duration_hours`, which an hourly
-plan's services have since this release). Once it connects, `expires_at` is its end.
+`null`: show "starts on first connection — 30 days" (or "— 1 hour" for an hourly plan's service: word the term from
+`duration_hours`). Once it connects, `expires_at` is its end.
 
 ## Reading a service now
 
@@ -87,13 +89,14 @@ counted too, then `429` (`اطلاعات سرویس را زیاد به‌روز 
 (`auto_renew.offered`) while the service runs, ends some day, still has its plan — one whose term is at least the
 `days_before` it is renewed in: a plan of a few hours is not —, and the shop takes the wallet, at the customer's renewal
 price: within the wallet's least and most amount (a service whose renewal it does not take is renewed by hand, and
-reminded of its end). A service without a plan
-— added by its link, or built and renewed with packages built — is never renewed by itself until a renewal on a plan
-gives it one;
-otherwise — turning it off too — `422` on `auto_renew` (`تمدید خودکار برای این سرویس در دسترس نیست.`), and anything but
-a boolean is `422` on it too. With it on, the shop renews the service from the wallet `auto_renew.days_before` days
-before its end, on its plan at that plan's price. The customer hears of it: `auto_renewed`, `auto_renew_short` (the
-wallet does not cover it — said once, and tried again until it does), or `renewal_failed`.
+reminded of its end) — and while that renewal would end it by 17 January 2038 («۲۸ دی ۱۴۱۶»), the last day the shop's
+dates hold (one that would end later is not offered the switch, and its customer is reminded of its end). A service
+without a plan — added by its link, or built and renewed with packages built — is never renewed by itself until a
+renewal on a plan gives it one. While it is not offered, the switch cannot be changed either way — turning it off is
+refused too: `422` on `auto_renew` (`تمدید خودکار برای این سرویس در دسترس نیست.`). Anything but a boolean is `422` on it
+as well. With it on, the shop renews the service from the wallet `auto_renew.days_before` days before its end, on its
+plan at that plan's price. The customer hears of it: `auto_renewed`, `auto_renew_short` (the wallet does not cover it —
+said once, and tried again until it does), or `renewal_failed`.
 
 ## A new link
 
@@ -147,13 +150,18 @@ support made on a server by hand, by sending its link — as in the bot. Offer i
 is true ([what the site asks first](Store-API-Shop.md#what-the-site-asks-first)): the main shop's alone, off until its
 admin switches it on.
 
-`POST /subscriptions/claim` `{ "link": "…" }` → `201` `{ "subscription": … }`, the service as
-[services](#services) shows it: `claimed_at` set, `plan` `null`. `link` is what the customer pasted, up to 2000
-characters — a subscription link (`https://…/sub/…`, through any domain) or one of the service's configs (`vless://`,
-`vmess://`, `trojan://`, `ss://`, `hysteria2://`, `tuic://`), alone or among other words; its links are read together,
-five at most.
-The first customer to send it gets it; the report group hears of every one. No `Idempotency-Key`: sent again, it is
-refused as theirs already.
+`POST /subscriptions/claim` request
+```json
+{ "link": "سرویسم این است: https://sub.example.net/sub/5b7d2c9e1f04" }
+```
+
+`link` is what the customer pasted, up to 2000 characters: a subscription link (`https://…/sub/…`, through any domain)
+or one of the service's configs (`vless://`, `vmess://`, `trojan://`, `ss://`, `hysteria2://` or `hy2://`,
+`tuic://`), alone or among other words. Its links are read together, five at most.
+
+The answer is `201` with `{ "subscription": … }`, the service as [services](#services) shows it: `claimed_at` set,
+`plan` `null`. The first customer to send it gets it; the report group hears of every one. It takes no
+`Idempotency-Key`: sent again, it is refused as theirs already.
 
 Every refusal is under `errors.link`, in words to show as they are:
 
@@ -171,8 +179,8 @@ are sold for it at the shop's own prices, while the shop sells them.
 ## Orders and payments
 
 `GET /orders?status=&type=&page=` lists the customer's orders, newest first, each with its payments (newest first) — the
-order shape of [what a checkout answers](Store-API-Buying.md#what-a-checkout-answers); `GET /orders/{id}` answers
-`{ "order": … }`. An order's `subscription` is the service it delivered, renews or adds extras to, as `{ id, name }` — its
+order shape of [what a checkout answers](Store-API-Buying.md#what-a-checkout-answers). `status` and `type` narrow it to
+one of the values below; anything else is every one. `GET /orders/{id}` answers `{ "order": … }`. An order's `subscription` is the service it delivered, renews or adds extras to, as `{ id, name }` — its
 name on the server, as a ticket names its service ([the list](Store-API-Support-Tickets.md#the-list)): a purchase's once
 delivered, a renewal's and extras' from the start; `null` for none, or once that service was deleted. Link it to
 `GET /subscriptions/{id}`. `package_name` is what a purchase or a renewal buys in words — its plan's name, or a service
@@ -196,7 +204,7 @@ service's own, `null` for the rest (an agent's `traffic` order says its traffic 
 | `paid` | paid; the delivery has not started |
 | `processing` | paid; the delivery is under way |
 | `fulfilled` | delivered (`fulfilled_at`; `subscription` the service delivered, renewed or given its extras) |
-| `failed` | paid, but the delivery failed — support delivers it (or gives the money back) |
+| `failed` | paid, but not delivered — `failure` says why: `delivery` (support delivers it), `first_purchase_used` or `service_changed_hands` (never delivered: support settles the payment with the customer) — [why an order failed](Store-API-Buying.md#why-an-order-failed) |
 | `cancelled` | cancelled by support, or left unpaid for 48 hours |
 | `refunded` | the money went back — a purchase's, a renewal's or extras' into the wallet, a delivered top-up's out of it again |
 
@@ -214,7 +222,8 @@ cancellation or a refund, or the shop's own (`سفارش با روش دیگری 
 `سرویس این سفارش به حساب دیگری منتقل شد`, `مهلت پرداخت در درگاه تمام شد`, `سفارش پیش از رسیدن این پرداخت بسته شده بود؛
 مبلغ به کیف پول مشتری رفت`, and for an online payment [held for support](Store-API-Buying.md#a-payment-held-for-support),
 whatever its status, `پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ …` in place of the shop's words to support on
-why). Show it under the payment. Support's internal notes on an order are never in the API.
+why). Show it under the payment. Support's internal notes on an order are never in the API: a `failed` order's
+`failure` says why in a word.
 
 ## The wallet
 
@@ -263,21 +272,34 @@ looked up for them then: `GET /wallet/transfer` answers a `422` under `errors.am
 1. **Who it goes to** — `GET /wallet/transfer?telegram_id=7070` → `200`
    `{ "recipient": { "name": "Sara", "username": "sara" } }` (either may be `null`): show it, then ask the amount and
    for a confirmation of both. Nothing changes.
-2. **Send it** — `POST /wallet/transfer` `{ "telegram_id": "7070", "amount": "50000" }` with an `Idempotency-Key` header
-   (a new UUID for each transfer the customer confirms) and a recent sign-in
-   ([a recent sign-in](Store-API-Account.md#a-recent-sign-in): a token that leaked gives no money away; a `403` asks for
-   `POST /me/reauthenticate` first) → `200`
-   ```json
-   {
-     "transfer": { "id": 9, "amount": "50000.00", "recipient": { "name": "Sara", "username": "sara" }, "created_at": "2026-10-14T12:00:00+00:00" },
-     "wallet": { "balance": "330000.00", "credit": "0.00", "spendable": "330000.00", "top_up": { … }, "transfer": { … } }
-   }
-   ```
-   `telegram_id` and `amount` as a customer types them (numbers, or text with Persian digits, separators and «تومان»),
-   or `amount` in the API's format (`"50000.00"`). The money moves at once; `wallet` is the customer's wallet as it is
-   now. Each wallet's history gets a line naming the other customer (`انتقال موجودی به Sara (@sara)`, `دریافت موجودی از
-   Ali (@ali)`); the recipient is told in the bot and among their notices (`wallet_received`), the customer among their
-   notices and in Telegram (`wallet_sent`). The report group hears of every one.
+2. **Send it** — `POST /wallet/transfer`, with an `Idempotency-Key` header (a new UUID for each transfer the customer
+   confirms) and a recent sign-in ([a recent sign-in](Store-API-Account.md#a-recent-sign-in): a token that leaked
+   gives no money away; a `403` asks for `POST /me/reauthenticate` first). The money moves at once.
+
+`POST /wallet/transfer` request
+```json
+{ "telegram_id": "7070", "amount": "50000" }
+```
+
+`POST /wallet/transfer` → `200`
+```json
+{
+  "transfer": { "id": 9, "amount": "50000.00", "recipient": { "name": "Sara", "username": "sara" }, "created_at": "2026-10-14T12:00:00+00:00" },
+  "wallet": {
+    "balance": "330000.00",
+    "credit": "0.00",
+    "spendable": "330000.00",
+    "top_up": { "min": "10000.00", "max": "500000000.00", "presets": ["50000.00", "100000.00", "200000.00", "500000.00"], "random": [] },
+    "transfer": { "min": "10000.00", "max": "5000000.00", "daily_cap": "10000000.00", "left_today": "9950000.00", "most": "330000.00" }
+  }
+}
+```
+
+`telegram_id` and `amount` go as a customer types them (numbers, or text with Persian digits, separators, «هزار» and
+«تومان»: [conventions](Store-API.md#conventions)), or `amount` in the API's format (`"50000.00"`). `wallet` is the
+customer's wallet as it is now. Each wallet's history gets a line naming the other customer (`انتقال موجودی به Sara
+(@sara)`, `دریافت موجودی از Ali (@ali)`). The recipient is told in the bot and among their notices (`wallet_received`),
+the customer among their notices and in Telegram (`wallet_sent`). The report group hears of every one.
 
 Sent again with the same `Idempotency-Key` — a network retry —, the answer is the transfer that key made and the wallet
 as it is now: never a second transfer, even for two at the same moment. The same key with another `telegram_id` or
@@ -324,12 +346,14 @@ either, a `429` with `Retry-After`.
 - While `enabled`, a referred customer's payment that brings money in — a card transfer, for anything; not a wallet
   payment — earns the referrer `rate` percent (whole Toman, rounded down) into their wallet — a renewal's
   `renewal_rate` instead (0: renewals earn nothing) —; with `first_only`, only that customer's first. One level: a
-  referral's referrals earn the referrer nothing.
+  referral's referrals earn the referrer nothing. A wallet top-up given back (its money out of the shop) takes its
+  commission back out of the referrer's wallet (a `referral_commission_back` notice); a purchase's, a renewal's or an
+  extra's refund, whose money stays in the shop as wallet credit, leaves it.
 - `start_gift` («هدیه شروع», `null` while there is none) — Toman to the referrer's wallet (`referrer`) and to the
   newcomer's own (`invitee`), once a newcomer: as they join (`trigger` `join`) or as their first purchase is paid
   (`purchase` — any way to pay; a service given free is no purchase). Both are told (`referral_start_gift` notices).
 - `reward` («جایزه دعوت», `null` while there is none) — each time `every` more of the newcomers their code brought
-  have bought, a service of `plan` is given to them free (a `referral_reward` notice, then the service as any
+  have bought (a purchase with a price, not refunded since), a service of `plan` is given to them free (a `referral_reward` notice, then the service as any
   order's); `rewards` — how many they were given.
 - While an alert on their referrals stands — support's, when they look made up —, no start gift and no reward is given,
   and none of what was held back later; commissions are as ever.

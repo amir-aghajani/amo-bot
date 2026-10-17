@@ -24,7 +24,6 @@ use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
-use App\Modules\Telegram\Keyboard\KeyboardLayout;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
@@ -237,7 +236,7 @@ final class CustomServiceHandler implements Handler, RedrawableCheckout
 
     /**
      * The third step: a button per server the builder sells on now, in its colour and row, «بازگشت» to the days — or, with
-     * only one, its checkout at once.
+     * only one, its checkout at once. They fit one keyboard: the builder has CustomServiceSettings::SERVERS_MOST at most.
      */
     private function server(Context $ctx, int $gb, int $days): void
     {
@@ -256,11 +255,7 @@ final class CustomServiceHandler implements Handler, RedrawableCheckout
             return;
         }
 
-        $buttons = array_map(fn(Server $server): array => [InlineKeyboard::callback(
-            $this->texts->render(BotText::ServerButton, ['server' => $server->name]),
-            self::checkoutCallback($gb, $days, $server->id),
-            KeyboardLayout::style($server->buttonStyle()),
-        ), $server->buttonRow()], $servers);
+        $buttons = array_map(fn(Server $server): array => $this->buttons->server($server, self::checkoutCallback($gb, $days, $server->id)), $servers);
 
         $ctx->session->clear();
         $ctx->edit($this->texts->render(BotText::CustomServer, [
@@ -423,6 +418,7 @@ final class CustomServiceHandler implements Handler, RedrawableCheckout
 
         $amount = $this->amounts->read(
             $ctx,
+            $quantity->typedUnit(),
             fn(int $amount): bool => $this->custom->allowed($quantity, $amount),
             $this->texts->render($gb === null ? BotText::CustomTrafficInvalid : BotText::CustomDaysInvalid, ['least' => Persian::number($least), 'most' => Persian::number($most)]),
             $gb === null ? self::stepCallback($renewing, $from) : self::stepCallback($renewing, $from, $gb),

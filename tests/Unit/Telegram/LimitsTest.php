@@ -38,6 +38,16 @@ final class LimitsTest extends TestCase
         self::assertTrue(mb_check_encoding($cut, 'UTF-8'));
     }
 
+    public function testAPhotoIsWithinTelegramsSidesAndRatio(): void
+    {
+        self::assertTrue(Limits::isPhoto(1024, 1024));
+        self::assertTrue(Limits::isPhoto(2000, 100), 'twenty times as wide: still a photo');
+        self::assertFalse(Limits::isPhoto(2001, 100), 'a banner past the ratio');
+        self::assertTrue(Limits::isPhoto(5000, 5000));
+        self::assertFalse(Limits::isPhoto(5001, 5000), 'past the sides together');
+        self::assertFalse(Limits::isPhoto(0, 100));
+    }
+
     public function testAFitIsWhatFitsElseCutShortWithAnEllipsisWithinItsUnits(): void
     {
         self::assertSame('سلام', Limits::fit('سلام', 4));

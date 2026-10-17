@@ -8,6 +8,8 @@ use App\Core\Exceptions\ValidationException;
 use App\Modules\Settings\Models\Setting;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Texts\TelegramHtml;
+use App\Modules\Telegram\Texts\TextCatalog;
 use App\Modules\Telegram\Texts\TextKind;
 use App\Support\Validation;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -48,6 +50,18 @@ final class BotTextsTest extends DatabaseTestCase
 
         self::assertFalse($this->texts->isCustomized(BotText::Cancel), 'a default improved later still reaches the shop');
         self::assertSame(0, Setting::query()->where('key', 'bot.text.cancel')->count());
+    }
+
+    public function testALeftToRightMarkBeforeARowNumberIsTheAdminsToWriteAsTheDefaultsDo(): void
+    {
+        // The default carries one before «#»; the admin's wording may too: an invisible mark, no markup, no content.
+        $this->texts->save(BotText::PayProcessing, BotText::PayProcessing->spec()->default);
+        self::assertFalse($this->texts->isCustomized(BotText::PayProcessing), 'the default as it is, its mark and all');
+
+        $wording = "✅ سفارش \u{200E}#%order% پرداخت شد؛ %outcome%.";
+        $this->texts->save(BotText::PayProcessing, $wording);
+        self::assertSame($wording, $this->texts->present(BotText::PayProcessing)['value'], 'kept as typed');
+        self::assertSame(TelegramHtml::visibleLength(str_replace("\u{200E}", '', $wording)) + 1, TelegramHtml::visibleLength($wording), 'one unit, as Telegram counts it in its limit');
     }
 
     public function testAPartKeepsTheLineBreaksItStartsWithAndMayBeEmptied(): void
@@ -108,10 +122,39 @@ final class BotTextsTest extends DatabaseTestCase
         self::assertTrue($variables['login']['required']);
     }
 
+    public function testAVariableTheBotFillsWithHtmlSaysSoAndItsSampleIsHtmlAsWell(): void
+    {
+        self::assertSame([], array_diff(TextCatalog::HTML_VARIABLES, array_keys(TextCatalog::VARIABLES)), 'every one a variable');
+        foreach (TextCatalog::VARIABLES as $name => [, $sample]) {
+            if (in_array($name, TextCatalog::HTML_VARIABLES, true)) {
+                self::assertNull(TelegramHtml::problem($sample), "%{$name}%'s sample is Telegram HTML, as the bot fills it");
+            } else {
+                self::assertDoesNotMatchRegularExpression('/[<&]/', $sample, "%{$name}%'s sample is plain text: markup in it would read as typed");
+            }
+        }
+
+        $variables = array_column($this->texts->present(BotText::PayOnlineCard)['variables'], 'html', 'name');
+        self::assertSame(['card' => false, 'card_holder' => true, 'bank' => true, 'amount_digits' => false], $variables, "a part's wording is HTML; a card number is not");
+        self::assertSame("\n👤 به نام <b>سارا احمدی</b>", TextCatalog::VARIABLES['card_holder'][1]);
+    }
+
     /** @return iterable<string, array{BotText, mixed, string}> */
     public static function refused(): iterable
     {
         yield 'nothing at all' => [BotText::Welcome, " \n ", 'نمی‌تواند خالی باشد'];
+        // Blank as Telegram reads it, though trim() leaves it: Telegram refuses a message of nothing.
+        yield 'a no-break space alone' => [BotText::MenuPrompt, "\u{00A0}", 'نمی‌تواند خالی باشد'];
+        yield 'zero-width characters alone' => [BotText::MenuPrompt, "\u{200B}\u{200C}\u{FEFF}\n\u{2060}", 'نمی‌تواند خالی باشد'];
+        yield 'direction marks alone' => [BotText::MenuPrompt, "\u{200E}\u{200F}", 'نمی‌تواند خالی باشد'];
+        yield 'formatting around a space, and a space as an entity' => [BotText::MenuPrompt, "<b>\u{2009}</b>&#160;", 'نمی‌تواند خالی باشد'];
+        yield 'a button of a thin space' => [BotText::Cancel, "\u{2009}", 'نمی‌تواند خالی باشد'];
+        yield 'a popup of an ideographic space' => [BotText::Error, "\u{3000}", 'نمی‌تواند خالی باشد'];
+        // The letters made to look empty (Text::blank()): a Hangul filler, the blank Braille pattern.
+        yield 'a button of a Hangul filler' => [BotText::Cancel, "\u{3164}", 'نمی‌تواند خالی باشد'];
+        yield 'a message of blank Braille in bold' => [BotText::MenuPrompt, "<b>\u{2800}\u{2800}</b>", 'نمی‌تواند خالی باشد'];
+        // The HTML first: what strip_tags() would swallow is told as what it is, not as nothing.
+        yield 'an unfinished tag alone' => [BotText::MenuPrompt, '<b پررنگ', 'تگ <b> با > بسته نشده است'];
+        yield 'an empty premium emoji alone' => [BotText::MenuPrompt, '<tg-emoji emoji-id="5"></tg-emoji>', 'فقط یک ایموجی معمولی'];
         yield 'not a text' => [BotText::Welcome, ['x'], 'متن را وارد کنید'];
         yield 'a variable the text does not have' => [BotText::Welcome, 'سلام %plan%', 'متغیر %plan% در این متن وجود ندارد'];
         yield 'a variable in a text without any' => [BotText::MenuPrompt, 'سلام %name%', 'این متن متغیری ندارد'];

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Store\Presenters;
 
+use App\Modules\Orders\Enums\OrderFailure;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderDirectory;
 use App\Modules\Payments\DTO\PayLink;
@@ -18,9 +19,10 @@ use Illuminate\Support\Carbon;
 
 /**
  * An order as its customer's website shows it, with its payments. Support's own words on an order (`notes`,
- * `diagnosis`) are never shown; a payment's verdict note (a rejection's reason) is the customer's to read, as in the bot;
- * an online payment's page is shown while it takes money — unless the payment is held for support. Relations come loaded
- * (Store\Services\CustomerOrders).
+ * `diagnosis`) are never shown — why a paid one failed is said in a word (`failure`, Orders\Enums\OrderFailure) —; a
+ * payment's verdict note (a rejection's reason) is the customer's to read, as in the bot; an online payment's page is
+ * shown while it takes money — unless the payment is held for support. Relations come loaded (Store\Services\
+ * CustomerOrders).
  */
 final class OrderPresenter
 {
@@ -43,6 +45,8 @@ final class OrderPresenter
             'id' => $order->id,
             'type' => $order->type->value,
             'status' => $order->status->value,
+            // Why a paid order failed, in a word the website words for its customer (support's own notes stay here).
+            'failure' => OrderFailure::of($order)?->value,
             'amount' => $order->amount,
             // The price a purchase or a renewal was made at: the plan's own, its first-purchase price or its agent price.
             'pricing' => $order->pricing->value,
@@ -79,7 +83,7 @@ final class OrderPresenter
             'receipt' => $payment->receipt_at === null ? null : ['sent_at' => $payment->receipt_at->toIso8601String()],
             // A hold's note is support's: the customer reads that it is with support, not to be paid again. Support's own
             // word (a cancellation's note) replaces it once they settle it.
-            'note' => in_array($payment->note, [PaymentService::NOTE_HELD, PaymentService::NOTE_UNSETTLED], true) ? sprintf(PaymentHeldException::MESSAGE, $payment->order_id) : $payment->note,
+            'note' => in_array($payment->note, PaymentService::HELD_NOTES, true) ? sprintf(PaymentHeldException::MESSAGE, $payment->order_id) : $payment->note,
             'link' => $this->openLink($payment),
         ];
     }

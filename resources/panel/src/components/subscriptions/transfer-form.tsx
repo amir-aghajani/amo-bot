@@ -8,7 +8,7 @@ import { UserIdentity, userLabel } from '@/components/user-identity'
 import { api, ApiError } from '@/lib/api'
 import type { SubscriptionRow, SubscriptionTransferRecipientResponse, UserRef } from '@/lib/api-types'
 import { messageOf } from '@/lib/failure'
-import { digitsOnly } from '@/lib/format'
+import { toLatinDigits } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { useForm } from '@/lib/use-form'
 import { useSettled } from '@/lib/use-settled'
@@ -32,7 +32,7 @@ interface TransferFormProps {
 export function TransferForm({ subscription, invalidates, onCancel, onTransferred, onStale }: TransferFormProps) {
   const id = useId()
   const { values, patch, error, formError, busy, dirty, submit, handleSubmit } = useForm({ telegram_id: '' })
-  const typed = digitsOnly(values.telegram_id)
+  const typed = idOf(values.telegram_id)
   const lookup = useRecipient(subscription.id, typed)
   // Sent only once the server named the customer the id would hand it to.
   const ready = lookup.recipient !== null
@@ -62,6 +62,14 @@ export function TransferForm({ subscription, invalidates, onCancel, onTransferre
       <FormActions error={formError} onCancel={onCancel} submitLabel="انتقال به مشتری دیگر" busy={busy} held={!ready} icon={Forward} dirty={dirty} />
     </form>
   )
+}
+
+/**
+ * The id as the server is asked it: Persian digits as Latin ones, spaces dropped — and anything else kept, so a handle
+ * typed by mistake («@sara1990») is refused by the server as no id, never read as the digits inside it (1990).
+ */
+function idOf(typed: string): string {
+  return toLatinDigits(typed).replace(/\s+/g, '')
 }
 
 interface Lookup {

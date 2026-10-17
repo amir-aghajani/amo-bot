@@ -49,8 +49,11 @@ export const PAYMENT_CARDS = { MOST: 20 } as const
 /** Receipts rejected at once (Payments\Services\ReceiptDismissals): how many a request names, and how many a round of «همه» takes. */
 export const RECEIPT_DISMISSALS = { MOST: 100 } as const
 
-/** Gift codes made at once (Rewards\Services\GiftCodes): how many, and their prefix's length. */
-export const GIFT_CODES = { COUNT_MAX: 500, PREFIX_MAX: 12 } as const
+/**
+ * Gift codes made at once (Rewards\Services\GiftCodes): how many, their prefix's length — and the last day they may be
+ * good until, the last the shop keeps (Support\LocalTime::LAST_DAY).
+ */
+export const GIFT_CODES = { COUNT_MAX: 500, PREFIX_MAX: 12, LAST_DAY: '2038-01-17' } as const
 
 /** The nightly draw (Rewards\Services\LotterySettings): its winners (`lottery_winners`). */
 export const LOTTERY_SETTINGS = { WINNERS_MAX: 20 } as const

@@ -1,12 +1,14 @@
 import { Suspense, type ReactNode } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
-import { ErrorBoundary } from '@/components/error-boundary'
+import { ErrorBoundary, RouteError } from '@/components/error-boundary'
 import type { ClientErrorRequest } from '@/lib/api-types'
 import { panelBuild } from '@/lib/config'
 import { startErrorReporting } from '@/lib/error-reporting'
 import { FAILURE_KINDS } from '@/lib/failure'
 import { lazyPage } from '@/lib/lazy-page'
+import { startPrefetching } from '@/lib/prefetch'
 import { STORAGE_KEYS } from '@/lib/storage'
 
 /*
@@ -138,5 +140,107 @@ describe('a lazy page that fails to load', () => {
 
     expect(screen.getByRole('heading', { name: FAILURE_KINDS.crash.title })).toBeTruthy()
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('whose file did not come while the browser is offline says so with a way to ask again, which draws the page once it comes', async () => {
+    const offline = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    let loads = 0
+    const Page = lazyPage(
+      () => (++loads === 1 ? Promise.reject(new TypeError(STALE)) : Promise.resolve({ Page: () => <p>صفحه پلن‌ها</p> })),
+      (module) => module.Page,
+    )
+    render(
+      <ErrorBoundary scope="page" onRetry={() => Page.preload()}>
+        <Suspense fallback={<p role="status">در حال بارگذاری…</p>}>
+          <Page />
+        </Suspense>
+      </ErrorBoundary>,
+    )
+
+    const retry = await screen.findByRole('button', { name: 'تلاش دوباره' })
+    expect(screen.getByRole('heading', { name: FAILURE_KINDS.offline.title })).toBeTruthy()
+    expect(reload).not.toHaveBeenCalled()
+
+    offline.mockReturnValue(true)
+    fireEvent.click(retry)
+
+    expect(await screen.findByText('صفحه پلن‌ها')).toBeTruthy()
+    expect(loads).toBe(2)
+  })
+
+  it('asked again from the keyboard, gives the focus to the page’s column once the page is drawn — never to the document', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    let loads = 0
+    const Page = lazyPage(
+      () => (++loads === 1 ? Promise.reject(new TypeError(STALE)) : Promise.resolve({ Page: () => <p>صفحه پلن‌ها</p> })),
+      (module) => module.Page,
+    )
+    render(
+      <main id="main" tabIndex={-1}>
+        <ErrorBoundary scope="page" onRetry={() => Page.preload()}>
+          <Suspense fallback={<p role="status">در حال بارگذاری…</p>}>
+            <Page />
+          </Suspense>
+        </ErrorBoundary>
+      </main>,
+    )
+
+    const retry = await screen.findByRole('button', { name: 'تلاش دوباره' })
+    retry.focus()
+    fireEvent.click(retry)
+
+    expect(await screen.findByText('صفحه پلن‌ها')).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('main'))
+  })
+})
+
+describe('a failure outside the shell — the router’s own screen', () => {
+  it('whose page’s file did not come offline says so with a way to ask again, which draws the page once it comes', async () => {
+    const offline = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    let loads = 0
+    const Login = lazyPage(
+      () => (++loads === 1 ? Promise.reject(new TypeError(STALE)) : Promise.resolve({ Page: () => <p>صفحه ورود</p> })),
+      (module) => module.Page,
+    )
+    const routes = [{ path: '/login', element: <Login /> }]
+    const router = createMemoryRouter(
+      [
+        {
+          element: (
+            <Suspense>
+              <Outlet />
+            </Suspense>
+          ),
+          errorElement: <RouteError />,
+          children: routes,
+        },
+      ],
+      // Sent to the sign-in from a page: where it leads back to rides on the entry.
+      { initialEntries: [{ pathname: '/login', state: { from: '/plans' } }] },
+    )
+    const stopPrefetching = startPrefetching(routes, '/')
+    try {
+      render(<RouterProvider router={router} />)
+
+      const retry = await screen.findByRole('button', { name: 'تلاش دوباره' })
+      expect(screen.getByRole('heading', { name: FAILURE_KINDS.offline.title })).toBeTruthy()
+      expect(reload).not.toHaveBeenCalled()
+
+      offline.mockReturnValue(true)
+      fireEvent.click(retry)
+
+      expect(await screen.findByText('صفحه ورود')).toBeTruthy()
+      expect([loads, router.state.location.pathname, router.state.location.state]).toEqual([2, '/login', { from: '/plans' }])
+    } finally {
+      stopPrefetching()
+    }
+  })
+
+  it('offers no asking again where it cannot help — an address no route takes', async () => {
+    const router = createMemoryRouter([{ path: '/', element: <p>داشبورد</p>, errorElement: <RouteError /> }], { initialEntries: ['/nowhere'] })
+    render(<RouterProvider router={router} />)
+
+    expect(await screen.findByRole('heading', { name: FAILURE_KINDS['not-found'].title })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'تلاش دوباره' })).toBeNull()
   })
 })

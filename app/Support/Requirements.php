@@ -11,7 +11,8 @@ use App\Core\Database\DatabaseManager;
 /**
  * What a host must have before the shop runs — the one list the installer shows, matching composer.json's required
  * extensions plus the database driver's. PHP's version is not listed: Composer's platform check stops an older PHP
- * first. The `optional` ones (sodium, zip: the panel's own update) are shown but hold nothing up.
+ * first. The `optional` ones — composer.json's suggestions: sodium and zip (the panel's own update), gd (the QR card) —
+ * are shown but hold nothing up.
  */
 final class Requirements
 {
@@ -46,6 +47,9 @@ final class Requirements
             // The panel's own update: a new release's signature checked, its zip unpacked (Modules\Updates).
             self::requirement('ext-sodium', 'افزونه sodium، برای بررسی امضای نسخه‌های تازه (به‌روزرسانی از داخل پنل)', extension_loaded('sodium'), optional: true),
             self::requirement('ext-zip', 'افزونه zip، برای باز کردن نسخه‌های تازه (به‌روزرسانی از داخل پنل)', extension_loaded('zip'), optional: true),
+            // The QR card a delivered service comes with (without it the link goes as text), and pictures written again
+            // without their metadata (Core\Support\Picture).
+            self::requirement('ext-gd', 'افزونه gd، برای کارت QR سرویس‌ها و بازنویسی عکس‌ها (بدون آن لینک سرویس به شکل متن فرستاده می‌شود)', extension_loaded('gd'), optional: true),
         ];
     }
 

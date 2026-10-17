@@ -8,7 +8,9 @@ use App\Modules\Catalog\DTO\Package;
 use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Support\LocalTime;
 use Illuminate\Support\Carbon;
 
 /**
@@ -22,6 +24,10 @@ use Illuminate\Support\Carbon;
  *
  * Extra devices bought last as long as the period they were bought for: a renewal brings its package's device limit —
  * at once, or once the period in use ends (`next_period_ip_limit`) —, and for the new period they are bought again.
+ *
+ * No term may end the service past the last day the shop keeps (LocalTime::LAST_DAY: the TIMESTAMP columns end in
+ * January 2038): what lengthens it — a purchase (newTerm()), a renewal, a grant, extra time — is refused with
+ * TermTooLongException when it would, a term still waiting for the first connection judged as if it began now.
  */
 final class ServiceTerms
 {
@@ -75,6 +81,46 @@ final class ServiceTerms
     public static function termOf(int $hours): Expiry
     {
         return $hours > 0 ? Expiry::afterFirstUse($hours * self::HOUR) : Expiry::never();
+    }
+
+    /** Whether a new service of `$hours` — connected now at the earliest — ends by the last day the shop keeps. */
+    public static function startsInTime(int $hours): bool
+    {
+        return $hours <= 0 || !LocalTime::tooLate(Carbon::now()->addHours($hours));
+    }
+
+    /**
+     * A new service's term of `$hours` (termOf()), while it starts in time (startsInTime()).
+     *
+     * @throws TermTooLongException
+     */
+    public static function newTerm(int $hours): Expiry
+    {
+        return self::startsInTime($hours) ? self::termOf($hours) : throw new TermTooLongException();
+    }
+
+    /**
+     * The most whole days the service may still be given — a grant, extra time, a prize — before its end would pass the
+     * last day the shop keeps: counted from its deadline while that is ahead, from now and the term still waiting for
+     * the first connection, or from now once its time ran out (extra days start a new term then) — now to the next whole
+     * second, so no day offered is one the term then refuses (inTime() counts from now to the microsecond). Null for a
+     * service that never ends: it takes no days.
+     */
+    public static function daysLeft(Subscription $subscription): ?int
+    {
+        if (!$subscription->hasTerm()) {
+            return null;
+        }
+        $deadline = $subscription->expires_at;
+        $clock = Carbon::now();
+        $now = $clock->getTimestamp() + ($clock->micro > 0 ? 1 : 0);
+        $from = match (true) {
+            $deadline === null => $now + $subscription->duration_hours * self::HOUR,
+            $deadline->isFuture() => $deadline->getTimestamp(),
+            default => $now,
+        };
+
+        return max(0, intdiv(LocalTime::last()->getTimestamp() - $from, self::DAY));
     }
 
     /**
@@ -144,6 +190,8 @@ final class ServiceTerms
      *
      * A queued period whose end has passed has begun, though NextPeriodTask has yet to start it (begun()): the renewal
      * goes on from it — its device limit, its traffic capped —, queued behind the deadline.
+     *
+     * @throws TermTooLongException when its term would end the service past the last day the shop keeps
      */
     public static function renewal(Subscription $subscription, Package $package, bool $carryTraffic, RenewalMethod $method = RenewalMethod::Extend, int $devicesBought = 0): self
     {
@@ -163,6 +211,9 @@ final class ServiceTerms
             $waiting => [self::termOf($subscription->duration_hours + $hours), $subscription->duration_hours + $hours, null],
             default => [self::termOf($hours), $hours, null],
         };
+        if ($hours > 0) {
+            self::inTime($expiry);
+        }
         $givenHours = match (true) {
             !$restart || $hours <= 0 => $hours,
             $running => $hours - (int) ceil(($deadline->getTimestamp() - $now->getTimestamp()) / self::HOUR),
@@ -313,6 +364,8 @@ final class ServiceTerms
      * move its deadline, or lengthen a term still waiting for the first connection; the traffic goes on top of
      * max(quota, used). A service without a term takes no days, an unlimited one no traffic. A queued renewal period moves
      * with the days — the period in use runs longer, with its devices —, and keeps the traffic given.
+     *
+     * @throws TermTooLongException when the days would end the service past the last day the shop keeps
      */
     public static function grant(Subscription $subscription, int $days, int $bytes): self
     {
@@ -320,8 +373,8 @@ final class ServiceTerms
         $deadline = $subscription->expires_at;
         $expiry = match (true) {
             $hours === 0 => self::expiryOf($subscription),
-            $deadline !== null => self::later($deadline, $hours),
-            default => self::termOf($subscription->duration_hours + $hours),
+            $deadline !== null => self::inTime(self::later($deadline, $hours)),
+            default => self::inTime(self::termOf($subscription->duration_hours + $hours)),
         };
         $limit = $subscription->traffic_limit_bytes;
         $total = $limit === 0 || $bytes === 0 ? $limit : max($limit, $subscription->usedBytes()) + $bytes;
@@ -346,6 +399,8 @@ final class ServiceTerms
      * raise its IP limit (an unlimited one stays unlimited) for the period in use: with a renewal queued behind it, the
      * next period keeps the limit it was to have — unless that period's end has passed already (NextPeriodTask has yet
      * to start it): it has begun, and they go onto its limit.
+     *
+     * @throws TermTooLongException when the days would end the service past the last day the shop keeps
      */
     public static function extra(Subscription $subscription, int $days, int $bytes, int $devices = 0): self
     {
@@ -353,7 +408,7 @@ final class ServiceTerms
         if ($days > 0 && $subscription->isExpiredByTime()) {
             $hours = $days * self::HOURS_A_DAY;
 
-            return new self($subscription->traffic_limit_bytes, self::termOf($hours), $hours, $ipLimit, givenHours: $hours, restartsTerm: true);
+            return new self($subscription->traffic_limit_bytes, self::inTime(self::termOf($hours)), $hours, $ipLimit, givenHours: $hours, restartsTerm: true);
         }
 
         $next = $subscription->next_period_ip_limit;
@@ -539,5 +594,19 @@ final class ServiceTerms
     private static function later(Carbon $deadline, int $hours): Expiry
     {
         return Expiry::at($deadline->copy()->addHours($hours)->toDateTimeImmutable());
+    }
+
+    /**
+     * `$expiry` as long as it ends by the last day the shop keeps — a term still waiting for the first connection judged
+     * as if it began now, the soonest it may.
+     *
+     * @throws TermTooLongException
+     */
+    private static function inTime(Expiry $expiry): Expiry
+    {
+        $pending = $expiry->pendingSeconds();
+        $end = $expiry->deadline() ?? ($pending !== null ? Carbon::now()->addSeconds($pending) : null);
+
+        return $end !== null && LocalTime::tooLate($end) ? throw new TermTooLongException() : $expiry;
     }
 }

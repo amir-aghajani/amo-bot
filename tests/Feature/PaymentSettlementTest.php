@@ -112,6 +112,30 @@ final class PaymentSettlementTest extends DatabaseTestCase
         self::assertCount(1, $this->telegram()->sentTo(1001), 'the customer hears the decision that stood, once');
     }
 
+    public function testAReceiptRefusedAsAnotherAdminApprovesItStaysRefused(): void
+    {
+        $payment = $this->receipt($this->cardPayment($this->orders()->openTopUp($this->ali, 50000), $this->card));
+        // Two admins read it in review: one refuses it, and the other's approval lands after.
+        [$refusing, $approving] = [Payment::query()->with('order')->findOrFail($payment->id), Payment::query()->with('order')->findOrFail($payment->id)];
+        $actions = $this->service(PaymentActions::class);
+
+        $actions->reject($refusing, $this->panelActor(), 'مبلغ نرسید');
+        try {
+            $actions->approve($approving, $this->panelActor('admin'));
+            self::fail('approved over a refusal made in the same moment');
+        } catch (ValidationException $e) {
+            self::assertSame(PaymentActions::DECIDED_MEANWHILE, $e->getMessage());
+        }
+
+        self::assertSame([PaymentStatus::Failed, 'مبلغ نرسید'], [$payment->refresh()->status, $payment->note]);
+        self::assertSame('0.00', $this->ali->balance());
+        self::assertCount(1, $this->telegram()->sentTo(1001), 'the customer hears the refusal alone');
+
+        // A refused receipt approved knowingly — support saw the money after all — still goes.
+        $actions->approve($payment, $this->panelActor('admin'));
+        self::assertSame([PaymentStatus::Paid, '50000.00'], [$payment->refresh()->status, $this->ali->balance()]);
+    }
+
     public function testARefundThatMeetsADeliveryClaimedInTheSameMomentWaitsForIt(): void
     {
         $server = $this->sellingServer('Berlin', ['is_active' => false]);
@@ -174,7 +198,7 @@ final class PaymentSettlementTest extends DatabaseTestCase
             $this->payments()->createForOrder($stale, $this->walletMethod());
             self::fail('the second payment finds the order paid');
         } catch (OrderNotPayableException $e) {
-            self::assertStringContainsString("سفارش #{$order->id}", $e->getMessage());
+            self::assertStringContainsString("سفارش \u{200E}#{$order->id}", $e->getMessage(), 'its number marked to read left to right in a Persian line');
         }
 
         self::assertSame([$first->id], Payment::query()->pluck('id')->all(), 'the loser left no payment behind');

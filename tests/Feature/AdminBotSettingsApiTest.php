@@ -223,18 +223,40 @@ final class AdminBotSettingsApiTest extends HttpTestCase
         if (!function_exists('imagecreatetruecolor')) {
             self::markTestSkipped('GD is not installed.');
         }
-        // A strip a little longer than a card needs: shrunk to MAX_SIDE, its proportions kept.
-        $image = imagecreatetruecolor(QrBackground::MAX_SIDE + 2, 2);
-        ob_start();
-        imagepng($image);
-        $png = (string) ob_get_clean();
-        imagedestroy($image);
-
-        $uploaded = $this->upload('/api/admin/bot/qr-background', 'file', 'wide.png', $png);
+        // A picture a little wider than a card needs: shrunk to MAX_SIDE, its proportions kept.
+        $uploaded = $this->upload('/api/admin/bot/qr-background', 'file', 'wide.png', self::png(QrBackground::MAX_SIDE + 2, 1000));
 
         self::assertSame(200, $uploaded->getStatusCode(), (string) $uploaded->getBody());
         $background = $this->decode($uploaded)['qr_background'];
-        self::assertSame(['image/png', QrBackground::MAX_SIDE, 2], [$background['mime'], $background['width'], $background['height']], '2 × 2048 / 2050, to the nearest');
+        self::assertSame(['image/png', QrBackground::MAX_SIDE, 999], [$background['mime'], $background['width'], $background['height']], '1000 × 2048 / 2050, to the nearest');
+    }
+
+    public function testABannerNoCardCouldBeSentOnIsRefused(): void
+    {
+        if (!function_exists('imagecreatetruecolor')) {
+            self::markTestSkipped('GD is not installed.');
+        }
+
+        // Longer than 20 times its height: Telegram takes no photo of that shape, at any size a card is drawn at.
+        $refused = $this->upload('/api/admin/bot/qr-background', 'file', 'banner.png', self::png(2100, 100));
+
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertStringContainsString('۲۰ برابر', $this->decode($refused)['errors']['file'][0]);
+        self::assertNull($this->service(Settings::class)->get(QrBackground::KEY), 'the background stays as it was');
+
+        $uploaded = $this->upload('/api/admin/bot/qr-background', 'file', 'strip.png', self::png(2000, 100));
+        self::assertSame(200, $uploaded->getStatusCode(), '20 times: still a photo');
+    }
+
+    /** A black PNG of that size, drawn by GD. */
+    private static function png(int $width, int $height): string
+    {
+        $image = imagecreatetruecolor($width, $height);
+        ob_start();
+        imagepng($image);
+        imagedestroy($image);
+
+        return (string) ob_get_clean();
     }
 
     public function testTheWalletGroupTakesAMinimumAndPresetsInAnyReasonableForm(): void
@@ -519,6 +541,9 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'extra_traffic_max' => ['بیشترین حجم دلخواه نمی‌تواند از کمترین حجم دلخواه کمتر باشد.'],
         ], $this->decode($bad)['errors']);
         self::assertSame('2000.00', $this->service(ExtrasSettings::class)->prices()->traffic->price, 'nothing stored from a refused save');
+
+        $free = $this->putJson('/api/admin/bot/settings/extras', ['extras_enabled' => true, 'extra_traffic_min' => 1, 'extra_traffic_max' => 20, 'extra_time_min' => 1, 'extra_time_max' => 30, 'extra_devices_price' => '0', 'extra_devices_min' => 1, 'extra_devices_max' => 3]);
+        self::assertStringStartsWith('قیمت هر کاربر برای ۳۰ روز باید مبلغی بین', $this->decode($free)['errors']['extra_devices_price'][0] ?? '', 'the thirty days a quantity in words: Persian digits');
     }
 
     public function testAnAgentsBotHasSettingsOfItsOwn(): void

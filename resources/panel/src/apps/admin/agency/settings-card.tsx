@@ -5,6 +5,7 @@ import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
 import { Field } from '@/components/field'
 import { MoneyField } from '@/components/money-field'
+import { useReadFailure } from '@/components/page'
 import { SectionCard } from '@/components/section-card'
 import { SwitchRow } from '@/components/switch-row'
 import { Input } from '@/components/ui/input'
@@ -19,10 +20,18 @@ import { useSettingsGroup } from '@/lib/use-settings-group'
 /** The program's rules, as read; the form keeps its draft while another section is shown. */
 export function AgencySettingsCard() {
   const read = useQuery(agencySettingsQuery)
+  const failure = useReadFailure(read)
+  const failed = failure.error && <ErrorState what="تنظیمات نمایندگی" error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} />
 
-  if (read.error) return <ErrorState what="تنظیمات نمایندگی" error={read.error} onRetry={() => void read.refetch()} retrying={read.isFetching} />
+  // A later read that fails is said over the form, which keeps its draft.
+  if (!read.data) return failed || <Skeleton className="h-64 w-full rounded-xl" />
 
-  return read.data ? <SettingsForm settings={read.data.settings} /> : <Skeleton className="h-64 w-full rounded-xl" />
+  return (
+    <>
+      {failed}
+      <SettingsForm settings={read.data.settings} />
+    </>
+  )
 }
 
 /** The rules as the form edits them: amounts as typed, the presets as one line. */

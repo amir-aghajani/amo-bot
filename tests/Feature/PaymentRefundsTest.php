@@ -119,7 +119,8 @@ final class PaymentRefundsTest extends HttpTestCase
         $refused = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
 
         self::assertSame(422, $refused->getStatusCode());
-        self::assertSame(RefundRefusedException::serviceInUse($renewal->id)->getMessage(), $this->decode($refused)['message']);
+        self::assertSame(RefundRefusedException::serviceInUse($renewal->refresh())->getMessage(), $this->decode($refused)['message']);
+        self::assertStringContainsString("#{$renewal->id}", $this->decode($refused)['message']);
         self::assertSame(PaymentStatus::Paid, $payment->refresh()->status);
         self::assertTrue(Subscription::query()->whereKey($service->id)->exists());
 
@@ -127,6 +128,33 @@ final class PaymentRefundsTest extends HttpTestCase
         $this->service(ProvisioningService::class)->delete($service);
         self::assertSame(200, $this->postJson("/api/admin/payments/{$payment->id}/refund", [])->getStatusCode());
         self::assertSame('50000.00', $this->ali->balance());
+    }
+
+    /**
+     * The refusal says what to do with the other order by its status: one still open holds the service from the services
+     * screen's delete too, so only a delivered one is told it may be deleted by hand.
+     */
+    public function testARefusalForAnotherOrderSaysWhatToDoWithItByItsStatus(): void
+    {
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['price' => '50000.00'], $server);
+        $payment = $this->paidByCard($this->purchaseOrder($this->ali, $plan, $server), $this->card);
+        $service = $payment->order->subscription ?? self::fail('nothing delivered');
+        $renewal = $this->service(OrderService::class)->createRenewal($this->ali, $service, $plan);
+        $refuse = fn(): string => $this->decode($this->postJson("/api/admin/payments/{$payment->id}/refund", []))['message'];
+
+        $deleteTold = 'صفحه اشتراک‌ها حذف کنید';
+        foreach ([[OrderStatus::Pending, 'لغو کنید'], [OrderStatus::Processing, 'در حال تحویل'], [OrderStatus::Failed, 'ناموفق']] as [$status, $told]) {
+            Order::query()->whereKey($renewal->id)->update(['status' => $status->value]);
+            $message = $refuse();
+            self::assertSame(RefundRefusedException::serviceInUse($renewal->refresh())->getMessage(), $message);
+            self::assertStringContainsString($told, $message, $status->value);
+            self::assertStringNotContainsString($deleteTold, $message, "{$status->value}: the services screen refuses to delete it while the order is open");
+            self::assertSame(422, $this->postJson("/api/admin/subscriptions/{$service->id}/delete", [])->getStatusCode(), $status->value);
+        }
+        Order::query()->whereKey($renewal->id)->update(['status' => OrderStatus::Fulfilled->value]);
+        self::assertStringContainsString($deleteTold, $refuse(), 'a delivered one leaves the service free to delete');
+        self::assertSame(PaymentStatus::Paid, $payment->refresh()->status);
     }
 
     public function testAnAgentsRefundedSaleGivesItsTrafficBack(): void

@@ -85,7 +85,7 @@ final class EmailSignUpTest extends HttpTestCase
         self::assertSame([null, $referrer->id], [$sara->telegram_id, $sara->referred_by], 'no Telegram account; the code\'s owner brought her');
         $reports = ReportMessage::query()->where('topic', Topic::Users)->pluck('text')->all();
         self::assertCount(1, $reports, 'reported, as every newcomer is');
-        self::assertStringContainsString("Sara Ahmadi · sara@example.com · <code>#{$sara->id}</code>", $reports[0], 'no Telegram profile to link: the name, the email, her number');
+        self::assertStringContainsString("Sara Ahmadi · sara@example.com · \u{200E}<code>#{$sara->id}</code>", $reports[0], 'no Telegram profile to link: the name, the email, her number');
         self::assertStringContainsString('<code>7070</code>', $reports[0], 'with whoever brought her');
         self::assertSame([self::text(BotText::ReferralJoined)], $this->telegram()->sentTo(7070), 'who is told');
 

@@ -1,6 +1,7 @@
 import { Field } from '@/components/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { DriverDescription } from '@/lib/api-types'
+import { unbrokenVersions } from '@/lib/direction'
 
 interface DriverPickerProps {
   id: string
@@ -21,14 +22,15 @@ interface DriverPickerProps {
  */
 export function DriverPicker({ id, label, drivers, value, onChange, error, none }: DriverPickerProps) {
   const picked = drivers.find((driver) => driver.key === value)
-  const about = picked === undefined ? none?.hint : [picked.description, ...picked.notes].join(' · ')
+  // A note's «MariaDB 10.3» stays on one line.
+  const about = picked === undefined ? none?.hint : unbrokenVersions([picked.description, ...picked.notes].join(' · '))
   const only = drivers[0]
 
   if (none === undefined && drivers.length === 1 && only !== undefined) {
     return (
       <p className="text-footnote text-muted-foreground">
         <bdi>{only.label}</bdi>
-        {only.notes.length > 0 && ` · ${only.notes.join(' · ')}`}
+        {only.notes.length > 0 && ` · ${unbrokenVersions(only.notes.join(' · '))}`}
       </p>
     )
   }

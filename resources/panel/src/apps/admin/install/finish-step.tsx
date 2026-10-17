@@ -49,7 +49,7 @@ export function FinishStep({ status }: { status: InstallStatus }) {
     },
     {
       label: 'ربات',
-      value: status.telegram.configured ? <bdi dir="ltr">@{status.telegram.username}</bdi> : 'بعدا از تنظیمات',
+      value: status.telegram.configured ? <bdi dir="ltr">@{status.telegram.username || '…'}</bdi> : 'بعدا از تنظیمات پنل',
       ok: true,
     },
   ]
@@ -68,8 +68,14 @@ export function FinishStep({ status }: { status: InstallStatus }) {
         ))}
       </ul>
       <Callout tone="info" icon={Info}>
-        کارهای زمان‌بندی‌شده (تایید خودکار رسید، تمدید خودکار، همگام‌سازی سرویس‌ها و یادآوری‌ها) با Cron اجرا می‌شوند: بعد از ورود، آدرس Cron را از «تنظیمات پنل › پیشرفته» بردارید و در بخش Cron Jobs
-        هاست طوری بگذارید که هر دقیقه باز شود.
+        <p className="font-medium">بعد از ورود:</p>
+        <ul className="mt-1 grid list-disc gap-1 ps-5">
+          <li>ربات تا Webhook ثبت نشود پیامی نمی‌گیرد: در «تنظیمات پنل › ربات تلگرام»، کارت «دریافت پیام‌ها»، «ثبت Webhook» را بزنید.</li>
+          <li>
+            کارهای زمان‌بندی‌شده (تایید خودکار رسید، تمدید خودکار، همگام‌سازی سرویس‌ها و یادآوری‌ها) با Cron اجرا می‌شوند: در «تنظیمات پنل › پیشرفته» توکن Cron بسازید و ذخیره کنید، بعد خط Cron را که
+            همان‌جا آماده می‌شود کپی کنید و در فرم Cron Jobs در cPanel با زمان‌بندی هر دقیقه بگذارید.
+          </li>
+        </ul>
       </Callout>
       <form onSubmit={finish} className="grid gap-4">
         <FormError message={formError} />

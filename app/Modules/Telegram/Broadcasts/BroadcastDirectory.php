@@ -12,6 +12,7 @@ use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Models\Broadcast;
 use App\Modules\Users\Services\UserDirectory;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * The panel's «ارسال همگانی» page: every run, newest first, with its progress and allowed actions, and the same
@@ -28,13 +29,7 @@ final class BroadcastDirectory
     /** A page of every run, newest first. */
     public function page(PageRequest $request): Page
     {
-        // Each group's or server's name is looked up once for the page, however many runs name it.
-        $names = [];
-        $query = Broadcast::withUnpinState(Broadcast::query()->with(['user', 'source.user'])->latest('id'));
-
-        return Page::fetch($query, $request, function (Broadcast $broadcast) use (&$names): array {
-            return $this->present($broadcast, $names);
-        });
+        return Page::fetchTogether(Broadcast::withUnpinState(Broadcast::query()->with(['user', 'source.user'])->latest('id')), $request, $this->presentAll(...));
     }
 
     /**
@@ -62,10 +57,37 @@ final class BroadcastDirectory
     /**
      * A run — an unpin run with its source's mode and audience.
      *
-     * @param array<string, string> $names Group and server names looked up already, by "key:id" (Audience::labelOf())
      * @return array<string, mixed>
      */
-    public function present(Broadcast $broadcast, array &$names = []): array
+    public function present(Broadcast $broadcast): array
+    {
+        return $this->presentAll(new Collection([$broadcast]))[0];
+    }
+
+    /**
+     * Runs as the page shows them: each group's or server's name looked up once, however many runs name it, and the
+     * names of the shop's admins who started them from its website read once for them all (Reviewers::names()).
+     *
+     * @param Collection<int, Broadcast> $broadcasts
+     * @return list<array<string, mixed>>
+     */
+    private function presentAll(Collection $broadcasts): array
+    {
+        $labels = [];
+        $names = $this->reviewers->names($broadcasts->pluck('reviewer'));
+
+        return array_values($broadcasts->map(function (Broadcast $broadcast) use (&$labels, $names): array {
+            return $this->row($broadcast, $labels, $names[$broadcast->reviewer ?? ''] ?? null);
+        })->all());
+    }
+
+    /**
+     * present(), with the name of the admin who started it (`$reviewerName`).
+     *
+     * @param array<string, string> $labels Group and server names looked up already, by "key:id" (Audience::labelOf())
+     * @return array<string, mixed>
+     */
+    private function row(Broadcast $broadcast, array &$labels, ?string $reviewerName): array
     {
         ['key' => $audience, 'id' => $audienceId] = $broadcast->audienceRef();
 
@@ -77,7 +99,7 @@ final class BroadcastDirectory
             'audience' => [
                 'key' => $audience,
                 'id' => $audienceId,
-                'label' => Audience::labelOf($audience, $audienceId, $names),
+                'label' => Audience::labelOf($audience, $audienceId, $labels),
             ],
             'pin' => $broadcast->pin,
             'pinned' => $broadcast->isUnpin() ? 0 : $broadcast->pinnedCount(),
@@ -91,6 +113,7 @@ final class BroadcastDirectory
             'failed' => $broadcast->failed,
             'admin' => $broadcast->user !== null ? UserDirectory::presentRef($broadcast->user) : null,
             'reviewer' => $this->reviewers->present($broadcast->reviewer),
+            'reviewer_name' => $reviewerName,
             'created_at' => $broadcast->created_at->toIso8601String(),
             'finished_at' => $broadcast->finished_at?->toIso8601String(),
             'actions' => [

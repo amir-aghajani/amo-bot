@@ -10,7 +10,8 @@ import { json, refusal, server } from '@/test/server'
  * A keyboard's draft in the editor (components/keyboards/use-keyboard-draft): its rows and buttons moved, added and
  * removed within the API's limits — a refused edit says why in a toast and changes nothing —, a row the same row
  * wherever it moves (its id), a button dropped past the last row on a row of its own, every change dropping the last
- * save's errors (they are about positions), and its save — the rows as the keyboard has them, no ids.
+ * save's errors (they are about positions), and its save — the rows as the keyboard has them, no ids —, after which the
+ * draft is what the server kept.
  */
 
 const button = (label: string): KeyboardButtonSpec => ({ action: label, label, style: null, icon: null })
@@ -178,6 +179,19 @@ describe('saving', () => {
     expect(onSaved).toHaveBeenCalledWith(kept)
     expect(toast.success).toHaveBeenCalled()
     rerender({ shown: kept })
+    expect(result.current.form.dirty).toBe(false)
+  })
+
+  it('shows what the server kept even when its copy did not move: a row left empty is gone', async () => {
+    server().on('PUT', '/api/admin/keyboards/start', json({ keyboard: START } satisfies KeyboardResponse))
+    const { result } = editor()
+    act(() => result.current.addRow())
+    expect(result.current.form.dirty).toBe(true)
+
+    await act(() => result.current.save())
+
+    expect(server().sent('PUT', '/api/admin/keyboards/start')[0]?.body).toEqual({ type: 'reply', rows: [...START.rows, []] })
+    expect(labels(result)).toEqual([['a', 'b'], ['c']])
     expect(result.current.form.dirty).toBe(false)
   })
 

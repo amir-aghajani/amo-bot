@@ -11,10 +11,12 @@ use App\Modules\Accounts\Http\RecentSignInMiddleware;
 use App\Modules\Accounts\Models\CustomerSession;
 use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Auth\CurrentPrincipal;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Principal;
 use App\Modules\Auth\PrincipalKind;
 use App\Modules\Auth\Services\Reviewers;
-use App\Modules\Store\Enums\StaffGrant;
+use App\Modules\Auth\StaffGrant;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Carbon;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -36,7 +38,9 @@ use Slim\Routing\RouteContext;
  *    not for the months a customer's session lasts;
  * 5. an operation that needs a grant (StaffGrant::ARGUMENT on its route) is granted, and then asks a recent sign-in too,
  *    as does one marked RECENT_SIGN_IN (approving a payment, which delivers a service by the admin's word alone).
- * The request then carries the staff Principal, and every change it asks is logged with them on the line.
+ * The request then carries the staff Principal — with the grants it may use, a service's own rule asking one by what the
+ * request holds (putting a customer in a «همکار» group) and refused the same two ways —, and every change it asks is
+ * logged with them on the line.
  */
 final class StaffMiddleware implements MiddlewareInterface
 {
@@ -88,15 +92,25 @@ final class StaffMiddleware implements MiddlewareInterface
             return $this->signInAgain();
         }
 
-        $principal = new Principal(PrincipalKind::Staff, Reviewers::forAdmin($customer->user), $website->shop(), $customer->user);
+        $granted = $website->staffGrants();
+        $principal = new Principal(PrincipalKind::Staff, Reviewers::forAdmin($customer->user), $website->shop(), $customer->user, CustomerSessions::isRecent($customer->session) ? $granted : []);
 
-        return CurrentPrincipal::run($principal, function () use ($request, $handler, $principal): ResponseInterface {
+        return CurrentPrincipal::run($principal, function () use ($request, $handler, $principal, $granted): ResponseInterface {
             try {
                 $response = $handler->handle($request->withAttribute(Principal::ATTRIBUTE, $principal));
             } catch (DomainRuleException $refused) {
                 $this->changed($request, $refused->status());
+                // A grant a service asks of the operation (Actor::holds()) that the website gives: the sign-in is not recent.
+                if ($refused instanceof ActorRefusedException && $refused->grant !== null && in_array($refused->grant->value, $granted, true)) {
+                    return $this->signInAgain();
+                }
 
                 throw $refused;
+            } catch (ModelNotFoundException $missing) {
+                // A row that is not there — or another shop's — refuses the change as surely.
+                $this->changed($request, 404);
+
+                throw $missing;
             }
             $this->changed($request, $response->getStatusCode());
 

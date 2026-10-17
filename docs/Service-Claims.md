@@ -1,3 +1,5 @@
+[فارسی](fa/Service-Claims.md)
+
 # Services added by their link
 
 A customer adds a service you made by hand on a panel to their account by sending the bot its link: its subscription
@@ -98,5 +100,5 @@ gave: the service has no plan again, to pick at its next renewal. Extra traffic,
   become the customer's as it is added, as for a service [handed to another customer](Services.md#handing-a-service-to-another-customer)
   (a panel that does not answer then gets them at the shop's next change of it: a renewal, extras).
 - **Each link sent asks every panel** for its whole list of clients, which is why a customer has 10 tries in 10
-  minutes. A panel the shop leaves alone after a failure is not asked: a link it holds is "try again later" until it
-  answers again.
+  minutes. A panel the shop leaves alone after a failure is not asked: for a link it holds, the bot says to try again
+  later, until the panel answers again.

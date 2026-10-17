@@ -86,7 +86,7 @@ final class ZarinpalPaymentsTest extends HttpTestCase
             'merchant_id' => FakeZarinpal::MERCHANT,
             'amount' => 500000,
             'callback_url' => $this->service(OnlineInvoices::class)->callbackUrl($payment),
-            'description' => sprintf('سفارش #%d', $payment->order_id),
+            'description' => sprintf("سفارش \u{200E}#%d", $payment->order_id),
             'metadata' => ['order_id' => $this->service(OnlineInvoices::class)->orderId($payment), 'auto_verify' => true],
         ], $request, 'in Rial, Zarinpal asked to confirm it with the bank itself');
         self::assertSame([$authority, PaymentStatus::Pending], [$payment->reference, $payment->status]);
@@ -110,7 +110,8 @@ final class ZarinpalPaymentsTest extends HttpTestCase
         $page = $this->browse($payment, 'OK');
         $html = (string) $page->getBody();
         self::assertStringContainsString('پرداخت شما تایید شد', $html);
-        self::assertStringContainsString(sprintf('سفارش #%d', $payment->order_id), $html);
+        self::assertStringContainsString(sprintf("سفارش \u{200E}#%d", $payment->order_id), $html, 'its number after a left-to-right mark: on the right-to-left page it would read «12#»');
+        self::assertStringNotContainsString(sprintf('سفارش #%d', $payment->order_id), $html);
         self::assertStringContainsString('href="https://t.me/amo_shop_bot"', $html, 'the way back to the bot');
         $payment->refresh();
         self::assertSame([PaymentStatus::Paid, (string) FakeZarinpal::REF_ID], [$payment->status, $payment->reference], 'its bank reference');

@@ -5,14 +5,19 @@ declare(strict_types=1);
 namespace App\Modules\Referrals\Services;
 
 use App\Core\Database\Ledger;
+use App\Core\Security\ReadableCode;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Referrals\Models\ReferralCommission;
 use App\Modules\Referrals\Models\ReferralReward;
+use App\Modules\Users\Exceptions\InsufficientBalanceException;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
 use App\Support\Money;
+use App\Support\Persian;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -21,16 +26,18 @@ use Psr\Container\ContainerInterface;
 /**
  * The referral program («زیرمجموعه‌گیری»): invite codes and links, attributing a newcomer to a referrer, and the
  * commission a referred customer's payment earns (once per payment). Only money that came in earns it — a wallet payment
- * spends money already counted when the wallet was charged —, and a refund leaves it standing. Start gifts, plan rewards
- * and alerts are ReferralGifts'.
+ * spends money already counted when the wallet was charged —, and only money that leaves the shop again takes it back:
+ * a top-up's refund (refundTakesBack()). Start gifts, plan rewards and alerts are ReferralGifts'.
  */
 final class ReferralService
 {
     /** What a referral link carries after /start: `ref_<code>`. */
     public const PAYLOAD = 'ref_';
 
-    /** Invite codes: lower case, without the characters that look alike (0/o, 1/l/i). */
-    private const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+    /** The referrer's wallet line of a commission its top-up's refund took back, by the payment's number. */
+    public const LINE_TAKEN_BACK = 'برگشت پورسانت زیرمجموعه (پرداخت #%d)';
+
+    /** An invite code's length: ReadableCode's characters, in lower case (no look-alikes: 0/o, 1/l/i). */
     private const CODE_LENGTH = 8;
 
     public function __construct(
@@ -49,7 +56,7 @@ final class ReferralService
     public function codeFor(User $user): string
     {
         while ($user->referral_code === null) {
-            $code = self::randomCode();
+            $code = strtolower(ReadableCode::make(self::CODE_LENGTH));
             try {
                 // Two taps at once: whichever code lands first is the customer's; another customer's code is refused by the index.
                 User::query()->whereKey($user->id)->whereNull('referral_code')->update(['referral_code' => $code]);
@@ -83,7 +90,8 @@ final class ReferralService
      */
     public function attribute(User $newcomer, ?string $code): ?User
     {
-        $code = strtolower(trim($code ?? ''));
+        // As a code is typed by hand on a sign-up form: any case, Persian digits.
+        $code = strtolower(Persian::latinDigits(trim($code ?? '')));
         if ($code === '' || $newcomer->referred_by !== null || !$this->settings->enabled()) {
             return null;
         }
@@ -113,7 +121,8 @@ final class ReferralService
     /**
      * Credits the commission a settled payment earns the customer's referrer (not banned), at the rate for its kind;
      * null when it earns nothing. Once per payment (the row's `payment_id` is unique): the row and the wallet credit are
-     * one transaction.
+     * one transaction, under a lock on the payment — a refund at the same moment either came first, and nothing is
+     * earned, or waits, and a top-up's then finds the commission to take back (takeBack()).
      */
     public function reward(Payment $payment): ?ReferralCommission
     {
@@ -134,6 +143,10 @@ final class ReferralService
 
         try {
             return $this->db->transaction(function () use ($payment, $customer, $referrer, $rate, $commission): ?ReferralCommission {
+                // The payment first, as a refund takes it: refunded meanwhile, it earns nothing.
+                if (Payment::query()->whereKey($payment->id)->lockForUpdate()->value('status') !== PaymentStatus::Paid) {
+                    return null;
+                }
                 // Under a lock on the customer: of two of their payments settled in the same moment, the first-only rule
                 // sees the commission the other one just earned.
                 User::query()->whereKey($customer->id)->lockForUpdate()->value('id');
@@ -149,6 +162,48 @@ final class ReferralService
         } catch (UniqueConstraintViolationException) {
             return null; // the payment's commission is there already
         }
+    }
+
+    /**
+     * Whether the order's refund takes back the commission its payment earned: a top-up's only — support returns its
+     * money outside the shop, so it leaves the shop. A refunded purchase, renewal, extra or agent's traffic gives its
+     * money back to the customer's wallet: it stays in the shop, and its commission stands (the rule the shop's takings
+     * are counted by, Payment::moneyIn()).
+     */
+    public static function refundTakesBack(Order $order): bool
+    {
+        return $order->type === OrderType::WalletTopUp;
+    }
+
+    /**
+     * The commission the payment earned, with its referrer; null for none. A top-up's refund reads it first (Payments\
+     * Services\PaymentActions::refund()): whom to tell after takeBack() deleted it.
+     */
+    public function commissionOf(Payment $payment): ?ReferralCommission
+    {
+        return ReferralCommission::query()->with('referrer')->where('payment_id', $payment->id)->first();
+    }
+
+    /**
+     * Takes back the commission the payment earned, inside its top-up's refund's transaction (refundTakesBack(); Payments\
+     * Services\PaymentService::refund()): out of the referrer's wallet as a line of its own (LINE_TAKEN_BACK) — below
+     * zero only as far as an agent's credit, the rule the refunded top-up comes back out of its customer's wallet by —,
+     * and its row deleted, so the referrer's earnings and the first-payment rule no longer count it. True when there was
+     * one.
+     *
+     * @throws InsufficientBalanceException the referrer spent it: nothing taken
+     */
+    public function takeBack(Payment $payment): bool
+    {
+        $commission = ReferralCommission::query()->with('referrer')->where('payment_id', $payment->id)->lockForUpdate()->first();
+        if ($commission === null) {
+            return false;
+        }
+        $referrer = $commission->referrer;
+        $this->wallet->debit($referrer, $commission->commission, sprintf(self::LINE_TAKEN_BACK, $payment->id), $referrer->credit());
+        $commission->delete();
+
+        return true;
     }
 
     /**
@@ -188,15 +243,5 @@ final class ReferralService
             ->exists();
 
         return $earlier || ReferralCommission::withPayer()->where(ReferralCommission::PAYER . '.id', $customer->id)->exists();
-    }
-
-    private static function randomCode(): string
-    {
-        $code = '';
-        for ($i = 0; $i < self::CODE_LENGTH; $i++) {
-            $code .= self::ALPHABET[random_int(0, strlen(self::ALPHABET) - 1)];
-        }
-
-        return $code;
     }
 }

@@ -6,15 +6,18 @@ namespace App\Modules\Store\Presenters;
 
 use App\Modules\Catalog\DTO\CustomPrice;
 use App\Modules\Discounts\DTO\DiscountLine;
+use App\Modules\Orders\DTO\Quote;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Subscriptions\DTO\ExtraOffer;
 use App\Modules\Subscriptions\DTO\RenewalPreview;
 use App\Modules\Subscriptions\DTO\RenewalWindow;
+use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ServiceTerms;
 use App\Modules\Subscriptions\Services\SubscriptionDirectory;
+use App\Support\Money;
 use Illuminate\Support\Carbon;
 
 /**
@@ -160,22 +163,50 @@ final class SubscriptionPresenter
     /**
      * What of each extra (GB of traffic, days of time, devices) may be bought now: the unit price, the amounts offered
      * with their prices, the least and most that may be typed while any amount may, and the days devices are charged
-     * for (their prices prorated to them); null for a kind none of which may be bought.
+     * for (their prices prorated to them); null for a kind none of which may be bought. Each price is the shop's
+     * (`price`) beside what the customer's order is charged for it (`offer_price`: `$priced`, less their automatic
+     * discount), with that `discount`.
      *
      * @param array{traffic: ExtraOffer|null, time: ExtraOffer|null, devices: ExtraOffer|null} $offers
+     * @param \Closure(ExtraKind, string): Quote $priced What a price of the kind comes to for the customer
      * @return array{traffic: array<string, mixed>|null, time: array<string, mixed>|null, devices: array<string, mixed>|null}
      */
-    public static function extras(array $offers): array
+    public static function extras(array $offers, \Closure $priced): array
     {
-        return ['traffic' => self::offer($offers['traffic']), 'time' => self::offer($offers['time']), 'devices' => self::offer($offers['devices'])];
+        return [
+            'traffic' => self::offer($offers['traffic'], ExtraKind::Traffic, $priced),
+            'time' => self::offer($offers['time'], ExtraKind::Time, $priced),
+            'devices' => self::offer($offers['devices'], ExtraKind::Devices, $priced),
+        ];
     }
 
-    /** @return array{price: string|null, options: list<array{quantity: int, price: string}>, custom: array{min: int, max: int}|null, days: int|null}|null */
-    private static function offer(?ExtraOffer $offer): ?array
+    /**
+     * One kind's offer, each price with what it comes to. Its `discount` is the one its largest price takes — every
+     * price's, but where rounding to whole Toman leaves two discounts taking as much off a small one.
+     *
+     * @param \Closure(ExtraKind, string): Quote $priced
+     * @return array{price: string|null, offer_price: string|null, discount: array{source: string, label: string, percent: int|null, ends_at: string|null}|null, options: list<array{quantity: int, price: string, offer_price: string}>, custom: array{min: int, max: int}|null, days: int|null}|null
+     */
+    private static function offer(?ExtraOffer $offer, ExtraKind $kind, \Closure $priced): ?array
     {
-        return $offer === null ? null : [
-            'price' => $offer->unitPrice(),
-            'options' => $offer->choices(),
+        if ($offer === null) {
+            return null;
+        }
+        $price = $offer->unitPrice();
+        $unit = $price === null ? null : $priced($kind, $price);
+        $largest = $unit;
+        $options = [];
+        foreach ($offer->choices() as $choice) {
+            $quote = $priced($kind, $choice['price']);
+            $options[] = $choice + ['offer_price' => $quote->amount()];
+            $largest = $largest === null || Money::compare($quote->base, $largest->base) > 0 ? $quote : $largest;
+        }
+
+        return [
+            'price' => $price,
+            'offer_price' => $unit?->amount(),
+            'discount' => PlanPresenter::discount($largest?->automatic),
+            'options' => $options,
             'custom' => $offer->typed() ? ['min' => $offer->min, 'max' => $offer->max] : null,
             'days' => $offer->days,
         ];

@@ -6,6 +6,7 @@ import { ListView } from '@/components/list-view'
 import { Reviewer } from '@/components/reviewer'
 import { api } from '@/lib/api'
 import type { TrafficLine, TrafficLinesResponse } from '@/lib/api-types'
+import { isolateIds } from '@/lib/direction'
 import { formatBytes, formatDate } from '@/lib/format'
 import { usePagedList } from '@/lib/use-paged-list'
 
@@ -38,7 +39,8 @@ export function TrafficLedger({ queryKey, url }: { queryKey: QueryKey; url: stri
           title: (
             <>
               {TYPES[line.type]}
-              {line.description && <span className="text-muted-foreground"> · {line.description}</span>}
+              {/* The shop's own notes name orders by number («فروش · سفارش #33»): each kept whole. */}
+              {line.description && <span className="text-muted-foreground"> · {isolateIds(line.description)}</span>}
             </>
           ),
           detail: (
@@ -47,7 +49,7 @@ export function TrafficLedger({ queryKey, url }: { queryKey: QueryKey; url: stri
               {line.reviewer && (
                 <>
                   {' · '}
-                  <Reviewer name={line.reviewer} />
+                  <Reviewer name={line.reviewer} person={line.reviewer_name} />
                 </>
               )}
             </>

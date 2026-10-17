@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { AreaChart, type AreaPoint } from '@/components/dashboard/area-chart'
 import { Dash } from '@/components/list-view'
 import { PageTabs } from '@/components/page-tabs'
-import { TrendChip } from '@/components/trend-chip'
+import { Trend } from '@/components/trend-chip'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { DashboardResponse, SeriesPoint } from '@/lib/api-types'
@@ -19,6 +19,9 @@ const METRICS: Record<Metric, { label: string; description: string }> = {
 
 const METRIC_OPTIONS = (Object.keys(METRICS) as Metric[]).map((key) => ({ value: key, label: METRICS[key].label }))
 
+/** Each metric's headline figure among the server's: the same the dashboard's cards show. */
+const KPI = { revenue: 'revenue', orders: 'orders', users: 'new_users' } as const satisfies Record<Metric, keyof DashboardResponse['kpis']>
+
 interface OverviewChartProps {
   /** The days of the period; undefined when there are none to draw (their read failed): «—». */
   series: SeriesPoint[] | undefined
@@ -28,8 +31,8 @@ interface OverviewChartProps {
 }
 
 /**
- * The period at a glance: a metric's total and change against the previous period, the daily curve, and the average and
- * best day. A skeleton while it loads, «—» with nothing to draw.
+ * The period at a glance: a metric's total and change against the previous period (the server's, as the cards above
+ * say them), the daily curve, and the average and best day. A skeleton while it loads, «—» with nothing to draw.
  */
 export function OverviewChart({ series, kpis, loading }: OverviewChartProps) {
   const [metric, setMetric] = useState<Metric>('revenue')
@@ -37,9 +40,12 @@ export function OverviewChart({ series, kpis, loading }: OverviewChartProps) {
 
   const data = useMemo(() => (series ?? []).map((point) => ({ date: point.date, value: Number(point[metric]) })), [series, metric])
 
+  // The period's figure and its change are the server's (the cards' above), never the days added up here: the two
+  // must not disagree.
+  const kpi = kpis?.[KPI[metric]]
   const stats = useMemo(() => {
     const values = data.map((point) => point.value)
-    const total = values.reduce((sum, value) => sum + value, 0)
+    const total = kpi ? Number(kpi.value) : values.reduce((sum, value) => sum + value, 0)
     const peakIndex = values.reduce((best, value, index) => (value > values[best]! ? index : best), 0)
     return {
       total,
@@ -47,20 +53,21 @@ export function OverviewChart({ series, kpis, loading }: OverviewChartProps) {
       peak: data[peakIndex],
       empty: values.every((value) => value === 0),
     }
-  }, [data])
+  }, [data, kpi])
 
-  const previous = kpis ? Number(metric === 'revenue' ? kpis.revenue.previous : metric === 'orders' ? kpis.orders.previous : kpis.new_users.previous) : null
-  const change = previous === null ? null : percentChange(stats.total, previous)
+  const change = kpi ? percentChange(kpi.value, kpi.previous) : null
 
   const formatValue = (value: number) => (metric === 'revenue' ? formatMoney(value) : formatNumber(Math.round(value)))
+  // Counted things a day on average may be under one: «۰٫۴», never a «۰» that says none came.
+  const formatAverage = (value: number) => (metric === 'revenue' ? formatMoney(value) : formatNumber(Math.round(value * 10) / 10))
 
-  // A day under the hand: its date in full, and the metric's figure in its unit (the axis carries the figure alone).
+  // A day under the hand: its date in full, and the metric's figure in its unit (the axis carries the figure alone). The
+  // space between the two keeps them two words where the day is read out.
   const tooltip = (point: AreaPoint) => ({
     title: formatDay(point.date, { weekday: 'long', day: 'numeric', month: 'long' }),
     body: (
       <div className="flex items-center justify-between gap-4">
-        <span className="text-muted-foreground">{meta.label}</span>
-        <span className="font-medium tabular">{formatValue(point.value)}</span>
+        <span className="text-muted-foreground">{meta.label}</span> <span className="font-medium tabular">{formatValue(point.value)}</span>
       </div>
     ),
   })
@@ -81,8 +88,7 @@ export function OverviewChart({ series, kpis, loading }: OverviewChartProps) {
             ) : (
               <>
                 <span className="text-stat font-medium tracking-tight tabular">{formatValue(stats.total)}</span>
-                <TrendChip change={change} />
-                <span className="text-footnote text-muted-foreground">نسبت به دوره قبل</span>
+                <Trend change={change} label="نسبت به دوره قبل" className="text-footnote text-muted-foreground" />
               </>
             )}
           </div>
@@ -111,7 +117,7 @@ export function OverviewChart({ series, kpis, loading }: OverviewChartProps) {
         ) : !series ? null : (
           <>
             <span>
-              میانگین روزانه <span className="font-medium text-foreground tabular">{formatValue(stats.average)}</span>
+              میانگین روزانه <span className="font-medium text-foreground tabular">{formatAverage(stats.average)}</span>
             </span>
             {stats.peak && !stats.empty && (
               <span>

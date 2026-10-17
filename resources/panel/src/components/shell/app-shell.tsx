@@ -11,6 +11,7 @@ import { Topbar } from '@/components/shell/topbar'
 import { useMainShop } from '@/lib/auth'
 import { pageOf } from '@/lib/config'
 import { useDocumentTitle } from '@/lib/document-title'
+import { preloadPage } from '@/lib/prefetch'
 import { useLiveUpdates } from '@/lib/use-live-updates'
 
 /**
@@ -32,7 +33,15 @@ export function AppShell({ panel }: { panel: PanelShell }) {
 
   return (
     <ShellProvider panel={shell}>
-      <a href="#main" className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-body text-primary-foreground focus:not-sr-only focus:fixed focus:start-3 focus:top-3">
+      {/* The page's <base> is the panel's folder, so a bare `#main` would lead to the dashboard: the link moves the focus itself. */}
+      <a
+        href="#main"
+        onClick={(event) => {
+          event.preventDefault()
+          document.getElementById('main')?.focus()
+        }}
+        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-body text-primary-foreground focus:not-sr-only focus:fixed focus:start-3 focus:top-3"
+      >
         پرش به محتوا
       </a>
 
@@ -44,8 +53,9 @@ export function AppShell({ panel }: { panel: PanelShell }) {
           {shell.banner && <shell.banner />}
           <main id="main" tabIndex={-1} className="flex flex-1 flex-col outline-none">
             {/* A page that throws shows what happened in its place; the sidebar still works. Another page starts afresh;
-                another section of the same page draws again and keeps its sections' drafts. */}
-            <ErrorBoundary key={pageOf(pathname)} resetKey={pathname} scope="page">
+                another section of the same page draws again and keeps its sections' drafts. Asked again, a page whose
+                file did not load asks for it again. */}
+            <ErrorBoundary key={pageOf(pathname)} resetKey={pathname} scope="page" onRetry={() => preloadPage(pathname)}>
               <Suspense fallback={<PageSkeleton />}>
                 <Outlet />
               </Suspense>

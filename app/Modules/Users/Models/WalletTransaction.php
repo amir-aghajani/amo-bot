@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string $balance_after
  * @property string|null $description
  * @property string|null $reviewer Who wrote it by hand (Auth\Services\Reviewers); null for the lines the shop writes itself
+ * @property string|null $request_key The Idempotency-Key of support's request that wrote it; null for every other line
  * @property Carbon $created_at
  */
 class WalletTransaction extends Model

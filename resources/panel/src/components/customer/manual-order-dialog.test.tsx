@@ -6,13 +6,13 @@ import { userLabel } from '@/components/user-identity'
 import type { ManualOrderResponse, PlanOptions, PlanRow } from '@/lib/api-types'
 import { AGENT_SHOP, signedIn, until } from '@/test/render'
 import { orderRow, planRow, subscriptionRow, userRow } from '@/test/rows'
-import { json, refusal, server } from '@/test/server'
+import { json, offline, refusal, server } from '@/test/server'
 
 /*
  * «افزودن سفارش» on a customer's page (components/customer/manual-order-dialog): a plan — its server picked when it has
  * one that delivers it — or support's own numbers on any server that can take a service; the way to pay, an amount
- * unless free; a preview of what it delivers; what is sent, under one Idempotency-Key a request, a new one after a
- * refusal; a refusal under its field; a list that could not be read said over its picker, with a retry; and in an
+ * unless free; a preview of what it delivers; what is sent, under one Idempotency-Key while the same order is sent again
+ * (after no answer), a new one once the form is changed; a refusal under its field; a list that could not be read said over its picker, with a retry; and in an
  * agent's shop, the GB said to come out of the bot's traffic.
  */
 
@@ -27,7 +27,7 @@ const OPTIONS: PlanOptions = {
   ],
 }
 const MADE: ManualOrderResponse = {
-  order: orderRow({ type: 'purchase', status: 'fulfilled', amount: '0.00', pricing: 'gift', manual: { by: 'root', payment: 'free', note: null } }),
+  order: orderRow({ type: 'purchase', status: 'fulfilled', amount: '0.00', pricing: 'gift', manual: { by: 'root', by_name: null, payment: 'free', note: null } }),
   subscription: subscriptionRow(),
 }
 
@@ -86,7 +86,7 @@ describe('an order of a plan', () => {
 
     const hidden = await screen.findByRole('option', { name: /پنهان/ })
     expect(hidden.getAttribute('aria-disabled')).toBe('true')
-    expect(hidden.textContent).toContain('پنهان‌شده توسط مدیر')
+    expect(hidden.textContent).toContain('پنهان‌شده توسط پشتیبانی')
   })
 
   it('says before the form that a suspended agent’s shop takes no order', async () => {
@@ -187,6 +187,40 @@ describe('a list that could not be read', () => {
 
     fireEvent.click(screen.getByRole('radio', { name: 'پلن' }))
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('an order sent again', () => {
+  it('after no answer goes under the same key, so the server makes it once', async () => {
+    server().on('POST', URL, offline)
+    const { onClose } = await open()
+
+    await pick('پلن', /طلایی/)
+    make()
+    await screen.findByRole('alert')
+    server().on('POST', URL, json(MADE, 201))
+    make()
+
+    await until(() => expect(onClose).toHaveBeenCalled())
+    const [first, again] = server().sent('POST', URL)
+    expect(first?.headers['idempotency-key']).toMatch(/^[0-9a-f]{32}$/)
+    expect(again?.headers['idempotency-key']).toBe(first?.headers['idempotency-key'])
+  })
+
+  it('changed after no answer is another order, under a new key', async () => {
+    server().on('POST', URL, offline)
+    const { onClose } = await open()
+
+    await pick('پلن', /طلایی/)
+    make()
+    await screen.findByRole('alert')
+    server().on('POST', URL, json(MADE, 201))
+    type(/نام کاربری سرویس/, 'ali_vip')
+    make()
+
+    await until(() => expect(onClose).toHaveBeenCalled())
+    const [first, changed] = server().sent('POST', URL)
+    expect(changed?.headers['idempotency-key']).not.toBe(first?.headers['idempotency-key'])
   })
 })
 

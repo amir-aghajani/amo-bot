@@ -17,6 +17,26 @@ import { randomToken } from '@/lib/random'
 /** The group as its form holds it: the request whole, the numbers as typed, the token blank until one is typed. */
 type Draft = Required<ConfigAdvancedRequest> & { session_lifetime: string; http_timeout: string }
 
+/**
+ * The cron job that calls the cron address every minute, as cPanel's «Cron Jobs» form takes it in its Command field —
+ * docs/Installation.md's line for a host whose cron does not run PHP's command line.
+ */
+function cronLine(url: string): string {
+  return `curl -fsS ${url} > /dev/null`
+}
+
+/** A line to copy as it is (an address, a command for a form), written left to right, with its copy button. */
+function CopyLine({ text, label, busy, onCopy }: { text: string; label: string; busy: boolean; onCopy: () => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-fill px-3 py-2">
+      <code dir="ltr" className="min-w-0 flex-1 truncate text-start text-footnote">
+        {text}
+      </code>
+      <IconButton icon={Copy} busy={busy} onClick={onCopy} aria-label={label} className="-me-1 size-7" />
+    </div>
+  )
+}
+
 /** The log, the admin's session, the timeout of outgoing requests, and the cron that runs from the web. */
 export function AdvancedSection({ settings, meta, disabled }: { settings: ConfigAdvancedSettings; meta: ConfigSettingsResponse['meta']; disabled: boolean }) {
   const group = useConfigGroup<Draft>(
@@ -33,13 +53,14 @@ export function AdvancedSection({ settings, meta, disabled }: { settings: Config
   )
   const { values, set, error } = group
 
-  // The screen shows the address with its token masked; the whole one is asked for when it is copied.
-  const copyCronUrl = useMutation({
-    mutationFn: () => api.get<CronUrlResponse>('/settings/config/cron-url'),
-    onSuccess: ({ url }) => {
-      if (url) void copyText(url, 'آدرس Cron کپی شد')
+  // The screen shows the address with its token masked; the whole one is asked for when it — or its line — is copied.
+  const copyCron = useMutation({
+    mutationFn: (_what: 'url' | 'line') => api.get<CronUrlResponse>('/settings/config/cron-url'),
+    onSuccess: ({ url }, what) => {
+      if (url) void (what === 'line' ? copyText(cronLine(url), 'خط Cron کپی شد') : copyText(url, 'آدرس Cron کپی شد'))
     },
   })
+  const copying = (what: 'url' | 'line') => copyCron.isPending && copyCron.variables === what
 
   return (
     <SectionCard form={group} title="پیشرفته" description="لاگ، Session پنل‌ها، تایم‌اوت درخواست‌های خروجی و اجرای Cron از وب." disabled={disabled}>
@@ -87,16 +108,27 @@ export function AdvancedSection({ settings, meta, disabled }: { settings: Config
           clear={values.clear_cron_token}
           onClear={(clear) => set('clear_cron_token', clear)}
           error={error('cron_token')}
-          hint="کارهای زمان‌بندی‌شده (تمدید خودکار، یادآوری‌ها، همگام‌سازی سرویس‌ها) با صدا زدن آدرس Cron اجرا می‌شوند: توکن بسازید و ذخیره کنید، بعد آدرسی را که این‌جا دیده می‌شود هر دقیقه صدا بزنید — در cPanel از بخش Cron Jobs، یا با یک سرویس Cron بیرونی."
-          action={<Button variant="secondary" size="icon" icon={RefreshCw} aria-label="تولید توکن تازه" title="تولید توکن تازه" onClick={() => set('cron_token', randomToken(20))} />}
+          hint="کارهای زمان‌بندی‌شده (تمدید خودکار، یادآوری‌ها، همگام‌سازی سرویس‌ها) با صدا زدن آدرس Cron اجرا می‌شوند: توکن بسازید و ذخیره کنید، بعد خط Cron را که این‌جا آماده می‌شود در فرم Cron Jobs در cPanel بگذارید، یا آدرس را به یک سرویس Cron بیرونی بدهید که هر دقیقه صدایش بزند."
+          action={
+            <Button
+              variant="secondary"
+              size="icon"
+              icon={RefreshCw}
+              aria-label="تولید توکن تازه"
+              title="تولید توکن تازه"
+              onClick={() => set('cron_token', randomToken(20))}
+              className="max-md:size-11"
+            />
+          }
         />
         {meta.cron_url && (
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-fill px-3 py-2">
-            <code dir="ltr" className="min-w-0 flex-1 truncate text-start text-footnote">
-              {meta.cron_url}
-            </code>
-            <IconButton icon={Copy} busy={copyCronUrl.isPending} onClick={() => copyCronUrl.mutate()} aria-label="کپی آدرس Cron" className="-me-1 size-7" />
-          </div>
+          <>
+            <CopyLine text={meta.cron_url} label="کپی آدرس Cron" busy={copying('url')} onCopy={() => copyCron.mutate('url')} />
+            <div className="grid gap-1.5">
+              <CopyLine text={cronLine(meta.cron_url)} label="کپی خط Cron" busy={copying('line')} onCopy={() => copyCron.mutate('line')} />
+              <p className="text-footnote text-muted-foreground">این خط برای فرم «Cron Jobs» در cPanel است: زمان‌بندی را هر دقیقه بگذارید (Once Per Minute) و خط را در فیلد Command بچسبانید.</p>
+            </div>
+          </>
         )}
       </div>
     </SectionCard>

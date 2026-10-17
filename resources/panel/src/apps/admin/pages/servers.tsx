@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Plus, Server as ServerIcon } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { EmptyState } from '@/components/empty-state'
-import { Dash, ListView, RowTitleLink } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, RowTitleLink } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { AddServerModal } from '@/components/servers/add-server-modal'
@@ -20,7 +20,7 @@ export function ServersPage() {
   const navigate = useNavigate()
   const read = useQuery(serversQuery)
   const servers = read.data?.servers ?? []
-  const list = { rows: servers, isPending: read.isPending, error: read.error, refetch: () => void read.refetch() }
+  const list = { rows: servers, isPending: read.isPending, isFetching: read.isFetching, error: read.error, refetch: () => void read.refetch() }
 
   const add = (variant: 'default' | 'secondary') => (
     <Button variant={variant} icon={Plus} onClick={() => setAdding(true)}>
@@ -47,7 +47,7 @@ export function ServersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>سرور</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <TableHead className="hidden md:table-cell">اینباندها</TableHead>
               <TableHead className="hidden sm:table-cell">اشتراک‌های فعال</TableHead>
               <TableHead className="hidden text-end lg:table-cell">آخرین بررسی</TableHead>
@@ -63,14 +63,17 @@ export function ServersPage() {
                       <Badge variant="outline" dir="ltr">
                         {server.driver_label}
                       </Badge>
-                      <span className="max-w-56 truncate text-caption" dir="ltr">
+                      <span className="max-w-40 truncate text-caption md:max-w-56" dir="ltr">
                         {server.base_url}
                       </span>
                     </span>
                     <UnsellableNote server={server} />
                   </div>
+                  <PhoneFacts>
+                    <ServerStatus server={server} details />
+                  </PhoneFacts>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <ServerStatus server={server} details />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground tabular md:table-cell">

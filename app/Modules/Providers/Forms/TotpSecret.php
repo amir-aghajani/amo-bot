@@ -31,7 +31,7 @@ final class TotpSecret extends Field
             pattern: '/^[A-Z2-7]+=*$/',
             mismatch: 'کلید TOTP باید به فرمت Base32 باشد (حروف A تا Z و ارقام 2 تا 7).',
             // A secret's characters are no token's: the hint gives none of them away.
-            hint: static fn(string $secret): string => '••••••••',
+            hint: Secret::hidden(),
             boundTo: $boundTo,
             moved: $moved,
             spec: $spec,

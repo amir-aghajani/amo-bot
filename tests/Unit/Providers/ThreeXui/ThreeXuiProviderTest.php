@@ -17,8 +17,11 @@ use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Enums\CoreState;
 use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Exceptions\PanelApiException;
+use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Support\PanelHttp;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Psr\Log\NullLogger;
 use Tests\Support\FakePanel;
@@ -103,6 +106,60 @@ final class ThreeXuiProviderTest extends TestCase
         self::assertSame(7, $info->totalBytes);
         self::assertNull($info->subscriptionUrl, 'only the panel knows the link it minted: no link, no sale');
         self::assertCount(2, $this->panel->calls(), 'nothing more is asked about a client the panel cannot show');
+    }
+
+    public function testAClientIsMadeSwitchedOnOrOffAsItsSpecSays(): void
+    {
+        $provider = $this->provider([
+            self::ok(null),
+            self::ok(self::wrapped(self::record(['email' => 'amir_1', 'enable' => false]), inboundIds: [3])),
+            self::ok(['up' => 0, 'down' => 0, 'enable' => false]),
+            self::ok(self::SUB_SETTINGS),
+            self::ok(null),
+            self::ok(self::wrapped(self::record(['email' => 'amir_2']), inboundIds: [3])),
+            self::ok(['up' => 0, 'down' => 0, 'enable' => true]),
+        ]);
+
+        $off = $provider->createClient(['3'], new ClientSpec(name: 'amir_1', enabled: false));
+        $provider->createClient(['3'], new ClientSpec(name: 'amir_2'));
+
+        self::assertFalse($this->panel->params(0)['client']['enable'], 'one call: no switch after it');
+        self::assertFalse($off->enabled);
+        self::assertTrue($this->panel->params(4)['client']['enable']);
+        self::assertSame(['POST /panel/api/clients/add', 'GET /panel/api/clients/get/amir_1', 'GET /panel/api/clients/traffic/amir_1', 'POST /panel/api/setting/all', 'POST /panel/api/clients/add', 'GET /panel/api/clients/get/amir_2', 'GET /panel/api/clients/traffic/amir_2'], $this->panel->calls());
+    }
+
+    public function testAReadAfterAWriteThePanelTookFailsAsOneAfterTheWrite(): void
+    {
+        $refused = static fn(): ConnectException => new ConnectException('cURL error 7: Failed to connect to panel.test port 2053: Connection refused', new Request('GET', 'https://panel.test:2053/panel/api/clients/get/amir_1'));
+        $provider = $this->provider([self::ok(null)]);
+        $this->panel->refuse($refused());
+
+        try {
+            $provider->createClient(['3'], new ClientSpec(name: 'amir_1'));
+            self::fail('the read after the add failed');
+        } catch (ProviderException $e) {
+            self::assertTrue($e->mayHaveBeenDone(), 'the client was made: whoever asked looks before making another');
+        }
+
+        // A traffic read the panel refuses, after an update.
+        $provider = $this->provider([self::ok(self::wrapped(self::record(), inboundIds: [3])), self::ok(null), self::ok(self::wrapped(self::record(), inboundIds: [3])), new Response(200, [], '{"success":false,"msg":"database is locked"}')]);
+        try {
+            $provider->updateClient(new ClientSpec(name: 'alice', totalBytes: 7));
+            self::fail('the read after the update failed');
+        } catch (ProviderException $e) {
+            self::assertTrue($e->mayHaveBeenDone());
+            self::assertSame('POST /panel/api/clients/update/alice', $this->panel->calls()[1], 'the update went through');
+        }
+
+        // The write itself refused is no write.
+        $provider = $this->provider([new Response(200, [], '{"success":false,"msg":"Duplicate email: amir_1"}')]);
+        try {
+            $provider->createClient(['3'], new ClientSpec(name: 'amir_1'));
+            self::fail('the add was refused');
+        } catch (PanelApiException $e) {
+            self::assertFalse($e->mayHaveBeenDone());
+        }
     }
 
     public function testCreatingAClientWithoutAnInboundIsTheCallersMistake(): void
@@ -534,6 +591,9 @@ final class ThreeXuiProviderTest extends TestCase
         self::assertSame('https://x.example.com/sub/', (new PanelSettings(['subURI' => 'https://x.example.com/sub', 'subPort' => 2096]))->subscriptionBase('ignored'));
         self::assertSame('http://[2001:db8::1]:2096/sub/', (new PanelSettings(['subPort' => 2096, 'subPath' => '/sub/']))->subscriptionBase('2001:db8::1'));
         self::assertSame('https://sub.example.com:443/feed/', (new PanelSettings(['subDomain' => 'sub.example.com', 'subPort' => 443, 'subPath' => 'feed', 'subCertFile' => 'c', 'subKeyFile' => 'k']))->subscriptionBase('panel.test'));
+        foreach (['/', ''] as $root) {
+            self::assertSame('http://panel.test:2096/', (new PanelSettings(['subPort' => 2096, 'subPath' => $root]))->subscriptionBase('panel.test'), "a path of «{$root}»: the links at the root, never «//»");
+        }
     }
 
     public function testAClientPayloadLeavesOutWhatItHasNotAndRoundTripsARow(): void

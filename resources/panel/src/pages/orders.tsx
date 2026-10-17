@@ -5,7 +5,7 @@ import { DateFilter } from '@/components/date-filter'
 import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
 import { ListTotal } from '@/components/list-total'
-import { ListView, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
 import { OrderAmount } from '@/components/orders/order-amount'
 import { OrderModal } from '@/components/orders/order-modal'
 import { OrderSubject } from '@/components/orders/order-subject'
@@ -16,7 +16,7 @@ import { SearchBox } from '@/components/search-box'
 import { StatusBadge, statusTabs } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { UserIdentity } from '@/components/user-identity'
+import { UserIdentity, UserLabel } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { OrderResponse, OrderRow, OrderSort, OrdersResponse, OrderStatus, OrderType } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
@@ -50,6 +50,7 @@ export function OrdersPage() {
     list: 'orders',
     statuses: ['', ...QUEUE],
     params: ['type', 'from', 'to', 'user'],
+    ids: ['user'],
     // A type the shop has no orders of (another shop's link) is no filter: «همه» shows, and the address says so.
     choices: { type: types },
     sorts: SORTS,
@@ -126,17 +127,19 @@ function OrdersTable({ orders, sorting, onOpen }: { orders: OrderRow[]; sorting:
       <TableHeader>
         <TableRow>
           <TableHead>سفارش</TableHead>
-          <TableHead>مشتری</TableHead>
-          <TableHead className="hidden md:table-cell">بابت</TableHead>
+          <TableHead className="hidden md:table-cell">مشتری</TableHead>
+          {/* What it was for and when come with the widest screens: a tablet has a phone's room and a half. */}
+          <TableHead className="hidden xl:table-cell">بابت</TableHead>
           <SortableHead list={sorting} by="amount">
             مبلغ
           </SortableHead>
-          <TableHead>وضعیت</TableHead>
-          <SortableHead list={sorting} by="created" className="hidden lg:table-cell">
+          <TableHead className="hidden md:table-cell">وضعیت</TableHead>
+          <SortableHead list={sorting} by="created" className="hidden xl:table-cell">
             زمان
           </SortableHead>
-          <TableHead className="w-24">
-            <span className="sr-only">جزئیات</span>
+          {/* Its button says «رسیدگی» or «جزئیات», by the order: the column is named for both. */}
+          <TableHead className="md:w-24">
+            <span className="sr-only">عملیات</span>
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -150,20 +153,24 @@ function OrdersTable({ orders, sorting, onOpen }: { orders: OrderRow[]; sorting:
                 </RowTitleButton>
                 <span className="text-footnote text-muted-foreground">{ORDER_TYPE[order.type]}</span>
               </div>
-            </TableCell>
-            <TableCell>
-              <UserIdentity user={order.user} />
+              <PhoneFacts>
+                <StatusBadge status={ORDER_STATUS[order.status]} />
+                <UserLabel user={order.user} />
+              </PhoneFacts>
             </TableCell>
             <TableCell className="hidden md:table-cell">
+              <UserIdentity user={order.user} />
+            </TableCell>
+            <TableCell className="hidden xl:table-cell">
               <OrderSubject order={order} />
             </TableCell>
-            <TableCell className="tabular">
+            <TableCell className="tabular max-md:whitespace-normal">
               <OrderAmount order={order} />
             </TableCell>
-            <TableCell>
+            <TableCell className="hidden md:table-cell">
               <StatusBadge status={ORDER_STATUS[order.status]} />
             </TableCell>
-            <TableCell className="hidden text-muted-foreground lg:table-cell">{timeAgo(order.created_at)}</TableCell>
+            <TableCell className="hidden text-muted-foreground xl:table-cell">{timeAgo(order.created_at)}</TableCell>
             <TableCell>
               <div className="flex justify-end">
                 <Button size="sm" variant={order.actions.retry ? 'default' : 'secondary'} onClick={() => onOpen(order)}>

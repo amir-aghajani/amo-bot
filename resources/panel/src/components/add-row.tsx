@@ -55,18 +55,20 @@ interface AddRowProps {
   onAdd: () => void
   /** Said beside the button while there is no row; nothing for a list that may well be empty. */
   empty?: string
+  /** The whole list waits as it is kept (a program switched off): no row is added. */
+  disabled?: boolean
 }
 
 /**
  * A list's add button, held — not disabled — once the list is full (just pressed, it keeps the focus) with the most it
- * holds beside it; and what an empty list lacks.
+ * holds beside it; and what an empty list lacks. Disabled while the list waits (`disabled`).
  */
-export function AddRow({ noun, count, most, onAdd, empty }: AddRowProps) {
+export function AddRow({ noun, count, most, onAdd, empty, disabled = false }: AddRowProps) {
   const full = count >= most
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <Button data-add variant="secondary" size="sm" icon={Plus} aria-disabled={full} onClick={full ? undefined : onAdd}>
+      <Button data-add variant="secondary" size="sm" icon={Plus} disabled={disabled} aria-disabled={full} onClick={full ? undefined : onAdd}>
         {`افزودن ${noun}`}
       </Button>
       {full && <span className="text-footnote text-muted-foreground">{`حداکثر ${formatNumber(most)} ${noun}؛ برای ${noun} تازه یکی را بردارید.`}</span>}

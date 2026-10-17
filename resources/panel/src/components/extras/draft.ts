@@ -1,6 +1,7 @@
 import type { PricedRowDraft } from '@/components/priced-rows-editor'
 import type { BotSettingsData, ExtraOption, ExtraOptionInput, ExtraPrices, ExtraPricesRequest } from '@/lib/api-types'
-import { amountDraft, tomanOf, wholeNumberOf, wholeOf } from '@/lib/format'
+import { amountDraft, tomanOf, wholeNumberOf } from '@/lib/format'
+import { asAmount, asWhole } from '@/lib/use-form'
 
 /*
  * A price list of «حجم، زمان و کاربر اضافه» — the shop's (the bot settings' `extra_…`) or a plan's own (`extras.…`) — as a form
@@ -142,17 +143,6 @@ export function extraPricesRequest(draft: ExtraPricesDraft): Required<ExtraPrice
   }
 }
 
-/** A whole number as the server reads one typed (Input::wholeOf()); the text, trimmed, when it is none — for the server to refuse. */
-function wholeRead(typed: string): number | string {
-  const number = wholeOf(typed)
-  return number === null ? typed.trim() : Number(number)
-}
-
-/** A price as the server reads one: blank is none; whole Toman, or the text, trimmed, when it is none — a plan's own prices too. */
-export function priceRead(typed: string): number | string | null {
-  return typed.trim() === '' ? null : (tomanOf(typed) ?? typed.trim())
-}
-
 /** Amounts the smallest first, as the server keeps them — one it cannot read after them, in the order typed. */
 function byQuantity(a: { quantity: number | string }, b: { quantity: number | string }): number {
   if (typeof a.quantity === 'number') return typeof b.quantity === 'number' ? a.quantity - b.quantity : -1
@@ -161,7 +151,7 @@ function byQuantity(a: { quantity: number | string }, b: { quantity: number | st
 
 /** The amounts offered as the server keeps them: the rows that say something, read, the smallest first. */
 function optionsRead(rows: ExtraOptionDraft[]) {
-  const read = said(rows).map((option) => ({ quantity: wholeRead(option.quantity), price: priceRead(option.price) }))
+  const read = said(rows).map((option) => ({ quantity: asWhole(option.quantity), price: asAmount(option.price) }))
   read.sort(byQuantity)
   return read
 }
@@ -172,18 +162,18 @@ function optionsRead(rows: ExtraOptionDraft[]) {
  */
 export function extraPricesRead(draft: ExtraPricesDraft) {
   return {
-    traffic_price: priceRead(draft.traffic_price),
+    traffic_price: asAmount(draft.traffic_price),
     traffic_options: optionsRead(draft.traffic_options),
-    traffic_min: wholeRead(draft.traffic_min),
-    traffic_max: wholeRead(draft.traffic_max),
-    time_price: priceRead(draft.time_price),
+    traffic_min: asWhole(draft.traffic_min),
+    traffic_max: asWhole(draft.traffic_max),
+    time_price: asAmount(draft.time_price),
     time_options: optionsRead(draft.time_options),
-    time_min: wholeRead(draft.time_min),
-    time_max: wholeRead(draft.time_max),
-    devices_price: priceRead(draft.devices_price),
+    time_min: asWhole(draft.time_min),
+    time_max: asWhole(draft.time_max),
+    devices_price: asAmount(draft.devices_price),
     devices_options: optionsRead(draft.devices_options),
-    devices_min: wholeRead(draft.devices_min),
-    devices_max: wholeRead(draft.devices_max),
+    devices_min: asWhole(draft.devices_min),
+    devices_max: asWhole(draft.devices_max),
   }
 }
 

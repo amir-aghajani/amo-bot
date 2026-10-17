@@ -1,14 +1,32 @@
 import { Badge } from '@/components/ui/badge'
 import { formatChange } from '@/lib/format'
 
-/** Percent change vs a baseline as a tinted chip; null = there was nothing to compare against. */
-export function TrendChip({ change }: { change: number | null }) {
-  const trend = change === null ? 'flat' : change > 0.5 ? 'up' : change < -0.5 ? 'down' : 'flat'
+/** What a figure with no baseline says in its comparison's place: the previous period had none to compare against. */
+const NO_BASELINE = 'دوره قبل رقمی برای مقایسه نداشت'
+
+/** Percent change vs a baseline as a tinted chip. */
+function TrendChip({ change }: { change: number }) {
+  const trend = change > 0.5 ? 'up' : change < -0.5 ? 'down' : 'flat'
 
   return (
     <Badge variant={trend === 'up' ? 'success' : trend === 'down' ? 'danger' : 'neutral'} className="tabular">
-      {change === null ? 'بدون مقایسه' : describeChange(change)}
+      {describeChange(change)}
     </Badge>
+  )
+}
+
+/**
+ * How a figure moved: its chip and what it is compared with («نسبت به دوره قبل»); null = there was nothing to compare
+ * against, said in a line of its own — never a comparison's words beside no comparison.
+ */
+export function Trend({ change, label, className }: { change: number | null; label: string; className?: string }) {
+  if (change === null) return <span className={className}>{NO_BASELINE}</span>
+
+  return (
+    <>
+      <TrendChip change={change} />
+      <span className={className}>{label}</span>
+    </>
   )
 }
 

@@ -6,32 +6,315 @@
     <title>AmoBot</title>
     <meta name="description" content="AmoBot's documentation: installing and running a shop, the owner's guide, the bot, the Store API and the code." />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4.13.1/lib/themes/vue.css" />
+    <style>
+      /*
+       * A right-to-left language's pages — body.rtl, which the languages plugin below sets on its routes: their text and
+       * sidebar right to left in Vazirmatn (the panels' typeface, loaded once such a page is shown), the sidebar on the
+       * right, code left to right. Inline code takes its direction from its first letter (`--check` stays `--check`).
+       */
+      body.rtl .markdown-section,
+      body.rtl .sidebar {
+        direction: rtl;
+        font-family: Vazirmatn, 'Source Sans Pro', 'Helvetica Neue', Arial, sans-serif;
+      }
+      body.rtl .markdown-section pre {
+        direction: ltr;
+        text-align: left;
+      }
+      body.rtl .markdown-section :not(pre) > code {
+        unicode-bidi: plaintext;
+      }
+      body.rtl .markdown-section ol,
+      body.rtl .markdown-section ul {
+        padding-left: 0;
+        padding-right: 1.5rem;
+      }
+      body.rtl .markdown-section blockquote {
+        border-left: 0;
+        border-right: 4px solid var(--theme-color, #42b983);
+        padding-left: 0;
+        padding-right: 20px;
+      }
+      body.rtl .sidebar ul {
+        margin: 0 15px 0 0;
+      }
+      body.rtl .sidebar ul li.active > a {
+        border-right: 0;
+        border-left: 2px solid;
+      }
+      body.rtl .app-sub-sidebar li:before {
+        float: right;
+        padding-right: 0;
+        padding-left: 4px;
+      }
+      body.rtl .app-nav {
+        left: 0;
+        margin: 25px 0 0 60px;
+        right: auto;
+        text-align: left;
+      }
+      body.rtl .github-corner {
+        left: 0;
+        right: auto;
+        transform: scaleX(-1);
+      }
+      @media screen and (min-width: 769px) {
+        body.rtl .sidebar {
+          border-left: 1px solid rgba(0, 0, 0, 0.07);
+          border-right: 0;
+          left: auto;
+          right: 0;
+        }
+        body.rtl .sidebar-toggle {
+          left: auto;
+          right: 0;
+        }
+        body.rtl .content {
+          left: 0;
+          right: 300px;
+          transition: right 0.25s ease;
+        }
+        body.rtl.close .sidebar {
+          transform: translateX(300px);
+        }
+        body.rtl.close .content {
+          right: 0;
+        }
+      }
+      @media screen and (max-width: 768px) {
+        body.rtl .sidebar {
+          left: auto;
+          right: -300px;
+        }
+        body.rtl.close .sidebar,
+        body.rtl.close .content {
+          transform: translateX(-300px);
+        }
+        body.rtl .sidebar-toggle {
+          left: auto;
+          padding: 30px 10px 10px 30px;
+          right: 0;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
     <script>
       // GitHub Pages serves docs/ as it is, and Docsify renders its Markdown here, in the browser: the same pages the
       // repository's view and the wiki show (Contributing.md, "Documentation"). There is nothing to build.
+      //
+      // The languages, English first: each other's pages are in its folder (fa/ for /fa/), under the same names, with its
+      // own _Sidebar.md (Docsify takes the one of a page's folder) and _Footer.md; each with its name, its direction and
+      // its search box's words. LANGUAGES in scripts/docs.php lists the same paths, names and directions, and its
+      // --check compares the two.
+      var languages = [
+        { path: '/', name: 'English', dir: 'ltr', search: 'Search', nothing: 'Nothing found.' },
+        { path: '/fa/', name: 'فارسی', dir: 'rtl', search: 'جستجو', nothing: 'چیزی پیدا نشد.' },
+      ]
+      var translations = languages.slice(1)
+
+      // The language of a route: its folder's, else English.
+      function languageOf(path) {
+        return (
+          translations.filter(function (language) {
+            return path.indexOf(language.path) === 0
+          })[0] || languages[0]
+        )
+      }
+
+      // The code of a language, as `lang` takes it.
+      function codeOf(language) {
+        return language.path === '/' ? 'en' : language.path.slice(1, -1)
+      }
+
+      // Each language's setting, by its route's start (search's placeholder, the sidebar's name link): the languages'
+      // first, English's last, as Docsify picks the first that fits.
+      function byLanguage(value) {
+        var settings = {}
+        translations.concat(languages[0]).forEach(function (language) {
+          settings[language.path] = value(language)
+        })
+        return settings
+      }
+
+      // A heading's anchor as GitHub makes it, and scripts/docs.php checks links against: lower case, every mark but
+      // letters, digits, _, - and the zero-width (non-)joiner of Persian words dropped, each space a dash. Docsify's own
+      // drops the non-joiner and keeps «» and ؟, which would give a Persian heading another anchor here than on GitHub.
+      function githubSlug(text) {
+        return text
+          .toLowerCase()
+          .replace(/[^\p{L}\p{M}\p{N}\p{Pc}‌‍ -]/gu, '')
+          .replace(/ /g, '-')
+      }
+
+      // Anchors a page at a time, a second heading of one anchor numbered as GitHub numbers it (-1, -2).
+      function anchors() {
+        var seen = {}
+        function anchor(slug) {
+          var count = seen[slug] || 0
+          seen[slug] = count + 1
+          return count ? slug + '-' + count : slug
+        }
+        anchor.clear = function () {
+          seen = {}
+        }
+        return anchor
+      }
+
+      // The text a piece of HTML shows: no tags, its entities as their characters.
+      function shown(html) {
+        var template = document.createElement('template')
+        template.innerHTML = html
+        return template.content.textContent
+      }
+
+      // The running Docsify, kept by the languages plugin; and the anchors of the page being rendered.
+      var docsify = null
+      var pageAnchors = anchors()
+
+      var footers = {}
+
       window.$docsify = {
         name: 'AmoBot',
+        nameLink: byLanguage(function (language) {
+          return '#' + language.path
+        }),
         repo: 'amir-aghajani/amo-bot',
         homepage: 'Home.md',
         loadSidebar: '_Sidebar.md',
+        // A link is relative to its page's folder, as on GitHub: Plans.md in fa/ is fa/Plans.md, ../Plans.md English's.
+        relativePath: true,
+        // A language's front page is its Home.md, as English's is.
+        alias: translations.reduce(function (alias, language) {
+          alias[language.path + '(?:README)?'] = language.path + 'Home'
+          return alias
+        }, {}),
         subMaxLevel: 2,
         auto2top: true,
-        search: { paths: 'auto', depth: 3, placeholder: 'Search', noData: 'Nothing found.' },
+        // A search index a language, of the pages its sidebar lists.
+        search: {
+          paths: 'auto',
+          depth: 3,
+          pathNamespaces: translations.map(function (language) {
+            return language.path.slice(0, -1)
+          }),
+          placeholder: byLanguage(function (language) {
+            return language.search
+          }),
+          noData: byLanguage(function (language) {
+            return language.nothing
+          }),
+        },
+        markdown: {
+          renderer: {
+            // Each heading as Docsify renders it (its anchor link, its place in the sidebar's contents), under GitHub's
+            // anchor.
+            heading: function (text, level) {
+              var html = this.origin.heading.apply(this, arguments)
+              var made = /^<h\d id="([^"]*)"><a href="([^"]*)" data-id="[^"]*" class="anchor">/.exec(html)
+              var slug = pageAnchors(githubSlug(shown(text)))
+              if (!made || made[1] === slug) {
+                return html
+              }
+              var url = docsify.router.toURL(docsify.router.getCurrentPath(), { id: slug })
+              var toc = docsify.compiler.toc
+              if (toc.length && toc[toc.length - 1].slug === made[2]) {
+                toc[toc.length - 1].slug = url
+              }
+              return '<h' + level + ' id="' + slug + '"><a href="' + url + '" data-id="' + slug + '" class="anchor">' + html.slice(made[0].length)
+            },
+          },
+        },
         plugins: [
-          // _Footer.md under every page, as the wiki shows it.
-          function (hook) {
-            var footer = fetch('_Footer.md')
-              .then(function (response) {
-                return response.ok ? response.text() : ''
+          // The languages: on each route its language's direction, font and `lang`; the search's links to headings under
+          // GitHub's anchors too; and the navbar's switch, to the page's own version in each language where it has one,
+          // else to that language's front page.
+          function (hook, vm) {
+            docsify = vm
+
+            var searchAnchors = anchors()
+            function searchSlug(text) {
+              // The search hands over a heading's Markdown, escaped.
+              var parts = shown(text)
+                .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+                .split(/(`[^`]*`)/)
+              return searchAnchors(
+                githubSlug(
+                  parts
+                    .map(function (part, index) {
+                      return index % 2 ? part.replace(/`/g, '') : shown(part).replace(/\*/g, '')
+                    })
+                    .join(''),
+                ),
+              )
+            }
+            searchSlug.clear = searchAnchors.clear
+            window.Docsify.slugify = searchSlug
+
+            var nav = document.createElement('nav')
+            languages.forEach(function (language) {
+              var link = document.createElement('a')
+              link.textContent = language.name
+              link.lang = codeOf(language)
+              link.href = '#' + language.path
+              nav.appendChild(link)
+            })
+            document.body.insertBefore(nav, document.body.firstChild)
+
+            function show(language) {
+              var rtl = language.dir === 'rtl'
+              document.documentElement.lang = codeOf(language)
+              document.body.classList.toggle('rtl', rtl)
+              if (rtl && !document.getElementById('vazirmatn')) {
+                var font = document.createElement('link')
+                font.id = 'vazirmatn'
+                font.rel = 'stylesheet'
+                font.href = 'https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap'
+                document.head.appendChild(font)
+              }
+            }
+            show(languageOf(location.hash.replace(/^#/, '').split('?')[0]))
+
+            hook.beforeEach(function (markdown) {
+              pageAnchors.clear()
+              show(languageOf(vm.route.path))
+              return markdown
+            })
+
+            // The page's versions are the ones the line atop it links (scripts/docs.php --check holds every page to it).
+            hook.doneEach(function () {
+              var path = vm.route.path
+              var current = languageOf(path)
+              var page = path.slice(current.path.length)
+              var line = document.querySelector('#main > p:first-child')
+              var versions = line
+                ? Array.prototype.map.call(line.querySelectorAll('a'), function (link) {
+                    return link.getAttribute('href')
+                  })
+                : []
+              languages.forEach(function (language, index) {
+                var link = nav.children[index]
+                var version = '#' + language.path + page
+                link.classList.toggle('active', language === current)
+                link.href = language === current ? '#' + path : versions.indexOf(version) > -1 ? version : '#' + language.path
               })
-              .catch(function () {
-                return ''
-              })
+            })
+          },
+          // Each language's _Footer.md under its pages, as the wiki shows it.
+          function (hook, vm) {
             hook.beforeEach(function (markdown, next) {
-              footer.then(function (text) {
+              var file = languageOf(vm.route.path).path.slice(1) + '_Footer.md'
+              footers[file] =
+                footers[file] ||
+                fetch(file)
+                  .then(function (response) {
+                    return response.ok ? response.text() : ''
+                  })
+                  .catch(function () {
+                    return ''
+                  })
+              footers[file].then(function (text) {
                 next(text ? markdown + '\n\n---\n\n' + text : markdown)
               })
             })

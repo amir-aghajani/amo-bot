@@ -247,6 +247,17 @@ final class InstallerApiTest extends HttpTestCase
         self::assertTrue($this->decode($this->get('/api/app'))['installed']);
     }
 
+    public function testAConfigFileWrittenByHandWithoutItsKeyGetsOneAsTheInstallationEnds(): void
+    {
+        // The database's settings typed into config.php by hand, its tables there already: no step that writes one ran.
+        $this->configFile(['DB_CONNECTION' => 'mysql', 'DB_HOST' => 'localhost', 'DB_DATABASE' => 'shop_db', 'DB_USERNAME' => 'shop_user', 'DB_PASSWORD' => 'p@ss']);
+        $this->configureAdmin();
+
+        self::assertSame(['installed' => true], $this->decode($this->install('POST', '/api/install/finish')));
+        self::assertMatchesRegularExpression('#^base64:[A-Za-z0-9+/]{43}=$#', (string) $this->file()->get('APP_KEY'), 'what the shop encrypts its secrets with');
+        self::assertSame('shop_db', $this->file()->get('DB_DATABASE'), 'the rest as it was');
+    }
+
     public function testFinishingNeedsWhatTheHostLacks(): void
     {
         $this->install('POST', '/api/install/database', $this->database());

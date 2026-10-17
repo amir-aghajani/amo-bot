@@ -2,9 +2,9 @@ import { fireEvent, render, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AddMethodModal } from '@/components/payments/add-method-modal'
-import type { DriverDescription, FieldDescription, PaymentMethodResponse } from '@/lib/api-types'
+import type { DriverDescription, PaymentMethodResponse } from '@/lib/api-types'
 import { providers, until } from '@/test/render'
-import { cardMethodRow, cubePayDriverRow, cubePayMethodRow } from '@/test/rows'
+import { cardDriverRow, cardMethodRow, cubePayDriverRow, cubePayMethodRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
@@ -16,29 +16,6 @@ import { json, refusal, server } from '@/test/server'
 
 const CARD_REFUSED = 'کارت ۱: شماره کارت باید 16 رقم و معتبر باشد.'
 
-function field(name: string, overrides: Partial<FieldDescription>): FieldDescription {
-  return {
-    name,
-    type: 'text',
-    label: name,
-    hint: null,
-    placeholder: null,
-    required: true,
-    secret: false,
-    bound_to: [],
-    moved: null,
-    advanced: false,
-    options: [],
-    when: {},
-    unit: null,
-    min: null,
-    max: null,
-    ltr: false,
-    default: '',
-    ...overrides,
-  }
-}
-
 /** The gateway drivers as the server describes them (Payments\Drivers). */
 const DRIVERS: DriverDescription[] = [
   {
@@ -49,17 +26,7 @@ const DRIVERS: DriverDescription[] = [
     traits: { kind: 'instant', builtin: true },
     fields: [],
   },
-  {
-    key: 'manual',
-    label: 'کارت به کارت',
-    description: 'مشتری مبلغ را به یکی از کارت‌های شما واریز می‌کند و رسید را می‌فرستد.',
-    notes: ['بدون کارمزد و بدون نیاز به درگاه'],
-    traits: { kind: 'manual', builtin: false },
-    fields: [
-      field('instructions', { type: 'textarea', label: 'توضیحات برای مشتری', required: false }),
-      field('auto_approve_after', { type: 'number', label: 'تایید خودکار', unit: 'دقیقه', required: false, min: 0, max: 10080, default: 0 }),
-    ],
-  },
+  cardDriverRow(),
   cubePayDriverRow(),
 ]
 
@@ -126,6 +93,8 @@ describe('adding a payment method', () => {
     expect(within(card).getByText('درگاه آنلاین')).toBeTruthy()
     expect(within(card).getByText(/باید با https شروع شود/)).toBeTruthy()
     fireEvent.click(card)
+    // What it needs of the shop stays in sight on its form.
+    expect(within(dialog().getByRole('list', { name: 'درباره این درگاه' })).getByText(/باید با https شروع شود/)).toBeTruthy()
     const token = dialog().getByLabelText('توکن API') as HTMLInputElement
     expect([token.closest('[dir]')?.getAttribute('dir'), token.placeholder]).toEqual(['ltr', ''])
     type('نام روش', 'پرداخت آنلاین')

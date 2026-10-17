@@ -1,10 +1,12 @@
+[فارسی](fa/Website.md)
+
 # Website
 
 Every shop — the main one and each agent's — may have a website of its own, built by whoever runs the shop, which talks
-to the shop through the [Store API](Store-API.md): its customers sign in, buy, renew, pay by card, read the shop's
-notices and write to support there — the same shop, customers and services the bot and the panels show. «تنظیمات
-وب‌سایت», in your panel and an agent's alike, sets it up: a section each, each card saved on its own — a secret left
-blank keeps the one kept.
+to the shop through the [Store API](Store-API.md): its customers sign in, buy, renew, pay, read the shop's notices and
+write to support there — the same shop, customers and services the bot and the panels show. «تنظیمات وب‌سایت», in your
+panel and an agent's alike, sets it up: a section each, each card saved on its own — a secret left blank keeps the one
+kept.
 
 ## Connection
 
@@ -12,15 +14,15 @@ blank keeps the one kept.
 
 - **«API وب‌سایت روشن باشد»** (off) — off, every call to the API's address is answered «این فروشگاه وب‌سایت فعالی ندارد.».
   An agent's website closes with their agency too.
-- **«آدرس وب‌سایت»** — the site, `https://shop.example.com`: required to switch the API on, and its origin may call the
-  API from a visitor's browser.
+- **«آدرس وب‌سایت»** — the site, `https://shop.example.com`: required to switch the API on. Its origin — the scheme, the
+  host and the port — may call the API from a visitor's browser.
 - **«Originهای مجاز دیگر»** — up to ten more origins, one a line: `http://localhost:3000` while the site is built, another
   domain of it. An origin is a scheme, a host and a port — no path.
 
-Card **«آدرس API»**: the base address to hand the site's developer — `<your APP_URL>/api/store/v1/<key>`, «کپی» — and its
+Card **«آدرس API»**: the base address to hand the site's developer — `<APP_URL>/api/store/v1/<key>`, with «کپی» — and its
 **«کلید فروشگاه»**, which names the shop in the address and is no secret. **«ساخت کلید جدید»** (asks first) ends the old
-address at once: the site must take the new one. The address follows `APP_URL`: change that, and the site's address
-changes with it.
+address at once: the site must take the new one. The address is built on the shop's «آدرس سایت» (`APP_URL`, [Panel
+settings](Panel-Settings.md#the-app)): change that, and the site's address changes with it.
 
 ## Signing in with Telegram
 
@@ -57,7 +59,8 @@ account; otherwise the customer is asked to sign in their own way and add Google
   («نوع تایید امنیتی»):
   - **«خاموش»** (the default) — the forms are held only by the limits on requests.
   - **«Cloudflare Turnstile»** — make a widget for the site's domain in Cloudflare's dashboard (*Turnstile*), and type its
-    **«Site Key»** and **«Secret Key»**. A token solved on another host than the site's, or for another form, is refused.
+    **«Site Key»** and **«Secret Key»**. A new Site Key needs its widget's Secret Key typed again. A token solved on
+    another host than the site's address and its other origins, or for another form, is refused.
   - **«ALTCHA»** — open source, no keys, no service outside: the site's widget takes its puzzle from the shop's API.
 
   Leaving Turnstile throws its keys away: going back needs both again. The site's own forms — a contact form, say — may
@@ -80,14 +83,16 @@ No review shows on the website until you approve it.
 ## The shop's admins
 
 «مدیران سایت», card «مدیریت فروشگاه از وب‌سایت» — the bot's admins work the shop's daily work from the website, with
-their own accounts there: receipts and payments, orders, services, tickets, reviews, customers and broadcasts. The payment
-methods, the bot, the report group, the website and who is an admin change from the panel alone.
+their own accounts there: receipts and payments, orders, services, tickets, reviews, customers and the groups they are
+in, referrals and broadcasts. The payment methods, the bot, the report group, the website and who is an admin change
+from the panel alone.
 
 - **«کار مدیران از وب‌سایت»** (off) — off, the website takes no admin's work at all.
 - **«ورود امن مدیران»** (on) — an admin's work is taken only from a sign-in with Telegram, Google, or a password with
   its two-factor code; off, a password alone is enough. Keep it on: a leaked password would otherwise open the shop.
-- **«کارهای بیشتر»** — what they may do beyond the daily work, a switch each, all off: «پلن‌ها و دسته‌بندی‌ها», «کیف پول
-  مشتری», «بازپرداخت», «رد یکجای رسیدها» (receipts waiting for review rejected in bulk —
+- **«کارهای بیشتر»** — what they may do beyond the daily work, a switch each, all off: «پلن‌ها و دسته‌بندی‌ها» (the plans
+  and their categories, and the customer groups: adding, changing, reordering and deleting them, and putting a customer
+  into a «همکار» group, whose members pay the agents' prices), «کیف پول مشتری», «بازپرداخت», «رد یکجای رسیدها» (receipts waiting for review rejected in bulk —
   [Orders and payments](Orders-And-Payments.md#receipts)), «افزایش زمان و حجم سرویس», «افزودن سفارش برای مشتری» (a
   service made for a customer by hand and delivered at once —
   [Orders and payments](Orders-And-Payments.md#orders-support-makes)), «حذف یا انتقال سرویس» (to another customer, as
@@ -100,16 +105,21 @@ as the extra work does.
 
 **Who the admins are** is the users list's: the customers with the bot's admin role («لیست کاربران» on the card opens
 them; [Customers](Customers.md#the-bots-admins)). An admin signs in to the website with that same account — their
-Telegram, or a way in added to it. Whatever is granted, an admin never decides about themselves — their own payment,
-wallet, service or review — nor touches an admin's or an agent's account, and approves only a payment whose receipt
-waits for review. **Those guards are about each admin's own account: two admins can do these things for each other** —
-approve each other's payments, credit each other's wallets —, as the card warns. Give the role only to people you
-trust. What the website's developer builds for them: [Store API: the shop's admins](Store-API-Admins.md).
+Telegram, or a way in added to it. Whatever is granted:
+
+- an admin never decides about themselves — their own payment, wallet, service or review;
+- an admin never touches an admin's or an agent's account — their groups included —, nor marks a group that holds an
+  admin «همکار»; and without «پلن‌ها و دسته‌بندی‌ها», adds nobody to a «همکار» group;
+- an admin approves only a payment whose receipt waits for review.
+
+**Those guards are about each admin's own account: two admins can do these things for each other** — approve each
+other's payments, credit each other's wallets —, as the card warns. Give the role only to people you trust. What the
+website's developer builds for them: [Store API: the shop's admins](Store-API-Admins.md).
 
 ## Watch out for
 
 - **With the bot switched off** («تنظیمات ربات › عمومی»), the website takes no orders; browsing and signing in still work.
-- **A new key, or another `APP_URL`, breaks the site** until its developer gives it the new address.
+- **A new key, or another «آدرس سایت», breaks the site** until its developer gives it the new address.
 - **Telegram sign-in needs the site's address in BotFather** — a sign-in from an address it does not list fails there.
 - **The site shows no reviews until «نظرات در وب‌سایت» is on**, and guests write none while «تایید امنیتی» is off.
 - **An admin's role opens the shop's daily work on the website** while «کار مدیران از وب‌سایت» is on: give the role with

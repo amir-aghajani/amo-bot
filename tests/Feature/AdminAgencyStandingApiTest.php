@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Agency\DTO\SellingTerms;
 use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Services\AgencyActions;
@@ -73,6 +74,33 @@ final class AdminAgencyStandingApiTest extends HttpTestCase
         self::assertSame(['2026-12-01 18:00:00', null], [$bot->agency_expires_at?->format('Y-m-d H:i:s'), $bot->monthly_minimum], 'as typed: an end, no minimum (0)');
     }
 
+    public function testAnApprovalWhoseProgramTermWouldEndPastTheLastDayTheShopKeepsIsRefused(): void
+    {
+        // The program's 30 days, 20 days before the TIMESTAMP columns' last moment (MySQL refuses a later one).
+        Carbon::setTestNow(LocalTime::last()->subDays(20));
+        $this->loginAsAdmin();
+        $settings = $this->service(AgencySettings::class);
+        $settings->save(['term_days' => 30] + $settings->present());
+        $ali = $this->customer();
+        $request = $this->agencyRequest($ali);
+        $refusal = LocalTime::tooLateFor('تاریخ پایان نمایندگی') . '؛ مدت نمایندگی را در تنظیمات نمایندگی کوتاه‌تر کنید یا تاریخ پایان را خودتان بنویسید.';
+
+        foreach (['nothing of the terms sent' => [], 'only the minimum sent' => ['monthly_minimum' => '0']] as $case => $terms) {
+            $refused = $this->postJson("/api/admin/agency/requests/{$request->id}/approve", ['level_id' => $this->gold->id, 'credit_limit' => '0'] + $terms);
+            self::assertSame([422, ['expires_at' => [$refusal]]], [$refused->getStatusCode(), $this->decode($refused)['errors']], $case);
+        }
+        try {
+            $this->service(AgencyActions::class)->approve($request, $this->panelActor(), $this->gold, null);
+            self::fail('Approved from the report group.');
+        } catch (ValidationException $e) {
+            self::assertSame(['expires_at' => [$refusal]], $e->errors());
+        }
+        self::assertNull($ali->refresh()->ownBot, 'no shop opened');
+
+        $typed = $this->postJson("/api/admin/agency/requests/{$request->id}/approve", ['level_id' => $this->gold->id, 'credit_limit' => '0', 'expires_at' => '']);
+        self::assertSame(200, $typed->getStatusCode(), 'no end typed: approved');
+    }
+
     public function testTheProgramsEndIsKeptToTheShopsHourSoARowSavedAsItIsChangesNothing(): void
     {
         LocalTime::use('Asia/Tehran');
@@ -124,6 +152,12 @@ final class AdminAgencyStandingApiTest extends HttpTestCase
         $refused = $this->putJson("/api/admin/agency/agents/{$agent->id}", $terms + ['expires_at' => '2026-02-30T10:00', 'monthly_minimum' => '-5']);
         self::assertSame(422, $refused->getStatusCode());
         self::assertSame(['expires_at', 'monthly_minimum'], array_keys($this->decode($refused)['errors']), 'no such day; below zero');
+        $tooLate = $this->putJson("/api/admin/agency/agents/{$agent->id}", $terms + ['expires_at' => '2040-01-01T00:00']);
+        self::assertSame(
+            [422, ['expires_at' => [LocalTime::tooLateFor('تاریخ پایان نمایندگی') . '؛ برای بدون پایان، خالی بگذارید.']]],
+            [$tooLate->getStatusCode(), $this->decode($tooLate)['errors']],
+            'past the last day the database keeps (MySQL\'s TIMESTAMP ends in 2038): refused, never a 500',
+        );
         // None is 0, as in the program's own field — whose words a blank one gets.
         $blank = $this->decode($this->putJson("/api/admin/agency/agents/{$agent->id}", $terms + ['monthly_minimum' => '']))['errors'] ?? [];
         $program = $this->decode($this->putJson('/api/admin/agency/settings', ['monthly_minimum' => ''] + $this->service(AgencySettings::class)->present()))['errors'] ?? [];

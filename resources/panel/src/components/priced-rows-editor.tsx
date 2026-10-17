@@ -46,12 +46,15 @@ interface PricedRowsEditorProps<K extends string> {
   most: number
   /** Said beside the add button while there is no row; nothing for a list that may well be empty. */
   empty?: string
+  /** The list waits as it is kept (a program switched off): its rows and buttons disabled. */
+  disabled?: boolean
 }
 
 /**
  * A list of amounts and their prices as rows — the extras' amounts offered, the custom builder's price tiers —: each
  * row's amount, price and remove, then an add button that is held, not disabled, once the list is full (AddRow). The
- * focus never falls to the document as rows come and go (useRowFocus): a new row's amount takes it.
+ * focus never falls to the document as rows come and go (useRowFocus): a new row's amount takes it. While the list
+ * waits (`disabled`), nothing of it can be changed.
  */
 export function PricedRowsEditor<K extends string>({
   label,
@@ -68,6 +71,7 @@ export function PricedRowsEditor<K extends string>({
   noun,
   most,
   empty,
+  disabled = false,
 }: PricedRowsEditorProps<K>) {
   const columns = cn('grid gap-2', wide ? 'grid-cols-[5.5rem_minmax(0,1fr)_2rem]' : 'grid-cols-[4.5rem_minmax(0,1fr)_2rem]')
   const { block, added, removed } = useRowFocus((row: PricedRowDraft<K>) => row.id)
@@ -107,6 +111,7 @@ export function PricedRowsEditor<K extends string>({
                       placeholder={example}
                       value={row[amount]}
                       onChange={(e) => edit(index, amount, e.target.value)}
+                      disabled={disabled}
                     />
                     <Input
                       dir="ltr"
@@ -116,8 +121,9 @@ export function PricedRowsEditor<K extends string>({
                       placeholder={pricePlaceholder?.(row)}
                       value={row.price}
                       onChange={(e) => edit(index, 'price', e.target.value)}
+                      disabled={disabled}
                     />
-                    <IconButton data-part="remove" aria-label={`حذف ${name.row}`} onClick={() => remove(index)}>
+                    <IconButton data-part="remove" aria-label={`حذف ${name.row}`} onClick={() => remove(index)} disabled={disabled}>
                       <X className="size-4" aria-hidden />
                     </IconButton>
                   </li>
@@ -127,7 +133,7 @@ export function PricedRowsEditor<K extends string>({
           </div>
         )}
 
-        <AddRow noun={noun} count={rows.length} most={most} onAdd={add} empty={empty} />
+        <AddRow noun={noun} count={rows.length} most={most} onAdd={add} empty={empty} disabled={disabled} />
       </FieldGroup>
     </div>
   )

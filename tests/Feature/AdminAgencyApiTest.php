@@ -12,6 +12,7 @@ use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Agency\Services\AgencyLevels;
 use App\Modules\Agency\Services\AgencySettings;
 use App\Modules\Agency\Services\TrafficPool;
+use App\Modules\Auth\Actor;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Enums\BotStatus;
 use App\Modules\Bots\Models\Bot;
@@ -169,6 +170,27 @@ final class AdminAgencyApiTest extends HttpTestCase
         self::assertFalse(Bot::query()->where('user_id', $customer->id)->exists(), 'no shop for them');
         self::assertSame([self::text(BotText::AgencyRejected, ['note' => self::text(BotText::AdminNote, ['comment' => 'فعلا نماینده نمی‌گیریم'])])], $this->telegram()->sentTo(self::TELEGRAM_ID));
         self::assertSame([], $this->decode($this->get('/api/admin/agency/requests?status=pending'))['requests']);
+    }
+
+    public function testARequestDecidedInTheReportGroupIsListedUnderItsAdminsName(): void
+    {
+        $actions = $this->service(AgencyActions::class);
+        // A group admin by their handle, one with none by their Telegram id; the owner on the panel, by no name.
+        $boss = $this->admin(['telegram_id' => self::BOSS_TELEGRAM_ID, 'username' => 'boss']);
+        $sara = $this->admin(['telegram_id' => 7171, 'first_name' => 'Sara', 'last_name' => 'Ahmadi']);
+        $actions->reject($this->agencyRequest($this->customer(['telegram_id' => 900_001])), Actor::groupAdmin($boss), null);
+        $actions->reject($this->agencyRequest($this->customer(['telegram_id' => 900_002])), Actor::groupAdmin($sara), null);
+        $actions->reject($this->agencyRequest($this->customer(['telegram_id' => 900_003])), $this->panelActor(), null);
+        $this->agencyRequest($this->customer(['telegram_id' => 900_004]));
+
+        $rows = $this->decode($this->get('/api/admin/agency/requests'))['requests'];
+
+        self::assertSame([
+            [null, null],
+            [self::ADMIN_USERNAME, null],
+            ['tg:7171', 'Sara Ahmadi'],
+            ['@boss', 'Boss'],
+        ], array_map(static fn(array $row): array => [$row['reviewer'], $row['reviewer_name']], $rows), 'newest first');
     }
 
     public function testAnAgentsCreditIsHeldToTheDefaultCreditsOwnRule(): void

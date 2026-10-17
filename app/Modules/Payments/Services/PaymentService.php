@@ -72,6 +72,12 @@ final class PaymentService
      */
     public const NOTE_UNSETTLED = 'درگاه پولی را که برای این پرداخت رسیده بود دو روز پس از بسته شدن صفحه هم تسویه نکرد؛ پشتیبانی باید آن را در درگاه بررسی کند';
 
+    /** The note on one held for support at once: its gateway closed it after saying money had come in on it (OnlinePayments). */
+    public const NOTE_CLOSED_WITH_MONEY = 'درگاه این پرداخت را بست، با اینکه پیش‌تر گفته بود پولی برای آن رسیده است؛ پشتیبانی باید آن را در درگاه بررسی کند';
+
+    /** The notes a hold for support writes — support's words, never the customer's to read. */
+    public const HELD_NOTES = [self::NOTE_HELD, self::NOTE_UNSETTLED, self::NOTE_CLOSED_WITH_MONEY];
+
     /**
      * Minutes an online payment's page must still take money for a checkout to show it again; one closing sooner is left
      * to the gateway's word and a new payment is opened.
@@ -386,10 +392,11 @@ final class PaymentService
      *   gave was taken back already (PaymentActions::refund(), RefundedOrders) — a purchase's service removed, a
      *   renewal's or an extra's term and traffic —, and in an agent's shop the traffic it drew goes back to the pool;
      * - an agent's traffic: the amount goes to their wallet and the traffic comes back out of their pool (refused once sold);
-     * - a top-up: support returns the money outside the shop, so the top-up comes back out of the wallet (refused once spent).
+     * - a top-up: support returns the money outside the shop, so the top-up comes back out of the wallet (refused once spent),
+     *   and so does the commission it earned the customer's referrer, out of the referrer's (refused once spent:
+     *   ReferralService::takeBack()). Every other refund's money stays in the shop, and its commission stands.
      * Refused while the order's delivery is under way, and — given `$seen`, the state what it gave was taken back by — when
-     * the order is no longer in that state (delivered since). A referrer's commission stands. True when this call refunded
-     * it.
+     * the order is no longer in that state (delivered since). True when this call refunded it.
      *
      * @throws RefundRefusedException what the order put in the shop is no longer there
      * @throws ValidationException 422 on `status`: the order's delivery is under way, or ended since it was seen
@@ -420,6 +427,15 @@ final class PaymentService
             $refundable = in_array($state, [OrderStatus::Paid, OrderStatus::Failed, OrderStatus::Fulfilled], true) && ($seen === null || $state === $seen);
             if (!$refundable || !Transitions::move($order, 'status', [$state], OrderStatus::Refunded)) {
                 throw ValidationException::on('status', self::DELIVERY_RUNNING);
+            }
+            // A top-up's money leaves the shop: the commission it earned the referrer goes back out with it. Any other
+            // refund's stays in the shop, as the customer's wallet credit, and its commission stands.
+            if (ReferralService::refundTakesBack($order)) {
+                try {
+                    $this->referrals->takeBack($payment);
+                } catch (InsufficientBalanceException $e) {
+                    throw RefundRefusedException::commissionSpent($e->balance);
+                }
             }
 
             $customer = $order->user;
@@ -463,7 +479,8 @@ final class PaymentService
      * order: two taps make one payment. A new one is shown a card picked for it — none while the shop takes card payments
      * in support's private chat (PaymentCards::toSupport()) —, and a top-up's asks a few Toman more at random
      * (PaymentCards::amountFor()). An open one keeps what it was shown; one shown no card gets a card once the shop shows
-     * cards again (as one made before cards does), at the sum it asks.
+     * cards again (as one made before cards does), at the sum it asks — or, when another open payment to that card asks
+     * the same sum, a fresh one.
      *
      * @throws MethodUnavailableException no card of the method has room for the amount today
      */
@@ -486,7 +503,7 @@ final class PaymentService
             }
             $card = $this->cards->pick($method, $order->type, $order->amount) ?? throw MethodUnavailableException::noCard($method);
             if ($open !== null) {
-                $open->forceFill(['card_id' => $card->id])->save();
+                $open->forceFill(['card_id' => $card->id, 'amount' => $this->cards->amountFor($method, $card, $order->type, $order->amount, keeping: $open->amount)])->save();
 
                 return $open;
             }

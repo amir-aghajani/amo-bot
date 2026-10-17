@@ -9,17 +9,23 @@ use App\Core\Exceptions\ValidationException;
 use App\Core\Security\ReadableCode;
 use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Bots\Models\Bot;
+use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Rewards\DTO\Reward;
 use App\Modules\Rewards\Enums\GiftCodeKind;
 use App\Modules\Rewards\Enums\GiftCodeRefusal;
 use App\Modules\Rewards\Exceptions\GiftCodeRefusedException;
 use App\Modules\Rewards\Exceptions\RewardUnavailableException;
 use App\Modules\Rewards\Models\GiftCode;
+use App\Modules\Rewards\Services\Eligibility;
 use App\Modules\Rewards\Services\GiftCodes;
+use App\Modules\Rewards\Services\Rewards;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Models\WalletTransaction;
+use App\Support\LocalTime;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
@@ -81,6 +87,24 @@ final class GiftCodesTest extends DatabaseTestCase
         self::assertSame(0, GiftCode::query()->count());
     }
 
+    public function testACodesLastDayIsOneTheDatabaseCanKeep(): void
+    {
+        $make = fn(string $day): array => $this->codes()->make(['count' => 1, 'kind' => 'wallet', 'amount' => '50000', 'batch' => $day, 'expires_on' => $day]);
+
+        $make(LocalTime::LAST_DAY);
+        self::assertSame('2038-01-18T00:00:00+00:00', GiftCode::query()->sole()->expires_at?->toIso8601String(), "before MySQL's TIMESTAMP ends (2038-01-19 03:14:07 UTC)");
+
+        foreach (['2038-01-18', '2126-03-01', '9999-12-31'] as $day) {
+            try {
+                $make($day);
+                self::fail("{$day} was taken");
+            } catch (ValidationException $e) {
+                self::assertSame(['expires_on' => ['تاریخ پایان نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد؛ برای کدهای بدون پایان، آن را خالی بگذارید.']], $e->errors(), 'refused, not a database error');
+            }
+        }
+        self::assertSame(1, GiftCode::query()->count());
+    }
+
     public function testTomanLandInTheWalletOnceTypedAsAPersonTypesIt(): void
     {
         $this->giftCode('NOWRUZ7K3M9QXAPT');
@@ -138,6 +162,20 @@ final class GiftCodesTest extends DatabaseTestCase
         self::assertSame($order->id, GiftCode::query()->sole()->order_id);
         self::assertCount(1, FakeProvider::$created, 'a plan kept for gifts, off sale, still given');
         self::assertNotSame([], $this->telegram()->sentTo(self::TELEGRAM_ID), 'its service sent');
+    }
+
+    public function testAPlanWhoseDeliveryBrokeIsRedeemedWithItsOrderWaitingForSupport(): void
+    {
+        $plan = $this->plan([], $this->sellingServer());
+        $this->giftCode('PLANGIFT2345', ['kind' => GiftCodeKind::Plan, 'amount' => null, 'plan_id' => $plan->id]);
+        FakeProvider::$onCall = static fn() => throw new \RuntimeException('A fault of the shop\'s own.');
+
+        $redeemed = $this->codes()->redeem($this->ali, 'PLANGIFT2345');
+
+        $order = $redeemed->given->order ?? self::fail('no order');
+        self::assertSame(OrderStatus::Failed, $order->refresh()->status, 'paid, waiting for support\'s retry');
+        $code = GiftCode::query()->sole();
+        self::assertSame([$this->ali->id, $order->id], [$code->redeemed_by, $code->order_id], 'taken, its order on it');
     }
 
     public function testAPlanNoServerDeliversNowLeavesTheCodeAsItWas(): void
@@ -202,6 +240,40 @@ final class GiftCodesTest extends DatabaseTestCase
 
             $this->codes()->redeem($reza, 'TOMANGIFT234');
             self::assertSame('50000.00', $reza->balance(), 'Toman are still given');
+        });
+    }
+
+    public function testASuspensionHoldsAtOnceThoughTheShopWasReadBeforeIt(): void
+    {
+        $server = $this->sellingServer();
+        $bot = $this->agentBot();
+        $plan = CurrentBot::run($bot, function () use ($server): Plan {
+            $this->giftCodesOn();
+            $plan = $this->plan([], $server);
+            $this->giftCode('PLANGIFT2345', ['kind' => GiftCodeKind::Plan, 'amount' => null, 'plan_id' => $plan->id]);
+
+            return $plan;
+        });
+        // The bot's poller holds this copy of the shop a while; the main shop suspends its selling meanwhile.
+        $kept = Bot::query()->findOrFail($bot->id);
+        $this->service(AgencyStanding::class)->suspendByHand($bot, null);
+
+        CurrentBot::run($kept, function () use ($plan): void {
+            self::assertTrue(CurrentBot::get()->sells(), 'the copy still says it sells');
+            $reza = $this->customer(['telegram_id' => 7003]);
+            self::assertSame(['wallet'], array_keys($this->service(Eligibility::class)->givable($reza, ['plan' => Reward::plan($plan), 'wallet' => Reward::wallet(1000)])), 'a wheel offers its Toman alone');
+            try {
+                $this->service(Rewards::class)->give($reza, Reward::plan($plan), 'test');
+                self::fail('a service was given');
+            } catch (RewardUnavailableException $e) {
+                self::assertSame(RewardUnavailableException::SUSPENDED, $e->getMessage());
+            }
+            try {
+                $this->codes()->redeem($reza, 'PLANGIFT2345');
+                self::fail('a service was given');
+            } catch (GiftCodeRefusedException $e) {
+                self::assertSame([GiftCodeRefusal::Unavailable, RewardUnavailableException::SUSPENDED], [$e->reason, $e->getMessage()]);
+            }
         });
     }
 

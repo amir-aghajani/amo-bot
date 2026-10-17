@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import type { GiftCodeBatchRequest, GiftCodeBatchResponse, GiftCodeKind } from '@/lib/api-types'
 import { copyText } from '@/lib/clipboard'
-import { digitsOnly, formatDay, formatNumber } from '@/lib/format'
+import { formatDay, formatNumber, wholeNumberOf } from '@/lib/format'
 import { addDays, today } from '@/lib/jalali'
 import { GIFT_CODES } from '@/lib/limits'
 import { queryKeys } from '@/lib/query-keys'
@@ -25,7 +25,7 @@ const KINDS: PageTab<GiftCodeKind>[] = [
   { value: 'plan', label: GIFT_CODE_KIND.plan, icon: Gift },
 ]
 
-/** The form's draft: numbers as typed, and the codes' life in days from today ('' — no end). */
+/** The form's draft: numbers as typed, and the codes' life. */
 interface Draft {
   count: string
   kind: GiftCodeKind
@@ -33,23 +33,42 @@ interface Draft {
   plan_id: string
   batch: string
   prefix: string
-  days: string
+  /**
+   * The codes' life in days from today ('' — no end), sent as the last day it comes to: kept under that day's name, so
+   * the server's refusal of the day lands on this field and goes as the field is typed in.
+   */
+  expires_on: string
 }
 
-const BLANK: Draft = { count: '10', kind: 'wallet', amount: '', plan_id: '', batch: '', prefix: '', days: '' }
+const BLANK: Draft = { count: '10', kind: 'wallet', amount: '', plan_id: '', batch: '', prefix: '', expires_on: '' }
 
 /** The reads a new batch changes: the code list and the batch list. */
 const CHANGES = [queryKeys.giftCodes, queryKeys.giftCodeBatches]
 
-/** The last day the codes can be redeemed, `days` from the shop's today; null for no end (or no number yet). */
+/** The longest life a batch is given today, in days: to the last day the server keeps (GIFT_CODES.LAST_DAY). */
+function daysMax(): number {
+  return Math.round((Date.parse(GIFT_CODES.LAST_DAY) - Date.parse(today())) / 86_400_000)
+}
+
+/** The words for a life that is no whole number of days within it. */
+const notALife = () => `تعداد روز را با عدد بنویسید، بین 0 تا ${daysMax()}.`
+
+/** The life typed, in whole days from today: '' for no end, null for no such number («۳٫۵», «-۱», «سی») or one too long. */
+function lifeOf(days: string): number | '' | null {
+  if (days.trim() === '') return ''
+  const count = wholeNumberOf(days)
+  return count !== null && count <= daysMax() ? count : null
+}
+
+/** The last day the codes can be redeemed, `days` from the shop's today; null for no end (or no number). */
 function lastDay(days: string): string | null {
-  const count = Number(digitsOnly(days))
-  return days.trim() === '' || !Number.isInteger(count) ? null : addDays(today(), count)
+  const life = lifeOf(days)
+  return typeof life === 'number' ? addDays(today(), life) : null
 }
 
 /** The draft as the API takes it: only the fields its kind reads, the life as a last day. */
 function requestOf(draft: Draft): GiftCodeBatchRequest {
-  const expires = lastDay(draft.days)
+  const expires = lastDay(draft.expires_on)
   return {
     count: draft.count,
     kind: draft.kind,
@@ -82,10 +101,16 @@ export function MakeCodesModal({ open, onClose }: { open: boolean; onClose: () =
 }
 
 function MakeCodesForm({ onMade, onCancel }: { onMade: (made: GiftCodeBatchResponse) => void; onCancel: () => void }) {
-  const { values, set, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(BLANK, { reads: requestOf })
-  const expires = lastDay(values.days)
+  const { values, set, setErrors, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(BLANK, { reads: requestOf })
+  const expires = lastDay(values.expires_on)
 
   const save = handleSubmit(async () => {
+    // The server takes a last day, which the panel works out: a life that is none is refused here, never sent as
+    // another day.
+    if (lifeOf(values.expires_on) === null) {
+      setErrors({ expires_on: [notALife()] })
+      return
+    }
     const data = await submit(() => api.post('/gift-codes', requestOf(values)), { invalidates: CHANGES })
     if (data) {
       toast.success(`${formatNumber(data.codes.length)} کد هدیه ساخته شد`)
@@ -130,9 +155,9 @@ function MakeCodesForm({ onMade, onCancel }: { onMade: (made: GiftCodeBatchRespo
           label="مهلت استفاده (روز)"
           optional
           error={error('expires_on')}
-          hint={expires !== null ? `تا پایان ${formatDay(expires, { dateStyle: 'long' })} استفاده می‌شوند.` : 'خالی بماند، کدها همیشه معتبرند.'}
+          hint={expires !== null ? `تا پایان ${formatDay(expires, { dateStyle: 'long' })} استفاده می‌شوند.` : values.expires_on.trim() === '' ? 'خالی بماند، کدها همیشه معتبرند.' : notALife()}
         >
-          <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values.days} onChange={(e) => set('days', e.target.value)} placeholder="30" />
+          <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values.expires_on} onChange={(e) => set('expires_on', e.target.value)} placeholder="30" />
         </Field>
       </div>
 

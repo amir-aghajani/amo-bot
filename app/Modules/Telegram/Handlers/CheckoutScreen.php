@@ -27,6 +27,7 @@ use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentSettings;
 use App\Modules\Subscriptions\Enums\ClientNameMode;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Services\ClientNameSettings;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Context;
@@ -59,7 +60,12 @@ use App\Support\Persian;
  */
 final class CheckoutScreen
 {
-    /** The chat's state while a checkout is on screen: a wallet payment claims it, so a double tap pays once. */
+    /**
+     * The chat's state while a checkout is on screen, `checkout.{amount}.{checkout}` naming the amount it showed and the
+     * checkout it is — its callback data, what it sells (stateFor()): a wallet payment claims it, so a double tap pays
+     * once, and only that checkout at that amount (repriced()). A chat at the old `checkout.{amount}` is a checkout
+     * redrawn once.
+     */
     private const STATE = 'checkout';
 
     /** The session fact holding the discount code kept for one checkout: `{at: its callback data, code}`. */
@@ -186,23 +192,24 @@ final class CheckoutScreen
     }
 
     /**
-     * Draw the checkout in place of the tapped message: `$text`, a button per way to pay `$type` at `$amount` (`$pay` makes
-     * each callback; PaymentMethods::forOrder() — a method whose bounds or cards cannot take the amount is left out, but
-     * not one the customer's own open payment of it waits on, and when none is left the customer is told so), the
-     * row `$instead` (other things to buy) and «بازگشت» to `$back`. Something `$free` gets one «🎁 دریافت رایگان» button
-     * instead, through the first way to pay: the checkout settles a free order whichever is picked. With a `$quote` and its
-     * `$checkout` callback, «🏷 کد تخفیف دارم» — or «❌ حذف کد تخفیف» while a code is applied — is offered while the shop
-     * has codes and something is left to pay. A purchase's checkout says its service's name under
-     * the text, with a button per way the shop lets buyers name it (nameRow()). The row `$choices` (a renewal's methods,
-     * each redrawing the checkout) comes above `$instead`. Showing it leaves whatever flow the chat was in.
+     * Draw the checkout `$checkout` (its callback data: what it sells, the one buy() is told) in place of the tapped
+     * message: `$text`, a button per way to pay `$type` at `$amount` (`$pay` makes each callback;
+     * PaymentMethods::forOrder() — a method whose bounds or cards cannot take the amount is left out, but not one the
+     * customer's own open payment of it waits on, and when none is left the customer is told so), the row `$instead`
+     * (other things to buy) and «بازگشت» to `$back`. Something `$free` gets one «🎁 دریافت رایگان» button instead,
+     * through the first way to pay: the checkout settles a free order whichever is picked. With a `$quote`,
+     * «🏷 کد تخفیف دارم» — or «❌ حذف کد تخفیف» while a code is applied — is offered while the shop has codes and
+     * something is left to pay. A purchase's checkout says its service's name under the text, with a button per way the
+     * shop lets buyers name it (nameRow()). The row `$choices` (a renewal's methods, each redrawing the checkout) comes
+     * above `$instead`. Both rows read in order, the first on the right. Showing it leaves whatever flow the chat was in.
      *
      * @param \Closure(PaymentMethod): string $pay
      * @param list<array<string, mixed>> $instead
      * @param list<array<string, mixed>> $choices
      */
-    public function show(Context $ctx, string $text, OrderType $type, string $amount, \Closure $pay, string $back, array $instead = [], bool $free = false, ?Quote $quote = null, ?string $checkout = null, array $choices = []): void
+    public function show(Context $ctx, string $text, OrderType $type, string $amount, \Closure $pay, string $back, string $checkout, array $instead = [], bool $free = false, ?Quote $quote = null, array $choices = []): void
     {
-        $ctx->session->enter(self::STATE);
+        $ctx->session->enter(self::stateFor($checkout, $amount));
 
         $methods = $this->methods->forOrder($type, $amount, $ctx->user);
         $keyboard = InlineKeyboard::make();
@@ -213,20 +220,20 @@ final class CheckoutScreen
                 $keyboard->row(InlineKeyboard::callback($method->label, $pay($method)));
             }
         }
-        if ($quote !== null && $checkout !== null && $methods !== [] && ($quote->code !== null || (Money::isPositive($quote->afterAutomatic()) && $this->codes->offered()))) {
+        if ($quote !== null && $methods !== [] && ($quote->code !== null || (Money::isPositive($quote->afterAutomatic()) && $this->codes->offered()))) {
             $keyboard->row($quote->code !== null
                 ? InlineKeyboard::callback($this->texts->get(BotText::DiscountCodeRemove), DiscountCodeHandler::removeCallback($checkout))
                 : InlineKeyboard::callback($this->texts->get(BotText::DiscountCodeButton), DiscountCodeHandler::askCallback($checkout)));
         }
-        if ($type === OrderType::Purchase && $checkout !== null && $methods !== []) {
+        if ($type === OrderType::Purchase && $methods !== []) {
             $named = $this->nameRow($ctx, $checkout);
             if ($named !== null) {
                 [$line, $buttons] = $named;
                 $text = BotTexts::paragraphs($text, $line);
-                $keyboard->row(...$buttons);
+                $keyboard->row(...array_reverse($buttons));
             }
         }
-        $keyboard->row(...$methods === [] ? [] : $choices)->row(...$instead)->row($this->buttons->back($back));
+        $keyboard->row(...$methods === [] ? [] : array_reverse($choices))->row(...$instead)->row($this->buttons->back($back));
 
         if ($methods === []) {
             // None for this amount, while some take another: that is what the customer is told.
@@ -264,22 +271,34 @@ final class CheckoutScreen
 
     /**
      * Pay `$price` with `$method` for the `$type` order `$open` makes (or finds open), and show what came of it in place
-     * of the checkout. `$checkout` is the checkout's callback data, where «بازگشت» leads from here. A way that does not
-     * take the price now (its bounds, or its cards' room for today: Checkout::pay()) orders nothing: the checkout is
-     * drawn again by `$redraw`, with the ways that are left.
+     * of the checkout. `$checkout` is the checkout's callback data (as show() drew it), where «بازگشت» leads from here.
+     * A way that does not take the price now (its bounds, or its cards' room for today: Checkout::pay()) orders nothing:
+     * the checkout is drawn again by `$redraw`, with the ways that are left. A purchase whose term would end its service
+     * past the last day the shop keeps orders nothing either (TermTooLongException): the refusal in its place.
      *
      * The wallet (and a free order) claims the checkout state first, so a second tap — or a tap on a checkout the chat
-     * left — charges nothing. A card needs no such guard: the same card finds the same payment. Nor does an online
-     * gateway: a tap finds the same page while it takes money a few minutes yet (PaymentService::LINK_SPARE_MINUTES),
-     * else a new one, and two taps at once both show the one page the shop keeps (OnlineInvoices::open()). An order whose
-     * online payment is held for support is paid no other way meanwhile: the customer is sent to support (held()).
+     * left — charges nothing; and it pays only the checkout on screen, at the amount it showed: one priced otherwise since
+     * (a sale over, a first purchase paid elsewhere) — or an older checkout's message tapped, whatever it costs now — is
+     * drawn again by `$redraw` first, as nothing the customer did not see is taken from their wallet — and so is
+     * «🎁 دریافت رایگان» no longer free, whichever way to pay it went through. A
+     * card needs no such guard: the same card finds the same payment, and its amount is shown before anything is paid.
+     * Nor does an online gateway: a tap finds the same page while it takes money a few minutes yet
+     * (PaymentService::LINK_SPARE_MINUTES), else a new one, and two taps at once both show the one page the shop keeps
+     * (OnlineInvoices::open()). An order whose online payment is held for support is paid no other way meanwhile: the
+     * customer is sent to support (held()).
      *
      * @param \Closure(?OrderKey): Order $open
      * @param \Closure(): void $redraw
      */
     public function buy(Context $ctx, PaymentMethod $method, OrderType $type, string $price, \Closure $open, string $checkout, \Closure $redraw): void
     {
-        $claim = $method->isWallet() || !Money::isPositive($price) ? static fn(): bool => $ctx->session->claim(self::STATE) : null;
+        $instant = $method->isWallet() || !Money::isPositive($price);
+        if (($instant || $this->shownFree($ctx, $checkout)) && $this->repriced($ctx, $checkout, $price)) {
+            $redraw();
+
+            return;
+        }
+        $claim = $instant ? static fn(): bool => $ctx->session->claim(self::stateFor($checkout, $price)) : null;
         try {
             $result = $this->checkout->pay($ctx->user, $method, $type, $price, $open, guard: $claim);
         } catch (DiscountCodeRefusedException $e) {
@@ -303,6 +322,11 @@ final class CheckoutScreen
         } catch (SellingSuspendedException) {
             // The main shop suspended this agent's selling since the checkout was drawn: nothing ordered.
             $this->paused($ctx, $checkout);
+
+            return;
+        } catch (TermTooLongException $e) {
+            // Its term would end the service past the last day the shop keeps: nothing ordered.
+            $ctx->edit($e->getMessage(), ['reply_markup' => $this->buttons->backOnly($checkout)]);
 
             return;
         }
@@ -358,6 +382,31 @@ final class CheckoutScreen
             $this->texts->get(self::NAME_BUTTONS[$mode->value]),
             ClientNameHandler::modeCallback($mode, $checkout),
         ), $modes)];
+    }
+
+    /**
+     * Whether the checkout on screen (the chat's state) is another than `$checkout` at `$price`: another amount, or
+     * another checkout — an older one's message tapped. A chat that left it is no repricing: its claim fails, and nothing
+     * is charged.
+     */
+    private function repriced(Context $ctx, string $checkout, string $price): bool
+    {
+        return $ctx->session->inState(self::STATE) && $ctx->session->state() !== self::stateFor($checkout, $price);
+    }
+
+    /** Whether the checkout on screen is `$checkout` showing «🎁 دریافت رایگان»: nothing to pay (show()'s `$free`). */
+    private function shownFree(Context $ctx, string $checkout): bool
+    {
+        return $ctx->session->state() === self::stateFor($checkout, '0');
+    }
+
+    /**
+     * The state of the checkout `$checkout` on screen showing `$amount`: within the session's 128 characters, the amount
+     * at most fifteen and the callback data 64 bytes (CallbackData::MAX_BYTES).
+     */
+    private static function stateFor(string $checkout, string $amount): string
+    {
+        return self::STATE . '.' . Money::normalize($amount) . '.' . $checkout;
     }
 
     /** The discount code kept for the checkout `$checkout` (its callback data); null for none. */

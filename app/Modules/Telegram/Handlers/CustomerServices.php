@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Handlers;
 
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Context;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Which service a customer's button may open: one of their own, not gone from its panel. Another
- * customer's id is treated as one that does not exist.
+ * customer's id is treated as one that does not exist — and one that stopped being theirs while they paid is said so.
  */
 final class CustomerServices
 {
@@ -36,14 +37,35 @@ final class CustomerServices
         return Subscription::active()->where('user_id', $customerId)->latest('id');
     }
 
-    /** The customer's service `$id`; null after telling them it is not there, with «بازگشت» to `$back`. */
-    public function find(Context $ctx, int $id, string $back): ?Subscription
+    /**
+     * The customer's service `$id`; null after telling them it is not there, with «بازگشت» to `$back` (null: the first page
+     * of «سرویس‌های من»).
+     */
+    public function find(Context $ctx, int $id, ?string $back = null): ?Subscription
     {
         $subscription = self::of($ctx->user)->find($id);
         if ($subscription === null) {
-            $ctx->edit($this->texts->get(BotText::ServiceNotFound), ['reply_markup' => $this->buttons->backOnly($back)]);
+            $this->gone($ctx, $this->texts->get(BotText::ServiceNotFound), $back);
         }
 
         return $subscription;
+    }
+
+    /**
+     * An order of the service refused because it is no longer the customer's since its screen was drawn — given away,
+     * or gone (OrderService's 422 on `status`) —: those words in place of the screen, with «بازگشت» to `$back` (null:
+     * the first page of «سرویس‌های من»); nothing was ordered. Any other refusal is thrown on.
+     *
+     * @throws ValidationException
+     */
+    public function movedOn(Context $ctx, ValidationException $refused, ?string $back = null): void
+    {
+        $this->gone($ctx, $refused->errors()['status'][0] ?? throw $refused, $back);
+    }
+
+    /** `$words` saying the service is not there, in place of the screen, with «بازگشت» to `$back`. */
+    private function gone(Context $ctx, string $words, ?string $back): void
+    {
+        $ctx->edit($words, ['reply_markup' => $this->buttons->backOnly($back ?? MenuHandler::subscriptionsCallback(1))]);
     }
 }

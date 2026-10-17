@@ -1,3 +1,5 @@
+[فارسی](fa/Development.md)
+
 # Development
 
 Working on AmoBot itself: what you need, how to run it locally, the checks, and where things are. Start with
@@ -16,7 +18,7 @@ rules are on its Internals page and in its classes' docblocks.
 | Outgoing HTTP | Guzzle — the VPN panels, Telegram, the OpenID providers, Cloudflare |
 | Email | symfony/mailer, and Resend's API |
 | Sign-in | firebase/php-jwt (OpenID Connect), the app's own TOTP |
-| Logging | Monolog → `storage/logs/`, secrets taken out |
+| Logging | Monolog → `storage/logs/`, secrets taken out of the app's own lines (PHP's own `php-errors.log` is not cleaned) |
 | Quality | PHPUnit 11, PHPStan (level 6, and dead code: shipmonk/dead-code-detector), PHP-CS-Fixer (PER-CS 2); TypeScript, oxlint, knip, Prettier, Vitest |
 
 ## What you need
@@ -71,7 +73,8 @@ php scripts/docs.php          # regenerate the documentation's generated pages
 php scripts/docs.php --check  # the documentation current, and every link between its pages leading somewhere
 ```
 
-Run them before a pull request; CI runs them all ([Testing](Testing.md)).
+Run them before a pull request; CI runs them all ([Testing](Testing.md)). To fix the style of some files only, name the
+configuration with them: `vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.php <paths>`.
 
 ## Project layout
 
@@ -79,7 +82,7 @@ Run them before a pull request; CI runs them all ([Testing](Testing.md)).
 app/
   Core/            framework glue: Application, config.php, the database (schema, upgrades, change feed, drivers), the
                    HTTP kernel and its own endpoints (/api/app, /health, /cron), drivers and forms, mail, captcha,
-                   security, sessions, scheduling
+                   security, sessions, logging, scheduling, files and locks
   Console/         bin/console's kernel and commands
   Modules/         one folder per domain (Controllers/ or Api/, Models/, Services/, …) — which modules each may name is
                    tests/Unit/Core/LayersTest's MODULES map
@@ -94,8 +97,9 @@ app/
     Installer      the web installer's API (/api/install)
     Notifications  what the shop tells a customer: kept for their website, sent to Telegram or by email
     Orders         the order's lifecycle
-    Payments       gateways (wallet, card-to-card, CubePay, Zarinpal, AtlasPay, AbanGateway), the checkout, the settlement
-    Providers      the VPN panels: the contract, 3x-ui and PasarGuard, servers and inbounds
+    Payments       gateways (wallet, card-to-card, CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht,
+                   Variza, and "outside": money support took for an order it made), the checkout, the settlement
+    Providers      the VPN panels: the contract, 3X-UI and PasarGuard, servers and inbounds
     Referrals      invite links and commissions
     Reviews        customers' reviews of the shop: written on its website, decided by support
     Rewards        cashback, gift codes, the lucky wheel, the nightly draw
@@ -106,11 +110,14 @@ app/
     Telegram       the Bot API client, the update dispatcher, handlers, keyboards, texts, broadcasts, the report group
     Updates        the owner's one-press update from a signed GitHub release
     Users          customers, the wallet ledger, customer groups, pictures
-  Support/         helpers: input, money, Persian, traffic, requirements
+  Support/         helpers: input, validation, money, time (the shop's clock, Jalali months), Persian, traffic,
+                   requirements
 bootstrap/         app.php (boot), container.php (the DI definitions and the driver registries), schedule.php (the tasks)
 config/            config.php's settings made into the app's parts
 database/          schema.php (every table) and upgrades/ (a release's changes for installed shops — see Database)
 docs/              this documentation
+phpstan/           the project's own PHPStan extensions: Eloquent's forwarded query methods, and what the dead-code check
+                   counts as used (the container's entries, the routes, the models' relations something reads)
 public/            the web root: index.php, .htaccess and the built panels (admin/, agent/, assets/)
 resources/         panel/ (the panels' React source), api/openapi.yaml (the API's description), assets/
 routes/            web.php, api.php, webhooks.php, bot.php

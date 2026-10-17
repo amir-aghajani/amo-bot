@@ -9,6 +9,7 @@ use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Services\Pricing;
 use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Subscriptions\DTO\ExtraOffer;
 use App\Modules\Subscriptions\DTO\ExtraPrices;
@@ -29,7 +30,8 @@ use Illuminate\Support\Carbon;
  *
  * Which services: running or ended — not switched off by support (it stays off until support switches it on), nor gone
  * from its panel. Traffic needs a quota and time left (a service whose traffic ran out runs again). Time needs a term and
- * traffic left (a service whose time ran out starts a new term at its next connection). One ended on both counts needs
+ * traffic left (a service whose time ran out starts a new term at its next connection), and sells no more days than keep
+ * its end by the last day the shop keeps (ServiceTerms::daysLeft()). One ended on both counts needs
  * a renewal. Devices need a device limit (unlimited takes none), time and traffic left — they last as long as the period
  * in use, which a renewal of a service ended on either count replaces at once —, and a panel that holds a client to its
  * IP limit (Capabilities::$ipLimit); their prices are for 30 days, charged for the days left of the period in use
@@ -59,6 +61,7 @@ final class CustomerExtras
     public function __construct(
         private readonly ExtrasSettings $settings,
         private readonly ProviderRegistry $providers,
+        private readonly Pricing $pricing,
     ) {}
 
     /**
@@ -192,12 +195,13 @@ final class CustomerExtras
 
         $offer = $this->offer($subscription, $kind) ?? throw ValidationException::on($kind->field(), sprintf(self::NOT_SOLD, $kind->label()));
 
-        return $offer->priceOf($quantity) ?? throw ValidationException::on($kind->field(), self::notOffered($kind, $offer));
+        return $offer->priceOf($quantity) ?? throw ValidationException::on($kind->field(), $this->notOffered($subscription, $kind, $offer));
     }
 
     /**
-     * The offer at the service's prices: devices prorated to what is left of the period in use (deviceDays()), traffic
-     * held to the agent's pool (read once per shop into `$pools`, by bot id).
+     * The offer at the service's prices: devices prorated to what is left of the period in use (deviceDays()), time held
+     * to the days that keep its end by the last day the shop keeps (ServiceTerms::daysLeft()), traffic held to the
+     * agent's pool (read once per shop into `$pools`, by bot id).
      *
      * @param array<int, int> $pools
      */
@@ -207,18 +211,28 @@ final class CustomerExtras
         if ($kind === ExtraKind::Devices) {
             return $offer->prorated(self::deviceDays($subscription));
         }
+        if ($kind === ExtraKind::Time) {
+            $days = ServiceTerms::daysLeft($subscription);
+
+            return $days === null ? $offer : $offer->upTo($days);
+        }
         $shop = $subscription->shop();
-        if ($kind !== ExtraKind::Traffic || $shop->isMain()) {
+        if ($shop->isMain()) {
             return $offer;
         }
 
         return $offer->upTo($pools[$shop->id] ??= intdiv(max(0, $shop->trafficBalance()), Traffic::GIGABYTE));
     }
 
-    /** The refusal of an amount not on offer, listing what may be bought instead. */
-    private static function notOffered(ExtraKind $kind, ExtraOffer $offer): string
+    /**
+     * The refusal of an amount not on offer, listing what may be bought instead — each at what its order charges the
+     * service's customer, who buys it: less their automatic discount (Pricing::extraOffer()), as the bot's buttons and
+     * the website's `offer_price` show it.
+     */
+    private function notOffered(Subscription $subscription, ExtraKind $kind, ExtraOffer $offer): string
     {
-        $listed = implode('، ', array_map(static fn(array $choice): string => $kind->words($choice['quantity']) . ' (' . Money::format($choice['price']) . ')', $offer->choices()));
+        $automatic = $this->pricing->automatic($subscription->user);
+        $listed = implode('، ', array_map(static fn(array $choice): string => $kind->words($choice['quantity']) . ' (' . Money::format(Pricing::extraOffer($automatic, $subscription, $kind, $choice['price'])->amount()) . ')', $offer->choices()));
 
         return match (true) {
             $offer->typed() && $listed !== '' => sprintf('این مقدار فروخته نمی‌شود؛ %s بین %s تا %s %s بنویسید، یا یکی از این‌ها را بخرید: %s.', $kind->label(), Persian::number($offer->min), Persian::number($offer->max), $kind->unit(), $listed),

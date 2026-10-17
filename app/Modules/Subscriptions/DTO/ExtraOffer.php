@@ -81,8 +81,8 @@ final readonly class ExtraOffer
     }
 
     /**
-     * The offer held to `$most` (what an agent's pool may still sell): the amounts above it go, and so does the room to
-     * type above it.
+     * The offer held to `$most` (what an agent's pool may still sell, the days a service may still take): the amounts
+     * above it go, and so does the room to type above it.
      */
     public function upTo(int $most): self
     {

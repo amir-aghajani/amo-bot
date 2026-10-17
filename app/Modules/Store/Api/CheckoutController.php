@@ -55,7 +55,7 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * POST /orders — {plan_id, server_id, method_id, discount_code?}: a purchase, paid.
+     * POST /orders — {plan_id, server_id, method_id, discount_code?, expected_amount?}: a purchase, paid.
      *
      * @throws ValidationException 422
      * @throws NoServerAvailableException 422 on `server_id`
@@ -98,8 +98,8 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * POST /subscriptions/{id}/renewal — {method_id, plan_id? | gb? + days?, method?, discount_code?}: the service renewed,
-     * paid.
+     * POST /subscriptions/{id}/renewal — {method_id, plan_id? | gb? + days?, method?, discount_code?, expected_amount?}:
+     * the service renewed, paid.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
@@ -117,18 +117,19 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * GET /subscriptions/{id}/extras — the extra traffic, time and devices the service may buy now, at its prices.
+     * GET /subscriptions/{id}/extras — the extra traffic, time and devices the service may buy now, at its prices and at
+     * what the customer's order is charged.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
      */
     public function extras(Request $request, Response $response, array $args): Response
     {
-        return $this->json($response, ['extras' => SubscriptionPresenter::extras($this->checkout->extras($this->own($request, $args)))]);
+        return $this->json($response, ['extras' => $this->checkout->extras(Customer::of($request)->user, $this->own($request, $args))]);
     }
 
     /**
-     * POST /subscriptions/{id}/extra-traffic — {gb, method_id, discount_code?}: extra traffic, paid.
+     * POST /subscriptions/{id}/extra-traffic — {gb, method_id, discount_code?, expected_amount?}: extra traffic, paid.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
@@ -142,7 +143,7 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * POST /subscriptions/{id}/extra-time — {days, method_id, discount_code?}: extra time, paid.
+     * POST /subscriptions/{id}/extra-time — {days, method_id, discount_code?, expected_amount?}: extra time, paid.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
@@ -156,8 +157,8 @@ final class CheckoutController extends ApiController
     }
 
     /**
-     * POST /subscriptions/{id}/extra-devices — {devices, method_id, discount_code?}: extra devices, paid at their price
-     * prorated to what the service has left.
+     * POST /subscriptions/{id}/extra-devices — {devices, method_id, discount_code?, expected_amount?}: extra devices, paid
+     * at their price prorated to what the service has left.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404

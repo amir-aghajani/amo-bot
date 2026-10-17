@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 import { DismissReceiptsModal } from '@/components/payments/dismiss-receipts'
@@ -9,8 +9,8 @@ import { json, refusal, server } from '@/test/server'
 
 /*
  * Rejecting the receipts ticked (components/payments/dismiss-receipts): ticks kept across a list's pages may be more than
- * a request names, so they go a hundred a request, said as one; a refusal on the way is said, and what went through
- * before it is read again.
+ * a request names, so they go a hundred a request, said as one; a double click rejects them once; a refusal on the way
+ * is said, and what went through before it is read again.
  */
 
 const DISMISS = '/api/admin/payments/dismiss'
@@ -44,6 +44,21 @@ describe('rejecting the receipts ticked', () => {
       { ids: IDS.slice(100), note: '' },
     ])
     expect(onDone).toHaveBeenCalledOnce()
+  })
+
+  it('pressed twice before the dialog shows it running — a double click —, rejects them once', async () => {
+    const answer = server().hold('POST', DISMISS)
+    const onDone = vi.fn()
+    render(<DismissReceiptsModal scope={{ ids: [1, 2] }} onClose={vi.fn()} onDone={onDone} />, { wrapper: providers().wrapper })
+    const reject = within(await screen.findByRole('dialog', { name: 'رد ۲ رسید' })).getByRole('button', { name: 'رد رسیدها' })
+
+    fireEvent.click(reject)
+    fireEvent.click(reject)
+
+    await until(() => expect(answer.waiting).toBe(1))
+    await act(async () => answer.answer(json({ dismissed: 2, skipped: 0, left: 0, until: null } satisfies DismissReceiptsResponse)))
+    await until(() => expect(onDone).toHaveBeenCalledOnce())
+    expect(server().sent('POST', DISMISS)).toHaveLength(1)
   })
 
   it('says a refusal on the way, and reads again what went through before it', async () => {

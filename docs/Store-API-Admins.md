@@ -1,3 +1,5 @@
+[فارسی](fa/Store-API-Admins.md)
+
 # Store API: the shop's admins
 
 For the developer of a shop's website who builds an admin area into it: the shop's admins — its bot's admins — work the
@@ -15,23 +17,34 @@ GET {base}/admin/payments?status=awaiting_review      the panels' GET /api/{pane
 
 | Area | What the shop's admins do there |
 |---|---|
-| The dashboard, the queues, the change feed | `GET /admin/dashboard` (its `agency_standing` always null: an agent's terms with the main shop are the agent's own), `/admin/queues`, `/admin/changes` (poll it to follow the shop live) |
-| Payments | the list and a payment, its receipt; approve, reject, cancel, remind, retry, ask an online payment's gateway (`POST /admin/payments/{id}/check`) — refund with the `refunds` grant, reject receipts in bulk with `payments` |
+| The dashboard, the queues, the change feed | `GET /admin/dashboard` (its `attention` counts what waits on support — the queues, the online payments held for support in `held_payments`, the servers whose panel failed — and then what waits on customers; its `agency_standing` always null: an agent's terms with the main shop are the agent's own), `/admin/queues`, `/admin/changes` (poll it to follow the shop live: it counts the website's own shop alone, and what every shop shares) |
+| Payments | the list — its `held` tab (`?status=held`: the online payments held for support and still waiting, counted in `meta.held` whatever the filters) among the statuses — and a payment, its receipt; approve, reject, cancel, remind, retry, ask an online payment's gateway (`POST /admin/payments/{id}/check`) — refund with the `refunds` grant, reject receipts in bulk with `payments` |
 | Orders | the list and an order; retry a delivery, cancel an unpaid order |
 | Services | the list and a service; read it from its panel, switch it off or on, move it — days and traffic with `extend`, delete or hand to another customer with `delete` |
-| Customers | the list (by role too) and a customer's page, their wallet's ledger, their groups, a ban — the wallet changed with `wallet`; an order made for them by hand with `manual_orders`; two-factor sign-in turned off and every device signed out with `account_security` |
-| Customer groups | the list; add, rename, reorder, delete |
-| Support tickets | the list and a ticket; answer (a picture too), close, open again |
+| Customers | the list (by role too) and a customer's page, their wallet's ledger, their groups (adding them to a «همکار» group with `catalog`), a ban — never an admin's or an agent's account ([refusals](#refusals)); the wallet changed with `wallet`; an order made for them by hand with `manual_orders`; two-factor sign-in turned off and every device signed out with `account_security` |
+| Customer groups | the list — add, rename, reorder, delete, and switch «همکار» on or off with `catalog`; never on for a group an admin is in |
+| Support tickets | the list and a ticket — each message by support with the admin who wrote it ([what the shop keeps](#what-the-shop-keeps-of-it)); answer (a picture too), close, open again |
 | Reviews | the list; approve, reject, delete ([reviews](Reviews.md)) |
-| Plans and categories | the lists — add, change, reorder, switch, duplicate and delete with `catalog` |
-| Referrals | the figures and the three lists |
+| Plans and categories | the lists — add, change, reorder, switch on or off, duplicate, change prices in bulk and delete with `catalog` |
+| Referrals | the figures and the four lists (referrers, invitees, commissions, alerts); an alert cleared |
 | Broadcasts | the runs; pause, resume, cancel, unpin (composing one stays the bot's `/broadcast`) |
 
 Everything else is the panels' alone, and a `404` here: the shop's configuration — its payment methods, the bot's
-settings, texts and keyboards, the report group, the website itself, **who its admins are** — and the owner's sections
-(the servers, the agency, the installation's settings).
+settings, texts and keyboards, the report group, the website itself, **who its admins are**, a customer's own
+discount, the discounts and rewards (discount codes, sales, gift codes, the wheel, loyalty, cashback, the draw), the
+test accounts — and the owner's sections (the servers, the agency, the installation's settings).
 
 The answers are the panels' very shapes: the same JSON, read the same way, the customers as the panels name them.
+
+**A change sent again.** A wallet's credit or debit (`POST /admin/users/{id}/wallet`) and a ticket's answer
+(`POST /admin/tickets/{id}/messages`) take an optional `Idempotency-Key`, as the panels send one: a key the site makes for
+each change (a UUID; 1 to 64 Latin letters, digits, `-` and `_`), kept while that change is tried again and made anew
+once it went through or the form was edited. Sent again with its key — the answer was lost —, the request answers with
+what the key did — the wallet's line (a `200`, where the first answer was a `201`), the ticket with its answer in it
+once — and never credits, debits or answers twice, nor tells the customer twice. The same key with another `type`,
+`amount` or `description` (for an answer, another `body` or picture) is a `422` on `idempotency_key`
+(`این Idempotency-Key پیش‌تر برای درخواست دیگری به کار رفته است؛ برای هر تغییر کلید تازه‌ای بسازید.`). Without a key,
+each request is a change of its own. An order made by hand always takes one ([grants](#grants)).
 
 ## Letting admins in
 
@@ -45,7 +58,8 @@ The shop's owner — or the agent, for their shop — sets it up in the panel, �
 **Who is an admin** is the shop's customers whose role is admin — given on the panel's «کاربران», the row's menu
 «مدیر ربات کردن» ([Customers](Customers.md#the-bots-admins)). The role is the customer's account's: an admin signs in to
 the website with the very account that has it — their Telegram, or a way in added to that account
-([ways in](Store-API-Account.md#ways-in-adding-and-removing)). A website account they made with an email alone is another customer, no admin.
+([ways in](Store-API-Account.md#ways-in-adding-and-removing)). A website account they made with an email alone is
+another customer, and no admin.
 
 ## Signing in
 
@@ -80,8 +94,8 @@ the website lets no admin in:
 - **A working day.** Every admin operation asks a way in proven on the session within the last **12 hours** — at the
   sign-in, or by `POST /me/reauthenticate` since —, else `403` `برای این کار دوباره وارد شوید.` with the challenge of a
   recent sign-in: an admin's token that leaked works for hours, not for the months a customer's session lasts.
-- **A recent sign-in.** An operation that asks a grant, and **approving a payment** (it delivers a service on the admin's
-  word alone), ask the session's sign-in to be at most **15 minutes** old too, as a change of the customer's own sign-in
+- **A recent sign-in.** An operation that asks a grant — adding a customer to a «همکار» group among them —, and
+  **approving a payment** (it delivers a service on the admin's word alone), ask the session's sign-in to be at most **15 minutes** old too, as a change of the customer's own sign-in
   does: else `403` with `WWW-Authenticate: Bearer error="insufficient_user_authentication", max_age=900`.
   `POST /me/reauthenticate` opens the next 15 minutes (and the next 12 hours); `recent_until` and `signed_in_until` say
   when they end. The [reference](Store-Admin-API-Reference.md) names each operation that asks it.
@@ -94,8 +108,8 @@ the website lets no admin in:
 
 | Grant | What it opens |
 |---|---|
-| `catalog` | The plans and their categories: add, change, reorder, switch on or off, duplicate, delete |
-| `wallet` | A customer's wallet credited or debited by hand |
+| `catalog` | The plans and their categories: add, change, reorder, switch on or off, duplicate, delete — and several plans' prices changed at once (`POST /admin/plans/prices`, previewed with `POST /admin/plans/prices/preview`). The customer groups too: add, change, reorder, delete — and a customer added to a «همکار» group (`PUT /admin/users/{id}/groups`), whose members pay the agents' prices; the plain groups, and a «همکار» one the customer is in already, ask none |
+| `wallet` | A customer's wallet credited or debited by hand (with an optional `Idempotency-Key`: [a change sent again](#what-it-is)) |
 | `refunds` | A payment given back |
 | `payments` | «رد یکجای رسیدها»: the receipts waiting for review rejected in bulk (`POST /admin/payments/dismiss`), each as rejecting one does, an uploaded picture deleted ([receipts](Orders-And-Payments.md#receipts)) |
 | `extend` | A service given days and traffic |
@@ -126,9 +140,12 @@ And past the door, what no admin decides, whatever the row's state allows — a 
 | `موجودی کیف پول خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.` | Their own wallet |
 | `سرویس خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.` | Their own service: days and traffic, switched off or on, moved, deleted, handed to another customer (reading it from its panel is fine) |
 | `نظر خودتان را نمی‌توانید تایید، رد یا حذف کنید؛ این کار با مدیر دیگری است.` | Their own review, approved, rejected or deleted |
+| `هشدار زیرمجموعه‌گیری خودتان را نمی‌توانید رفع کنید؛ این کار با مدیر دیگری است.` | A referral alert on themselves, cleared |
 | `برای خودتان نمی‌توانید سفارش ثبت کنید؛ این کار با مدیر دیگری است.` | An order made by hand for their own account |
-| `حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.` | An admin's account — a ban, two-factor sign-in, the devices — theirs or another admin's |
-| `حساب نماینده‌ها فقط از پنل تغییر می‌کند.` | An agent's account, the same way: the owner's partners are the panel's |
+| `حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.` | An admin's account — a ban, its groups, two-factor sign-in, the devices —, theirs or another admin's |
+| `گروه «همکاران» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل ممکن است.` | «همکار» switched on for a group an admin is in (the message names the group): a «همکار» group's members pay the agents' prices |
+| `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.` | A customer added to a «همکار» group while the website does not grant `catalog` (granted, a sign-in older than 15 minutes is the `403` of a recent sign-in instead) |
+| `حساب نماینده‌ها فقط از پنل تغییر می‌کند.` | An agent's account, the same way (a ban, its groups, two-factor sign-in, the devices): the owner's partners are the panel's |
 | `از وب‌سایت فقط پرداختی تایید می‌شود که رسیدش رسیده و در انتظار بررسی است.` | Approving a payment without a receipt in review |
 
 Nor does an admin hand a customer's service to themselves: a `422` on `telegram_id` (`سرویس را به حساب خودتان نمی‌توانید
@@ -136,6 +153,10 @@ Nor does an admin hand a customer's service to themselves: a `422` on `telegram_
 
 **These guards stop an admin acting on their own account only: two admins can do these things for each other** — approve
 each other's payments, credit each other's wallets. Give the role only to people you trust.
+
+A reorder — `POST /admin/plans/reorder`, `POST /admin/plans/categories/reorder`, `POST /admin/customer-groups/reorder` —
+sends `ids` as the rows' ids, JSON numbers: an empty list is a `422` on `ids` (`لیست شناسه‌ها خالی است.`), and so is
+one that is not a row's id — a text, a boolean, a list (`یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.`).
 
 A client is left on its panel (a service deleted from the shop alone, a move without deleting the old client) only
 while that panel does not answer: a `422` on `status` otherwise (`پنل سرور «…» در دسترس است؛ …`). What the admins ask of
@@ -146,9 +167,15 @@ delivery failed — reads to them as a short word, never the owner's diagnosis.
 
 ## What the shop keeps of it
 
-- **Every change an admin asks is logged** with them on the line — done or refused —, and the decisions keep who made it
+- **Every change an admin asks is logged** with them on the line — done or refused —, and the decisions keep who made them
   (a payment's verdict, a wallet's line, a ticket's answer): their `@handle`, else `tg:<id>`, else `user#<id>`. The
-  owner's own decisions read «پشتیبانی» to the admins.
+  owner's own decisions read «پشتیبانی» to the admins. Beside that `reviewer`, a payment row, a review row, a wallet's
+  line, a ticket's message by support and a broadcast (`GET /admin/broadcasts`, an unpin run an admin started) carry
+  `reviewer_name`: the admin's first and last name as their account has them, to show — `null` for the owner, an
+  agent, an account gone or one that shows no name (only spaces or invisible characters count as none), and a handle
+  no admin of the shop has now. An order support made by hand has the same beside its maker: `manual.by_name` beside
+  `manual.by`. The panels show the name in place of the handle or «کاربر #12», and name admins the same way on the rows
+  only the panels list (agency requests, an agent's traffic lines, grants of days or traffic, server moves).
 - **The customer reads «پشتیبانی»**: an admin's answer to a ticket shows in the panels as written «مدیریت وب‌سایت», and to
   the customer as support's, like any other.
 
@@ -169,4 +196,5 @@ delivery failed — reads to them as a short word, never the owner's diagnosis.
    `picture('/admin/payments/' + id + '/receipt', adminTokens)` ([the conversation](Store-API-Support-Tickets.md#the-conversation)
    has the function).
 6. Poll `GET /admin/changes` every few seconds to know which lists moved — each area's number grows when its rows
-   change — and read again only those.
+   change — and read again only those. It counts the website's own shop: another shop's writes move nothing here, but
+   what every shop shares (the servers) does.

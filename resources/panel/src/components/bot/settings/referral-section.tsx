@@ -1,6 +1,6 @@
 import { Coins, Gift, Info, ShieldAlert, Trophy } from 'lucide-react'
 import { MenuButtonNotice } from '@/components/bot/menu-button-notice'
-import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
+import { useBotSettingsGroup, useHeldWhile } from '@/components/bot/settings/use-bot-settings-group'
 import { Callout } from '@/components/callout'
 import { Field, FieldGroup, FormPart } from '@/components/field'
 import { MoneyField } from '@/components/money-field'
@@ -12,7 +12,7 @@ import { TextLink } from '@/components/text-link'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotReferralSettingsRequest, BotSettingsData, ReferralStartTrigger } from '@/lib/api-types'
-import { amountDraft, digitsOnly, formatMoney, formatNumber, wholeNumberOf, wholeOf } from '@/lib/format'
+import { amountDraft, formatMoney, formatNumber, wholeNumberOf, wholeOf } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { asNumbers } from '@/lib/use-form'
 
@@ -50,15 +50,20 @@ function draftOf(settings: BotSettingsData) {
  */
 export function ReferralSection({ settings }: { settings: BotSettingsData }) {
   // The referrals page shows the rules with its numbers. A number is what the server reads of it: «۲۰٬۰۰۰» is 20000.
-  const group = useBotSettingsGroup(draftOf(settings), (values) => api.put('/bot/settings/referral', values), {
+  const saved = draftOf(settings)
+  const group = useBotSettingsGroup(saved, (values) => api.put('/bot/settings/referral', values), {
     invalidates: [queryKeys.referrals],
     reads: asNumbers,
   })
   const { values, set, error } = group
-  const rate = Number(digitsOnly(values.referral_rate))
+  // Read as the server reads the percent (a whole number, 1 to 100): «۱٫۵» or "1,5" is no rate, not 15.
+  const rate = wholeNumberOf(values.referral_rate) ?? 0
   const renewalRate = wholeOf(values.referral_renewal_rate)
   const every = wholeNumberOf(values.referral_reward_every) ?? 0
-  const off = !values.referral_enabled
+  // Switched off, the program's numbers wait as they are kept — and the reward's plan while no count gives one; one
+  // changed stays open, as the save still carries it.
+  const held = useHeldWhile(!values.referral_enabled, group, saved)
+  const planHeld = useHeldWhile(!values.referral_enabled || every === 0, group, saved)
 
   return (
     <>
@@ -82,9 +87,9 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
               id="referral_rate"
               label="درصد پورسانت"
               error={error('referral_rate')}
-              hint={rate > 0 ? `از پرداخت ${formatMoney(100000)}، ${formatMoney(Math.floor((100000 * rate) / 100))} به کیف پول معرف اضافه می‌شود.` : 'درصدی از مبلغ هر پرداخت'}
+              hint={rate > 0 && rate <= 100 ? `از پرداخت ${formatMoney(100000)}، ${formatMoney(Math.floor((100000 * rate) / 100))} به کیف پول معرف اضافه می‌شود.` : 'درصدی از مبلغ هر پرداخت'}
             >
-              <Input dir="ltr" inputMode="numeric" value={values.referral_rate} onChange={(e) => set('referral_rate', e.target.value)} disabled={off} />
+              <Input dir="ltr" inputMode="numeric" value={values.referral_rate} onChange={(e) => set('referral_rate', e.target.value)} disabled={held('referral_rate')} />
             </Field>
             <Field
               id="referral_renewal_rate"
@@ -92,7 +97,7 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
               error={error('referral_renewal_rate')}
               hint={renewalRate === '0' ? 'تمدید سرویس پورسانت ندارد.' : 'پرداخت تمدید سرویس به جای درصد بالا این درصد را دارد؛ 0 یعنی بدون پورسانت.'}
             >
-              <Input dir="ltr" inputMode="numeric" value={values.referral_renewal_rate} onChange={(e) => set('referral_renewal_rate', e.target.value)} disabled={off} />
+              <Input dir="ltr" inputMode="numeric" value={values.referral_renewal_rate} onChange={(e) => set('referral_renewal_rate', e.target.value)} disabled={held('referral_renewal_rate')} />
             </Field>
           </div>
           <SwitchRow
@@ -107,7 +112,7 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
         <FormPart
           icon={Gift}
           title="هدیه شروع"
-          about="به ازای هر زیرمجموعه یک بار، مبلغی به کیف پول معرف و مبلغی به کیف پول خود زیرمجموعه اضافه می‌شود و هر دو در ربات خبردار می‌شوند. 0 یعنی بدون هدیه."
+          about="به ازای هر زیرمجموعه یک بار، مبلغی به کیف پول معرف و مبلغی به کیف پول خود زیرمجموعه اضافه می‌شود و هر دو در تلگرام یا با ایمیل خبردار می‌شوند. 0 یعنی بدون هدیه."
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <MoneyField
@@ -118,7 +123,7 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
               error={error('referral_start_referrer')}
               hint={GIFT_HINT}
               zero="بدون هدیه"
-              disabled={off}
+              disabled={held('referral_start_referrer')}
             />
             <MoneyField
               id="referral_start_invitee"
@@ -128,7 +133,7 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
               error={error('referral_start_invitee')}
               hint={GIFT_HINT}
               zero="بدون هدیه"
-              disabled={off}
+              disabled={held('referral_start_invitee')}
             />
           </div>
           <FieldGroup
@@ -152,7 +157,7 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
               error={error('referral_reward_every')}
               hint={every > 0 ? `با خرید ${formatNumber(every)}امین، ${formatNumber(every * 2)}امین و … زیرمجموعه` : '0 یعنی بدون جایزه'}
             >
-              <Input dir="ltr" inputMode="numeric" value={values.referral_reward_every} onChange={(e) => set('referral_reward_every', e.target.value)} disabled={off} />
+              <Input dir="ltr" inputMode="numeric" value={values.referral_reward_every} onChange={(e) => set('referral_reward_every', e.target.value)} disabled={held('referral_reward_every')} />
             </Field>
             <PrizeAmountField
               id="referral_reward_plan_id"
@@ -161,7 +166,7 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
               onChange={(id) => set('referral_reward_plan_id', id)}
               error={error('referral_reward_plan_id')}
               hint="سرویس جایزه روی اولین سروری ساخته می‌شود که این پلن را می‌فروشد."
-              disabled={off || every === 0}
+              disabled={planHeld('referral_reward_plan_id')}
             />
           </div>
         </FormPart>
@@ -173,20 +178,21 @@ export function ReferralSection({ settings }: { settings: BotSettingsData }) {
         >
           <div className="grid gap-4 sm:grid-cols-3">
             <Field id="referral_alert_burst" label="عضویت پشت سر هم" error={error('referral_alert_burst')} hint="این تعداد زیرمجموعه با یک لینک در بازه هشدار">
-              <Input dir="ltr" inputMode="numeric" value={values.referral_alert_burst} onChange={(e) => set('referral_alert_burst', e.target.value)} disabled={off} />
+              <Input dir="ltr" inputMode="numeric" value={values.referral_alert_burst} onChange={(e) => set('referral_alert_burst', e.target.value)} disabled={held('referral_alert_burst')} />
             </Field>
             <Field id="referral_alert_minutes" label="بازه هشدار (دقیقه)" error={error('referral_alert_minutes')} hint="در هر بازه، هر نوع هشدار یک بار">
-              <Input dir="ltr" inputMode="numeric" value={values.referral_alert_minutes} onChange={(e) => set('referral_alert_minutes', e.target.value)} disabled={off} />
+              <Input dir="ltr" inputMode="numeric" value={values.referral_alert_minutes} onChange={(e) => set('referral_alert_minutes', e.target.value)} disabled={held('referral_alert_minutes')} />
             </Field>
             <Field id="referral_alert_idle" label="زیرمجموعه بدون خرید" error={error('referral_alert_idle')} hint="این تعداد زیرمجموعه که هیچ‌کدام خرید نکرده‌اند">
-              <Input dir="ltr" inputMode="numeric" value={values.referral_alert_idle} onChange={(e) => set('referral_alert_idle', e.target.value)} disabled={off} />
+              <Input dir="ltr" inputMode="numeric" value={values.referral_alert_idle} onChange={(e) => set('referral_alert_idle', e.target.value)} disabled={held('referral_alert_idle')} />
             </Field>
           </div>
         </FormPart>
 
         <Callout tone="info" icon={Info}>
           پورسانت فقط از پولی حساب می‌شود که واقعا واریز شده است: پرداخت کارت به کارت یا درگاه، برای خرید، تمدید یا شارژ کیف پول. خرید از کیف پول دوباره پورسانت ندارد، چون پولش وقتی کیف پول شارژ شد
-          حساب شده است؛ برگشت وجه هم به کیف پول مشتری است و پورسانت را پس نمی‌گیرد. زیرمجموعه‌ها، پورسانت‌ها و هشدارها در صفحه{' '}
+          حساب شده است. برگشت وجه شارژ کیف پول، که پولش از فروشگاه بیرون می‌رود، پورسانتش را از کیف پول معرف پس می‌گیرد؛ اگر معرف آن را خرج کرده باشد، برگشت وجه انجام نمی‌شود. برگشت وجه خرید یا تمدید
+          به کیف پول مشتری است و پولش در فروشگاه می‌ماند، پس پورسانتش هم می‌ماند. زیرمجموعه‌ها، پورسانت‌ها و هشدارها در صفحه{' '}
           <TextLink to="/referrals" inline className="font-medium">
             زیرمجموعه‌گیری
           </TextLink>{' '}

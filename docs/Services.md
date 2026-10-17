@@ -1,3 +1,5 @@
+[فارسی](fa/Services.md)
+
 # Services
 
 «فروش › اشتراک‌ها», in both panels: the customers' services. A service is one client on a server's panel, with the one
@@ -18,7 +20,7 @@ less than a day before its end the bot and the panels give its hour too, and the
 | «رو به انقضا» | Active services ending within three days (counted beside it); one still waiting has no end yet, and a free test is never here |
 | «منقضی‌شده» | Ended by time or traffic — renewed, they run again |
 | «غیرفعال» | Switched off by support |
-| «حذف‌شده» | Gone from their panel, found so by a sync or a read — nothing but delete is offered |
+| «حذف‌شده» | Gone from their panel, found so by a sync or a read — nothing but delete is offered here, and in the bot its screen has only the way back to the list |
 
 - **Filters**: «سرور» (a server's page links here, with its active services), «نوع» — «همه», «اکانت تست» for the
   free tests ([below](#test-services)), «سرویس عادی» for the services sold or given, neither a test nor added by their
@@ -31,8 +33,8 @@ less than a day before its end the bot and the panels give its hour too, and the
   added by its link), the customer, the server, the traffic used («X از Y», amber at 80%, red when used up) and its end
   («۵ روز مانده», amber within three days), its status, and «جزئیات».
 
-Tick services to [move them](#moving-services) together: the selection stays while you page and sort, and goes with
-another tab, server, customer or search.
+Tick services to [move them](#moving-services) together: the selection stays while you page and sort, and is cleared
+by another tab, server, «نوع», customer or search.
 
 ## A service's dialog
 
@@ -51,7 +53,12 @@ until the next run takes it. Then what may be done with it now:
 | «فعال کردن دوباره» | A service switched off here (an ended one needs a renewal) | The client switched on again | Told |
 | «انتقال به سرور دیگر» | An active service | [Below](#moving-services) | Gets the new link |
 | «انتقال به مشتری دیگر» | Anything but a free test or a service gone from its panel | [Below](#handing-a-service-to-another-customer) | Both told: it left the one, it is the other's |
-| «حذف سرویس» | Always | Asks for an optional note; the client off its panel and the service off the shop — no trace; the orders that sold it keep their record | Told when it was still active; an ended or switched-off one goes quietly |
+| «حذف سرویس» | While no order of it is open | Asks for an optional note; the client off its panel and the service off the shop — no trace; the orders that sold it keep their record | Told when it was still active; an ended or switched-off one goes quietly |
+
+**«حذف سرویس» waits for the service's open orders.** While a renewal or an extra of it is unpaid, being delivered or
+failed, the button is not offered, and a delete sent from elsewhere is refused: «سفارش #… این سرویس هنوز تمام نشده
+است…». Deliver, cancel or refund that order first ([Orders and payments](Orders-And-Payments.md)), then delete the
+service.
 
 A change made on a panel holds the service while it runs: another change of the same service waits a few seconds, then
 is refused («این سرویس همین حالا در حال تغییر است؛ …»). A panel that fails says so — the full diagnosis for you, in
@@ -62,8 +69,9 @@ as it was last read, said to be gone.
 
 «افزایش زمان و حجم» makes one customer whole: «تعداد روز» (0 to 365) onto its end — or a longer term, for one that has
 not started —, «حجم (گیگابایت)» (0 to 10000) on top of its quota, an optional note the customer reads under the gift, and
-«پیام به مشتری» (on). Days only for a service that ends some day, traffic only for one with a quota. The panel is read
-first: a service it has ended or switched off takes nothing.
+«پیام به مشتری» (on). Days only for a service that ends some day, traffic only for one with a quota. Days that would
+end it after [the last day](#watch-out-for) are refused under «تعداد روز». The panel is read first: a service it has
+ended or switched off takes nothing.
 
 **In an agent's shop the traffic is the agent's**: it comes out of their bot's pool first (the field's hint says how
 much is left, in the agent's own panel), refused while the pool is short, and given back if the extension fails; the
@@ -110,7 +118,9 @@ with it on, customers do it themselves in the bot and on the website).
   their «سرویس‌های من», renewed and reminded for them. Its «تمدید خودکار» goes off: the new customer switches it on if
   their wallet should pay.
 - **The link goes with it**, so the previous customer's devices stay connected until the new one taps «تغییر لینک» on
-  its screen: the new customer's message says so, where its server can change a link.
+  its screen: the new customer's message says so, where its server can change a link. The previous customer can no
+  longer change the link or the «تمدید خودکار» switch — a press made just as the service changes hands is refused too
+  («این سرویس همین حالا به حساب دیگری منتقل شد.»).
 - **Both customers are told** in the bot: the previous one that support moved it to another account (and which of their
   unpaid orders were cancelled with it, below), the new one what it is, with «📊 مشاهده سرویس».
 - **The report group's «خریدها»** hears of every transfer: from whom, to whom, and who did it.
@@ -129,9 +139,11 @@ with it on, customers do it themselves in the bot and on the website).
   is cancelled with the transfer — it is no longer theirs to pay for —, unless its receipt waits for your review: that
   one stays, and approved, it is not delivered onto the new customer's service: it fails, its note asking you to give
   the money back ([refunds](Orders-And-Payments.md#refunds)). So does one paid but not yet sent to the panel as you
-  hand it on; while one is being sent to it right then, the transfer waits for it: «این سرویس همین حالا روی سرور در
-  حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید.» Nor does a refund of what the previous customer bought take anything
-  from the new one: it is refused until you take the service back by hand.
+  hand it on. The previous customer is told when such an order fails: the service is no longer theirs, and support
+  settles the payment with them («⚠️ پرداخت سفارش #… ثبت شد، ولی سرویس … پیش از انجام آن به حساب دیگری منتقل شد و دیگر
+  سرویس شما نیست؛ …»). While one is being sent to the panel right then, the transfer waits for it: «این سرویس همین حالا
+  روی سرور در حال تغییر است؛ چند لحظه بعد دوباره امتحان کنید.» Nor does a refund of what the previous customer bought
+  take anything from the new one: it is refused until you take the service back by hand.
 
 ### When the panel fails a delete
 
@@ -159,9 +171,9 @@ A client you made by hand on a panel becomes a customer's service when they send
 ([Services added by their link](Service-Claims.md)). It is a service like the others, kept as its panel had it — its
 client there takes the customer's Telegram id and comment, as a [transferred](#handing-a-service-to-another-customer)
 one does — and filed under «نوع › افزوده‌شده با لینک»; its dialog says when it was added. It has no plan until its
-first renewal, when the customer picks one sold on its server; from then on it renews on that plan. Without one —
-before then, or once its plan is deleted — the dialog's «پلن» reads «بدون پلن» and says the customer picks one when
-renewing.
+first renewal, when the customer picks one sold on its server; from then on it renews on that plan. Until then the
+dialog's «پلن» reads «بدون پلن» and says the customer picks one when renewing. (A plan a service names cannot be
+deleted, only switched off: [Plans](Plans.md).)
 
 Every operation works on it. Its delete confirmation has one more choice, «حذف فقط از فروشگاه (کلاینت روی پنل
 می‌ماند)»: what puts right a service added to the wrong account — the client keeps working on its panel, and the right
@@ -174,8 +186,8 @@ Working an agent's shop — the agent in their panel, or you with their shop ope
 
 - **A client is left on its panel** (a delete from the shop alone, a move without deleting the old client) only while
   that panel does not answer — its last contact failed within ten minutes. A panel that answers refuses it («پنل سرور
-  «…» در دسترس است؛ …»): a client left on a working panel would be a second service nobody paid for. Removing it from
-  the panel is then yours.
+  «…» در دسترس است؛ …»): a client left on a working panel would be a second service nobody paid for. A client the shop
+  leaves on a panel stays there until you delete it on the panel yourself.
 - **60 panel operations a minute** — reads, extensions, switches, each moved service, deletes — then a short wait
   («درخواست زیادی به پنل سرورها فرستاده‌اید؛ …»); a longer move batch marks the rest failed. Your own work in the main
   shop has no such limit.
@@ -197,7 +209,8 @@ service**, nor takes a customer's — another admin, or you, does.
   there by hand: traffic, end, and on 3X-UI the device limit, which the next extra then builds on (a renewal brings its
   plan's); a panel whose last contact failed is left alone ten minutes ([Servers](Servers.md#health)).
 - **Renewal** — the customer renews a service on its own plan at its price today, in the bot or on the website, an ended
-  one too — a running one, once it nears its end if the shop holds it back till then («آستانه مجاز تمدید») —, by one of
+  one too — a running one, once it nears its end if the shop holds it back till then («آستانه مجاز تمدید»; a service
+  that never ends has no end to near, so only a traffic percent can hold it back) —, by one of
   the shop's renewal methods: the days left carried over and the traffic left by the shop's rule («تمدید پلن فعلی»), the
   traffic counted afresh («ریست حجم + افزایش روز»), or the term started again with the traffic carried («ریست زمان +
   انتقال حجم») ([Bot settings](Bot-Settings.md#renewal)). Each brings its plan's device limit, the extra devices bought
@@ -239,6 +252,11 @@ service**, nor takes a customer's — another admin, or you, does.
 
 - **«حذف سرویس» leaves no trace** and cannot be undone; the customer of a running service is told. To stop a service
   for a while, switch it off.
+- **No service may end after 17 January 2038 («۲۸ دی ۱۴۱۶»)**, the last day the shop can keep. A purchase, a renewal,
+  extra days or days you give that would end one later are refused before anything is charged or sent to a panel: «تاریخ
+  پایان سرویس نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد؛ مدت کوتاه‌تری انتخاب کنید.» A new service is judged as if it connected
+  at once. Extra days are offered only as far as that day; a server's or the mass gift's days pass such a service by;
+  «تمدید خودکار» does not renew it — its customer is reminded of its end instead.
 - **A service the automatic removal takes is gone for good** too: its customer can no longer renew it, and a new
   purchase gets a new link to add to their app. Set «فاصله حذف» with that in mind — long enough for a customer to come
   back and renew.

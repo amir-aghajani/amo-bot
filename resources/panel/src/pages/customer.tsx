@@ -14,7 +14,7 @@ import { TicketsCard } from '@/components/customer/tickets-card'
 import { WebsiteAccountCard } from '@/components/customer/website-account-card'
 import { ErrorState } from '@/components/error-state'
 import { NotFoundPage } from '@/components/not-found'
-import { Page } from '@/components/page'
+import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { StatusBadge } from '@/components/status-badge'
 import { shopServerChoices, type ServerChoices } from '@/components/subscriptions/server-choices'
@@ -58,6 +58,7 @@ export function CustomerPage(props: CustomerPageProps) {
 function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, agentPage }: CustomerPageProps & { id: number }) {
   const queryClient = useQueryClient()
   const detail = useQuery(customerQuery(id))
+  const failed = useReadFailure(detail)
   useTitleSubject(detail.data && userLabel(detail.data.user))
 
   /** The customer's row as an operation handed it back: on their page at once. */
@@ -69,7 +70,7 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
   // «افزودن سفارش»: support's order for the customer, in its dialog.
   const [ordering, setOrdering] = useState(false)
 
-  if (detail.isPending) {
+  if (detail.isPending && failed.error === null) {
     return (
       <Page width="default">
         <div className="grid gap-3" aria-busy="true" aria-label="در حال بارگذاری مشتری">
@@ -85,7 +86,7 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
     )
   }
 
-  const failure = detail.error && <ErrorState what="مشتری" error={detail.error} onRetry={() => void detail.refetch()} retrying={detail.isFetching} />
+  const failure = failed.error && <ErrorState what="مشتری" error={failed.error} onRetry={() => void detail.refetch()} retrying={failed.retrying} />
 
   if (!detail.data) {
     return (
@@ -107,10 +108,11 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
         <BackLink to="/users">کاربران</BackLink>
         <PageHeader
           title={
-            // The spaces keep the name and its marks words apart for assistive tech, not one.
+            // The spaces keep the name and its marks words apart for assistive tech, not one. Without a name, the handle
+            // names them, as everywhere one line names a customer.
             <span className="flex flex-wrap items-center gap-2">
-              {user.name ? <bdi>{user.name}</bdi> : <span className="text-faint">بدون نام</span>} <StatusBadge status={USER_STATUS[user.status]} /> {user.role === 'admin' && <AdminMark />}{' '}
-              {agency && <Badge variant="outline">نماینده</Badge>}
+              {user.name ? <bdi>{user.name}</bdi> : user.username ? <bdi dir="ltr">@{user.username}</bdi> : <span className="text-faint">بدون نام</span>}{' '}
+              <StatusBadge status={USER_STATUS[user.status]} /> {user.role === 'admin' && <AdminMark />} {agency && <Badge variant="outline">نماینده</Badge>}
             </span>
           }
           description={<Identity user={user} />}

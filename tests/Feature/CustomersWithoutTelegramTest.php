@@ -70,7 +70,7 @@ final class CustomersWithoutTelegramTest extends HttpTestCase
         $this->buy($sara, $this->plan([], $server), $server);
 
         $sale = (string) ReportMessage::query()->where('topic', Topic::Purchases)->value('text');
-        self::assertStringContainsString("👤 Sara Ahmadi · sara@example.com · <code>#{$sara->id}</code>", $sale);
+        self::assertStringContainsString("👤 Sara Ahmadi · sara@example.com · \u{200E}<code>#{$sara->id}</code>", $sale);
         self::assertStringNotContainsString('tg://user', $sale, 'no Telegram profile to open');
     }
 

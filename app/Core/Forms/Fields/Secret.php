@@ -21,8 +21,15 @@ use App\Support\Input;
  */
 final class Secret extends Field
 {
+    /** The hint of a kept secret too short to show any of: that one is kept. */
+    public const KEPT = '••••••••';
+
+    /** How many of a kept secret's last characters its default hint shows, and how long it must be to show them. */
+    private const HINTED = 4;
+    private const HINTED_FROM = 12;
+
     /**
-     * @param (\Closure(string): string)|null $hint How a kept one is recognised; by default its last characters
+     * @param (\Closure(string): string)|null $hint How a kept one is recognised; by default its last characters (lastCharacters())
      * @param array<string, (\Closure(mixed): mixed)|null> $boundTo The fields of the form it belongs with, by name — each
      *                                                              with what identifies it, or null for its value as it is
      */
@@ -54,6 +61,17 @@ final class Secret extends Field
     public static function byOrigin(): \Closure
     {
         return static fn(mixed $url): ?string => is_string($url) ? Origin::of($url) : null;
+    }
+
+    /**
+     * The hint of a secret none of whose characters are shown, however long (a password, a two-factor secret): only that
+     * one is kept.
+     *
+     * @return \Closure(string): string
+     */
+    public static function hidden(): \Closure
+    {
+        return static fn(string $secret): string => self::KEPT;
     }
 
     public function type(): FieldType
@@ -91,7 +109,16 @@ final class Secret extends Field
             return ['set' => false, 'hint' => ''];
         }
 
-        return ['set' => true, 'hint' => $this->hint !== null ? ($this->hint)($value) : '••••••' . substr($value, -4)];
+        return ['set' => true, 'hint' => $this->hint !== null ? ($this->hint)($value) : self::lastCharacters($value)];
+    }
+
+    /**
+     * A kept secret's default hint: its last HINTED characters behind dots — of one at least HINTED_FROM long, which they
+     * give little of away —; a shorter one's dots alone, saying only that one is kept.
+     */
+    private static function lastCharacters(string $secret): string
+    {
+        return mb_strlen($secret) >= self::HINTED_FROM ? '••••••' . mb_substr($secret, -self::HINTED) : self::KEPT;
     }
 
     /** `moved`'s words when the input keeps the stored secret (blank, not cleared) while a field it is bound to changed. */

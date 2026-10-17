@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Agency\Enums\TrafficTransactionType;
 use App\Modules\Agency\Models\TrafficTransaction;
 use App\Modules\Agency\Services\TrafficPool;
@@ -28,6 +29,7 @@ use App\Modules\Subscriptions\Services\CustomerExtras;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
+use App\Support\LocalTime;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
@@ -75,6 +77,28 @@ final class ServiceExtrasTest extends DatabaseTestCase
         self::assertSame('14000.00', $this->extras->quote($service, ExtraKind::Traffic, 7), 'typed: the price of a GB seven times');
         self::assertSame('25000.00', $this->extras->quote($service, ExtraKind::Time, 30));
         self::assertSame('7000.00', $this->extras->quote($service, ExtraKind::Time, 7));
+    }
+
+    public function testTimeIsSoldNoFurtherThanTheLastDayTheShopKeeps(): void
+    {
+        // Its 30 days end 10 days before the TIMESTAMP columns' last moment (MySQL refuses a later one).
+        Carbon::setTestNow(LocalTime::last()->subDays(40));
+        $this->extrasOnSale();
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
+
+        $time = $this->extras->offer($service, ExtraKind::Time) ?? self::fail('no time on sale');
+        self::assertSame([[['quantity' => 7, 'price' => '7000.00']], 1, 10], [$time->choices(), $time->min, $time->max], 'the 30 days go; up to 10 typed');
+        self::assertSame('10000.00', $this->extras->quote($service, ExtraKind::Time, 10));
+        try {
+            $this->extras->quote($service, ExtraKind::Time, 11);
+            self::fail('Eleven days were sold.');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('days', $e->errors());
+        }
+        self::assertNotNull($this->extras->offer($service, ExtraKind::Traffic), 'traffic is sold as ever');
+
+        $atTheEnd = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_2', ['expires_at' => LocalTime::last()]));
+        self::assertNull($this->extras->offer($atTheEnd, ExtraKind::Time), 'not a day more');
     }
 
     public function testAPlansOwnPricesStandInForTheShopsButNotForItsSwitch(): void

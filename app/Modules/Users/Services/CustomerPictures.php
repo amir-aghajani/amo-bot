@@ -157,7 +157,7 @@ final class CustomerPictures
             throw ValidationException::on('file', self::tooLarge($what));
         }
 
-        return ['bytes' => $bytes, 'extension' => self::UPLOAD_TYPES[Picture::typeOf($bytes)] ?? throw ValidationException::on('file', "{$what} باید JPG، PNG یا WebP باشد.")];
+        return ['bytes' => $bytes, 'extension' => self::UPLOAD_TYPES[Picture::typeOf($bytes)] ?? throw ValidationException::on('file', "{$what} باید " . Picture::FORMATS . ' باشد.')];
     }
 
     /**

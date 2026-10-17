@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { CircleAlert, Undo2, type LucideIcon } from 'lucide-react'
+import { CircleAlert, RefreshCw, Undo2, type LucideIcon } from 'lucide-react'
+import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
 import { useHoldOpen } from '@/components/modal'
 import { Button } from '@/components/ui/button'
 import { CardFooter } from '@/components/ui/card'
 import { formatNumber } from '@/lib/format'
 import { useConfirmDiscard, useUnsavedGuard } from '@/lib/use-unsaved-guard'
+import { cn } from '@/lib/utils'
 
 /*
  * The two footers every edit surface ends with: FormActions (a form in a dialog: revert, cancel, submit) and SaveFooter
@@ -18,6 +20,26 @@ export function FormError({ message, failure }: { message: string | null | undef
   if (!message) return null
 
   return <ErrorState variant="inline" error={failure ?? undefined} description={message} />
+}
+
+/**
+ * A card edited in place whose server copy changed under its unsaved draft (useForm's `elsewhere`: another tab saved
+ * it, a live refresh): the draft stays, as typed — saved, it takes the new copy's place —, and its button shows the new
+ * copy instead, putting the draft aside (`onTake`, the form's revert).
+ */
+export function ChangedElsewhere({ shown, onTake }: { shown: boolean; onTake: () => void }) {
+  if (!shown) return null
+
+  return (
+    <Callout tone="info" icon={RefreshCw} role="status">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <span className="min-w-0">این بخش جای دیگری هم ذخیره شد. تغییرهای شما سر جایش مانده و با ذخیره جای آن را می‌گیرد؛ یا نسخه تازه را ببینید و تغییرها را کنار بگذارید.</span>
+        <Button variant="secondary" size="sm" onClick={onTake}>
+          دیدن نسخه تازه
+        </Button>
+      </div>
+    </Callout>
+  )
 }
 
 /**
@@ -105,6 +127,14 @@ function FieldsToFix({ count }: { count: number }) {
   )
 }
 
+/**
+ * A row that sticks to the foot of a phone's sheet (.app-modal below `md`) over what scrolls under it, edge to edge: a
+ * form's buttons, a review's operations. A sticky box stays clear of its scroller's padding (the dialog body's 20px
+ * `pb-5`): pulled down into it, the row sits on the sheet's very edge, nothing scrolling by beneath it.
+ */
+export const SHEET_FOOT =
+  'max-md:in-[.app-modal]:sticky max-md:in-[.app-modal]:-bottom-5 max-md:in-[.app-modal]:z-10 max-md:in-[.app-modal]:-mx-5 max-md:in-[.app-modal]:border-t max-md:in-[.app-modal]:border-border max-md:in-[.app-modal]:bg-popover max-md:in-[.app-modal]:px-5 max-md:in-[.app-modal]:py-3'
+
 const CreatingContext = createContext(false)
 
 /**
@@ -140,7 +170,8 @@ interface FormActionsProps {
 
 /**
  * The cancel/submit row of every form in a dialog. While the values are dirty, leaving (the tab, a link, «انصراف», the
- * dialog's ✕) asks first; while the submit runs, the dialog waits for it.
+ * dialog's ✕) asks first; while the submit runs, the dialog waits for it. On a phone its buttons are a finger's 44px,
+ * and in a dialog's sheet the row sticks to the sheet's foot, so the submit of a long form stays in reach.
  */
 export function FormActions({ error, onCancel, submitLabel, busy = false, disabled = false, held = false, icon, start, dirty = false, onRevert }: FormActionsProps) {
   useUnsavedGuard(dirty && !busy)
@@ -152,19 +183,19 @@ export function FormActions({ error, onCancel, submitLabel, busy = false, disabl
   return (
     <>
       <FormError message={error} />
-      <div ref={anchor} className="flex flex-wrap items-center gap-2 pt-2">
+      <div ref={anchor} className={cn('flex flex-wrap items-center gap-2 pt-2', SHEET_FOOT)}>
         {start}
         {/* Wraps on a phone: revert, cancel and submit side by side are wider than a phone-wide dialog. */}
         <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
           {toFix > 0 && <FieldsToFix count={toFix} />}
           {revert && <RevertButton onClick={revert} held={busy || !dirty} />}
           {onCancel && (
-            <Button variant="secondary" onClick={() => confirmDiscard(onCancel)} disabled={busy}>
+            <Button variant="secondary" onClick={() => confirmDiscard(onCancel)} disabled={busy} className="max-md:h-11">
               انصراف
             </Button>
           )}
           {/* An edit with nothing changed has nothing to save: held rather than disabled, so a press keeps the focus. */}
-          <Button type="submit" icon={icon} busy={busy} disabled={disabled} aria-disabled={held || (revert !== undefined && !dirty)}>
+          <Button type="submit" icon={icon} busy={busy} disabled={disabled} aria-disabled={held || (revert !== undefined && !dirty)} className="max-md:h-11">
             {submitLabel}
           </Button>
         </div>
@@ -198,7 +229,7 @@ export function SaveFooter({ saving, dirty, onRevert, disabled = false, onSave, 
         {toFix > 0 ? <FieldsToFix count={toFix} /> : dirty && !saving && <span className="me-1 text-footnote text-faint">تغییرات ذخیره نشده</span>}
         <RevertButton onClick={onRevert} held={saving || !dirty} size="sm" />
         {/* Nothing to save: held rather than disabled, so a press keeps the focus. */}
-        <Button type={onSave ? 'button' : 'submit'} size="sm" onClick={onSave} busy={saving} disabled={disabled} aria-disabled={!dirty}>
+        <Button type={onSave ? 'button' : 'submit'} size="sm" onClick={onSave} busy={saving} disabled={disabled} aria-disabled={!dirty} className="max-md:h-11">
           ذخیره
         </Button>
       </div>
@@ -209,7 +240,7 @@ export function SaveFooter({ saving, dirty, onRevert, disabled = false, onSave, 
 /** «بازگردانی تغییرات»: held (not disabled) while there is nothing to revert, so a press keeps the focus. */
 function RevertButton({ onClick, held = false, size = 'default' }: { onClick: () => void; held?: boolean; size?: 'default' | 'sm' }) {
   return (
-    <Button variant="ghost" size={size} icon={Undo2} onClick={onClick} aria-disabled={held}>
+    <Button variant="ghost" size={size} icon={Undo2} onClick={onClick} aria-disabled={held} className="max-md:h-11">
       بازگردانی تغییرات
     </Button>
   )

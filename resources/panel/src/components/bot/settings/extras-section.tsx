@@ -1,4 +1,4 @@
-import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
+import { useBotSettingsGroup, useHeldWhile } from '@/components/bot/settings/use-bot-settings-group'
 import { extraPricesAs, extraPricesIn, extraPricesRead, extraPricesRequest, shopExtraPricesDraft, type ExtraPricesAs } from '@/components/extras/draft'
 import { ExtraPricesFields } from '@/components/extras/extra-prices-fields'
 import { SectionCard } from '@/components/section-card'
@@ -38,13 +38,16 @@ function requestOf(values: Values): BotExtrasSettingsRequest {
 
 /**
  * «حجم، زمان و کاربر اضافه» («خرید اضافه» in the menu): whether customers may buy extra traffic, time and devices for a
- * service, and the shop's price list (a plan may replace it with its own).
+ * service, and the shop's price list (a plan may replace it with its own) — held while the switch is off.
  */
 export function ExtrasSection({ settings }: { settings: BotSettingsData }) {
-  const group = useBotSettingsGroup(draftOf(settings), (values) => api.put('/bot/settings/extras', requestOf(values)), {
+  const saved = draftOf(settings)
+  const group = useBotSettingsGroup(saved, (values) => api.put('/bot/settings/extras', requestOf(values)), {
     reads: (values) => ({ extras_enabled: values.extras_enabled, ...extraPricesRead(extraPricesIn(PREFIX, values)) }),
   })
   const { values, set, error } = group
+  // While nothing is sold the prices wait as they are kept, held; one changed stays open, as the save still carries it.
+  const held = useHeldWhile(!values.extras_enabled, group, saved)
 
   return (
     <SectionCard
@@ -59,7 +62,7 @@ export function ExtrasSection({ settings }: { settings: BotSettingsData }) {
         onCheckedChange={(checked) => set('extras_enabled', checked)}
         error={error('extras_enabled')}
       />
-      <ExtraPricesFields form={group} prefix={PREFIX} />
+      <ExtraPricesFields form={group} prefix={PREFIX} held={(field) => held(`${PREFIX}${field}`)} />
     </SectionCard>
   )
 }

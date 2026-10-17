@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
-import type { DismissReceiptsResponse, PaymentRow } from '@/lib/api-types'
+import type { DismissReceiptsResponse, PaymentRow, PaymentsResponse } from '@/lib/api-types'
+import { queryKeys } from '@/lib/query-keys'
 import { PaymentsPage } from '@/pages/payments'
 import { signedIn, until } from '@/test/render'
 import { onlinePaymentRow, paymentRow } from '@/test/rows'
@@ -10,19 +11,23 @@ import { json, refusal, server } from '@/test/server'
 /*
  * The payments screen (pages/payments): what each payment paid for — the amount an order of a service's extra traffic or
  * time brings, else the plan, else the order's type — over the order's type and number; an online payment paid after its
- * order closed said to have gone to the wallet, one held for support said to be; and the receipts waiting for review
- * dismissed at once — those ticked, or
- * every one waiting, a hundred a request —, after a confirmation that says what it does, with a note for the customers.
+ * order closed said to have gone to the wallet, one held for support said to be — and those still waiting a tab of their
+ * own; and the receipts waiting for review
+ * dismissed at once — those ticked (one decided elsewhere meanwhile unticked), or every one waiting, a hundred a
+ * request —, after a confirmation that says what it does, with a note for the customers.
  */
 
 const DISMISS = '/api/admin/payments/dismiss'
 
-/** The screen listing `payments` (at `at`), `waiting` receipts in review in the shop. */
-function open(payments: PaymentRow[], { at = '/payments', waiting = 0 }: { at?: string; waiting?: number } = {}) {
+/** The screen listing `payments` (at `at`), `waiting` receipts in review and `held` payments held for support in the shop. */
+function open(payments: PaymentRow[], { at = '/payments', waiting = 0, held = 0 }: { at?: string; waiting?: number; held?: number } = {}) {
   server().on(
     'GET',
     '/api/admin/payments',
-    json({ payments, meta: { page: 1, per_page: 25, total: payments.length, last_page: 1, sort: 'created', dir: 'desc', awaiting_review: waiting, paid: 0, paid_amount: '0.00' } }),
+    json({
+      payments,
+      meta: { page: 1, per_page: 25, total: payments.length, last_page: 1, sort: 'created', dir: 'desc', awaiting_review: waiting, held, paid: 0, paid_amount: '0.00' },
+    } satisfies PaymentsResponse),
   )
   render(<PaymentsPage />, { wrapper: signedIn({ at }).wrapper })
 }
@@ -69,6 +74,28 @@ describe('an online payment', () => {
 
     const statuses = (await screen.findAllByText('نگه داشته شده برای پشتیبانی')).map((caption) => caption.closest('div')?.textContent?.replace(/\s+/g, ' ').trim())
     expect(statuses).toEqual(['در انتظار پرداخت نگه داشته شده برای پشتیبانی', 'لغوشده نگه داشته شده برای پشتیبانی توسط root'])
+  })
+})
+
+describe('the payments held for support', () => {
+  it('are a tab of their own after the receipts, counted, which the dashboard links to: the list is asked for them alone', async () => {
+    open([onlinePaymentRow({ id: 7, held: true })], { at: '/payments?status=held', held: 2 })
+
+    const tab = await screen.findByRole('tab', { name: /نگه داشته شده/ })
+    expect(tab.getAttribute('aria-selected')).toBe('true')
+    expect(tab.textContent).toBe('نگه داشته شده۲')
+    expect(screen.getAllByRole('tab').map((shown) => shown.id.replace(/^.*-tab-/, ''))).toEqual(['', 'awaiting_review', 'held', 'paid', 'failed', 'pending'])
+    expect(
+      server()
+        .sent('GET', '/api/admin/payments')
+        .map((request) => request.query.get('status')),
+    ).toEqual(['held'])
+  })
+
+  it('say so when none waits', async () => {
+    open([], { at: '/payments?status=held' })
+
+    expect(await screen.findByText('فعلا پرداختی برای پشتیبانی نگه داشته نشده است.')).toBeTruthy()
   })
 })
 
@@ -141,6 +168,27 @@ describe('dismissing receipts', () => {
     await screen.findByRole('checkbox', { name: 'انتخاب رسید پرداخت #7' })
 
     expect(screen.queryByRole('button', { name: 'رد همه رسیدهای در انتظار' })).toBeNull()
+  })
+
+  it('lets go of a receipt ticked and then decided elsewhere — its box gone, it is neither counted nor sent', async () => {
+    let shown = rows()
+    server().on('GET', '/api/admin/payments', () =>
+      json({ payments: shown, meta: { page: 1, per_page: 25, total: shown.length, last_page: 1, sort: 'created', dir: 'desc', awaiting_review: 2, held: 0, paid: 0, paid_amount: '0.00' } }),
+    )
+    const { client, wrapper } = signedIn({ at: '/payments' })
+    render(<PaymentsPage />, { wrapper })
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'انتخاب همه رسیدهای در انتظار این صفحه' }))
+    expect(within(screen.getByRole('toolbar', { name: 'رسیدهای انتخاب‌شده' })).getByText('۲ رسید انتخاب شده')).toBeTruthy()
+
+    // The report group approved #8 meanwhile; the live updates read the list again.
+    shown = [paymentRow({ id: 7 }), paymentRow({ id: 8, status: 'paid' }), paymentRow({ id: 9, status: 'paid' })]
+    await act(() => client.invalidateQueries({ queryKey: queryKeys.payments }))
+
+    await until(() => expect(screen.queryByRole('checkbox', { name: 'انتخاب رسید پرداخت #8' })).toBeNull())
+    const toolbar = screen.getByRole('toolbar', { name: 'رسیدهای انتخاب‌شده' })
+    expect(within(toolbar).getByText('۱ رسید انتخاب شده')).toBeTruthy()
+    fireEvent.click(within(toolbar).getByRole('button', { name: 'رد رسیدهای انتخاب‌شده' }))
+    expect(await screen.findByRole('dialog', { name: 'رد ۱ رسید' })).toBeTruthy()
   })
 
   it('says a refusal in the dialog', async () => {

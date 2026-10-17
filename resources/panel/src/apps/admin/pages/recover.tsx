@@ -18,6 +18,7 @@ import { shopMissing } from '@/lib/api'
 import type { RecoveryKeyResponse } from '@/lib/api-types'
 import { useAuth } from '@/lib/auth'
 import { useDocumentTitle } from '@/lib/document-title'
+import { messageOf } from '@/lib/failure'
 import { formatDate } from '@/lib/format'
 import { useForm } from '@/lib/use-form'
 
@@ -29,7 +30,8 @@ export function RecoverPage() {
   const { session } = useAuth()
   const { recoveryKey, recover } = useOwner()
   const [written, setWritten] = useState<RecoveryKeyResponse | null>(null)
-  const write = useMutation({ mutationFn: recoveryKey, onSuccess: (key) => setWritten(key) })
+  // Refused (the host's storage folder not writable, too many keys asked for), the key's panel says why — and stays so.
+  const write = useMutation({ mutationFn: recoveryKey, onSuccess: (key) => setWritten(key), meta: { quiet: true } })
   const { values, set, error, formError, failure, busy, submit, handleSubmit } = useForm({ key: '', username: '', password: '', password_confirmation: '' })
   // Too many wrong keys: the server's wait counts down, and the form waits as long.
   const wait = useRetryWait(failure)
@@ -60,6 +62,7 @@ export function RecoverPage() {
               کلید در فایل <bdi dir="ltr">{written.file}</bdi> نوشته شد و تا ساعت {formatDate(written.expires_at, { timeStyle: 'short' })} کار می‌کند.
             </Callout>
           )}
+          {!write.isPending && <FormError message={write.error && messageOf(write.error)} failure={write.error} />}
           {/* Asked again while the key still works, the same key and its hour; once over, a new one. */}
           <Button variant={written ? 'secondary' : 'default'} className="w-fit" icon={KeyRound} busy={write.isPending} onClick={() => write.mutate()}>
             ساختن کلید

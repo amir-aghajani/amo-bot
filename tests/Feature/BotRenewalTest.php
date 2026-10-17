@@ -19,7 +19,9 @@ use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Telegram\Handlers\DiscountCodeHandler;
 use App\Modules\Telegram\Handlers\MenuHandler;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
@@ -31,6 +33,7 @@ use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
+use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Traffic;
@@ -232,6 +235,19 @@ final class BotRenewalTest extends BotTestCase
         self::assertSame(0, Order::query()->count());
     }
 
+    public function testARenewalThatWouldEndPastTheLastDayTheShopKeepsIsSaidSoAndNothingOrdered(): void
+    {
+        // 30 days left and the plan's 30 on top would pass the TIMESTAMP columns' last moment, 40 days away.
+        Carbon::setTestNow(LocalTime::last()->subDays(40));
+        $this->subscription->forceFill(['expires_at' => now()->addDays(30)])->save();
+
+        $this->send($this->tap($this->renewButton()));
+
+        self::assertSame(['answerCallbackQuery'], $this->calls());
+        self::assertSame([TermTooLongException::message(), 'true'], [$this->popup(), $this->params(0)['show_alert'] ?? null]);
+        self::assertSame(0, Order::query()->count());
+    }
+
     public function testAnEndedServiceIsRenewedFromTheMenuAndStartsAfresh(): void
     {
         $ended = $this->endedService('ali_2');
@@ -423,6 +439,19 @@ final class BotRenewalTest extends BotTestCase
         self::assertSame(1, Order::query()->count());
     }
 
+    public function testAServiceHandedOnBetweenItsCheckoutAndTheTapIsSaidSoAndNothingIsOrdered(): void
+    {
+        // From the menu's list of renewals: «بازگشت» leads back to it.
+        $this->send($this->tap(RenewalHandler::checkoutCallback($this->subscription->id, 1)));
+        $sara = $this->customer(['telegram_id' => 9999, 'first_name' => 'Sara']);
+
+        $this->sendWhileTheServiceMovesOn($this->tap(CallbackData::build(RenewalHandler::PREFIX, $this->subscription->id, 1, $this->wallet->id)), $sara);
+
+        self::assertSame([ServiceTransfers::MOVED_ON], $this->said(), 'not the error every failure gets');
+        self::assertSame([MenuHandler::renewalsCallback(1)], $this->callbacks(0));
+        self::assertSame([0, '500000.00'], [Order::query()->count(), $this->ali->balance()], 'nothing ordered, nothing charged');
+    }
+
     public function testSomeoneElsesServiceIsNotFound(): void
     {
         $theirs = $this->subscription($this->customer(['telegram_id' => 9999]), $this->plan, $this->server, 'reza_1');
@@ -465,11 +494,11 @@ final class BotRenewalTest extends BotTestCase
         $this->send($this->tap($this->renewButton()));
         self::assertSame([$this->runningCheckout()], $this->said(), 'drawn by the first offered: the numbers of an extension');
         self::assertSame([
-            self::text(BotText::RenewMethodChosen, ['method' => 'تمدید پلن فعلی']),
-            self::text(BotText::RenewMethodButton, ['method' => 'ریست حجم + افزایش روز']),
             self::text(BotText::RenewMethodButton, ['method' => 'ریست زمان + انتقال حجم']),
-        ], array_column($this->inlineKeyboard(0)[1], 'text'), 'a row of the methods under the ways to pay, the one shown marked');
-        self::assertSame([$this->pay($this->wallet), $this->checkout(), $this->checkoutBy(RenewalMethod::ResetTraffic), $this->checkoutBy(RenewalMethod::ResetTime), SubscriptionHandler::serviceCallback($this->subscription->id)], $this->callbacks(0));
+            self::text(BotText::RenewMethodButton, ['method' => 'ریست حجم + افزایش روز']),
+            self::text(BotText::RenewMethodChosen, ['method' => 'تمدید پلن فعلی']),
+        ], array_column($this->inlineKeyboard(0)[1], 'text'), 'a row of the methods under the ways to pay, the first on the right, the one shown marked');
+        self::assertSame([$this->pay($this->wallet), $this->checkoutBy(RenewalMethod::ResetTime), $this->checkoutBy(RenewalMethod::ResetTraffic), $this->checkout(), SubscriptionHandler::serviceCallback($this->subscription->id)], $this->callbacks(0));
 
         $this->send($this->tap($this->checkoutBy(RenewalMethod::ResetTraffic)));
         self::assertSame([$this->checkoutText($this->subscription, $this->renewedExpiry(), Messages::bytes(Traffic::bytesOfGb(30)))], $this->said(), 'the days left carry, the traffic starts afresh: nothing of this period queued');
@@ -478,6 +507,11 @@ final class BotRenewalTest extends BotTestCase
 
         $this->send($this->tap($this->checkoutBy(RenewalMethod::ResetTime)));
         self::assertSame([$this->checkoutText($this->subscription, Messages::expiry(Carbon::parse('2026-10-19 12:00:00'), 30 * 24), Messages::bytes(Traffic::bytesOfGb(42)))], $this->said(), 'thirty days from now, the 12 GB left carried');
+
+        // The wallet button of the checkout by another method — no longer the one on screen — draws that one again first.
+        $this->send($this->tap($this->payBy($this->wallet, RenewalMethod::ResetTraffic)));
+        self::assertSame([$this->checkoutText($this->subscription, $this->renewedExpiry(), Messages::bytes(Traffic::bytesOfGb(30)))], $this->said(), 'its checkout, as it renews now');
+        self::assertSame(0, Order::query()->count(), 'nothing paid for a checkout not on screen');
 
         $this->send($this->tap($this->payBy($this->wallet, RenewalMethod::ResetTraffic)));
         $order = Order::query()->sole();

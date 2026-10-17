@@ -167,7 +167,7 @@ final class SchedulerTest extends TestCase
         $this->shops->ids = [1, 7];
         $scheduler = $this->scheduler()->everyMinutes(1, CountingTask::class, eachBot: true)->everyMinutes(1, FailingTask::class, eachBot: true);
 
-        self::assertSame([CountingTask::class, FailingTask::class], $scheduler->run(), 'a shop\'s task that failed in a shop still ran in the others');
+        self::assertSame([CountingTask::class], $scheduler->run(), 'a shop\'s task that failed in every shop did not run');
         self::assertSame([1, 7, 1, 7], $this->shops->ran);
         self::assertSame(2, $this->task->runs);
         self::assertCount(2, array_filter($this->log->getRecords(), static fn(LogRecord $record): bool => $record->context['task'] === FailingTask::class && in_array($record->context['shop'], [1, 7], true)), 'each shop\'s failure, named');
@@ -175,6 +175,27 @@ final class SchedulerTest extends TestCase
         $this->shops->ran = [];
         $this->scheduler()->everyMinutes(1, CountingTask::class)->run(force: true);
         self::assertSame([null], $this->shops->ran);
+    }
+
+    public function testAShopsTaskThatFailedInAShopStillRanInTheOthers(): void
+    {
+        $this->shops->ids = [1, 7];
+        // Goes through in the first shop, breaks in the second.
+        $task = new class implements Task {
+            public int $calls = 0;
+
+            public function run(): void
+            {
+                if (++$this->calls === 2) {
+                    throw new \RuntimeException('the second shop broke it');
+                }
+            }
+        };
+        $this->container->set($task::class, $task);
+
+        self::assertSame([$task::class], $this->scheduler()->everyMinutes(1, $task::class, eachBot: true)->run());
+        self::assertSame(2, $task->calls);
+        self::assertTrue($this->log->hasErrorThatPasses(static fn(LogRecord $record): bool => $record->context['shop'] === 7), 'the shop it broke in, named');
     }
 
     public function testShopsThatCannotBeReadHoldTheShopsTasksBackForTheNextTick(): void

@@ -1,18 +1,18 @@
 import { RefreshCw } from 'lucide-react'
 import { EmptyState } from '@/components/empty-state'
-import { Dash } from '@/components/list-view'
+import { Dash, PhoneFacts } from '@/components/list-view'
 import type { ServerPage } from '@/components/servers/use-server'
 import { StatusDot } from '@/components/status-badge'
 import { Switch } from '@/components/switch'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { ServerInboundRow } from '@/lib/api-types'
+import type { ProbeInbound, ServerInboundRow } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-/** An inbound as the admin knows it: its remark, else its tag. */
-const inboundName = (inbound: ServerInboundRow) => inbound.remark || inbound.tag
+/** An inbound as the admin knows it — kept or just probed —: its remark, else its tag. */
+export const inboundName = (inbound: Pick<ProbeInbound, 'remark' | 'tag'>) => inbound.remark || inbound.tag
 
 /** What a server sells: its inbounds as the panel last listed them, each with its switch for sale. */
 export function InboundsCard({ page, inbounds }: { page: ServerPage; inbounds: ServerInboundRow[] }) {
@@ -39,7 +39,7 @@ export function InboundsCard({ page, inbounds }: { page: ServerPage; inbounds: S
             <TableHeader>
               <TableRow>
                 <TableHead>اینباند</TableHead>
-                <TableHead>پروتکل</TableHead>
+                <TableHead className="hidden md:table-cell">پروتکل</TableHead>
                 <TableHead className="hidden sm:table-cell">پورت</TableHead>
                 <TableHead className="hidden md:table-cell">کلاینت‌ها</TableHead>
                 <TableHead className="text-end">فروش</TableHead>
@@ -55,24 +55,22 @@ export function InboundsCard({ page, inbounds }: { page: ServerPage; inbounds: S
                         <span className="font-medium" dir="auto">
                           {inboundName(inbound)}
                         </span>
-                        <span className="text-caption text-faint" dir="ltr">
+                        {/* A long tag breaks on a phone rather than push the switch out of sight. */}
+                        <span className="text-caption text-faint max-md:break-all max-md:whitespace-normal" dir="ltr">
                           #{inbound.remote_key} · {inbound.tag}
                         </span>
+                        {inbound.protocol !== null && (
+                          <PhoneFacts>
+                            <Protocol inbound={inbound} />
+                          </PhoneFacts>
+                        )}
                       </div>
                       <span className="sr-only">{inbound.enabled ? 'فعال در پنل' : 'غیرفعال در پنل'}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     {/* A PasarGuard group is no one protocol and has no port of its own. */}
-                    {inbound.protocol === null ? (
-                      <Dash />
-                    ) : (
-                      <span className="text-footnote" dir="ltr">
-                        {inbound.protocol}
-                        {inbound.network && `/${inbound.network}`}
-                        {inbound.security && inbound.security !== 'none' && <span className="text-muted-foreground">+{inbound.security}</span>}
-                      </span>
-                    )}
+                    {inbound.protocol === null ? <Dash /> : <Protocol inbound={inbound} />}
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">
                     {inbound.port === null ? (
@@ -101,5 +99,16 @@ export function InboundsCard({ page, inbounds }: { page: ServerPage; inbounds: S
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/** An inbound's protocol, its transport and its security («vless/tcp+reality»), left to right. */
+function Protocol({ inbound }: { inbound: ServerInboundRow }) {
+  return (
+    <span className="text-footnote" dir="ltr">
+      {inbound.protocol}
+      {inbound.network && `/${inbound.network}`}
+      {inbound.security && inbound.security !== 'none' && <span className="text-muted-foreground">+{inbound.security}</span>}
+    </span>
   )
 }

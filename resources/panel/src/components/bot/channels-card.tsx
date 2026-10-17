@@ -112,7 +112,8 @@ export function ChannelsCard({ required }: { required: boolean }) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center justify-end gap-1">
+                    {/* On a phone, 12px apart: neither's 44px press reaches over the other. */}
+                    <div className="flex items-center justify-end gap-1 max-md:gap-3">
                       <IconButton
                         aria-label={`بررسی دوباره ${channel.title}`}
                         title="بررسی دوباره"
@@ -165,7 +166,11 @@ function AddChannelForm({ onAdded }: { onAdded: (channel: BotChannelRow) => void
         label="افزودن کانال"
         // Telegram not answering is about this one field too.
         error={error('link') ?? formError ?? undefined}
-        hint="لینک عمومی یا نام کاربری (مثل https://t.me/mychannel یا @mychannel). برای کانال خصوصی شناسه عددی آن را بدهید؛ لینک عضویت را ربات خودش می‌سازد."
+        hint={
+          <>
+            لینک عمومی یا نام کاربری (مثل <bdi dir="ltr">https://t.me/mychannel</bdi> یا <bdi dir="ltr">@mychannel</bdi>). برای کانال خصوصی شناسه عددی آن را بدهید؛ لینک عضویت را ربات خودش می‌سازد.
+          </>
+        }
       >
         {(control) => (
           <div className="flex gap-2">

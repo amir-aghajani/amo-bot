@@ -147,7 +147,8 @@ export function RemoveConfirm<Row>({ row, remove, title, description, details, k
             {reason}
           </Callout>
           <div className="flex justify-end">
-            <Button variant="secondary" onClick={close} data-autofocus>
+            {/* A finger's 44px on a phone, as every dialog's foot. */}
+            <Button variant="secondary" onClick={close} data-autofocus className="max-md:h-11">
               بستن
             </Button>
           </div>

@@ -12,6 +12,11 @@ use App\Modules\Payments\Contracts\OnlineGateway;
 use App\Modules\Payments\Drivers\AtlasPay\AtlasPayGateway;
 use App\Modules\Payments\Drivers\Zarinpal\ZarinpalGateway;
 use App\Modules\Payments\DTO\CheckoutResult;
+use App\Modules\Payments\DTO\OnlineInvoice;
+use App\Modules\Payments\DTO\OnlineRequest;
+use App\Modules\Payments\DTO\OnlineVerdict;
+use App\Modules\Payments\DTO\PaymentInitiation;
+use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Enums\CheckoutOutcome;
 use App\Modules\Payments\Enums\OnlineState;
 use App\Modules\Payments\Enums\PaymentStatus;
@@ -23,6 +28,7 @@ use App\Modules\Payments\Services\OnlineInvoices;
 use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Payments\Tasks\OnlinePaymentsTask;
 use App\Modules\Users\Models\User;
+use App\Support\LocalTime;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Carbon;
@@ -32,8 +38,9 @@ use Tests\HttpTestCase;
 /**
  * The online payments' engine through the gateways OnlinePaymentsTest's CubePay does not show it on: one page per
  * payment — Zarinpal makes a new authority for every request, so two openings of one payment at once both show the one
- * the shop kept —, and money a gateway holds on a payment still under way (AtlasPay's review, Aban's part paid) marked
- * on it once, its payment never given up on while the gateway may still settle it.
+ * the shop kept —, a page's end past what the shop keeps held to its last moment, and money a gateway holds on a payment
+ * still under way (AtlasPay's review, Aban's part paid) marked on it once, its payment never given up on while the
+ * gateway may still settle it.
  */
 final class OnlineGatewaysEngineTest extends HttpTestCase
 {
@@ -76,6 +83,48 @@ final class OnlineGatewaysEngineTest extends HttpTestCase
         $zarinpal->pay((string) $kept->reference);
         self::assertSame(OnlineState::Paid, $this->service(OnlinePayments::class)->check($kept->load('method')));
         self::assertSame('50000.00', $this->customer->balance());
+    }
+
+    public function testAPageTheGatewaySaysLastsPastWhatTheShopKeepsIsKeptToItsLastMoment(): void
+    {
+        $this->zarinpal();
+        $method = $this->zarinpalMethod();
+        $order = $this->service(OrderService::class)->openTopUp($this->customer, 50000);
+        $payment = Payment::query()->create(['order_id' => $order->id, 'payment_method_id' => $method->id, 'status' => PaymentStatus::Pending, 'amount' => $order->amount]);
+        $zarinpal = $this->service(GatewayRegistry::class)->forMethod($method);
+        self::assertInstanceOf(OnlineGateway::class, $zarinpal);
+        // A gateway answering a page open until 2100: past MySQL's TIMESTAMP, it would be refused on saving.
+        $gateway = new class ($zarinpal) implements OnlineGateway {
+            public function __construct(private readonly OnlineGateway $inner) {}
+
+            public function open(Payment $payment, OnlineRequest $request): OnlineInvoice
+            {
+                $invoice = $this->inner->open($payment, $request);
+
+                return new OnlineInvoice($invoice->url, new \DateTimeImmutable('2100-01-01T00:00:00Z'), $invoice->reference, $invoice->details);
+            }
+
+            public function check(Payment $payment): OnlineVerdict
+            {
+                return $this->inner->check($payment);
+            }
+
+            public function initiate(Payment $payment): PaymentInitiation
+            {
+                return $this->inner->initiate($payment);
+            }
+
+            public function settle(Payment $payment): PaymentResult
+            {
+                return $this->inner->settle($payment);
+            }
+        };
+
+        $this->service(OnlineInvoices::class)->open(Payment::query()->with('order.user', 'method')->findOrFail($payment->id), $gateway);
+
+        $kept = $payment->refresh();
+        self::assertNotNull($kept->link);
+        self::assertSame(LocalTime::last()->getTimestamp(), $kept->link_expires_at?->getTimestamp());
     }
 
     public function testARequestMadeAgainWhileTheFirstWaitsOnTheGatewayAnswersTheSamePage(): void

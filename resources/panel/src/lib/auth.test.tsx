@@ -107,6 +107,22 @@ describe('opening the panel', () => {
     expect(server().sent('GET', '/api/admin/auth/me')).toHaveLength(2)
   })
 
+  it('asked again, keeps the failure on screen until the answer — «تلاش دوباره» turning, the focus on it —, never the loading screen', async () => {
+    server().on('GET', '/api/admin/auth/me', () => offline)
+    panel('/orders')
+    const retry = await screen.findByRole('button', { name: 'تلاش دوباره' })
+    const asked = server().hold('GET', '/api/admin/auth/me')
+    retry.focus()
+
+    fireEvent.click(retry)
+
+    await until(() => expect(asked.waiting).toBe(1))
+    expect([retry.isConnected, retry.getAttribute('aria-busy'), document.activeElement]).toEqual([true, 'true', retry])
+    expect(screen.queryByText('در حال بارگذاری', { exact: false })).toBeNull()
+    asked.answer(json({ session: OWNER }))
+    expect(await screen.findByText('سفارش‌ها')).toBeTruthy()
+  })
+
   it('says the shop the tab’s address names is not there, with the way to the main shop — never the main shop in its place', async () => {
     server().on('GET', '/api/admin/auth/me', refusal(404, 'این فروشگاه پیدا نشد؛ شاید آدرسی که باز کردید درست نیست.', { shop: ['این فروشگاه پیدا نشد؛ شاید آدرسی که باز کردید درست نیست.'] }))
     panel('/orders')

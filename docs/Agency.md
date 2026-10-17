@@ -1,3 +1,5 @@
+[فارسی](fa/Agency.md)
+
 # Agency
 
 An agent is a reseller with **a bot of their own** — its own customers, plans, payment methods, texts, menu, settings,
@@ -7,9 +9,9 @@ you give them. «فروش › نمایندگان» is the owner's: «درخوا�
 
 ## Setting it up
 
-1. **«سطح‌ها»** › «افزودن سطح»: a level is a name the customers and agents read («برنزی», 32 characters at most, unique)
-   and **a price per GB** in whole Toman. ▲▼ is the order the bot lists them in. A level agents are on is not deleted:
-   move them to another first.
+1. **«سطح‌ها»** › «افزودن سطح»: a level is a name the customers and agents read («نام سطح»: «برنزی», 32 characters at
+   most, unique) and **a price per GB** («قیمت هر گیگابایت (تومان)», whole Toman). ▲▼ is the order the bot lists them
+   in. A level agents are on is not deleted: move them to another first.
 2. **«تنظیمات»** — «برنامه نمایندگی»:
 
    | Field | What it is |
@@ -33,15 +35,20 @@ A customer presses «🤝 نمایندگی» in the main bot: the terms and each
 which asks a few words about them (500 characters) — one request at a time. It arrives in two places:
 
 - **«درخواست‌ها»** (it opens on those waiting): «تایید» asks the level, the credit, the agency's end and the monthly
-  minimum (the program's by default) and approves — «تایید و نماینده کردن» —; «رد» asks an optional note the customer
+  minimum (the program's by default), and approves with «تایید و نماینده کردن»; «رد» asks an optional note the customer
   reads.
 - **The main bot's report group, «نمایندگی»**: «✅ تایید» offers a button per level and approves with the program's
-  credit; «❌ رد» rejects without a note. For the bot's admins alone.
+  credit; «❌ رد» rejects without a note. For the bot's admins alone. An approval refused as it stands — the program's
+  «مدت نمایندگی» would end it after 17 January 2038 («۲۸ دی ۱۴۱۶»), the last day the shop can keep — says why in a popup
+  and keeps the request's buttons: shorten the term in «تنظیمات», or approve it in the panel with an end of your own.
 
 Whichever decides first stands; the other says it was decided. The customer is told — approved, with their level, price
 and credit, and their agency's end and monthly minimum when they have them. **Approval opens their shop**: their bot's
 place, with its wallet as a way to pay. A returning agent starts their terms of selling afresh, a suspension of before
 gone.
+
+«درخواست‌ها» shows who decided each request and when: a bot admin who decided it in the report group by the first and
+last name on their account (by their @handle or Telegram id when it shows none), you by your login.
 
 ## The agent's side
 
@@ -49,8 +56,8 @@ In the main bot, «🤝 نمایندگی» is then their account — level and p
 their wallet and credit, their bot and what it sold, their agency's end, this month's traffic bought against their
 minimum, and why their bot sells nothing when it does not — with:
 
-- **«💾 خرید حجم»** — a preset or a typed amount (from the least), paid through the checkout at their level's price; the
-  wallet counts their credit. The traffic is added as it is paid (a card's, once you approve its receipt).
+- **«💾 خرید حجم»** — a preset or a typed amount (from the least to 100,000 GB; «۵ هزار گیگ» is read as 5000), paid
+  through the checkout at their level's price; the wallet counts their credit. The traffic is added as it is paid (a card's, once you approve its receipt).
 - **«🤖 ربات من»** — the token of a bot they made in @BotFather, sent here; the message is deleted at once. A new token of
   the same bot replaces it; another bot is refused (its customers know the first) — moving an agent to another bot is
   not done from the panel.
@@ -66,14 +73,20 @@ panel leads to the account.
 
 ## Their traffic
 
-Every purchase and renewal their bot delivers draws its plan's traffic from their pool, once per order; a failed delivery
-gives it back, and so does a purchase, a renewal or extra traffic refunded — the refund takes what it gave back off
-the service. **A pool too short fails the order**: it waits for a retry («نیازمند رسیدگی» in their shop), and the
-agent is told in the main bot, with «💾 خرید حجم». The GB their shop gives a service by hand («افزایش زمان و حجم») comes
-out of it too, and so does the extra traffic their customers buy («حجم اضافه»), which is never offered beyond
-what the pool holds; the extra days cost it nothing. So in their shop a plan needs traffic (unlimited plans are not sold
-there), and a plan their pool cannot cover is not offered — an order made by hand («افزودن سفارش») is refused up front,
-in the words a failed delivery gets —; their dashboard says when their traffic sells nothing.
+Every purchase and renewal their bot delivers draws its traffic from their pool, once per order. A failed delivery gives
+it back, and so does a purchase, a renewal or extra traffic refunded (the refund takes what it gave back off the
+service). **A pool too short fails the order**: it waits for a retry («نیازمند رسیدگی» in their shop), and the agent is
+told in the main bot, with «💾 خرید حجم».
+
+- The GB their shop gives a service by hand («افزایش زمان و حجم») come out of the pool too.
+- So does the extra traffic their customers buy («حجم اضافه»), which is never offered beyond what the pool holds. Extra
+  days and devices cost it nothing.
+- So in their shop a plan needs traffic (unlimited plans are not sold there), and a plan their pool cannot cover is not
+  offered. An order made by hand («افزودن سفارش») is refused up front, in the words a failed delivery gets.
+- Their dashboard says when their traffic sells nothing.
+- Their traffic's history — «گردش حجم» on their account page, and in yours the «حجم» dialog of their row in
+  «نماینده‌ها» — says who made each change by hand: they (by their bot's @handle), you («پشتیبانی» to them), or an admin
+  of their website, by name.
 
 **Free tests** their bot gives draw their traffic too, as each is made — a «فروش» line «اکانت تست · سرویس …» in their
 traffic's history, written with the test itself, so a test that falls through draws nothing —, and a server whose test
@@ -84,25 +97,38 @@ Your own gifts — a server's, the mass gift — draw nothing from it.
 
 ## The terms of selling: an end and a monthly minimum
 
-Each agent may have **an end** («پایان نمایندگی», a day and an hour on the shop's clock; none: never) and **a monthly
-minimum** («کف خرید ماهانه»: the Toman of traffic they buy in the main bot each Jalali month — traffic orders delivered,
-a refunded one not counted; 0: none, as in the program's setting). Past either, **their bot's selling is suspended — never the bot**: their
-shop sells nothing new — no purchase, renewal (automatic renewal waits too), extra traffic, time or devices, top-up,
-free test, gift of a service from the wheel, a gift code or a referral reward, and their staff extend no service by
-hand nor make an order for a customer by hand (you neither) —, its customers told politely in the bot and on the
-website («فروش این فروشگاه فعلا متوقف است…»: the website's API answers an order with a `503`, and a renewal's preview or
-a discount code's check with a `422` on `status` — [buying](Store-API-Buying.md#the-flow)). Everything else goes on:
-the bot answers, their panel works, their customers' services keep running, syncing and being reminded, a receipt for an
-order made before is still reviewed, and what was paid is delivered. **They still buy traffic** in the main bot — that is
-how a minimum is met.
+Each agent may have:
+
+- **an end** — «پایان نمایندگی»: a Jalali day and an hour on the shop's clock; none: never. A day typed for an agent who
+  had no end ends at 23:00 of it unless you pick another hour. It may fall on 17 January 2038 («۲۸ دی ۱۴۱۶») at most,
+  the last day the shop can keep;
+- **a monthly minimum** — «کف خرید ماهانه (تومان)»: the Toman of traffic they buy in the main bot each Jalali month —
+  traffic orders delivered, a refunded one not counted; 0: none, as in the program's setting.
+
+Past either, **their bot's selling is suspended — never the bot**. From that moment their shop sells nothing new:
+
+- no purchase, renewal (automatic renewal waits too), extra traffic, time or devices, or top-up;
+- no free test, and no service given by the wheel, a gift code or a referral reward;
+- the agent and their staff extend no service by hand («افزایش زمان و حجم»: «فروش این فروشگاه متوقف است؛ دلیلش در
+  «حساب نمایندگی» آمده است.») — you still may, with their shop open in your panel;
+- nobody makes an order for a customer by hand («افزودن سفارش»), you neither: lift the suspension first («فروش این
+  نماینده متوقف است و سفارشی در فروشگاهش ثبت نمی‌شود؛ اول از صفحه «نمایندگان» فروشش را باز کنید.»).
+
+Its customers are told politely, in the bot and on the website («فروش این فروشگاه فعلا متوقف است…»): the website's API
+answers an order with a `503`, and a renewal's preview or a discount code's check with a `422` on `status`
+([buying](Store-API-Buying.md#the-flow)). Everything else goes on: the bot answers, their panel works, their customers'
+services keep running, syncing and being reminded, a receipt for an order made before is still reviewed, and what was
+paid is delivered. **They still buy traffic** in the main bot — that is how a minimum is met.
 
 - **The end** — warned of once, «هشدار پیش از توقف» days ahead, in the main bot. The moment it passes their shop stops
   selling; within the hour they hear it, and so does your report group («نمایندگی»). A later end (or none) given on their
-  row lifts it at once.
+  row lifts it at once — unless the month before ended below their minimum and this month has not reached it yet: then
+  their selling stays suspended, now for the minimum (below), and they and your group are told so.
 - **The minimum** — judged once a Jalali month on the shop's clock is over; the month in which you set or changed it is
   not judged. They are warned once when the month nears its end short of it, with «💾 خرید حجم». A month that ended below
-  it suspends their selling — and **as soon as the month they are in reaches the minimum** (their traffic purchase
-  delivered), it sells again by itself. Setting the minimum to 0 lifts it too.
+  it suspends their selling — and **as soon as the month they are in reaches the minimum**, it sells again by itself:
+  the moment the traffic purchase that reaches it is delivered, or support's retry delivers it. Setting the minimum to
+  0 lifts it too.
 - **By hand** — «توقف فروش» on their row, with an optional note they read; only «ادامه فروش» lifts it. It stands over an
   end or a minimum, which «ادامه فروش» also lifts — but an end that has passed, which you extend instead.
 
@@ -119,10 +145,12 @@ The agent hears every suspension and every lifting in the main bot, with the rea
   and take extras, and an order paid before is delivered there, since nothing new is sold. Your own moves still carry
   their services onto it: a server's [«انتقال سرویس‌ها»](Servers.md#moving-its-services), and one service's «انتقال»
   from their shop opened in your panel.
-- **Their plans** — not sold, made by hand nor given as a prize, whatever their own switch says. The agent sees them marked «پنهان‌شده توسط مدیر» on their
-  plans page and cannot show them again; a copy of one stays hidden. Services sold on one renew.
+- **Their plans** — not sold, made by hand nor given as a prize, whatever their own switch says. The agent sees them
+  marked «پنهان‌شده توسط پشتیبانی» on their plans page («پشتیبانی فروشگاه اصلی این پلن را پنهان کرده است؛ …») and cannot
+  show them again; a copy of one stays hidden. Services sold on one renew.
 
-Your own shop and other agents' are untouched.
+Your own shop and other agents' are untouched. Agents read your part in all this as «پشتیبانی فروشگاه اصلی», never as
+the shop's owner.
 
 ## The agents list
 
@@ -135,7 +163,8 @@ customer page while the main shop is open. The row's menu:
 - **«سطح، اعتبار و شرایط فروش»** — another level or credit, end or monthly minimum (this month's purchases shown above
   them); the agent is told (the toast says whether it reached them) — saved unchanged, nothing is sent.
 - **«حجم»** — set their traffic right: «افزایش» or «کاهش» in GB, with an optional note they read in their traffic's
-  history; never below zero. **The agent is not told.**
+  history; never below zero. **The agent is not told.** Pressing «افزایش حجم» or «کاهش حجم» again after the panel got
+  no answer never adjusts twice.
 - **«سرورها و پلن‌های پنهان»** — [above](#servers-and-plans-kept-from-an-agents-shop).
 - **«توقف فروش»** / **«ادامه فروش»** — their selling suspended by hand, with a note they read, or let go
   ([above](#the-terms-of-selling-an-end-and-a-monthly-minimum)).

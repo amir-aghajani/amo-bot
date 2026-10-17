@@ -113,6 +113,10 @@ final class EntityHtml
             'custom_emoji' => preg_match('/^\d{1,20}$/', (string) ($entity['custom_emoji_id'] ?? '')) === 1
                 ? ['<tg-emoji emoji-id="' . $entity['custom_emoji_id'] . '">', '</tg-emoji>']
                 : null,
+            // A date and time: its Unix time, and how the customer's app writes it (none: the words as they are).
+            'date_time' => is_int($entity['unix_time'] ?? null) && $entity['unix_time'] > 0
+                ? ['<tg-time unix="' . $entity['unix_time'] . '"' . (($entity['date_time_format'] ?? '') !== '' ? ' format="' . $attribute($entity['date_time_format']) . '"' : '') . '>', '</tg-time>']
+                : null,
             default => null,
         };
     }

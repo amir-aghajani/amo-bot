@@ -1,3 +1,5 @@
+[فارسی](fa/Store-API-Reviews.md)
+
 # Store API: reviews
 
 The shop's customers' reviews: the ones support approved are anyone's to read, and a review may be written by a customer

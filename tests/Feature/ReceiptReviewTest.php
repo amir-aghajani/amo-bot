@@ -160,8 +160,8 @@ final class ReceiptReviewTest extends BotTestCase
         self::assertSame((string) $this->threads['receipts'], $prompt['message_thread_id']);
         self::assertSame(self::RECEIPT_POST, $this->telegram()->replyTarget(0), 'under the receipt');
         self::assertSame(['force_reply' => true, 'selective' => true, 'input_field_placeholder' => 'دلیل رد رسید'], FakeTelegram::markupOf($prompt));
-        self::assertStringContainsString("دلیل رد رسید پرداخت #{$this->payment->id} را در پاسخ به همین پیام بنویسید", $prompt['text']);
-        self::assertStringEndsWith('@boss', $prompt['text'], 'mentioned, so the reply box opens for them alone');
+        self::assertStringContainsString("دلیل رد رسید پرداخت \u{200E}#{$this->payment->id} را در پاسخ به همین پیام بنویسید", $prompt['text'], 'the number marked to read left to right in the Persian line');
+        self::assertStringEndsWith(" \u{200E}@boss", $prompt['text'], 'mentioned, so the reply box opens for them alone — after a left-to-right mark, read «@boss» after the Persian words');
         self::assertSame(ReceiptReview::buttons($this->payment->id), $this->buttonsUnder(self::RECEIPT_POST), 'the receipt keeps its two buttons meanwhile');
         self::assertSame(PaymentStatus::AwaitingReview, $this->payment->refresh()->status);
 

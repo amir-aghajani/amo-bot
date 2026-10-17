@@ -4,7 +4,7 @@ import { Ban, BarChart3, Disc, File, Film, Image, Megaphone, MessageSquare, Mic,
 import { toast } from 'sonner'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowMenu } from '@/components/list-view'
+import { ListView, PhoneFacts, RowMenu } from '@/components/list-view'
 import { ProgressBar } from '@/components/progress-bar'
 import { Reviewer } from '@/components/reviewer'
 import { StatusBadge } from '@/components/status-badge'
@@ -84,15 +84,26 @@ export function BroadcastsList() {
         noun="ارسال‌ها"
         unit="ارسال"
         skeletonRows={4}
-        empty={<EmptyState framed icon={Megaphone} title="هنوز ارسالی نشده است" description="مدیرهای ربات با /broadcast در ربات پیام همگانی می‌فرستند؛ هر ارسال با پیشرفتش این‌جا می‌آید." />}
+        empty={
+          <EmptyState
+            framed
+            icon={Megaphone}
+            title="هنوز ارسالی نشده است"
+            description={
+              <>
+                مدیرهای ربات با <bdi dir="ltr">/broadcast</bdi> در ربات پیام همگانی می‌فرستند؛ هر ارسال با پیشرفتش این‌جا می‌آید.
+              </>
+            }
+          />
+        }
       >
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>پیام</TableHead>
-              <TableHead>مخاطب</TableHead>
-              <TableHead>پیشرفت</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">مخاطب</TableHead>
+              <TableHead className="hidden md:table-cell">پیشرفت</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <TableHead className="hidden lg:table-cell">فرستنده</TableHead>
               <TableHead className="w-10">
                 <span className="sr-only">عملیات</span>
@@ -102,20 +113,29 @@ export function BroadcastsList() {
           <TableBody>
             {list.rows.map((broadcast) => (
               <TableRow key={broadcast.id}>
-                <TableCell className="max-w-72">
+                <TableCell className="max-w-72 max-md:whitespace-normal">
                   <MessageCell broadcast={broadcast} />
+                  <PhoneFacts>
+                    <StatusBadge status={BROADCAST_STATUS[broadcast.status]} />
+                    <Audience broadcast={broadcast} />
+                    <div className="w-full">
+                      <Progress broadcast={broadcast} />
+                    </div>
+                  </PhoneFacts>
                 </TableCell>
-                <TableCell>{broadcast.kind === 'unpin' ? <span className="text-muted-foreground">همان گیرنده‌ها</span> : broadcast.audience.label}</TableCell>
-                <TableCell className="min-w-44">
+                <TableCell className="hidden md:table-cell">
+                  <Audience broadcast={broadcast} />
+                </TableCell>
+                <TableCell className="hidden min-w-44 md:table-cell">
                   <Progress broadcast={broadcast} />
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <StatusBadge status={BROADCAST_STATUS[broadcast.status]} />
                 </TableCell>
                 <TableCell className="hidden text-footnote text-muted-foreground lg:table-cell">
                   {/* The space keeps who and when words apart for assistive tech, not one. */}
                   <div className="grid">
-                    {broadcast.admin ? <UserIdentity user={broadcast.admin} /> : broadcast.reviewer && <Reviewer name={broadcast.reviewer} />}{' '}
+                    {broadcast.admin ? <UserIdentity user={broadcast.admin} /> : broadcast.reviewer && <Reviewer name={broadcast.reviewer} person={broadcast.reviewer_name} />}{' '}
                     <time dateTime={broadcast.created_at} title={formatDate(broadcast.created_at)}>
                       {timeAgo(broadcast.created_at)}
                     </time>
@@ -150,6 +170,11 @@ export function BroadcastsList() {
       </ConfirmModal>
     </>
   )
+}
+
+/** Who it went to: its audience — an unpin, the run's own. */
+function Audience({ broadcast }: { broadcast: BroadcastRow }) {
+  return broadcast.kind === 'unpin' ? <span className="text-muted-foreground">همان گیرنده‌ها</span> : broadcast.audience.label
 }
 
 /** What went: its kind and the start of its text, how (a copy or a forward), pinned, with buttons. */

@@ -1,9 +1,9 @@
 import { useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Calculator, CalendarDays, HardDrive, Server, type LucideIcon } from 'lucide-react'
-import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
+import { useBotSettingsGroup, useHeldWhile } from '@/components/bot/settings/use-bot-settings-group'
 import { CheckList, optionsRead } from '@/components/check-list'
-import { customPrice, customServicesDraft, customServicesRead, customServicesRequest, optionsOf, type CustomServicesDraft, type QuantityKind } from '@/components/custom-services/draft'
+import { customPrice, customServicesDraft, customServicesRead, customServicesRequest, offeredOf, type CustomServicesDraft, type Offered, type QuantityKind } from '@/components/custom-services/draft'
 import { Field, FormPart } from '@/components/field'
 import { PricedRowsEditor } from '@/components/priced-rows-editor'
 import { SectionCard } from '@/components/section-card'
@@ -68,15 +68,19 @@ type HostForm = Pick<Form<CustomServicesDraft>, 'values' | 'set' | 'error'>
 
 /**
  * The `custom_services` bot-settings group (main shop only): the switch, the GB's and the days' price tiers with their
- * bounds and the amounts offered as buttons, the devices of a built service, the servers it is built on — and a
- * calculator of what a customer pays for what they build, from the tiers as typed.
+ * bounds and the amounts offered as buttons, the devices of a built service, the servers it is built on — the numbers
+ * held while the switch is off — and a calculator of what a customer pays for what they build, from the tiers as typed.
  */
 export function CustomServicesCard({ settings }: { settings: BotSettingsData }) {
-  const group = useBotSettingsGroup(customServicesDraft(settings), (values) => api.put('/bot/settings/custom_services', customServicesRequest(values)), {
+  const saved = customServicesDraft(settings)
+  const group = useBotSettingsGroup(saved, (values) => api.put('/bot/settings/custom_services', customServicesRequest(values)), {
     reads: customServicesRead,
   })
   const { values, set, error } = group
   const devices = wholeNumberOf(values.custom_devices)
+  // While nothing is built its prices and numbers wait as they are kept, held; one changed stays open, as the save still
+  // carries it.
+  const held = useHeldWhile(!values.custom_enabled, group, saved)
 
   return (
     <SectionCard
@@ -94,8 +98,8 @@ export function CustomServicesCard({ settings }: { settings: BotSettingsData }) 
 
       <div className="@container">
         <div className="grid gap-4 @xl:grid-cols-2">
-          <QuantityPart kind="traffic" form={group} />
-          <QuantityPart kind="days" form={group} />
+          <QuantityPart kind="traffic" form={group} held={held} />
+          <QuantityPart kind="days" form={group} held={held} />
         </div>
       </div>
 
@@ -106,7 +110,15 @@ export function CustomServicesCard({ settings }: { settings: BotSettingsData }) 
           error={error('custom_devices')}
           hint={devices === null ? `بین 0 تا ${CUSTOM_SERVICE_SETTINGS.MAX_DEVICES}` : devices === 0 ? '0 یعنی نامحدود.' : `هر سرویس دلخواه ${formatDevices(devices)}.`}
         >
-          <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values.custom_devices} onChange={(e) => set('custom_devices', e.target.value)} className="max-w-32" />
+          <Input
+            dir="ltr"
+            inputMode="numeric"
+            autoComplete="off"
+            value={values.custom_devices}
+            onChange={(e) => set('custom_devices', e.target.value)}
+            disabled={held('custom_devices')}
+            className="max-w-32"
+          />
         </Field>
         <ServerChoice value={values.custom_servers} onChange={(ids) => set('custom_servers', ids)} error={error('custom_servers')} />
       </FormPart>
@@ -116,13 +128,16 @@ export function CustomServicesCard({ settings }: { settings: BotSettingsData }) 
   )
 }
 
-/** One quantity's prices: its tiers, the bounds a customer builds within and the amounts offered as buttons. */
-function QuantityPart({ kind, form }: { kind: QuantityKind; form: HostForm }) {
+/**
+ * One quantity's prices: its tiers, the bounds a customer builds within and the amounts offered as buttons — each held
+ * while it waits (`held`).
+ */
+function QuantityPart({ kind, form, held }: { kind: QuantityKind; form: HostForm; held: (field: keyof CustomServicesDraft) => boolean }) {
   const id = useId()
   const words = QUANTITIES[kind]
   const { values, set, error } = form
   const field = words.fields
-  const options = optionsOf(values[field.options])
+  const offered = offeredOf(values[field.tiers], values[field.min], values[field.max], values[field.options])
 
   return (
     <FormPart icon={words.icon} title={words.title} about={words.about}>
@@ -144,13 +159,14 @@ function QuantityPart({ kind, form }: { kind: QuantityKind; form: HostForm }) {
         noun="پله"
         most={TIER_PRICES.MOST}
         empty="بدون پله قیمت، سرویس دلخواه فروخته نمی‌شود."
+        disabled={held(field.tiers)}
       />
       <div className="grid grid-cols-2 gap-3">
         <Field id={`${id}-min`} label={`کمترین (${words.unit})`} error={error(field.min)}>
-          <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values[field.min]} onChange={(e) => set(field.min, e.target.value)} />
+          <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values[field.min]} onChange={(e) => set(field.min, e.target.value)} disabled={held(field.min)} />
         </Field>
         <Field id={`${id}-max`} label={`بیشترین (${words.unit})`} error={error(field.max)}>
-          <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values[field.max]} onChange={(e) => set(field.max, e.target.value)} />
+          <Input dir="ltr" inputMode="numeric" autoComplete="off" value={values[field.max]} onChange={(e) => set(field.max, e.target.value)} disabled={held(field.max)} />
         </Field>
       </div>
       <Field
@@ -158,15 +174,25 @@ function QuantityPart({ kind, form }: { kind: QuantityKind; form: HostForm }) {
         label={`دکمه‌های پیشنهادی (${words.unit})`}
         error={error(field.options)}
         hint={
-          options && options.length > 0
-            ? `دکمه‌ها: ${options.map(words.amount).join('، ')} — مشتری عدد دیگری بین کمترین و بیشترین را هم می‌نویسد.`
-            : `عددها را با کاما جدا کنید (حداکثر ${formatNumber(EXTRA_OPTIONS.MOST)} دکمه، بین 1 تا ${words.most})؛ خالی یعنی مشتری عدد را خودش می‌نویسد.`
+          offered
+            ? `${buttonsWords(offered, words)} — مشتری عدد دیگری بین کمترین و بیشترین را هم می‌نویسد.`
+            : `عددها را با کاما جدا کنید (حداکثر ${EXTRA_OPTIONS.MOST} دکمه، بین 1 تا ${words.most})؛ خالی یعنی مشتری عدد را خودش می‌نویسد.`
         }
       >
-        <Input dir="ltr" autoComplete="off" placeholder={words.examples} value={values[field.options]} onChange={(e) => set(field.options, e.target.value)} />
+        <Input dir="ltr" autoComplete="off" placeholder={words.examples} value={values[field.options]} onChange={(e) => set(field.options, e.target.value)} disabled={held(field.options)} />
       </Field>
     </FormPart>
   )
+}
+
+/**
+ * The buttons the bot shows of the amounts typed — and those it leaves out, outside what a customer may build (the least
+ * never below the first tier), and why —, as the server offers them (CustomServices::options()).
+ */
+function buttonsWords({ shown, left, bounds }: Offered, words: QuantityWords): string {
+  const buttons = shown.length > 0 ? `دکمه‌ها: ${shown.map(words.amount).join('، ')}` : 'دکمه‌ای نشان داده نمی‌شود'
+  const out = bounds !== null && left.length > 0 ? `؛ ${left.map(words.amount).join('، ')} نشان داده نمی‌شود، چون مشتری بین ${bounds.least} تا ${bounds.most} ${words.unit} می‌سازد` : ''
+  return `${buttons}${out}`
 }
 
 /**

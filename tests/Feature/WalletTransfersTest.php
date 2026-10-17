@@ -63,8 +63,8 @@ final class WalletTransfersTest extends DatabaseTestCase
         self::assertSame(['70000.00', '30000.00'], [$this->ali->balance(), $this->sara->balance()], 'no fee: what one gave, the other got');
         $sent = WalletTransaction::query()->where('user_id', $this->ali->id)->latest('id')->firstOrFail();
         $received = WalletTransaction::query()->where('user_id', $this->sara->id)->latest('id')->firstOrFail();
-        self::assertSame([WalletTransactionType::Debit, '30000.00', 'انتقال موجودی به Sara Ahmadi (@sara)', null], [$sent->type, $sent->amount, $sent->description, $sent->reviewer]);
-        self::assertSame([WalletTransactionType::Credit, '30000.00', 'دریافت موجودی از Ali (@ali)', null], [$received->type, $received->amount, $received->description, $received->reviewer]);
+        self::assertSame([WalletTransactionType::Debit, '30000.00', "انتقال موجودی به \u{200E}Sara Ahmadi (\u{200E}@sara)", null], [$sent->type, $sent->amount, $sent->description, $sent->reviewer]);
+        self::assertSame([WalletTransactionType::Credit, '30000.00', "دریافت موجودی از \u{200E}Ali (\u{200E}@ali)", null], [$received->type, $received->amount, $received->description, $received->reviewer]);
 
         $row = WalletTransfer::query()->sole();
         self::assertSame($transfer->id, $row->id);
@@ -79,26 +79,28 @@ final class WalletTransfersTest extends DatabaseTestCase
 
         $ledger = static fn(array $lines): array => array_map(static fn(array $line): array => [$line['description'], $line['counterpart']['id'] ?? null], $lines);
         self::assertSame([
-            ['دریافت موجودی از Sara Ahmadi (@sara)', $this->sara->id],
-            ['انتقال موجودی به Sara Ahmadi (@sara)', $this->sara->id],
+            ["دریافت موجودی از \u{200E}Sara Ahmadi (\u{200E}@sara)", $this->sara->id],
+            ["انتقال موجودی به \u{200E}Sara Ahmadi (\u{200E}@sara)", $this->sara->id],
             ['test', null],
         ], $ledger($this->service(UserDirectory::class)->ledger($this->ali)));
         self::assertSame(UserDirectory::presentRef($this->ali), $this->service(UserDirectory::class)->ledger($this->sara)[0]['counterpart'], 'whom it went to');
     }
 
+    /** After a left-to-right mark: a handle or a number alone would read «reza@», «12#» after the Persian words. */
     public function testALineNamesAnotherCustomerAsTheyCanBeTold(): void
     {
         $this->walletTransfersOn();
         $nameless = $this->customer(['telegram_id' => 7272, 'first_name' => null, 'username' => 'reza']);
         $handleless = $this->customer(['telegram_id' => 7373, 'first_name' => 'Mina']);
         $bare = $this->customer(['telegram_id' => 7474, 'first_name' => null]);
+        $website = $this->customer(['telegram_id' => null, 'first_name' => null, 'email' => 'nameless@example.com']);
 
-        foreach ([$nameless, $handleless, $bare] as $to) {
+        foreach ([$nameless, $handleless, $bare, $website] as $to) {
             $this->transfers()->transfer($this->ali, $to, 10_000);
         }
 
         self::assertSame(
-            ['انتقال موجودی به @reza', 'انتقال موجودی به Mina', 'انتقال موجودی به 7474'],
+            ["انتقال موجودی به \u{200E}@reza", "انتقال موجودی به \u{200E}Mina", "انتقال موجودی به \u{200E}7474", "انتقال موجودی به \u{200E}#{$website->id}"],
             WalletTransaction::query()->where('user_id', $this->ali->id)->where('type', 'debit')->oldest('id')->pluck('description')->all(),
         );
     }
@@ -109,10 +111,10 @@ final class WalletTransfersTest extends DatabaseTestCase
 
         $this->transfers()->transfer($this->ali, $this->sara, 30_000);
 
-        $received = self::text(BotText::WalletReceived, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => 'Ali (@ali)', 'balance' => '۳۰٬۰۰۰ تومان']);
+        $received = self::text(BotText::WalletReceived, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => "Ali (\u{200E}@ali)", 'balance' => '۳۰٬۰۰۰ تومان']);
         self::assertSame([$received], $this->telegram()->sentTo(self::SARA));
         self::assertSame([], $this->telegram()->sentTo(self::TELEGRAM_ID), 'the bot answered the sender in place');
-        $sent = self::text(BotText::WalletSent, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => 'Sara Ahmadi (@sara)', 'balance' => '۷۰٬۰۰۰ تومان']);
+        $sent = self::text(BotText::WalletSent, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => "Sara Ahmadi (\u{200E}@sara)", 'balance' => '۷۰٬۰۰۰ تومان']);
         self::assertSame([
             [$this->sara->id, NoticeType::WalletReceived, $received],
             [$this->ali->id, NoticeType::WalletSent, $sent],
@@ -125,7 +127,7 @@ final class WalletTransfersTest extends DatabaseTestCase
 
         $this->transfers()->transferById($this->ali, (string) self::SARA, '30000', 'key-1');
 
-        self::assertSame([self::text(BotText::WalletSent, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => 'Sara Ahmadi (@sara)', 'balance' => '۷۰٬۰۰۰ تومان'])], $this->telegram()->sentTo(self::TELEGRAM_ID));
+        self::assertSame([self::text(BotText::WalletSent, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => "Sara Ahmadi (\u{200E}@sara)", 'balance' => '۷۰٬۰۰۰ تومان'])], $this->telegram()->sentTo(self::TELEGRAM_ID));
         self::assertCount(1, $this->telegram()->sentTo(self::SARA));
     }
 
@@ -139,9 +141,9 @@ final class WalletTransfersTest extends DatabaseTestCase
         $report = ReportMessage::query()->sole();
         self::assertSame(Topic::Wallet, $report->topic);
         self::assertSame(implode("\n", [
-            sprintf('💸 <b>انتقال موجودی بین مشتری‌ها</b> · انتقال #%d', $transfer->id),
-            '👤 از: <a href="tg://user?id=' . self::TELEGRAM_ID . '">Ali</a> · @ali · <code>' . self::TELEGRAM_ID . '</code>',
-            '👤 به: <a href="tg://user?id=' . self::SARA . '">Sara Ahmadi</a> · @sara · <code>' . self::SARA . '</code>',
+            sprintf("💸 <b>انتقال موجودی بین مشتری‌ها</b> · انتقال \u{200E}#%d", $transfer->id),
+            '👤 از: <a href="tg://user?id=' . self::TELEGRAM_ID . '">Ali</a> · ' . "\u{200E}@ali · <code>" . self::TELEGRAM_ID . '</code>',
+            '👤 به: <a href="tg://user?id=' . self::SARA . '">Sara Ahmadi</a> · ' . "\u{200E}@sara · <code>" . self::SARA . '</code>',
             '💳 مبلغ: ۳۰٬۰۰۰ تومان',
             '👛 موجودی فرستنده: ۷۰٬۰۰۰ تومان · گیرنده: ۳۰٬۰۰۰ تومان',
         ]), $report->text);

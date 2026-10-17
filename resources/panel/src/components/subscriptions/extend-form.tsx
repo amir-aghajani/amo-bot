@@ -50,10 +50,10 @@ export function ExtendForm({ subscription, traffic, invalidates, onCancel, onExt
   return (
     <form onSubmit={extend} noValidate className="grid gap-4">
       <GrantAmountFields values={values} change={patch} error={error} days={daysHint(subscription)} traffic={trafficHint(subscription, agentShop, traffic)} />
-      <Field id={`${id}-note`} label="توضیح برای مشتری" optional error={error('note')} hint="در پیام ربات به مشتری نشان داده می‌شود.">
+      <Field id={`${id}-note`} label="توضیح برای مشتری" optional error={error('note')} hint="در پیامی که مشتری در تلگرام یا با ایمیل می‌گیرد نشان داده می‌شود.">
         <NoteInput rows={2} value={values.note} onChange={(e) => patch({ note: e.target.value })} placeholder="مثلا: جبران قطعی دیروز" />
       </Field>
-      <GrantOption label="پیام به مشتری" hint="مشتری در ربات می‌بیند چه چیزی به سرویسش اضافه شد." checked={values.notify} onCheckedChange={(notify) => patch({ notify })} />
+      <GrantOption label="پیام به مشتری" hint="مشتری در تلگرام یا با ایمیل می‌بیند چه چیزی به سرویسش اضافه شد." checked={values.notify} onCheckedChange={(notify) => patch({ notify })} />
       <FormActions error={formError} onCancel={onCancel} submitLabel="افزایش زمان و حجم" busy={busy} icon={Gift} dirty={dirty} />
     </form>
   )

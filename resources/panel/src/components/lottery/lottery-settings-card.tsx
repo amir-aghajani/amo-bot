@@ -1,4 +1,4 @@
-import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
+import { useBotSettingsGroup, useHeldWhile } from '@/components/bot/settings/use-bot-settings-group'
 import { Field, FieldGroup } from '@/components/field'
 import { HourSelect } from '@/components/hour-select'
 import { PageTabs, type PageTab } from '@/components/page-tabs'
@@ -9,10 +9,10 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotLotterySettingsRequest, BotSettingsData, LotteryPrizeKind } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
-import { amountDraft, decimalInput, formatNumber } from '@/lib/format'
+import { amountDraft, decimalInput } from '@/lib/format'
 import { LOTTERY_SETTINGS } from '@/lib/limits'
 import { WHEEL_PRIZE_KIND } from '@/lib/statuses'
-import { trimmed } from '@/lib/use-form'
+import { asNumbers } from '@/lib/use-form'
 
 const PRIZES: PageTab<LotteryPrizeKind>[] = (['wallet', 'traffic', 'days', 'plan'] as const).map((kind) => ({ value: kind, label: WHEEL_PRIZE_KIND[kind] }))
 
@@ -64,37 +64,41 @@ function requestOf(values: Draft): BotLotterySettingsRequest {
   return { ...rest, ...amount }
 }
 
+/** The rules as the server keeps them, as the card edits them. */
+function draftOf(settings: BotSettingsData): Draft {
+  return {
+    lottery_enabled: settings.lottery_enabled,
+    lottery_hour: String(settings.lottery_hour),
+    lottery_winners: String(settings.lottery_winners),
+    lottery_prize: settings.lottery_prize,
+    lottery_wallet: amountDraft(settings.lottery_wallet),
+    lottery_traffic_gb: String(settings.lottery_traffic_gb),
+    lottery_days: String(settings.lottery_days),
+    lottery_plan_id: settings.lottery_plan_id === null ? '' : String(settings.lottery_plan_id),
+    lottery_entries: settings.lottery_entries,
+    lottery_exclude_agents: settings.lottery_exclude_agents,
+  }
+}
+
 /**
  * The `lottery` bot-settings group: whether the nightly draw runs, its hour, its winners and prize, how entries count
  * (one per paid order or one per buyer) and whether agents take part.
  */
 export function LotterySettingsCard({ settings }: { settings: BotSettingsData }) {
   const main = useMainShop()
-  const group = useBotSettingsGroup<Draft>(
-    {
-      lottery_enabled: settings.lottery_enabled,
-      lottery_hour: String(settings.lottery_hour),
-      lottery_winners: String(settings.lottery_winners),
-      lottery_prize: settings.lottery_prize,
-      lottery_wallet: amountDraft(settings.lottery_wallet),
-      lottery_traffic_gb: String(settings.lottery_traffic_gb),
-      lottery_days: String(settings.lottery_days),
-      lottery_plan_id: settings.lottery_plan_id === null ? '' : String(settings.lottery_plan_id),
-      lottery_entries: settings.lottery_entries,
-      lottery_exclude_agents: settings.lottery_exclude_agents,
-    },
-    (values) => api.put('/bot/settings/lottery', requestOf(values)),
-    { reads: (values) => trimmed(requestOf(values)) },
-  )
+  const saved = draftOf(settings)
+  // Compared as the request sends them: «۱٬۰۰۰» GB is the 1000 kept, an amount typed for a prize not chosen no change.
+  const group = useBotSettingsGroup<Draft>(saved, (values) => api.put('/bot/settings/lottery', requestOf(values)), { reads: (values) => asNumbers(requestOf(values)) })
   const { values, set, error } = group
-  const off = !values.lottery_enabled
   const prize = values.lottery_prize
+  // While the draw is off its rules wait as they are kept, held; one changed stays open, as the save still carries it.
+  const held = useHeldWhile(!values.lottery_enabled, group, saved)
 
   return (
     <SectionCard
       form={group}
       title="قرعه‌کشی شبانه"
-      description="هر شب در ساعتی که تعیین می‌کنید، از میان مشتری‌هایی که در ۲۴ ساعت گذشته خرید کرده‌اند قرعه کشیده می‌شود؛ جایزه همان لحظه به برنده‌ها داده می‌شود و در ربات خبردار می‌شوند. مدیرهای ربات و مشتری‌های مسدود هیچ‌وقت شرکت داده نمی‌شوند."
+      description="هر شب در ساعتی که تعیین می‌کنید، از میان مشتری‌هایی که از قرعه‌کشی قبلی تا همان لحظه خرید کرده‌اند قرعه کشیده می‌شود (حداکثر ۴۸ ساعت گذشته؛ اولین قرعه‌کشی ۲۴ ساعت گذشته)؛ جایزه همان لحظه به برنده‌ها داده می‌شود و در تلگرام یا با ایمیل خبردار می‌شوند. مدیرهای ربات و مشتری‌های مسدود هیچ‌وقت شرکت داده نمی‌شوند."
     >
       <SwitchRow
         label="قرعه‌کشی شبانه فعال باشد"
@@ -105,11 +109,16 @@ export function LotterySettingsCard({ settings }: { settings: BotSettingsData })
       />
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field id="lottery_hour" label="ساعت قرعه‌کشی" error={error('lottery_hour')} hint="به وقت منطقه زمانی فروشگاه؛ شانس‌ها خریدهای ۲۴ ساعت پیش از همین ساعت است.">
-          {(control) => <HourSelect {...control} value={values.lottery_hour} onChange={(hour) => set('lottery_hour', hour)} disabled={off} className="w-full sm:max-w-40" />}
+        <Field
+          id="lottery_hour"
+          label="ساعت قرعه‌کشی"
+          error={error('lottery_hour')}
+          hint="به وقت منطقه زمانی فروشگاه؛ شانس‌ها خریدهای پرداخت‌شده از قرعه‌کشی قبلی تا همین ساعت است، پس با عوض کردن ساعت هیچ خریدی جا نمی‌ماند یا دو بار حساب نمی‌شود."
+        >
+          {(control) => <HourSelect {...control} value={values.lottery_hour} onChange={(hour) => set('lottery_hour', hour)} disabled={held('lottery_hour')} className="w-full sm:max-w-40" />}
         </Field>
-        <Field id="lottery_winners" label="تعداد برنده‌ها" error={error('lottery_winners')} hint={`بین ۱ تا ${formatNumber(LOTTERY_SETTINGS.WINNERS_MAX)}؛ هر مشتری حداکثر یک بار برنده می‌شود.`}>
-          <Input dir="ltr" inputMode="numeric" value={values.lottery_winners} onChange={(e) => set('lottery_winners', e.target.value)} disabled={off} className="sm:max-w-28" />
+        <Field id="lottery_winners" label="تعداد برنده‌ها" error={error('lottery_winners')} hint={`بین 1 تا ${LOTTERY_SETTINGS.WINNERS_MAX}؛ هر مشتری حداکثر یک بار برنده می‌شود.`}>
+          <Input dir="ltr" inputMode="numeric" value={values.lottery_winners} onChange={(e) => set('lottery_winners', e.target.value)} disabled={held('lottery_winners')} className="sm:max-w-28" />
         </Field>
       </div>
 
@@ -123,7 +132,7 @@ export function LotterySettingsCard({ settings }: { settings: BotSettingsData })
         onChange={(value) => set(PRIZE_FIELD[prize], value)}
         error={error(PRIZE_FIELD[prize])}
         hint={PRIZE_HINT[prize]}
-        disabled={off}
+        disabled={held(PRIZE_FIELD[prize])}
       />
 
       <FieldGroup

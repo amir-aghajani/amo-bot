@@ -62,6 +62,9 @@ describe('the website account', () => {
     if (!newer || !older) throw new Error('Two merged accounts are listed.')
     expect(newer.textContent).toContain('علی')
     expect(within(newer).getByText('#31')).toBeTruthy()
+    // Its Telegram id, set apart: no column shows it here.
+    expect(within(newer).getByText('5151').getAttribute('dir')).toBe('ltr')
+    expect(older.textContent).not.toContain('شناسه تلگرام')
     expect(older.textContent).toContain('old@example.com')
     expect(older.textContent).toContain('با گوگل')
     // Two accounts are made one by the customer alone, from their website.

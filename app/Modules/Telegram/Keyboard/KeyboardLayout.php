@@ -22,6 +22,12 @@ final class KeyboardLayout
     /** How many buttons a row of the bot's plan and location lists holds at most (a plan's, a server's `button_row`). */
     public const ROW_MOST = 3;
 
+    /** The refusal of a plan's or a server's button colour other than STYLES and the client's default. */
+    public const STYLE_REFUSED = 'رنگ دکمه را از میان آبی، سبز و قرمز انتخاب کنید، یا پیش‌فرض تلگرام.';
+
+    /** The refusal of a plan's or a server's `button_row` other than 1 to ROW_MOST. */
+    public const ROW_REFUSED = 'جای دکمه یک ردیف کامل، دو یا سه دکمه در ردیف است.';
+
     /** A button's icon: a premium emoji's id, as Telegram numbers them (digits, a 64-bit number). */
     public const ICON_PATTERN = '/^[0-9]{1,20}$/';
 

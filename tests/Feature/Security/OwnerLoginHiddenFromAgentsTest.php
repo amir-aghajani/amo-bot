@@ -157,7 +157,7 @@ final class OwnerLoginHiddenFromAgentsTest extends HttpTestCase
 
         $lines = CurrentBot::run($this->bot, static fn(): array => ReportMessage::query()->oldest('id')->pluck('text')->all());
         $by = array_values(array_filter(array_merge(...array_map(static fn(string $text): array => explode("\n", $text), $lines)), static fn(string $line): bool => str_starts_with($line, '🎧')));
-        self::assertSame(['🎧 توسط پشتیبانی', '🎧 توسط پشتیبانی', '🎧 توسط پشتیبانی: @agent_shop_bot'], $by, 'the transfer, then each dismissal');
+        self::assertSame(['🎧 توسط پشتیبانی', '🎧 توسط پشتیبانی', "🎧 توسط پشتیبانی: \u{200E}@agent_shop_bot"], $by, 'the transfer, then each dismissal');
         self::assertStringNotContainsString(self::OWNER, implode("\n", $lines));
     }
 

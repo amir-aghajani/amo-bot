@@ -74,8 +74,20 @@ final class BotReceiptTest extends BotTestCase
         $this->send($this->message('واریز کردم'));
 
         self::assertSame([self::text(BotText::ReceiptWaiting)], $this->said());
+        self::assertArrayNotHasKey('reply_markup', $this->params(0), 'no button under it: the way elsewhere it names is /menu, whatever form the menu takes');
         $this->send($this->message(null, ['photo' => [['file_id' => 'r-1']]]));
         self::assertSame('r-1', $payment->refresh()->receipt_file_id, 'still awaited');
+    }
+
+    public function testTheMenuTheRequestForThePictureNamesLeavesTheStep(): void
+    {
+        $payment = $this->transferTo($this->cardMethod());
+        self::assertStringContainsString('/menu', self::text(BotText::ReceiptWaiting));
+
+        $this->send($this->message('/menu'));
+        $this->send($this->message(null, ['photo' => [['file_id' => 'r-1']]]));
+
+        self::assertNull($payment->refresh()->receipt_file_id, 'a picture now is no receipt');
     }
 
     public function testAnythingButAPictureIsRefusedAndThePictureIsStillAwaited(): void
@@ -139,6 +151,25 @@ final class BotReceiptTest extends BotTestCase
         $payment->refresh();
         self::assertSame(PaymentStatus::AwaitingReview, $payment->status);
         self::assertSame(['first-picture', 4320], [$payment->receipt_file_id, $payment->receipt_message_id]);
+    }
+
+    public function testAReceiptSentAsAnAlbumIsItsFirstPictureAndTheOthersPassUnanswered(): void
+    {
+        $payment = $this->transferTo($this->cardMethod());
+
+        $this->send($this->message(null, ['photo' => [['file_id' => 'first']], 'media_group_id' => 'album-1']));
+        self::assertSame([self::text(BotText::ReceiptReceived, ['outcome' => self::text(BotText::ReceiptOutcomeSubscription)])], $this->said());
+
+        // Telegram sends the album's next picture as an update of its own, after the first was answered.
+        $this->send($this->message(null, ['photo' => [['file_id' => 'second']], 'media_group_id' => 'album-1']));
+        self::assertSame([], $this->calls(), 'not «متوجه نشدم», nor «این سفارش دیگر قابل پرداخت نیست»');
+        self::assertSame('first', $payment->refresh()->receipt_file_id);
+
+        // Anything else is no answer to the receipt: served as sent at no step.
+        $this->send($this->message('salam'));
+        self::assertSame([self::text(BotText::Unknown)], $this->said());
+        $this->send($this->message(null, ['photo' => [['file_id' => 'third']], 'media_group_id' => 'album-1']));
+        self::assertSame([self::text(BotText::Unknown)], $this->said(), 'the chat waits on the album no more');
     }
 
     public function testAReceiptThatMeetsACancelInTheSameMomentFindsThePaymentClosed(): void

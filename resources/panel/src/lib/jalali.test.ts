@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setShopTimeZone } from '@/lib/format'
-import { addDays, fromJalali, isDay, monthLength, monthRange, shiftMonth, today, toJalali, weekday } from '@/lib/jalali'
+import { addDays, fromJalali, isDay, monthLength, monthRange, shiftMonth, shopClock, today, toJalali, weekday } from '@/lib/jalali'
 
 /*
  * The Persian calendar the date filters pick days in (lib/jalali), on Intl's own: a Gregorian day and its Jalali date
@@ -31,6 +31,17 @@ describe('today', () => {
     expect(today()).toBe('2026-10-06')
     setShopTimeZone('Not/A_Zone')
     expect(today()).toBe('2026-10-07')
+  })
+})
+
+describe('the shop’s clock', () => {
+  it('reads a moment as the shop’s day and hour, whatever the browser’s zone — midnight as hour 0', () => {
+    setShopTimeZone('Asia/Tehran')
+    expect(shopClock('2026-10-06T20:35:00Z')).toEqual({ day: '2026-10-07', hour: 0 })
+    expect(shopClock(new Date('2026-10-06T14:30:00Z'))).toEqual({ day: '2026-10-06', hour: 18 })
+
+    setShopTimeZone('America/Los_Angeles')
+    expect(shopClock('2026-10-07T02:00:00Z')).toEqual({ day: '2026-10-06', hour: 19 })
   })
 })
 

@@ -71,7 +71,8 @@ final class CustomerOnlinePayments
             $state = $this->payments->check($payment);
         } catch (GatewayUnavailableException $e) {
             if ($e->held) {
-                // What the gateway answered did not fit the payment: held for support from now on (the log says so).
+                // What the gateway answered did not fit the payment, or closed it after saying money had come in on it:
+                // held for support from now on (the log says so).
                 throw new PaymentHeldException($payment);
             }
             $this->logger->warning('Payment {id} was asked about from the website, but its gateway could not be asked: {detail}', ['id' => $payment->id, 'detail' => $e->detail]);

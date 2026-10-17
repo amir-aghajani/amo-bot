@@ -33,7 +33,16 @@ export function RecentUsers({ users, loading }: { users: RecentUser[] | undefine
             <Dash />
           </div>
         ) : users.length === 0 ? (
-          <EmptyState compact icon={Users} title="هنوز کسی ثبت‌نام نکرده است" description="کاربرانی که به ربات /start بزنند این‌جا ظاهر می‌شوند." />
+          <EmptyState
+            compact
+            icon={Users}
+            title="هنوز کسی ثبت‌نام نکرده است"
+            description={
+              <>
+                کاربرانی که به ربات <bdi dir="ltr">/start</bdi> بزنند یا در وب‌سایت ثبت‌نام کنند این‌جا ظاهر می‌شوند.
+              </>
+            }
+          />
         ) : (
           <ul className="grid gap-px sm:grid-cols-2">
             {users.map((user) => (

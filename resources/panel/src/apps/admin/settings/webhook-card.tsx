@@ -96,7 +96,11 @@ export function WebhookCard({ appUrl, webhookUrl }: WebhookCardProps) {
 
         {!https && (
           <Callout tone="warning" icon={CircleAlert}>
-            تلگرام Webhook را فقط روی آدرس https می‌پذیرد و آدرس فروشگاه <bdi dir="ltr">{appUrl || '—'}</bdi> است؛ آن را در بخش{' '}
+            تلگرام Webhook را فقط روی آدرس https می‌پذیرد و آدرس فروشگاه{' '}
+            <bdi dir="ltr" className="break-all">
+              {appUrl || '—'}
+            </bdi>{' '}
+            است؛ آن را در بخش{' '}
             <TextLink inline to="/settings/app">
               برنامه
             </TextLink>{' '}

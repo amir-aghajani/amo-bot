@@ -39,6 +39,24 @@ describe('one line about a customer', () => {
   })
 })
 
+describe('a customer’s handle line', () => {
+  it('runs left to right when it is Latin — a handle, an email —, so one too long is cut at its end, its start kept', () => {
+    render(
+      <>
+        <UserIdentity user={SARA} />
+        <UserIdentity user={AMIR} />
+        <UserIdentity user={{ ...AMIR, id: 12, name: 'رضا', username: null }} />
+      </>,
+      { wrapper: providers().wrapper },
+    )
+
+    expect(screen.getByText('sara@example.com').parentElement?.getAttribute('dir')).toBe('ltr')
+    expect(screen.getByText('@amir').parentElement?.getAttribute('dir')).toBe('ltr')
+    // Persian words keep the page's direction.
+    expect(screen.getByText('بدون نام کاربری').getAttribute('dir')).toBeNull()
+  })
+})
+
 describe('a customer distinguished from every other', () => {
   it('is the name with the handle, else with the Telegram id — two «࿐Âmîr™» are two people', () => {
     expect(distinctUserLabel({ ...AMIR, name: '࿐Âmîr™' })).toBe(`${isolate('࿐Âmîr™')} (${isolate('@amir')})`)
@@ -89,12 +107,23 @@ describe('a customer in a row', () => {
     expect(container.textContent).toContain('مسدود')
   })
 
-  it('makes the name the way to the customer’s page — «بدون نام» standing in for none', () => {
+  it('makes the name the way to the customer’s page — the handle standing in for none, «بدون نام» for neither', () => {
     const { rerender } = render(<UserIdentity user={AMIR} to={userPage(AMIR.id)} />, { wrapper: providers().wrapper })
     expect(screen.getByRole('link', { name: 'امیر' }).getAttribute('href')).toBe('/users/10')
 
     rerender(<UserIdentity user={{ ...AMIR, name: null }} to={userPage(AMIR.id)} />)
+    expect(screen.getByRole('link', { name: '@amir' }).getAttribute('href')).toBe('/users/10')
+
+    rerender(<UserIdentity user={{ ...AMIR, name: null, username: null }} to={userPage(AMIR.id)} />)
     expect(screen.getByRole('link', { name: 'بدون نام' }).getAttribute('href')).toBe('/users/10')
+  })
+
+  it('without a name, is headed by the handle — never «بدون نام» while it has one —, the Telegram id under it', () => {
+    const { container } = render(<UserIdentity user={{ ...AMIR, name: null }} />)
+
+    expect(container.textContent).toBe('@amir123456789')
+    expect(container.textContent).not.toContain('بدون نام')
+    expect(Array.from(container.querySelectorAll('bdi[dir="ltr"]'), (bdi) => bdi.textContent)).toEqual(['@amir', '123456789'])
   })
 })
 
@@ -126,6 +155,14 @@ describe('a customer in a dialog’s facts', () => {
 
     expect(screen.queryByRole('link')).toBeNull()
     expect(screen.getByText('امیر')).toBeTruthy()
+  })
+
+  it('without a name, names the customer by the handle once — never «بدون نام» while they have one', () => {
+    const { container } = facts({ ...AMIR, name: null })
+
+    expect(container.querySelector('dd')?.textContent).toBe('@amir ')
+    expect(screen.getByRole('link', { name: '@amir' }).getAttribute('href')).toBe('/users/10')
+    expect(container.textContent).not.toContain('بدون نام')
   })
 
   it('gives a website customer’s email the line the Telegram id has', () => {

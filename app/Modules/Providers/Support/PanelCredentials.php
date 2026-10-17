@@ -17,7 +17,7 @@ use App\Modules\Providers\Models\Server;
  * `servers.api_token`, `servers.username` and `servers.password` (secrets encrypted). A server keeps one way at a time;
  * which credentials it has is its way in (of()). Every connector's form uses the same fields (fields()); a connector
  * may add fields to the password way (WITH_PASSWORD: 3x-ui's two-factor secret). A secret left blank keeps the stored
- * one only while the panel's address stays on its host (PanelConnection::bound()).
+ * one only while the panel's address stays on its host, and its proxy and TLS check as they were (PanelConnection::bound()).
  */
 final class PanelCredentials
 {
@@ -71,7 +71,7 @@ final class PanelCredentials
                 mismatch: $tokenMismatch,
                 missing: "{$token} را وارد کنید.",
                 boundTo: PanelConnection::bound(),
-                moved: "آدرس پنل عوض شده است؛ {$token} را دوباره وارد کنید.",
+                moved: PanelConnection::MOVED . "{$token} را دوباره وارد کنید.",
                 spec: new FieldSpec($token, hint: $tokenHint, when: [self::MODE => [AuthMode::Token->value]]),
             ),
             new Text('username', 'username', '', label: 'نام کاربری', max: self::USERNAME_MAX, required: true, spec: new FieldSpec('نام کاربری', hint: $loginHint, when: self::WITH_PASSWORD, ltr: true)),
@@ -82,10 +82,10 @@ final class PanelCredentials
                 '',
                 pattern: '/^[^\x00-\x1f\x7f]{1,255}$/u',
                 mismatch: 'رمز عبور حداکثر 255 کاراکتر است، بدون کاراکترهای کنترلی.',
-                hint: static fn(string $password): string => '••••••••',
+                hint: Secret::hidden(),
                 missing: 'رمز عبور را وارد کنید.',
                 boundTo: PanelConnection::bound(),
-                moved: 'آدرس پنل عوض شده است؛ رمز عبور را دوباره وارد کنید.',
+                moved: PanelConnection::MOVED . 'رمز عبور را دوباره وارد کنید.',
                 spec: new FieldSpec('رمز عبور', when: self::WITH_PASSWORD),
             ),
         ];

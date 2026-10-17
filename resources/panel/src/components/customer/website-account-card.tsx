@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { LogOut, ShieldOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmModal } from '@/components/confirm-modal'
+import { FACTS } from '@/components/customer/profile-cards'
 import { Fact, FactList } from '@/components/fact-list'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,9 +16,6 @@ import { formatDate, formatNumber } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 
 /* A customer's account on the shop's website, on their page: how it signs in, the devices signed in, the accounts merged into it. */
-
-/** A fact's column, a little narrower than a dialog's: the card sits in the page's side column. */
-const FACTS = 'grid-cols-[minmax(5.5rem,auto)_1fr] gap-x-4 gap-y-2.5'
 
 /** What support does to the account: turn two-factor sign-in off, sign it out of every device. */
 type Operation = 'two-factor' | 'sessions'
@@ -157,7 +155,10 @@ function Missing({ children }: { children: string }) {
   return <span className="text-muted-foreground">{children}</span>
 }
 
-/** An account merged into this one (the customer did it on the website): who it was, its old number and when. */
+/**
+ * An account merged into this one (the customer did it on the website): who it was — its Telegram id too, which no
+ * column shows here and may be all a nameless Telegram account has —, its old number and when.
+ */
 function MergedAccount({ merge }: { merge: CustomerMerge }) {
   const { merged } = merge
 
@@ -169,6 +170,14 @@ function MergedAccount({ merge }: { merge: CustomerMerge }) {
         <bdi dir="ltr" className="text-foreground">
           #{merge.merged_user_id}
         </bdi>
+        {merged.telegram_id !== null && (
+          <>
+            {' · شناسه تلگرام '}
+            <bdi dir="ltr" className="text-foreground">
+              {merged.telegram_id}
+            </bdi>
+          </>
+        )}
         {merged.google && ' · با گوگل'} · به درخواست خود مشتری · {formatDate(merge.created_at, { dateStyle: 'medium' })}
       </span>
     </li>

@@ -1,6 +1,28 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+
+/** What useReadFailure() needs of a read (useQuery's result). */
+interface Read {
+  error: Error | null
+  isFetching: boolean
+}
+
+/**
+ * The failure a page draws for a read of its own (a ListView, its list's): the read's error, kept while the read is asked
+ * again. A read with nothing to show goes back to pending without an error as it is asked again — by
+ * «تلاش دوباره» or the live updates —, which would swap the failure, its button and the focus on it for the loading
+ * state until the answer. `retrying` spins the button meanwhile, so a second press asks nothing more. `of` names the read
+ * when it changes under the page (the dashboard's range): one read's failure is never kept for another.
+ */
+export function useReadFailure(read: Read, of: unknown = null): { error: Error | null; retrying: boolean } {
+  const [last, setLast] = useState<{ error: Error; of: unknown } | null>(null)
+  if (read.error !== null && (last?.error !== read.error || last.of !== of)) setLast({ error: read.error, of })
+  else if (read.error === null && !read.isFetching && last !== null) setLast(null)
+  const error = read.error ?? (last !== null && last.of === of && read.isFetching ? last.error : null)
+
+  return { error, retrying: error !== null && read.isFetching }
+}
 
 /**
  * The column a page lives in. `wide` for lists and tables (they use the screen), `default` for pages of cards,

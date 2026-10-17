@@ -7,10 +7,15 @@ namespace App\Modules\Users\Services;
 use App\Core\Database\Sorting;
 use App\Core\Database\UniqueName;
 use App\Core\Exceptions\ValidationException;
+use App\Modules\Auth\Actor;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Auth\StaffGrant;
+use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\CustomerGroup;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
 use App\Support\Validation;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -48,12 +53,20 @@ final class CustomerGroups
     }
 
     /**
+     * From the website, a group a shop's admin is in is not switched to «همکار»: their prices would be the agents'
+     * (UserActions::assignGroups() keeps them out of one the same way).
+     *
      * @param array<string, mixed> $input {name, agent_pricing?}
+     * @throws ActorRefusedException 403 from the website, «همکار» switched on with an admin in the group
      * @throws ValidationException
      */
-    public function update(CustomerGroup $group, array $input): CustomerGroup
+    public function update(CustomerGroup $group, Actor $actor, array $input): CustomerGroup
     {
-        UniqueName::save($group->fill(self::validate($input, $group)), self::TAKEN);
+        $fields = self::validate($input, $group);
+        if ($actor->isStaff() && $fields['agent_pricing'] && !$group->agent_pricing && $group->users()->where('role', UserRole::Admin)->exists()) {
+            throw ActorRefusedException::adminInGroup($group->name);
+        }
+        UniqueName::save($group->fill($fields), self::TAKEN);
 
         return $group->loadCount('users');
     }
@@ -70,20 +83,30 @@ final class CustomerGroups
     }
 
     /**
-     * The groups a customer is in, as the admin ticked them: every one listed, no other.
+     * The groups a customer is in, as the admin ticked them: every one listed, no other. A «همکار» group they are not in
+     * yet sets their prices as the catalogue does: from the website it asks the `catalog` grant (the plain groups, and
+     * one they are in already, do not). Whose account an admin may put in a group is UserActions::assignGroups()'s to say.
      *
      * @param mixed $ids The `group_ids` the panel sent
+     * @return list<int> The groups' ids
+     * @throws ActorRefusedException 403 from the website without `catalog`, a «همکار» group added
      * @throws ValidationException on `group_ids` when one is not a group
      */
-    public function assign(User $user, mixed $ids): void
+    public function assign(User $user, Actor $actor, mixed $ids): array
     {
-        $ids = is_array($ids) ? array_values(array_unique(array_map(static fn(mixed $id): int => (int) $id, $ids))) : null;
-        if ($ids === null || count(array_filter($ids, static fn(int $id): bool => $id <= 0)) > 0 || CustomerGroup::query()->whereIn('id', $ids)->count() !== count($ids)) {
+        // Whole numbers only: "2abc" or a list is no group's id.
+        $ids = is_array($ids) ? array_values(array_unique(array_map(static fn(mixed $id): int => Input::integerOf($id) ?? 0, $ids))) : null;
+        if ($ids === null || in_array(0, $ids, true) || CustomerGroup::query()->whereIn('id', $ids)->count() !== count($ids)) {
             throw ValidationException::on('group_ids', 'یکی از گروه‌ها پیدا نشد؛ صفحه را دوباره باز کنید.');
+        }
+        if (!$actor->holds(StaffGrant::Catalog) && CustomerGroup::query()->whereIn('id', $ids)->where('agent_pricing', true)->whereDoesntHave('users', static fn(Builder $member) => $member->whereKey($user->id))->exists()) {
+            throw ActorRefusedException::agentGroupNotGranted();
         }
 
         $user->groups()->sync($ids);
         $user->unsetRelation('groups');
+
+        return $ids;
     }
 
     /** @return array<string, mixed> One row, its customers counted with it (withCount()/loadCount()). */

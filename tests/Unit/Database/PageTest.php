@@ -179,6 +179,15 @@ final class PageTest extends DatabaseTestCase
         self::assertSame('', Page::term(['search' => ['nested']]), 'not a scalar');
     }
 
+    public function testANumberCopiedFromABotMessageStillNamesItsRow(): void
+    {
+        // The bot's «سفارش #12» carries a left-to-right mark before the «#»; an isolate may come along from the panel.
+        self::assertSame('#12', Page::term(['search' => "\u{200E}#12"]));
+        self::assertSame(12, PageRequest::fromQuery(['search' => " \u{200E}#۱۲ "])->row());
+        self::assertSame('#12', Page::term(['search' => "\u{2068}#12\u{2069}"]));
+        self::assertSame('', Page::term(['search' => "\u{200E}"]), 'a mark alone is no search');
+    }
+
     public function testASearchTakesTheTermsWildcardsLiterally(): void
     {
         foreach (['ali_r', 'alixr', '50%_off', '50xxoff', 'wow!', 'wow'] as $n => $name) {

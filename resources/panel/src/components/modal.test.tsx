@@ -7,6 +7,7 @@ import { Modal, useHoldOpen } from '@/components/modal'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/lib/theme'
 import { useUnsavedGuard } from '@/lib/use-unsaved-guard'
+import { resizeWindow } from '@/test/browser'
 import { until } from '@/test/render'
 
 /*
@@ -20,6 +21,21 @@ function Draft() {
   useUnsavedGuard(true)
   return null
 }
+
+/** A gateway's long description, as a method's form dialog opens under it. */
+const DESCRIPTION = 'درگاهی که مبلغ را به کارت فروشنده واریز می‌کند و پرداخت را خودش تایید می‌کند.'
+
+function Described() {
+  return (
+    <Modal open onClose={() => undefined} title="افزودن آبان گیت وی" description={DESCRIPTION}>
+      <input aria-label="کلید API" />
+    </Modal>
+  )
+}
+
+const sheet = () => screen.getByRole('dialog', { name: 'افزودن آبان گیت وی' })
+/** What scrolls in the dialog: the field's place. */
+const scroller = () => screen.getByLabelText('کلید API').parentElement as HTMLElement
 
 function Busy({ busy }: { busy: boolean }) {
   useHoldOpen(busy)
@@ -100,6 +116,44 @@ describe('opening', () => {
     )
 
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'انصراف' }))
+  })
+
+  it('on a phone scrolls its description with what is under it — the title and the ✕ stay —, and is described by it all the same', () => {
+    const { rerender } = render(<Described />)
+
+    expect(scroller().contains(screen.getByText(DESCRIPTION))).toBe(false)
+    expect(sheet().getAttribute('aria-describedby')).toBe(screen.getByText(DESCRIPTION).id)
+
+    act(() => resizeWindow(375))
+    rerender(<Described />)
+
+    expect(scroller().contains(screen.getByText(DESCRIPTION))).toBe(true)
+    expect(screen.getByText('افزودن آبان گیت وی').closest('.overflow-y-auto')).toBeNull()
+    expect(sheet().getAttribute('aria-describedby')).toBe(screen.getByText(DESCRIPTION).id)
+  })
+
+  it('on a phone keeps its keyboard down — the focus on the sheet itself, its name read —, unless typing is its point; its ✕ a finger’s size', () => {
+    resizeWindow(375)
+    const { rerender } = render(
+      <Modal open onClose={() => undefined} title="افزودن پلن">
+        <input aria-label="نام پلن" />
+      </Modal>,
+    )
+
+    expect(document.activeElement).toBe(screen.getByRole('dialog', { name: 'افزودن پلن' }))
+    expect(screen.getByRole('button', { name: 'بستن' }).className).toContain('max-md:size-11')
+
+    rerender(
+      <Modal open={false} onClose={() => undefined} title="ویرایش متن" typing>
+        <textarea aria-label="متن" />
+      </Modal>,
+    )
+    rerender(
+      <Modal open onClose={() => undefined} title="ویرایش متن" typing>
+        <textarea aria-label="متن" />
+      </Modal>,
+    )
+    expect(document.activeElement).toBe(screen.getByLabelText('متن'))
   })
 })
 

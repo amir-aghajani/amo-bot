@@ -6,7 +6,7 @@ import { SectionCard } from '@/components/section-card'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotSettingsData, BotWalletSettingsRequest } from '@/lib/api-types'
-import { formatMoney, formatNumber, wholeNumberOf, wholesOf } from '@/lib/format'
+import { formatMoney, wholeNumberOf, wholesOf } from '@/lib/format'
 import { WALLET_SETTINGS } from '@/lib/limits'
 import { asNumbers, asSet } from '@/lib/use-form'
 
@@ -63,12 +63,7 @@ export function WalletSection({ settings }: { settings: BotSettingsData }) {
         about="کنار مبلغ‌های پیشنهادی، دکمه‌هایی با مبلغ تصادفی؛ هر بار که صفحه شارژ باز می‌شود مبلغ‌های تازه‌ای کشیده می‌شود، هر کدام بین کمترین و بیشترین مبلغ، گردشده و هیچ‌کدام تکراری یا برابر یک مبلغ پیشنهادی نیست."
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            id="wallet_topup_random_count"
-            label="تعداد دکمه‌ها"
-            error={error('topup_random_count')}
-            hint={`۰ یعنی بدون دکمه تصادفی؛ حداکثر ${formatNumber(WALLET_SETTINGS.RANDOM_BUTTONS_MOST)}.`}
-          >
+          <Field id="wallet_topup_random_count" label="تعداد دکمه‌ها" error={error('topup_random_count')} hint={`0 یعنی بدون دکمه تصادفی؛ حداکثر ${WALLET_SETTINGS.RANDOM_BUTTONS_MOST}.`}>
             <Input dir="ltr" inputMode="numeric" value={values.topup_random_count} onChange={(e) => set('topup_random_count', e.target.value)} />
           </Field>
           <MoneyField
@@ -78,7 +73,7 @@ export function WalletSection({ settings }: { settings: BotSettingsData }) {
             onChange={(amount) => set('topup_random_round', amount)}
             reads={wholeNumberOf}
             error={error('topup_random_round')}
-            hint="مثلا ۱۰۰۰ یعنی مبلغ‌ها هزار تومانی گرد می‌شوند."
+            hint="مثلا 1000 یعنی مبلغ‌ها هزار تومانی گرد می‌شوند."
           />
           <MoneyField
             id="wallet_topup_random_min"
@@ -111,7 +106,7 @@ export function WalletSection({ settings }: { settings: BotSettingsData }) {
         says={(money) =>
           `به هر شارژ کیف پول با کارت به کارت، مبلغی تصادفی بین ۱ تا ${money} اضافه می‌شود تا هر واریز مبلغی متفاوت داشته باشد و رسیدش راحت پیدا شود؛ مشتری همه مبلغ را واریز می‌کند و همه به کیف پولش می‌رود.`
         }
-        hint={`۰ یعنی خاموش. روشن که باشد، به هر شارژ کیف پول با کارت به کارت مبلغی تصادفی (تا ${formatMoney(WALLET_SETTINGS.UNIQUE_MAX)}) اضافه می‌شود تا هر واریز مبلغی متفاوت داشته باشد و رسیدش راحت پیدا شود.`}
+        hint={`0 یعنی خاموش. روشن که باشد، به هر شارژ کیف پول با کارت به کارت مبلغی تصادفی (تا ${WALLET_SETTINGS.UNIQUE_MAX} تومان) اضافه می‌شود تا هر واریز مبلغی متفاوت داشته باشد و رسیدش راحت پیدا شود.`}
         inputClassName="sm:max-w-xs"
       />
     </SectionCard>

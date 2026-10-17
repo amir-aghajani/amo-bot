@@ -1,3 +1,5 @@
+[فارسی](fa/Releasing.md)
+
 # Releasing
 
 A release is one zip a shop owner uploads to their host — the app, its PHP packages without the development ones, the
@@ -58,10 +60,14 @@ that writes zips (Windows 10+, macOS) or `zip` (Linux), and, to sign, PHP's sodi
 
 ## Publishing it
 
-1. In [Releases](Releases.md), rename the `## Unreleased` heading to the version's (`## Version 1.2.3`) and start a new,
-   empty `## Unreleased` above it.
-2. Set `Application::VERSION`, commit, and push a tag `v<version>` — `v1.2.3` for `1.2.3` — on a commit CI passed on
-   every PHP version.
+1. In [Releases](Releases.md) (`docs/Releases.md`, the source of the release notes), rename the `## Unreleased` heading
+   to the version's (`## Version 1.2.3`) and start a new, empty `## Unreleased` above it. Then bring its Persian
+   translation, `docs/fa/Releases.md`, up to date: translate what the version's section gained since the Persian page
+   was last updated, rename its `## در دست ساخت` heading to `## نسخه 1.2.3`, and start a new, empty `## در دست ساخت`
+   above it. The release workflow reads the English page only.
+2. Set `Application::VERSION`, commit, and push `main`.
+3. Wait for CI to pass on that commit, on every PHP version — only then push the tag `v<version>` (`v1.2.3` for
+   `1.2.3`) on it. A tag is what publishes the release.
 
 `.github/workflows/release.yml` checks that the tag names `Application::VERSION`, that `docs/Releases.md` has the version's
 section and that the signing secret is set — no unsigned release is ever published —, runs `composer check` (on PHP

@@ -2,17 +2,23 @@
 export const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
 /**
- * Text with its `%variables%` set apart left to right, so a token inside Persian reads whole instead of losing its
- * percent signs to the other side.
+ * What runs left to right inside a Persian sentence about a text: a `%variable%`, a command («/menu»), a handle
+ * («@BotFather») or a start link's parameter («?start=usertest») — not a path's or an address's part.
+ */
+const TOKEN = /(%[A-Za-z_][A-Za-z0-9_]*%|(?<![\w./:?=-])[/@?][A-Za-z][\w=-]*)/g
+
+/**
+ * Text with its tokens (`%variables%`, commands, handles) set apart left to right, so one inside Persian reads whole
+ * instead of losing its «%», «/» or «@» to the other side («menu/»).
  */
 export function WithTokens({ text }: { text: string }) {
   return (
     <>
-      {/* split() puts each captured name between the runs of text around it: every odd part is a variable's name. */}
-      {text.split(VARIABLE).map((part, i) =>
+      {/* split() puts each captured token between the runs of text around it: every odd part is a token. */}
+      {text.split(TOKEN).map((part, i) =>
         i % 2 === 1 ? (
           <bdi key={i} dir="ltr">
-            %{part}%
+            {part}
           </bdi>
         ) : (
           part

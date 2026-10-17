@@ -1,6 +1,6 @@
 import type { QueryKey } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { OrderKindsField, PlansField } from '@/components/discounts/targets'
+import { OrderKindsField, PlansField, targetsRead } from '@/components/discounts/targets'
 import { windowEnd, windowRequest, type WindowEnd } from '@/components/discounts/window'
 import { WindowField } from '@/components/discounts/window-field'
 import { Field } from '@/components/field'
@@ -9,7 +9,7 @@ import { SwitchRow } from '@/components/switch-row'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { OwnOrderType, SaleRequest, SaleRow } from '@/lib/api-types'
-import { useForm } from '@/lib/use-form'
+import { asWhole, trimmed, useForm } from '@/lib/use-form'
 
 interface SaleFormProps {
   sale: SaleRow | null
@@ -41,6 +41,11 @@ function requestOf(draft: Draft): SaleRequest {
   }
 }
 
+/** The draft as the server reads it, for `dirty`: its name trimmed, its percent by its digits, what it applies to as sets. */
+function readOf(draft: Draft): unknown {
+  return trimmed({ ...requestOf(draft), percent: asWhole(draft.percent), order_types: targetsRead(draft.order_types), plan_ids: targetsRead(draft.plan_ids) })
+}
+
 /** A timed sale created or edited: the name customers see, its percent off, the order kinds and plans, and its window. */
 export function SaleForm({ sale, invalidates, onSaved, onCancel }: SaleFormProps) {
   const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(
@@ -53,7 +58,7 @@ export function SaleForm({ sale, invalidates, onSaved, onCancel }: SaleFormProps
       ends: windowEnd(sale?.ends_at ?? null, '23'),
       enabled: sale?.enabled ?? true,
     },
-    { reads: requestOf },
+    { reads: readOf },
   )
 
   const save = handleSubmit(async () => {

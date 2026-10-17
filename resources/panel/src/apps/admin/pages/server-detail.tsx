@@ -4,7 +4,7 @@ import { PlugZap } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router'
 import { BackLink } from '@/components/back-link'
 import { ErrorState } from '@/components/error-state'
-import { Page } from '@/components/page'
+import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { DeleteCard } from '@/components/servers/delete-card'
 import { GrantsCard } from '@/components/servers/grants-card'
@@ -17,7 +17,7 @@ import { TestAccountCard } from '@/components/servers/test-account-card'
 import { useServer, type ServerPage } from '@/components/servers/use-server'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { DriverDescription, Probe, ServerRow } from '@/lib/api-types'
 import { useTitleSubject } from '@/lib/document-title'
@@ -33,11 +33,19 @@ function createdProbe(state: unknown): Probe | null {
  */
 export function ServerDetailPage() {
   const id = Number(useParams().id)
+
+  // The route stays mounted from one server's address to another's: each server's page starts afresh, so a draft of
+  // one server's connection, a dialog open on it or a check still running is never carried onto the next.
+  return <ServerDetail key={id} id={id} />
+}
+
+function ServerDetail({ id }: { id: number }) {
   const location = useLocation()
   const navigate = useNavigate()
   const [created] = useState(() => createdProbe(location.state))
   const page = useServer(id, created)
   const { detail, check } = page
+  const failed = useReadFailure(detail)
   // The connectors as they describe themselves: the connection's form, and the words the status card says of it.
   const drivers = useQuery(serverDriversQuery)
   useTitleSubject(detail.data?.server.name)
@@ -47,7 +55,7 @@ export function ServerDetailPage() {
     if (location.state !== null) void navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate])
 
-  if (detail.isPending) {
+  if (detail.isPending && failed.error === null) {
     return (
       <Page width="default">
         <BackLink to="/servers">سرورها</BackLink>
@@ -60,12 +68,16 @@ export function ServerDetailPage() {
     )
   }
 
-  if (detail.error) {
+  // A later read that fails (the live updates, the window's focus) is said above the page, which stays as it was — a
+  // connection's draft with it; one that never answered is the page.
+  const failure = failed.error && <ErrorState what="سرور" error={failed.error} onRetry={() => void detail.refetch()} retrying={failed.retrying} />
+
+  if (!detail.data) {
     return (
       <Page width="default">
         <BackLink to="/servers">سرورها</BackLink>
         <PageHeader title="سرور" />
-        <ErrorState what="سرور" error={detail.error} onRetry={() => void detail.refetch()} retrying={detail.isFetching} />
+        {failure}
       </Page>
     )
   }
@@ -87,7 +99,8 @@ export function ServerDetailPage() {
             </span>
           }
           description={
-            <span className="text-footnote" dir="ltr">
+            // An address has no spaces to wrap at: it breaks anywhere rather than past a phone's edge.
+            <span className="text-footnote break-all" dir="ltr">
               {server.base_url}
             </span>
           }
@@ -98,6 +111,8 @@ export function ServerDetailPage() {
           }
         />
       </div>
+
+      {failure}
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="grid min-w-0 content-start gap-4 xl:col-span-2">
@@ -119,21 +134,22 @@ export function ServerDetailPage() {
 
 /** The connection's settings: the server's form on its connector (`driver`), as the connector describes it. */
 function ConnectionCard({ page, server, drivers, driver }: { page: ServerPage; server: ServerRow; drivers: UseQueryResult<DriverDescription[]>; driver: DriverDescription | undefined }) {
+  const failure = useReadFailure(drivers)
+
   return (
     <Card>
       <CardHeader>
         <CardHeading>
           <CardTitle>تنظیمات اتصال</CardTitle>
-          <CardDescription>فیلدهای محرمانه را برای نگه‌داشتن مقدار فعلی خالی بگذارید.</CardDescription>
         </CardHeading>
       </CardHeader>
       <CardContent>
         {driver ? (
           <ServerForm driver={driver} server={server} onSaved={page.saved} />
+        ) : failure.error ? (
+          <ErrorState what="کانکتورها" error={failure.error} onRetry={() => void drivers.refetch()} retrying={failure.retrying} />
         ) : drivers.isPending ? (
           <Skeleton className="h-40 w-full" />
-        ) : drivers.error ? (
-          <ErrorState what="کانکتورها" error={drivers.error} onRetry={() => void drivers.refetch()} retrying={drivers.isFetching} />
         ) : (
           <p className="text-body text-muted-foreground">فرم تنظیمات این کانکتور در این نسخه در دسترس نیست.</p>
         )}

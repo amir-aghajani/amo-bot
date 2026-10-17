@@ -38,6 +38,16 @@ final class RedactTest extends TestCase
         self::assertSame('POST https://shop.example/payments/callback/12/*** -> 503', Redact::text('POST https://shop.example/payments/callback/12/0123456789abcdef0123456789abcdef01234567 -> 503'));
     }
 
+    public function testAKeyAnAddressCarriesInItsQueryIsTakenOut(): void
+    {
+        self::assertSame(
+            'Plisio is out of reach: cURL error 28 for https://api.plisio.net/api/v1/operations/5ee0?api_key=*** (timeout)',
+            Redact::text('Plisio is out of reach: cURL error 28 for https://api.plisio.net/api/v1/operations/5ee0?api_key=Sk_9f8e-7d6c5b4a (timeout)'),
+        );
+        self::assertSame('GET /x?a=1&token=***&b=2', Redact::text('GET /x?a=1&token=abc123&b=2'));
+        self::assertSame('GET /x?keys=1&monkey=2', Redact::text('GET /x?keys=1&monkey=2'), 'only a key of that name');
+    }
+
     public function testAnAddresssLoginIsTakenOut(): void
     {
         self::assertSame('proxy socks5h://***@proxy.example.com:1080 refused', Redact::text('proxy socks5h://shop:s3cret%40pw@proxy.example.com:1080 refused'));

@@ -1,3 +1,5 @@
+[فارسی](fa/Support-Tickets.md)
+
 # Support tickets
 
 «پشتیبانی», in both panels, right under the dashboard: the customers' support conversations. A ticket is a subject, the
@@ -18,19 +20,21 @@ The menu's count, and the dashboard's «تیکت‌های در انتظار پا
 The tabs are «همه» (where it opens), «در انتظار پاسخ» — counted —, «پاسخ‌داده‌شده» and «بسته‌شده». The conversation that
 moved last is first; no column sorts it. Search by a ticket's number (`#12` is ticket 12 alone), the subject or the
 customer; one customer's tickets come from their page («همه تیکت‌ها»). A row: the number, the subject (with the service
-it is about), the customer, its status, its last activity, how many messages, the customer's rating, and «پاسخ» on one
-waiting for you («مشاهده» on the rest).
+it is about), the customer, its status, its last activity, how many messages, the customer's rating (out of five stars),
+and «پاسخ» on one waiting for you («مشاهده» on the rest).
 
 ## A ticket's page
 
 The subject and status, «تیکت #12 · باز شده در …» (and since when it is closed), the customer, the service — a link to
-it —, the customer's rating and note; then the conversation, oldest first: the customer's at the start, support's at
-the end, each with where it was written — «وب‌سایت», «ربات», «پنل», «مدیریت وب‌سایت» (a bot admin on the shop's website),
-«گروه گزارش‌ها» — and, for support's, who wrote it.
+it —, the customer's rating (one to five stars) and note; then the conversation, oldest first: the customer's at the
+start, support's at the end, each with where it was written — «وب‌سایت», «ربات», «پنل», «مدیریت وب‌سایت» (a bot admin on
+the shop's website), «گروه گزارش‌ها» — and, for support's, who wrote it (below).
 A picture opens at full size («دانلود تصویر» for one the browser cannot draw, a phone's HEIC sent as a file).
 
 **«پاسخ به مشتری»**: «متن پاسخ» (4000 characters at most) and, optionally, one picture — JPG, PNG or WebP, 10 MB at most
-—, then «ارسال پاسخ». The ticket becomes «پاسخ‌داده‌شده» and the customer is told: in Telegram, with your picture and the
+—, then «ارسال پاسخ». While it sends, the text and the picture cannot be changed: what goes is what you see. Pressing
+«ارسال پاسخ» again after the panel got no answer never sends the answer twice. The ticket
+becomes «پاسخ‌داده‌شده» and the customer is told: in Telegram, with your picture and the
 buttons «✍️ پاسخ» and «🗂️ مشاهده تیکت» (a long answer cut, the whole on the website), or — a customer Telegram cannot
 reach — by email; the answer is on their website either way. Answering a **closed** ticket opens it again as
 «پاسخ‌داده‌شده», and drops the customer's rating.
@@ -42,8 +46,9 @@ The page's one button follows the status:
 - **«باز کردن دوباره»** — on a closed ticket: it goes back to «در انتظار پاسخ», and the customer is not told. A rated
   ticket asks first: opening it clears the rating (they may rate it again when it closes).
 
-**Who of support wrote** shows to the panel's reader: your login, an agent's «@bot», a bot admin's handle from the
-group or the website. Anyone but you reads your login as «پشتیبانی»; the customer never sees who — every answer is
+**Who of support wrote** shows to the panel's reader beside «پشتیبانی»: your login, an agent's «@bot», or a bot admin —
+from the group or the website — by the first and last name of their account («پشتیبانی · سارا احمدی»), else by their
+handle or number. Anyone but you reads your login as «پشتیبانی» alone; the customer never sees who — every answer is
 «🎧 پشتیبانی» to them. The bot's admins may answer, close and open tickets from the shop's website too, while it lets
 them in ([Website](Website.md#the-shops-admins)).
 
@@ -72,7 +77,7 @@ panel ([Report group](Telegram-Group.md)).
 
 ## Watch out for
 
-- **Opening a ticket in the panel marks nothing read** for the customer, and answering it is what tells them: a ticket
-  you only read stays «در انتظار پاسخ».
+- **Reading a ticket in the panel changes nothing**: the customer is not told you read it, and the ticket stays «در
+  انتظار پاسخ» until you answer — the answer is what tells them.
 - **A ticket opened while no group was connected**, or the topic off, is never reported later: answer it from the panel.
 - **An answer cannot be taken back** — it reached the customer as it was sent.

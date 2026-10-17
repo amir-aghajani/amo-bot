@@ -32,21 +32,30 @@ final class PlanPresenter
      */
     public static function present(Plan $plan, ?PlanCategory $category, array $choices, Buyer $buyer, Quote $offer): array
     {
-        $discount = $offer->automatic;
-
         return self::terms($plan, [
             'first_purchase_price' => $buyer->firstPurchase ? $plan->firstPurchasePrice() : null,
             'agent_price' => $buyer->agent ? $plan->agentPrice() : null,
             'offer_price' => $offer->amount(),
-            'discount' => $discount === null ? null : [
-                'source' => $discount->source->value,
-                'label' => $discount->label,
-                'percent' => $discount->percent,
-                'ends_at' => DiscountForm::moment($discount->endsAt),
-            ],
+            'discount' => self::discount($offer->automatic),
         ]) + [
             'category_id' => $category?->id,
             'locations' => array_map(static fn(array $choice): array => ['id' => $choice['server']->id, 'name' => $choice['server']->name], $choices),
+        ];
+    }
+
+    /**
+     * The automatic discount in a price offered to the reader (a plan's, an extra's), as the website shows it beside what
+     * it leaves: its source, label and percent and, a sale's, when it ends; null for none.
+     *
+     * @return array{source: string, label: string, percent: int|null, ends_at: string|null}|null
+     */
+    public static function discount(?DiscountLine $discount): ?array
+    {
+        return $discount === null ? null : [
+            'source' => $discount->source->value,
+            'label' => $discount->label,
+            'percent' => $discount->percent,
+            'ends_at' => DiscountForm::moment($discount->endsAt),
         ];
     }
 

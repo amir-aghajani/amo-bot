@@ -8,8 +8,8 @@ use App\Core\Exceptions\ValidationException;
 
 /**
  * Reads loosely typed input (JSON, forms, query strings, the bot's typed text) one way everywhere: Persian and Arabic
- * digits count, a non-scalar reads as empty, a native number follows the rules of its text. Text that is not UTF-8 is
- * refused under its field — the database would refuse it with a 500.
+ * digits count, a non-scalar reads as empty (and as a number, a boolean too), a native number follows the rules of its
+ * text. Text that is not UTF-8 is refused under its field — the database would refuse it with a 500.
  */
 final class Input
 {
@@ -21,6 +21,9 @@ final class Input
 
     /** The whole part of an amount: up to twelve digits, or thousands separated by commas or spaces («1,5» is no 15). */
     private const WHOLE = '[0-9]{1,3}(?:[, ][0-9]{3})+|[0-9]{1,12}';
+
+    /** The most an amount reads as: twelve digits. */
+    private const AMOUNT_MOST = 999_999_999_999;
 
     /** A Telegram id: a positive number of at most 16 digits (Telegram's ids fit in 52 bits). */
     private const TELEGRAM_ID = '/^[1-9][0-9]{0,15}$/';
@@ -127,24 +130,29 @@ final class Input
      */
     public static function numbersOf(string $typed): array
     {
-        preg_match_all('/[0-9]{1,3}(?:,[0-9]{3})+(?![0-9])|[^\s,،]+/u', self::numberOf($typed), $matches);
-
-        return $matches[0];
+        // Text that is not UTF-8 matches nothing: it is one part no number reads, never an empty list.
+        return preg_match_all('/[0-9]{1,3}(?:,[0-9]{3})+(?![0-9])|[^\s,،]+/u', self::numberOf($typed), $matches) !== false ? $matches[0] : [$typed];
     }
 
     /**
-     * A whole amount a customer types ("۱۵۰٬۰۰۰ تومان", "150 000", "۲۰ گیگ": a unit word allowed) or the API's own
-     * "150000.00"; null for a fraction, two numbers, words alone or more than twelve digits.
+     * A whole amount of `$unit` a customer types ("۱۵۰٬۰۰۰ تومان", "150 000", "۲۰ گیگ", "۵۰ هزار تومان": the unit's own
+     * words after it allowed, and its scale words before them, Unit::scales()) or the API's own "150000.00"; null for a
+     * fraction, two numbers, words alone, a word that is not `$unit`'s («ریال», «ساعت», «روز» where GB are read: never a
+     * number read in the wrong unit) or more than twelve digits.
      */
-    public static function amountOf(mixed $value): ?int
+    public static function amountOf(mixed $value, Unit $unit): ?int
     {
-        if (preg_match('/^(' . self::WHOLE . ')(?:\.0{1,2})?\s*\p{L}*$/u', self::numberOf($value), $match) !== 1) {
+        $text = str_replace(['ي', 'ك'], ['ی', 'ک'], self::numberOf($value));
+        $scales = $unit->scales();
+        $scaled = $scales === [] ? '' : '(' . implode('|', array_keys($scales)) . ')?[\s\x{200C}]*';
+        if (preg_match('/^(' . self::WHOLE . ')(?:\.0{1,2})?[\s\x{200C}]*' . $scaled . '(?:' . $unit->words() . ')?$/iu', $text, $match) !== 1) {
             return null;
         }
 
         $digits = str_replace([',', ' '], '', $match[1]);
+        $scale = $scales[$match[2] ?? ''] ?? 1;
 
-        return strlen($digits) <= 12 ? (int) $digits : null;
+        return strlen($digits) <= 12 && (int) $digits <= intdiv(self::AMOUNT_MOST, $scale) ? (int) $digits * $scale : null;
     }
 
     /**
@@ -155,7 +163,7 @@ final class Input
      */
     public static function amount(array $input, string $field): ?int
     {
-        return self::amountOf($input[$field] ?? null);
+        return self::amountOf($input[$field] ?? null, Unit::Toman);
     }
 
     /**
@@ -170,7 +178,7 @@ final class Input
         if ($value === null || (is_string($value) && trim($value) === '')) {
             return null;
         }
-        $amount = self::amountOf($value);
+        $amount = self::amountOf($value, Unit::Toman);
 
         return $amount !== null && $amount >= $least && $amount <= $most ? Money::normalize($amount) : false;
     }
@@ -224,19 +232,22 @@ final class Input
         return self::truthy($input['is_active'] ?? $default ?? true);
     }
 
-    /** The value as Latin-digit text, whatever it was sent as; "" for anything that is not a scalar. */
+    /**
+     * The value as Latin-digit text, whatever it was sent as; "" for anything that is not a scalar, and for a boolean — a
+     * JSON `true` is no 1 (a plan's, a service's id).
+     */
     private static function digitsOf(mixed $value): string
     {
-        return Persian::latinDigits(is_scalar($value) ? trim((string) $value) : '');
+        return Persian::latinDigits(is_scalar($value) && !is_bool($value) ? trim((string) $value) : '');
     }
 
     /**
      * An amount as Latin-digit text with its separators kept: «٬» becomes a comma (Persian::latinDigits() would drop it,
-     * and «۱٬۵» is no 15).
+     * and «۱٬۵» is no 15), and any space — a pasted no-break or thin space too — an ASCII one.
      */
     private static function numberOf(mixed $value): string
     {
-        return self::digitsOf(is_scalar($value) ? str_replace('٬', ',', (string) $value) : null);
+        return self::digitsOf(is_string($value) ? preg_replace('/\h/u', ' ', str_replace('٬', ',', $value)) ?? $value : $value);
     }
 
     /**

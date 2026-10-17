@@ -58,6 +58,9 @@ final class EmailSignIn
 
     public const WRONG_PASSWORD = 'رمز عبور درست نیست.';
 
+    /** The account's password asked again before a change (confirm()), and left blank. */
+    public const NO_PASSWORD = 'رمز عبور حساب را وارد کنید.';
+
     /** The longest invite code read: a code is eight characters. */
     private const REFERRAL_MAX = 32;
 
@@ -331,7 +334,7 @@ final class EmailSignIn
     public function confirm(User $user, ServerRequestInterface $request, string $password, string $field): void
     {
         if ($password === '') {
-            throw ValidationException::on($field, 'رمز عبور حساب را وارد کنید.');
+            throw ValidationException::on($field, self::NO_PASSWORD);
         }
         $hash = $user->password_hash;
         if (!$this->throttle->password(SignInThrottle::WEBSITE, $request, $user->email, static fn(): bool => $hash !== null && password_verify($password, $hash))) {

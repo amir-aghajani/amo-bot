@@ -1,3 +1,5 @@
+[فارسی](fa/Test-Accounts.md)
+
 # Test accounts
 
 A free test account («اکانت تست») is a small service a customer takes in the bot to try the shop before buying: a few
@@ -66,7 +68,10 @@ Put it in a channel post or an advert. `/free`, typed in the bot, opens the same
 
 «🧪 اکانت تست», `/free` or the link opens the test screen: «🧪 اکانت تست رایگان», a line for each server giving a test now
 — its name, traffic and term, and «(از اولین اتصال)» when the term counts from the first connection («🌍 آلمان: ۵۰۰
-مگابایت، ۱ روز (از اولین اتصال)») —, and a button for each («🌍 آلمان»), in the servers' order.
+مگابایت، ۱ روز (از اولین اتصال)») —, and a button for each («🌍 آلمان»), in the servers' order, with the colour and width
+its server's form gives it, as a purchase's servers have ([Servers](Servers.md)). More than 20 servers come in pages of
+20, with «بعدی» and «قبلی» under them. A server whose test would end after [the last day](Services.md#watch-out-for)
+the shop can keep is not offered.
 
 A tap makes the test there and sends it in place of the screen, as a bought service comes — a QR card of its link, or
 the link as text —: «🧪 اکانت تست رایگان شما آماده است», with its name, location, traffic, end and link, and «📊 مشاهده
@@ -101,7 +106,8 @@ had; «سروری برای اکانت تست نیست» only when no server is l
 - **The shop** gives at most «سقف روزانه فروشگاه» a day, counted from midnight on the shop's clock — the bot's admins'
   tests among them.
 - **Newcomers only** refuses a customer with a purchase that had a price — paid at some point, whatever came of it
-  since. A free plan, a gift and a test make no buyer.
+  since: a refunded one too, though a refund makes the customer a newcomer again for
+  [first-purchase prices](Plans.md#first-purchase-price). A free plan, a gift and a test make no buyer.
 - **The bot's admins** are held to the switch alone — no quota, no newcomers' rule, and the cap never refuses them —, to
   try it as often as they like; their tests still count toward the cap.
 - **Two taps at once** never take more than the quota: the test is judged and counted before the panel is asked. A

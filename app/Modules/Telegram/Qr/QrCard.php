@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Qr;
 
 use App\Core\Support\Picture;
+use App\Modules\Telegram\Api\Limits;
 use chillerlan\QRCode\Common\EccLevel;
 use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QRCodeException;
 use chillerlan\QRCode\QROptions;
 use Psr\Log\LoggerInterface;
 
 /**
  * The QR card a delivered service comes with: the subscription link as a QR code on a white plate centred on the
- * background. Needs GD; without it (or with a background GD cannot read) render() gives null and the text goes alone.
+ * background — a background too small to hold the code readably is drawn larger first. Needs GD; without it (or with a
+ * background GD cannot read, data no code can hold, or a card Telegram would not take as a photo) render() gives null
+ * and the text goes alone.
  */
 final class QrCard
 {
@@ -21,6 +25,9 @@ final class QrCard
 
     /** Modules of white around the code on each side (the QR standard asks for four). */
     private const QUIET = 4;
+
+    /** The fewest pixels a module is drawn with: smaller, and the code blurs away in the JPEG Telegram makes of the picture. */
+    private const MIN_MODULE = 4;
 
     /** Corner radius of the plate as a share of its side. */
     private const CORNER = 0.075;
@@ -41,20 +48,28 @@ final class QrCard
             return null;
         }
 
-        $image = $this->canvas();
+        try {
+            $matrix = (new QRCode(new QROptions(['eccLevel' => EccLevel::M, 'addQuietzone' => false])))->addByteSegment($data)->getQRMatrix();
+        } catch (QRCodeException $e) {
+            // An empty link, or one longer than a code holds: no code, never no delivery.
+            $this->logger->warning('QR code skipped: the link cannot be drawn as a code ({message}).', ['message' => $e->getMessage()]);
+
+            return null;
+        }
+        $modules = $matrix->getMatrix(true);
+        // The plate's side, in modules: the code and its quiet zone.
+        $side = $matrix->getSize() + 2 * self::QUIET;
+
+        $image = $this->canvas($side);
         if ($image === null) {
             return null;
         }
 
         try {
-            $matrix = (new QRCode(new QROptions(['eccLevel' => EccLevel::M, 'addQuietzone' => false])))->addByteSegment($data)->getQRMatrix();
-            $modules = $matrix->getMatrix(true);
-            $count = $matrix->getSize();
-
             $width = imagesx($image);
             $height = imagesy($image);
-            $module = intdiv((int) round(min($width, $height) * self::PLATE), $count + 2 * self::QUIET);
-            $plate = $module * ($count + 2 * self::QUIET);
+            $module = intdiv((int) round(min($width, $height) * self::PLATE), $side);
+            $plate = $module * $side;
             $left = intdiv($width - $plate, 2);
             $top = intdiv($height - $plate, 2);
 
@@ -74,15 +89,24 @@ final class QrCard
 
             ob_start();
             imagejpeg($image, null, self::JPEG_QUALITY);
+            $jpeg = (string) ob_get_clean();
+            if (strlen($jpeg) > Limits::PHOTO_BYTES) {
+                $this->logger->warning('QR code skipped: the card is {bytes} bytes, more than Telegram takes as a photo.', ['bytes' => strlen($jpeg)]);
 
-            return (string) ob_get_clean();
+                return null;
+            }
+
+            return $jpeg;
         } finally {
             imagedestroy($image);
         }
     }
 
-    /** The background as a truecolor GD image, or null when GD cannot read it — or must not. */
-    private function canvas(): ?\GdImage
+    /**
+     * The background as a truecolor GD image the plate's `$side` modules fit on at MIN_MODULE pixels each (a smaller
+     * picture drawn larger), or null when GD cannot read it — or must not.
+     */
+    private function canvas(int $side): ?\GdImage
     {
         $background = $this->background->image();
         // Judged by its header before anything is decoded: a picture over the limit (one put on disk by hand — an upload
@@ -105,7 +129,29 @@ final class QrCard
         // black (imagecolorallocate gives false); truecolor always has.
         imagepalettetotruecolor($image);
 
-        return $image;
+        return $this->roomFor($image, $side);
+    }
+
+    /**
+     * The picture as it is when its shorter side holds the plate's `$side` modules at MIN_MODULE pixels, else drawn larger
+     * until it does; null when what it would be is no photo Telegram takes (Limits::isPhoto(): a sliver of a picture, a
+     * banner) or past QrBackground::MAX_PIXELS.
+     */
+    private function roomFor(\GdImage $image, int $side): ?\GdImage
+    {
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $scale = max(1, ceil($side * self::MIN_MODULE / self::PLATE) / min($width, $height));
+        [$cardWidth, $cardHeight] = [(int) ceil($width * $scale), (int) ceil($height * $scale)];
+        if (!Limits::isPhoto($cardWidth, $cardHeight) || $cardWidth * $cardHeight > QrBackground::MAX_PIXELS) {
+            imagedestroy($image);
+            $this->logger->warning('QR code skipped: the background ({width}x{height}) cannot make a card Telegram takes as a photo.', ['width' => $width, 'height' => $height]);
+
+            return null;
+        }
+
+        // Drawn larger as Picture draws every picture anew, never by imagescale() (libgd's scalers, Picture::fitted()).
+        return $scale > 1 ? Picture::resized($image, $cardWidth, $cardHeight) : $image;
     }
 
     private function roundedSquare(\GdImage $image, int $left, int $top, int $side, int $radius, int $color): void

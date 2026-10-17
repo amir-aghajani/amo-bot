@@ -11,6 +11,7 @@ use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
+use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Telegram\Notifications\ServiceCard;
@@ -121,6 +122,23 @@ final class AutoApproveReceiptsTest extends DatabaseTestCase
         self::assertSame([], FakeProvider::$created);
         self::assertSame([], $this->telegram()->calls());
         self::assertFalse($logs->hasErrorRecords(), 'a decision that lost is no failure');
+    }
+
+    public function testAReceiptSupportRefusedAsTheTimerReachedItStaysRefused(): void
+    {
+        $payment = $this->receiptOn($this->timed);
+        Carbon::setTestNow(now()->addHours(2));
+        // The timer read it in review; support refused it before the timer's turn came (a delivery before it was slow).
+        $read = Payment::query()->with(['method', 'order'])->findOrFail($payment->id);
+        $this->service(PaymentActions::class)->reject($payment, $this->panelActor(), 'رسید جعلی است');
+        $told = $this->telegram()->sentTo(self::TELEGRAM_ID);
+
+        self::assertFalse($this->service(PaymentActions::class)->autoApprove($read));
+
+        self::assertSame([PaymentStatus::Failed, 'رسید جعلی است'], [$payment->refresh()->status, $payment->note]);
+        self::assertSame(OrderStatus::Pending, $payment->order->status);
+        self::assertSame([], FakeProvider::$created, 'nothing delivered for a refused receipt');
+        self::assertSame($told, $this->telegram()->sentTo(self::TELEGRAM_ID), 'the customer heard the refusal alone');
     }
 
     public function testTheCustomerIsToldWhenFulfilmentFailsAfterAutoApproval(): void

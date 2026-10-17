@@ -6,6 +6,7 @@ namespace Tests\Unit\Support;
 
 use App\Core\Exceptions\ValidationException;
 use App\Support\Input;
+use App\Support\Unit;
 use App\Support\Validation;
 use PHPUnit\Framework\TestCase;
 
@@ -58,19 +59,105 @@ final class InputTest extends TestCase
 
     public function testAWholeAmountTakesSeparatorsAUnitAndAZeroFractionButNotAFraction(): void
     {
-        self::assertSame(150000, Input::amountOf('۱۵۰٬۰۰۰ تومان'));
-        self::assertSame(150000, Input::amountOf('150,000'));
-        self::assertSame(150000, Input::amountOf('150 000'));
-        self::assertSame(20, Input::amountOf('۲۰ گیگ'));
-        self::assertSame(20, Input::amountOf('20گیگ'), 'the unit right after the number');
-        self::assertSame(999_999_999_999, Input::amountOf('999999999999'));
-        self::assertSame(50000, Input::amountOf('50000.00'), "the Store API's own form of an amount: a fraction of zero");
-        self::assertSame(50000, Input::amountOf('50000.0'));
+        self::assertSame(150000, Input::amountOf('۱۵۰٬۰۰۰ تومان', Unit::Toman));
+        self::assertSame(150000, Input::amountOf('150,000', Unit::Toman));
+        self::assertSame(150000, Input::amountOf('150 000', Unit::Toman));
+        self::assertSame(20, Input::amountOf('۲۰ گیگ', Unit::Gigabyte));
+        self::assertSame(20, Input::amountOf('20گیگ', Unit::Gigabyte), 'the unit right after the number');
+        self::assertSame(999_999_999_999, Input::amountOf('999999999999', Unit::Toman));
+        self::assertSame(50000, Input::amountOf('50000.00', Unit::Toman), "the Store API's own form of an amount: a fraction of zero");
+        self::assertSame(50000, Input::amountOf('50000.0', Unit::Toman));
 
         foreach (['1.5', '۱٫۵ گیگ', '10 20', 'تومان', '', '1,50', '۱٬۵', '1000000000000', '-5', 'ده هزار', '50000.50', '150.000', '50000.'] as $typed) {
-            self::assertNull(Input::amountOf($typed), $typed);
+            foreach (Unit::cases() as $unit) {
+                self::assertNull(Input::amountOf($typed, $unit), "{$typed} ({$unit->name})");
+            }
         }
-        self::assertNull(Input::amountOf(['150000']));
+        self::assertNull(Input::amountOf(['150000'], Unit::Toman));
+    }
+
+    /** «هزار» and «میلیون» multiply, as a customer means them; a word it does not know is no unit to read past. */
+    public function testThousandsAndMillionsCountAndAnUnknownWordIsNoUnit(): void
+    {
+        self::assertSame(50_000, Input::amountOf('۵۰ هزار', Unit::Toman), 'never 50');
+        self::assertSame(50_000, Input::amountOf('۵۰ هزار تومان', Unit::Toman));
+        self::assertSame(50_000, Input::amountOf('50هزارتومن', Unit::Toman));
+        self::assertSame(50_000, Input::amountOf("۵۰ هزار\u{200C}تومان", Unit::Toman), 'a zero-width non-joiner between the words');
+        self::assertSame(2_000_000, Input::amountOf('۲ میليون', Unit::Toman), 'an Arabic keyboard\'s yeh');
+        self::assertSame(1_500_000, Input::amountOf('1,500 هزار', Unit::Toman));
+        self::assertSame(
+            [30, 2, 2, 20, 20],
+            [Input::amountOf('۳۰ روز', Unit::Day), Input::amountOf('۲ کاربره', Unit::Device), Input::amountOf('2 كاربر', Unit::Device), Input::amountOf('20 GB', Unit::Gigabyte), Input::amountOf('۲۰ گیگابایت', Unit::Gigabyte)],
+            'each step\'s own unit',
+        );
+        self::assertSame(999_999_000_000, Input::amountOf('999999 میلیون', Unit::Toman));
+        self::assertSame(
+            [20, 2, 50_000, 50_000],
+            [Input::amountOf('۲۰ گیگی', Unit::Gigabyte), Input::amountOf('۲ نفره', Unit::Device), Input::amountOf('۵۰ هزار تومانی', Unit::Toman), Input::amountOf('50000 تومنی', Unit::Toman)],
+            'a unit as a customer says it of a service («سرویس ۲۰ گیگی»), as read before units were known',
+        );
+
+        foreach (['۵۰۰ ریال', '۲ ساعت', '۱ ماه', '50k', '۵۰ هزار ریال', '۵۰ تومان هزار', '1000000 میلیون', '۵۰ هزار هزار'] as $typed) {
+            self::assertNull(Input::amountOf($typed, Unit::Toman), $typed);
+        }
+    }
+
+    /** Each step reads its own unit's words and no other's: «۲۰ روز» typed where GB are awaited is no 20 GB. */
+    public function testAnotherUnitsWordIsNoAmount(): void
+    {
+        $typed = [
+            Unit::Toman->name => ['۲۰ تومان', '۲۰ ت', '20 toman'],
+            Unit::Gigabyte->name => ['۲۰ گیگ', '۲۰ گیگا', '۲۰ گیگی', '20 GB', '20g'],
+            Unit::Day->name => ['۲۰ روز', '۲۰ روزه', '20 days', '20 day'],
+            Unit::Device->name => ['۲۰ کاربر', '۲۰ کاربره', '۲۰ نفر', '۲۰ نفره', '۲۰ دستگاه', '20 devices', '20 users'],
+        ];
+        foreach (Unit::cases() as $unit) {
+            foreach ($typed as $words => $amounts) {
+                foreach ($amounts as $amount) {
+                    self::assertSame($words === $unit->name ? 20 : null, Input::amountOf($amount, $unit), "{$amount} read as {$unit->name}");
+                }
+            }
+        }
+    }
+
+    /**
+     * Money and GB are counted in thousands («۵ هزار گیگ»: an agent buys traffic so), money alone in millions; days and
+     * devices are typed as digits.
+     */
+    public function testOnlyMoneyAndTrafficAreCountedInThousands(): void
+    {
+        self::assertSame(
+            [5_000, 5_000, 2_000, 2_000, 2_000_000],
+            [Input::amountOf('۵ هزار گیگ', Unit::Gigabyte), Input::amountOf('5هزارگیگابایت', Unit::Gigabyte), Input::amountOf('۲ هزار', Unit::Gigabyte), Input::amountOf('۲ هزار', Unit::Toman), Input::amountOf('۲ میلیون', Unit::Toman)],
+        );
+
+        foreach (['۲ میلیون گیگ' => Unit::Gigabyte, '۲ میلیون' => Unit::Gigabyte, '۵ هزار تومان' => Unit::Gigabyte, '۳ هزار روز' => Unit::Day, '۲ هزار کاربر' => Unit::Device, '۲ میلیون کاربر' => Unit::Device] as $typed => $unit) {
+            self::assertNull(Input::amountOf($typed, $unit), $typed);
+        }
+        self::assertNull(Input::amountOf('999999999999 هزار گیگ', Unit::Gigabyte), 'past twelve digits once multiplied: no amount');
+    }
+
+    /** Whatever space a person pastes between groups of digits sets them apart as a plain one does. */
+    public function testAnySpaceSetsDigitGroupsApart(): void
+    {
+        foreach (["150\u{00A0}000", "150\u{2009}000", "150\u{202F}000", "\u{00A0}150 000\u{00A0}"] as $typed) {
+            self::assertSame(150_000, Input::amountOf($typed, Unit::Toman), json_encode($typed, JSON_THROW_ON_ERROR));
+            self::assertSame(150_000, Input::wholeOf($typed));
+            self::assertSame('150000', Input::decimalOf($typed));
+        }
+        self::assertSame(150_000, Input::amountOf("۱۵۰\u{00A0}۰۰۰\u{00A0}تومان", Unit::Toman));
+        self::assertNull(Input::amountOf("15\u{00A0}00", Unit::Toman), 'a group of three, still');
+        self::assertNull(Input::amountOf("150000\xFF", Unit::Toman), 'text that is not UTF-8 is no amount');
+    }
+
+    /** A JSON `true` is no id 1 — nor any number: a boolean reads as nothing wherever a number is read. */
+    public function testABooleanIsNoNumber(): void
+    {
+        foreach ([true, false] as $boolean) {
+            self::assertSame([null, null, null, null], [Input::integerOf($boolean), Input::amountOf($boolean, Unit::Toman), Input::wholeOf($boolean), Input::decimalOf($boolean)], var_export($boolean, true));
+        }
+        self::assertNull(Input::integer(['plan_id' => true], 'plan_id'));
+        self::assertFalse(Input::optionalAmountOf(true, 1, 1000));
     }
 
     public function testMoneyTheAdminTypesIsAWholeAmountOfToman(): void
@@ -85,6 +172,10 @@ final class InputTest extends TestCase
             self::assertNull(Input::amount(['price' => $typed], 'price'), 'no fraction of a Toman, which the bot would round away: ' . $typed);
         }
         self::assertNull(Input::amount([], 'price'));
+        foreach (['۲۰ گیگ', '۳۰ روز'] as $typed) {
+            self::assertNull(Input::amount(['price' => $typed], 'price'), 'no price in another unit: ' . $typed);
+            self::assertFalse(Input::optionalAmountOf($typed, 1, 1000), $typed);
+        }
     }
 
     public function testMoneyLeftBlankIsNoneAndAnythingElseIsWholeTomanWithinItsBounds(): void
@@ -148,6 +239,8 @@ final class InputTest extends TestCase
         self::assertSame(['1', '5'], Input::numbersOf('1,5'), 'never 15');
         self::assertSame(['100', '20', '50'], Input::numbersOf(' 100، 20 ,, 50 '));
         self::assertSame([], Input::numbersOf(''));
+        self::assertSame(["50\xFF, 60"], Input::numbersOf("50\xFF, 60"), 'text that is not UTF-8: one part no number reads, never an empty list that clears the field');
+        self::assertNull(Input::wholeOf(Input::numbersOf("50\xFF, 60")[0]));
     }
 
     public function testDecimalsAreAmountsWithUpToTwoPlacesAndSeparatorsTolerated(): void
@@ -211,6 +304,15 @@ final class InputTest extends TestCase
         self::assertFalse(Input::active([], false), 'an edit that leaves the switch out keeps the row as it is');
         self::assertTrue(Input::active([], null), 'a new row starts active');
         self::assertTrue(Input::active(['is_active' => null], null), 'null is "not sent"');
+    }
+
+    /** A review's and a ticket's rating, one rule: 1 to 5 stars, in any digits. */
+    public function testARatingIsOneToFiveStars(): void
+    {
+        self::assertSame([1, 5, 4], [Validation::rating(1), Validation::rating('5'), Validation::rating('۴')]);
+        foreach ([0, 6, '3.5', true, null, '', [5]] as $refused) {
+            self::assertNull(Validation::rating($refused), var_export($refused, true));
+        }
     }
 
     public function testTooLongIsWordedOnceWithLatinDigits(): void

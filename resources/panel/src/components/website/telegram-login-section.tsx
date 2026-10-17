@@ -71,9 +71,8 @@ export function TelegramLoginSection({ website }: { website: Website }) {
           clear={values.clear_telegram_client_secret}
           onClear={(clear) => set('clear_telegram_client_secret', clear)}
           error={error('telegram_client_secret')}
-          hint={
-            telegram.has_secret ? 'یک Client Secret ذخیره شده است. فقط روش redirect به آن نیاز دارد؛ روش popup بدون آن کار می‌کند.' : 'فقط روش redirect به آن نیاز دارد؛ روش popup بدون آن کار می‌کند.'
-          }
+          // That one is kept the field itself says (SecretField).
+          hint="فقط روش redirect به آن نیاز دارد؛ روش popup بدون آن کار می‌کند."
         />
       </div>
     </SectionCard>

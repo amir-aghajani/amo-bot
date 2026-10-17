@@ -1,12 +1,13 @@
 import { useId, useRef } from 'react'
 import type { QueryKey } from '@tanstack/react-query'
-import { ImageIcon, ImagePlus, Info, Send, X } from 'lucide-react'
+import { ImageIcon, ImagePlus, Info, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Callout } from '@/components/callout'
 import { Field, FieldGroup } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
 import { IconButton } from '@/components/icon-button'
 import { NoteInput } from '@/components/note-input'
+import { SendIcon } from '@/components/send-icon'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
@@ -14,6 +15,7 @@ import type { TicketDetail, TicketMessageRequest } from '@/lib/api-types'
 import { formatBytes } from '@/lib/format'
 import { TICKET_STATUS } from '@/lib/statuses'
 import { useForm } from '@/lib/use-form'
+import { useRequestKey } from '@/lib/use-request-key'
 
 /** The longest answer the server takes (Support\Services\Tickets::BODY_MAX). */
 const BODY_MAX = 4000
@@ -49,11 +51,15 @@ export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
   const picker = useRef<HTMLInputElement>(null)
   const choose = useRef<HTMLButtonElement>(null)
   const { values, set, reset, errors, setErrors, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(BLANK)
+  const requestKey = useRequestKey()
 
   const send = handleSubmit(async () => {
     const { body, file } = values
-    const answer = await submit(() => api.post(`/tickets/${ticket.id}/messages`, file ? { body, file } : { body }), { invalidates })
+    // Sent again after no answer, the same words and picture go under the same key: the customer gets one answer.
+    const idempotencyKey = requestKey.keyFor([body.trim(), file])
+    const answer = await submit(() => api.post(`/tickets/${ticket.id}/messages`, file ? { body, file } : { body }, { idempotencyKey }), { invalidates })
     if (!answer) return
+    requestKey.done()
     onAnswered(answer.ticket)
     reset(BLANK)
     // Emptied, the form's submit waits for words: the focus goes back to them, never to the document.
@@ -89,12 +95,23 @@ export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
             </Callout>
           )}
 
+          {/* Held while the answer goes: what is typed meanwhile would go with the form, emptied once it went. */}
           <Field id={`${id}-body`} label="متن پاسخ" error={error('body')}>
-            <NoteInput max={BODY_MAX} rows={4} value={values.body} onChange={(event) => set('body', event.target.value)} placeholder="پاسخ خود را بنویسید" />
+            <NoteInput max={BODY_MAX} rows={4} value={values.body} onChange={(event) => set('body', event.target.value)} readOnly={busy} placeholder="پاسخ خود را بنویسید" />
           </Field>
 
           {/* Its control is a button that opens the hidden file input: refused, the group takes the focus as a whole. */}
-          <FieldGroup label="تصویر" optional error={error('file')} hint={`JPG، PNG یا WebP، حداکثر ${formatBytes(PICTURE_MAX_BYTES)}؛ همراه متن پاسخ فرستاده می‌شود.`}>
+          <FieldGroup
+            label="تصویر"
+            optional
+            error={error('file')}
+            hint={
+              // Each type set apart: bare, the three Latin words would run left to right as one, last first.
+              <>
+                <bdi dir="ltr">JPG</bdi>، <bdi dir="ltr">PNG</bdi> یا <bdi dir="ltr">WebP</bdi>، حداکثر {formatBytes(PICTURE_MAX_BYTES)}؛ همراه متن پاسخ فرستاده می‌شود.
+              </>
+            }
+          >
             <input
               ref={picker}
               type="file"
@@ -110,7 +127,7 @@ export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
               }}
             />
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Button ref={choose} variant="secondary" size="sm" icon={ImagePlus} onClick={() => picker.current?.click()}>
+              <Button ref={choose} variant="secondary" size="sm" icon={ImagePlus} aria-disabled={busy} onClick={() => picker.current?.click()}>
                 {values.file ? 'تغییر تصویر' : 'افزودن تصویر'}
               </Button>
               {values.file && (
@@ -125,6 +142,7 @@ export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
                   <IconButton
                     icon={X}
                     aria-label="برداشتن تصویر"
+                    aria-disabled={busy}
                     className="size-7 rounded-md"
                     onClick={() => {
                       set('file', null)
@@ -137,7 +155,7 @@ export function ReplyForm({ ticket, invalidates, onAnswered }: ReplyFormProps) {
             </div>
           </FieldGroup>
 
-          <FormActions error={formError} submitLabel="ارسال پاسخ" icon={Send} busy={busy} disabled={values.body.trim() === ''} dirty={dirty} />
+          <FormActions error={formError} submitLabel="ارسال پاسخ" icon={SendIcon} busy={busy} disabled={values.body.trim() === ''} dirty={dirty} />
         </form>
       </CardContent>
     </Card>

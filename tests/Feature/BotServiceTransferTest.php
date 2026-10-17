@@ -80,7 +80,7 @@ final class BotServiceTransferTest extends BotTestCase
         self::assertSame([SubscriptionHandler::serviceCallback($this->service->id)], $this->callbacks(0), '«بازگشت» to the service');
 
         $this->send($this->message('۷۰۷۰'));
-        self::assertSame([self::text(BotText::TransferConfirm, ['client' => 'ali_1', 'name' => 'Sara Ahmadi (@sara)'])], $this->said());
+        self::assertSame([self::text(BotText::TransferConfirm, ['client' => 'ali_1', 'name' => "Sara Ahmadi (\u{200E}@sara)"])], $this->said());
         $yes = ServiceTransferHandler::PREFIX . $this->service->id . ':' . $this->sara->id;
         self::assertSame([[
             ['text' => self::text(BotText::Cancel), 'callback_data' => SubscriptionHandler::serviceCallback($this->service->id)],
@@ -91,7 +91,7 @@ final class BotServiceTransferTest extends BotTestCase
         $this->send($this->tap($yes));
         $given = $this->service->fresh() ?? self::fail('gone');
         self::assertSame([$this->sara->id, false], [$given->user_id, $given->auto_renew]);
-        self::assertContains(self::text(BotText::TransferDone, ['client' => 'ali_1', 'name' => 'Sara Ahmadi (@sara)']), $this->said(), 'said in place of the question');
+        self::assertContains(self::text(BotText::TransferDone, ['client' => 'ali_1', 'name' => "Sara Ahmadi (\u{200E}@sara)"]), $this->said(), 'said in place of the question');
         $edit = (int) array_search('editMessageText', $this->calls(), true);
         self::assertSame([MenuHandler::subscriptionsCallback(1)], $this->callbacks($edit), '«بازگشت» to the list');
         self::assertCount(1, $this->telegram()->sentTo(self::SARA), 'the recipient told');
@@ -115,7 +115,7 @@ final class BotServiceTransferTest extends BotTestCase
         }
 
         $this->send($this->message((string) self::SARA));
-        self::assertSame([self::text(BotText::TransferConfirm, ['client' => 'ali_1', 'name' => 'Sara Ahmadi (@sara)'])], $this->said(), 'still awaited');
+        self::assertSame([self::text(BotText::TransferConfirm, ['client' => 'ali_1', 'name' => "Sara Ahmadi (\u{200E}@sara)"])], $this->said(), 'still awaited');
     }
 
     public function testAnotherIdTypedAtTheQuestionAsksAboutThatOneInstead(): void
@@ -160,7 +160,7 @@ final class BotServiceTransferTest extends BotTestCase
         self::assertSame(self::text(BotText::TransferExpired), $this->popup());
         self::assertSame($this->ali->id, $this->service->fresh()?->user_id);
         $this->send($this->message((string) self::SARA));
-        self::assertNotContains(self::text(BotText::TransferConfirm, ['client' => 'ali_1', 'name' => 'Sara Ahmadi (@sara)']), $this->said(), 'no id awaited any more');
+        self::assertNotContains(self::text(BotText::TransferConfirm, ['client' => 'ali_1', 'name' => "Sara Ahmadi (\u{200E}@sara)"]), $this->said(), 'no id awaited any more');
     }
 
     public function testAServiceThatMayNotGoNowSaysWhy(): void
@@ -201,7 +201,7 @@ final class BotServiceTransferTest extends BotTestCase
 
         self::assertStringStartsWith('⚠️ این سرویس الان منتقل نمی‌شود: شناسه‌های زیادی را بررسی کرده‌اید؛ ', $this->said()[0]);
         $this->send($this->message((string) self::SARA));
-        self::assertNotContains(self::text(BotText::TransferConfirm, ['client' => 'ali_1', 'name' => 'Sara Ahmadi (@sara)']), $this->said(), 'the step is over');
+        self::assertNotContains(self::text(BotText::TransferConfirm, ['client' => 'ali_1', 'name' => "Sara Ahmadi (\u{200E}@sara)"]), $this->said(), 'the step is over');
     }
 
     public function testTheGiversOldButtonsFindTheServiceGone(): void

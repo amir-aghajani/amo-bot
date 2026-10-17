@@ -55,19 +55,32 @@ describe('an agent’s terms saved', () => {
     await until(() => expect(toast.success).toHaveBeenCalledWith('نمایندگی به‌روز شد و به نماینده خبر داده شد'))
   })
 
-  it('unchanged by the server’s reading, say nothing changed and no notice was sent', async () => {
-    // Typed in the API's own form: other text to the panel, the same credit to the server.
-    save('0.00', null)
+  it('found by the server as they already were (set so meanwhile), say nothing changed and no notice was sent', async () => {
+    save('500000', null)
     await until(() => expect(toast.success).toHaveBeenCalledWith('شرایط نماینده تغییری نکرد'))
     expect(toast.warning).not.toHaveBeenCalled()
   })
 
-  it('wait for a change: as they were, and once a change is typed back, there is nothing to save nor to revert', () => {
-    save('0', 'told')
+  it.each(['0', '0.00', '۰'])('wait for a change: typed back as they were (%s), there is nothing to save nor to revert', (credit) => {
+    save(credit, 'told')
     const submit = screen.getByRole('button', { name: 'ذخیره تغییرات' })
     expect(submit.getAttribute('aria-disabled')).toBe('true')
     expect(screen.getByRole('button', { name: 'بازگردانی تغییرات' }).getAttribute('aria-disabled')).toBe('true')
     expect(server().sent('PUT', '/api/admin/agency/agents/21')).toEqual([])
+  })
+
+  it('read as the server reads them: a credit and a minimum typed with their thousands set apart are no change', () => {
+    const agent: AgentRow = { ...REZA, credit_limit: '500000.00', standing: agencyStanding({ monthly_minimum: '1000000.00' }) }
+    server().on('GET', '/api/admin/agency/levels', json({ levels: [] } satisfies AgencyLevelsResponse))
+    render(<AgentModal agent={agent} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+    const submit = screen.getByRole('button', { name: 'ذخیره تغییرات' })
+
+    fireEvent.change(screen.getByLabelText('اعتبار (تومان)'), { target: { value: '500,000' } })
+    fireEvent.change(screen.getByLabelText('کف خرید ماهانه (تومان)'), { target: { value: '۱٬۰۰۰٬۰۰۰' } })
+    expect(submit.getAttribute('aria-disabled')).toBe('true')
+
+    fireEvent.change(screen.getByLabelText('کف خرید ماهانه (تومان)'), { target: { value: '900000' } })
+    expect(submit.getAttribute('aria-disabled')).toBeNull()
   })
 })
 
@@ -87,13 +100,15 @@ describe('an agent’s terms of selling', () => {
 
     expect(screen.getAllByText('بدون پایان')).toHaveLength(2) // the fact, and the field's hint
     expect((screen.getByLabelText('کف خرید ماهانه (تومان)') as HTMLInputElement).value).toBe('500000')
+    // A day typed where there was no end ends at its last hour, as a discount's end does — not at its start.
     fireEvent.change(screen.getByLabelText('پایان نمایندگی'), { target: { value: '1405/08/10' } })
+    expect(screen.getByText(/۱۴۰۵، ساعت ۲۳:۰۰$/)).toBeTruthy()
     fireEvent.change(screen.getByLabelText('کف خرید ماهانه (تومان)'), { target: { value: '0' } })
     expect(screen.getByText('0: بدون کف خرید.')).toBeTruthy() // none is 0, as in the program's own field
     fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
 
     await until(() => expect(server().sent('PUT', '/api/admin/agency/agents/21')).toHaveLength(1))
-    expect(server().sent('PUT', '/api/admin/agency/agents/21')[0]?.body).toEqual({ level_id: '1', credit_limit: '0', expires_at: '2026-11-01T00:00', monthly_minimum: '0' })
+    expect(server().sent('PUT', '/api/admin/agency/agents/21')[0]?.body).toEqual({ level_id: '1', credit_limit: '0', expires_at: '2026-11-01T23:00', monthly_minimum: '0' })
   })
 
   it('go only as changed: an end kept to the minute is not moved to the hour the field shows', async () => {

@@ -1,3 +1,5 @@
+[فارسی](fa/Drivers.md)
+
 # Drivers
 
 What the shop does through someone else is a **driver** of a family: a VPN panel it sells on, a way it takes money, the
@@ -8,7 +10,7 @@ description, with no code of their own but where a family says so below.
 | Family | The interface | Registry (`bootstrap/container.php`) | Lives in | Today | Panel code for a new one |
 |---|---|---|---|---|---|
 | VPN panels | `Providers\Contracts\PanelDriver` (and its client, `ProviderInterface`) | `panel.drivers` | `app/Modules/Providers/Drivers/<Name>/` | `3x-ui`, `pasarguard` | none |
-| Payment gateways | `Payments\Contracts\GatewayDriver` (and its gateway, `GatewayInterface`) | `payment.drivers` | `app/Modules/Payments/Drivers/<Name>/` | `wallet`, `outside` (paid outside the shop), `manual` (card to card), `cubepay`, `zarinpal`, `atlaspay`, `abangateway` | an icon |
+| Payment gateways | `Payments\Contracts\GatewayDriver` (and its gateway, `GatewayInterface`) | `payment.drivers` | `app/Modules/Payments/Drivers/<Name>/` | `wallet`, `outside` (paid outside the shop), `manual` (card to card), `cubepay`, `zarinpal`, `atlaspay`, `abangateway`, `plisio`, `aqayepardakht`, `variza` | an icon |
 | Databases | `Core\Database\Drivers\DatabaseDriver` | `database.drivers` | `app/Core/Database/Drivers/` | `mysql`, `sqlite` | none |
 | Mail | `Core\Mail\MailDriver` | `mail.drivers` | `app/Core/Mail/Drivers/` | `smtp`, `native`, `resend` | none |
 | Captchas | `Core\Captcha\CaptchaDriver` | `captcha.drivers` | `app/Core/Captcha/Drivers/` | `turnstile`, `altcha` | none |
@@ -36,11 +38,13 @@ how to draw (`card`: in groups of four, on a phone's number pad). Then:
   words, before anything is kept; `checkSent()` does the same for a partial save (a `PATCH`). `values()` is what a
   driver works with — each field's value read off what is kept, one the field would refuse at its default — and
   `present()` what a screen shows.
-- A `Secret` is never shown back: a screen gets whether one is kept and a hint that gives nothing away; left blank, it
-  keeps the one kept, and `clear_<name>: true` empties it. With `missing` a form left without one is refused. With
-  `boundTo`, it belongs with other fields — a server's address, the account on it — and while one of them moves, a blank
-  one no longer keeps the stored secret: the save is refused in `moved`'s words, so a kept password is never sent
-  somewhere it was not given for.
+- A `Secret` is never shown back: a screen gets whether one is kept and a hint that gives little away — its last 4
+  characters for a secret of at least 12, else only dots (`Secret::KEPT`), and only dots whatever its length with
+  `hint: Secret::hidden()` (a password, a two-factor secret). Left blank, it keeps the one kept, and
+  `clear_<name>: true` empties it. With `missing` a form left without one is refused. With `boundTo`, it belongs with
+  other fields — a server's address, the way a request takes there, the account on it — and while one of them changes,
+  a blank one no longer keeps the stored secret: the save is refused in `moved`'s words, so a kept password is never
+  sent somewhere, or by a way, it was not given for.
 - `describe()` writes every field out for the panels (`DriverDescription.fields` in the API: its type, words, whether it
   is required, a secret, bound to which fields, advanced, its options, `when`, bounds and default).
 
@@ -74,7 +78,9 @@ folder but its registration and its request shape.
      the panel's own pages your connector names — 3X-UI's `/panel`, PasarGuard's `/dashboard`), then
      `...Support\PanelCredentials::fields(token, tokenHint, tokenPattern, tokenMismatch, loginHint)` (an API token, or
      an admin's username and password), then fields of its own — one for the password way only takes
-     `when: PanelCredentials::WITH_PASSWORD`, a secret `boundTo: PanelConnection::bound()` —, then
+     `when: PanelCredentials::WITH_PASSWORD`, a secret `boundTo: PanelConnection::bound()` (the panel's address by its
+     origin, the proxy's host and port, and the TLS check; a proxy switched off changes nothing) with `moved` starting
+     `PanelConnection::MOVED` —, then
      `...PanelConnection::options(subscriptionHint, subscriptionPlaceholder)` (TLS, the timeout, another address for
      subscription links, and the SOCKS5 proxy the panel may be reached through, under «تنظیمات پیشرفته»). A field is kept
      under its key: a column of `servers` (`api_token`, `username`, `password`, `totp_secret`, `proxy_*` …), or
@@ -93,14 +99,17 @@ folder but its registration and its request shape.
    `status()`, `listInbounds()`, `servesSubscriptions()`, `createClient()`, `updateClient()`, `rotateClientCredentials()`,
    `setClientEnabled()`, `deleteClient()`, `findClient()`, `listClients()`, `findClientByLink()`,
    `resetClientTraffic()`. Clients go in as a `ClientSpec` (name, quota, an `Expiry` — counted from the first
-   connection, fixed, or never —, an IP limit, the Telegram id or none, a comment, and `enabled`: `createClient()`
-   always makes it on, `updateClient()` leaves it on or off as that says) and come out as a `ClientInfo` (name,
-   enabled, counters, quota, expiry, the subscription link, presence, the IP limit the panel keeps or none — the sync
-   copies it onto the service);
+   connection, fixed, or never —, an IP limit, the Telegram id or none, a comment, and `enabled`: both
+   `createClient()` and `updateClient()` leave the client on or off as that says — a service moved while switched off
+   is made switched off on its new server; a panel that only makes users switched on, as PasarGuard does, switches the
+   new one off at once, and takes it back if that is refused) and come out as a `ClientInfo` (name, enabled, counters,
+   quota, expiry, the subscription link, presence, the IP limit the panel keeps or none — the sync copies it onto the
+   service);
    `findClientByLink()` says whose a `DTO\ClientLink` is — a subscription link's tokens, or a config's credentials — for
    a customer claiming a client made by hand ([Services added by their link](Service-Claims.md)): match whatever your
-   panel's links carry, and never trust a token you cannot verify (PasarGuard's are shown to the panel's own subscription
-   route); inbounds are `InboundInfo` with an opaque `key` your connector understands. What a
+   panel's links carry, and never trust a token you cannot verify yourself — PasarGuard signs its tokens, so its
+   connector asks the panel's own subscription route (`…/{token}/info`) whose user a token is, rather than reading the
+   token; inbounds are `InboundInfo` with an opaque `key` your connector understands. What a
    panel cannot answer is a `null` on the DTO, or an `UnsupportedOperationException` (`status()`, `listClients()` —
    the sync then asks client by client —, `rotateClientCredentials()`). Talk to the panel through `Support\PanelHttp`,
    the shop's one outgoing client with the connection's TLS rule, timeouts and SOCKS5 proxy, no redirects followed —
@@ -114,7 +123,11 @@ folder but its registration and its request shape.
    `UnsupportedOperationException`, and a
    `PanelApiException` subclass of your own for "the panel said no, because …". Give the ones that describe a fixable
    setup a `hint` in your panel's own words (its menus, its pages): `ProviderErrorPresenter` words every failure for the
-   owner, who runs the servers, and in one plain word for anyone else.
+   owner, who runs the servers, and in one plain word for anyone else. A write that answers with the client
+   (`createClient()`, `updateClient()`, `rotateClientCredentials()`) and fails *after* the panel took it — the read of
+   the client that follows fails — throws its failure marked `->afterWrite()` (`ProviderException::afterWrite()`): its
+   `mayHaveBeenDone()` is then true, so the shop asks the panel how the client stands instead of taking the write for
+   one never made and making it again.
 4. **Register it** in `bootstrap/container.php`: add `$c->get(<Name>Driver::class)` to `panel.drivers`.
 5. **Describe its requests** in `resources/api/openapi.yaml`: a `Server<Name>Request` in `ServerRequest`'s `oneOf` —
    `driver` with your key as its one value, `<<: *serverFormProperties`, and your own fields, each secret with its
@@ -124,8 +137,8 @@ folder but its registration and its request shape.
    `DriverFields`.
 7. **Tests**:
    - `tests/Unit/Providers/<Name>/<Name>DriverTest.php` — its card, every refused field reported at once, the address
-     rule, a stored secret kept while the address stays on its host and refused once it moves to another (as
-     `PasarGuardDriverTest`);
+     rule, a stored secret kept while the address stays on its host and refused once it moves to another, a proxy is
+     switched on or the TLS check changes (as `PasarGuardDriverTest`);
    - client and provider tests against the fake panel — `$this->panelHttp()` (`tests/Support/FakePanel`: queue answers
      with `ok()`, `fail()`, `raw()`, `refuse()`; read what was sent with `calls()`, `request(i)`, `params(i)`,
      `options(i)`) —, and, when the panel publishes a description of its API, a contract test that holds every request
@@ -137,7 +150,7 @@ folder but its registration and its request shape.
 
 The two that exist:
 
-- **3x-ui** (`Drivers/ThreeXui`) targets the v3 panel API: `ThreeXuiClient` (an API token as a bearer, or a cookie
+- **3X-UI** (`Drivers/ThreeXui`) targets the v3 panel API: `ThreeXuiClient` (an API token as a bearer, or a cookie
   login — the CSRF token replayed, a TOTP code when a secret is kept — signed in again once on a refusal), `ThreeXuiApi`
   (one method per endpoint the shop calls), `ThreeXuiProvider`. A term from the first connection is the panel's own
   "expire on first use".
@@ -163,7 +176,9 @@ driver, the label the checkout's button shows, and the driver's settings in the 
      `online` (the customer pays on the gateway's page and the gateway says so, as CubePay's do — below) — and
      `GatewayDriver::BUILTIN` (`true` only for a driver that is part of every shop: never added, never deleted);
    - `summary(settings)` — the one line the methods list shows about it from its settings, or `null` (the wallet; card
-     to card, whose cards are rows of their own — the list shows them, and each payment the card it was shown);
+     to card, whose cards are rows of their own — the list shows them, and each payment the card it was shown). A
+     method set to its gateway's test service, where no money moves, says `GatewayDriver::TEST_MODE`
+     («حالت آزمایشی: پولی جابه‌جا نمی‌شود»);
    - `gateway(settings)` — the gateway of one method row, implementing `GatewayInterface`: `initiate($payment)` says what
      the customer does next to pay that payment (`PaymentInitiation::instant()`, or `transfer()` with the card it was
      shown), and `settle()` is its part of a payment's settlement, inside the settlement's transaction — database work
@@ -191,7 +206,8 @@ card" and "pay on this page" alike.
 ### An online gateway
 
 The customer pays on the gateway's page — CubePay's (`Drivers\CubePay`), Zarinpal's (`Drivers\Zarinpal`), AtlasPay's
-mini app in Telegram (`Drivers\AtlasPay`), AbanGateway's (`Drivers\Aban`), the four in the box — and the gateway says
+mini app in Telegram (`Drivers\AtlasPay`), AbanGateway's (`Drivers\Aban`), Plisio's (`Drivers\Plisio`),
+AqayePardakht's (`Drivers\AqayePardakht`), Variza's (`Drivers\Variza`), the seven in the box — and the gateway says
 what came of it. Its gateway implements `Contracts\OnlineGateway` (the kind `online`):
 
 - `open($payment, $request)` opens the payment on the gateway — the payment's id there (`$request->orderId`, the same
@@ -207,29 +223,56 @@ what came of it. Its gateway implements `Contracts\OnlineGateway` (the kind `onl
 - `check($payment)` asks the gateway what came of it — `OnlineVerdict::paid()` (with its reference), `waiting()` or
   `closed()` — never believing what a callback said. `waiting(moneyIn: true)` says the gateway took money on it that
   it has not settled yet (a receipt in review, a sum paid in part): the shop marks the payment (`invoice.money_in`) and
-  asks about it past the usual two hours, up to 48 after its page closed — then it holds it for support;
-- `initiate($payment)` reads what `open()` kept and calls nothing: `PaymentInitiation::link()` with a `PayLink` — the
-  page, until when, the exact sum it asks (a gateway may add a few Toman of its own) and, if the gateway gave one to
-  show in the bot, a card; `settle()` answers yes with the payment's reference (the gateway said paid before it runs).
+  asks about it past the usual two hours, up to 48 after its page closed — then it holds it for support. A payment so
+  marked that the gateway then answers `closed()` is held for support at once;
+- `initiate($payment)` and `settle()` are the same for every online gateway, so they come from one trait,
+  `Drivers\OnlinePage`: `initiate()` reads what `open()` kept and calls nothing — `PaymentInitiation::link()` with a
+  `PayLink`: the page, until when, the exact sum it asks (a gateway may add a few Toman of its own, through the trait's
+  `page()`) and, if the gateway gave one to show in the bot, a card —; `settle()` answers yes with the payment's
+  reference (the gateway said paid before it runs).
 
-Both calls talk to the gateway: throw `GatewayUnavailableException` with what it said as the detail (the log's; the
-customer reads the exception's own words) when it is out of reach or refuses — with `held: true` when its answer does
-not fit the payment (another order or amount than asked). The shop then **holds the payment for support**
+`open()` and `check()` talk to the gateway through `Drivers\GatewayHttp::call()` — no redirect followed, JSON asked
+for, its status and JSON object back — and throw `GatewayUnavailableException` with what it said as the detail (the
+log's; the customer reads the exception's own words) when it is out of reach or refuses — the gateway's own words cut
+short alike by `GatewayHttp::said()` —, with `held: true` when its answer does not fit the payment (another order or
+amount than asked). The shop then **holds the payment for support**
 (`OnlinePayments::isHeld()`): asked about no more, the report group's «خطاها» told once, and — while it still waits,
 pending or failed with its page — its order neither expiring nor paid another way (`Checkout::pay()` throws
 `PaymentHeldException`). Everything else is the shop's (`Services\OnlinePayments`, `PaymentService::settleOnline()`):
-the asks about one payment taking turns — a lock file per payment, the payment read afresh once it is its turn, so
-`check()` and what the shop does with its answer are one step and two at once never settle what the other holds —,
+the asks about one payment taking turns — a lock file of 32, picked by the payment's id; the payment read afresh once it
+is its turn, so `check()` and what the shop does with its answer are one step and two at once never settle what the
+other holds —,
 the callback address `/payments/callback/{payment}/{secret}` — a secret of the payment's own; a call there only makes
 the shop ask the gateway, a few times a minute at most for one payment, and one past that is answered from the payment
 as it stands —, the scheduler asking about every one not paid yet now and then (`Tasks\OnlinePaymentsTask`) until two
 hours after its page closed — a gateway may take money late —, the bot's and the website's «check» for the customer
 and the panels' for support; a paid one settles its order once and tells the customer once, and money the gateway took
 after its order closed goes to the customer's wallet. A test puts a fake of the gateway's API under the shop's outgoing
-client, as `Tests\Support\FakeCubePay`, `FakeZarinpal`, `FakeAtlasPay` and `FakeAban` do. A gateway that sends the
-customer's browser back to that address (Zarinpal, AbanGateway) gets the browser a page of what came of it
-(`Controllers\ReturnPage`, the one page PHP answers, with a policy that runs no script) — its server calls are
-answered JSON.
+client, as `Tests\Support\FakeCubePay`, `FakeZarinpal`, `FakeAtlasPay`, `FakeAban`, `FakePlisio`,
+`FakeAqayePardakht` and `FakeVariza` do. A gateway that sends the customer's browser back to that address (Zarinpal,
+AbanGateway, Plisio, AqayePardakht, Variza) gets the browser a page of what came of it (`Controllers\ReturnPage`, the
+one page PHP answers, with a policy that runs no script) — its server calls are answered JSON. One that takes its key in the address's query (Plisio) hands `GatewayHttp::call()` the key to keep
+out of its messages. One whose page opens only for a visitor from the shop's domain (AqayePardakht: Shaparak
+checks the referrer) answers `$request->viaShop()` as its page and keeps its own in the invoice's details as `page`:
+the callback address with `?go=1` shows the customer a page leading on to it (`ReturnPage::go()`, whose button sends
+the shop's origin as the referrer) while it takes money, and what came of it after.
+
+One that answers no question about a payment and signs its word instead (Variza) implements `Contracts\SignedWebhook`
+too: `hear($body, $headers)` answers a `WebhookWord` when the signature is its method's — the gateway's reference for
+the payment (`null` for an event that names none) and what it said —, `null` when it is not. Its webhook comes to one
+address for its driver, `/payments/webhooks/{driver}` (`Controllers\GatewayWebhookController`; `Urls::paymentWebhook()`
+for the form's note): each of that driver's methods, in every shop, is asked to hear it; the payment of the one that
+signs it, found by its reference, keeps the word as its invoice's `heard` — once, while it is unpaid
+(`OnlinePayments::hear()`) — and is checked at once, its gateway's `check()` reading that word as the answer. The
+answers:
+
+- **404** («هیچ روش پرداختی وب‌هوک این آدرس را نمی‌گیرد.») — the driver is not installed, or no method of it takes a
+  signed webhook (no such method in any shop, or a gateway that is asked instead, as every other online one is);
+- **400** («امضای این درخواست با هیچ روش پرداختی جور نیست.») — no method signs it: nothing changes, and the log says so;
+- **200** — signed, whatever it came to (a payment it names not found, or held for support), so the gateway stops
+  sending it.
+
+`FakeVariza::webhook()` writes and signs one for a test.
 
 ## A database driver
 

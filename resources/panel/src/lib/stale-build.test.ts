@@ -60,11 +60,26 @@ describe('reloading for a new build', () => {
     expect(reload).toHaveBeenCalledTimes(2)
   })
 
-  it('reloads all the same where the browser keeps nothing', () => {
+  it('reloads all the same where the browser keeps nothing — once: a page that is itself a reload of a moment ago does not reload again', () => {
     blockStorage()
+    vi.spyOn(performance, 'now').mockReturnValue(5_000)
 
     expect(reloadForNewBuild()).toBe(true)
     expect(reload).toHaveBeenCalledTimes(1)
+
+    // The page that reload brought, its files still missing.
+    const reloaded = { name: '', entryType: 'navigation', startTime: 0, duration: 0, toJSON: () => ({}), type: 'reload' }
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([reloaded])
+    expect(reloadForNewBuild()).toBe(false)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reload while the browser is offline: the file is missing because the network is', () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+
+    expect(reloadForNewBuild()).toBe(false)
+    expect(reload).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem(STORAGE_KEYS.reloadedAt)).toBeNull()
   })
 })
 

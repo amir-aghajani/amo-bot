@@ -19,7 +19,9 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Exceptions\AutoRenewUnavailableException;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Services\AutoRenewal;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Subscriptions\Tasks\SyncSubscriptionsTask;
 use App\Modules\Telegram\Handlers\SubscriptionHandler;
@@ -29,6 +31,7 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
+use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Traffic;
@@ -85,6 +88,30 @@ final class AutoRenewalTest extends BotTestCase
 
         self::assertSame(1, Order::query()->count(), 'the new deadline is out of the window: not again');
         self::assertSame([], $this->calls());
+    }
+
+    public function testARenewalThatWouldEndPastTheLastDayTheShopKeepsIsNotMadeNorCharged(): void
+    {
+        // Its deadline tomorrow, 20 days before the TIMESTAMP columns' last moment: the plan's 30 days would pass it.
+        Carbon::setTestNow(LocalTime::last()->subDays(20));
+        $subscription = $this->due('ali_1');
+        $this->wallet($this->ali, '300000');
+
+        $this->renewNow();
+
+        self::assertSame([0, '300000.00'], [Order::query()->count(), $this->ali->balance()], 'nothing ordered, nothing charged');
+        self::assertSame([], FakeProvider::$updated, 'no panel changed');
+        self::assertEquals(now()->addDay(), $subscription->refresh()->expires_at);
+
+        // Never asked of its panel (out of reach here: no wait is logged), nor a short wallet told.
+        FakeProvider::$unreachable = true;
+        $this->wallet($this->ali, '0');
+        $this->renewNow();
+        self::assertSame([], $this->calls(), 'nor told the wallet is short: the reminder of its end tells the customer (ServiceReminders)');
+        self::assertSame([], array_filter($this->logs()->getRecords(), static fn(LogRecord $record): bool => str_contains($record->message, 'waits for')));
+
+        $this->send($this->tap(SubscriptionHandler::serviceCallback($subscription->id)));
+        self::assertNotContains(SubscriptionHandler::serviceCallback($subscription->id, 'autorenew'), $this->callbacks(0), 'the switch is not offered: it would not renew it');
     }
 
     public function testAPriceOutsideTheWalletsBoundsIsNotRenewedFromItNorOfferedTheSwitch(): void
@@ -368,6 +395,38 @@ final class AutoRenewalTest extends BotTestCase
         self::assertSame(OrderStatus::Cancelled, Order::query()->sole()->status, 'dropped unpaid');
         self::assertSame('70000.00', $this->ali->balance(), 'nothing more was taken');
         self::assertSame([$this->short($subscription, '70000')], $this->said());
+    }
+
+    public function testAServiceHandedOnSinceTheRunReadItIsNotRenewedFromThePreviousOwnersWallet(): void
+    {
+        $subscription = $this->due('ali_1');
+        $this->wallet($this->ali, '300000');
+        $sara = $this->customer(['telegram_id' => 1002, 'username' => 'sara']);
+        $read = Subscription::query()->with(['user', 'plan', 'server'])->findOrFail($subscription->id);
+        // Handed to Sara after the run read it, and Sara switched «تمدید خودکار» on at once.
+        $subscription->forceFill(['user_id' => $sara->id, 'auto_renew' => true])->save();
+
+        $this->service(AutoRenewal::class)->renew($read);
+
+        self::assertSame([0, '300000.00'], [Order::query()->count(), $this->ali->balance()], 'nothing ordered, nothing charged to Ali');
+    }
+
+    public function testTheSwitchOfAServiceHandedOnSinceItWasReadIsNotSetForTheNewOwner(): void
+    {
+        $subscription = $this->due('ali_1', ['auto_renew' => false]);
+        $this->wallet($this->ali, '300000');
+        $read = Subscription::query()->with(['user', 'plan', 'server'])->findOrFail($subscription->id);
+        $sara = $this->customer(['telegram_id' => 1002, 'username' => 'sara']);
+        $subscription->forceFill(['user_id' => $sara->id])->save(); // support hands it to Sara as Ali taps the switch
+
+        try {
+            $this->service(AutoRenewal::class)->set($read, true);
+            self::fail('the switch was set for a service no longer Ali\'s');
+        } catch (AutoRenewUnavailableException) {
+            // Refused: not his to commit a wallet for.
+        }
+
+        self::assertFalse($subscription->refresh()->auto_renew, 'Sara\'s wallet is not committed by Ali\'s tap');
     }
 
     public function testARunOutOfTimeLeavesTheRenewalsForTheNextOne(): void

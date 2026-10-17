@@ -159,6 +159,35 @@ final class Update
         return $text !== null && str_starts_with($text, '/') && strlen($text) > 1;
     }
 
+    /**
+     * The message this one replies to, when the bot `$botId` wrote it — never the first message of a topic (the bot's,
+     * when it made the topic), which every message written in the topic replies to without its writer replying to
+     * anything; null otherwise.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function repliedToBot(?int $botId): ?array
+    {
+        $message = $this->raw['message'] ?? null;
+        $replied = is_array($message) ? $message['reply_to_message'] ?? null : null;
+        if ($botId === null || !is_array($replied) || (int) ($replied['from']['id'] ?? 0) !== $botId) {
+            return null;
+        }
+        $opensTopic = isset($replied['forum_topic_created'])
+            || (($message['is_topic_message'] ?? false) === true && (int) ($replied['message_id'] ?? 0) === (int) ($message['message_thread_id'] ?? 0));
+
+        return $opensTopic ? null : $replied;
+    }
+
+    /**
+     * Whether a group's update is meant for the bot `$botId` — a press on a button of its, a command, a reply to one of
+     * its messages (repliedToBot()) — rather than the group's own talk, all of which an admin of the group is sent.
+     */
+    public function isForBot(?int $botId): bool
+    {
+        return $this->isCallback() || $this->isCommand() || $this->repliedToBot($botId) !== null;
+    }
+
     /** The command's name, lower case, without the slash or "@bot" suffix: "start". */
     public function command(): ?string
     {

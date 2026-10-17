@@ -27,6 +27,7 @@ use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Support\Persian;
 use App\Support\Text;
+use App\Support\Validation;
 
 /**
  * «☎️ پشتیبانی» and the customer's support tickets — the screens; what the customer writes is TicketMessageHandler's,
@@ -188,8 +189,7 @@ final class TicketHandler implements Handler
             return;
         }
 
-        $pages = (int) ceil($total / self::PER_PAGE);
-        $page = max(1, min($page, $pages));
+        [$page, $pages] = Buttons::page($total, $page, self::PER_PAGE);
 
         $keyboard = InlineKeyboard::make();
         foreach ($mine->orderByDesc('last_message_at')->orderByDesc('id')->forPage($page, self::PER_PAGE)->get(['id', 'subject', 'status']) as $ticket) {
@@ -201,11 +201,7 @@ final class TicketHandler implements Handler
             $keyboard->row(InlineKeyboard::callback($label, self::screenCallback($ticket->id, $page)));
         }
 
-        $text = $this->texts->get(BotText::TicketsTitle);
-        if ($pages > 1) {
-            $keyboard->row(...$this->buttons->pages($page, $pages, self::listCallback(...)));
-            $text .= $this->texts->part(BotText::SubscriptionsPage, ['page' => Persian::digits($page), 'pages' => Persian::digits($pages)]);
-        }
+        $text = $this->buttons->paged($keyboard, $this->texts->get(BotText::TicketsTitle), $page, $pages, self::listCallback(...));
         $keyboard->row($this->buttons->back(MainMenu::SUPPORT));
 
         $ctx->edit($text, ['reply_markup' => $keyboard->build()]);
@@ -266,7 +262,10 @@ final class TicketHandler implements Handler
         $this->show($ctx, $ticket, $from, fresh: false);
     }
 
-    /** «⭐ امتیاز»: five star buttons; a ticket opened again meanwhile has nothing to rate until it closes. */
+    /**
+     * «⭐ امتیاز»: a star button per rating (Validation::RATING_MIN to RATING_MAX); a ticket opened again meanwhile has
+     * nothing to rate until it closes.
+     */
     private function stars(Context $ctx, Ticket $ticket, int $from, bool $fresh): void
     {
         if ($ticket->status !== TicketStatus::Closed) {
@@ -279,8 +278,8 @@ final class TicketHandler implements Handler
         $stars = array_map(fn(int $rating): array => InlineKeyboard::callback(
             $this->texts->render(BotText::TicketStar, ['rating' => Persian::digits($rating)]),
             self::screenCallback($ticket->id, $from, self::RATE, (string) $rating),
-        ), range(1, 5));
-        // Reading order: 1 on the right to 5 on the left — Telegram lays a row out left to right.
+        ), range(Validation::RATING_MIN, Validation::RATING_MAX));
+        // Reading order: the fewest stars on the right, the most on the left — Telegram lays a row out left to right.
         $keyboard = InlineKeyboard::make()->row(...array_reverse($stars))->row($this->buttons->back(self::screenCallback($ticket->id, $from)));
 
         $this->put($ctx, $fresh, $this->texts->render(BotText::TicketRateAsk, ['ticket' => $ticket->id]), $keyboard->build());
@@ -355,12 +354,16 @@ final class TicketHandler implements Handler
             }
         }
 
-        // Only the latest message is left: cut its text by as much as the admin's wording leaves no room for.
+        // Only the latest message is left: cut its text by as much as the admin's wording leaves no room for, counted from
+        // what the screen shows of it (a short one, the whole).
         $shown = array_slice($latest, -1);
         $text = $render($shown, self::WORDS_SHOWN);
         $over = TelegramHtml::visibleLength($text) - $room;
+        if ($over > 0 && $shown !== []) {
+            $text = $render($shown, max(0, Limits::length(Limits::fit($shown[0]->body, self::WORDS_SHOWN)) - $over));
+        }
 
-        return [$over > 0 ? $render($shown, max(0, self::WORDS_SHOWN - $over)) : $text, $pictured($shown)];
+        return [$text, $pictured($shown)];
     }
 
     /**

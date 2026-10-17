@@ -7,13 +7,12 @@ namespace App\Modules\Payments\Drivers\AtlasPay;
 use App\Core\Security\Encrypter;
 use App\Modules\Payments\Contracts\OnlineGateway;
 use App\Modules\Payments\Drivers\GatewayHttp;
+use App\Modules\Payments\Drivers\OnlinePage;
 use App\Modules\Payments\DTO\CardTransfer;
 use App\Modules\Payments\DTO\OnlineInvoice;
 use App\Modules\Payments\DTO\OnlineRequest;
 use App\Modules\Payments\DTO\OnlineVerdict;
-use App\Modules\Payments\DTO\PayLink;
 use App\Modules\Payments\DTO\PaymentInitiation;
-use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Models\Payment;
 use App\Support\Money;
@@ -32,10 +31,12 @@ use GuzzleHttp\ClientInterface;
  * details kept on the payment (`payments.invoice`): the order's id at AtlasPay, the shop's reference for it, its
  * tracking code (what a customer is told, never the id), the sum asked and of it what AtlasPay added (`fee`), and — when
  * AtlasPay shows the merchant the card ("direct payment info") — that card, encrypted, shown only while the page takes
- * money.
+ * money. Its tracking code, when it gave one, is the payment's reference.
  */
 final class AtlasPayGateway implements OnlineGateway
 {
+    use OnlinePage;
+
     public const ORDERS = 'https://api.atlaspay.space/api/v1/orders';
 
     /** A page AtlasPay sends a customer to: its mini app, in Telegram. */
@@ -56,9 +57,6 @@ final class AtlasPayGateway implements OnlineGateway
     /** Minutes a page takes money when AtlasPay says nothing of it: its own 20. */
     private const MINUTES = 20;
 
-    /** The longest of AtlasPay's own words a log line keeps. */
-    private const SAID_MAX = 200;
-
     public function __construct(
         private readonly string $apiKey,
         private readonly ClientInterface $http,
@@ -74,21 +72,12 @@ final class AtlasPayGateway implements OnlineGateway
     /** Its page and the sum it asks — and the card, while the page takes money, when AtlasPay gave one —, as open() kept them. */
     public function initiate(Payment $payment): PaymentInitiation
     {
-        if ($payment->link === null) {
-            return PaymentInitiation::instant();
-        }
         $invoice = $payment->invoice ?? [];
-        $asked = is_int($invoice['total'] ?? null) && $invoice['total'] > 0 ? Money::normalize($invoice['total']) : $payment->amount;
+        $asked = is_int($invoice['total'] ?? null) && $invoice['total'] > 0 ? Money::normalize($invoice['total']) : null;
         $fee = is_int($invoice['fee'] ?? null) && $invoice['fee'] > 0 ? Money::normalize($invoice['fee']) : null;
         $card = $payment->link_expires_at?->isFuture() === true ? $this->openCard($invoice['card'] ?? null) : null;
 
-        return PaymentInitiation::link(new PayLink($payment->link, $payment->link_expires_at?->toDateTimeImmutable(), $asked, $card, $fee));
-    }
-
-    /** AtlasPay said it was paid before this runs (Services\OnlinePayments): its tracking code, if it gave one, is the reference. */
-    public function settle(Payment $payment): PaymentResult
-    {
-        return PaymentResult::success($payment->reference);
+        return $this->page($payment, $asked, $card, $fee);
     }
 
     public function open(Payment $payment, OnlineRequest $request): OnlineInvoice
@@ -247,11 +236,7 @@ final class AtlasPayGateway implements OnlineGateway
     private static function refusal(string $what, int $status, array $answer): string
     {
         $message = $answer['message'] ?? null;
-        $said = mb_substr(match (true) {
-            is_string($message) => $message,
-            is_array($message) => implode('; ', array_filter($message, is_string(...))),
-            default => '',
-        }, 0, self::SAID_MAX);
+        $said = GatewayHttp::said(is_array($message) ? implode('; ', array_filter($message, is_string(...))) : $message);
         $meaning = match ($status) {
             400 => ' — AtlasPay would not take the request: an amount out of its bounds, or a field it would not take',
             401 => ' — the API key is wrong: set the one AtlasPay gives in the payment method',

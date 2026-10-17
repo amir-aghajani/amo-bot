@@ -76,6 +76,24 @@ final class BotTestAccountsTest extends BotTestCase
         self::assertSame([$screen], $this->said());
     }
 
+    public function testAServersButtonTakesItsColourAndRowAsOnAPlansLocations(): void
+    {
+        $this->testsOn();
+        $germany = $this->testServer('آلمان', ['meta' => ['button_style' => 'success', 'button_row' => '2']]);
+        $dutch = $this->testServer('هلند', ['meta' => ['button_style' => 'danger', 'button_row' => '2']]);
+        $french = $this->testServer('فرانسه');
+
+        $this->send($this->message('/free'));
+
+        self::assertSame([
+            [
+                ['text' => self::text(BotText::ServerButton, ['server' => 'هلند']), 'callback_data' => self::serverTap($dutch), 'style' => 'danger'],
+                ['text' => self::text(BotText::ServerButton, ['server' => 'آلمان']), 'callback_data' => self::serverTap($germany), 'style' => 'success'],
+            ],
+            [['text' => self::text(BotText::ServerButton, ['server' => 'فرانسه']), 'callback_data' => self::serverTap($french)]],
+        ], $this->inlineKeyboard(0), 'the first two side by side, the first on the right; the third its own row in the client\'s look');
+    }
+
     public function testATapMakesATestCountedFromItsFirstConnectionAndSendsIt(): void
     {
         $this->testsOn();

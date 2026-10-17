@@ -122,6 +122,24 @@ final class ExpiredServicesCleanupTest extends DatabaseTestCase
         self::assertFalse(Subscription::query()->whereKey($service->id)->exists());
     }
 
+    public function testARenewalOrderedWhileThePanelDeletesTheClientKeepsTheService(): void
+    {
+        $this->removeAfter(0);
+        $service = $this->endedService();
+        $renewal = null;
+        FakeProvider::$onCall = function (int $server, string $call) use ($service, &$renewal): void {
+            if ($call === 'deleteClient' && $renewal === null) {
+                $renewal = $this->service(OrderService::class)->createRenewal($this->ali, $service, $this->plan);
+            }
+        };
+
+        $this->cleanUp();
+
+        self::assertNotNull($renewal);
+        self::assertSame(SubscriptionStatus::Deleted, $service->refresh()->status, 'kept for its renewal, as its panel has it');
+        self::assertSame($service->id, $renewal->refresh()->subscription_id, 'the order still names the service it renews');
+    }
+
     public function testSwitchedOffBySupportItStays(): void
     {
         $this->removeAfter(0);

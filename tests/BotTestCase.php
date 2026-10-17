@@ -9,12 +9,14 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Telegram\Update\Dispatcher;
 use App\Modules\Telegram\Update\Update;
+use App\Modules\Users\Models\User;
 use App\Support\Money;
 use Tests\Support\FakeTelegram;
 
@@ -44,7 +46,7 @@ abstract class BotTestCase extends DatabaseTestCase
         $this->telegram();
     }
 
-    /** The bot: the container's dispatcher, rebuilt around this test's fake Telegram by `telegram()`. */
+    /** The bot: the container's dispatcher, talking to this test's fake Telegram (`telegram()`, under its transport). */
     protected function bot(): Dispatcher
     {
         return $this->service(Dispatcher::class);
@@ -61,6 +63,21 @@ abstract class BotTestCase extends DatabaseTestCase
     protected function sendTo(Bot $bot, Update $update): void
     {
         CurrentBot::run($bot, fn() => $this->send($update));
+    }
+
+    /**
+     * The customer does something while their service is handed to `$to` — given away, or by support, in another
+     * process — the moment the bot first reads it: what it read is still theirs, the row is not.
+     */
+    protected function sendWhileTheServiceMovesOn(Update $update, User $to): void
+    {
+        $moved = false;
+        $this->whileListening('eloquent.retrieved: ' . Subscription::class, static function (Subscription $read) use (&$moved, $to): void {
+            if (!$moved) {
+                $moved = true;
+                Subscription::query()->whereKey($read->id)->update(['user_id' => $to->id]);
+            }
+        }, fn() => $this->send($update));
     }
 
     /** @return list<string> Bot API methods the bot called since the last send(). */

@@ -19,11 +19,11 @@ describe('the connection strip', () => {
     expect(screen.getByRole('status').textContent).toBe('')
   })
 
-  it('says the browser is offline, and goes when it is back', () => {
+  it('says the browser is offline — pages not following, changes not saved, as every write fails at once —, and goes when it is back', () => {
     render(<ConnectionBanner unreachable={false} />)
 
     act(() => onlineManager.setOnline(false))
-    expect(screen.getByRole('status').textContent).toBe('اتصال اینترنت قطع است؛ تا برگشتن آن صفحه‌ها به‌روز نمی‌شوند و تغییرها منتظر می‌مانند.')
+    expect(screen.getByRole('status').textContent).toBe('اتصال اینترنت قطع است؛ تا برگشتن آن صفحه‌ها به‌روز نمی‌شوند و تغییرها ذخیره نمی‌شوند.')
 
     act(() => onlineManager.setOnline(true))
     expect(screen.getByRole('status').textContent).toBe('')

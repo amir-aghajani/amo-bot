@@ -39,9 +39,10 @@ export function KeyboardRow({ row, index, count, canAdd, problems, drag, onMove,
     <li className={cn('rounded-xl border bg-card p-3 transition-colors', problems.length > 0 ? 'border-danger-line' : insertAt !== null ? 'border-selected' : 'border-border')}>
       <div className="mb-2 flex items-center gap-2 text-footnote text-muted-foreground">
         <span>{name}</span>
-        <span className="ms-auto flex items-center gap-0.5">
+        {/* On a phone, 12px between the arrows and the delete, as between the arrows: each a finger's press of its own. */}
+        <span className="ms-auto flex items-center gap-0.5 max-md:gap-3">
           <OrderControls label={name} index={index} count={count} onMove={onMove} />
-          <IconButton aria-label={`حذف ${name}`} className="size-6 hover:text-danger" onClick={onRemove}>
+          <IconButton aria-label={`حذف ${name}`} className="size-6 hover:text-danger max-md:size-8" onClick={onRemove}>
             <Trash2 className="size-3.5" aria-hidden />
           </IconButton>
         </span>

@@ -53,9 +53,9 @@ final class BotWalletTransferTest extends BotTestCase
         $this->walletTransfersOn();
         $this->send($this->tap(MainMenu::WALLET));
         self::assertSame([[
-            ['text' => self::text(BotText::WalletTopup), 'callback_data' => TopUpHandler::START, 'style' => 'success'],
             ['text' => self::text(BotText::WalletSend), 'callback_data' => WalletTransferHandler::PREFIX],
-        ]], $this->inlineKeyboard(0), 'one row, beside the top-up');
+            ['text' => self::text(BotText::WalletTopup), 'callback_data' => TopUpHandler::START, 'style' => 'success'],
+        ]], $this->inlineKeyboard(0), 'one row, the top-up first: on the right, as Telegram lays a row out left to right');
     }
 
     public function testTheIdAndTheAmountTypedAreConfirmedAndTheMoneySent(): void
@@ -68,11 +68,11 @@ final class BotWalletTransferTest extends BotTestCase
         self::assertSame([MainMenu::WALLET], $this->callbacks(0), '«بازگشت» to the wallet');
 
         $this->send($this->message('۷۰۷۰'));
-        self::assertSame([self::text(BotText::WalletSendAmount, ['name' => 'Sara Ahmadi (@sara)', 'min' => '۱۰٬۰۰۰ تومان', 'sendable' => '۱۰۰٬۰۰۰ تومان', 'balance' => '۱۰۰٬۰۰۰ تومان'])], $this->said());
+        self::assertSame([self::text(BotText::WalletSendAmount, ['name' => "Sara Ahmadi (\u{200E}@sara)", 'min' => '۱۰٬۰۰۰ تومان', 'sendable' => '۱۰۰٬۰۰۰ تومان', 'balance' => '۱۰۰٬۰۰۰ تومان'])], $this->said());
         self::assertSame([MainMenu::WALLET], $this->callbacks(0));
 
         $this->send($this->message('۳۰٬۰۰۰ تومان'));
-        self::assertSame([self::text(BotText::WalletSendConfirm, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => 'Sara Ahmadi (@sara)', 'balance' => '۷۰٬۰۰۰ تومان'])], $this->said());
+        self::assertSame([self::text(BotText::WalletSendConfirm, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => "Sara Ahmadi (\u{200E}@sara)", 'balance' => '۷۰٬۰۰۰ تومان'])], $this->said());
         $yes = WalletTransferHandler::PREFIX . $this->sara->id . ':30000';
         self::assertSame([[
             ['text' => self::text(BotText::Cancel), 'callback_data' => MainMenu::WALLET],
@@ -83,7 +83,7 @@ final class BotWalletTransferTest extends BotTestCase
         $this->send($this->tap($yes));
         self::assertSame(['70000.00', '30000.00'], [$this->ali->balance(), $this->sara->balance()]);
         $edit = (int) array_search('editMessageText', $this->calls(), true);
-        self::assertSame(self::text(BotText::WalletSendDone, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => 'Sara Ahmadi (@sara)', 'balance' => '۷۰٬۰۰۰ تومان']), $this->params($edit)['text'], 'said in place of the question');
+        self::assertSame(self::text(BotText::WalletSendDone, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => "Sara Ahmadi (\u{200E}@sara)", 'balance' => '۷۰٬۰۰۰ تومان']), $this->params($edit)['text'], 'said in place of the question');
         self::assertSame([MainMenu::WALLET], $this->callbacks($edit), '«بازگشت» to the wallet');
         self::assertSame([self::text(BotText::WalletReceived, ['amount' => '۳۰٬۰۰۰ تومان', 'name' => 'Ali', 'balance' => '۳۰٬۰۰۰ تومان'])], $this->telegram()->sentTo(self::SARA), 'the recipient told, the sender named as their Telegram account shows them');
         self::assertSame([], $this->telegram()->sentTo(self::CHAT), 'the sender is answered in place, no notice beside it');
@@ -106,7 +106,7 @@ final class BotWalletTransferTest extends BotTestCase
         }
 
         $this->send($this->message((string) self::SARA));
-        self::assertStringStartsWith('💸 انتقال موجودی به Sara Ahmadi (@sara)', $this->said()[0], 'still awaited');
+        self::assertStringStartsWith("💸 انتقال موجودی به Sara Ahmadi (\u{200E}@sara)", $this->said()[0], 'still awaited');
     }
 
     public function testAnAmountOutOfRangeIsSaidAndAnotherAwaited(): void
@@ -134,7 +134,7 @@ final class BotWalletTransferTest extends BotTestCase
         $this->send($this->message('30000'));
 
         $this->send($this->message('20000'));
-        self::assertSame([self::text(BotText::WalletSendConfirm, ['amount' => '۲۰٬۰۰۰ تومان', 'name' => 'Sara Ahmadi (@sara)', 'balance' => '۸۰٬۰۰۰ تومان'])], $this->said());
+        self::assertSame([self::text(BotText::WalletSendConfirm, ['amount' => '۲۰٬۰۰۰ تومان', 'name' => "Sara Ahmadi (\u{200E}@sara)", 'balance' => '۸۰٬۰۰۰ تومان'])], $this->said());
 
         $this->send($this->tap(WalletTransferHandler::PREFIX . $this->sara->id . ':20000'));
         self::assertSame(['80000.00', '20000.00'], [$this->ali->balance(), $this->sara->balance()]);
@@ -287,7 +287,7 @@ final class BotWalletTransferTest extends BotTestCase
 
         self::assertStringStartsWith('⚠️ انتقال موجودی الان ممکن نیست: شناسه‌های زیادی را بررسی کرده‌اید؛ ', $this->said()[0]);
         $this->send($this->message((string) self::SARA));
-        self::assertNotContains(self::text(BotText::WalletSendAmount, ['name' => 'Sara Ahmadi (@sara)', 'min' => '۱۰٬۰۰۰ تومان', 'sendable' => '۱۰۰٬۰۰۰ تومان', 'balance' => '۱۰۰٬۰۰۰ تومان']), $this->said(), 'the step is over');
+        self::assertNotContains(self::text(BotText::WalletSendAmount, ['name' => "Sara Ahmadi (\u{200E}@sara)", 'min' => '۱۰٬۰۰۰ تومان', 'sendable' => '۱۰۰٬۰۰۰ تومان', 'balance' => '۱۰۰٬۰۰۰ تومان']), $this->said(), 'the step is over');
     }
 
     public function testEveryButtonFitsTelegramsCallbackData(): void

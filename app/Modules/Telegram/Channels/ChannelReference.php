@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Channels;
 
+use App\Support\Persian;
+
 /**
  * What the admin pasted to name a channel, as getChat takes it: "@username" for a public one, or a private one's numeric
  * id. A private invite link is recognised but cannot be looked up (the Bot API has no call for it).
@@ -23,8 +25,10 @@ final class ChannelReference
             return null;
         }
 
-        if (preg_match('/^-?\d{5,20}$/', $input) === 1) {
-            return new self((int) $input, false);
+        // A private one's id, as copied or as typed on a Persian keyboard.
+        $id = Persian::latinDigits($input);
+        if (preg_match('/^-?\d{5,20}$/', $id) === 1) {
+            return new self((int) $id, false);
         }
 
         $path = preg_replace('~^(?:https?://)?(?:www\.)?(?:t(?:elegram)?\.me|telegram\.dog)/~i', '', $input);

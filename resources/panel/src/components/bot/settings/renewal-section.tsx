@@ -129,7 +129,10 @@ function RenewalCard({ settings }: { settings: BotSettingsData }) {
               value={values.renew_default_method}
               // Radix's hidden select reports "" while the value has no item drawn (every method off, or the one just
               // switched on not drawn yet): that is no choice, and the method stays as toggle() left it.
-              onValueChange={(method) => method !== '' && set('renew_default_method', method as RenewalMethod)}
+              onValueChange={(picked) => {
+                const method = METHODS.find((item) => item.method === picked)?.method
+                if (method) set('renew_default_method', method)
+              }}
               disabled={on.length === 0}
             >
               <SelectTrigger {...control} className="w-full sm:max-w-72">
@@ -184,7 +187,7 @@ function AutoRenewCard({ settings }: { settings: BotSettingsData }) {
     <SectionCard
       form={group}
       title="تمدید خودکار"
-      description="مشتری می‌تواند تمدید خودکار هر سرویسش را از صفحه همان سرویس در ربات روشن کند: چند روز پیش از پایان سرویس، قیمت پلن از کیف پولش کسر و سرویس تمدید می‌شود. اگر موجودی کافی نباشد، یک بار در ربات خبردار می‌شود."
+      description="مشتری می‌تواند تمدید خودکار هر سرویسش را از صفحه همان سرویس در ربات روشن کند: چند روز پیش از پایان سرویس، قیمت پلن از کیف پولش کسر و سرویس تمدید می‌شود. اگر موجودی کافی نباشد، یک بار در تلگرام یا با ایمیل خبردار می‌شود."
     >
       <Field id="renewal_days" label="چند روز پیش از پایان سرویس" error={error('auto_renew_days')}>
         <Input dir="ltr" inputMode="numeric" value={values.auto_renew_days} onChange={(e) => set('auto_renew_days', e.target.value)} className="sm:max-w-40" />

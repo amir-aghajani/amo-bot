@@ -4,33 +4,37 @@ import { CustomerFilter } from '@/components/customer-filter'
 import { DateFilter } from '@/components/date-filter'
 import { EmptyState } from '@/components/empty-state'
 import { ListTotal } from '@/components/list-total'
-import { ListView, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
 import { PaidFor } from '@/components/orders/order-subject'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
 import { DismissReceiptsModal, type DismissScope } from '@/components/payments/dismiss-receipts'
+import { PaymentStatusCell } from '@/components/payments/payment-status-cell'
 import { ReviewModal } from '@/components/payments/review-modal'
-import { Reviewer } from '@/components/reviewer'
 import { SearchBox } from '@/components/search-box'
 import { SelectionBar } from '@/components/selection-bar'
-import { StatusBadge, statusTabs } from '@/components/status-badge'
+import { statusTabs } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { UserIdentity } from '@/components/user-identity'
+import { UserIdentity, UserLabel } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { PaymentResponse, PaymentRow, PaymentSort, PaymentsResponse, PaymentStatus } from '@/lib/api-types'
 import { formatMoney, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
-import { HELD, PAYMENT_STATUS, TO_WALLET } from '@/lib/statuses'
+import { PAYMENT_HELD, PAYMENT_STATUS, type Status } from '@/lib/statuses'
 import { useNextRow } from '@/lib/use-next-row'
 import { useOpenRow } from '@/lib/use-open-row'
 import { usePagedList } from '@/lib/use-paged-list'
 import { useSelection, type Selection } from '@/lib/use-selection'
 
-/** The queue's tabs after «همه»: the receipts waiting for a review first. */
-const QUEUE: PaymentStatus[] = ['awaiting_review', 'paid', 'failed', 'pending']
+/** A tab of the queue: a status, or the online payments held for support and still waiting (`held`, the API's). */
+type Filter = PaymentStatus | 'held'
+
+/** The queue's tabs after «همه»: what waits on support first — the receipts waiting for a review, the payments held. */
+const QUEUE: Filter[] = ['awaiting_review', 'held', 'paid', 'failed', 'pending']
+const TABS: Record<Filter, Status> = { ...PAYMENT_STATUS, held: PAYMENT_HELD }
 
 /** What the headers sort the payments by — the list's own order, the newest first, leads. */
 const SORTS: PaymentSort[] = ['created', 'amount']
@@ -44,14 +48,15 @@ const waiting = (payment: PaymentRow) => payment.status === 'awaiting_review'
  */
 export function PaymentsPage() {
   const tabs = useId()
-  // The dashboard and the sidebar link here with ?status=awaiting_review; an order to one of its payments with ?search=#id;
-  // a customer's page with ?user=.
+  // The dashboard and the sidebar link here with ?status=awaiting_review, the dashboard with ?status=held too; an order to
+  // one of its payments with ?search=#id; a customer's page with ?user=.
   const list = usePagedList({
     queryKey: queryKeys.payments,
     read: (query) => api.get<PaymentsResponse>('/payments', query),
     list: 'payments',
     statuses: ['', ...QUEUE],
     params: ['from', 'to', 'user'],
+    ids: ['user'],
     sorts: SORTS,
     address: '/payments',
   })
@@ -61,6 +66,8 @@ export function PaymentsPage() {
   const next = useNextRow({ queryKey: queryKeys.payments, list, open: opened.row, onOpen: opened.open })
   // Ticks belong to one list: another tab, search, customer or dates start with nothing selected (its pages keep theirs).
   const selection = useSelection<PaymentRow>(`${list.filter}|${list.params.user}|${list.params.from}|${list.params.to}|${list.typed.trim()}`)
+  // A receipt ticked and then decided elsewhere (another tab, the report group) loses its box: its tick goes with it.
+  selection.follow(list.rows, waiting)
   const [dismissing, setDismissing] = useState<DismissScope | null>(null)
   const inReview = list.meta?.awaiting_review ?? 0
 
@@ -78,11 +85,17 @@ export function PaymentsPage() {
         description="هر پرداختی که مشتری‌ها شروع کرده‌اند. رسیدهای کارت به کارت این‌جا بررسی می‌شوند؛ تایید یعنی تحویل سرویس یا شارژ کیف پول. پرداخت آنلاین را خود درگاه تایید می‌کند و از جزئیاتش می‌شود از درگاه استعلام کرد. برای رد کردن چند رسید در انتظار با هم، انتخابشان کنید."
       />
 
-      <PageTabs id={tabs} value={list.filter} tabs={statusTabs(PAYMENT_STATUS, QUEUE, { awaiting_review: list.meta?.awaiting_review })} onChange={list.setFilter} aria-label="وضعیت پرداخت" />
+      <PageTabs
+        id={tabs}
+        value={list.filter}
+        tabs={statusTabs(TABS, QUEUE, { awaiting_review: list.meta?.awaiting_review, held: list.meta?.held })}
+        onChange={list.setFilter}
+        aria-label="وضعیت پرداخت"
+      />
 
       <div {...tabPanel(tabs, list.filter)} className="grid gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <SearchBox value={list.typed} onChange={list.setTyped} placeholder="شماره پرداخت یا سفارش، نام یا شناسه مشتری" aria-label="جستجوی پرداخت" />
+          <SearchBox value={list.typed} onChange={list.setTyped} placeholder="شماره پرداخت، سفارش یا مشتری" aria-label="جستجوی پرداخت" />
           <DateFilter
             range={days}
             basis="بر اساس زمان ثبت پرداخت"
@@ -120,7 +133,15 @@ export function PaymentsPage() {
               framed
               icon={Search}
               title="پرداختی پیدا نشد"
-              description={list.narrowed ? 'با این جستجو یا فیلتر چیزی نیست.' : list.filter === 'awaiting_review' ? 'فعلا رسیدی منتظر بررسی نیست.' : 'پرداختی در این وضعیت نیست.'}
+              description={
+                list.narrowed
+                  ? 'با این جستجو یا فیلتر چیزی نیست.'
+                  : list.filter === 'awaiting_review'
+                    ? 'فعلا رسیدی منتظر بررسی نیست.'
+                    : list.filter === 'held'
+                      ? 'فعلا پرداختی برای پشتیبانی نگه داشته نشده است.'
+                      : 'پرداختی در این وضعیت نیست.'
+              }
             />
           }
         >
@@ -168,17 +189,19 @@ function PaymentsTable({
             <Checkbox {...selection.page(payments.filter(waiting))} aria-label="انتخاب همه رسیدهای در انتظار این صفحه" />
           </TableHead>
           <TableHead>پرداخت</TableHead>
-          <TableHead>مشتری</TableHead>
-          <TableHead className="hidden md:table-cell">بابت</TableHead>
+          <TableHead className="hidden md:table-cell">مشتری</TableHead>
+          {/* What it paid for and when come with the widest screens: a tablet has a phone's room and a half. */}
+          <TableHead className="hidden xl:table-cell">بابت</TableHead>
           <SortableHead list={sorting} by="amount">
             مبلغ
           </SortableHead>
-          <TableHead>وضعیت</TableHead>
-          <SortableHead list={sorting} by="created" className="hidden lg:table-cell">
+          <TableHead className="hidden md:table-cell">وضعیت</TableHead>
+          <SortableHead list={sorting} by="created" className="hidden xl:table-cell">
             زمان
           </SortableHead>
-          <TableHead className="w-24">
-            <span className="sr-only">بررسی</span>
+          {/* Its button says «بررسی» or «جزئیات», by the payment: the column is named for both. */}
+          <TableHead className="md:w-24">
+            <span className="sr-only">عملیات</span>
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -197,27 +220,22 @@ function PaymentsTable({
                   </RowTitleButton>
                   <span className="max-w-44 truncate text-footnote text-muted-foreground">{payment.method}</span>
                 </div>
-              </TableCell>
-              <TableCell>
-                <UserIdentity user={payment.user} />
+                <PhoneFacts>
+                  <PaymentStatusCell payment={payment} decided />
+                  <UserLabel user={payment.user} />
+                </PhoneFacts>
               </TableCell>
               <TableCell className="hidden md:table-cell">
+                <UserIdentity user={payment.user} />
+              </TableCell>
+              <TableCell className="hidden xl:table-cell">
                 <PaidFor order={payment.order} />
               </TableCell>
               <TableCell className="tabular">{formatMoney(payment.amount)}</TableCell>
-              <TableCell>
-                {/* The spaces between the lines keep them words apart for assistive tech («ناموفق توسط …»), not one. */}
-                <div className="grid justify-items-start gap-0.5">
-                  <StatusBadge status={PAYMENT_STATUS[payment.status]} /> {payment.auto_approved && <span className="text-caption text-faint">تایید خودکار</span>}
-                  {payment.to_wallet && <span className="text-caption text-warning">{TO_WALLET}</span>} {payment.held && <span className="text-caption text-warning">{HELD}</span>}{' '}
-                  {payment.reviewer && !payment.auto_approved && (
-                    <span className="text-caption text-faint">
-                      توسط <Reviewer name={payment.reviewer} />
-                    </span>
-                  )}
-                </div>
+              <TableCell className="hidden md:table-cell">
+                <PaymentStatusCell payment={payment} decided />
               </TableCell>
-              <TableCell className="hidden text-muted-foreground lg:table-cell">
+              <TableCell className="hidden text-muted-foreground xl:table-cell">
                 {/* When it was made — what the column sorts by —, and when its receipt came. */}
                 <div className="grid">
                   <span>{timeAgo(payment.created_at)}</span>

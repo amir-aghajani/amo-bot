@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Discounts\Enums\DiscountSource;
+use App\Modules\Discounts\Exceptions\DiscountInUseException;
 use App\Modules\Discounts\Models\DiscountCode;
 use App\Modules\Discounts\Models\Sale;
 use App\Modules\Orders\Enums\OrderStatus;
@@ -80,13 +81,14 @@ final class AdminDiscountsApiTest extends HttpTestCase
             'per_user' => 1,
             'enabled' => true,
             'uses' => 0,
+            'deletable' => true,
             'state' => 'active',
         ], array_diff_key($code, ['id' => 0, 'created_at' => 0]), 'kept in upper case, the window read in the shop\'s zone');
 
         $order = $this->purchaseOrder($this->customer(), $plan, $server, ['discount_code_id' => $code['id']]);
         $this->purchaseOrder($this->customer(['telegram_id' => 7001]), $plan, $server, ['discount_code_id' => $code['id'], 'status' => OrderStatus::Cancelled]);
         $list = $this->decode($this->get('/api/admin/discount-codes'));
-        self::assertSame([1, 1], [$list['meta']['total'], $list['codes'][0]['uses']], 'an order cancelled is no use');
+        self::assertSame([1, 1, false], [$list['meta']['total'], $list['codes'][0]['uses'], $list['codes'][0]['deletable']], 'an order cancelled is no use; the other keeps it, which the list says up front');
 
         self::assertSame(1, $this->decode($this->get('/api/admin/discount-codes?search=' . rawurlencode('اینستا')))['meta']['total'], 'searched by its note');
         self::assertSame(1, $this->decode($this->get('/api/admin/discount-codes?search=nowruz'))['meta']['total'], 'and its code, in any case');
@@ -94,11 +96,29 @@ final class AdminDiscountsApiTest extends HttpTestCase
 
         self::assertSame(409, $this->deleteJson("/api/admin/discount-codes/{$code['id']}")->getStatusCode(), 'a code with a use stays');
         $off = $this->decode($this->patchJson("/api/admin/discount-codes/{$code['id']}", ['enabled' => false]))['code'];
-        self::assertSame([false, 'off'], [$off['enabled'], $off['state']]);
+        self::assertSame([false, 'off', false], [$off['enabled'], $off['state'], $off['deletable']]);
 
         $order->forceFill(['status' => OrderStatus::Cancelled])->save();
+        self::assertTrue($this->decode($this->get('/api/admin/discount-codes'))['codes'][0]['deletable'], 'only cancelled orders name it');
         self::assertSame(204, $this->deleteJson("/api/admin/discount-codes/{$code['id']}")->getStatusCode(), 'nothing uses it now');
         self::assertNull($order->refresh()->discount_code_id);
+    }
+
+    public function testACodeOnlyRefundedOrdersNamedCountsNoUseButIsKeptAndTheListSaysSo(): void
+    {
+        $server = $this->sellingServer();
+        $plan = $this->plan([], $server);
+        $refunded = $this->discountCode('REFUNDED', 10);
+        $this->purchaseOrder($this->customer(), $plan, $server, ['discount_code_id' => $refunded->id, 'status' => OrderStatus::Refunded]);
+        $unused = $this->discountCode('UNUSED', 10);
+
+        $rows = array_column($this->decode($this->get('/api/admin/discount-codes'))['codes'], null, 'code');
+
+        self::assertSame([0, false], [$rows['REFUNDED']['uses'], $rows['REFUNDED']['deletable']], 'no use, but its refunded order keeps it');
+        self::assertSame([0, true], [$rows['UNUSED']['uses'], $rows['UNUSED']['deletable']]);
+        $refused = $this->deleteJson("/api/admin/discount-codes/{$refunded->id}");
+        self::assertSame([409, DiscountInUseException::REFUNDED], [$refused->getStatusCode(), $this->decode($refused)['message']], 'as the delete answers');
+        self::assertSame(204, $this->deleteJson("/api/admin/discount-codes/{$unused->id}")->getStatusCode());
     }
 
     public function testEveryRefusalOfTheFormComesAtOnce(): void
@@ -172,6 +192,17 @@ final class AdminDiscountsApiTest extends HttpTestCase
 
         $refused = $this->postJson('/api/admin/sales', ['name' => '', 'percent' => 0, 'enabled' => true]);
         self::assertSame(['name', 'percent'], array_keys($this->decode($refused)['errors']));
+
+        // Past the last day the database keeps (MySQL's TIMESTAMP ends in 2038): refused, never a 500.
+        $tooLate = $this->postJson('/api/admin/sales', ['name' => 'حراج', 'percent' => 10, 'starts_at' => '2040-01-01T00:00', 'ends_at' => '2099-01-01T00:00', 'enabled' => true]);
+        self::assertSame(422, $tooLate->getStatusCode());
+        self::assertSame(
+            ['starts_at' => [LocalTime::tooLateFor('زمان شروع') . '؛ برای بدون محدودیت، خالی بگذارید.'], 'ends_at' => [LocalTime::tooLateFor('زمان پایان') . '؛ برای بدون محدودیت، خالی بگذارید.']],
+            $this->decode($tooLate)['errors'],
+        );
+        $code = $this->postJson('/api/admin/discount-codes', ['code' => 'LATE', 'type' => 'percent', 'value' => 10, 'first_purchase_only' => false, 'ends_at' => '2038-01-18T00:01', 'enabled' => true]);
+        self::assertSame(['ends_at'], array_keys($this->decode($code)['errors']), 'a discount code\'s window too');
+        self::assertSame(201, $this->postJson('/api/admin/discount-codes', ['code' => 'LAST', 'type' => 'percent', 'value' => 10, 'first_purchase_only' => false, 'ends_at' => LocalTime::LAST_DAY . 'T23:59', 'enabled' => true])->getStatusCode(), 'its last day is fine');
 
         self::assertSame('off', $this->decode($this->patchJson("/api/admin/sales/{$sale['id']}", ['enabled' => false]))['sale']['state']);
         self::assertSame(30, $this->decode($this->putJson("/api/admin/sales/{$sale['id']}", ['name' => 'حراج', 'percent' => 30, 'enabled' => true]))['sale']['percent']);

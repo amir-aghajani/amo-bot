@@ -47,6 +47,8 @@ final class SignInRefusedException extends DomainRuleException
     public const MAIL_OFF = 'فعلا ایمیلی از این فروشگاه فرستاده نمی‌شود؛ کمی بعد دوباره امتحان کنید یا از راه دیگری وارد شوید.';
     public const EMAIL_TAKEN = 'با این ایمیل همین حالا حسابی ساخته شد؛ با ایمیل و رمز عبور وارد شوید.';
     public const GOOGLE_OFF = 'ورود با Google برای این وب‌سایت فعال نیست.';
+    /** A nonce asked while neither sign-in that brings one back (Telegram's, Google's) is on. */
+    public const ID_TOKEN_OFF = 'ورود با تلگرام و Google برای این وب‌سایت فعال نیست.';
     public const GOOGLE_UNREACHABLE = 'Google در دسترس نبود؛ چند لحظه بعد دوباره امتحان کنید.';
 
     private function __construct(
@@ -163,6 +165,11 @@ final class SignInRefusedException extends DomainRuleException
     public static function googleOff(): self
     {
         return new self(self::GOOGLE_OFF, 422);
+    }
+
+    public static function idTokenOff(): self
+    {
+        return new self(self::ID_TOKEN_OFF, 422);
     }
 
     public static function googleUnreachable(\Throwable $previous): self

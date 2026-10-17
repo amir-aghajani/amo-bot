@@ -5,6 +5,7 @@ import { ConnectedGroup } from '@/components/bot/connected-group'
 import { useReportGroup, useReportGroupActions } from '@/components/bot/use-report-group'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -18,7 +19,9 @@ import { useMainShop } from '@/lib/auth'
 export function ReportGroupCard() {
   // The agency's requests are reported in the main bot's group alone.
   const mainShop = useMainShop()
-  const { data: group, error, refetch } = useReportGroup()
+  const read = useReportGroup()
+  const { data: group, refetch } = read
+  const failure = useReadFailure(read)
   const { link, check, test, disconnect, busy } = useReportGroupActions()
   const [replacing, setReplacing] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
@@ -44,25 +47,26 @@ export function ReportGroupCard() {
       </CardHeader>
 
       <CardContent className="grid gap-5 pt-5">
-        {error && <ErrorState what="گروه گزارش‌ها" error={error} onRetry={() => void refetch()} />}
+        {failure.error && <ErrorState what="گروه گزارش‌ها" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />}
 
         {!group ? (
-          !error && <Skeleton className="h-40 w-full" />
+          !failure.error && <Skeleton className="h-40 w-full" />
         ) : group.connected ? (
           <>
             <ConnectedGroup group={group} />
 
+            {/* Every operation held while one runs — held, not disabled, so the one pressed keeps the focus. */}
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" icon={Send} busy={test.isPending} disabled={busy} onClick={() => test.mutate()}>
+              <Button variant="secondary" icon={Send} busy={test.isPending} aria-disabled={busy} onClick={() => test.mutate()}>
                 پیام تست
               </Button>
-              <Button variant="secondary" icon={RefreshCw} busy={check.isPending} disabled={busy} onClick={() => check.mutate()}>
+              <Button variant="secondary" icon={RefreshCw} busy={check.isPending} aria-disabled={busy} onClick={() => check.mutate()}>
                 بررسی دوباره
               </Button>
-              <Button variant="ghost" icon={Link2} disabled={busy || replacing} onClick={() => setReplacing(true)}>
+              <Button variant="ghost" icon={Link2} aria-disabled={busy || replacing} onClick={() => setReplacing(true)}>
                 اتصال گروه دیگر
               </Button>
-              <Button variant="danger" icon={Unlink} disabled={busy} onClick={() => setDisconnecting(true)}>
+              <Button variant="danger" icon={Unlink} aria-disabled={busy} onClick={() => setDisconnecting(true)}>
                 قطع اتصال
               </Button>
             </div>

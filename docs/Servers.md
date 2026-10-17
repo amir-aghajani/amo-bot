@@ -1,3 +1,5 @@
+[فارسی](fa/Servers.md)
+
 # Servers
 
 «سرورها», the owner's alone: the VPN panels the shop sells on — 3X-UI v3 or PasarGuard 3.1+. Every shop sells on the same
@@ -13,7 +15,7 @@ address, and in amber why it cannot sell, when it cannot; then «وضعیت», �
 | «وضعیت» | Means |
 |---|---|
 | «غیرفعال» | You switched it off — whatever else is true of it |
-| «خطا در اتصال» | The last contact with its panel failed; the ⓘ beside it says why |
+| «خطا در اتصال» | The last contact with its panel failed; the ⓘ beside it says why: what to fix, and under it, on a line of its own, the technical detail (the panel's own words, or cURL's) |
 | «متصل» | The last contact worked |
 | «بررسی نشده» | Never contacted |
 
@@ -39,7 +41,7 @@ Under «تنظیمات پیشرفته»:
 | «تایم‌اوت اتصال (ثانیه)» | 5 to 120, 30 by default: how long a call to the panel may take (connecting gives up after 10 seconds at most) |
 | «آدرس اشتراک» | Blank: the subscription links are the panel's own. Set, the full prefix before the link's token, when the links must come from another address (a reverse proxy): `https://sub.example.com/sub` |
 | «اتصال از طریق پراکسی SOCKS5» | Off: the shop talks to the panel directly. On, every request the shop makes to this panel goes through a SOCKS5 proxy ([below](#a-panel-behind-a-socks5-proxy)), and these appear: |
-| «آدرس پراکسی» | The proxy's host name or IP address, without `socks5://` and without a port: `proxy.example.com`, `203.0.113.10` |
+| «آدرس پراکسی» | The proxy's host name or IP address, without `socks5://` and without a port: `proxy.example.com`, `203.0.113.10` (an IP typed in Persian digits is read as the same IP) |
 | «پورت پراکسی» | 1 to 65535, 1080 by default |
 | «نام کاربری پراکسی» / «رمز پراکسی» | Blank for a proxy without a login. A password only with a username |
 | «ظرفیت» | How many **active** services it may hold — every shop's together, free tests too. Blank is unlimited; **`0` is full** |
@@ -59,12 +61,15 @@ is saved even when that check fails**: fix the connection on its page. The check
 for sale** until you mark them ([inbounds](#inbounds)).
 
 **The secrets** — the token or key, the password, the TOTP secret, the proxy's password — are kept encrypted and never
-shown again: a kept one shows as dots (a token with its last four characters). Left blank on an edit, it stays;
-«پاک کردن مقدار ذخیره‌شده» removes one the connection can do without — one it needs (a panel's token or password) has
-no such button: type the new one. **A secret stays only while the address keeps its origin** — the same http or
-https, host and port (a path may change): moved, it is never sent to the new address, not even by «تست اتصال», and the
-form asks for it again («آدرس پنل عوض شده است؛ … را دوباره وارد کنید.»). The proxy's password likewise stays only
-while the proxy's address and port do. Saving another way in removes the other way's credentials.
+shown again: a kept one shows as dots — a token of 12 characters or more with its last four; a password, the TOTP
+secret and the proxy's password with none. Left blank on an edit, it stays; «پاک کردن مقدار ذخیره‌شده» removes one the
+connection can do without — one it needs (a panel's token or password) has no such button: type the new one. **A secret
+stays only while the way to the panel stays**: the address's origin — the same http or https, host and port (a path
+may change) —, the proxy's address and port, and «بررسی گواهی TLS». Change one, and the kept token or password is never
+sent the new way, not even by «تست اتصال»: the form asks for it again («آدرس پنل، پراکسی یا بررسی گواهی TLS عوض شده
+است؛ … را دوباره وارد کنید.»). Switching the proxy off keeps it — it then goes straight to the panel it was given for.
+The proxy's password likewise stays only while the proxy's address and port do. Saving another way in removes the
+other way's credentials.
 
 ### A panel behind a SOCKS5 proxy
 
@@ -109,7 +114,9 @@ The header's **«بررسی اتصال»** checks the saved server and keeps wha
 subscription links, its inbounds. Press it after changing anything on the panel or in the server's settings. A server
 whose connector this installation no longer has is not checked: «کانکتور این سرور در این نصب وجود ندارد.»
 
-- **«وضعیت»** — when it was last checked, its status, and why it cannot sell, if it cannot. The panel's CPU, RAM, disk
+- **«وضعیت»** — when it was last checked, its status, why its last contact failed, if it did — what to fix, and under
+  it, on a line of its own, the technical detail (the panel's own words, or cURL's) —, and why it cannot sell, if it
+  cannot. A check made on this page shows its own result in the failure's place. The panel's CPU, RAM, disk
   and uptime are shown only for a check made on this page now (or just after adding it): nothing of them is kept. Then
   how the shop signs in, where the links come from («از تنظیمات پنل», or your prefix), the SOCKS5 proxy when the panel
   is reached through one, the TLS check, the timeout, and
@@ -120,7 +127,8 @@ whose connector this installation no longer has is not checked: «کانکتور
 - **«تنظیمات اتصال»** — the form again, with «تست اتصال», «بازگردانی تغییرات» and «ذخیره تغییرات» (both held until a
   field differs from what is saved). Every field but the
   connector changes here (another kind of panel is another server). **Saving does not check it again**: press «بررسی
-  اتصال» after. The switch «فعال» is here, under «تنظیمات پیشرفته».
+  اتصال» after. The switch «فعال» is here, under «تنظیمات پیشرفته». When the server is saved elsewhere meanwhile
+  (another tab), what you typed stays and the form says so; «دیدن نسخه تازه» shows the saved one instead.
 - **«افزودن زمان و حجم»** — days and traffic for its services ([below](#adding-days-and-traffic)).
 - **«انتقال سرویس‌ها»** — every shop's services on it moved to another server, to empty it or to rescue them from a
   panel that is gone ([below](#moving-its-services)).
@@ -136,24 +144,20 @@ one client on the panel, attached to its inbounds.
 
 The shop reads them only on «به‌روزرسانی از پنل», «بررسی اتصال» and the check of a new server — never by itself. New
 ones come not for sale. One the panel no longer lists is switched off and kept with your choice, for when it comes back;
-it cannot be switched on meanwhile, nor can an inbound disabled on the panel.
+it cannot be switched on meanwhile, nor can an inbound disabled on the panel. A very long remark or tag is kept cut
+short (255 characters of a remark, 128 of a tag).
 
 ### Test accounts
 
 The card «اکانت تست» sets what a free test on this server gets, in every shop — the main bot's and each agent's —, and
-is saved on its own:
-
-- «اکانت تست روی این سرور» — off at first; on, customers may take a test here while their shop gives tests (its hint
-  links to «اکانت تست › تنظیمات», where a shop switches tests on);
-- «حجم (مگابایت)» — 1 to 102400, 500 by default;
-- «مدت (ساعت)» — 1 to 720, 24 by default;
-- «شروع از اولین اتصال» — on at first: the hours count from the customer's first connection; off, from the moment the
-  test is made.
+is saved on its own: whether the server gives tests at all («اکانت تست روی این سرور», off at first), a test's traffic
+and hours, and whether the hours count from the customer's first connection. Each field is described on
+[Test accounts](Test-Accounts.md#what-a-test-gets-each-servers-terms).
 
 A test is one client — on a panel with inbounds, on every inbound marked «فروش» —, made only while the server can sell.
 It takes room in the server's «ظرفیت» as any active service. A change holds for the tests made from then on. Agents
 see these terms on their tests page and cannot change them. The shop's own rules — the switch, the quota, the
-clean-up — are on «فروشگاه › اکانت تست» ([Test accounts](Test-Accounts.md)).
+clean-up — are on «فروشگاه › اکانت تست» ([Test accounts](Test-Accounts.md#the-shops-rules)).
 
 ### Adding days and traffic
 
@@ -170,15 +174,23 @@ gift:
 **Who gets it**: the services of every shop that were on this server when you gave it — none bought afterwards, and no
 free test — and running. Running is the panel's word, asked at each service's turn: one that ended by time or traffic,
 or was switched off — by support or on the panel — is passed by; days go only to a service that ends some day, traffic
-only to one with a quota. The dialog counts whom it reaches from the shop's copy now; the card's progress says how many
+only to one with a quota. A service the days would end after [the last day](Services.md#watch-out-for) the shop can keep
+is passed by whole, its traffic too. The dialog counts whom it reaches from the shop's copy now; the card's progress says how many
 were checked, given, passed by and failed.
 
 **How it runs**: one service at a time, by the card while the page is open, else by the scheduler every minute. One
-gift runs on a server at a time — a [mass gift](Broadcasts.md#the-mass-gift)'s part on it too. A panel out of reach
-holds the gift at that service, with an amber note saying why, and it goes on once the panel answers; a service the
-panel refused, or whose update timed out or got an error page from a proxy in front of the panel, is counted failed
-and not tried again (the panel may have taken it).
-**«لغو»** stops it there («لغوشده») — what was given stays given. The card lists the latest ten.
+gift runs on a server at a time — a [mass gift](Broadcasts.md#the-mass-gift)'s part on it too.
+
+- **A panel out of reach** holds the gift at that service, with an amber note saying why, and it goes on once the panel
+  answers.
+- **An update that got no clear answer** — it timed out, the connection broke, or a proxy in front of the panel sent an
+  error page — has the panel asked what it now holds. When the panel has the gift, the service counts as given (and its
+  customer is told). Otherwise, or when the panel cannot be asked, it is counted failed and not tried again: the panel
+  may still have taken it, and a service is never given twice.
+- **A service the panel refused** is counted failed.
+- **«لغو»** stops it there («لغوشده») — what was given stays given.
+
+The card lists the latest ten.
 
 ### Moving its services
 
@@ -195,8 +207,8 @@ service at a time, so it is the batch of [moving services](Services.md#moving-se
     15-minute sync), and this panel is never asked. Its old clients stay on it — they would work again if it came back —,
     so the shop keeps a list of them and removes them once the panel answers ([below](#the-clients-a-rescue-left)). The
     dialog starts on it when the server's last contact failed.
-- «سرویس‌های غیرفعال‌شده هم منتقل شوند» — off: the services support switched off stay here. On, they move switched off,
-  and stay so until support switches them on.
+- «سرویس‌های غیرفعال‌شده هم منتقل شوند» — off: the services support switched off stay here. On, they move too: each is
+  made switched off on the target, and stays so until support switches it on.
 - «پیام به مشتری‌ها» — on: each customer is sent the new link.
 - «فقط سرویس‌های این پلن‌ها» — shown when the services here are of more than one plan; none ticked moves them all. A
   service with no plan (a free test, one added by its link) moves only when none is ticked.
@@ -227,8 +239,9 @@ the scheduler every minute. The card shows how far it got: services checked, mov
 clients it left on a panel that are still there («کلاینت روی پنل مانده است»; [below](#the-clients-a-rescue-left)).
 
 - **A panel out of reach** — the target's, or this one's in a migration — holds the move at that service with an amber
-  note saying why, and it goes on once the panel answers. A migration waiting for this server's panel can go on as a
-  rescue: «ادامه با حالت نجات».
+  note saying why, and it goes on once the panel answers. When it is this server's panel that does not answer, the card
+  offers «ادامه با حالت نجات»: the migration goes on as a rescue. A target out of reach holds a rescue too, so the
+  button is not offered then.
 - **A panel that stops answering half-way through a service** is asked again before anything is undone: an old client
   it deleted without saying so leaves the service moved, and a client the target made without saying so is kept — a
   customer is never left without a service, nor given two. When the panel cannot be asked either, the client it may
@@ -276,19 +289,22 @@ renewals wait for it (nothing is charged meanwhile), and a customer's own servic
 bot says they may be old; the website's refresh says the panel did not answer. Then it is tried again. Your own
 buttons, sales and deliveries do not wait.
 
-The main shop's dashboard counts the servers whose last contact failed («سرورهای دارای خطا»), and the main bot's
-report group hears it in «خطاها»: «🔴 پنل سرور … جواب نمی‌دهد» when a panel that answered stops, «🟢 … دوباره جواب
-می‌دهد» when it answers again ([Report group](Telegram-Group.md)).
+The main shop's dashboard counts the switched-on servers whose last contact failed («سرورهای دارای خطا»; one you
+switched off is not counted), and the main bot's
+report group hears it in «خطاها»: «🔴 پنل سرور «…» جواب نمی‌دهد», with the reason, when a panel that answered stops,
+and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it answers again ([Report group](Telegram-Group.md)).
 
 ## The two connectors
 
 **3X-UI** (v3 and later, MHSanaei's):
 
 - The **subscription service must be on** in the panel's settings: the shop builds each link the way the panel does
-  (its sub domain, port and path), or from «آدرس اشتراک».
+  (its sub domain, port and path — a path of just `/` too), or from «آدرس اشتراک».
 - A service's term starts at its first connection; the plan's devices are its IP limit; the comment names the
   customer's Telegram id.
 - «تغییر لینک» gives the client new credentials and a new subscription id.
+- Signed in with «نام کاربری و رمز», the shop signs in again by itself when the panel's session has expired — whether
+  it was reading or changing something.
 
 **PasarGuard** (3.1 and later):
 
@@ -299,14 +315,8 @@ report group hears it in «خطاها»: «🔴 پنل سرور … جواب ن�
   «نامشخص».
 - «تغییر لینک» revokes the link: every earlier one stops working.
 
-Another panel is a driver ([Drivers](Drivers.md#a-vpn-panel-connector)).
-
-## From a shell
-
-`php bin/console panel:probe 3x-ui <address> -t <token>` (or `-u`/`-p`, `--totp` for 3X-UI's two-factor login, `-k` for
-a self-signed certificate, `--proxy socks5h://[user:password@]host[:port]` through a SOCKS5 proxy; `pasarguard` for the
-other) tries an address and its credentials as «تست اتصال» does, stores nothing, and prints the status, the inbounds
-and the subscription server ([Console commands](Console-Commands.md)).
+Another panel is a driver ([Drivers](Drivers.md#a-vpn-panel-connector)). For developers, `panel:probe` tries a panel
+from a console as «تست اتصال» does ([Console commands](Console-Commands.md)); a shop never needs it.
 
 ## Watch out for
 

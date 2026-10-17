@@ -101,6 +101,17 @@ final class StoreCheckoutTest extends HttpTestCase
         self::assertSame([], $this->telegram()->sentTo(self::TELEGRAM_ID), 'the website shows it: the bot says nothing');
     }
 
+    public function testAWalletPurchaseWhoseDeliveryFailedSaysWhyInAWord(): void
+    {
+        $this->wallet($this->customer, '500000');
+        FakeProvider::$unreachable = true;
+
+        $checkout = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod()))['checkout'];
+
+        self::assertSame(['settled', 'failed', 'delivery', null], [$checkout['outcome'], $checkout['order']['status'], $checkout['order']['failure'], $checkout['subscription']], 'paid, support finishes it: the website tells its customer so');
+        self::assertSame(OrderStatus::Failed, Order::query()->sole()->status);
+    }
+
     public function testACardPurchaseAnswersWhereToTransferAndWaitsForTheReceipt(): void
     {
         $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->card);

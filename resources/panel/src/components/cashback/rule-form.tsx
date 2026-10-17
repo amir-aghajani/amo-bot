@@ -14,6 +14,9 @@ import { asSet, useForm } from '@/lib/use-form'
 /** The kinds of order a rule may be for, in their own order. */
 const CASHBACK_TYPES = (Object.keys(OWN_ORDER_TYPE) as OwnOrderType[]).map((type) => ({ value: type, label: OWN_ORDER_TYPE[type] }))
 
+/** What a new rule is for to start with: purchases and renewals. */
+const STARTING_TYPES: OwnOrderType[] = ['purchase', 'renewal']
+
 /** The selects' value for "any" (the rule names no group or way to pay). */
 const ANY = 'any'
 
@@ -32,7 +35,7 @@ export function RuleForm({ rule, invalidates, onSaved, onCancel }: RuleFormProps
   const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm(
     {
       percent: rule ? String(rule.percent) : '',
-      order_types: rule ? [...rule.order_types] : (['purchase', 'renewal'] as OwnOrderType[]),
+      order_types: rule ? [...rule.order_types] : STARTING_TYPES,
       customer_group_id: rule?.customer_group ? String(rule.customer_group.id) : ANY,
       payment_method_id: rule?.payment_method ? String(rule.payment_method.id) : ANY,
     },

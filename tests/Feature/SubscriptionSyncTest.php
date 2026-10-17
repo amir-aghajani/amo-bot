@@ -10,6 +10,7 @@ use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Enums\ConnectionFailure;
 use App\Modules\Providers\Exceptions\ConnectionException;
+use App\Modules\Providers\Exceptions\PanelApiException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
@@ -17,6 +18,7 @@ use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Subscriptions\Tasks\SyncSubscriptionsTask;
 use App\Modules\Users\Models\User;
+use App\Support\LocalTime;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
@@ -61,6 +63,25 @@ final class SubscriptionSyncTest extends DatabaseTestCase
         self::assertSame('2026-10-19 12:00:00', $started->expires_at?->format('Y-m-d H:i:s'), 'the panel started the clock at the first connection');
         self::assertSame('2026-09-19 12:00:00', $started->starts_at?->format('Y-m-d H:i:s'));
         self::assertSame(5 * Traffic::GIGABYTE, $ended->refresh()->download_bytes, 'only running services are read');
+    }
+
+    public function testADeadlineThePanelSetsPastTheLastDayTheShopKeepsIsKeptAsThatDay(): void
+    {
+        // A long term first connected late, or a client extended on its panel by hand: MySQL keeps no TIMESTAMP past
+        // January 2038, and one such row would stop the whole server's sync.
+        $late = $this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['starts_at' => null, 'expires_at' => null, 'duration_hours' => 3650 * 24]);
+        $next = $this->subscription($this->ali, $this->plan, $this->server, 'ali_2');
+        $this->onThePanel('ali_1', usedGb: 1, expiry: Expiry::at(new \DateTimeImmutable('2040-03-01 12:00:00')));
+        $this->onThePanel('ali_2', usedGb: 4);
+
+        $this->sync();
+
+        self::assertEquals(LocalTime::last(), $late->refresh()->expires_at, 'the last moment the shop keeps');
+        self::assertSame(SubscriptionStatus::Active, $late->status);
+        self::assertSame(4 * Traffic::GIGABYTE, $next->refresh()->download_bytes, 'the sync goes on with the rest');
+
+        $this->sync();
+        self::assertEquals(LocalTime::last(), $late->refresh()->expires_at, 'read again, nothing moves');
     }
 
     public function testEveryBotsServicesOnAServerAreReadFromOneListOfItsPanel(): void
@@ -203,6 +224,28 @@ final class SubscriptionSyncTest extends DatabaseTestCase
         $this->sync();
 
         self::assertSame(12 * Traffic::GIGABYTE, $subscription->refresh()->download_bytes);
+    }
+
+    public function testAServiceItsPanelFailsToAnswerAboutHoldsUpNoOther(): void
+    {
+        $logs = $this->logs();
+        FakeProvider::$lists = false;
+        $first = $this->subscription($this->ali, $this->plan, $this->server, 'ali_1');
+        $second = $this->subscription($this->ali, $this->plan, $this->server, 'ali_2');
+        $this->onThePanel('ali_1', usedGb: 12);
+        $this->onThePanel('ali_2', usedGb: 7);
+        // The panel answers about every client but the first.
+        $asked = 0;
+        FakeProvider::$onCall = static function (int $server, string $call) use (&$asked): void {
+            if ($call === 'findClient' && $asked++ === 0) {
+                throw new PanelApiException('The fake panel could not read ali_1.', 200, 'a broken row');
+            }
+        };
+
+        $this->sync();
+
+        self::assertSame([0, 7 * Traffic::GIGABYTE], [(int) $first->refresh()->download_bytes, $second->refresh()->download_bytes], 'the second read all the same');
+        self::assertTrue($logs->hasWarningThatContains('Could not read subscription ' . $first->id . ' (ali_1)'));
     }
 
     public function testADeviceLimitChangedOnThePanelIsTheServicesFromThenOn(): void

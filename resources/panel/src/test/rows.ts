@@ -1,5 +1,6 @@
 import type {
   AgencyLevelRow,
+  AgencyRequestRow,
   AgencyStanding,
   BotSettingsData,
   BotSettingsResponse,
@@ -250,6 +251,7 @@ export function paymentRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
     receipt: { name: null, note: null, sent_at: '2026-10-06T09:00:00Z' },
     auto_approved: false,
     reviewer: null,
+    reviewer_name: null,
     refund_note: null,
     paid_at: null,
     link_expires_at: null,
@@ -366,7 +368,7 @@ export function serverRow(overrides: Partial<ServerRow> = {}): ServerRow {
       name: 'آلمان',
       base_url: 'https://de.example.com:2053/panel-path',
       auth_mode: 'token',
-      api_token: { set: true, hint: '••••••ok-1' },
+      api_token: { set: true, hint: '••••••••' },
       username: '',
       password: { set: false, hint: '' },
       totp_secret: { set: false, hint: '' },
@@ -388,6 +390,7 @@ export function serverRow(overrides: Partial<ServerRow> = {}): ServerRow {
     notes: null,
     last_checked_at: '2026-10-06T09:00:00Z',
     last_error: null,
+    last_error_detail: null,
     serves_subscriptions: true,
     unsellable_reason: null,
     counts: { inbounds: 2, selectable_inbounds: 1, active_subscriptions: 4, shop_active_subscriptions: 4 },
@@ -414,9 +417,11 @@ export function serverMigrationRow(overrides: Partial<ServerMigrationRow> = {}):
     skipped: 0,
     left_behind: 0,
     waiting_reason: null,
+    waiting_on: null,
     reason: null,
     last_failure: null,
     reviewer: 'root',
+    reviewer_name: null,
     created_at: '2026-10-14T09:00:00Z',
     started_at: '2026-10-14T09:00:01Z',
     finished_at: null,
@@ -452,7 +457,11 @@ export function serverDriverRow(): DriverDescription {
       serverSecret('api_token', 'توکن API', { when: { auth_mode: ['token'] } }),
       serverField('username', { label: 'نام کاربری', required: true, when: { auth_mode: ['password'] }, ltr: true }),
       serverSecret('password', 'رمز عبور', { when: { auth_mode: ['password'] } }),
-      serverSecret('totp_secret', 'کلید TOTP', { required: false, when: { auth_mode: ['password'] }, moved: 'آدرس پنل عوض شده است؛ کلید TOTP را دوباره وارد کنید یا پاکش کنید.' }),
+      serverSecret('totp_secret', 'کلید TOTP', {
+        required: false,
+        when: { auth_mode: ['password'] },
+        moved: 'آدرس پنل، پراکسی یا بررسی گواهی TLS عوض شده است؛ کلید TOTP را دوباره وارد کنید یا پاکش کنید.',
+      }),
       serverField('verify_tls', { type: 'toggle', label: 'بررسی گواهی TLS', required: true, advanced: true, default: true }),
       serverField('timeout', { type: 'number', label: 'تایم‌اوت اتصال', required: true, advanced: true, unit: 'ثانیه', min: 5, max: 120, default: 30 }),
       serverField('subscription_url', { type: 'url', label: 'آدرس اشتراک', advanced: true }),
@@ -474,9 +483,18 @@ export function serverDriverRow(): DriverDescription {
   }
 }
 
-/** A secret of a server's way in as its connector describes it: required, bound to the panel's address. */
+/** A secret of a server's way in as its connector describes it: required, bound to the panel's address and the way there (its proxy, the TLS check). */
 function serverSecret(name: string, label: string, overrides: Partial<FieldDescription>): FieldDescription {
-  return serverField(name, { type: 'secret', label, required: true, secret: true, bound_to: ['base_url'], moved: `آدرس پنل عوض شده است؛ ${label} را دوباره وارد کنید.`, default: null, ...overrides })
+  return serverField(name, {
+    type: 'secret',
+    label,
+    required: true,
+    secret: true,
+    bound_to: ['base_url', 'proxy_host', 'proxy_port', 'verify_tls'],
+    moved: `آدرس پنل، پراکسی یا بررسی گواهی TLS عوض شده است؛ ${label} را دوباره وارد کنید.`,
+    default: null,
+    ...overrides,
+  })
 }
 
 /** A field of a server's form as its connector's description has it: a line of text, optional, unless `overrides` say. */
@@ -554,6 +572,26 @@ export function levelRow(overrides: Partial<AgencyLevelRow> = {}): AgencyLevelRo
   return { id: 1, name: 'طلایی', price_per_gb: '3000.00', sort: 1, counts: { agents: 0 }, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-10-06T09:00:00Z', ...overrides }
 }
 
+/** Agency request 4, رضا's, waiting: nothing written with it, to approve or reject. */
+export function agencyRequestRow(overrides: Partial<AgencyRequestRow> = {}): AgencyRequestRow {
+  return {
+    id: 4,
+    user: { id: 21, name: 'رضا', username: 'reza', telegram_id: 555_000, email: null },
+    user_status: 'active',
+    agent: false,
+    status: 'pending',
+    note: null,
+    level: null,
+    reason: null,
+    reviewer: null,
+    reviewer_name: null,
+    decided_at: null,
+    created_at: '2026-10-06T09:00:00Z',
+    actions: { approve: true, reject: true },
+    ...overrides,
+  }
+}
+
 /** An agent's terms of selling: no end, no monthly minimum, selling — in Mehr 1405, nothing bought yet, warned three days ahead. */
 export function agencyStanding(overrides: Partial<AgencyStanding> = {}): AgencyStanding {
   return {
@@ -574,7 +612,7 @@ export function dashboardResponse(overrides: Partial<DashboardResponse> = {}): D
     generated_at: '2026-10-06T09:00:00Z',
     kpis: { revenue: { value: '0.00', previous: '0.00' }, orders: none, new_users: none, active_subscriptions: 0, users_total: 0 },
     series: [],
-    attention: { payments_to_review: 0, stuck_orders: 0, open_tickets: 0, pending_reviews: 0, pending_orders: 0, servers_with_errors: 0, expiring_soon: 0 },
+    attention: { payments_to_review: 0, stuck_orders: 0, open_tickets: 0, pending_reviews: 0, held_payments: 0, servers_with_errors: 0, pending_orders: 0, expiring_soon: 0 },
     traffic_shortage: null,
     agency_standing: null,
     expiring_days: 3,
@@ -645,9 +683,27 @@ export function cubePayDriverRow(): DriverDescription {
     notes: ['آدرس سایت فروشگاه باید با https شروع شود: CubePay نتیجه هر پرداخت را به آن خبر می‌دهد'],
     traits: { kind: 'online', builtin: false },
     fields: [
-      serverField('token', { type: 'secret', label: 'توکن API', hint: 'از ربات ‎@cubepy_bot، بخش «🔗 پنل من».', required: true, secret: true, ltr: true, default: null }),
+      serverField('token', { type: 'secret', label: 'توکن API', hint: 'از ربات \u{200E}@cubepy_bot، بخش «🔗 پنل من».', required: true, secret: true, ltr: true, default: null }),
       serverField('fee_percent', { label: 'کارمزد درصدی بر عهده مشتری', placeholder: '0', ltr: true }),
       serverField('fee_fixed', { type: 'number', label: 'کارمزد ثابت بر عهده مشتری', required: true, unit: 'تومان', min: 0, max: 1000000, default: 0 }),
+    ],
+  }
+}
+
+/**
+ * The card-to-card driver as GET /payment-methods/drivers describes it (Payments\Drivers\Manual\ManualDriver): the note
+ * under the card and the review window; its cards are the method's form's own.
+ */
+export function cardDriverRow(): DriverDescription {
+  return {
+    key: 'manual',
+    label: 'کارت به کارت',
+    description: 'مشتری مبلغ را به یکی از کارت‌های شما واریز می‌کند و رسید را می‌فرستد.',
+    notes: ['بدون کارمزد و بدون نیاز به درگاه'],
+    traits: { kind: 'manual', builtin: false },
+    fields: [
+      serverField('instructions', { type: 'textarea', label: 'توضیحات برای مشتری' }),
+      serverField('auto_approve_after', { type: 'number', label: 'تایید خودکار', unit: 'دقیقه', min: 0, max: 10080, default: 0 }),
     ],
   }
 }
@@ -751,7 +807,7 @@ export function ticketRow(overrides: Partial<TicketRow> = {}): TicketRow {
 
 /** A message of ticket 12: the customer's first one, from the website, without a picture. */
 export function ticketMessage(overrides: Partial<TicketMessageRow> = {}): TicketMessageRow {
-  return { id: 30, author: 'customer', reviewer: null, body: 'از دیشب سرعت خیلی پایین است.', attachment: null, channel: 'web', created_at: '2026-10-06T09:00:00Z', ...overrides }
+  return { id: 30, author: 'customer', reviewer: null, reviewer_name: null, body: 'از دیشب سرعت خیلی پایین است.', attachment: null, channel: 'web', created_at: '2026-10-06T09:00:00Z', ...overrides }
 }
 
 /** Ticket 12 with its conversation: the customer wrote twice, the second time with a picture — waiting on support. */
@@ -775,6 +831,7 @@ export function reviewRow(overrides: Partial<ReviewRow> = {}): ReviewRow {
     status: 'pending',
     customer: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null },
     reviewer: null,
+    reviewer_name: null,
     decided_at: null,
     created_at: '2026-10-06T09:00:00Z',
     actions: { approve: true, reject: true },
@@ -850,7 +907,7 @@ export function testServerRow(overrides: Partial<TestServerRow> = {}): TestServe
   return { id: 1, name: 'آلمان', test_enabled: true, test_traffic_mb: 500, test_duration_hours: 24, test_on_hold: true, available: true, ...overrides }
 }
 
-/** Code 21 of the shop: NOWRUZ, 20% off anything a code takes, for anyone, no window, used once of a hundred. */
+/** Code 21 of the shop: NOWRUZ, 20% off anything a code takes, for anyone, no window, used once of a hundred — so kept. */
 export function discountCodeRow(overrides: Partial<DiscountCodeRow> = {}): DiscountCodeRow {
   return {
     id: 21,
@@ -870,6 +927,7 @@ export function discountCodeRow(overrides: Partial<DiscountCodeRow> = {}): Disco
     per_user: null,
     enabled: true,
     uses: 1,
+    deletable: false,
     state: 'active',
     created_at: '2026-10-06T09:00:00Z',
     ...overrides,

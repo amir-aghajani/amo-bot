@@ -49,8 +49,8 @@ final class CustomServicesController extends ApiController
     }
 
     /**
-     * POST /custom-services/orders — {gb, days, server_id, method_id, name_mode?, client_name?, discount_code?}: a service
-     * built, paid.
+     * POST /custom-services/orders — {gb, days, server_id, method_id, name_mode?, client_name?, discount_code?,
+     * expected_amount?}: a service built, paid.
      *
      * @throws ValidationException 422
      * @throws RequestKeyReusedException 422 on `idempotency_key`

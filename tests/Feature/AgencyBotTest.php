@@ -165,7 +165,7 @@ final class AgencyBotTest extends BotTestCase
             'traffic' => Messages::bytes(Traffic::bytesOfGb(10)),
             'balance' => Messages::balance('0'),
             'credit' => '۵۰۰٬۰۰۰ تومان',
-            'bot' => '@agent_shop_bot',
+            'bot' => "\u{200E}@agent_shop_bot",
             'customers' => '۱',
             'sold' => '۱',
             'active' => '۱',
@@ -233,14 +233,19 @@ final class AgencyBotTest extends BotTestCase
         $this->agentBot($this->agent());
         $this->send($this->tap(AgencyHandler::TRAFFIC));
 
-        foreach (['۵', (string) (AgencySettings::TRAFFIC_MAX_GB + 1)] as $typed) {
+        foreach (['۵', (string) (AgencySettings::TRAFFIC_MAX_GB + 1), '۲۰ روز', '۲۰ هزار تومان', '۲۰۰ هزار گیگ', '۱ میلیون گیگ'] as $typed) {
             $this->send($this->message($typed));
-            self::assertSame([self::text(BotText::AgencyTrafficInvalid, ['min' => '۱۰'])], $this->said(), $typed);
+            self::assertSame([self::text(BotText::AgencyTrafficInvalid, ['min' => '۱۰', 'most' => '۱۰۰٬۰۰۰'])], $this->said(), $typed . ': GB are typed as a number of GB within the bounds — both said —, in no other unit');
         }
 
         $this->send($this->message('۲۰ گیگ'));
         self::assertSame([self::text(BotText::AgencyTrafficCheckout, ['traffic' => Messages::bytes(Traffic::bytesOfGb(20)), 'amount' => '۶۰٬۰۰۰ تومان'])], $this->said());
         self::assertContains($this->payFor(20, $this->wallet), $this->callbacks(0));
+
+        // By the thousand, as an agent says it.
+        $this->send($this->tap(AgencyHandler::TRAFFIC));
+        $this->send($this->message('۵ هزار گیگ'));
+        self::assertSame([self::text(BotText::AgencyTrafficCheckout, ['traffic' => Messages::bytes(Traffic::bytesOfGb(5_000)), 'amount' => '۱۵٬۰۰۰٬۰۰۰ تومان'])], $this->said());
         self::assertSame(0, Order::query()->count(), 'nothing is ordered before a way to pay is picked');
     }
 
@@ -260,15 +265,15 @@ final class AgencyBotTest extends BotTestCase
         self::assertSame([FakeTelegram::AGENT_TOKEN, 777000, 'reza_shop_bot', 'فروشگاه <رضا>'], [$bot->token, $bot->telegram_id, $bot->username, $bot->title]);
         self::assertNotNull($bot->connected_at);
         self::assertStringNotContainsString(FakeTelegram::AGENT_TOKEN, (string) $this->db()->table('bots')->where('id', $bot->id)->value('token'), 'kept encrypted');
-        self::assertSame([self::text(BotText::AgencyBotSaved, ['bot' => '@reza_shop_bot'])], $this->said());
+        self::assertSame([self::text(BotText::AgencyBotSaved, ['bot' => "\u{200E}@reza_shop_bot"])], $this->said());
 
         $this->send($this->tap('agency:bot'));
-        self::assertSame([self::text(BotText::AgencyBotInfo, ['bot' => '@reza_shop_bot', 'status' => self::text(BotText::AgencyBotRunning)])], $this->said());
+        self::assertSame([self::text(BotText::AgencyBotInfo, ['bot' => "\u{200E}@reza_shop_bot", 'status' => self::text(BotText::AgencyBotRunning)])], $this->said());
 
         // Telegram turned its token down since.
         $bot->forceFill(['problem' => 'تلگرام <توکن> را نپذیرفت'])->save();
         $this->send($this->tap('agency:bot'));
-        self::assertSame([self::text(BotText::AgencyBotInfo, ['bot' => '@reza_shop_bot', 'status' => self::text(BotText::AgencyBotProblem, ['reason' => 'تلگرام &lt;توکن&gt; را نپذیرفت'])])], $this->said(), 'the problem as text, escaped once');
+        self::assertSame([self::text(BotText::AgencyBotInfo, ['bot' => "\u{200E}@reza_shop_bot", 'status' => self::text(BotText::AgencyBotProblem, ['reason' => 'تلگرام &lt;توکن&gt; را نپذیرفت'])])], $this->said(), 'the problem as text, escaped once');
     }
 
     public function testATokenIsRefusedWhenItIsNoneTelegramRefusesItOrTheBotIsNotTheirs(): void
@@ -314,7 +319,7 @@ final class AgencyBotTest extends BotTestCase
 
         $bot->refresh();
         self::assertSame([$rotated, 'فروشگاه رضا', $handedOver], [$bot->token, $bot->title, $bot->connected_at?->getTimestamp()], 'the new token and the name Telegram gives the bot now; handed over when it first was');
-        self::assertSame([self::text(BotText::AgencyBotSaved, ['bot' => '@agent_shop_bot'])], $this->said());
+        self::assertSame([self::text(BotText::AgencyBotSaved, ['bot' => "\u{200E}@agent_shop_bot"])], $this->said());
     }
 
     public function testABotAnotherAgentHandedOverInTheSameMomentIsRefusedAsTaken(): void

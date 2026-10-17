@@ -17,8 +17,8 @@ import { formatBytes, formatMoney, formatNumber, formatPricePerGb } from '@/lib/
 
 /* The side of a customer's page: their wallet, what the referral program knows of them, their groups, an agent's agency. */
 
-/** A fact's column, a little narrower than a dialog's: the cards sit in the page's side column. */
-const FACTS = 'grid-cols-[minmax(5.5rem,auto)_1fr] gap-x-4 gap-y-2.5'
+/** A fact's column, a little narrower than a dialog's: the cards sit in the page's side column (every side card's FactList). */
+export const FACTS = 'grid-cols-[minmax(5.5rem,auto)_1fr] gap-x-4 gap-y-2.5'
 
 interface WalletCardProps {
   customer: UserRow

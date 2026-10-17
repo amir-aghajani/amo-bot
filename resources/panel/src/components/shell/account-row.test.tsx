@@ -11,8 +11,8 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, RequireAuth } from '@/lib/auth'
 import { STORAGE_KEYS } from '@/lib/storage'
 import { ThemeProvider } from '@/lib/theme'
-import { PHONE } from '@/lib/use-media-query'
 import { useUnsavedGuard } from '@/lib/use-unsaved-guard'
+import { resizeWindow } from '@/test/browser'
 import { testQueryClient, until } from '@/test/render'
 import { json, noContent, offline, server } from '@/test/server'
 
@@ -65,23 +65,6 @@ async function showPanel({ unsaved = false }: { unsaved?: boolean } = {}) {
   await screen.findByText('صفحه داشبورد')
 }
 
-/** The window is a phone's: the sidebar is a drawer behind the topbar's menu. */
-function onAPhone() {
-  vi.spyOn(window, 'matchMedia').mockImplementation(
-    (query) =>
-      ({
-        matches: query === PHONE,
-        media: query,
-        onchange: null,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-        addListener: () => undefined,
-        removeListener: () => undefined,
-        dispatchEvent: () => false,
-      }) satisfies MediaQueryList,
-  )
-}
-
 beforeEach(() => {
   server()
     .on('GET', '/api/app', json({ name: 'فروشگاه امو', installed: true }))
@@ -119,7 +102,8 @@ describe('the account row', () => {
   })
 
   it('is in the phone’s drawer', async () => {
-    onAPhone()
+    // The window is a phone's: the sidebar is a drawer behind the topbar's menu.
+    resizeWindow(400)
     await showPanel()
 
     fireEvent.click(screen.getByRole('button', { name: 'باز کردن منو' }))

@@ -30,7 +30,8 @@ final class SessionPresenter
         $name = match (true) {
             $bot->isMain() => 'فروشگاه اصلی',
             ($bot->title ?? '') !== '' => (string) $bot->title,
-            default => 'نماینده: ' . ($bot->agent?->name() ?? '#' . $bot->id),
+            // A number set apart (U+2068 … U+2069): right to left, a bare «#12» reads «12#».
+            default => 'نماینده: ' . ($bot->agent?->name() ?? "\u{2068}#{$bot->id}\u{2069}"),
         };
 
         return [

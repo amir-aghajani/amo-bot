@@ -5,7 +5,8 @@ import { FilterSelect } from '@/components/filter-select'
 
 /*
  * A list's filter pill (components/filter-select): assistive tech hears what the eye reads on it — the filter and the
- * value it narrows the list to —, and the name follows each pick.
+ * value it narrows the list to —, the name follows each pick, and a list narrowed by a value its choices lack is never
+ * said to be whole.
  */
 
 const OPTIONS = [
@@ -28,5 +29,28 @@ describe('a filter pill', () => {
     fireEvent.click(screen.getByRole('option', { name: 'مسدود' }))
 
     expect(screen.getByRole('combobox', { name: 'وضعیت مسدود' })).toBeTruthy()
+  })
+
+  it('never says «همه» of a list it narrows: a value its choices do not name yet — or any more — is said as it is', () => {
+    const servers = [{ value: '', label: 'همه' }]
+    const { rerender } = render(<FilterSelect label="سرور" value="4" options={servers} onChange={() => undefined} />)
+    expect(screen.getByRole('combobox', { name: 'سرور 4' })).toBeTruthy()
+
+    rerender(<FilterSelect label="سرور" value="4" options={[...servers, { value: '4', label: 'آلمان' }]} onChange={() => undefined} />)
+    expect(screen.getByRole('combobox', { name: 'سرور آلمان' })).toBeTruthy()
+  })
+
+  it('lights up under the hand and while open in the dark theme too — dark’s own fill never wins over them', () => {
+    render(<StatusFilter />)
+    const looks = screen.getByRole('combobox', { name: 'وضعیت همه' }).className.split(' ')
+
+    expect(looks).toEqual(expect.arrayContaining(['border-field-line', 'dark:bg-transparent', 'dark:hover:bg-fill', 'dark:data-[state=open]:bg-fill']))
+    expect(looks.filter((look) => look.startsWith('dark:border-'))).toEqual([])
+  })
+
+  it('presses as a finger’s 44px on a phone, drawn as the 32px pill', () => {
+    render(<StatusFilter />)
+
+    expect(screen.getByRole('combobox', { name: 'وضعیت همه' }).className.split(' ')).toEqual(expect.arrayContaining(['h-8', 'touch-target']))
   })
 })

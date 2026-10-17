@@ -8,6 +8,7 @@ import { PageTabs, type PageTab } from '@/components/page-tabs'
 import { Input } from '@/components/ui/input'
 import { decimalOf, wholeOf } from '@/lib/format'
 import { trimmed, useForm } from '@/lib/use-form'
+import { useRequestKey } from '@/lib/use-request-key'
 
 export type Direction = 'add' | 'remove'
 
@@ -40,8 +41,11 @@ interface BalanceAdjustProps<A extends string, N extends string, R> {
   noteHint: string
   notePlaceholders: Record<Direction, string>
   submitLabels: Record<Direction, string>
-  /** The change: the amount in the API's form ("150000", "1.5" however it was typed — wholeOf, decimalOf), in its direction, with the note. */
-  send: (direction: Direction, amount: string, note: string) => Promise<R>
+  /**
+   * The change: the amount in the API's form ("150000", "1.5" however it was typed — wholeOf, decimalOf), in its
+   * direction, with the note, under its `Idempotency-Key` — the same while the same change is sent again (useRequestKey).
+   */
+  send: (direction: Direction, amount: string, note: string, key: string) => Promise<R>
   /**
    * What else the change shows in — what its answer does not bring (the ledger beside it, another screen's copy) —, read
    * again once it went through.
@@ -56,8 +60,8 @@ interface BalanceAdjustProps<A extends string, N extends string, R> {
 /**
  * A balance changed by hand (a customer's wallet, an agent's traffic): the balance, the direction, the amount — whole
  * Toman with `whole` («۱۵۰٬۰۰۰» goes as "150000"), else up to two decimals («۱٫۵» goes as "1.5"); anything else is
- * refused here, never sent as another number — and a ledger note. After a change the form is ready for the next one in
- * the same direction.
+ * refused here, never sent as another number — and a ledger note. A change pressed again after no answer goes under
+ * the same key, so the server makes it once. After a change the form is ready for the next one in the same direction.
  */
 export function BalanceAdjust<A extends string, N extends string, R>(props: BalanceAdjustProps<A, N, R>) {
   const { balanceLabel, balance, fields, amountLabel, amountPlaceholder, whole = false, amountHint, noteHint, notePlaceholders, submitLabels, send, invalidates, onDone, onCancel } = props
@@ -66,6 +70,7 @@ export function BalanceAdjust<A extends string, N extends string, R>(props: Bala
   const { values, set, reset, error, setErrors, formError, busy, dirty, submit, handleSubmit } = useForm<Values<A, N>>(() => blank('add'), {
     reads: (draft) => trimmed([draft[fields.amount], draft[fields.note]]),
   })
+  const requestKey = useRequestKey()
   const typed = values[fields.amount]
   const amount = whole ? wholeOf(typed) : decimalOf(typed)
 
@@ -74,8 +79,11 @@ export function BalanceAdjust<A extends string, N extends string, R>(props: Bala
       setErrors({ [fields.amount]: [whole ? NOT_A_WHOLE_AMOUNT : NOT_AN_AMOUNT] })
       return
     }
-    const result = await submit(() => send(values.direction, amount, values[fields.note]), { invalidates })
+    const note = values[fields.note]
+    const key = requestKey.keyFor([values.direction, amount, note.trim()])
+    const result = await submit(() => send(values.direction, amount, note, key), { invalidates })
     if (result === undefined) return
+    requestKey.done()
     reset(blank(values.direction))
     onDone(result, values.direction)
   })
@@ -104,7 +112,9 @@ export function BalanceAdjust<A extends string, N extends string, R>(props: Bala
             <NoteLine max={LEDGER_NOTE_MAX} value={values[fields.note]} onChange={(e) => set(fields.note, e.target.value as Values<A, N>[N])} placeholder={notePlaceholders[values.direction]} />
           </Field>
         </div>
-        <FormActions error={formError} onCancel={onCancel} submitLabel={submitLabels[values.direction]} busy={busy} disabled={typed.trim() === ''} icon={Check} dirty={dirty} />
+        {/* Held while no amount is typed — not disabled: after a change the amount is emptied under the submit just
+            pressed, which keeps the focus. */}
+        <FormActions error={formError} onCancel={onCancel} submitLabel={submitLabels[values.direction]} busy={busy} held={typed.trim() === ''} icon={Check} dirty={dirty} />
       </form>
     </div>
   )

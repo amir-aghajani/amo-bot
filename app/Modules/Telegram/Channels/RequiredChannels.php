@@ -42,7 +42,7 @@ final class RequiredChannels
     {
         $reference = ChannelReference::parse($input);
         if ($reference === null) {
-            throw self::invalid('لینک یا نام کاربری کانال معتبر نیست. مثلا https://t.me/mychannel یا @mychannel، و برای کانال خصوصی شناسه عددی آن.');
+            throw self::invalid("لینک یا نام کاربری کانال معتبر نیست. مثلا https://t.me/mychannel یا \u{200E}@mychannel، و برای کانال خصوصی شناسه عددی آن.");
         }
         if ($reference->isInviteLink()) {
             throw self::invalid('از روی لینک دعوت خصوصی نمی‌شود کانال را پیدا کرد. ربات را ادمین کانال کنید و شناسه عددی کانال را وارد کنید (مثل -1001234567890)؛ لینک عضویت را ربات خودش می‌سازد.');

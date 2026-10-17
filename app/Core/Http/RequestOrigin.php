@@ -99,13 +99,7 @@ final class RequestOrigin
             return $address;
         }
 
-        $whole = intdiv($bits, 8);
-        $network = substr($packed, 0, $whole);
-        if ($bits % 8 !== 0) {
-            $network .= chr(ord($packed[$whole]) & ((0xFF << (8 - $bits % 8)) & 0xFF));
-        }
-
-        return inet_ntop(str_pad($network, 16, "\0")) . '/' . $bits;
+        return inet_ntop(str_pad(self::prefix($packed, $bits), 16, "\0")) . '/' . $bits;
     }
 
     /** The browser reached the shop over HTTPS — directly, or through a proxy that says so. */
@@ -136,31 +130,30 @@ final class RequestOrigin
         return false;
     }
 
-    /** Whether the packed address is the proxy's, or inside its range ("10.0.0.0/8", "2400:cb00::/32"). */
+    /**
+     * Whether the packed address is the proxy's, or inside its range ("10.0.0.0/8", "2400:cb00::/32"). A range whose
+     * length is no number ("10.0.0.1/", a typo in config.php) is trusted for nothing — read as /0 it would trust everyone.
+     */
     private static function within(string $packed, string $proxy): bool
     {
         [$network, $bits] = str_contains($proxy, '/') ? explode('/', $proxy, 2) : [$proxy, null];
         $range = inet_pton($network);
-        if ($range === false || strlen($range) !== strlen($packed)) {
+        if ($range === false || strlen($range) !== strlen($packed) || ($bits !== null && !ctype_digit($bits))) {
             return false;
         }
 
         $length = strlen($packed) * 8;
         $bits = $bits === null ? $length : (int) $bits;
-        if ($bits < 0 || $bits > $length) {
-            return false;
-        }
 
+        return $bits <= $length && self::prefix($packed, $bits) === self::prefix($range, $bits);
+    }
+
+    /** The first `$bits` bits of a packed address: its whole bytes, then the byte they end in with the rest zeroed. */
+    private static function prefix(string $packed, int $bits): string
+    {
         $whole = intdiv($bits, 8);
-        if (strncmp($packed, $range, $whole) !== 0) {
-            return false;
-        }
         $rest = $bits % 8;
-        if ($rest === 0) {
-            return true;
-        }
-        $mask = (0xFF << (8 - $rest)) & 0xFF;
 
-        return (ord($packed[$whole]) & $mask) === (ord($range[$whole]) & $mask);
+        return substr($packed, 0, $whole) . ($rest === 0 ? '' : chr(ord($packed[$whole]) & (0xFF << (8 - $rest)) & 0xFF));
     }
 }

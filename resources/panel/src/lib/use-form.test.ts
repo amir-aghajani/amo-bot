@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api'
 import { FAILURE_KINDS } from '@/lib/failure'
 import { queryKeys } from '@/lib/query-keys'
-import { asSet, useForm } from '@/lib/use-form'
+import { asAmount, asSet, asWhole, useForm } from '@/lib/use-form'
 import { providers } from '@/test/render'
 
 /**
@@ -100,6 +100,19 @@ describe('what is unsaved', () => {
 
     act(() => result.current.set('group_ids', [1]))
     expect(result.current.dirty).toBe(true)
+  })
+
+  it('is an amount’s or a count’s number however it is typed — a unit, separators, Persian digits —, a blank one none', () => {
+    const { result } = renderForm(() =>
+      useForm({ price: '50000', cap: '', uses: '100' }, { reads: (values) => ({ price: asAmount(values.price), cap: asAmount(values.cap), uses: asWhole(values.uses) }) }),
+    )
+
+    act(() => result.current.patch({ price: '۵۰٬۰۰۰ تومان', cap: '  ', uses: '۱۰۰' }))
+    expect(result.current.dirty).toBe(false)
+
+    act(() => result.current.patch({ price: '50000.50', uses: '1,000' }))
+    expect(result.current.dirty).toBe(true)
+    expect([asAmount(' 50,000.00 '), asAmount('سی هزار'), asWhole(' ۱۰٬۰۰۰ '), asWhole('ده')]).toEqual([50000, 'سی هزار', 10000, 'ده'])
   })
 
   it('tells a file picked by itself, not by what it holds', () => {
@@ -319,14 +332,72 @@ describe('fixing what was refused', () => {
 })
 
 describe('a form that follows the server’s copy', () => {
-  it('starts again when the server’s values change', () => {
+  it('with nothing typed starts again when the server’s values change', () => {
     const { result, rerender } = renderForm(({ initial }) => useForm(initial, { follow: true }), { initialProps: { initial: PLAN } })
-    act(() => result.current.set('name', 'Silver'))
 
     rerender({ initial: { ...PLAN, price: '150000' } })
 
     expect(result.current.values).toEqual({ ...PLAN, price: '150000' })
-    expect(result.current.dirty).toBe(false)
+    expect([result.current.dirty, result.current.elsewhere]).toEqual([false, false])
+  })
+
+  it('never replaces what is typed: the draft stays, saying the copy changed elsewhere, until the admin takes the new copy', () => {
+    const { result, rerender } = renderForm(({ initial }) => useForm(initial, { follow: true }), { initialProps: { initial: PLAN } })
+    act(() => result.current.set('name', 'Silver'))
+
+    // Another tab saved the same card.
+    rerender({ initial: { ...PLAN, price: '150000' } })
+
+    expect(result.current.values).toEqual({ ...PLAN, name: 'Silver' })
+    expect([result.current.dirty, result.current.elsewhere]).toEqual([true, true])
+
+    act(() => result.current.revert())
+    expect(result.current.values).toEqual({ ...PLAN, price: '150000' })
+    expect([result.current.dirty, result.current.elsewhere]).toEqual([false, false])
+  })
+
+  it('typed back to where it started, takes the new copy it held', () => {
+    const { result, rerender } = renderForm(({ initial }) => useForm(initial, { follow: true }), { initialProps: { initial: PLAN } })
+    act(() => result.current.set('name', 'Silver'))
+    rerender({ initial: { ...PLAN, price: '150000' } })
+
+    act(() => result.current.set('name', 'Gold'))
+
+    expect(result.current.values).toEqual({ ...PLAN, price: '150000' })
+    expect(result.current.elsewhere).toBe(false)
+  })
+
+  it('saved over the new copy, says no more of it — its own save’s answer is no change elsewhere', async () => {
+    const { result, rerender } = renderForm(({ initial }) => useForm(initial, { follow: true }), { initialProps: { initial: PLAN } })
+    act(() => result.current.set('name', 'Silver'))
+    rerender({ initial: { ...PLAN, price: '150000' } })
+
+    await act(() => result.current.submit(() => Promise.resolve('saved')))
+    expect(result.current.elsewhere).toBe(false)
+    rerender({ initial: { ...PLAN, name: 'Silver' } })
+
+    expect(result.current.values).toEqual({ ...PLAN, name: 'Silver' })
+    expect([result.current.dirty, result.current.elsewhere]).toEqual([false, false])
+  })
+
+  it('typed on while its own save ran, keeps that, the save’s answer its new start', async () => {
+    const { result, rerender } = renderForm(({ initial }) => useForm(initial, { follow: true }), { initialProps: { initial: PLAN } })
+    act(() => result.current.set('name', 'Silver'))
+    const request = deferred<string>()
+    let saving!: Promise<unknown>
+    act(() => {
+      saving = result.current.submit(() => request.promise)
+    })
+    act(() => result.current.set('price', '99000'))
+    await act(async () => {
+      request.resolve('saved')
+      await saving
+    })
+
+    rerender({ initial: { ...PLAN, name: 'Silver' } })
+
+    expect(result.current.values).toEqual({ ...PLAN, name: 'Silver', price: '99000' })
+    expect([result.current.dirty, result.current.elsewhere]).toEqual([true, false])
   })
 
   it('keeps the draft when the server hands the same values again (another card’s save)', () => {

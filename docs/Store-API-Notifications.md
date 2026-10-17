@@ -1,3 +1,5 @@
+[فارسی](fa/Store-API-Notifications.md)
+
 # Store API: notifications
 
 Everything the shop tells a customer on its own — a payment approved or refused, a service ending soon, a gift of days,
@@ -56,12 +58,13 @@ screens, a wallet purchase's or renewal's own confirmation (the website's checko
 
 | `type` | About | `subject` |
 |---|---|---|
-| `payment_settled` | a payment approved — a receipt by support, an online payment by its gateway: the service delivered, the wallet charged — or the delivery failed and support finishes it | order |
+| `payment_settled` | a payment approved — a receipt by support, an online payment by its gateway: the service delivered, the wallet charged — or the order not delivered: a failed delivery support finishes, or one never delivered (its `failure` `first_purchase_used` or `service_changed_hands`: [why an order failed](Store-API-Buying.md#why-an-order-failed)) whose payment support settles with them | order |
 | `payment_credited` | an online payment that came in once its order had closed (paid another way, cancelled or expired): its money put in the wallet | order |
 | `payment_rejected` | a receipt refused, with the reason | order |
 | `order_cancelled` | an order cancelled by support | order |
 | `payment_refunded` | a payment back in the wallet | order |
 | `topup_refunded` | a wallet top-up given back, its amount taken out of the wallet | order |
+| `wallet_sent`, `wallet_received` | money they sent another customer from their wallet, or money another customer sent them («انتقال موجودی», [sending money](Store-API-After-Buying.md#sending-money-to-another-customer)) | `null` |
 | `payment_reminder` | a reminder of a card payment never finished | order |
 | `service_disabled`, `service_enabled` | a service switched off by support, or back on | subscription |
 | `service_deleted` | a running service deleted by support | `null` |
@@ -72,10 +75,12 @@ screens, a wallet purchase's or renewal's own confirmation (the website's checko
 | `expiry_reminder`, `traffic_reminder` | a service ending soon, or its traffic running low | subscription |
 | `auto_renewed` | a service renewed from the wallet | order (the renewal) |
 | `auto_renew_short` | the wallet short of an automatic renewal | subscription |
-| `renewal_failed` | a renewal paid but not delivered — support finishes it | order |
-| `referral_joined`, `referral_commission` | a newcomer by their invite code; a commission earned | `null` |
+| `renewal_failed` | an automatic renewal paid but not delivered: a failed delivery support finishes — or, its service handed to another customer meanwhile (`service_changed_hands`), never delivered, support settling the payment with them | order |
+| `referral_joined`, `referral_commission`, `referral_commission_back` | a newcomer by their invite code; a commission earned; a commission taken back out of their wallet, the wallet top-up that earned it given back | `null` |
 | `referral_start_gift`, `referral_reward` | a start gift in their wallet (the referrer's for a newcomer, the newcomer's own); a service given free for their invitations — the service itself comes as a `payment_settled` | `null` |
-| `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked`, `agency_traffic_short` | an agent's agency, and their bot's traffic | `null` |
+| `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked` | an agent's agency: their request approved or rejected, their terms changed, their agency ended | `null` |
+| `agency_traffic_short` | an order their bot could not deliver: its traffic does not cover it | `null` |
+| `agency_expiring`, `agency_minimum_short`, `agency_suspended`, `agency_resumed` | their agency's end is near; a month nears its end with their traffic bought below their monthly minimum; their bot's selling suspended, or open again ([the terms of selling](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum)) | `null` |
 | `way_in_added`, `way_in_removed` | a Telegram account, a Google account or an email added to their account, or taken off it | `null` |
 | `password_changed` | their password set or changed (`PUT /me/password`), reset, or set by a merge ([the merge offer](Store-API-Account.md#the-merge-offer)); an email added with its password is told as `way_in_added` | `null` |
 | `two_factor_enabled`, `two_factor_disabled` | their two-factor sign-in turned on, or off — by them, or by support | `null` |
@@ -109,10 +114,14 @@ shop: show a notice of a type you do not know by its text, and link it only by a
 { "unread": 0 }
 ```
 
-`{ "ids": […] }` marks those (at most 100; a number that is not one of theirs marks nothing and is no error); `{}` marks
-every one. An empty list marks nothing; anything but a list of numbers is `422` on `ids`. A notice read before keeps when
-it was read. A ticket's notices are marked read with the ticket, too: `POST /tickets/{id}/read`
-([the conversation](Store-API-Support-Tickets.md#the-conversation)) — or the bot showing the customer that ticket.
+- `{ "ids": […] }` marks those, 100 at most. A number that is not one of theirs marks nothing and is no error.
+- `{}` marks every one.
+- An empty list marks nothing. Anything but a list of numbers, or more than 100, is `422` on `ids`
+  (`شناسه‌ها باید لیستی از حداکثر 100 شماره اعلان باشد.`).
+
+A notice read before keeps when it was read. A ticket's notices are marked read with the ticket, too:
+`POST /tickets/{id}/read` ([the conversation](Store-API-Support-Tickets.md#the-conversation)) — or the bot showing the
+customer that ticket.
 
 ## The bell
 

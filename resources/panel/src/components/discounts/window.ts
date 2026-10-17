@@ -1,5 +1,5 @@
-import { formatDate, shownTimeZone, toLatinDigits } from '@/lib/format'
-import { fromJalali, monthLength, toJalali, type Day } from '@/lib/jalali'
+import { formatDate, toLatinDigits } from '@/lib/format'
+import { fromJalali, monthLength, shopClock, toJalali, type Day } from '@/lib/jalali'
 
 /*
  * When a discount code or a sale holds. The form keeps each end as a Jalali day typed by the admin ("1405/07/20",
@@ -15,22 +15,6 @@ export interface WindowEnd {
 
 const pad = (value: number) => String(value).padStart(2, '0')
 
-/** One formatter per time zone, made on first use. */
-const formatters = new Map<string, Intl.DateTimeFormat>()
-
-/** A moment's Gregorian day and hour on the shop's clock. */
-function shopParts(iso: string): { day: Day; hour: number } {
-  const { zone } = shownTimeZone()
-  let format = formatters.get(zone)
-  if (!format) {
-    format = new Intl.DateTimeFormat('en-u-ca-gregory-nu-latn', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
-    formatters.set(zone, format)
-  }
-  const parts = format.formatToParts(new Date(iso))
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((piece) => piece.type === type)?.value ?? ''
-  return { day: `${part('year')}-${part('month')}-${part('day')}`, hour: Number(part('hour')) % 24 }
-}
-
 /** A day as the form shows it: the Jalali "1405/07/20". */
 export function jalaliText(day: Day): string {
   const { year, month, day: date } = toJalali(day)
@@ -40,7 +24,7 @@ export function jalaliText(day: Day): string {
 /** A saved end (the API's moment, or none) as the form starts from it: its Jalali day and hour on the shop's clock. */
 export function windowEnd(iso: string | null, emptyHour = '0'): WindowEnd {
   if (iso === null) return { day: '', hour: emptyHour }
-  const { day, hour } = shopParts(iso)
+  const { day, hour } = shopClock(iso)
   return { day: jalaliText(day), hour: String(hour) }
 }
 

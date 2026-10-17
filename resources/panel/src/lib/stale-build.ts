@@ -21,11 +21,17 @@ export function isStaleBuildError(error: unknown): boolean {
   )
 }
 
-/** Reload once for a new build: true when the page is reloading, false when it just did and that did not help. */
+/**
+ * Reload once for a new build: true when the page is reloading; false when it just did and that did not help, and while
+ * the browser is offline — the file is missing because the network is, and a reload would leave only the browser's own
+ * offline page.
+ */
 export function reloadForNewBuild(): boolean {
-  if (reloadedLately()) return false
+  if (navigator.onLine === false || reloadedLately()) return false
 
   writeStored(STORAGE_KEYS.reloadedAt, String(Date.now()), 'session')
+  // Where the tab keeps nothing, a page that is itself a reload of a moment ago counts as ours: never a reload loop.
+  if (readStored(STORAGE_KEYS.reloadedAt, 'session') === null && pageReloadedLately()) return false
   window.location.reload()
   return true
 }
@@ -36,6 +42,12 @@ export function reloadForNewBuild(): boolean {
  */
 export function reloadedLately(): boolean {
   return Date.now() - Number(readStored(STORAGE_KEYS.reloadedAt, 'session') ?? 0) < GRACE_MS
+}
+
+/** This page was itself loaded by a reload, within the grace. */
+function pageReloadedLately(): boolean {
+  const [navigation] = performance.getEntriesByType('navigation')
+  return navigation !== undefined && 'type' in navigation && navigation.type === 'reload' && performance.now() < GRACE_MS
 }
 
 /** How many loads asked for ahead of need are under way. */

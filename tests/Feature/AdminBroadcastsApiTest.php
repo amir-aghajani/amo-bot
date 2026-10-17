@@ -123,6 +123,27 @@ final class AdminBroadcastsApiTest extends HttpTestCase
         self::assertSame(BroadcastStatus::Done, Broadcast::query()->findOrFail($run['id'])->status);
     }
 
+    public function testARunStartedOnTheWebsiteIsListedUnderItsAdminsName(): void
+    {
+        $broadcasts = $this->service(BroadcastService::class);
+        $ownersSource = $this->start(['pin' => true]);
+        $bossSource = $this->start(['pin' => true]);
+        $broadcasts->process($ownersSource, 50);
+        $broadcasts->process($bossSource, 50);
+        // The owner takes one's pins off on the panel, the boss the other's on the website.
+        $broadcasts->startUnpin($ownersSource, null, self::ADMIN_USERNAME);
+        $broadcasts->startUnpin($bossSource, null, '@boss');
+
+        $rows = $this->decode($this->get('/api/admin/broadcasts'))['broadcasts'];
+
+        self::assertSame([
+            ['unpin', '@boss', 'Boss'],
+            ['unpin', self::ADMIN_USERNAME, null],
+            ['message', null, null],
+            ['message', null, null],
+        ], array_map(static fn(array $row): array => [$row['kind'], $row['reviewer'], $row['reviewer_name']], $rows), "the bot's admin who sent a message is its `admin`");
+    }
+
     /**
      * A copy of message 5 from the boss's chat, its progress in message 77 there.
      *

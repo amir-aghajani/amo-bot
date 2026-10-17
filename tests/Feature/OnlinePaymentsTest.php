@@ -50,7 +50,7 @@ use Tests\Support\FakeCubePay;
  * it is only ever the gateway's word — asked when it calls back, when the customer or support asks, and now and then by
  * the task —, settled once and told once; money taken after its order closed goes to the wallet; a page whose time is
  * over gives way to a new payment, and is given up on long after — unless the gateway holds money on it, then support's
- * in the end; an answer that does not fit holds it for support, told once, its order paid no other way; the callback
+ * in the end (at once, should the gateway close it); an answer that does not fit holds it for support, told once, its order paid no other way; the callback
  * asks a few times a minute at most; the return page says what came of it, and where to look.
  */
 final class OnlinePaymentsTest extends HttpTestCase
@@ -95,7 +95,7 @@ final class OnlinePaymentsTest extends HttpTestCase
             'price_amount' => 50000,
             'callback_url' => $this->service(OnlineInvoices::class)->callbackUrl($payment),
             'redirect_after_payment' => false,
-            'description' => sprintf('سفارش #%d', $payment->order_id),
+            'description' => sprintf("سفارش \u{200E}#%d", $payment->order_id),
             'customer_user_id' => (string) self::TELEGRAM_ID,
             'customer_username' => 'ali_1',
         ], $order['request']);
@@ -422,8 +422,8 @@ final class OnlinePaymentsTest extends HttpTestCase
         // Told once to the report group's «خطاها»: who, for what, its id at CubePay, and why.
         $reports = ReportMessage::query()->where('topic', Topic::Errors->value)->pluck('text')->all();
         self::assertCount(1, $reports);
-        self::assertStringContainsString(sprintf('پرداخت آنلاین برای بررسی پشتیبانی نگه داشته شد</b> · پرداخت #%d', $payment->id), $reports[0]);
-        self::assertStringContainsString(sprintf('شارژ کیف پول · سفارش #%d', $payment->order_id), $reports[0]);
+        self::assertStringContainsString(sprintf("پرداخت آنلاین برای بررسی پشتیبانی نگه داشته شد</b> · پرداخت \u{200E}#%d", $payment->id), $reports[0]);
+        self::assertStringContainsString(sprintf("شارژ کیف پول · سفارش \u{200E}#%d", $payment->order_id), $reports[0]);
         self::assertStringContainsString('<code>' . $payment->reference . '</code>', $reports[0]);
         self::assertStringContainsString(PaymentService::NOTE_HELD, $reports[0]);
         self::assertStringContainsString('for another order or amount', $reports[0]);
@@ -456,6 +456,7 @@ final class OnlinePaymentsTest extends HttpTestCase
         $page = $this->send('GET', $this->callbackPath($payment), null, ['Accept' => 'text/html']);
         self::assertSame(200, $page->getStatusCode());
         self::assertStringContainsString(sprintf(PaymentHeldException::MESSAGE, $payment->order_id), (string) $page->getBody());
+        self::assertStringContainsString("پرداخت سفارش \u{200E}#{$payment->order_id} برای بررسی", (string) $page->getBody(), 'its number after a left-to-right mark: on the right-to-left page it would read «12#»');
         self::assertCount(1, $this->cubePay->callsTo(CubePayGateway::VERIFY));
     }
 
@@ -612,6 +613,27 @@ final class OnlinePaymentsTest extends HttpTestCase
         Carbon::setTestNow(now()->addHour());
         $task->run();
         self::assertSame($asked, $verifies());
+    }
+
+    public function testMoneyInThatTheGatewayThenClosesIsHeldForSupportAtOnce(): void
+    {
+        $this->reportGroup();
+        $payment = $this->topUp('50000')->payment()->refresh();
+        $payment->forceFill(['invoice' => ['money_in' => true] + $payment->invoice])->save();
+        $this->cubePay->close((string) $payment->reference);
+
+        try {
+            $this->service(OnlinePayments::class)->check($payment);
+            self::fail('held');
+        } catch (GatewayUnavailableException $e) {
+            self::assertTrue($e->held, 'the caller hears it is support\'s now');
+        }
+
+        $payment->refresh();
+        self::assertSame([PaymentStatus::Failed, PaymentService::NOTE_CLOSED_WITH_MONEY, true], [$payment->status, $payment->note, OnlinePayments::awaitsSupport($payment)], 'closed, held — not asked about for two more days');
+        self::assertStringContainsString(PaymentService::NOTE_CLOSED_WITH_MONEY, (string) ReportMessage::query()->where('topic', Topic::Errors->value)->value('text'));
+        self::assertSame(PaymentService::NOTE_CLOSED_WITH_MONEY . '.', $this->service(PaymentActions::class)->refusal($payment, 'check'));
+        self::assertTrue($payment->order->refresh()->status === OrderStatus::Pending && Order::expirable()->whereKey($payment->order_id)->doesntExist(), 'its order waits for support');
     }
 
     public function testTheCallbackAsksTheGatewayAFewTimesAMinuteAtMost(): void

@@ -19,6 +19,7 @@ use App\Modules\Orders\Exceptions\ServiceChangedHandsException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\DTO\Capabilities;
 use App\Modules\Providers\Models\Server;
@@ -35,6 +36,7 @@ use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Reports\Topic;
 use App\Modules\Telegram\Texts\BotText;
+use App\Modules\Telegram\Texts\WebText;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\CustomerLookup;
@@ -235,17 +237,17 @@ final class ServiceTransfersTest extends DatabaseTestCase
 
         self::assertSame([
             implode("\n", [
-                "🔁 <b>سرویس به مشتری دیگری منتقل شد</b> · اشتراک #{$this->service->id}",
-                '👤 از: <a href="tg://user?id=5151">Ali</a> · @ali · <code>5151</code>',
-                '👤 به: <a href="tg://user?id=7070">Sara</a> · @sara · <code>7070</code>',
+                "🔁 <b>سرویس به مشتری دیگری منتقل شد</b> · اشتراک \u{200E}#{$this->service->id}",
+                '👤 از: <a href="tg://user?id=5151">Ali</a> · ' . "\u{200E}@ali · <code>5151</code>",
+                '👤 به: <a href="tg://user?id=7070">Sara</a> · ' . "\u{200E}@sara · <code>7070</code>",
                 '🔖 سرویس: <code>ali_1</code>',
                 '📍 لوکیشن: آلمان',
                 '✋ به درخواست خود مشتری',
             ]),
             implode("\n", [
-                "🔁 <b>سرویس به مشتری دیگری منتقل شد</b> · اشتراک #{$other->id}",
-                '👤 از: <a href="tg://user?id=5151">Ali</a> · @ali · <code>5151</code>',
-                '👤 به: <a href="tg://user?id=7070">Sara</a> · @sara · <code>7070</code>',
+                "🔁 <b>سرویس به مشتری دیگری منتقل شد</b> · اشتراک \u{200E}#{$other->id}",
+                '👤 از: <a href="tg://user?id=5151">Ali</a> · ' . "\u{200E}@ali · <code>5151</code>",
+                '👤 به: <a href="tg://user?id=7070">Sara</a> · ' . "\u{200E}@sara · <code>7070</code>",
                 '🔖 سرویس: <code>ali_2</code>',
                 '📍 لوکیشن: آلمان',
                 '🎧 توسط پشتیبانی',
@@ -406,6 +408,38 @@ final class ServiceTransfersTest extends DatabaseTestCase
         self::assertSame($limit, $this->service->fresh()?->traffic_limit_bytes, "nothing added to Sara's service");
     }
 
+    public function testTheGiverIsToldTheServiceIsNoLongerTheirsAndSupportSettlesThePaymentWithThem(): void
+    {
+        $orders = $this->service(OrderService::class);
+        $card = $this->cardMethod();
+        // Ali's renewal and a website customer's extra — she has no Telegram — each with its receipt in review when support
+        // hands their services on.
+        $renewal = $orders->openRenewal($this->ali, $this->service, $this->plan, RenewalMethod::Extend);
+        $sent = $this->receipt($this->cardPayment($renewal, $card));
+        $web = $this->webCustomer();
+        $hers = $this->mirrored($this->subscription($web, $this->plan, $this->server, 'web_1'));
+        $extra = $orders->openExtra($web, $hers, ExtraKind::Traffic, 10, '20000.00');
+        $uploaded = $this->receipt($this->cardPayment($extra, $card), messageId: self::RECEIPT_MESSAGE + 1);
+        $this->transfers()->transfer($this->service, $this->sara, $this->panelActor());
+        $this->transfers()->transfer($hers, $this->sara, $this->panelActor());
+        $this->telegram()->reset();
+        $mail = $this->mail();
+
+        $this->service(PaymentActions::class)->approve($sent, $this->panelActor());
+        $this->service(PaymentActions::class)->approve($uploaded, $this->panelActor());
+
+        foreach ([$renewal, $extra] as $order) {
+            self::assertSame([OrderStatus::Failed, ServiceChangedHandsException::MESSAGE], [$order->refresh()->status, $order->notes], "support's note: give the money back");
+        }
+        $toAli = self::text(BotText::PayServiceChangedHands, ['order' => $renewal->id, 'client' => 'ali_1']);
+        self::assertSame([$toAli], $this->telegram()->sentTo(self::TELEGRAM_ID), 'his service no longer his, support settles with him — never that support will renew it');
+        $toHer = self::text(BotText::PayServiceChangedHands, ['order' => $extra->id, 'client' => 'web_1']);
+        $told = static fn(User $customer): string => Notification::query()->where('user_id', $customer->id)->where('type', NoticeType::PaymentSettled->value)->sole()->text;
+        self::assertSame([$toAli, $toHer], [$told($this->ali), $told($web)], "the same words in their website's feed");
+        $email = $mail->to(self::WEB_EMAIL)[0] ?? self::fail('No email went to her.');
+        self::assertStringContainsString(WebText::html($toHer), (string) $email->getHtmlBody(), 'and by email to her, who has no Telegram');
+    }
+
     public function testADeliveryUnderWayWhenSupportHandsTheServiceOnAddsNothingToIt(): void
     {
         $orders = $this->service(OrderService::class);
@@ -472,8 +506,8 @@ final class ServiceTransfersTest extends DatabaseTestCase
         self::assertSame(OrderStatus::Pending, $other->refresh()->status, "his other service's is his still");
         self::assertSame([self::text(BotText::ServiceTransferredBySupport, [
             'client' => 'ali_1',
-            'cancelled' => self::text(BotText::ServiceTransferredOrders, ['orders' => "#{$renewal->id}، #{$traffic->id}"]),
-        ])], $this->telegram()->sentTo(self::TELEGRAM_ID), 'he hears which went with it');
+            'cancelled' => self::text(BotText::ServiceTransferredOrders, ['orders' => "\u{200E}#{$renewal->id}، \u{200E}#{$traffic->id}"]),
+        ])], $this->telegram()->sentTo(self::TELEGRAM_ID), 'he hears which went with it, each number marked to read left to right');
     }
 
     public function testTheNewOwnersAutomaticRenewalGoesAheadOnceTheGiversUnpaidRenewalIsCancelled(): void

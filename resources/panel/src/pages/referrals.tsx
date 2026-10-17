@@ -8,7 +8,8 @@ import { ConfirmModal } from '@/components/confirm-modal'
 import { CustomerFilter, customerList } from '@/components/customer-filter'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
-import { Dash, ListView, SortableHead } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, SortableHead } from '@/components/list-view'
+import { useReadFailure } from '@/components/page'
 import { ProgramOff } from '@/components/program-off'
 import { SearchBox } from '@/components/search-box'
 import { SectionedPage } from '@/components/sectioned-page'
@@ -18,7 +19,7 @@ import { searchLink, TextLink } from '@/components/text-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { distinctUserLabel, UserIdentity, userPage } from '@/components/user-identity'
+import { distinctUserLabel, UserIdentity, UserLabel, userPage } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type {
   InviteeSort,
@@ -81,6 +82,7 @@ const COMMISSION_SORTS: ReferralCommissionSort[] = ['created', 'commission']
  */
 export function ReferralsPage() {
   const read = useQuery({ queryKey: queryKeys.referrals, queryFn: () => api.get<ReferralSummaryResponse>('/referrals') })
+  const failure = useReadFailure(read)
   const summary = read.data?.summary
 
   return (
@@ -106,7 +108,7 @@ export function ReferralsPage() {
             </ProgramOff>
           )}
           {summary?.enabled && <MenuButtonNotice action="affiliates" label="زیرمجموعه‌گیری" screen="صفحه لینک دعوتشان" />}
-          {read.error && <ErrorState what="آمار زیرمجموعه‌گیری" error={read.error} onRetry={() => void read.refetch()} retrying={read.isFetching} />}
+          {failure.error && <ErrorState what="آمار زیرمجموعه‌گیری" error={failure.error} onRetry={() => void read.refetch()} retrying={failure.retrying} />}
 
           <StatGrid label="آمار زیرمجموعه‌گیری">
             <StatCard label="معرف‌ها" value={summary && formatNumber(summary.referrers)} hint="مشتری‌هایی که لینکشان کسی را آورده" loading={read.isPending} />
@@ -196,6 +198,7 @@ function InviteesList() {
     read: (query) => api.get<InviteesResponse>('/referrals/invitees', query),
     list: 'invitees',
     params: ['referrer'],
+    ids: ['referrer'],
     sorts: INVITEE_SORTS,
     address: '/referrals/invitees',
   })
@@ -203,7 +206,7 @@ function InviteesList() {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <SearchBox value={list.typed} onChange={list.setTyped} placeholder="زیرمجموعه یا معرف: نام، نام کاربری یا شناسه" aria-label="جستجوی زیرمجموعه" />
+        <SearchBox value={list.typed} onChange={list.setTyped} placeholder="زیرمجموعه یا معرف: نام یا شناسه" aria-label="جستجوی زیرمجموعه" />
         <CustomerFilter label="معرف" value={list.params.referrer ?? ''} onClear={() => list.setParam('referrer', '')} />
       </div>
       <ListView
@@ -218,7 +221,7 @@ function InviteesList() {
           <TableHeader>
             <TableRow>
               <TableHead>زیرمجموعه</TableHead>
-              <TableHead>معرف</TableHead>
+              <TableHead className="hidden md:table-cell">معرف</TableHead>
               <SortableHead list={list} by="earned">
                 پورسانت برای معرف
               </SortableHead>
@@ -232,8 +235,15 @@ function InviteesList() {
               <TableRow key={row.id}>
                 <TableCell>
                   <UserIdentity user={row.user} status={row.status} to={userPage(row.id)} />
+                  {row.referrer && (
+                    <PhoneFacts>
+                      <span>
+                        معرف: <UserLabel user={row.referrer} />
+                      </span>
+                    </PhoneFacts>
+                  )}
                 </TableCell>
-                <TableCell>{row.referrer ? <UserIdentity user={row.referrer} to={userPage(row.referrer.id)} /> : <Dash />}</TableCell>
+                <TableCell className="hidden md:table-cell">{row.referrer ? <UserIdentity user={row.referrer} to={userPage(row.referrer.id)} /> : <Dash />}</TableCell>
                 <TableCell className="tabular">{Number(row.earned) > 0 ? formatMoney(row.earned) : <Dash />}</TableCell>
                 <TableCell className="hidden text-muted-foreground md:table-cell">{timeAgo(row.joined_at)}</TableCell>
               </TableRow>
@@ -273,7 +283,7 @@ function CommissionsList() {
                 پورسانت
               </SortableHead>
               <TableHead>معرف</TableHead>
-              <TableHead>زیرمجموعه</TableHead>
+              <TableHead className="hidden md:table-cell">زیرمجموعه</TableHead>
               <TableHead className="hidden lg:table-cell">پرداخت</TableHead>
               <SortableHead list={list} by="created" className="hidden md:table-cell">
                 زمان
@@ -291,8 +301,13 @@ function CommissionsList() {
                 </TableCell>
                 <TableCell>
                   <UserIdentity user={row.referrer} to={userPage(row.referrer.id)} />
+                  <PhoneFacts>
+                    <span>
+                      زیرمجموعه: <UserLabel user={row.customer} />
+                    </span>
+                  </PhoneFacts>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <UserIdentity user={row.customer} to={userPage(row.customer.id)} />
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">
@@ -360,7 +375,7 @@ function AlertsList() {
           <TableHeader>
             <TableRow>
               <TableHead>معرف</TableHead>
-              <TableHead>دلیل</TableHead>
+              <TableHead className="hidden md:table-cell">دلیل</TableHead>
               <TableHead className="hidden md:table-cell">زمان</TableHead>
               <TableHead>
                 <span className="sr-only">عملیات</span>
@@ -372,8 +387,9 @@ function AlertsList() {
               <TableRow key={alert.id}>
                 <TableCell>
                   <UserIdentity user={alert.referrer} status={alert.status} to={userPage(alert.referrer.id)} />
+                  <PhoneFacts>{ALERT_REASON[alert.reason](alert.count)}</PhoneFacts>
                 </TableCell>
-                <TableCell>{ALERT_REASON[alert.reason](alert.count)}</TableCell>
+                <TableCell className="hidden md:table-cell">{ALERT_REASON[alert.reason](alert.count)}</TableCell>
                 <TableCell className="hidden text-muted-foreground md:table-cell">{timeAgo(alert.created_at)}</TableCell>
                 <TableCell>
                   <Button size="sm" variant="secondary" onClick={() => setClearing(alert)} aria-label={`رفع هشدار ${distinctUserLabel(alert.referrer)}`}>

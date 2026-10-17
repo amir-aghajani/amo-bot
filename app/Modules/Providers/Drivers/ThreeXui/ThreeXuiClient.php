@@ -109,13 +109,13 @@ final class ThreeXuiClient
         }
         $response = $this->send($method, $path, $this->sessionOptions($method, $options));
 
-        if ($this->sessionExpired($response)) {
+        if ($this->sessionExpired($method, $response)) {
             $this->http->logger->info('The 3x-ui session at {host} expired; signing in again', ['host' => parse_url($this->connection->baseUrl, PHP_URL_HOST)]);
             $this->login();
             $response = $this->send($method, $path, $this->sessionOptions($method, $options));
 
-            if ($this->sessionExpired($response)) {
-                throw AuthenticationException::sessionRejected($response->getStatusCode());
+            if ($this->sessionExpired($method, $response)) {
+                throw $response->getStatusCode() === 403 ? AuthenticationException::csrfRejected() : AuthenticationException::sessionRejected($response->getStatusCode());
             }
         }
 
@@ -191,10 +191,15 @@ final class ThreeXuiClient
         return is_string($token) ? $token : '';
     }
 
-    /** A 401, or (on builds that ignore the XHR marker) a redirect to the panel's own login page. */
-    private function sessionExpired(ResponseInterface $response): bool
+    /**
+     * A 401, or (on builds that ignore the XHR marker) a redirect to the panel's own login page — or, for an unsafe
+     * request, the CSRF guard's 403: it stands before the session check, and a session that is gone holds no token to
+     * match. Either way the panel did nothing.
+     */
+    private function sessionExpired(string $method, ResponseInterface $response): bool
     {
-        if ($response->getStatusCode() === 401) {
+        $status = $response->getStatusCode();
+        if ($status === 401 || ($status === 403 && $method !== 'GET')) {
             return true;
         }
         if (!PanelHttp::isRedirect($response)) {
@@ -262,13 +267,17 @@ final class ThreeXuiClient
     }
 
     /**
-     * The JSON body, or the failure of an answer that is not JSON.
+     * The JSON body, or the failure of an answer that is not JSON — a redirect with where it points (the sign-in's
+     * requests reach here unguarded: an http address of an https panel).
      *
      * @return array<string, mixed>
      * @throws UnexpectedResponseException
      */
     private function decode(ResponseInterface $response): array
     {
+        if (PanelHttp::isRedirect($response)) {
+            throw PanelHttp::redirected($response, self::HINT_REDIRECT);
+        }
         $decoded = json_decode((string) $response->getBody(), true);
 
         return is_array($decoded) ? $decoded : throw self::notTheApi($response);

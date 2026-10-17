@@ -5,8 +5,8 @@ import { FormActions } from '@/components/form-footer'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { AgencyLevelRow } from '@/lib/api-types'
-import { amountDraft, decimalInput, decimalOf, formatMoney } from '@/lib/format'
-import { useForm } from '@/lib/use-form'
+import { amountDraft, decimalInput, formatMoney, tomanOf } from '@/lib/format'
+import { asAmount, trimmed, useForm } from '@/lib/use-form'
 
 interface LevelFormProps {
   level: AgencyLevelRow | null
@@ -18,11 +18,15 @@ interface LevelFormProps {
 
 /** Create/edit form for one level of the agents: its name and what a GB of the traffic their bots sell costs them. */
 export function LevelForm({ level, invalidates, onSaved, onCancel }: LevelFormProps) {
-  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm({
-    name: level?.name ?? '',
-    price_per_gb: level ? amountDraft(level.price_per_gb) : '',
-  })
-  const price = Number(decimalOf(values.price_per_gb) ?? 0)
+  // The price as the server reads it — whole Toman, «۳٬۰۰۰» being 3000 —: what `dirty` compares and the hint works from.
+  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm(
+    {
+      name: level?.name ?? '',
+      price_per_gb: level ? amountDraft(level.price_per_gb) : '',
+    },
+    { reads: (draft) => trimmed({ ...draft, price_per_gb: asAmount(draft.price_per_gb) }) },
+  )
+  const price = tomanOf(values.price_per_gb) ?? 0
 
   const save = handleSubmit(async () => {
     const body = { name: values.name, price_per_gb: decimalInput(values.price_per_gb) }
@@ -45,7 +49,7 @@ export function LevelForm({ level, invalidates, onSaved, onCancel }: LevelFormPr
         error={error('price_per_gb')}
         hint={price > 0 ? `۱۰۰ گیگابایت برای نماینده‌های این سطح ${formatMoney(price * 100)} است.` : 'نماینده‌ها حجمی را که رباتشان می‌فروشد با این قیمت از شما می‌خرند.'}
       >
-        <Input dir="ltr" inputMode="decimal" value={values.price_per_gb} onChange={(e) => set('price_per_gb', e.target.value)} placeholder="3000" className="sm:max-w-40" />
+        <Input dir="ltr" inputMode="numeric" value={values.price_per_gb} onChange={(e) => set('price_per_gb', e.target.value)} placeholder="3000" className="sm:max-w-40" />
       </Field>
 
       <FormActions error={formError} onCancel={onCancel} submitLabel={level ? 'ذخیره تغییرات' : 'افزودن سطح'} busy={busy} dirty={dirty} onRevert={revert} />

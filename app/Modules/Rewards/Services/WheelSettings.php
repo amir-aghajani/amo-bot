@@ -48,7 +48,7 @@ final class WheelSettings implements DeclaresSettings
         return $this->settings->read($this->cooldown);
     }
 
-    /** Whether only customers who have bought something with a price may spin (Order::paidPurchases()). */
+    /** Whether only customers who have bought something with a price, and kept it, may spin (Order::keptPurchases()). */
     public function buyersOnly(): bool
     {
         return $this->settings->read($this->buyersOnly);

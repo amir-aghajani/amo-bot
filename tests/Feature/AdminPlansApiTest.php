@@ -15,6 +15,7 @@ use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Users\Models\User;
 use App\Support\Validation;
+use Illuminate\Database\Events\QueryExecuted;
 use Tests\HttpTestCase;
 
 /**
@@ -334,6 +335,17 @@ final class AdminPlansApiTest extends HttpTestCase
         self::assertStringContainsString('بیش از یک بار', $this->decode($response)['errors']['servers'][0]);
     }
 
+    public function testAPinnedInboundThatIsNoIdIsRefusedNotReadAsOne(): void
+    {
+        foreach (["{$this->reality->id}abc", true, 1.5, ['id' => $this->reality->id]] as $sent) {
+            $response = $this->unchecked()->postJson('/api/admin/plans', $this->input(['servers' => [['server_id' => $this->berlin->id, 'inbound_ids' => [$this->reality->id, $sent]]]]));
+
+            self::assertSame(422, $response->getStatusCode(), (string) json_encode($sent));
+            self::assertSame(['«Berlin»: شناسه اینباند انتخاب‌شده درست نیست.'], $this->decode($response)['errors']['servers'] ?? null);
+        }
+        self::assertSame(0, Plan::query()->count(), 'never sold on inbound 1 or the one its digits begin');
+    }
+
     public function testAServerWithoutSubscriptionLinksMayBeAttachedButIsFlagged(): void
     {
         $this->paris->forceFill(['serves_subscriptions' => false])->save();
@@ -378,7 +390,7 @@ final class AdminPlansApiTest extends HttpTestCase
         $data = $this->decode($this->postJson('/api/admin/plans/reorder', ['ids' => [$c['id'], $a['id']]]));
         self::assertSame(['C', 'A', 'B'], array_column($data['plans'], 'name'), 'unlisted plans follow the listed ones');
 
-        $refused = $this->postJson('/api/admin/plans/reorder', ['ids' => []]);
+        $refused = $this->unchecked()->postJson('/api/admin/plans/reorder', ['ids' => []]);
         self::assertSame(422, $refused->getStatusCode());
         self::assertSame(['message' => 'لیست شناسه‌ها خالی است.', 'errors' => ['ids' => ['لیست شناسه‌ها خالی است.']]], array_diff_key($this->decode($refused), ['request_id' => true, 'debug' => true]), 'an empty order is refused on its field, in its own words');
 
@@ -442,6 +454,28 @@ final class AdminPlansApiTest extends HttpTestCase
         self::assertSame(204, $this->deleteJson("/api/admin/plans/{$fresh['id']}")->getStatusCode());
         self::assertNull(Plan::query()->find($fresh['id']));
         self::assertSame(0, $this->db()->table('plan_servers')->where('plan_id', $fresh['id'])->count(), 'entries go with the plan');
+    }
+
+    public function testAnOrderOpenedAsThePlanIsDeletedKeepsIt(): void
+    {
+        $plan = $this->plan([], $this->berlin);
+        $order = null;
+        $statements = [];
+        $delete = function () use ($plan, &$statements): void {
+            $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use (&$statements): void {
+                $statements[] = $query->sql;
+            }, fn() => self::assertSame(409, $this->deleteJson("/api/admin/plans/{$plan->id}")->getStatusCode()));
+        };
+        $this->whileListening('eloquent.retrieved: ' . Plan::class, function () use ($plan, &$order): void {
+            // A customer orders it the moment the delete has read it.
+            $order ??= $this->purchaseOrder($this->customer, $plan, $this->berlin);
+        }, $delete);
+
+        self::assertNotNull(Plan::query()->find($plan->id));
+        self::assertSame($plan->id, $order?->refresh()->plan_id, 'the order keeps its plan');
+        $deleting = array_key_first(array_filter($statements, static fn(string $sql): bool => preg_match('/^delete from\W+plans\W/i', $sql) === 1));
+        self::assertNotNull($deleting);
+        self::assertSame([], array_filter(array_slice($statements, 0, (int) $deleting), static fn(string $sql): bool => preg_match('/^select\W.*\W(orders|subscriptions)\W/is', $sql) === 1), 'nothing asked of its orders before the statement that decides');
     }
 
     public function testOptionsListServersWithTheirInbounds(): void

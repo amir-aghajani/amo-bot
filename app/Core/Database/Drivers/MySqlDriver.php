@@ -163,7 +163,7 @@ final class MySqlDriver implements DatabaseDriver
                 '',
                 pattern: '/^[^\x00-\x1f\x7f]{1,255}$/u',
                 mismatch: 'رمز عبور دیتابیس حداکثر 255 کاراکتر است، بدون کاراکترهای کنترلی.',
-                hint: static fn(string $password): string => '••••••••',
+                hint: Secret::hidden(),
                 boundTo: ['host' => null, 'port' => null, 'socket' => null],
                 moved: self::ADDRESS_MOVED,
                 spec: new FieldSpec('رمز عبور'),

@@ -2,14 +2,16 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { ExpiredServicesSection } from '@/components/bot/settings/expired-services-section'
 import type { BotSettingsData, BotSettingsSaved } from '@/lib/api-types'
+import { queryKeys } from '@/lib/query-keys'
 import { signedIn, until } from '@/test/render'
 import { botSettingsRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
  * «سرویس‌های منقضی‌شده» in the bot settings (components/bot/settings/expired-services-section): the switch and the hours
- * after a service's end, saved as one PUT of the group as typed; the hint says what the hours come to (0: at once), the
- * hours wait for the switch, a refusal lands under its field, and the free tests' own rule is a link away.
+ * after a service's end, saved as one PUT of the group as typed — the services read again, their removal moved with
+ * it —; the hint says what the hours come to (0: at once), the hours wait for the switch, a refusal lands under its
+ * field, and the free tests' own rule is a link away.
  */
 
 const PATH = '/api/admin/bot/settings/expired_services'
@@ -61,6 +63,21 @@ describe('the removal of ended services', () => {
     expect(server().sent('PUT', PATH)[0]?.body).toEqual({ expired_cleanup: true, expired_cleanup_hours: '۱۲' })
   })
 
+  it('saved, has the services read again: each one’s dialog says when it goes by the rule', async () => {
+    server().on('PUT', PATH, json({ settings: botSettingsRow({ expired_cleanup: true }) } satisfies BotSettingsSaved))
+    const { client, wrapper } = signedIn()
+    client.setQueryData([...queryKeys.subscriptions, 'page-1'], {})
+    client.setQueryData([...queryKeys.everySubscription, 7], {})
+    render(<ExpiredServicesSection settings={botSettingsRow()} />, { wrapper })
+    await screen.findByLabelText('فاصله حذف (ساعت)')
+
+    fireEvent.click(screen.getByRole('switch', { name: 'حذف خودکار سرویس‌های منقضی‌شده' }))
+    save()
+
+    await until(() => expect(client.getQueryState([...queryKeys.subscriptions, 'page-1'])?.isInvalidated).toBe(true))
+    expect(client.getQueryState([...queryKeys.everySubscription, 7])?.isInvalidated).toBe(true)
+  })
+
   it('shows a refusal under the hours', async () => {
     const refused = 'فاصله حذف باید عددی بین 0 تا 8760 ساعت باشد.'
     server().on('PUT', PATH, refusal(422, refused, { expired_cleanup_hours: [refused] }))
@@ -71,5 +88,25 @@ describe('the removal of ended services', () => {
 
     expect(await screen.findByText(refused)).toBeTruthy()
     expect(hours().getAttribute('aria-invalid')).toBe('true')
+  })
+
+  it('switched off with the hours changed, leaves them open to fix once the server refused them', async () => {
+    const refused = 'فاصله حذف باید عددی بین 0 تا 8760 ساعت باشد.'
+    server().on('PUT', PATH, refusal(422, refused, { expired_cleanup_hours: [refused] }))
+    await show(botSettingsRow({ expired_cleanup: true }))
+
+    type('9000')
+    fireEvent.click(screen.getByRole('switch', { name: 'حذف خودکار سرویس‌های منقضی‌شده' }))
+    expect(hours().disabled).toBe(false)
+    save()
+
+    expect(await screen.findByText(refused)).toBeTruthy()
+    expect(hours().disabled).toBe(false)
+    // Typed back to the hours kept, they stay open — not disabled under the typist — until the switch goes back on.
+    type('24')
+    expect(hours().disabled).toBe(false)
+    fireEvent.click(screen.getByRole('switch', { name: 'حذف خودکار سرویس‌های منقضی‌شده' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'حذف خودکار سرویس‌های منقضی‌شده' }))
+    expect(hours().disabled).toBe(true)
   })
 })

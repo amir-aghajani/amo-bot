@@ -1,8 +1,9 @@
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { SystemCard } from '@/components/dashboard/system-card'
 import type { BotRuntime, SystemResponse, UpdateResponse, UpdateStatus } from '@/lib/api-types'
 import { handleLabel } from '@/lib/direction'
+import { agentBotStatus } from '@/lib/statuses'
 import { providers, until } from '@/test/render'
 import { json, server } from '@/test/server'
 
@@ -75,5 +76,38 @@ describe('the bot’s row', () => {
     expect(within(bot).getByText('نماینده هنوز توکن رباتش را از ربات اصلی نفرستاده است')).toBeTruthy()
     expect(within(bot).queryByRole('link')).toBeNull()
     expect(screen.queryByText('ربات اصلی')).toBeNull()
+  })
+
+  it('says a bot is not working, or has no token yet, in the words the agents list has for an agent’s bot', async () => {
+    open({ id: 7, ...RUNNING, username: 'reza_shop_bot', mode: 'offline' })
+
+    const bot = await row(`ربات این فروشگاه ${handleLabel('reza_shop_bot')}`)
+    expect(within(bot).getByText('مشکل دارد')).toBeTruthy()
+    expect(agentBotStatus({ id: 7, username: 'reza_shop_bot', title: null, status: 'active', connected: true, problem: 'x', traffic_balance: 0, connected_at: null }).label).toBe('مشکل دارد')
+    // «ثبت Webhook» is one piece: «Webhook» never on a line of its own.
+    expect(within(bot).getByRole('link', { name: 'ثبت Webhook' }).className).toContain('whitespace-nowrap')
+    cleanup()
+
+    open({ id: 7, ...QUIET })
+    expect(within(await row('ربات این فروشگاه')).getByText('وصل نشده')).toBeTruthy()
+    expect(agentBotStatus({ id: 7, username: null, title: null, status: 'active', connected: false, problem: null, traffic_balance: 0, connected_at: null }).label).toBe('وصل نشده')
+  })
+
+  it('on a poller says how it gets its updates in words, never by the command an owner has no way to run', async () => {
+    open({ id: 1, ...RUNNING, mode: 'polling' })
+
+    expect(within(await row(`ربات اصلی ${handleLabel('amo_bot')}`)).getByText('پولینگ')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('bot:poll')
+  })
+})
+
+describe('the scheduled work’s row', () => {
+  it('is named in Persian, and says it has not run yet with the way to set it up', async () => {
+    open({ id: 1, ...RUNNING })
+
+    const work = await row('کارهای زمان‌بندی‌شده')
+    expect(within(work).getByText('تنظیم نشده')).toBeTruthy()
+    expect(within(work).getByRole('link', { name: 'راه‌اندازی Cron' }).getAttribute('href')).toBe('/settings/advanced')
+    expect(screen.queryByText('Scheduler')).toBeNull()
   })
 })

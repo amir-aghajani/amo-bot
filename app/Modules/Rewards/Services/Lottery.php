@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Rewards\Services;
 
-use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Models\Payment;
-use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Rewards\DTO\Reward;
 use App\Modules\Rewards\Enums\RewardKind;
 use App\Modules\Rewards\Exceptions\RewardUnavailableException;
@@ -28,14 +26,27 @@ use Psr\Log\LoggerInterface;
 /**
  * The nightly draw («قرعه‌کشی شبانه») of the current shop, once per day of the shop's clock, after the configured hour.
  * The day's row is inserted first (unique per shop and day), so two runs never draw twice. Entries are orders bought for
- * themselves at a price and paid in the 24 hours before the scheduled hour (so a late run leaves no gap); bot admins,
- * banned customers and (optionally) agents never enter. Winners are drawn by weight, each customer once; one who cannot
- * be given the prize is passed over, and a plan no server can deliver ends the draw.
+ * themselves at a price and paid since the draw before it (window()): one draw's window ends where the next one's begins,
+ * so a late run, or the hour moved earlier or later, enters no order twice and skips none. Bot admins, banned customers
+ * and (optionally) agents never enter. Winners are drawn by weight, each customer once; one who cannot be given the prize
+ * is passed over, and a plan no server can deliver ends the draw.
  */
 final class Lottery
 {
     /** The wallet line a prize's Toman is, and the word a prize is given with. */
     public const REASON = 'جایزه قرعه‌کشی شبانه';
+
+    /**
+     * A draw's window ends this long before it is made: a payment settling at that moment — its time written a moment
+     * before its commit — enters the next draw, never neither.
+     */
+    private const SETTLING_SECONDS = 60;
+
+    /** The furthest back a window reaches: the draw before it — or, the shop's first, or after draws stopped a while, this. */
+    private const WINDOW_MAX_HOURS = 48;
+
+    /** A shop's first draw: the day before it. */
+    private const FIRST_WINDOW_HOURS = 24;
 
     public function __construct(
         private readonly LotterySettings $settings,
@@ -62,17 +73,18 @@ final class Lottery
             return null;
         }
 
-        return $this->draw($day, Carbon::instance($now->setTime($hour, 0))->utc());
+        return $this->draw($day);
     }
 
     /**
-     * The entries of a draw due at `$due` (UTC), by customer: their orders paid in the 24 hours before it, or one per buyer.
+     * The entries of a draw whose window is `$since` (inclusive) to `$until` (exclusive), UTC, by customer: their orders
+     * paid in it, or one per buyer.
      *
      * @return array<int, int>
      */
-    public function entries(Carbon $due): array
+    public function entries(Carbon $since, Carbon $until): array
     {
-        $paid = Payment::query()->select('order_id')->whereNotNull('paid_at')->where('paid_at', '>=', $due->copy()->subDay())->where('paid_at', '<', $due);
+        $paid = Payment::query()->select('order_id')->whereNotNull('paid_at')->where('paid_at', '>=', $since)->where('paid_at', '<', $until);
         $users = User::query()->select('id')
             ->where('role', '!=', UserRole::Admin->value)
             ->where('status', '!=', UserStatus::Banned->value)
@@ -96,8 +108,26 @@ final class Lottery
         return $entries;
     }
 
-    /** The draw of `$day`, due at `$due`; null when another run drew it first. */
-    private function draw(string $day, Carbon $due): ?LotteryDraw
+    /**
+     * The window of `$draw`, just made: from where the draw before it ended to SETTLING_SECONDS before this one — but never
+     * further back than WINDOW_MAX_HOURS; a shop's first, FIRST_WINDOW_HOURS.
+     *
+     * @return array{Carbon, Carbon} From (inclusive), until (exclusive), UTC
+     */
+    private static function window(LotteryDraw $draw): array
+    {
+        $until = $draw->created_at->copy()->startOfSecond()->subSeconds(self::SETTLING_SECONDS)->utc();
+        $before = LotteryDraw::query()->where('id', '<', $draw->id)->latest('id')->first();
+        if ($before === null) {
+            return [$until->copy()->subHours(self::FIRST_WINDOW_HOURS), $until];
+        }
+        $since = $before->created_at->copy()->subSeconds(self::SETTLING_SECONDS)->utc();
+
+        return [$since->max($until->copy()->subHours(self::WINDOW_MAX_HOURS)), $until];
+    }
+
+    /** The draw of `$day`, made now; null when another run drew it first. */
+    private function draw(string $day): ?LotteryDraw
     {
         $prize = $this->settings->prize();
         try {
@@ -112,7 +142,7 @@ final class Lottery
             return null;
         }
 
-        $entries = $this->entries($due);
+        $entries = $this->entries(...self::window($draw));
         $draw->forceFill(['entries' => array_sum($entries)])->save();
         if ($entries === []) {
             $this->logger->info('The nightly draw of {day} had no entries', ['day' => $day]);
@@ -163,9 +193,8 @@ final class Lottery
 
                 continue;
             } catch (\Throwable $e) {
-                // The draw goes on with the next one drawn; a panel's or a rule's refusal is expected, anything else a bug.
-                $level = $e instanceof DomainRuleException || $e instanceof ProviderException ? 'warning' : 'error';
-                $this->logger->log($level, 'A winner of the nightly draw of {day} was passed over: {reason}', ['day' => $draw->day, 'user' => $id, 'reason' => $e->getMessage(), 'exception' => $e]);
+                // The draw goes on with the next one drawn.
+                $this->logger->log(Rewards::failureLevel($e), 'A winner of the nightly draw of {day} was passed over: {reason}', ['day' => $draw->day, 'user' => $id, 'reason' => $e->getMessage(), 'exception' => $e]);
 
                 continue;
             }

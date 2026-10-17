@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { SectionedPage } from '@/components/sectioned-page'
 import { WEBSITE_SETTINGS_SECTIONS } from '@/components/shell/nav'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,7 +20,9 @@ import { websiteQuery } from '@/components/website/website-query'
  * `mailSettings`: where the panel sets up the shop's email (the owner's), which email sign-up needs; an agent has none.
  */
 export function WebsiteSettingsPage({ mailSettings }: { mailSettings?: string }) {
-  const { data, error, refetch } = useQuery(websiteQuery)
+  const read = useQuery(websiteQuery)
+  const { data, refetch } = read
+  const failure = useReadFailure(read)
 
   return (
     <SectionedPage
@@ -28,8 +31,8 @@ export function WebsiteSettingsPage({ mailSettings }: { mailSettings?: string })
       header={() => ({ title: 'تنظیمات وب‌سایت', description: 'وب‌سایت فروشگاه از راه API به فروشگاه وصل می‌شود و مشتری در آن با تلگرام، گوگل یا ایمیل وارد حسابش می‌شود.' })}
       above={() => (
         <>
-          {error && <ErrorState what="تنظیمات وب‌سایت" error={error} onRetry={() => void refetch()} />}
-          {!data && !error && <Skeleton className="h-64 w-full rounded-xl" />}
+          {failure.error && <ErrorState what="تنظیمات وب‌سایت" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />}
+          {!data && !failure.error && <Skeleton className="h-64 w-full rounded-xl" />}
         </>
       )}
     >

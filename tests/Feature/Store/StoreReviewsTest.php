@@ -166,7 +166,7 @@ final class StoreReviewsTest extends HttpTestCase
         $report = ReportMessage::query()->sole();
         self::assertSame([Topic::Reviews, 2, null], [$report->topic, $report->priority, $report->keyboard], "the reviews' topic, after everything else in the queue, no buttons");
         self::assertSame(
-            "⭐️ <b>نظر جدید</b> · #{$review->id}\n✍️ Ali R.\n★★★★☆ (۴ از ۵)\n📱 ایرانسل · اندروید · Happ\n👤 مهمان، بدون ورود به حساب\n📨 از وب‌سایت\n\n"
+            "⭐️ <b>نظر جدید</b> · \u{200E}#{$review->id}\n✍️ Ali R.\n★★★★☆ (۴ از ۵)\n📱 ایرانسل · اندروید · Happ\n👤 مهمان، بدون ورود به حساب\n📨 از وب‌سایت\n\n"
             . "اتصال سریع است.\nپشتیبانی هم خوب جواب می‌دهد.\n\n⏳ در انتظار بررسی؛ تا در صفحه «نظرات» پنل تایید نشود، در وب‌سایت دیده نمی‌شود.",
             $report->text,
         );
@@ -210,7 +210,7 @@ final class StoreReviewsTest extends HttpTestCase
         $this->bearer($this->customerSession($ali));
         self::assertSame(201, $this->write(self::REVIEW)->getStatusCode());
         self::assertSame($ali->id, Review::query()->sole()->user_id, 'theirs');
-        self::assertStringContainsString('👤 <a href="tg://user?id=' . self::TELEGRAM_ID . '">Ali</a> · @ali · <code>' . self::TELEGRAM_ID . '</code>', ReportMessage::query()->sole()->text, 'the report names the customer');
+        self::assertStringContainsString('👤 <a href="tg://user?id=' . self::TELEGRAM_ID . '">Ali</a> · ' . "\u{200E}@ali · <code>" . self::TELEGRAM_ID . '</code>', ReportMessage::query()->sole()->text, 'the report names the customer');
 
         $this->bearer(str_repeat('a', 64));
         $signedOut = $this->write(self::REVIEW);

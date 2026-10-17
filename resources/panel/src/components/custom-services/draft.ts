@@ -1,6 +1,7 @@
 import type { PricedRowDraft } from '@/components/priced-rows-editor'
 import type { BotCustomServicesSettingsRequest, BotSettingsData, PriceTier } from '@/lib/api-types'
 import { amountDraft, tomanOf, wholeNumberOf, wholesOf } from '@/lib/format'
+import { asAmount, asSet, asWhole } from '@/lib/use-form'
 
 /*
  * «سرویس دلخواه»'s settings as the panel edits them (the `custom_services` bot-settings group), and the price the bot
@@ -71,16 +72,37 @@ export function customServicesRequest(draft: CustomServicesDraft): BotCustomServ
   }
 }
 
-/** The tier rows that say something, smallest start first — the order the server keeps them in —, without their ids. */
-function byStart(rows: TierDraft[]): { from: string; price: string }[] {
-  const kept = said(rows).map(({ from, price }) => ({ from, price }))
-  kept.sort((a, b) => (wholeNumberOf(a.from) ?? 0) - (wholeNumberOf(b.from) ?? 0))
+/** The tier rows that say something as the server keeps them: each start and price read as it reads them, smallest start first. */
+function tiersRead(rows: TierDraft[]): { from: number | string; price: number | string | null }[] {
+  const kept = said(rows).map(({ from, price }) => ({ from: asWhole(from), price: asAmount(price) }))
+  kept.sort((a, b) => (typeof a.from === 'number' ? a.from : 0) - (typeof b.from === 'number' ? b.from : 0))
   return kept
 }
 
-/** The group as the server reads it, to tell a change from none: the request, the tiers in the order they are kept. */
+/** Amounts offered as the server keeps them (Core\Forms\Fields\Numbers): each once, in no order — or the text, trimmed, while one is no number. */
+const optionsRead = (typed: string) => {
+  const numbers = wholesOf(typed)
+  return numbers === null ? typed.trim() : asSet(numbers.map(Number))
+}
+
+/**
+ * The group as the server reads it, to tell a change from none: numbers by their digits («۳٬۰۰۰» is 3000), the tiers in
+ * the order they are kept, the amounts offered and the servers as sets.
+ */
 export function customServicesRead(draft: CustomServicesDraft): unknown {
-  return { ...customServicesRequest(draft), custom_traffic_tiers: byStart(draft.custom_traffic_tiers), custom_days_tiers: byStart(draft.custom_days_tiers) }
+  return {
+    custom_enabled: draft.custom_enabled,
+    custom_traffic_tiers: tiersRead(draft.custom_traffic_tiers),
+    custom_traffic_min: asWhole(draft.custom_traffic_min),
+    custom_traffic_max: asWhole(draft.custom_traffic_max),
+    custom_traffic_options: optionsRead(draft.custom_traffic_options),
+    custom_days_tiers: tiersRead(draft.custom_days_tiers),
+    custom_days_min: asWhole(draft.custom_days_min),
+    custom_days_max: asWhole(draft.custom_days_max),
+    custom_days_options: optionsRead(draft.custom_days_options),
+    custom_devices: asWhole(draft.custom_devices),
+    custom_servers: asSet(draft.custom_servers),
+  }
 }
 
 /** The tiers as typed, read as the server reads them — smallest start first; null while a row says something unreadable. */
@@ -106,6 +128,41 @@ export function optionsOf(typed: string): number[] | null {
   return wholesOf(typed)?.map(Number) ?? null
 }
 
+/** What a customer may build of a quantity, as the server bounds it (CustomServices::bounds()): from the least set — never below the first tier — to the most. */
+interface Bounds {
+  least: number
+  most: number
+}
+
+/** The bounds of a quantity priced by `tiers`, its least and most as typed. */
+function boundsOf(tiers: Tier[], min: string, max: string): Bounds {
+  return { least: Math.max(wholeNumberOf(min) ?? 1, tiers[0]?.from ?? 1), most: wholeNumberOf(max) ?? 0 }
+}
+
+/**
+ * The amounts typed as buttons as the bot offers them (CustomServices::options()), each once and the smallest first: those
+ * within what a customer may build (`shown`), and those it leaves out (`left`) by those `bounds` — none while the tiers
+ * cannot bound anything yet.
+ */
+export interface Offered {
+  shown: number[]
+  left: number[]
+  bounds: Bounds | null
+}
+
+/** What the bot offers of the amounts typed as buttons (Offered); null while none is typed, or one is no whole number. */
+export function offeredOf(rows: TierDraft[], min: string, max: string, typed: string): Offered | null {
+  const options = optionsOf(typed)
+  if (options === null || options.length === 0) return null
+  const amounts = [...new Set(options)]
+  amounts.sort((a, b) => a - b)
+  const tiers = tiersOf(rows)
+  if (tiers === null || tiers.length === 0) return { shown: amounts, left: [], bounds: null }
+  const bounds = boundsOf(tiers, min, max)
+  const within = (amount: number) => amount >= bounds.least && amount <= bounds.most
+  return { shown: amounts.filter(within), left: amounts.filter((amount) => !within(amount)), bounds }
+}
+
 /** One quantity's price for the calculator: its tier's rate a unit, and the whole of it. */
 interface QuantityPrice {
   quantity: number
@@ -125,8 +182,7 @@ function quantityPrice(kind: QuantityKind, typed: string, rows: TierDraft[], min
   if (tiers.length === 0) return 'هنوز پله قیمتی ندارد؛ بدون آن فروخته نمی‌شود.'
   const quantity = wholeNumberOf(typed)
   if (quantity === null) return `تعداد ${UNITS[kind]} را بنویسید.`
-  const least = Math.max(wholeNumberOf(min) ?? 1, tiers[0]?.from ?? 1)
-  const most = wholeNumberOf(max) ?? 0
+  const { least, most } = boundsOf(tiers, min, max)
   const tier = tierOf(tiers, quantity)
   if (tier === null || quantity < least || quantity > most) return `مشتری بین ${least} تا ${most} ${UNITS[kind]} می‌سازد.`
   return { quantity, unit: tier.price, total: tier.price * quantity }

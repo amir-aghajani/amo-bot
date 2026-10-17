@@ -13,6 +13,7 @@ import { TextLink } from '@/components/text-link'
 import { UserLabel, userLabel, userPage } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { UserRow, UserWalletResponse } from '@/lib/api-types'
+import { isolateIds } from '@/lib/direction'
 import { formatAmount, formatBalance, formatDate } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -61,7 +62,7 @@ export function WalletPanel({ user, onChanged, invalidates, onCancel }: WalletPa
         noteHint="مشتری این متن را در تاریخچه کیف پولش می‌بیند."
         notePlaceholders={{ add: 'مثلا: هدیه، جبران قطعی', remove: 'مثلا: اصلاح اشتباه' }}
         submitLabels={{ add: 'افزایش موجودی', remove: 'کاهش موجودی' }}
-        send={(direction, amount, description) => api.post(`/users/${user.id}/wallet`, { type: direction === 'add' ? 'credit' : 'debit', amount, description })}
+        send={(direction, amount, description, key) => api.post(`/users/${user.id}/wallet`, { type: direction === 'add' ? 'credit' : 'debit', amount, description }, { idempotencyKey: key })}
         invalidates={invalidates}
         onDone={(result, direction) => {
           queryClient.setQueryData<UserWalletResponse>(queryKeys.userWallet(user.id), { user: result.user, transactions: result.transactions })
@@ -74,7 +75,7 @@ export function WalletPanel({ user, onChanged, invalidates, onCancel }: WalletPa
       <section className="grid gap-2.5">
         <h3 className="text-body font-medium">تراکنش‌ها</h3>
         <ListView
-          list={{ rows: transactions, isPending: read.isPending, error: read.error, refetch: () => void read.refetch() }}
+          list={{ rows: transactions, isPending: read.isPending, isFetching: read.isFetching, error: read.error, refetch: () => void read.refetch() }}
           noun="تراکنش‌ها"
           skeletonRows={3}
           empty={<EmptyState compact framed icon={Receipt} title="هنوز تراکنشی ندارد" description="شارژها، خریدها و تغییرهای دستی این‌جا ثبت می‌شوند." />}
@@ -83,7 +84,8 @@ export function WalletPanel({ user, onChanged, invalidates, onCancel }: WalletPa
             entries={transactions.map((row) => ({
               id: row.id,
               credit: row.type === 'credit',
-              title: row.description ?? '—',
+              // The shop's own lines name orders and payments by number («شارژ کیف پول (سفارش #4)»): each kept whole.
+              title: row.description === null ? '—' : isolateIds(row.description),
               detail: (
                 <>
                   {formatDate(row.created_at)} · مانده {formatBalance(row.balance_after)}
@@ -99,7 +101,7 @@ export function WalletPanel({ user, onChanged, invalidates, onCancel }: WalletPa
                   {row.reviewer && (
                     <>
                       {' · '}
-                      <Reviewer name={row.reviewer} />
+                      <Reviewer name={row.reviewer} person={row.reviewer_name} />
                     </>
                   )}
                 </>

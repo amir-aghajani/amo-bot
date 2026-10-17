@@ -18,12 +18,14 @@ use App\Modules\Subscriptions\Enums\GrantStatus;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Grant;
 use App\Modules\Subscriptions\Models\GrantPart;
+use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Subscriptions\Tasks\GrantsTask;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
+use App\Support\LocalTime;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Psr\Http\Message\ResponseInterface;
@@ -68,8 +70,8 @@ final class ServerGrantsTest extends HttpTestCase
         self::assertSame(201, $response->getStatusCode());
         $grant = $this->decode($response)['grant'];
         self::assertSame(
-            ['running', 2, 0, 3, 10 * Traffic::GIGABYTE, true, false, self::ADMIN_USERNAME],
-            [$grant['status'], $grant['total'], $grant['granted'], $grant['days'], $grant['traffic_bytes'], $grant['notify'], $grant['include_unstarted'], $grant['reviewer']],
+            ['running', 2, 0, 3, 10 * Traffic::GIGABYTE, true, false, self::ADMIN_USERNAME, null],
+            [$grant['status'], $grant['total'], $grant['granted'], $grant['days'], $grant['traffic_bytes'], $grant['notify'], $grant['include_unstarted'], $grant['reviewer'], $grant['reviewer_name']],
         );
         self::assertSame([], FakeProvider::$updated, 'nothing is given until it is worked on');
 
@@ -100,6 +102,21 @@ final class ServerGrantsTest extends HttpTestCase
         $history = $this->decode($this->get("/api/admin/servers/{$this->server->id}/grants"))['grants'];
         self::assertSame([$grant['id']], array_column($history, 'id'));
         self::assertSame('جبران قطعی سرور', $history[0]['reason']);
+    }
+
+    public function testAServiceTheDaysWouldEndPastTheLastDayTheShopKeepsIsPassedByAndCounted(): void
+    {
+        // 30 days before the TIMESTAMP columns' last moment (MySQL refuses a later one).
+        Carbon::setTestNow(LocalTime::last()->subDays(30));
+        $near = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1', ['expires_at' => now()->addDays(10)]));
+        $far = $this->mirrored($this->subscription($this->sara, $this->plan, $this->server, 'sara_1', ['expires_at' => now()->addDays(25)]));
+
+        $grant = $this->work($this->decode($this->start(['days' => '7', 'traffic_gb' => '10']))['grant']['id']);
+
+        self::assertSame(['done', 1, 1, 0], [$grant['status'], $grant['granted'], $grant['skipped'], $grant['failed']], 'seven days would take the second past it: passed by, traffic and all');
+        self::assertSame(['ali_1'], FakeProvider::updatedNames());
+        self::assertEquals(now()->addDays(17), $near->refresh()->expires_at);
+        self::assertSame(30 * Traffic::GIGABYTE, $far->refresh()->traffic_limit_bytes);
     }
 
     /**
@@ -307,6 +324,36 @@ final class ServerGrantsTest extends HttpTestCase
         self::assertSame('سرویس ali_1: ' . ProviderErrorPresenter::describe(new ConnectionException(ConnectionFailure::Timeout, 'Connection failed')), $grant['last_failure']);
         self::assertNull($grant['waiting_reason']);
         self::assertSame(30 * 24, $subscription->refresh()->duration_hours);
+    }
+
+    public function testAnUpdateThePanelTookThoughItsAnswerNeverCameIsCountedGiven(): void
+    {
+        $subscription = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
+        FakeProvider::$unanswered = [$this->server->id => ['updateClient']];
+
+        $grant = $this->work($this->decode($this->start(['days' => 3]))['grant']['id']);
+
+        self::assertSame(['done', 1, 0], [$grant['status'], $grant['granted'], $grant['failed']], 'the panel has it: given, once');
+        self::assertSame([33 * 24, 1], [$subscription->refresh()->duration_hours, count(FakeProvider::$updated)]);
+        self::assertSame(['sendMessage'], $this->telegram()->calls(), 'and its customer told');
+    }
+
+    public function testAServiceDeletedAsItsTurnCameIsPassedBy(): void
+    {
+        $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
+        $this->mirrored($this->subscription($this->sara, $this->plan, $this->server, 'sara_1'));
+        $id = $this->decode($this->start(['days' => 3]))['grant']['id'];
+        // Deleted from the shop (support, the clean-up) while its panel answers the grant's read of it.
+        FakeProvider::$onCall = static function (int $server, string $call): void {
+            if ($call === 'findClient') {
+                Subscription::query()->where('remote_name', 'ali_1')->delete();
+            }
+        };
+
+        $grant = $this->work($id);
+
+        self::assertSame(['done', 1, 1, 0], [$grant['status'], $grant['granted'], $grant['skipped'], $grant['failed']], 'the next service is not held up');
+        self::assertSame(['sara_1'], FakeProvider::updatedNames());
     }
 
     public function testAnUpdateAProxyInFrontOfThePanelGaveUpOnIsNotTriedAgain(): void

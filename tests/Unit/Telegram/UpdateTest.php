@@ -81,6 +81,35 @@ final class UpdateTest extends TestCase
         self::assertNull($update->callbackArgs('plan:'), 'a message is no tap');
     }
 
+    /**
+     * In a group the bot is sent everything: a press, a command or a reply to the bot's message is meant for it; a reply
+     * to its topic's first message — which every message in a topic replies to — or to someone else is the group's talk.
+     */
+    public function testWhatAGroupMeansForTheBotIsAPressACommandOrAReplyToIt(): void
+    {
+        $bot = 555;
+        $message = static fn(array $fields): Update => new Update(['update_id' => 1, 'message' => $fields + ['message_id' => 40, 'chat' => ['id' => -100, 'type' => 'supergroup'], 'from' => ['id' => 7]]]);
+        $inTopic = ['is_topic_message' => true, 'message_thread_id' => 11];
+        $botsPost = ['message_id' => 30, 'from' => ['id' => $bot, 'is_bot' => true]];
+
+        $reply = $message(['text' => 'پاسخ', 'reply_to_message' => $botsPost] + $inTopic);
+        self::assertSame($botsPost, $reply->repliedToBot($bot));
+        self::assertTrue($reply->isForBot($bot));
+        self::assertTrue($message(['text' => '/start'])->isForBot($bot));
+        self::assertTrue((new Update(['update_id' => 2, 'callback_query' => ['id' => 'cb', 'data' => 'x', 'from' => ['id' => 7], 'message' => ['message_id' => 30, 'chat' => ['id' => -100, 'type' => 'supergroup']]]]))->isForBot($bot));
+
+        foreach ([
+            'plain talk' => $message(['text' => 'سلام']),
+            "the topic's first message" => $message(['text' => 'سلام', 'reply_to_message' => ['message_id' => 11, 'from' => ['id' => $bot]]] + $inTopic),
+            'the topic made, as Telegram marks it' => $message(['text' => 'سلام', 'reply_to_message' => ['message_id' => 9, 'from' => ['id' => $bot], 'forum_topic_created' => ['name' => 'تیکت‌ها']]] + $inTopic),
+            "someone else's" => $message(['text' => 'سلام', 'reply_to_message' => ['message_id' => 30, 'from' => ['id' => 8]]] + $inTopic),
+        ] as $talk => $update) {
+            self::assertNull($update->repliedToBot($bot), $talk);
+            self::assertFalse($update->isForBot($bot), $talk);
+        }
+        self::assertFalse($reply->isForBot(null), 'without a token the bot has no messages to reply to');
+    }
+
     public function testTheBotsOwnMembershipAndTheKindOfChat(): void
     {
         $update = new Update([

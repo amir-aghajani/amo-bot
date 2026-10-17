@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $description
  * @property int|null $order_id
  * @property string|null $reviewer The panel's principal behind an adjustment or an extension
+ * @property string|null $request_key The Idempotency-Key of the owner's adjustment that wrote it; null for every other line
  * @property Carbon|null $created_at
  */
 class TrafficTransaction extends Model
@@ -28,7 +29,7 @@ class TrafficTransaction extends Model
 
     protected $table = 'traffic_transactions';
 
-    protected $fillable = ['bot_id', 'type', 'bytes', 'balance_after', 'description', 'order_id', 'reviewer'];
+    protected $fillable = ['bot_id', 'type', 'bytes', 'balance_after', 'description', 'order_id', 'reviewer', 'request_key'];
 
     /** @var array<string, string> */
     protected $casts = [

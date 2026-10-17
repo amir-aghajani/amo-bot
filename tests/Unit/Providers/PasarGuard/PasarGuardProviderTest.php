@@ -101,6 +101,40 @@ final class PasarGuardProviderTest extends TestCase
         self::assertSame([null, null], [$never->expiry->deadline(), $never->expiry->pendingSeconds()]);
     }
 
+    public function testAClientWantedSwitchedOffIsSwitchedOffAsItIsMade(): void
+    {
+        $provider = $this->provider([self::json(201, self::user()), self::json(200, self::user(['status' => 'disabled']))]);
+
+        $client = $provider->createClient(['3'], new ClientSpec('amir_1', 10, Expiry::afterFirstUse(self::MONTH), enabled: false));
+
+        self::assertSame(['POST /api/user', 'PUT /api/user/by-username/amir_1'], $this->panel->calls(), 'PasarGuard makes a user active or on hold only');
+        self::assertSame('on_hold', $this->panel->params(0)['status']);
+        self::assertSame(['status' => 'disabled'], $this->panel->params(1), 'its waiting term left on it');
+        self::assertFalse($client->enabled);
+        self::assertSame(self::MONTH, $client->expiry->pendingSeconds());
+    }
+
+    public function testAUserThePanelWillNotSwitchOffIsTakenBackOrElseFailsAsMade(): void
+    {
+        $refusal = static fn(): Response => self::json(500, ['detail' => 'database is locked']);
+        $provider = $this->provider([self::json(201, self::user()), $refusal(), new Response(204)]);
+        try {
+            $provider->createClient(['3'], new ClientSpec('amir_1', enabled: false));
+            self::fail('the switch was refused');
+        } catch (ProviderException $e) {
+            self::assertSame(['POST /api/user', 'PUT /api/user/by-username/amir_1', 'DELETE /api/user/by-username/amir_1'], $this->panel->calls());
+            self::assertFalse($e->mayHaveBeenDone(), 'taken back: nothing was made');
+        }
+
+        $provider = $this->provider([self::json(201, self::user()), $refusal(), $refusal()]);
+        try {
+            $provider->createClient(['3'], new ClientSpec('amir_1', enabled: false));
+            self::fail('the switch was refused');
+        } catch (ProviderException $e) {
+            self::assertTrue($e->mayHaveBeenDone(), 'still there, switched on: whoever asked looks at it');
+        }
+    }
+
     public function testCreateClientWithoutAGroupIsACallerMistake(): void
     {
         $this->expectException(\InvalidArgumentException::class);
@@ -179,6 +213,34 @@ final class PasarGuardProviderTest extends TestCase
         self::assertTrue($ended->enabled, 'expired is ended by its term, not switched off');
         self::assertSame('2026-10-01', $ended->expiry->deadline()?->format('Y-m-d'));
         self::assertNull($ended->online, 'presence not asked: nobody can tell');
+    }
+
+    /** A deadline written as unix seconds (as the shop sends it) reads as one, and `expire: 0` as none — never "no end". */
+    public function testADeadlineAsUnixSecondsAndNoneAsZeroReadAsTheyAreMeant(): void
+    {
+        $provider = $this->provider([
+            self::json(200, self::user(['status' => 'active', 'expire' => 1793491200, 'on_hold_expire_duration' => null])),
+            self::json(200, self::user(['status' => 'on_hold', 'expire' => 0])),
+            self::json(200, self::user(['status' => 'active', 'expire' => 0, 'on_hold_expire_duration' => null])),
+        ]);
+
+        [$fixed, $onHold, $never] = array_map(static fn(): ?ClientInfo => $provider->findClient('amir_1'), range(1, 3));
+        self::assertNotNull($fixed);
+        self::assertNotNull($onHold);
+        self::assertNotNull($never);
+
+        self::assertSame(1793491200, $fixed->expiry->deadline()?->getTimestamp());
+        self::assertSame(self::MONTH, $onHold->expiry->pendingSeconds(), 'on hold with its duration: the term waits for the first connection');
+        self::assertSame([null, null], [$never->expiry->deadline(), $never->expiry->pendingSeconds()], 'no end at all');
+    }
+
+    public function testAPageWithoutATotalPagesOnUntilAShortOne(): void
+    {
+        $full = self::json(200, ['users' => array_map(static fn(int $i): array => self::user(['username' => "user_{$i}"]), range(1, 500))]);
+        $provider = $this->provider([$full, self::json(200, ['users' => [self::user(['username' => 'user_501'])]])]);
+
+        self::assertCount(501, $provider->listClients(), 'no total is no "zero users": the next page is asked for');
+        self::assertCount(2, $this->panel->calls());
     }
 
     public function testFindClientIsNullForAMissingUserButAWrongAddressIsNoAnswer(): void
@@ -515,16 +577,17 @@ final class PasarGuardProviderTest extends TestCase
         $provider = $this->provider([self::json(200, ['groups' => [
             ['id' => 3, 'name' => 'VIP', 'inbound_tags' => ['VLESS TCP', 'Trojan WS'], 'is_disabled' => false, 'total_users' => 12],
             ['id' => 5, 'name' => 'Germany', 'inbound_tags' => $tags, 'is_disabled' => true, 'total_users' => 0],
-        ], 'total' => 2])]);
+            ['id' => 6, 'name' => 'Old', 'inbound_tags' => [], 'is_disabled' => 'true'],
+        ], 'total' => 3])]);
 
-        [$vip, $germany] = $provider->listInbounds();
+        [$vip, $germany, $old] = $provider->listInbounds();
 
         self::assertSame(['GET /api/groups'], $this->panel->calls());
         self::assertSame(['3', 'VIP', 'VLESS TCP, Trojan WS', true, 12], [$vip->key, $vip->remark, $vip->tag, $vip->enabled, $vip->clientCount]);
         self::assertSame([null, null, null, null], [$vip->protocol, $vip->port, $vip->network, $vip->security], 'a group is no single protocol or port: nothing made up');
         self::assertFalse($germany->enabled);
-        self::assertSame(128, mb_strlen($germany->tag), 'the tags are cut to what the shop keeps');
-        self::assertStringEndsWith('…', $germany->tag);
+        self::assertSame(implode(', ', $tags), $germany->tag, 'every tag, as the panel has them: the shop\'s copy cuts what it keeps');
+        self::assertFalse($old->enabled, 'a switch as loosely typed as any');
     }
 
     public function testStatusIsTheHostsVitalsWithTheCoreUnknown(): void

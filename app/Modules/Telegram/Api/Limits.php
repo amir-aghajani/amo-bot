@@ -22,11 +22,31 @@ final class Limits
     /** A group's title, a forum topic's name. */
     public const TITLE = 128;
 
+    /** The buttons of one inline keyboard, every row's together: a message with more is refused whole. */
+    public const KEYBOARD_BUTTONS = 100;
+
     /** Premium emoji asked for in one getCustomEmojiStickers. */
     public const CUSTOM_EMOJI_IDS = 200;
 
     /** Messages a minute to one group. */
     public const GROUP_PER_MINUTE = 20;
+
+    /** A photo's width and height together, in pixels; its longer side at most PHOTO_RATIO times its shorter; its bytes. */
+    public const PHOTO_SIDES = 10_000;
+    public const PHOTO_RATIO = 20;
+    public const PHOTO_BYTES = 10 * 1024 * 1024;
+
+    /** Whether a picture of this size goes as a photo (sendPhoto): Telegram refuses one past its sides or its ratio. */
+    public static function isPhoto(int $width, int $height): bool
+    {
+        return self::isPhotoShape($width, $height) && $width + $height <= self::PHOTO_SIDES;
+    }
+
+    /** Whether a picture of these proportions can be a photo at any size: its longer side within PHOTO_RATIO times its shorter. */
+    public static function isPhotoShape(int $width, int $height): bool
+    {
+        return $width > 0 && $height > 0 && max($width, $height) <= self::PHOTO_RATIO * min($width, $height);
+    }
 
     /** A plain text's length as Telegram counts it: UTF-16 code units. */
     public static function length(string $text): int

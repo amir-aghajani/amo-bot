@@ -14,7 +14,7 @@ final class RequirementsTest extends TestCase
         $checks = array_column($this->service(Requirements::class)->check(), 'ok', 'name');
 
         self::assertSame(
-            ['ext-pdo_sqlite', 'ext-curl', 'ext-mbstring', 'ext-openssl', 'ext-bcmath', 'ext-fileinfo', 'memory_limit >= 64M', 'storage/ writable', 'config.php writable', 'ext-sodium', 'ext-zip'],
+            ['ext-pdo_sqlite', 'ext-curl', 'ext-mbstring', 'ext-openssl', 'ext-bcmath', 'ext-fileinfo', 'memory_limit >= 64M', 'storage/ writable', 'config.php writable', 'ext-sodium', 'ext-zip', 'ext-gd'],
             array_keys($checks),
             'the suite runs on SQLite: its driver\'s extension; PHP\'s version is Composer\'s platform check',
         );
@@ -30,7 +30,12 @@ final class RequirementsTest extends TestCase
         $optional = array_column($this->service(Requirements::class)->check(), 'optional', 'name');
         $met = ['name' => 'ext-curl', 'label' => 'curl', 'ok' => true, 'optional' => false];
 
-        self::assertSame(['ext-sodium', 'ext-zip'], array_keys(array_filter($optional)), 'the release\'s signature checked, its zip unpacked: composer.json suggests them');
+        self::assertSame(['ext-sodium', 'ext-zip', 'ext-gd'], array_keys(array_filter($optional)), 'the release\'s signature checked, its zip unpacked, the QR card drawn: composer.json suggests them');
+        $suggested = array_keys((array) (json_decode((string) file_get_contents(dirname(__DIR__, 3) . '/composer.json'), true, flags: JSON_THROW_ON_ERROR)['suggest'] ?? []));
+        $shown = array_keys(array_filter($optional));
+        sort($suggested);
+        sort($shown);
+        self::assertSame($suggested, $shown, 'every extension composer.json suggests, and no other');
         self::assertTrue(Requirements::met([$met, ['name' => 'ext-zip', 'label' => 'zip', 'ok' => false, 'optional' => true]]), 'an optional one missing holds nothing up');
         self::assertFalse(Requirements::met([$met, ['name' => 'ext-bcmath', 'label' => 'bcmath', 'ok' => false, 'optional' => false]]));
     }

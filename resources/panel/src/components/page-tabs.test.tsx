@@ -53,3 +53,30 @@ describe('a row of tabs', () => {
     expect(row.style.maskImage).toBe('')
   })
 })
+
+describe('a row whose value is none of its options (a mode not chosen yet)', () => {
+  it('is reached by the keyboard on its first option, and the arrows start there', () => {
+    const onChange = vi.fn()
+    render(<PageTabs as="choice" value={'' as string} tabs={STATUSES} onChange={onChange} aria-label="وضعیت" />)
+    const options = screen.getAllByRole('radio')
+
+    expect(options.map((option) => option.tabIndex)).toEqual([0, -1, -1, -1])
+    expect(options.every((option) => option.getAttribute('aria-checked') === 'false')).toBe(true)
+
+    // The next option along the row's reading direction (right to left: on the left).
+    const forward = getComputedStyle(screen.getByRole('radiogroup')).direction === 'rtl' ? 'ArrowLeft' : 'ArrowRight'
+    options[0]?.focus()
+    fireEvent.keyDown(options[0]!, { key: forward })
+    expect(onChange).toHaveBeenLastCalledWith('stuck')
+    expect(document.activeElement).toBe(options[1])
+
+    fireEvent.keyDown(options[0]!, { key: 'End' })
+    expect(onChange).toHaveBeenLastCalledWith('fulfilled')
+  })
+
+  it('still gives the selected option alone the tab stop once one is chosen', () => {
+    render(<PageTabs as="choice" value="pending" tabs={STATUSES} onChange={vi.fn()} aria-label="وضعیت" />)
+
+    expect(screen.getAllByRole('radio').map((option) => option.tabIndex)).toEqual([-1, -1, 0, -1])
+  })
+})

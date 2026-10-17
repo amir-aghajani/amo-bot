@@ -6,13 +6,12 @@ namespace App\Modules\Payments\Drivers\Aban;
 
 use App\Modules\Payments\Contracts\OnlineGateway;
 use App\Modules\Payments\Drivers\GatewayHttp;
+use App\Modules\Payments\Drivers\OnlinePage;
 use App\Modules\Payments\DTO\CardTransfer;
 use App\Modules\Payments\DTO\OnlineInvoice;
 use App\Modules\Payments\DTO\OnlineRequest;
 use App\Modules\Payments\DTO\OnlineVerdict;
-use App\Modules\Payments\DTO\PayLink;
 use App\Modules\Payments\DTO\PaymentInitiation;
-use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Models\Payment;
 use App\Support\Money;
@@ -28,10 +27,13 @@ use GuzzleHttp\ClientInterface;
  * cancelled), and a paid one is claimed by verify, which says yes once (409 after: paid all the same) — held for support
  * when its order or amount is not the payment's. Its details kept on the payment (`payments.invoice`): the invoice's id,
  * the shop's reference for it, the Rial asked and to pay, whether it is Aban's test mode (an invoice the other mode's key
- * cannot see), and the card to show in the bot when the merchant wants it and the sum is one transfer's.
+ * cannot see), and the card to show in the bot when the merchant wants it and the sum is one transfer's. The invoice's
+ * id is the payment's reference.
  */
 final class AbanGateway implements OnlineGateway
 {
+    use OnlinePage;
+
     public const INVOICES = 'https://api.abangateway.ir/api/v1/invoices';
 
     /** A test key's beginning: its invoices move no money, and are paid only by Aban's simulation. */
@@ -52,9 +54,6 @@ final class AbanGateway implements OnlineGateway
     /** An invoice's id at Aban ("inv_…"). */
     private const INVOICE = '/^[A-Za-z0-9_]{4,32}$/D';
 
-    /** The longest of Aban's own words a log line keeps. */
-    private const SAID_MAX = 200;
-
     public function __construct(
         private readonly string $apiKey,
         private readonly bool $showCard,
@@ -70,27 +69,13 @@ final class AbanGateway implements OnlineGateway
     /** Its page and the exact sum it asks — and the card, when it is to be shown —, as open() kept them. */
     public function initiate(Payment $payment): PaymentInitiation
     {
-        if ($payment->link === null) {
-            return PaymentInitiation::instant();
-        }
         $invoice = $payment->invoice ?? [];
         $payable = $invoice['payable'] ?? null;
         $card = is_array($invoice['card'] ?? null) && is_string($invoice['card']['number'] ?? null)
             ? new CardTransfer($invoice['card']['number'], self::words($invoice['card']['holder'] ?? null), '', self::words($invoice['card']['bank'] ?? null))
             : null;
 
-        return PaymentInitiation::link(new PayLink(
-            $payment->link,
-            $payment->link_expires_at?->toDateTimeImmutable(),
-            is_int($payable) && $payable > 0 ? self::toman($payable) : $payment->amount,
-            $card,
-        ));
-    }
-
-    /** Aban said it was paid, and the shop claimed it, before this runs (Services\OnlinePayments): the invoice's id is the reference. */
-    public function settle(Payment $payment): PaymentResult
-    {
-        return PaymentResult::success($payment->reference);
+        return $this->page($payment, is_int($payable) && $payable > 0 ? self::toman($payable) : null, $card);
     }
 
     public function open(Payment $payment, OnlineRequest $request): OnlineInvoice
@@ -279,12 +264,11 @@ final class AbanGateway implements OnlineGateway
     {
         $code = self::errorCode($answer);
         $detail = $answer['detail'] ?? null;
-        $said = match (true) {
+        $said = GatewayHttp::said(match (true) {
             is_array($answer['error'] ?? null) && is_string($answer['error']['message'] ?? null) => $answer['error']['message'],
-            is_string($detail) => $detail,
             is_array($detail) => implode('; ', array_filter(array_map(static fn(mixed $fault): mixed => is_array($fault) ? ($fault['msg'] ?? null) : null, $detail), is_string(...))),
-            default => '',
-        };
+            default => $detail,
+        });
         $meaning ??= match (true) {
             $status === 401 => ' — the API key is wrong or was revoked: make another in Aban\'s panel (Settings, API keys) and set it in the payment method',
             $code === 'insufficient_fee_wallet' => ' — the fee wallet at Aban is short: top it up in its panel',
@@ -298,6 +282,6 @@ final class AbanGateway implements OnlineGateway
             default => '',
         };
 
-        return "AbanGateway {$what} (HTTP {$status}" . ($code === null ? '' : ", {$code}") . ')' . ($said === '' ? '' : ': ' . mb_substr($said, 0, self::SAID_MAX)) . $meaning;
+        return "AbanGateway {$what} (HTTP {$status}" . ($code === null ? '' : ", {$code}") . ')' . ($said === '' ? '' : ": {$said}") . $meaning;
     }
 }

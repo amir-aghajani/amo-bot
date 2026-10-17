@@ -1,12 +1,13 @@
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Bold, Check, Code, EyeOff, Italic, Link2, Quote, RotateCcw, Sparkles, Strikethrough, TriangleAlert, Underline, type LucideIcon } from 'lucide-react'
+import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { KIND_LABELS } from '@/components/bot-texts/kinds'
 import { PremiumEmojiPicker, premiumEmojiTag } from '@/components/bot-texts/premium-emoji-picker'
 import { fillSamples, visibleLength } from '@/components/bot-texts/telegram-html'
 import { TextPreview } from '@/components/bot-texts/text-preview'
 import { WithTokens } from '@/components/bot-texts/tokens'
-import { keptWording, wordingProblem } from '@/components/bot-texts/wording-problem'
+import { blankWording, keptWording, wordingProblem } from '@/components/bot-texts/wording-problem'
 import { Field } from '@/components/field'
 import { FormActions, FormError } from '@/components/form-footer'
 import { IconButton } from '@/components/icon-button'
@@ -18,6 +19,7 @@ import type { BotTextKind, BotTextRow } from '@/lib/api-types'
 import { isolateMarkup } from '@/lib/direction'
 import { formatNumber } from '@/lib/format'
 import { useForm } from '@/lib/use-form'
+import { useConfirmDiscard } from '@/lib/use-unsaved-guard'
 import { cn } from '@/lib/utils'
 
 interface TextModalProps {
@@ -33,7 +35,7 @@ interface TextModalProps {
  */
 export function TextModal({ text, onClose, onSaved }: TextModalProps) {
   return (
-    <Modal open={text !== null} onClose={onClose} size="xl" title={text?.title ?? ''} description={text && <WithTokens text={text.description} />}>
+    <Modal open={text !== null} onClose={onClose} size="xl" title={text?.title ?? ''} description={text && <WithTokens text={text.description} />} typing>
       {text && <TextForm key={text.key} text={text} onCancel={onClose} onSaved={onSaved} />}
     </Modal>
   )
@@ -76,10 +78,13 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
   const { values, set, revert, error, formError, busy, dirty, submit } = useForm({ value: text.value }, { reads: ({ value }) => keptWording(text.kind, value) })
   const field = useRef<HTMLTextAreaElement>(null)
   const [emojiOpen, setEmojiOpen] = useState(false)
-  const samples = useMemo(() => Object.fromEntries(text.variables.map((variable) => [variable.name, variable.sample])), [text.variables])
+  const confirmDiscard = useConfirmDiscard()
+  const samples = useMemo(() => Object.fromEntries(text.variables.map((variable) => [variable.name, variable])), [text.variables])
   // As Telegram counts, and the server with it: UTF-16 units (an emoji beyond the basic plane is two) of what the
-  // customer sees — a tag's markup, a premium emoji's long one above all, costs nothing.
-  const length = text.html ? visibleLength(values.value) : values.value.length
+  // customer sees — a tag's markup, a premium emoji's long one above all, costs nothing — in the wording the server
+  // would keep (a space at its end is none). A blank one — a no-break space alone — is none: the save refuses it as empty.
+  const kept = keptWording(text.kind, values.value)
+  const length = blankWording(text, kept) ? 0 : text.html ? visibleLength(kept) : kept.length
   const tooLong = length > text.limit
   // What the save would refuse, as it is typed; once a save is refused, its own word stands until the next edit. Either
   // says tags: each kept whole and as typed in the Persian sentence (isolateMarkup — bare, «</b>» would read «<b/>»).
@@ -95,12 +100,11 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
     const value = values.value
     const start = textarea?.selectionStart ?? value.length
     const end = textarea?.selectionEnd ?? value.length
-    const kept = replace ? '' : value.slice(start, end)
-    set('value', value.slice(0, start) + open + kept + close + value.slice(end))
-    requestAnimationFrame(() => {
-      textarea?.focus()
-      textarea?.setSelectionRange(start + open.length, start + open.length + kept.length)
-    })
+    const selected = replace ? '' : value.slice(start, end)
+    // Drawn at once, so the caret is set in the wording as it now is.
+    flushSync(() => set('value', value.slice(0, start) + open + selected + close + value.slice(end)))
+    textarea?.focus()
+    textarea?.setSelectionRange(start + open.length, start + open.length + selected.length)
   }
   const insert = (token: string) => replaceSelection(token, '', true)
 
@@ -133,7 +137,7 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
                 {text.html && (
                   <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-border p-0.5" role="toolbar" aria-label="قالب‌بندی">
                     {FORMATS.map(({ icon: Icon, label, open, close }) => (
-                      <IconButton key={label} aria-label={label} title={label} className="size-7" onClick={() => replaceSelection(open, close)}>
+                      <IconButton key={label} aria-label={label} title={label} className="size-7 max-md:size-11" onClick={() => replaceSelection(open, close)}>
                         <Icon className="size-3.5" aria-hidden />
                       </IconButton>
                     ))}
@@ -141,7 +145,7 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
                       type="button"
                       variant={emojiOpen ? 'secondary' : 'ghost'}
                       size="sm"
-                      className="ms-auto h-7 gap-1.5 px-2 text-footnote"
+                      className="ms-auto h-7 gap-1.5 px-2 text-footnote max-md:h-11"
                       aria-expanded={emojiOpen}
                       aria-controls={emojiOpen ? 'premium_emoji_picker' : undefined}
                       onClick={() => setEmojiOpen((open) => !open)}
@@ -205,7 +209,9 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
         dirty={dirty}
         onRevert={revert}
         start={
-          <Button variant="secondary" icon={RotateCcw} onClick={() => set('value', text.default)} disabled={busy || values.value === text.default}>
+          // A wording typed and not saved is asked about before the default takes its place: nothing brings it back.
+          // Held, not disabled: once the default is in, the focus stays on it.
+          <Button variant="secondary" icon={RotateCcw} onClick={() => confirmDiscard(() => set('value', text.default))} aria-disabled={busy || values.value === text.default}>
             متن پیش‌فرض
           </Button>
         }

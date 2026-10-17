@@ -55,6 +55,22 @@ describe('an account that could not be read', () => {
     expect(screen.queryByText('نمایندگی فعال نیست')).toBeNull()
     await until(() => expect(skeletons()).toHaveLength(0))
   })
+
+  it('stays said while it is asked again — its button keeping the focus, spinning —, until the answer', async () => {
+    server().on('GET', '/api/agent/account', refusal(500, 'خطای سرور.'))
+    open()
+    const retry = await screen.findByRole('button', { name: 'تلاش دوباره' })
+    const again = server().hold('GET', '/api/agent/account')
+
+    retry.focus()
+    fireEvent.click(retry)
+    await until(() => expect(retry.getAttribute('aria-busy')).toBe('true'))
+    expect(document.activeElement).toBe(retry)
+    expect(screen.getByText('حساب نمایندگی بارگذاری نشد.')).toBeTruthy()
+
+    again.answer(json(account()))
+    await until(() => expect(screen.queryByText('حساب نمایندگی بارگذاری نشد.')).toBeNull())
+  })
 })
 
 describe('the agent’s bot', () => {

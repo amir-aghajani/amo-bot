@@ -2,11 +2,23 @@ import { useConfigGroup } from '@/apps/admin/settings/use-config-group'
 import { Field } from '@/components/field'
 import { SectionCard } from '@/components/section-card'
 import { SwitchRow } from '@/components/switch-row'
+import { TextLink } from '@/components/text-link'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api } from '@/lib/api'
 import type { ConfigAppRequest, ConfigAppSettings, ConfigSettingsResponse } from '@/lib/api-types'
 import { queryKeys } from '@/lib/query-keys'
+
+/** The address's line: how it is written — and that Telegram keeps calling the old one until the webhooks are set again. */
+const APP_URL_HINT = (
+  <>
+    بدون / در انتها، با زیرپوشه اگر برنامه در زیرپوشه نصب شده. Webhook تلگرام به https نیاز دارد و بعد از عوض کردن آدرس، تا آن را در{' '}
+    <TextLink inline to="/settings/telegram">
+      ربات تلگرام
+    </TextLink>{' '}
+    › «دریافت پیام‌ها» دوباره ثبت نکنید، تلگرام آدرس قبلی را صدا می‌زند.
+  </>
+)
 
 /** The shop's name and public address (its sub-folder in it), the zone its times are shown in, and the debug switch. */
 export function AppSection({ settings, meta, disabled }: { settings: ConfigAppSettings; meta: ConfigSettingsResponse['meta']; disabled: boolean }) {
@@ -20,7 +32,7 @@ export function AppSection({ settings, meta, disabled }: { settings: ConfigAppSe
         <Field id="app_name" label="نام برنامه" error={error('name')} hint="در عنوان صفحه‌ها و پیام‌های ربات.">
           <Input value={values.name} onChange={(e) => set('name', e.target.value)} />
         </Field>
-        <Field id="app_url" label="آدرس سایت" error={error('url')} hint="بدون / در انتها، با زیرپوشه اگر برنامه در زیرپوشه نصب شده؛ Webhook تلگرام به https نیاز دارد.">
+        <Field id="app_url" label="آدرس سایت" error={error('url')} hint={APP_URL_HINT}>
           <Input dir="ltr" inputMode="url" value={values.url} onChange={(e) => set('url', e.target.value)} placeholder="https://shop.example.com" />
         </Field>
       </div>

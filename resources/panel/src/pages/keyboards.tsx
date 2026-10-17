@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fillSamples } from '@/components/bot-texts/telegram-html'
 import { ErrorState } from '@/components/error-state'
 import { KeyboardEditor } from '@/components/keyboards/keyboard-editor'
-import { Page } from '@/components/page'
+import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BotTextsResponse, KeyboardLayoutData } from '@/lib/api-types'
@@ -14,13 +14,15 @@ const WELCOME = 'welcome'
 /** The greeting in the admin's wording, its variables filled with their samples — what the preview shows above the menu. */
 function welcomeOf(data: BotTextsResponse): string | undefined {
   const text = data.groups.flatMap((group) => group.texts).find((row) => row.key === WELCOME)
-  return text && fillSamples(text.value, Object.fromEntries(text.variables.map((variable) => [variable.name, variable.sample])), text.html)
+  return text && fillSamples(text.value, Object.fromEntries(text.variables.map((variable) => [variable.name, variable])), text.html)
 }
 
 /** The bot's keyboards: an editor for each one the API lists (the start menu). */
 export function KeyboardsPage() {
   const queryClient = useQueryClient()
-  const { data, error, refetch } = useQuery(keyboardsQuery)
+  const read = useQuery(keyboardsQuery)
+  const { data, refetch } = read
+  const failure = useReadFailure(read)
   const { data: welcome } = useQuery({ ...botTextsQuery, select: welcomeOf })
 
   const replace = (keyboard: KeyboardLayoutData) =>
@@ -35,8 +37,8 @@ export function KeyboardsPage() {
         data.keyboards.map((keyboard) => (
           <KeyboardEditor key={keyboard.name} keyboard={keyboard} actions={data.actions} styles={data.styles} limits={data.limits} welcome={welcome} onSaved={replace} />
         ))
-      ) : error ? (
-        <ErrorState what="کیبوردها" error={error} onRetry={() => void refetch()} />
+      ) : failure.error ? (
+        <ErrorState what="کیبوردها" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />
       ) : (
         <Skeleton className="h-96 w-full rounded-xl" />
       )}

@@ -63,7 +63,7 @@ final class ZarinpalDriver implements GatewayDriver
     /** «حالت آزمایشی» while the sandbox is on: no real money moves; none otherwise (the code no screen shows). */
     public function summary(array $settings): ?string
     {
-        return ($settings['sandbox'] ?? false) === true ? 'حالت آزمایشی: پولی جابه‌جا نمی‌شود' : null;
+        return ($settings['sandbox'] ?? false) === true ? self::TEST_MODE : null;
     }
 
     public function gateway(array $settings): GatewayInterface

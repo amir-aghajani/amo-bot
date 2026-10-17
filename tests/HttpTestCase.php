@@ -250,17 +250,22 @@ abstract class HttpTestCase extends DatabaseTestCase
     }
 
     /**
-     * POST one file as a multipart upload (`$field`) with the form's other `$fields`, as a browser form does.
+     * POST one file as a multipart upload (`$field`) with the form's other `$fields`, as a browser form does, with any
+     * other `$headers` (an Idempotency-Key).
      *
      * @param array<string, string> $fields
+     * @param array<string, string> $headers
      */
-    protected function upload(string $path, string $field, string $filename, string $bytes, array $fields = []): ResponseInterface
+    protected function upload(string $path, string $field, string $filename, string $bytes, array $fields = [], array $headers = []): ResponseInterface
     {
         $request = (new ServerRequestFactory())->createServerRequest('POST', 'http://localhost' . $path)
             ->withHeader('Accept', 'application/json')
             ->withHeader('X-Requested-With', 'XMLHttpRequest')
             ->withHeader('Content-Type', 'multipart/form-data; boundary=amobot-test')
             ->withUploadedFiles([$field => new UploadedFile((new StreamFactory())->createStream($bytes), $filename, null, strlen($bytes))]);
+        foreach ($headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
+        }
         if ($fields !== []) {
             $request = $request->withParsedBody($fields);
         }

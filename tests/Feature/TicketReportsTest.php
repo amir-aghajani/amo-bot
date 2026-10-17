@@ -20,6 +20,7 @@ use App\Modules\Telegram\Reports\TicketClose;
 use App\Modules\Telegram\Tasks\SendReportsTask;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\TelegramHtml;
+use App\Modules\Telegram\Update\ReceivedUpdates;
 use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 use Illuminate\Support\Carbon;
@@ -68,8 +69,8 @@ final class TicketReportsTest extends BotTestCase
         $kept = (string) file_get_contents($this->app()->container()->get('tickets.path') . '/' . TicketMessage::query()->sole()->attachment_path);
         self::assertSame([[1, 1, 'image/png'], $kept], [self::imageOf($kept), $this->telegram()->files(0)['photo'] ?? null], 'the picture as the shop keeps it, by its bytes');
         self::assertSame([(string) self::REPORT_GROUP, (string) $this->threads['tickets'], 'HTML'], [$photo['chat_id'], $photo['message_thread_id'], $photo['parse_mode']]);
-        self::assertStringContainsString("🎫 <b>تیکت جدید</b> · #{$ticket->id}", $photo['caption']);
-        self::assertStringContainsString('<a href="tg://user?id=5252">Ali</a> · @ali', $photo['caption']);
+        self::assertStringContainsString("🎫 <b>تیکت جدید</b> · \u{200E}#{$ticket->id}", $photo['caption']);
+        self::assertStringContainsString('<a href="tg://user?id=5252">Ali</a> · ' . "\u{200E}@ali", $photo['caption']);
         self::assertStringContainsString('📌 موضوع: قطعی اتصال', $photo['caption']);
         self::assertStringContainsString('سرویس وصل نمی‌شود.', $photo['caption']);
         self::assertSame(TicketClose::buttons($ticket->id), FakeTelegram::markupOf($photo)['inline_keyboard'] ?? null);
@@ -103,7 +104,7 @@ final class TicketReportsTest extends BotTestCase
 
         self::assertSame(['sendMessage', 'editMessageReplyMarkup'], $this->telegram()->calls());
         self::assertSame($first, $this->telegram()->replyTarget(0), 'under the ticket');
-        self::assertStringContainsString("💬 <b>پیام مشتری</b> · تیکت #{$ticket->id} · از وب‌سایت", $this->telegram()->params(0)['text']);
+        self::assertStringContainsString("💬 <b>پیام مشتری</b> · تیکت \u{200E}#{$ticket->id} · از وب‌سایت", $this->telegram()->params(0)['text']);
         self::assertSame(TicketClose::buttons($ticket->id), $this->inlineKeyboard(0), 'the button handed down');
         self::assertSame([], $this->buttonsUnder($first), 'the last report loses its own');
         $second = (int) ReportMessage::query()->latest('id')->firstOrFail()->message_id;
@@ -115,9 +116,9 @@ final class TicketReportsTest extends BotTestCase
         self::assertSame(3, $this->sender()->flush());
 
         $texts = array_values(array_map(static fn(array $call): string => $call['params']['text'], array_filter($this->telegram()->history, static fn(array $call): bool => $call['method'] === 'sendMessage')));
-        self::assertStringContainsString("↩️ <b>پاسخ پشتیبانی</b> · تیکت #{$ticket->id} · از پنل", $texts[0]);
-        self::assertSame("🔒 تیکت #{$ticket->id} بسته شد — مشتری آن را بست.", $texts[1]);
-        self::assertSame("⭐️ امتیاز مشتری به تیکت #{$ticket->id}: ۳ از ۵\n📝 توضیح مشتری: کند بود", $texts[2]);
+        self::assertStringContainsString("↩️ <b>پاسخ پشتیبانی</b> · تیکت \u{200E}#{$ticket->id} · از پنل", $texts[0]);
+        self::assertSame("🔒 تیکت \u{200E}#{$ticket->id} بسته شد — مشتری آن را بست.", $texts[1]);
+        self::assertSame("⭐️ امتیاز مشتری به تیکت \u{200E}#{$ticket->id}: ۳ از ۵\n📝 توضیح مشتری: کند بود", $texts[2]);
         self::assertSame($second, $this->telegram()->replyTarget(0), 'each a reply to the one before');
     }
 
@@ -140,7 +141,7 @@ final class TicketReportsTest extends BotTestCase
         foreach (['سرویس وصل نمی‌شود.', 'هنوز وصل نمی‌شود.', 'روی وای‌فای هم امتحان کردم.', 'لطفا زودتر جواب دهید.'] as $body) {
             self::assertStringContainsString($body, $text);
         }
-        self::assertSame(3, substr_count($text, "💬 <b>پیام مشتری</b> · تیکت #{$ticket->id}"), 'each message under its own line');
+        self::assertSame(3, substr_count($text, "💬 <b>پیام مشتری</b> · تیکت \u{200E}#{$ticket->id}"), 'each message under its own line');
         self::assertSame(TicketClose::buttons($ticket->id), $this->inlineKeyboard(0));
 
         // Sent, it is the ticket's last report: the next message goes under it, a report of its own.
@@ -184,6 +185,25 @@ final class TicketReportsTest extends BotTestCase
         self::assertSame(77, $this->telegram()->replyTarget(1), "under the admin's reply");
         self::assertSame((string) $this->threads['tickets'], $this->params(1)['message_thread_id']);
         self::assertSame(1, ReportMessage::query()->count(), 'what was written in the group is not reported to it again');
+    }
+
+    public function testTheGroupsOwnTalkNeverHoldsAnAdminsAnswerBack(): void
+    {
+        Carbon::setTestNow(now());
+        $ticket = $this->open();
+        $this->sender()->flush();
+        $post = (int) ReportMessage::query()->sole()->message_id;
+
+        // A burst of talk, in the tickets topic (each message there replies to the topic's first) and outside it.
+        for ($i = 1; $i <= ReceivedUpdates::FLOOD_UPDATES; $i++) {
+            $this->send($this->groupReply('تیکت‌ها', "پیام {$i}", $this->threads['tickets'], $this->threads['tickets'], self::GROUP_MEMBER));
+            $this->send($this->groupText("گپ {$i}"));
+        }
+        self::assertSame([], $this->calls(), "the group's talk is not the bot's to answer");
+
+        $this->send($this->reply($post, 'سلام، مشکل برطرف شد.'));
+        self::assertSame(TicketStatus::Answered, $ticket->refresh()->status, 'the answer is served: talk counts against no pace');
+        self::assertSame(['✅ پاسخ برای مشتری فرستاده شد.'], $this->telegram()->sentTo(self::REPORT_GROUP));
     }
 
     public function testAPhotoWithItsCaptionIsAnAnswerWithItsPicture(): void
@@ -297,7 +317,7 @@ final class TicketReportsTest extends BotTestCase
         self::assertSame([], $this->buttonsUnder($post));
         self::assertSame([self::text(BotText::TicketClosed, ['ticket' => (string) $ticket->id, 'subject' => 'قطعی اتصال'])], $this->telegram()->sentTo(5252), 'the customer told');
         $closing = ReportMessage::query()->latest('id')->firstOrFail();
-        self::assertSame(["🔒 تیکت #{$ticket->id} بسته شد — پشتیبانی آن را بست.", "ticket:{$ticket->id}", true, null], [$closing->text, $closing->reply_ref, $closing->clears_buttons, $closing->keyboard]);
+        self::assertSame(["🔒 تیکت \u{200E}#{$ticket->id} بسته شد — پشتیبانی آن را بست.", "ticket:{$ticket->id}", true, null], [$closing->text, $closing->reply_ref, $closing->clears_buttons, $closing->keyboard]);
 
         $this->send($this->groupTap(TicketClose::PREFIX . $ticket->id, $post, $this->threads['tickets']));
         self::assertSame(Tickets::CLOSED, $this->popup(), 'a stale button decides nothing');

@@ -17,8 +17,8 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * What the owner keeps from an agent's shop («سرورها و پلن‌های پنهان», the owner's agents page): servers — its plans are
  * not sold on them, its free tests not given there, its staff move or build no service there (Bot::hiddenServerIds()) —
- * and plans of its own kept from sale (Plan::$hidden_by_owner, «پنهان‌شده توسط مدیر»). The agent sees both in their panel
- * and changes neither. What the shop already has on a hidden server runs on — renewed, given extras, an order paid
+ * and plans of its own kept from sale (Plan::$hidden_by_owner, «پنهان‌شده توسط پشتیبانی»). The agent sees both in their
+ * panel and changes neither. What the shop already has on a hidden server runs on — renewed, given extras, an order paid
  * before delivered (ServerSelector::resolve()) — since nothing new is sold there, and the owner's moves of a server's
  * services carry its services there too; a hidden plan's services renew as well.
  */

@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Notifications;
 
+use App\Modules\Orders\Enums\OrderFailure;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
+use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Subscriptions\Services\ServiceCleanup;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\Limits;
+use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Messages;
@@ -22,12 +25,14 @@ use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
 use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Support\Persian;
+use Psr\Log\LoggerInterface;
 
 /**
  * A service as the bot shows it: the values every service text is filled with, and the QR card of its link with the
  * text as caption. send() is the one place a service goes out (a delivery, a new link, a move) and show() puts it in
  * place of a tapped message. The card is used when the setting is on, GD can draw it and the text fits a caption;
- * otherwise the text goes alone — a missing picture never costs the customer their link.
+ * otherwise — or when Telegram will not take the card — the text goes alone: a missing picture never costs the customer
+ * their link.
  */
 final class ServiceCard
 {
@@ -41,6 +46,7 @@ final class ServiceCard
         private readonly ServiceCleanup $cleanup,
         private readonly QrCard $qr,
         private readonly BotTexts $texts,
+        private readonly LoggerInterface $logger,
     ) {}
 
     /**
@@ -85,8 +91,10 @@ final class ServiceCard
     }
 
     /**
-     * Send the service to a chat as its QR card with `$text` as caption, or the text alone. `$text` is a BotText to
-     * render with the service's values, or words made already (a notice keeps the very words it sent).
+     * Send the service to a chat as its QR card with `$text` as caption, or the text alone — also when Telegram refuses
+     * the card for anything but being out of reach or asking to wait (cardRefused()), which the caller hears of as of
+     * any message. `$text` is a BotText to render with the service's values, or words made already (a notice keeps the
+     * very words it sent).
      *
      * @param array<string, mixed> $options
      * @return array<string, mixed> The message sent
@@ -96,14 +104,19 @@ final class ServiceCard
         $caption = $text instanceof BotText ? $this->text($subscription, $text) : $text;
         $card = $this->card($subscription, $caption);
         if ($card !== null) {
-            return $this->api->sendPhoto($chatId, $card, self::FILENAME, ['caption' => $caption] + $options);
+            try {
+                return $this->api->sendPhoto($chatId, $card, self::FILENAME, ['caption' => $caption] + $options);
+            } catch (TelegramApiException $e) {
+                $this->cardRefused($e, $subscription);
+            }
         }
 
         return $this->api->sendMessage($chatId, $caption, $options + BotApi::NO_LINK_PREVIEW);
     }
 
     /**
-     * The same in place of the tapped message: the text edited in, or the QR card (Context::editPhoto()).
+     * The same in place of the tapped message: the text edited in, or the QR card (Context::editPhoto()) — the card
+     * refused as send() says, the text in its place as a new message (the tapped one may be gone by then).
      *
      * @param array<string, mixed> $options
      */
@@ -111,13 +124,18 @@ final class ServiceCard
     {
         $caption = $this->text($subscription, $text);
         $card = $this->card($subscription, $caption);
-        if ($card !== null) {
-            $ctx->editPhoto($card, self::FILENAME, ['caption' => $caption] + $options);
+        if ($card === null) {
+            $ctx->edit($caption, $options + BotApi::NO_LINK_PREVIEW);
 
             return;
         }
 
-        $ctx->edit($caption, $options + BotApi::NO_LINK_PREVIEW);
+        try {
+            $ctx->editPhoto($card, self::FILENAME, ['caption' => $caption] + $options);
+        } catch (TelegramApiException $e) {
+            $this->cardRefused($e, $subscription);
+            $ctx->replace($caption, $options + BotApi::NO_LINK_PREVIEW);
+        }
     }
 
     /**
@@ -157,9 +175,21 @@ final class ServiceCard
         };
     }
 
-    /** The order was paid but not delivered: support finishes it, nothing to pay again. */
+    /**
+     * The order was paid but not delivered: support finishes it, nothing to pay again — or, no longer the customer's
+     * first purchase by the time it was paid, or its service no longer theirs (OrderFailure), it is never delivered:
+     * support settles its payment with them.
+     */
     public function failedText(Order $order): string
     {
+        $failure = OrderFailure::of($order);
+        if ($failure === OrderFailure::FirstPurchaseUsed) {
+            return $this->texts->render(BotText::PayFirstPurchaseUsed, ['order' => $order->id]);
+        }
+        if ($failure === OrderFailure::ServiceChangedHands) {
+            return $this->texts->render(BotText::PayServiceChangedHands, ['order' => $order->id, 'client' => self::subscriptionOf($order)->remote_name]);
+        }
+
         return match ($order->type) {
             OrderType::Purchase => $this->texts->get(BotText::PayProvisionFailed),
             OrderType::Renewal => $this->texts->render(BotText::RenewFailed, ['client' => self::subscriptionOf($order)->remote_name]),
@@ -229,11 +259,11 @@ final class ServiceCard
     /**
      * The line saying when the shop removes the service by itself (ServiceCleanup::removesAt()): an ended service unless
      * it is renewed first, a free test by the test accounts' rule. For its screen and its renewal's checkout; '' when the
-     * shop does not remove it.
+     * shop does not remove it — nor one its panel lost: gone already.
      */
     public function removal(Subscription $subscription): Html|string
     {
-        $at = $this->cleanup->removesAt($subscription);
+        $at = $subscription->status === SubscriptionStatus::Deleted ? null : $this->cleanup->removesAt($subscription);
         if ($at === null) {
             return '';
         }
@@ -256,6 +286,21 @@ final class ServiceCard
         };
 
         return $carries && $given > 0 && ($subscription->remainingBytes() ?? 0) > $given;
+    }
+
+    /**
+     * A QR card Telegram refused: thrown on when Telegram was out of reach or asked to wait — the text would fare no
+     * better now, and the caller's retry sends the card again —; any other refusal (a picture it would not take) is
+     * logged, and the caller sends the text with the link in its place.
+     *
+     * @throws TelegramApiException
+     */
+    private function cardRefused(TelegramApiException $e, Subscription $subscription): void
+    {
+        if ($e->refusal()->isTransient()) {
+            throw $e;
+        }
+        $this->logger->warning('Telegram refused the QR card of subscription {id}, its text goes alone: {message}', ['id' => $subscription->id, 'message' => $e->getMessage()]);
     }
 
     /** The QR card's JPEG, or null when it is off, GD cannot draw it, or the text is too long for a caption. */

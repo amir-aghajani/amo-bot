@@ -2,16 +2,19 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 import { AgentsPage } from '@/apps/admin/pages/agents'
-import type { AgencyLevelsResponse, AgencyRequestsResponse, AgencySettingsResponse, AgentHiddenResponse, AgentResponse, AgentRow, AgentsResponse } from '@/lib/api-types'
+import { LeaveQuestion } from '@/components/leave-question'
+import type { AgencyLevelsResponse, AgencyRequestRow, AgencyRequestsResponse, AgencySettingsResponse, AgentHiddenResponse, AgentResponse, AgentRow, AgentsResponse } from '@/lib/api-types'
+import { useUnsavedGuard } from '@/lib/use-unsaved-guard'
 import { signedIn, until } from '@/test/render'
-import { agencyStanding } from '@/test/rows'
+import { agencyRequestRow, agencyStanding } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
  * The agency's page (apps/admin/pages/agents): the program's numbers that could not be read say so, with a way to ask
  * again, and stay «—» — never zeros, nothing pulsing for ever — while the lists stand; the requests' status pill lists
- * «همه» first, as every pill does, the list still opening on the requests that wait; an agent's shop is a link of the
- * agents list's, opened here or in a new tab; an agent's selling is stopped by hand (with a note) and let go again — never
+ * «همه» first, as every pill does, the list still opening on the requests that wait, a decided one naming who decided it
+ * as their account has it; an agent's shop is a link of the
+ * agents list's, opened here — its menu closed before the unsaved-changes question — or in a new tab; an agent's selling is stopped by hand (with a note) and let go again — never
  * past its end, which is extended instead —, and the servers and plans kept from their shop are ticked in a dialog.
  */
 
@@ -35,7 +38,13 @@ async function shopItem() {
   return screen.findByRole('menuitem', { name: 'باز کردن فروشگاه' })
 }
 
-function open(at = '/agents', agents: AgentRow[] = [REZA]) {
+/** A page with a draft nobody saved. */
+function Unsaved() {
+  useUnsavedGuard(true)
+  return null
+}
+
+function open(at = '/agents', agents: AgentRow[] = [REZA], unsaved = false, requests: AgencyRequestRow[] = []) {
   server()
     .on(
       'GET',
@@ -43,9 +52,16 @@ function open(at = '/agents', agents: AgentRow[] = [REZA]) {
       json({ settings: { enabled: false, default_credit: '0.00', traffic_presets: [50, 100], traffic_min: 10, term_days: 0, monthly_minimum: '0.00', warn_days: 3 } } satisfies AgencySettingsResponse),
     )
     .on('GET', '/api/admin/agency/levels', json({ levels: [] } satisfies AgencyLevelsResponse))
-    .on('GET', '/api/admin/agency/requests', json({ requests: [], meta: { page: 1, per_page: 25, total: 0, last_page: 1, sort: 'created', dir: 'desc' } } satisfies AgencyRequestsResponse))
+    .on('GET', '/api/admin/agency/requests', json({ requests, meta: { page: 1, per_page: 25, total: requests.length, last_page: 1, sort: 'created', dir: 'desc' } } satisfies AgencyRequestsResponse))
     .on('GET', '/api/admin/agency/agents', json({ agents, meta: { page: 1, per_page: 25, total: agents.length, last_page: 1, sort: 'joined', dir: 'desc' } } satisfies AgentsResponse))
-  render(<AgentsPage />, { wrapper: signedIn({ at }).wrapper })
+  render(
+    <>
+      <LeaveQuestion />
+      {unsaved && <Unsaved />}
+      <AgentsPage />
+    </>,
+    { wrapper: signedIn({ at }).wrapper },
+  )
 }
 
 describe('the program’s numbers', () => {
@@ -78,6 +94,17 @@ describe('the requests’ status pill', () => {
   })
 })
 
+describe('a request decided', () => {
+  it('names the report group’s admin who decided it as their account has it, not by the number they are kept by', async () => {
+    server().on('GET', '/api/admin/agency', refusal(500, 'خطای سرور.'))
+    const decided = agencyRequestRow({ status: 'rejected', reviewer: 'tg:7171', reviewer_name: 'سارا احمدی', decided_at: '2026-10-06T10:00:00Z', actions: { approve: false, reject: false } })
+    open('/agents', [REZA], false, [decided])
+
+    expect((await screen.findAllByText('سارا احمدی')).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/شناسه تلگرام/)).toBeNull()
+  })
+})
+
 describe('an agent’s shop', () => {
   it('is a link to its address — a new tab opens it as any link —, a plain press opening it here, the panel loaded afresh', async () => {
     const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined)
@@ -87,10 +114,28 @@ describe('an agent’s shop', () => {
     const shop = await shopItem()
     expect(shop.getAttribute('href')).toBe('/admin/s/7/')
 
-    fireEvent.click(shop, { ctrlKey: true })
+    // A click's own way — true when nothing held it back — is the browser following the link: a new tab, not this one.
+    expect(fireEvent.click(shop, { ctrlKey: true })).toBe(true)
+    expect(assign).not.toHaveBeenCalled()
+
+    expect(fireEvent.click(await shopItem())).toBe(false)
+    await until(() => expect(assign).toHaveBeenCalledWith('/admin/s/7/'))
+  })
+
+  it('asks first while a draft is unsaved, its menu closed — the question is not left under it — staying keeps the shop', async () => {
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined)
+    server().on('GET', '/api/admin/agency', refusal(500, 'خطای سرور.'))
+    open('/agents/list', [REZA], true)
+
+    fireEvent.click(await shopItem())
+    const question = await screen.findByRole('dialog', { name: 'تغییرات ذخیره نشده‌اند' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.click(within(question).getByRole('button', { name: 'ماندن' }))
+    await until(() => expect(screen.queryByRole('dialog', { name: 'تغییرات ذخیره نشده‌اند' })).toBeNull())
     expect(assign).not.toHaveBeenCalled()
 
     fireEvent.click(await shopItem())
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'تغییرات ذخیره نشده‌اند' })).getByRole('button', { name: 'رها کردن تغییرات' }))
     await until(() => expect(assign).toHaveBeenCalledWith('/admin/s/7/'))
   })
 })

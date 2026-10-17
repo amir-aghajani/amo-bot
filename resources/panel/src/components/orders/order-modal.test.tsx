@@ -111,12 +111,19 @@ describe('its amount', () => {
   })
 
   it('of one support made by hand says how it was paid, who made it and their note', () => {
-    const manual = orderRow({ type: 'purchase', status: 'fulfilled', amount: '100000.00', manual: { by: 'root', payment: 'outside', note: 'نقدی در دفتر' } })
+    const manual = orderRow({ type: 'purchase', status: 'fulfilled', amount: '100000.00', manual: { by: 'root', by_name: null, payment: 'outside', note: 'نقدی در دفتر' } })
     render(<OrderModal order={manual} {...props} />, { wrapper: providers().wrapper })
 
     expect(fact('مبلغ')).toBe('۱۰۰٬۰۰۰ تومان پرداخت خارج از فروشگاه')
     expect(fact('ثبت دستی')).toBe('توسط root')
     expect(fact('یادداشت پشتیبانی')).toBe('نقدی در دفتر')
+  })
+
+  it('of one a website admin made by hand names them as their account has it', () => {
+    const manual = orderRow({ type: 'purchase', status: 'fulfilled', amount: '0.00', manual: { by: 'user#12', by_name: 'سارا احمدی', payment: 'free', note: null } })
+    render(<OrderModal order={manual} {...props} />, { wrapper: providers().wrapper })
+
+    expect(fact('ثبت دستی')).toBe('توسط سارا احمدی')
   })
 })
 

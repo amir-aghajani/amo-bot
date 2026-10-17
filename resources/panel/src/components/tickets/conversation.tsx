@@ -36,13 +36,17 @@ function Message({ ticket, customer, message }: { ticket: number; customer: User
         className={cn('grid w-fit max-w-[92%] min-w-0 gap-2 rounded-xl px-3.5 py-3 sm:max-w-[85%]', support ? 'bg-fill' : 'border border-border')}
       >
         <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-footnote">
-          <span className="font-medium text-foreground">{support ? <SupportAuthor reviewer={message.reviewer} /> : <UserLabel user={customer} />}</span>
+          <span className="min-w-0 font-medium wrap-anywhere text-foreground">
+            {support ? <SupportAuthor reviewer={message.reviewer} person={message.reviewer_name} /> : <UserLabel user={customer} />}
+          </span>
           <Badge variant="outline">{TICKET_CHANNEL[message.channel]}</Badge>
           <time dateTime={message.created_at} className="ms-auto text-muted-foreground">
             {formatDate(message.created_at)}
           </time>
         </header>
-        <p dir="auto" className="text-body wrap-break-word whitespace-pre-wrap [unicode-bidi:plaintext]">
+        {/* Breaks anywhere: a long link or a pasted config has nowhere to break else, and would stretch the message past
+            its column (`wrap-break-word` breaks too, but leaves the message as wide as the longest run). */}
+        <p dir="auto" className="text-body wrap-anywhere whitespace-pre-wrap [unicode-bidi:plaintext]">
           {message.body}
         </p>
         {message.attachment &&
@@ -56,15 +60,18 @@ function Message({ ticket, customer, message }: { ticket: number; customer: User
   )
 }
 
-/** Who of support wrote it: «پشتیبانی» and its writer — once, where the writer is support itself (the owner, in an agent's shop). */
-function SupportAuthor({ reviewer }: { reviewer: string | null }) {
+/**
+ * Who of support wrote it: «پشتیبانی» and its writer — by their name where the server read one (`person`), else as kept —,
+ * once where the writer is support itself (the owner, in an agent's shop).
+ */
+function SupportAuthor({ reviewer, person }: { reviewer: string | null; person: string | null }) {
   if (reviewer === null || reviewer === SUPPORT) return SUPPORT
 
   return (
     <>
       {SUPPORT}{' '}
       <span className="font-normal text-muted-foreground">
-        · <Reviewer name={reviewer} />
+        · <Reviewer name={reviewer} person={person} />
       </span>
     </>
   )

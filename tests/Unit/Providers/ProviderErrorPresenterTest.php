@@ -76,6 +76,21 @@ final class ProviderErrorPresenterTest extends TestCase
         }
     }
 
+    /** @param list<string> $expected */
+    #[DataProvider('failures')]
+    public function testTheOneLineComesApartAgainAsTheDiagnosisAndItsDetail(ProviderException $e, array $expected): void
+    {
+        self::assertSame(ProviderErrorPresenter::explain($e), ProviderErrorPresenter::split(ProviderErrorPresenter::describe($e)), 'what a server keeps as its last error, shown on two lines');
+    }
+
+    public function testALineOfAnotherShapeIsAllDiagnosis(): void
+    {
+        foreach (['پنل جواب نداد.', 'پنل توکن API را نپذیرفت (HTTP 401).', 'دریافت نشد (کد 5)', 'پنل جواب نداد. (cut short', ')', ''] as $line) {
+            self::assertSame(['message' => $line, 'detail' => ''], ProviderErrorPresenter::split($line), $line);
+        }
+        self::assertSame(['message' => 'پنل درخواست را رد کرد.', 'detail' => 'a (b) c'], ProviderErrorPresenter::split('پنل درخواست را رد کرد. (a (b) c)'), 'parentheses inside the detail are its own');
+    }
+
     public function testTheOwnersDiagnosisNamesThePanelWhereTheSummaryNeverDoes(): void
     {
         $e = new ConnectionException(ConnectionFailure::Refused, 'cURL error 7: Failed to connect to de1.example.net port 2053');

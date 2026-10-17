@@ -59,7 +59,7 @@ final class ThreeXuiDriver implements PanelDriver
                     'totp_secret',
                     'totp_secret',
                     boundTo: PanelConnection::bound(),
-                    moved: 'آدرس پنل عوض شده است؛ کلید TOTP را دوباره وارد کنید یا پاکش کنید.',
+                    moved: PanelConnection::MOVED . 'کلید TOTP را دوباره وارد کنید یا پاکش کنید.',
                     spec: new FieldSpec(
                         'کلید TOTP',
                         hint: 'فقط اگر ورود دومرحله‌ای پنل روشن است: کلید Base32 که هنگام روشن کردنش نشان داده شد.',

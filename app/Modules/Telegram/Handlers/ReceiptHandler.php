@@ -17,6 +17,7 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
+use App\Modules\Telegram\Update\Dispatcher;
 use App\Modules\Users\Services\CustomerPictures;
 use App\Support\Persian;
 
@@ -26,11 +27,15 @@ use App\Support\Persian;
  * the website's rule too). The picture is kept by its Telegram file id for support to review; the customer is told the
  * longest they may wait when the method approves on a timer. A reminder's «ارسال رسید» is the same callback, entering
  * the state again. While the shop takes one receipt at a time (ReceiptsInReview), a customer whose other receipt is in
- * review is told so and the flow ends.
+ * review is told so and the flow ends. A receipt sent as an album is its first picture: the chat waits on the album
+ * (ALBUM) so its other pictures pass unanswered, and anything else sent then is served as at no step.
  */
 final class ReceiptHandler implements Handler
 {
     public const PREFIX = 'receipt:';
+
+    /** The scratch's album whose first picture was the receipt. */
+    private const ALBUM = 'album';
 
     public function __construct(
         private readonly PaymentService $payments,
@@ -38,6 +43,7 @@ final class ReceiptHandler implements Handler
         private readonly CustomerPictures $pictures,
         private readonly MainMenu $menu,
         private readonly BotTexts $texts,
+        private readonly Dispatcher $dispatcher,
     ) {}
 
     /** The state that waits for this payment's receipt — and the callback that enters it again. */
@@ -63,6 +69,15 @@ final class ReceiptHandler implements Handler
     public function handle(Context $ctx): void
     {
         $update = $ctx->update;
+        $album = $ctx->session->get(self::ALBUM);
+        if (!$update->isCallback() && is_string($album)) {
+            // The receipt was taken: another picture of its album says nothing more, anything else is no answer to it.
+            if ($ctx->album() !== $album) {
+                $this->dispatcher->atNoStep($ctx);
+            }
+
+            return;
+        }
         $args = $update->isCallback() ? $update->callbackArgs(self::PREFIX) : CallbackData::args((string) $ctx->session->state(), self::PREFIX);
         $payment = Payment::query()->whereRelation('order', 'user_id', $ctx->user->id)->find((int) ($args[0] ?? 0));
 
@@ -111,7 +126,8 @@ final class ReceiptHandler implements Handler
             return;
         }
 
-        $ctx->session->clear();
+        $album = $ctx->album();
+        $album === null ? $ctx->session->clear() : $ctx->session->enter(self::stateFor($payment), [self::ALBUM => $album]);
         $window = ManualGateway::reviewWindow($payment->method);
         $outcome = $this->texts->part(self::outcome($payment->order->type));
         $ctx->reply($window > 0

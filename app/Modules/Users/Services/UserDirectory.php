@@ -61,7 +61,8 @@ final class UserDirectory
 
     /**
      * @return list<array<string, mixed>> The customer's latest ledger lines, newest first — a wallet transfer's with the
-     *                                    other customer (WalletTransfers), read for the page at once
+     *                                    other customer (WalletTransfers), and the names of the shop's admins who
+     *                                    wrote lines by hand (Reviewers::names()), read for the page at once
      */
     public function ledger(User $user): array
     {
@@ -75,15 +76,23 @@ final class UserDirectory
                 $others[$transfer->credit_id] = $transfer->sender;
             }
         }
+        $names = $this->reviewers->names($lines->pluck('reviewer'));
 
-        return $lines->map(fn(WalletTransaction $line): array => $this->presentTransaction($line, $others[$line->id] ?? null))->values()->all();
+        return $lines->map(fn(WalletTransaction $line): array => $this->line($line, $others[$line->id] ?? null, $names[$line->reviewer ?? ''] ?? null))->values()->all();
+    }
+
+    /** @return array<string, mixed> A line written now, with the name of the admin who wrote it. */
+    public function presentTransaction(WalletTransaction $transaction): array
+    {
+        return $this->line($transaction, null, $this->reviewers->names([$transaction->reviewer])[$transaction->reviewer ?? ''] ?? null);
     }
 
     /**
      * @param User|null $counterpart A wallet transfer's line: whom the money went to, or came from
+     * @param string|null $reviewerName The name of the admin who wrote it by hand (Reviewers::names())
      * @return array<string, mixed>
      */
-    public function presentTransaction(WalletTransaction $transaction, ?User $counterpart = null): array
+    private function line(WalletTransaction $transaction, ?User $counterpart, ?string $reviewerName): array
     {
         return [
             'id' => $transaction->id,
@@ -92,6 +101,7 @@ final class UserDirectory
             'balance_after' => $transaction->balance_after,
             'description' => $transaction->description,
             'reviewer' => $this->reviewers->present($transaction->reviewer),
+            'reviewer_name' => $reviewerName,
             'counterpart' => $counterpart === null ? null : self::presentRef($counterpart),
             'created_at' => $transaction->created_at->toIso8601String(),
         ];

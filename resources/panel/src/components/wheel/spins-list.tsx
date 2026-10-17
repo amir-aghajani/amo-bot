@@ -1,7 +1,7 @@
 import { FerrisWheel, Search } from 'lucide-react'
 import { CustomerFilter } from '@/components/customer-filter'
 import { EmptyState } from '@/components/empty-state'
-import { ListView } from '@/components/list-view'
+import { ListView, PhoneFacts } from '@/components/list-view'
 import { SearchBox } from '@/components/search-box'
 import { StatusBadge } from '@/components/status-badge'
 import { searchLink, TextLink } from '@/components/text-link'
@@ -28,6 +28,7 @@ export function SpinsList() {
     read: (query) => api.get<WheelSpinsResponse>('/wheel/spins', query),
     list: 'spins',
     params: ['user'],
+    ids: ['user'],
     address: '/wheel/spins',
   })
 
@@ -50,7 +51,7 @@ export function SpinsList() {
             <TableRow>
               <TableHead>مشتری</TableHead>
               <TableHead>جایزه</TableHead>
-              <TableHead>نتیجه</TableHead>
+              <TableHead className="hidden md:table-cell">نتیجه</TableHead>
               <TableHead className="hidden sm:table-cell">زمان</TableHead>
             </TableRow>
           </TableHeader>
@@ -59,6 +60,9 @@ export function SpinsList() {
               <TableRow key={spin.id}>
                 <TableCell>
                   <UserIdentity user={spin.customer} to={userPage(spin.customer.id)} />
+                  <PhoneFacts>
+                    <Outcome spin={spin} />
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell>
                   <div className="grid gap-0.5">
@@ -66,7 +70,7 @@ export function SpinsList() {
                     <span className="text-footnote text-muted-foreground">{WHEEL_PRIZE_KIND[spin.kind]}</span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <Outcome spin={spin} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">

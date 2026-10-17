@@ -10,8 +10,10 @@ use Psr\Http\Message\ServerRequestInterface;
 /**
  * The `Idempotency-Key` header every request that moves money carries — a checkout, a wallet transfer, an order support
  * makes by hand: a key the caller makes per attempt (a UUID), so the same request again is answered by what the key did,
- * never done twice (`request_keys` for orders, Payments\Services\Checkout; `wallet_transfers.request_key`). 1 to 64
- * Latin letters, digits, `-` and `_`.
+ * never done twice (`request_keys` for orders, Payments\Services\Checkout; `wallet_transfers.request_key`). Support's
+ * other changes by hand — a wallet's credit or debit, an agent's traffic set right, a ticket's answer — take one when
+ * it is sent (optional(); the `request_key` of the line or the message it wrote). 1 to 64 Latin letters, digits, `-`
+ * and `_`.
  */
 final class IdempotencyKey
 {
@@ -35,5 +37,16 @@ final class IdempotencyKey
         $key = $request->getHeaderLine(self::HEADER);
 
         return preg_match(self::PATTERN, $key) === 1 ? $key : throw ValidationException::on('idempotency_key', self::MALFORMED);
+    }
+
+    /**
+     * The request's key where the caller may send none (a client made before the change took one): null without the
+     * header, the request then done each time it comes.
+     *
+     * @throws ValidationException 422 on `idempotency_key`: one sent that is not one
+     */
+    public static function optional(ServerRequestInterface $request): ?string
+    {
+        return $request->hasHeader(self::HEADER) ? self::of($request) : null;
     }
 }

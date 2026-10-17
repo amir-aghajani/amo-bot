@@ -1,3 +1,5 @@
+[فارسی](fa/Broadcasts.md)
+
 # Broadcasts
 
 «ربات › ارسال همگانی»: «پیام همگانی» — a message to many customers, in both panels — and, the owner's alone, «هدیه
@@ -16,7 +18,8 @@ their own Telegram message that goes out, with its media and formatting. The pan
      a forward takes no buttons).
    - **«👥 مخاطب»** — «همه کاربران», «خریداران» (anyone who bought a service; a top-up alone is no purchase),
      «غیرفعال‌ها» (no service running now), «غیرخریداران», one of the shop's customer groups, «نماینده‌ها» (the main bot's
-     agents), or one server's customers (a service running there) — each with how many it reaches.
+     agents), or one server's customers (a service running there) — each with how many it reaches. A list of more than
+     90 groups or servers comes in pages («بعدی», «قبلی»).
    - **«📌 پین»** — pinned, quietly, in each chat.
    - **«🔘 دکمه‌ها»** — link buttons under a copy: a row a line, the buttons of a row apart by `|`, each `text - link`
      (an `http://`, `https://` or `tg://` link; 8 rows of 4 at most):
@@ -50,16 +53,18 @@ From the panel, «ادامه» leaves the next batch to the scheduler. An agent'
 
 «هدیه همگانی» › «هدیه جدید»: days and traffic for many services at once — a holiday gift, a long outage made good:
 
-- **«به چه سرویس‌هایی»** — «همه سرویس‌ها», «فقط سرویس‌های نماینده‌ها» (what the bots of the agencies that stand sold),
-  «سرویس‌های یک سرور» or «سرویس‌های مشتری‌های یک گروه» — then «گروه مشتریان»: one of the main shop's customer groups
-  ([«گروه‌ها»](Customers.md), on the users page), each with how many of its customers' services run, free tests aside;
-  the gift reaches the running services of the customers in it as each one's turn comes.
+- **«به چه سرویس‌هایی»** — «همه سرویس‌ها», «فقط سرویس‌های نماینده‌ها» (the services sold by the bots of agents whose
+  agency stands), «سرویس‌های یک سرور» or «سرویس‌های مشتری‌های یک گروه». For the last, pick «گروه مشتریان»: one of the
+  main shop's customer groups ([«گروه‌ها»](Customers.md#groups), on the users page), each shown with how many of its
+  customers' services run, free tests aside. The gift then reaches the running services of the customers in that group
+  as each one's turn comes.
 - «تعداد روز» (0 to 365), «حجم (گیگابایت)» (0 to 10000), «دلیل» (300 characters, the customers read it), «سرویس‌های در
   انتظار اولین اتصال هم شامل شوند» (off) and «پیام به مشتری‌ها» (on) — as a [server's](Servers.md#adding-days-and-traffic).
 
 «شروع هدیه» gives it as **one part per server**, each worked through on its own — service by service, the panel's word
-deciding at each one's turn, exactly as a server's «افزودن زمان و حجم»: a panel out of reach holds its own server's part
-only, and the rest go on. It reaches the services of every shop that existed as you gave it — never a free test —, and
+deciding at each one's turn, exactly as a server's «افزودن زمان و حجم» (a service the days would end after
+[the last day](Services.md#watch-out-for) is passed by): a panel out of reach holds its own server's part only, and the
+rest go on. It reaches the services of every shop that existed as you gave it — never a free test —, and
 each customer is told by their own shop's bot. The card works it while open, the scheduler every minute otherwise;
 «لغو» stops every part still going («لغوشده») — what was given stays given.
 
@@ -72,6 +77,8 @@ too, where it can be stopped alone.
 - **The bot's «✖️ لغو ارسال» does not ask first**; the panel's does.
 - **A group or server deleted** after the draft leaves its audience empty: the card offers no «ارسال», and a run under way
   ends at its next batch.
+- **A run needs the admin who sent it**: their message is copied from their own chat. When their account is gone — or
+  has no Telegram any more —, the run ends as «لغوشده» at its next batch; those already sent keep it.
 - **Traffic a mass gift gives agents' customers** is not drawn from the agents' pools.
 - **A customer group deleted while its gift runs** — the gift keeps its parts and its list line («سرویس‌های گروهی که حذف
   شد»), and reaches nobody more: it finishes, never turning into a gift for everyone. A customer taken out of the group

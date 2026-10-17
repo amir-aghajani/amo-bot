@@ -10,6 +10,7 @@ use App\Core\Support\Files;
 use App\Core\Support\Picture;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Settings\Services\Settings;
+use App\Modules\Telegram\Api\Limits;
 use App\Support\Persian;
 use App\Support\Validation;
 use Psr\Http\Message\UploadedFileInterface;
@@ -88,7 +89,7 @@ final class QrBackground
 
     /**
      * Take the admin's upload as the background: a picture by its content, within the size limits, scaled down to what a
-     * card needs.
+     * card needs — and of a shape a card can be sent in (Limits::isPhotoShape()), else no delivery would ever draw on it.
      *
      * @throws ValidationException
      */
@@ -107,13 +108,18 @@ final class QrBackground
         $extension = self::TYPES[$mime] ?? null;
         $size = Picture::size($bytes);
         if ($extension === null || $size === null) {
-            throw ValidationException::on('file', 'فقط تصویر PNG، JPG یا WebP پذیرفته می‌شود.');
+            throw ValidationException::on('file', 'تصویر باید ' . Picture::FORMATS . ' باشد.');
         }
         // Read from the header, before anything is decoded.
         if ($size[0] * $size[1] > self::MAX_PIXELS) {
             throw ValidationException::on('file', 'ابعاد تصویر بیش از حد بزرگ است؛ حداکثر ۱۶ مگاپیکسل (مثلا ۴۰۰۰ در ۴۰۰۰ پیکسل) پذیرفته می‌شود.');
         }
         $bytes = self::fitted($bytes, $mime, $size[0], $size[1]);
+        // As kept: a card keeps the picture's proportions, and Telegram takes no photo of a banner's.
+        [$width, $height] = Picture::size($bytes) ?? $size;
+        if (!Limits::isPhotoShape($width, $height)) {
+            throw ValidationException::on('file', 'این تصویر برای کارت QR بیش از حد کشیده است؛ ضلع بلند آن حداکثر ' . Persian::number(Limits::PHOTO_RATIO) . ' برابر ضلع کوتاهش می‌تواند باشد.');
+        }
 
         // Written whole, then remembered, then the old one deleted: a failure on the way leaves the background as it was.
         $previous = $this->customPath();

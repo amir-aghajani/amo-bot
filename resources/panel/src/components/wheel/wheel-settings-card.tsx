@@ -1,4 +1,4 @@
-import { useBotSettingsGroup } from '@/components/bot/settings/use-bot-settings-group'
+import { useBotSettingsGroup, useHeldWhile } from '@/components/bot/settings/use-bot-settings-group'
 import { Field } from '@/components/field'
 import { MoneyField } from '@/components/money-field'
 import { SectionCard } from '@/components/section-card'
@@ -8,20 +8,22 @@ import { api } from '@/lib/api'
 import type { BotSettingsData, BotWheelSettingsRequest } from '@/lib/api-types'
 import { formatDuration, wholeNumberOf, wholeOf } from '@/lib/format'
 import { WHEEL_SETTINGS } from '@/lib/limits'
+import { asNumbers } from '@/lib/use-form'
 
-/** The `wheel` bot-settings group: the switch, the wait between spins, buyers only, and a spin's cost. */
+/** The `wheel` bot-settings group: the switch, the wait between spins and a spin's cost (held while it is off), buyers only. */
 export function WheelSettingsCard({ settings }: { settings: BotSettingsData }) {
-  const group = useBotSettingsGroup(
-    {
-      wheel_enabled: settings.wheel_enabled,
-      wheel_cooldown_hours: String(settings.wheel_cooldown_hours),
-      wheel_buyers_only: settings.wheel_buyers_only,
-      wheel_cost: String(settings.wheel_cost),
-    } satisfies BotWheelSettingsRequest,
-    (values) => api.put('/bot/settings/wheel', values),
-  )
+  const saved = {
+    wheel_enabled: settings.wheel_enabled,
+    wheel_cooldown_hours: String(settings.wheel_cooldown_hours),
+    wheel_buyers_only: settings.wheel_buyers_only,
+    wheel_cost: String(settings.wheel_cost),
+  } satisfies BotWheelSettingsRequest
+  // Typed numbers as the server reads them: «۱۰٬۰۰۰» is the 10000 kept, no change.
+  const group = useBotSettingsGroup(saved, (values) => api.put('/bot/settings/wheel', values), { reads: asNumbers })
   const { values, set, error } = group
   const hours = wholeOf(values.wheel_cooldown_hours)
+  // While the wheel is off its numbers wait as they are kept, held; one changed stays open, as the save still carries it.
+  const held = useHeldWhile(!values.wheel_enabled, group, saved)
 
   return (
     <SectionCard form={group} title="قوانین گردونه" description="مشتری هر چند ساعت یک بار گردونه را می‌چرخاند و یکی از جایزه‌ها را می‌برد؛ چرخشی که جایزه‌اش داده نشود حساب نمی‌شود.">
@@ -39,7 +41,7 @@ export function WheelSettingsCard({ settings }: { settings: BotSettingsData }) {
           error={error('wheel_cooldown_hours')}
           hint={hours !== null && Number(hours) > 0 ? `هر مشتری هر ${formatDuration(Number(hours))} یک بار.` : `بین 1 تا ${WHEEL_SETTINGS.COOLDOWN_HOURS_MAX} ساعت`}
         >
-          <Input dir="ltr" inputMode="numeric" value={values.wheel_cooldown_hours} onChange={(e) => set('wheel_cooldown_hours', e.target.value)} />
+          <Input dir="ltr" inputMode="numeric" value={values.wheel_cooldown_hours} onChange={(e) => set('wheel_cooldown_hours', e.target.value)} disabled={held('wheel_cooldown_hours')} />
         </Field>
         <MoneyField
           id="wheel_cost"
@@ -50,6 +52,7 @@ export function WheelSettingsCard({ settings }: { settings: BotSettingsData }) {
           error={error('wheel_cost')}
           says={(money) => `${money} از کیف پول مشتری کم می‌شود.`}
           hint="صفر یعنی چرخش رایگان است."
+          disabled={held('wheel_cost')}
         />
       </div>
       <SwitchRow

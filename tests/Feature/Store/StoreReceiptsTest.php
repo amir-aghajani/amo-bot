@@ -87,7 +87,7 @@ final class StoreReceiptsTest extends HttpTestCase
         $photo = $this->telegram()->params(0);
         self::assertSame($kept, $this->telegram()->files(0)['photo'] ?? null, 'the picture, by its bytes');
         self::assertSame([(string) self::REPORT_GROUP, 'HTML'], [$photo['chat_id'], $photo['parse_mode']]);
-        self::assertStringContainsString("🧾 <b>رسید جدید</b> · پرداخت #{$payment->id}", $photo['caption']);
+        self::assertStringContainsString("🧾 <b>رسید جدید</b> · پرداخت \u{200E}#{$payment->id}", $photo['caption']);
         self::assertStringContainsString('📝 توضیح مشتری: از کارت پدرم', $photo['caption']);
         self::assertStringContainsString('رسیدی که از وب‌سایت می‌رسد خودکار تایید نمی‌شود', $photo['caption'], "the method's review window is not this receipt's");
         self::assertStringNotContainsString('۳۰ دقیقه', $photo['caption']);

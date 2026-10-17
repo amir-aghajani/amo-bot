@@ -78,7 +78,7 @@ interface DriverFieldProps {
   set: (name: string, value: string | boolean) => void
   error: string | undefined
   stored: DriverValues | undefined
-  /** A secret kept for an address that moved: its `moved` words in place of its hint. */
+  /** A secret kept for an address that moved: its `moved` words in place of its hint, and a value asked. */
   movedHint: boolean
 }
 
@@ -104,6 +104,7 @@ function DriverField({ id, field, draft, set, error, stored, movedHint }: Driver
           onClear={(clear) => set(`clear_${field.name}`, clear)}
           error={error}
           hint={movedHint ? (field.moved ?? hint) : hint}
+          stays={!movedHint}
           optional={!field.required}
           // One the form cannot go without (an online gateway's token) is typed anew, never emptied: the server refuses that.
           clearable={!field.required}

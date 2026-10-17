@@ -2,9 +2,10 @@ import { keepPreviousData, useQuery, type QueryKey } from '@tanstack/react-query
 import { ArrowLeftRight, LifeBuoy, TriangleAlert } from 'lucide-react'
 import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
-import { Field } from '@/components/field'
+import { Field, FieldGroup } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
 import { GrantOption } from '@/components/grants/grant-terms'
+import { useReadFailure } from '@/components/page'
 import { serversQuery } from '@/components/servers/queries'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api } from '@/lib/api'
@@ -14,6 +15,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { MIGRATION_MODE } from '@/lib/statuses'
 import { useForm } from '@/lib/use-form'
 import { useSettled } from '@/lib/use-settled'
+import { cn, sameData } from '@/lib/utils'
 
 /** The dialog's choices: the target as its select holds it (blank until one is chosen), and the plans ticked (none: every service). */
 interface Values {
@@ -47,6 +49,7 @@ interface MigrationFormProps {
  */
 export function MigrationForm({ server, invalidates, onCancel, onStarted }: MigrationFormProps) {
   const servers = useQuery(serversQuery)
+  const serversFailure = useReadFailure(servers)
   const { values, patch, error, formError, busy, dirty, submit, handleSubmit } = useForm<Values>(() => ({
     target_server_id: '',
     mode: server.last_error !== null ? 'rescue' : 'migrate',
@@ -56,12 +59,16 @@ export function MigrationForm({ server, invalidates, onCancel, onStarted }: Migr
   }))
   const target = values.target_server_id === '' ? null : Number(values.target_server_id)
   // Read once the choices settle: plans ticked in a row ask once.
-  const filters = useSettled({ target_server_id: target, include_disabled: values.include_disabled, plan_ids: values.plan_ids })
+  const choices = { target_server_id: target, include_disabled: values.include_disabled, plan_ids: values.plan_ids }
+  const filters = useSettled(choices)
   const preview = useQuery({
     queryKey: queryKeys.migrationPreview(server.id, filters),
     queryFn: () => api.post(`/servers/${server.id}/migrations/preview`, filters),
     placeholderData: keepPreviousData,
   })
+  // Until the choices on screen are read, the counts shown are the last choices' (kept meanwhile, dimmed): the move waits
+  // for its own, so it never starts on a count — or a target's room — it did not show.
+  const stale = !sameData(filters, choices) || preview.isPlaceholderData
   const others = (servers.data?.servers ?? []).filter((other) => other.id !== server.id)
 
   const start = handleSubmit(async () => {
@@ -84,7 +91,7 @@ export function MigrationForm({ server, invalidates, onCancel, onStarted }: Migr
 
   return (
     <form onSubmit={start} noValidate className="grid gap-4">
-      {servers.error && <ErrorState what="لیست سرورها" error={servers.error} onRetry={() => void servers.refetch()} retrying={servers.isFetching} />}
+      {serversFailure.error && <ErrorState what="لیست سرورها" error={serversFailure.error} onRetry={() => void servers.refetch()} retrying={serversFailure.retrying} />}
 
       <Field id="migration_target" label="سرور مقصد" error={error('target_server_id')}>
         {(control) => (
@@ -110,7 +117,7 @@ export function MigrationForm({ server, invalidates, onCancel, onStarted }: Migr
 
       <Field id="migration_mode" label="روش" error={error('mode')} hint={MODE_HINTS[values.mode]}>
         {(control) => (
-          <Select value={values.mode} onValueChange={(mode) => patch({ mode: mode as ServerMigrationMode })}>
+          <Select value={values.mode} onValueChange={(mode) => patch({ mode: mode === 'rescue' ? 'rescue' : 'migrate' })}>
             <SelectTrigger {...control} className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -133,32 +140,42 @@ export function MigrationForm({ server, invalidates, onCancel, onStarted }: Migr
           checked={values.include_disabled}
           onCheckedChange={(include_disabled) => patch({ include_disabled })}
         />
-        <GrantOption label="پیام به مشتری‌ها" hint="هر مشتری لینک جدید را در ربات فروشگاه خودش می‌گیرد." checked={values.notify} onCheckedChange={(notify) => patch({ notify })} />
+        <GrantOption
+          label="پیام به مشتری‌ها"
+          hint="هر مشتری لینک جدید را در تلگرام، از ربات فروشگاه خودش، یا با ایمیل می‌گیرد."
+          checked={values.notify}
+          onCheckedChange={(notify) => patch({ notify })}
+        />
       </div>
 
       {preview.data && preview.data.plans.length > 1 && (
-        <fieldset className="grid gap-2">
-          <legend className="mb-1 text-body font-medium">فقط سرویس‌های این پلن‌ها</legend>
-          {preview.data.plans.map((plan) => (
-            <GrantOption
-              key={plan.id}
-              label={plan.name}
-              hint={`${plan.shop} · ${formatNumber(plan.services)} سرویس`}
-              checked={values.plan_ids.includes(plan.id)}
-              onCheckedChange={(ticked) => togglePlan(plan.id, ticked)}
-            />
-          ))}
-          <p className="text-footnote text-muted-foreground">
-            {values.plan_ids.length === 0
+        // Its refusal (a plan gone meanwhile) under it, as a field's: the plans are one field of the request.
+        <FieldGroup
+          label="فقط سرویس‌های این پلن‌ها"
+          error={error('plan_ids')}
+          hint={
+            values.plan_ids.length === 0
               ? 'هیچ‌کدام انتخاب نشده است: همه سرویس‌ها منتقل می‌شوند.'
               : preview.data.unplanned > 0
                 ? `${formatNumber(preview.data.unplanned)} سرویس بدون پلن منتقل نمی‌شود.`
-                : ''}
-          </p>
-        </fieldset>
+                : undefined
+          }
+        >
+          <div className="grid gap-2">
+            {preview.data.plans.map((plan) => (
+              <GrantOption
+                key={plan.id}
+                label={plan.name}
+                hint={`${plan.shop} · ${formatNumber(plan.services)} سرویس`}
+                checked={values.plan_ids.includes(plan.id)}
+                onCheckedChange={(ticked) => togglePlan(plan.id, ticked)}
+              />
+            ))}
+          </div>
+        </FieldGroup>
       )}
 
-      <Reach preview={preview.data} error={preview.error} chosen={target !== null} />
+      <Reach preview={preview.data} error={preview.error} chosen={target !== null} stale={stale} />
 
       <FormActions
         error={formError}
@@ -166,6 +183,7 @@ export function MigrationForm({ server, invalidates, onCancel, onStarted }: Migr
         submitLabel="شروع انتقال"
         busy={busy}
         disabled={target === null || !preview.data || preview.data.services === 0 || (preview.data.target?.problem ?? null) !== null}
+        held={stale}
         icon={values.mode === 'rescue' ? LifeBuoy : ArrowLeftRight}
         dirty={dirty}
       />
@@ -173,17 +191,25 @@ export function MigrationForm({ server, invalidates, onCancel, onStarted }: Migr
   )
 }
 
+interface ReachProps {
+  preview: ServerMigrationPreview | undefined
+  error: Error | null
+  chosen: boolean
+  /** The choices changed since it was read: shown dimmed until they are. */
+  stale: boolean
+}
+
 /** What the move would carry, as the server counts it: how many, of which shops — and the target's room, or why it cannot take them. */
-function Reach({ preview, error, chosen }: { preview: ServerMigrationPreview | undefined; error: Error | null; chosen: boolean }) {
+function Reach({ preview, error, chosen, stale }: ReachProps) {
   if (error) return <ErrorState what="شمار سرویس‌ها" error={error} />
   if (!preview) return null
-  if (preview.services === 0) return <p className="text-body text-muted-foreground">روی این سرور سرویسی با این انتخاب برای انتقال نیست.</p>
+  if (preview.services === 0) return <p className={cn('text-body text-muted-foreground transition-opacity', stale && 'opacity-60')}>روی این سرور سرویسی با این انتخاب برای انتقال نیست.</p>
 
   const shops = preview.shops.map((row) => `${row.shop.name} ${formatNumber(row.services)}`).join('، ')
   const room = preview.target?.room ?? null
 
   return (
-    <div className="grid gap-2">
+    <div className={cn('grid gap-2 transition-opacity', stale && 'opacity-60')} aria-busy={stale || undefined}>
       <p className="text-body text-muted-foreground" role="status">
         {formatNumber(preview.services)} سرویس منتقل می‌شود ({shops})؛ لینک هر کدام عوض می‌شود.
       </p>

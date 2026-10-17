@@ -1,10 +1,13 @@
+[فارسی](fa/Store-API-Support-Tickets.md)
+
 # Store API: support tickets
 
 A ticket is a conversation with support: a subject, the service it is about (or none), and messages — the customer's
 and support's, each words and at most one picture, 200 at most a ticket. The customer opens and writes in tickets on the
-website or in the bot, which list the same tickets; support answers from either panel, the shop's Telegram group or the
-website's admin side ([the shop's admins](Store-API-Admins.md)) — which, the customer's side need not care. Paths are under the [base address](Store-API.md#the-base-address); every one here
-takes the customer's bearer token, and another customer's ticket is `404`, as one that never was.
+website or in the bot, which list the same tickets. Support answers from either panel, the shop's Telegram group or the
+website's admin side ([the shop's admins](Store-API-Admins.md)); the customer's side need not care which. Paths are
+under the [base address](Store-API.md#the-base-address); every one here takes the customer's bearer token, and another
+customer's ticket is `404`, as one that never was.
 
 ## The list
 

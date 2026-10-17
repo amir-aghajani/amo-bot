@@ -20,6 +20,7 @@ use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Exceptions\AutoRenewUnavailableException;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Tasks\AutoRenewTask;
 use App\Modules\Users\Enums\UserStatus;
@@ -40,10 +41,11 @@ use Psr\Log\LoggerInterface;
  * Only a running service with a deadline qualifies — one waiting for its first connection has none yet, one that never
  * ends needs none, an ended one is renewed by hand — and only on a plan whose term is at least the window (renews()):
  * a shorter term would leave the service due again at once; and only at a renewal price within the wallet's least and
- * most amount — one outside them is renewed by hand. By ResetTime, which starts the term afresh and throws away
- * what was left of it, the renewal waits for the last run before the deadline (LAST_RUN_MINUTES), so it loses no more
- * than that; a wallet that cannot pay is still told at the window's start. A deadline is renewed once, and two runs
- * never charge a service twice (claim()).
+ * most amount — one outside them is renewed by hand —, and while the renewal ends it by the last day the shop keeps
+ * (endsInTime(); one that would not is reminded of its end, as one outside the wallet's bounds is). By ResetTime, which
+ * starts the term afresh and throws away what was left of it, the renewal waits for the last run before the deadline
+ * (LAST_RUN_MINUTES), so it loses no more than that; a wallet that cannot pay is still told at the window's start. A
+ * deadline is renewed once, and two runs never charge a service twice (claim()).
  */
 final class AutoRenewal
 {
@@ -94,8 +96,9 @@ final class AutoRenewal
 
     /**
      * Whether the service could renew itself, paid by `$wallet` (wallet(); none renews nothing): it runs, ends some day,
-     * still has a plan whose term is at least the renewal window (RenewalSettings::autoRenews()), and the wallet takes
-     * its renewal price (PaymentMethods::within()) — one it does not take is renewed by hand.
+     * still has a plan whose term is at least the renewal window (RenewalSettings::autoRenews()) and whose renewal ends
+     * it by the last day the shop keeps (endsInTime()), and the wallet takes its renewal price (PaymentMethods::within())
+     * — one it does not take is renewed by hand. One that could not is reminded of its end (ServiceReminders).
      */
     public function renews(Subscription $subscription, ?PaymentMethod $wallet): bool
     {
@@ -117,7 +120,7 @@ final class AutoRenewal
         foreach ($subscriptions as $subscription) {
             $renews[$subscription->id] = false;
             $plan = $subscription->plan;
-            if ($subscription->isActive() && $subscription->duration_hours > 0 && $plan !== null && $this->settings->autoRenews($plan)) {
+            if ($subscription->isActive() && $subscription->duration_hours > 0 && $plan !== null && $this->settings->autoRenews($plan) && $this->endsInTime($subscription, $plan)) {
                 $priced[$subscription->user_id][] = [$subscription, $plan];
             }
         }
@@ -137,7 +140,8 @@ final class AutoRenewal
     }
 
     /**
-     * Set the customer's switch (the bot's button, the website's), only while it is offered (offeredFor()).
+     * Set the customer's switch (the bot's button, the website's), only while it is offered (offeredFor()) and the
+     * service is still theirs: one handed to another customer since it was read is the new owner's wallet to commit.
      *
      * @throws AutoRenewUnavailableException 422 on `auto_renew`
      */
@@ -146,7 +150,10 @@ final class AutoRenewal
         if (!$this->offeredFor($subscription)) {
             throw new AutoRenewUnavailableException();
         }
-        $subscription->forceFill(['auto_renew' => $on])->save();
+        if ($subscription->newModelQuery()->whereKey($subscription->id)->where('user_id', $subscription->user_id)->update(['auto_renew' => $on]) !== 1) {
+            throw new AutoRenewUnavailableException();
+        }
+        $subscription->forceFill(['auto_renew' => $on])->syncOriginalAttribute('auto_renew');
     }
 
     /**
@@ -184,8 +191,9 @@ final class AutoRenewal
     {
         $wallet = $this->wallet();
         $plan = $subscription->plan;
-        // A plan whose term was shortened below the window since is not renewed, whatever the switch says.
-        if ($wallet === null || $plan === null || !$this->settings->autoRenews($plan) || $subscription->server->isBackingOff()) {
+        // A plan whose term was shortened below the window since is not renewed, whatever the switch says — nor one whose
+        // renewal would end the service past the last day the shop keeps: its panel is not asked, nor a short wallet told.
+        if ($wallet === null || $plan === null || !$this->settings->autoRenews($plan) || !$this->endsInTime($subscription, $plan) || $subscription->server->isBackingOff()) {
             return;
         }
 
@@ -222,6 +230,12 @@ final class AutoRenewal
         if (!$this->renewsNow($deadline, $method)) {
             return;
         }
+        // Judged again by the panel's deadline just read.
+        if (!$this->endsInTime($subscription, $plan)) {
+            $this->logger->info('Auto-renewal of subscription {id} is not made: it would end the service past the last day the shop keeps', ['id' => $subscription->id]);
+
+            return;
+        }
 
         $order = $this->claim($subscription, $plan, $method);
         if ($order === null) {
@@ -253,6 +267,25 @@ final class AutoRenewal
         $order->refresh();
         $this->logger->info('Auto-renewal of subscription {id}: order {order} is {status}', ['id' => $subscription->id, 'order' => $order->id, 'status' => $order->status->value]);
         $order->status === OrderStatus::Fulfilled ? $this->notifier->autoRenewed($order) : $this->notifier->renewalFailed($order);
+    }
+
+    /**
+     * Whether the renewal on `$plan` by the admin's default method would end the service by the last day the shop keeps
+     * (ServiceTerms::renewal()), by the row as it stands: one that would not renews nothing by itself — nothing charged,
+     * the switch not offered (renews()) —, and its customer is reminded of its end instead, to hear why when they renew
+     * by hand. Asked again once the panel's numbers are read into the row.
+     *
+     * @phpstan-impure
+     */
+    private function endsInTime(Subscription $subscription, Plan $plan): bool
+    {
+        try {
+            ServiceTerms::renewal($subscription, $plan->package(), $this->settings->carriesTraffic(), $this->settings->defaultMethod());
+        } catch (TermTooLongException) {
+            return false;
+        }
+
+        return true;
     }
 
     /** The deadline of a service that is running and within the admin's days of it; null for any other. */
@@ -289,13 +322,14 @@ final class AutoRenewal
      * second charge) — or was delivered since this deadline's renewal could be made (opensAt(); refunded since or not,
      * this task's or the customer's own): one that left the deadline where it was (a panel that kept its own) is not
      * followed by another. So a deadline is renewed once, and two runs never both charge. One a previous owner left is
-     * never delivered onto it, so it holds nothing.
+     * never delivered onto it, so it holds nothing — and a service handed to another customer since the run read it is
+     * not ordered for the one it read, whose wallet would pay for someone else's service.
      */
     private function claim(Subscription $subscription, Plan $plan, RenewalMethod $method): ?Order
     {
         return $this->db->transaction(function () use ($subscription, $plan, $method): ?Order {
             $row = $subscription->newModelQuery()->whereKey($subscription->id)->lockForUpdate()->first();
-            $deadline = $row !== null && $row->auto_renew ? $this->dueDeadline($row) : null;
+            $deadline = $row !== null && $row->auto_renew && (int) $row->user_id === (int) $subscription->user_id ? $this->dueDeadline($row) : null;
             if ($row === null || $deadline === null || !$this->renewsNow($deadline, $method)) {
                 return null;
             }

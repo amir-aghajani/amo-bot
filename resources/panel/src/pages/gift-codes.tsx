@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
 import { GiftCodesSettingsCard } from '@/components/gift-codes/gift-codes-settings-card'
 import { MakeCodesModal } from '@/components/gift-codes/make-codes-modal'
-import { Dash, ListView, RowMenu } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, RowMenu } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
@@ -105,8 +105,9 @@ export function GiftCodesPage() {
 
       <div {...tabPanel(tabs, list.filter)} className="grid gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <SearchBox value={list.typed} onChange={list.setTyped} placeholder="کد، یا مشتری‌ای که استفاده کرد" aria-label="جستجوی کد هدیه" />
-          {named.length > 0 && (
+          <SearchBox value={list.typed} onChange={list.setTyped} placeholder="کد یا مشتری‌ای که استفاده کرد" aria-label="جستجوی کد هدیه" />
+          {/* A batch the address names (a link, the back button) is said and can be undone, even once it is gone. */}
+          {(named.length > 0 || (list.params.batch ?? '') !== '') && (
             <FilterSelect
               label="سری"
               value={list.params.batch ?? ''}
@@ -160,8 +161,8 @@ export function GiftCodesPage() {
                 <TableHead>کد</TableHead>
                 <TableHead>ارزش</TableHead>
                 <TableHead className="hidden md:table-cell">سری</TableHead>
-                <TableHead>وضعیت</TableHead>
-                <TableHead>استفاده</TableHead>
+                <TableHead className="hidden md:table-cell">وضعیت</TableHead>
+                <TableHead className="hidden md:table-cell">استفاده</TableHead>
                 <TableHead className="w-10">
                   <span className="sr-only">عملیات</span>
                 </TableHead>
@@ -174,18 +175,19 @@ export function GiftCodesPage() {
                     <code dir="ltr" className="font-medium tracking-wide">
                       {code.code}
                     </code>
+                    <PhoneFacts>
+                      <CodeState code={code} />
+                      {code.redeemed_at !== null && <Taken code={code} />}
+                    </PhoneFacts>
                   </TableCell>
                   <TableCell>
                     <Worth code={code} />
                   </TableCell>
                   <TableCell className="hidden md:table-cell">{code.batch ? <bdi>{code.batch}</bdi> : <Dash />}</TableCell>
-                  <TableCell>
-                    <div className="grid justify-items-start gap-1">
-                      <StatusBadge status={GIFT_CODE_STATUS[code.status]} />{' '}
-                      {code.expires_at && code.status === 'unused' && <span className="text-footnote text-muted-foreground">تا {formatDate(code.expires_at, { dateStyle: 'medium' })}</span>}
-                    </div>
+                  <TableCell className="hidden md:table-cell">
+                    <CodeState code={code} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <Taken code={code} />
                   </TableCell>
                   <TableCell>
@@ -251,6 +253,16 @@ function Worth({ code }: { code: GiftCodeRow }) {
     <div className="grid gap-0.5">
       <span className="font-medium">{code.kind === 'wallet' ? formatMoney(code.amount ?? 0) : code.plan ? <bdi>{code.plan.name}</bdi> : 'پلن حذف شده'}</span>
       <span className="text-footnote text-muted-foreground">{GIFT_CODE_KIND[code.kind]}</span>
+    </div>
+  )
+}
+
+/** A code's state — and, unused, the day it stops working. */
+function CodeState({ code }: { code: GiftCodeRow }) {
+  return (
+    <div className="grid justify-items-start gap-1">
+      <StatusBadge status={GIFT_CODE_STATUS[code.status]} />{' '}
+      {code.expires_at && code.status === 'unused' && <span className="text-footnote text-muted-foreground">تا {formatDate(code.expires_at, { dateStyle: 'medium' })}</span>}
     </div>
   )
 }

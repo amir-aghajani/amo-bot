@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Modules\Auth\Exceptions\ShopRefusedException;
 use App\Modules\Auth\NamedShop;
+use App\Modules\Auth\Services\SignInThrottle;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Users\Models\CustomerGroup;
@@ -107,6 +108,18 @@ final class PanelShopTest extends HttpTestCase
         $signedIn = $signIn((string) $this->bot->id);
         self::assertSame(['root', $this->bot->id], [$this->decode($signedIn)['session']['name'], $this->decode($signedIn)['session']['shop']['id']], "back where the tab was: the agent's shop");
         self::assertSame(Bot::MAIN, $this->decode($this->get('/api/admin/auth/me'))['session']['shop']['id'], 'the session itself in none');
+    }
+
+    public function testTheRightPasswordAtAShopThatIsNotThereIsNoFailedSignIn(): void
+    {
+        $this->postJson('/api/admin/auth/logout');
+        $signIn = fn(string $shop): ResponseInterface => $this->send('POST', '/api/admin/auth/login', ['username' => self::ADMIN_USERNAME, 'password' => self::ADMIN_PASSWORD], ['X-Requested-With' => 'XMLHttpRequest', NamedShop::HEADER => $shop]);
+
+        for ($try = 0; $try < SignInThrottle::MAX_ATTEMPTS; $try++) {
+            self::assertSame(404, $signIn('999')->getStatusCode());
+        }
+
+        self::assertSame(200, $signIn((string) Bot::MAIN)->getStatusCode(), 'an old tab\'s address locks the owner out of no other');
     }
 
     public function testAPicturesAddressNamesItsShopInItsQuery(): void

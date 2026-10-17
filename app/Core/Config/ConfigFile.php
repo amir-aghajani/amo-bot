@@ -111,7 +111,7 @@ final class ConfigFile
         }
 
         // The next read goes through PHP's opcode cache, which may still hold the file as it was.
-        if (function_exists('opcache_invalidate')) {
+        if (function_exists('opcache_invalidate') && Files::mayUseOpcache()) {
             opcache_invalidate($this->path, true);
         }
     }

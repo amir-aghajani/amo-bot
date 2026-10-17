@@ -10,6 +10,7 @@ use App\Core\Http\LongRunning;
 use App\Core\Security\RateLimiter;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Services\Bots;
+use App\Modules\Payments\DTO\OnlineRequest;
 use App\Modules\Payments\Enums\OnlineState;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\GatewayUnavailableException;
@@ -22,13 +23,16 @@ use Psr\Log\LoggerInterface;
 
 /**
  * GET or POST /payments/callback/{payment}/{secret} — an online gateway's word that something happened to a payment:
- * CubePay, AtlasPay and Aban call it from their servers (each only given an https address); Zarinpal — and Aban, from
- * its page — send the customer's browser back to it, paid or not. What it says is never believed: with the payment's
- * own secret in the address (OnlineInvoices), it only makes the shop ask the gateway itself (OnlinePayments::check()), in
- * the payment's shop — CALLBACK_ASKS times a minute a payment at most, any call past that answered from the payment as
- * it stands. A gateway is answered whether the payment is paid now — a 503 while the gateway cannot be asked, so it calls
+ * CubePay, AtlasPay, Aban and Plisio call it from their servers (each only given an https address); Zarinpal,
+ * AqayePardakht and Variza — and Aban and Plisio, from their pages — send the customer's browser back to it, paid or
+ * not (Variza's word itself is its signed webhook, GatewayWebhookController's). What it says is never believed: with the
+ * payment's own secret in the address (OnlineInvoices), it only makes the shop ask the gateway itself (OnlinePayments::
+ * check()), in the payment's shop — CALLBACK_ASKS times a minute a payment at most, any call past that answered from the
+ * payment as it stands. A gateway is answered whether the payment is paid now — a 503 while the gateway cannot be asked, so it calls
  * again, but never for one held for support (it is not asked again); a 404 for an address that names no payment —, a
- * browser the same as a page (ReturnPage), with the way back to the bot for a customer with a Telegram account.
+ * browser the same as a page (ReturnPage), with the way back to the bot for a customer with a Telegram account. A
+ * browser sent to it with `?go=1` (OnlineRequest::viaShop()) while the payment's page takes money is shown the page that
+ * leads on to the gateway's own (ReturnPage::go()), for a gateway that takes customers only from the shop's address.
  */
 final class CallbackController extends ApiController
 {
@@ -64,9 +68,14 @@ final class CallbackController extends ApiController
 
         LongRunning::keepGoing(self::TIME_LIMIT);
 
-        return CurrentBot::run($payment->shop(), function () use ($payment, $response, $browser): Response {
+        $onward = $browser && ($request->getQueryParams()[OnlineRequest::VIA_SHOP] ?? null) === '1' ? self::gatewayPage($payment) : null;
+
+        return CurrentBot::run($payment->shop(), function () use ($payment, $response, $browser, $onward): Response {
+            if ($onward !== null) {
+                return ReturnPage::go($response, $payment, $this->bots->name($payment->shop()), $onward);
+            }
             if ($this->limiter->attempt([['online-callback|' . $payment->id, self::CALLBACK_ASKS, self::ASK_WINDOW]]) > 0) {
-                return $browser ? $this->page($response, $payment, self::stored($payment)) : $this->json($response, ['paid' => self::isPaid($payment)]);
+                return $browser ? $this->page($response, $payment, self::stored($payment)) : $this->json($response, ['paid' => $payment->status->isSettled()]);
             }
 
             try {
@@ -102,15 +111,22 @@ final class CallbackController extends ApiController
         return match (true) {
             OnlinePayments::isHeld($payment) => ReturnPage::HELD,
             $payment->wentToWallet() => ReturnPage::WALLET,
-            self::isPaid($payment) => OnlineState::Paid->value,
+            $payment->status->isSettled() => OnlineState::Paid->value,
             in_array($payment->status, [PaymentStatus::Failed, PaymentStatus::Cancelled], true) => OnlineState::Closed->value,
             default => OnlineState::Waiting->value,
         };
     }
 
-    private static function isPaid(Payment $payment): bool
+    /**
+     * The gateway's own page the shop leads its customer on to — kept by a gateway that takes them only from the shop's
+     * address (OnlineRequest::viaShop()) — while the payment's page takes money; null otherwise (then the address shows
+     * what came of it).
+     */
+    private static function gatewayPage(Payment $payment): ?string
     {
-        return in_array($payment->status, [PaymentStatus::Paid, PaymentStatus::Refunded], true);
+        $page = $payment->invoice['page'] ?? null;
+
+        return $payment->hasOpenPage() && !OnlinePayments::isHeld($payment) && is_string($page) && str_starts_with($page, 'https://') ? $page : null;
     }
 
     /** A customer's browser sent back by the gateway — a page it asks for —, not the gateway's own server calling. */

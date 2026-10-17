@@ -20,7 +20,8 @@ use Tests\DatabaseTestCase;
 /**
  * «آستانه مجاز تمدید» and «روش‌های تمدید» as CustomerRenewal keeps them for every door: a running service may be renewed
  * once its deadline is within the window's days, or once at most the window's percent of its traffic is left — any
- * time with both off, an ended one always, one without a deadline by its traffic alone —, with words for from when; and
+ * time with both off, an ended one always, one without a deadline by its traffic alone (one that never ends by time at
+ * once while no percent holds it) —, with words for from when; and
  * the preview is by a method the shop offers, the first when none is asked.
  */
 final class RenewalWindowTest extends DatabaseTestCase
@@ -115,11 +116,27 @@ final class RenewalWindowTest extends DatabaseTestCase
         $window = $this->renewal()->window($waiting);
         self::assertSame([false, null, 7, null], [$window->open, $window->opensAt, $window->daysBefore, $window->percent], 'its clock not started: no deadline to come near yet');
         self::assertSame('از ۷ روز مانده به پایان آن', $window->when());
-        self::assertSame('پس از پایان آن', $this->renewal()->window($never)->when(), 'one that never ends');
 
         $this->window(days: 7, percent: 50);
         self::assertTrue($this->renewal()->window($this->service30(daysLeft: null, usedGb: 20))->open, 'ten of thirty left lets it in');
         self::assertFalse($this->renewal()->window($never)->open, 'nothing used');
+        self::assertSame('وقتی ٪۵۰ از حجم یا کمتر مانده باشد', $this->renewal()->window($never)->when());
+    }
+
+    public function testAServiceThatNeverEndsByTimeIsNotHeldBackByTheWindowsDays(): void
+    {
+        $this->window(days: 7);
+        $never = $this->service30(daysLeft: null, overrides: ['duration_hours' => 0]);
+        $endless = $this->service30(daysLeft: null, overrides: ['duration_hours' => 0, 'traffic_limit_bytes' => 0]);
+
+        self::assertTrue($this->renewal()->window($never)->open, 'no deadline it could come within seven days of');
+        self::assertNotNull($this->renewal()->preview($never));
+        self::assertTrue($this->renewal()->window($endless)->open, 'never told «پس از پایان آن» of an end that never comes');
+
+        $this->window(percent: 20);
+        self::assertTrue($this->renewal()->window($endless)->open, 'unlimited: no traffic to run low either');
+        self::assertFalse($this->renewal()->window($never)->open, 'its traffic still holds it back');
+        self::assertFalse($this->renewal()->window($this->service30(daysLeft: 1, overrides: ['traffic_limit_bytes' => 0]))->open, 'one with a deadline waits for it, as before');
     }
 
     public function testThePreviewIsByTheMethodAskedAmongThoseTheShopOffers(): void

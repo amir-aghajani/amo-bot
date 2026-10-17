@@ -7,6 +7,7 @@ namespace Tests\Unit\Providers\ThreeXui;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Forms\Fields\Field;
 use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
+use App\Modules\Providers\Support\PanelConnection;
 use Tests\TestCase;
 
 /**
@@ -33,7 +34,7 @@ final class ThreeXuiDriverTest extends TestCase
         self::assertSame(['base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'], array_column($card['fields'], 'name'));
         $fields = array_column($card['fields'], null, 'name');
         self::assertSame(['auth_mode' => ['password']], (array) $fields['totp_secret']['when'], 'the two-factor secret is the password way in\'s');
-        self::assertSame(['base_url'], $fields['totp_secret']['bound_to'], 'and goes only where the panel is');
+        self::assertSame(['base_url', 'proxy_host', 'proxy_port', 'verify_tls'], $fields['totp_secret']['bound_to'], 'and goes only where the panel is, the way it was given for');
         self::assertSame([true, true, true], [$fields['verify_tls']['advanced'], $fields['timeout']['advanced'], $fields['subscription_url']['advanced']]);
     }
 
@@ -102,7 +103,7 @@ final class ThreeXuiDriverTest extends TestCase
         foreach (['https://attacker.example:2053/AbCdEf', 'https://de1.example.com:8443/AbCdEf', 'http://de1.example.com:2053/AbCdEf'] as $url) {
             $errors = self::errors(['base_url' => $url, 'auth_mode' => 'token'] + self::OPTIONS, $tokened);
             self::assertSame(['api_token'], array_keys($errors), $url);
-            self::assertStringContainsString('آدرس پنل عوض شده است', $errors['api_token'][0]);
+            self::assertSame(PanelConnection::MOVED . 'توکن API را دوباره وارد کنید.', $errors['api_token'][0]);
 
             self::assertSame(['password', 'totp_secret'], array_keys(self::errors(self::login(['base_url' => $url, 'password' => '']), $loggedIn)), $url);
         }
@@ -110,6 +111,30 @@ final class ThreeXuiDriverTest extends TestCase
         // Typed again they go there; the two-factor secret of the old address typed again too, or cleared.
         $values = self::check(self::login(['base_url' => 'https://attacker.example:2053/AbCdEf', 'password' => 'typed-again', 'clear_totp_secret' => true]), $loggedIn);
         self::assertSame(['typed-again', ''], [$values['password'], $values['totp_secret']]);
+    }
+
+    /**
+     * A proxy may read what goes through it once the TLS certificate is not checked: a stored secret goes to its panel only
+     * the way it was given for — through the same proxy, the certificate checked as it was.
+     */
+    public function testNoStoredSecretGoesToItsPanelAnotherWay(): void
+    {
+        $proxy = ['proxy_enabled' => true, 'proxy_host' => 'proxy.example.com', 'proxy_port' => 1080];
+        $tokened = self::kept(['base_url' => self::ADDRESS, 'auth_mode' => 'token', 'api_token' => 'stored-token', 'meta.verify_tls' => true] + $proxy);
+        $form = static fn(array $changed): array => $changed + ['base_url' => self::ADDRESS, 'auth_mode' => 'token'] + $proxy + self::OPTIONS;
+
+        self::assertSame('stored-token', self::check($form([]), $tokened)['api_token'], 'the same way: kept');
+        foreach ([['proxy_host' => 'proxy.attacker.example'], ['proxy_port' => 1081], ['verify_tls' => false]] as $changed) {
+            self::assertSame([PanelConnection::MOVED . 'توکن API را دوباره وارد کنید.'], self::errors($form($changed), $tokened)['api_token'] ?? null, (string) json_encode($changed));
+            self::assertSame('typed-again', self::check($form($changed + ['api_token' => 'typed-again']), $tokened)['api_token'], 'typed again, it goes');
+        }
+
+        $loggedIn = self::kept(['base_url' => self::ADDRESS, 'auth_mode' => 'password', 'username' => 'admin', 'password' => 'stored-pw', 'totp_secret' => self::TOTP, 'meta.verify_tls' => true]);
+        self::assertSame(['password', 'totp_secret'], array_keys(self::errors(self::login(['password' => ''] + $proxy), $loggedIn)), 'a proxy switched on');
+        self::assertSame(['password', 'totp_secret'], array_keys(self::errors(self::login(['password' => '', 'verify_tls' => false]), $loggedIn)), 'the certificate no longer checked');
+
+        // Switched off, the proxy sends it straight to the panel it was given for.
+        self::assertSame('stored-token', self::check($form(['proxy_enabled' => false]), $tokened)['api_token']);
     }
 
     /**

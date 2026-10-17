@@ -1,3 +1,5 @@
+[فارسی](fa/Panels.md)
+
 # The panels
 
 Two panels, one for each kind of person who runs a shop:
@@ -25,7 +27,8 @@ session left unused for two hours (`SESSION_LIFETIME`) ends; an open tab keeps i
    عبور تازه» (8 characters at least) and «تکرار رمز عبور».
 3. «ذخیره و ورود» sets the new login, signs this browser in under it and every other browser out, and deletes the key.
 
-Only someone with the host's files can read the key; wrong keys are counted like wrong passwords
+Only someone with the host's files can read the key. Wrong keys have a count of their own, apart from wrong passwords:
+after 10 from one address in 15 minutes, the page waits before it takes another
 ([Running in production](Running-In-Production.md#the-panels-login)).
 
 **An agent** signs in with the link the main bot gives them: «نمایندگی» › «🔐 ورود به پنل». It works once, for 10
@@ -67,7 +70,7 @@ The sidebar, top to bottom:
 | «نظرات» | Customers' reviews from the shop's website, with the number waiting on you ([Reviews](Reviews.md)) |
 | «سرورها» — the owner's | The VPN panels the shop sells on ([Servers](Servers.md)) |
 | «حساب نمایندگی» — an agent's | Their account with the main bot ([below](#an-agents-account)) |
-| «فروشگاه» | «پلن‌ها», «اکانت تست», «دسته‌بندی‌ها», «روش‌های پرداخت» ([Plans](Plans.md), [Test accounts](Test-Accounts.md), [Payment methods](Payment-Methods.md)) |
+| «فروشگاه» | «پلن‌ها», «اکانت تست», the main shop's «سرویس دلخواه», «دسته‌بندی‌ها», «روش‌های پرداخت» ([Plans](Plans.md), [Test accounts](Test-Accounts.md), [Custom services](Custom-Services.md), [Payment methods](Payment-Methods.md)) |
 | «فروش» | «کاربران», «سفارش‌ها» (stuck orders counted), «پرداخت‌ها» (receipts to review counted), «اشتراک‌ها», «زیرمجموعه‌گیری» — and the owner's «نمایندگان» ([Customers](Customers.md), [Orders and payments](Orders-And-Payments.md), [Services](Services.md), [Referrals](Referrals.md), [Agency](Agency.md)) |
 | «تخفیف و جوایز» | «کدهای تخفیف», «فروش ویژه», «سطوح وفاداری», «کش‌بک», «کدهای هدیه», «گردونه شانس», «قرعه‌کشی» ([Discounts](Discounts.md), [Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md), [Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)) |
 | «ربات» | «کیبوردها», «متن‌های ربات», «ارسال همگانی» ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md), [Broadcasts](Broadcasts.md)) |
@@ -91,7 +94,10 @@ from its icon. The browser remembers the choice; until one is made, a window nar
 **The top bar** stays at the top of every page while it scrolls: the page's name, and the dark/light switch («تم روشن» /
 «تم تاریک»). The sign-in screens and the installer have it too, with the switch alone. **On a phone** there is no
 sidebar: «باز کردن منو» in the top bar opens it as a drawer. Dialogs open as a full-width sheet from the bottom of the
-screen.
+screen, without the keyboard: you see the whole sheet first, and the keyboard comes when you tap a field. Only the bot
+text editor, where writing is the whole point, opens with its field ready to type. The sheet keeps only its title and ✕
+at its top — its description scrolls with the rest —, and a form's buttons, like a receipt review's decisions, stay at
+its foot.
 
 ## The dashboard
 
@@ -104,25 +110,31 @@ What the shop did over a range and what waits on someone, read again every minut
   top-up is not counted at all. «سفارش‌ها»: every order placed, of any kind and in any state — unpaid and cancelled ones
   too, so it is not sales. «کاربران جدید»: customers who joined. «اشتراک‌های فعال»: services running now, free tests
   aside, with how many end within three days. Each of the first three shows its change against the period before
-  («بدون مقایسه» when there was nothing then).
+  («دوره قبل رقمی برای مقایسه نداشت» when there was nothing then).
 - **The chart** — revenue, orders or newcomers a day; hover over a day, or focus the chart and use the arrow keys, to
   read it.
-- **«نیازمند توجه»** — what waits on a person now, whatever the range: «پرداخت‌های در انتظار بررسی», «سفارش‌های نیازمند
-  رسیدگی», «تیکت‌های در انتظار پاسخ», «نظرات در انتظار بررسی», «سرورهای دارای خطا» (the main shop's dashboard alone),
-  «اشتراک‌های رو به انقضا (۳ روز)» (free tests aside) and «سفارش‌های در انتظار پرداخت» — each a link to its list,
-  filtered. With nothing waiting it says
-  «همه‌چیز مرتب است». An agent's selling suspended — or its end, or a month short of its minimum, near — and their
-  bot's traffic no longer covering its smallest plan are said first: to the agent, with what to do; to the owner in an
-  agent's shop, of the agent, with a link to «نمایندگان».
+- **«نیازمند توجه»** — what waits on you now, whatever the range, each a link to its list, filtered. Its line counts
+  your own queues alone («۳ مورد منتظر اقدام شماست»); with none of them waiting, the card says «همه‌چیز مرتب است»
+  instead:
+  - «پرداخت‌های در انتظار بررسی», «پرداخت‌های نگه داشته شده» (online payments
+    [held for you](Orders-And-Payments.md#a-payment-held-for-support)), «سفارش‌های نیازمند رسیدگی», «تیکت‌های در
+    انتظار پاسخ», «نظرات در انتظار بررسی» and «سرورهای دارای خطا» (the main shop's dashboard alone);
+  - first, an agent's selling suspended — or its end, or a month short of its minimum, near — and their bot's traffic
+    no longer covering its smallest plan: to the agent, with what to do; to the owner in an agent's shop, of the agent,
+    with a link to «نمایندگان»;
+  - under them, apart and not counted, «در انتظار مشتری» — what waits on customers: «اشتراک‌های رو به انقضا (۳ روز)»
+    (free tests aside) and «سفارش‌های در انتظار پرداخت».
 - **«آخرین سفارش‌ها»** and **«مشتریان جدید»** — the latest eight of each; a number opens the order, a name the customer's
   page.
-- **«وضعیت سیستم»** (the owner's) — the version and PHP's, the open shop's bot — «راه‌اندازی نشده» without a token,
-  «خاموش» when it gets no updates (no webhook, and no poller seen in the last two minutes: «ثبت Webhook» leads to the
-  fix), «غیرفعال از تنظیمات» while its switch is off, else «Webhook» or «bot:poll» with when its last message came —
-  and the «Scheduler»: «فعال» with its last run, or «تنظیم نشده» with a way to its cron setting.
+- **«وضعیت سیستم»** (the owner's) — the version and PHP's, the open shop's bot — «وصل نشده» without a token,
+  «مشکل دارد» when it gets no updates (no webhook, and no poller seen in the last two minutes: «ثبت Webhook» leads to the
+  fix), «غیرفعال از تنظیمات» while its switch is off, else «Webhook» or «پولینگ» with when its last message came —
+  and «کارهای زمان‌بندی‌شده» (the scheduler): «فعال» with its last run and how many tasks it ran, or «تنظیم نشده» with
+  «راه‌اندازی Cron», a link to its cron setting.
 
 Watch out: «Webhook» means only that a webhook was registered — the last message's time says whether updates arrive. A
-server stays among «سرورهای دارای خطا» until its panel answers again; switching the server off does not take it out.
+switched-on server stays among «سرورهای دارای خطا» until its panel answers again. Switching a server off takes it out
+of the count; switched on again, it counts until its panel answers.
 
 ## An agent's account
 
@@ -138,8 +150,8 @@ traffic added to services, traffic given back, corrections by support, each with
 whether this month is held to it), and whether their bot sells. While the main shop has their bot's selling suspended —
 or its end, or a month short of its minimum, is near — the page and their dashboard's «نیازمند توجه» say so, why, and
 what lifts it, and a strip over every other page of their panel leads here ([Agency](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum)).
-A plan the main shop keeps from sale is marked «پنهان‌شده توسط مدیر» on «پلن‌ها», and a server it keeps from their shop
-is none of their plan form's choices.
+A plan the main shop keeps from sale is marked «پنهان‌شده توسط پشتیبانی» on «پلن‌ها». A server it keeps from their shop
+is not among their plan form's choices, and a plan already on it says the server is hidden.
 
 ## Lists
 
@@ -156,7 +168,9 @@ Most lists are read a page of 25 rows at a time, and work the same way:
 - **Sorting** by a column's header: a first press sorts, a second turns it around, a third gives the list its own order
   back.
 - **The address keeps the view**: the tab, the filters, the search, the order and the page are in it, so a reload, the
-  browser's back and a link sent to someone show the same list.
+  browser's back and a link sent to someone show the same list. What the address gets wrong is put right in place: a
+  filter the list does not have — a server or a customer whose id is not a number, say — is dropped, and a page past
+  the end opens the last page.
 
 Lists the owner orders by hand — plans, categories, payment methods, groups, levels, channels, the wheel's prizes —
 have ▲▼ instead, and no pages.
@@ -165,15 +179,27 @@ have ▲▼ instead, and no pages.
 
 - **The panels follow the shop** without a reload: a payment approved in the report group, a new order in the bot, a
   ticket answered in another tab show up within seconds — while the tab is in view (a tab in the background catches up
-  as it comes back). What you are typing is never replaced.
+  as it comes back).
+- **What you are typing is never replaced.** When a settings card, a keyboard or a server's «تنظیمات اتصال» you are
+  changing is saved somewhere else meanwhile — in another tab, say —, your changes stay as you typed them, and the card
+  says so: «این بخش جای دیگری هم ذخیره شد…». Save, and your version takes the place of the other; or press «دیدن نسخه تازه» to put your changes
+  aside and see the saved one.
 - **Unsaved changes** are asked about — «تغییرات ذخیره نشده‌اند», «رها کردن تغییرات» or «ماندن» — before another page,
   signing out, another shop, or closing a dialog — or going back in «افزودن سرور» and «افزودن روش پرداخت» — and only
   when something was changed: a value changed and typed back as it was is no change. A reload or closing the tab gets
   the browser's own question.
-- **Forms**: one that adds something — a plan, a server, a grant — has no «بازگردانی تغییرات»; an edit form has it, and
+- **Forms**: one that adds something — a plan, a server, days or traffic given to many services (on a server, or
+  «هدیه همگانی») — has no «بازگردانی تغییرات»; an edit form has it, and
   both it and the save are held while nothing differs from where the form started.
-- **Offline**, a strip over the page says so, and the lists wait; a save made meanwhile fails rather than waits — send it
-  again once the strip is gone. The same strip says when the server stops answering.
+- **Secrets** — a password, a token, an API key — are never shown again once saved. The field shows only a hint of the
+  kept value, and says «خالی بماند، همان مقدار ذخیره‌شده می‌ماند.»: leave it blank to keep it, type to replace it, or
+  press «پاک کردن مقدار ذخیره‌شده» to empty it on save (where the form can go without it).
+- **Confirmations**: a press on a dialog's confirm button is held until its request is answered, so a double press
+  sends it once.
+- **Offline**, a strip over the page says so («اتصال اینترنت قطع است؛ تا برگشتن آن صفحه‌ها به‌روز نمی‌شوند و تغییرها
+  ذخیره نمی‌شوند.»). The lists wait for the connection, and every change made meanwhile — a save, an approval, a retry —
+  fails at once instead of going out later: send it again once the strip is gone. When the server stops answering, the
+  strip says so too («سرور پاسخ نمی‌دهد؛ …»).
 - **A failure** says what failed and why, in plain words, with «تلاش دوباره» where trying again may help. A failure of
   the server's own ends with «کد پیگیری: …»: the shop's log has that request's lines under it
   ([health and logs](Running-In-Production.md#health-and-logs)). «جزئیات فنی» under a failure holds what support needs,

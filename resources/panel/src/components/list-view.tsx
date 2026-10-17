@@ -1,13 +1,15 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, EllipsisVertical } from 'lucide-react'
 import { Link } from 'react-router'
 import { ErrorState } from '@/components/error-state'
 import { IconButton } from '@/components/icon-button'
+import { useReadFailure } from '@/components/page'
 import { Pagination } from '@/components/pagination'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TableHead, TableName } from '@/components/ui/table'
 import type { PageMeta, SortDirection } from '@/lib/api-types'
+import { PHONE, useMediaQuery } from '@/lib/use-media-query'
 import type { ListOrder } from '@/lib/use-paged-list'
 import { cn } from '@/lib/utils'
 
@@ -15,8 +17,12 @@ import { cn } from '@/lib/utils'
 interface ListState {
   rows: readonly unknown[]
   isPending: boolean
+  /** The read is asked (again): a retry's button spins meanwhile, rows shown under a failed refresh too. */
+  isFetching: boolean
   error: Error | null
   refetch: () => void
+  /** Which read the state is of, when that changes under the list (a paged list's view): a failure is kept for its own read alone. */
+  readKey?: string
 }
 
 /** And a paged list's (usePagedList): where it is, the next page loading, whether something narrows it. */
@@ -46,24 +52,16 @@ interface ListViewProps {
 /**
  * A list page's table in exactly one state: loading, failed (with «تلاش دوباره»), empty, nothing matched, or the rows —
  * named for assistive tech after `noun`. A paged list dims while the next page loads and shows its pagination; rows a
- * later read failed to refresh stay under the failure. After a retry the failure stays (its button spinning, keeping the
- * focus) until the read answers — never the loading state, which would take the button and the focus with it, nor the
- * previous view's rows, which are not this view's.
+ * later read failed to refresh stay under the failure. While the read is asked again the failure stays (useReadFailure:
+ * its button spinning, keeping the focus) until the read answers — never the loading state, which would take the
+ * button and the focus with it, nor the previous view's rows, which are not this view's.
  */
 export function ListView({ list, noun, unit, empty, noMatch, skeletonRows = 4, children }: ListViewProps) {
   const paged = 'meta' in list ? list : null
   // The previous view's rows, standing in while this view's read runs (react-query's placeholder): not an answer.
   const borrowed = paged?.isPlaceholderData === true
-  // The failure being retried: while the retry runs, the read is pending with no error (or shows the previous view's
-  // rows), so the failure is kept here until the read answers.
-  const [retried, setRetried] = useState<Error | null>(null)
-  if (retried !== null && !list.isPending && !borrowed && list.error !== retried) setRetried(null)
-  const error = list.error ?? retried
-  const retry = () => {
-    setRetried(list.error)
-    list.refetch()
-  }
-  const failure = error && <ErrorState what={`لیست ${noun}`} error={error} onRetry={retry} retrying={list.error === null} />
+  const { error, retrying } = useReadFailure(list, list.readKey ?? null)
+  const failure = error && <ErrorState what={`لیست ${noun}`} error={error} onRetry={list.refetch} retrying={retrying} />
   // A later page whose last rows were deleted: the list steps back a page (usePagedList), so show it as loading.
   const emptied = paged?.meta !== undefined && list.rows.length === 0 && paged.meta.total > 0
 
@@ -78,9 +76,10 @@ export function ListView({ list, noun, unit, empty, noMatch, skeletonRows = 4, c
     )
   }
 
-  // A failure belongs to this view: the previous view's rows are not shown under it.
+  // A failure belongs to this view: the previous view's rows are not shown under it. A list with no words of its own for
+  // nothing matching (one only its address narrows) says it has nothing — never a blank.
   if (list.rows.length === 0 || (failure && borrowed)) {
-    return failure || (paged?.filtered ? noMatch : empty) || null
+    return failure || (paged?.filtered ? (noMatch ?? empty) : empty) || null
   }
 
   return (
@@ -113,6 +112,18 @@ export function RowTitleLink({ to, children }: { to: string; children: ReactNode
       {children}
     </Link>
   )
+}
+
+/**
+ * Under a row's title on a phone (below `md`, where a table keeps only its title, its amount and its controls —
+ * components/ui/table): what its hidden columns say that a phone still needs, its status first. Not drawn from `md`,
+ * where the columns say it — not merely hidden, so nothing is said twice.
+ */
+export function PhoneFacts({ children, className }: { children: ReactNode; className?: string }) {
+  const phone = useMediaQuery(PHONE)
+  if (!phone) return null
+
+  return <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-footnote whitespace-normal text-muted-foreground', className)}>{children}</div>
 }
 
 /** The ⋮ menu at the end of a row; `children` are its items. */

@@ -32,6 +32,7 @@ function broadcast(overrides: Partial<BroadcastRow> = {}): BroadcastRow {
     failed: 0,
     admin: null,
     reviewer: 'root',
+    reviewer_name: null,
     created_at: '2026-10-06T09:00:00Z',
     finished_at: '2026-10-06T09:05:00Z',
     actions: { pause: false, resume: false, cancel: false, unpin: true },
@@ -51,6 +52,18 @@ async function choose(id: number, item: string) {
 
 beforeEach(() => {
   vi.spyOn(toast, 'success')
+})
+
+describe('who started a run', () => {
+  it('is named as their account has it where the server read it, else as they are kept', async () => {
+    const unpinned = broadcast({ id: 6, kind: 'unpin', source_id: 5, pinned: 0, reviewer: '@boss', reviewer_name: 'سارا احمدی', actions: { pause: false, resume: false, cancel: false, unpin: false } })
+    server().on('GET', '/api/admin/broadcasts', runs(unpinned, broadcast()))
+    render(<BroadcastsList />, { wrapper: providers({ at: '/broadcasts' }).wrapper })
+
+    expect(await screen.findByText('سارا احمدی')).toBeTruthy()
+    expect(screen.queryByText('@boss')).toBeNull()
+    expect(screen.getByText('root')).toBeTruthy()
+  })
 })
 
 describe('a run’s controls', () => {

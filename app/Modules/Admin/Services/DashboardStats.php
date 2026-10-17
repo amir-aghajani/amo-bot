@@ -26,10 +26,11 @@ use Illuminate\Support\Carbon;
 
 /**
  * The numbers behind the dashboard (both panels, and the website's admin API): the period's figures against the one
- * before (one query each), a point per day for the chart, what needs a human (Queues, plus services ending within
- * SubscriptionDirectory::EXPIRING_DAYS and, in an agent's shop, traffic too short to sell anything and its terms of
- * selling), and the latest orders and customers. Revenue is money that came in (Payment::moneyIn()), never wallet
- * spending. Days are the shop's (LocalTime); the database is asked in UTC.
+ * before (one query each), a point per day for the chart, what needs a human (Queues, plus online payments held for
+ * support, failing servers and, in an agent's shop, traffic too short to sell anything and its terms of selling) and
+ * what waits on customers (unpaid orders, services ending within SubscriptionDirectory::EXPIRING_DAYS), and the latest
+ * orders and customers. Revenue is money that came in (Payment::moneyIn()), never wallet spending. Days are the shop's
+ * (LocalTime); the database is asked in UTC.
  */
 final class DashboardStats
 {
@@ -179,13 +180,20 @@ final class DashboardStats
         return $this->standing->present(CurrentBot::get());
     }
 
-    /** @return array<string, int> The shop's queues (Queues), then unpaid orders, failing servers and services ending soon. */
+    /**
+     * What waits on support — the shop's queues (Queues), online payments held for support, failing servers —, then what
+     * waits on customers: unpaid orders and services ending soon.
+     *
+     * @return array<string, int>
+     */
     private function attention(): array
     {
         return Queues::counts() + [
+            'held_payments' => Payment::whereHeld(Payment::query())->count(),
+            // Servers are the installation's: an agent's shop is not told about them. A server switched off is no one's to
+            // see to — its last error goes stale, and the servers list calls it «غیرفعال», not failing.
+            'servers_with_errors' => CurrentBot::isMain() ? Server::query()->where('is_active', true)->whereNotNull('last_error')->count() : 0,
             'pending_orders' => Order::query()->where('status', OrderStatus::Pending->value)->count(),
-            // Servers are the installation's: an agent's shop is not told about them.
-            'servers_with_errors' => CurrentBot::isMain() ? Server::query()->whereNotNull('last_error')->count() : 0,
             'expiring_soon' => Subscription::expiringWithin(SubscriptionDirectory::EXPIRING_DAYS)->count(),
         ];
     }

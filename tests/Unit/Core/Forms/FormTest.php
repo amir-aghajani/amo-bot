@@ -127,6 +127,8 @@ final class FormTest extends TestCase
         self::assertSame(Validation::tooLong('آدرس پنل', 40), self::refusal($panel, ['base_url' => 'https://panel.example/' . str_repeat('a', 20)]));
         self::assertSame('آدرس پایه پنل را بنویسید.', self::refusal($panel, ['base_url' => 'https://panel.example/panel']));
         self::assertSame('https://panel.example:2053/base', $panel->read(['base_url' => 'https://panel.example:2053/base/'], null));
+        self::assertSame('https://panel.example:2053/base', $panel->read(['base_url' => 'https://panel.example:۲۰۵۳/base'], null), 'a port typed on a Persian keyboard');
+        self::assertSame('http://192.168.1.10:8080', $panel->read(['base_url' => 'http://۱۹۲٫۱۶۸٫۱٫۱۰:٨٠٨٠'], null), 'an address in Persian and Arabic digits');
     }
 
     public function testASecretIsNeverShownKeptWhenLeftBlankAndClearedOnRequest(): void
@@ -137,8 +139,12 @@ final class FormTest extends TestCase
         self::assertSame('newsecret1', $secret->read(['token' => 'newsecret1'], 'keptsecret'));
         self::assertSame('', $secret->read(['clear_token' => true], 'keptsecret'));
         self::assertSame('کوتاه است.', self::refusal($secret, ['token' => 'short']));
-        self::assertSame(['set' => true, 'hint' => '••••••cret'], $secret->present('keptsecret'));
         self::assertSame(['set' => false, 'hint' => ''], $secret->present(''));
+        // Its last four characters only of one long enough that they give little of it away; a shorter one only kept.
+        self::assertSame(['set' => true, 'hint' => '••••••••'], $secret->present('keptsecret'));
+        self::assertSame(['set' => true, 'hint' => '••••••••'], $secret->present('keptsecret1'), 'eleven characters');
+        self::assertSame(['set' => true, 'hint' => '••••••et12'], $secret->present('keptsecret12'), 'twelve');
+        self::assertSame(['set' => true, 'hint' => '••••••کلید'], $secret->present('رمز-طولانی-کلید'), 'its characters, never their bytes');
     }
 
     public function testAFormIsRefusedAsAWholeWithEveryRefusalAtOnce(): void

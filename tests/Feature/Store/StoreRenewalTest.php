@@ -16,8 +16,10 @@ use App\Modules\Store\Models\Website;
 use App\Modules\Store\Services\CustomerCheckout;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Users\Models\User;
+use App\Support\LocalTime;
 use App\Support\Persian;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
@@ -122,6 +124,23 @@ final class StoreRenewalTest extends HttpTestCase
         }
         self::assertSame(0, Order::query()->count());
         self::assertSame('500000.00', $this->ali->balance());
+    }
+
+    public function testARenewalThatWouldEndPastTheLastDayTheShopKeepsIsRefusedBeforeItIsPaid(): void
+    {
+        // 30 days left and the plan's 30 on top would pass the TIMESTAMP columns' last moment, 40 days away.
+        Carbon::setTestNow(LocalTime::last()->subDays(40));
+        $this->subscription->forceFill(['expires_at' => now()->addDays(30)])->save();
+        $this->mirrored($this->subscription);
+        $this->bearer($this->customerSession($this->ali));
+
+        $preview = $this->get($this->storeApi($this->website, "/subscriptions/{$this->subscription->id}/renewal"));
+        $renewal = $this->renewing($this->walletMethod());
+
+        foreach ([$preview, $renewal] as $response) {
+            self::assertSame([422, TermTooLongException::message()], [$response->getStatusCode(), $this->decode($response)['message']]);
+        }
+        self::assertSame([0, '500000.00'], [Order::query()->count(), $this->ali->balance()]);
     }
 
     public function testARenewalUnderWayIsRefusedButOneMadeAgainIsAnsweredByItsOrder(): void

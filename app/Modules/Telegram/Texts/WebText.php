@@ -229,9 +229,13 @@ final class WebText
         }
     }
 
+    /**
+     * The entities read as Telegram reads them (TelegramHtml::decode()), not as a browser does: the web shows what the
+     * bot's customer sees — «&nbsp;» or «&#X41;», which Telegram shows as typed, as typed.
+     */
     private static function decode(string $text): string
     {
-        return html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return TelegramHtml::decode($text);
     }
 
     private static function escape(string $text): string

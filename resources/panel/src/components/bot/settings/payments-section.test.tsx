@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { PaymentsSection } from '@/components/bot/settings/payments-section'
 import { BOT_SETTINGS_SECTIONS, sectionsOfShop } from '@/components/shell/nav'
 import type { BotSettingsData, BotSettingsSaved } from '@/lib/api-types'
+import { queryKeys } from '@/lib/query-keys'
 import { openBotSettings } from '@/test/bot-settings'
 import { AGENT_SHOP, signedIn, until } from '@/test/render'
 import { botSettingsRow } from '@/test/rows'
@@ -41,10 +42,13 @@ describe('the card-to-card payments', () => {
     expect(screen.getByRole('link', { name: 'پرداخت‌ها' }).getAttribute('href')).toBe('/payments?status=awaiting_review')
   })
 
-  it('are saved as the group’s PUT', async () => {
+  it('are saved as the group’s PUT, the payment methods read again: whether a card is given in support’s chat is theirs to say', async () => {
     const saved: BotSettingsSaved = { settings: botSettingsRow({ card_protect: false, card_to_support: true }) }
     server().on('PUT', PATH, json(saved))
-    await show()
+    const { client, wrapper } = signedIn()
+    client.setQueryData(queryKeys.paymentMethods, {})
+    render(<PaymentsSection settings={botSettingsRow()} />, { wrapper })
+    await screen.findByRole('switch', { name: PROTECT })
 
     fireEvent.click(toggle(PROTECT))
     fireEvent.click(toggle(SUPPORT))
@@ -52,6 +56,7 @@ describe('the card-to-card payments', () => {
 
     await until(() => expect(server().sent('PUT', PATH)).toHaveLength(1))
     expect(server().sent('PUT', PATH)[0]?.body).toEqual({ card_protect: false, card_to_support: true, receipt_single: true })
+    await until(() => expect(client.getQueryState(queryKeys.paymentMethods)?.isInvalidated).toBe(true))
   })
 
   it('warn while support’s private chat is on but the support contact was emptied since: the card is shown again', async () => {

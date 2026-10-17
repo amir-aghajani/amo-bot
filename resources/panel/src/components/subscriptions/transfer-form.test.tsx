@@ -98,6 +98,19 @@ describe('handing a service to another customer', () => {
     expect(submit().getAttribute('aria-disabled')).toBe('true')
   })
 
+  it('asks the server of a handle typed by mistake as it is — never of the digits inside it, another customer’s id', async () => {
+    const notAnId = 'شناسه عددی تلگرام را وارد کنید: فقط رقم، بدون @ یا نام کاربری.'
+    const asked = lookup({ '7070': SARA, '@sara7070': refusal(422, notAnId, { telegram_id: [notAnId] }) })
+    await transfer()
+
+    type('@sara7070')
+
+    expect(await screen.findByText(notAnId)).toBeTruthy()
+    expect(asked).toEqual(['@sara7070'])
+    expect(screen.queryByText('سارا احمدی')).toBeNull()
+    expect(submit().getAttribute('aria-disabled')).toBe('true')
+  })
+
   it('says beside the id why the service itself may not go', async () => {
     const gone = 'کلاینت این سرویس دیگر روی سرور نیست؛ این سرویس منتقل نمی‌شود.'
     lookup({ '7070': refusal(422, gone, { status: [gone] }) })

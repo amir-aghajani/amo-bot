@@ -2,7 +2,7 @@ import { FlaskConical, Search } from 'lucide-react'
 import { CustomerFilter } from '@/components/customer-filter'
 import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
-import { Dash, ListView } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts } from '@/components/list-view'
 import { SearchBox } from '@/components/search-box'
 import { StatusBadge } from '@/components/status-badge'
 import { UsageMeter } from '@/components/subscriptions/service-usage'
@@ -32,6 +32,7 @@ export function TestsList() {
     list: 'tests',
     statuses: ['', ...STATES],
     params: ['user'],
+    ids: ['user'],
     address: '/tests',
   })
 
@@ -62,7 +63,7 @@ export function TestsList() {
               <TableHead className="hidden lg:table-cell">سرور</TableHead>
               <TableHead className="hidden md:table-cell">حجم و مدت</TableHead>
               <TableHead className="hidden md:table-cell">مصرف</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <TableHead className="hidden sm:table-cell">زمان</TableHead>
             </TableRow>
           </TableHeader>
@@ -71,13 +72,16 @@ export function TestsList() {
               <TableRow key={test.id} className={cn(test.state === 'removed' && 'text-muted-foreground')}>
                 <TableCell>
                   <UserIdentity user={test.customer} to={userPage(test.customer.id)} badge={test.bought_after && <Badge variant="success">خرید کرد</Badge>} />
+                  <PhoneFacts>
+                    <State test={test} />
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">{test.server ? <bdi>{test.server.name}</bdi> : <span className="text-muted-foreground">سرور حذف شده</span>}</TableCell>
                 <TableCell className="hidden md:table-cell">
                   <TestTerms bytes={test.traffic_bytes} hours={test.duration_hours} onHold={test.on_hold} />
                 </TableCell>
                 <TableCell className="hidden md:table-cell">{test.subscription ? <UsageMeter traffic={test.subscription.traffic} className="w-36" /> : <Dash />}</TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <State test={test} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">

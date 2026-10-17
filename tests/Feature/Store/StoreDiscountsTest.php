@@ -94,6 +94,18 @@ final class StoreDiscountsTest extends HttpTestCase
         self::assertSame(0, Order::query()->count());
     }
 
+    public function testAUseTheCustomersOwnUnpaidOrderHoldsIsSaidSoOnTheCodesField(): void
+    {
+        $this->discountCode('ONE', 10, ['per_user' => 1]);
+        $other = $this->plan(['name' => 'دوماهه', 'price' => '200000.00'], $this->server);
+        $held = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, ['discount_code' => 'ONE'], 'k-1'))['checkout']['order'];
+
+        $response = $this->placeOrder($this->website, $other, $this->server, $this->card, ['discount_code' => 'ONE'], 'k-2');
+
+        self::assertSame([422, ['discount_code' => [sprintf(DiscountCodes::HELD_BY_YOU, $held['id'])]]], [$response->getStatusCode(), $this->decode($response)['errors']], 'with the number of the order the website shows');
+        self::assertSame(1, Order::query()->count(), 'nothing more ordered');
+    }
+
     public function testARequestMadeAgainIsAnsweredByItsOrderWhateverItsCodeSaysNow(): void
     {
         $code = $this->discountCode('ONCE', 50, ['max_uses' => 1]);

@@ -12,6 +12,7 @@ import { WebhookCard } from '@/apps/admin/settings/webhook-card'
 import { APPEARANCE_DESCRIPTION, AppearanceCard } from '@/components/appearance-card'
 import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
+import { useReadFailure } from '@/components/page'
 import { SectionedPage } from '@/components/sectioned-page'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -24,7 +25,9 @@ import { queryKeys } from '@/lib/query-keys'
  * broken —, the owner's login, the panel's look in this browser, and AmoBot's update.
  */
 export function SettingsPage() {
-  const { data, error, refetch } = useQuery({ queryKey: queryKeys.configSettings, queryFn: () => api.get<ConfigSettingsResponse>('/settings/config'), staleTime: 60_000 })
+  const read = useQuery({ queryKey: queryKeys.configSettings, queryFn: () => api.get<ConfigSettingsResponse>('/settings/config'), staleTime: 60_000 })
+  const { data, refetch } = read
+  const failure = useReadFailure(read)
   const readOnly = data ? !data.file.writable : false
 
   return (
@@ -41,10 +44,13 @@ export function SettingsPage() {
                   تنظیمات برنامه، ربات، دیتابیس، ایمیل و ورود به پنل. این مقادیر در فایل <code dir="ltr">config.php</code> برنامه ذخیره می‌شوند، نه در دیتابیس.
                 </>
               ),
+              // The file's whole path — where the host's File Manager finds it —, wrapped on a phone rather than past its edge.
               actions: data && (
-                <Badge variant="outline" className="h-6 gap-1.5 px-2 font-normal">
+                <Badge variant="outline" className="h-auto min-h-6 max-w-full gap-1.5 px-2 py-0.5 font-normal whitespace-normal">
                   <FileCog aria-hidden />
-                  <code dir="ltr">{data.file.path}</code>
+                  <code dir="ltr" className="min-w-0 break-all">
+                    {data.file.path}
+                  </code>
                   <span aria-hidden>·</span>
                   {data.file.writable ? 'قابل ویرایش' : 'فقط خواندنی'}
                 </Badge>
@@ -58,14 +64,14 @@ export function SettingsPage() {
 
         return (
           <>
-            {reads && error && <ErrorState what="تنظیمات" error={error} onRetry={() => void refetch()} />}
+            {reads && failure.error && <ErrorState what="تنظیمات" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />}
             {readOnly && (
               <Callout tone="danger" icon={CircleAlert}>
                 <span className="font-medium">فایل config.php قابل نوشتن نیست.</span> در File Manager هاست به این فایل و پوشه برنامه اجازه نوشتن بدهید تا تنظیمات از این‌جا ذخیره شوند؛ تا آن موقع
                 می‌توانید خود فایل را همان‌جا ویرایش کنید.
               </Callout>
             )}
-            {reads && !data && !error && <Skeleton className="h-80 w-full rounded-xl" />}
+            {reads && !data && !failure.error && <Skeleton className="h-80 w-full rounded-xl" />}
           </>
         )
       }}

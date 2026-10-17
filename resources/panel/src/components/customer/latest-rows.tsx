@@ -37,6 +37,7 @@ export function useLatestRows<K extends string, R extends { meta: PageMeta } & R
     /** How many the customer has in all. */
     total: result.data?.meta.total,
     isPending: result.isPending,
+    isFetching: result.isFetching,
     error: result.error,
     refetch: () => void result.refetch(),
     /** The card's own key, under the list's. */

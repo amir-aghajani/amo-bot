@@ -15,8 +15,8 @@ use Illuminate\Database\Query\Expression;
 
 /**
  * The subscriptions screen («اشتراک‌ها»: both panels and the website's admin API): a searchable, filterable page of the
- * shop's services as last seen on their panels, each with what its modal may do now (SubscriptionActions::allowed()) and
- * when the shop removes it by itself (ServiceCleanup::removesAt()).
+ * shop's services as last seen on their panels, each with what its modal may do now (SubscriptionActions::allowed(), its
+ * open order read with the page: withOpenOrder()) and when the shop removes it by itself (ServiceCleanup::removesAt()).
  */
 final class SubscriptionDirectory
 {
@@ -60,7 +60,7 @@ final class SubscriptionDirectory
             'used' => new Expression('upload_bytes + download_bytes'),
         ], 'created');
 
-        return Page::fetch($query->with(['user', 'plan', 'server']), $list, $this->present(...), $sort)
+        return Page::fetch(SubscriptionActions::withOpenOrder($query->with(['user', 'plan', 'server'])), $list, $this->present(...), $sort)
             ->with(['expiring' => Subscription::expiringWithin(self::EXPIRING_DAYS)->count(), 'expiring_days' => self::EXPIRING_DAYS]);
     }
 

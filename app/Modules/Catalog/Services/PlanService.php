@@ -30,6 +30,7 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 
 /**
  * Plans as the panels keep them: validation, create/update/duplicate, ordering, deletion (refused once orders or
@@ -134,11 +135,22 @@ final class PlanService
     }
 
     /**
+     * Deleted while no order or service points at it — asked by the statement that deletes it, so one made since the
+     * screen read its counts (an order opened that moment) keeps it, rather than losing its plan to the foreign key.
+     *
      * @throws PlanInUseException once an order or a service points at it (its `counts`, which the screen reads to offer
      *                            no delete): it is switched off instead
      */
     public function delete(Plan $plan): void
     {
+        $deleted = $plan->newModelQuery()->whereKey($plan->id)
+            ->whereNotExists(static fn(QueryBuilder $orders) => $orders->from('orders')->whereColumn('orders.plan_id', 'plans.id'))
+            ->whereNotExists(static fn(QueryBuilder $services) => $services->from('subscriptions')->whereColumn('subscriptions.plan_id', 'plans.id'))
+            ->delete();
+        if ($deleted === 1) {
+            return;
+        }
+
         ['orders' => $orders, 'subscriptions' => $subscriptions] = self::counts([$plan->id])[$plan->id];
         if ($orders > 0 || $subscriptions > 0) {
             throw new PlanInUseException(sprintf(
@@ -147,8 +159,7 @@ final class PlanService
                 Persian::number($subscriptions),
             ));
         }
-
-        $plan->delete();
+        // Deleted meanwhile (another tab).
     }
 
     /**
@@ -424,7 +435,7 @@ final class PlanService
             if ($style === '') {
                 $style = null;
             } elseif (!in_array($style, KeyboardLayout::STYLES, true)) {
-                $errors['button_style'][] = 'رنگ دکمه را از میان آبی، سبز و قرمز انتخاب کنید، یا پیش‌فرض تلگرام.';
+                $errors['button_style'][] = KeyboardLayout::STYLE_REFUSED;
             }
         }
 
@@ -432,7 +443,7 @@ final class PlanService
         if (array_key_exists('button_row', $input)) {
             $row = Input::integerOf($input['button_row']) ?? 0;
             if ($row < 1 || $row > KeyboardLayout::ROW_MOST) {
-                $errors['button_row'][] = 'جای دکمه یک ردیف کامل، دو یا سه دکمه در ردیف است.';
+                $errors['button_row'][] = KeyboardLayout::ROW_REFUSED;
             }
         }
 
@@ -720,7 +731,17 @@ final class PlanService
             $all = Input::truthy($item['all_inbounds'] ?? false);
             $inboundIds = [];
             if (!$all) {
-                $requested = array_values(array_unique(array_map(intval(...), is_array($item['inbound_ids'] ?? null) ? $item['inbound_ids'] : [])));
+                // Each an id as integerOf() reads one: «2abc» or `true` is none, never inbound 2 or 1.
+                $requested = [];
+                foreach (is_array($item['inbound_ids'] ?? null) ? $item['inbound_ids'] : [] as $sent) {
+                    $id = Input::integerOf($sent);
+                    if ($id === null) {
+                        $errors['servers'][] = "«{$server->name}»: شناسه اینباند انتخاب‌شده درست نیست.";
+                        continue 2;
+                    }
+                    $requested[$id] = $id;
+                }
+                $requested = array_values($requested);
                 if ($requested === []) {
                     $errors['servers'][] = "برای «{$server->name}» یا کل سرور را انتخاب کنید یا دست‌کم یک اینباند.";
                     continue;

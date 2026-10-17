@@ -25,6 +25,14 @@ final class Principal
         public readonly Bot $shop,
         /** A shop's admin's customer account; null on a panel. */
         public readonly ?User $customer = null,
+        /**
+         * What a shop's admin may do on this request beyond the daily work (StaffGrant values): the website's grants while
+         * the session's sign-in is recent — what a granted operation asks —, none otherwise; null on a panel, which holds
+         * every grant.
+         *
+         * @var list<string>|null
+         */
+        public readonly ?array $grants = null,
     ) {}
 
     /** The principal a guard put on the request. */

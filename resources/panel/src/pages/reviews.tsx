@@ -3,10 +3,11 @@ import { useMutation } from '@tanstack/react-query'
 import { Check, Search, Star, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowMenu } from '@/components/list-view'
+import { ListView, PhoneFacts, RowMenu } from '@/components/list-view'
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
+import { Rating } from '@/components/rating'
 import { Reviewer } from '@/components/reviewer'
 import { SearchBox } from '@/components/search-box'
 import { RemoveConfirm } from '@/components/sortable-list'
@@ -18,11 +19,10 @@ import { UserLabel, userPage } from '@/components/user-identity'
 import { api, stateChanged } from '@/lib/api'
 import type { ReviewRow, ReviewsResponse, ReviewStatus } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
-import { formatDate, formatNumber, timeAgo } from '@/lib/format'
+import { formatDate, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { REVIEW_STATUS } from '@/lib/statuses'
 import { usePagedList } from '@/lib/use-paged-list'
-import { cn } from '@/lib/utils'
 
 /** The tabs after «همه»: the reviews waiting on support first — the queue —, then the ones the website shows, then the rejected. */
 const QUEUE: ReviewStatus[] = ['pending', 'approved', 'rejected']
@@ -101,11 +101,11 @@ export function ReviewsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>شماره</TableHead>
-                <TableHead>نام</TableHead>
-                <TableHead>امتیاز</TableHead>
+                <TableHead className="hidden md:table-cell">شماره</TableHead>
+                <TableHead className="hidden md:table-cell">نام</TableHead>
+                <TableHead className="hidden md:table-cell">امتیاز</TableHead>
                 <TableHead>نظر</TableHead>
-                <TableHead>وضعیت</TableHead>
+                <TableHead className="hidden md:table-cell">وضعیت</TableHead>
                 <TableHead className="hidden sm:table-cell">زمان</TableHead>
                 <TableHead className="w-10">
                   <span className="sr-only">عملیات</span>
@@ -115,16 +115,21 @@ export function ReviewsPage() {
             <TableBody>
               {list.rows.map((review) => (
                 <TableRow key={review.id}>
-                  <TableCell className="text-muted-foreground tabular">
+                  <TableCell className="hidden text-muted-foreground tabular md:table-cell">
                     <span dir="ltr">#{review.id}</span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <Writer review={review} />
                   </TableCell>
-                  <TableCell>
-                    <Stars rating={review.rating} />
+                  <TableCell className="hidden md:table-cell">
+                    <Rating rating={review.rating} />
                   </TableCell>
                   <TableCell className="max-w-md">
+                    {/* On a phone the review is the row: who wrote it, its stars and its state come with its words. */}
+                    <PhoneFacts className="pt-0 pb-1.5">
+                      <Writer review={review} />
+                      <Rating rating={review.rating} />
+                    </PhoneFacts>
                     {/* The writer's words whole — what support decides on —, wrapping in their own measure. */}
                     <p dir="auto" className="min-w-56 wrap-break-word whitespace-pre-line">
                       {review.body}
@@ -134,23 +139,13 @@ export function ReviewsPage() {
                         {review.context}
                       </p>
                     )}
+                    <PhoneFacts>
+                      <span dir="ltr">#{review.id}</span>
+                      <Decision review={review} />
+                    </PhoneFacts>
                   </TableCell>
-                  <TableCell>
-                    {/* The spaces between the lines keep them words apart for assistive tech, not one. */}
-                    <div className="grid justify-items-start gap-1">
-                      <StatusBadge status={REVIEW_STATUS[review.status]} />{' '}
-                      {review.decided_at && (
-                        <span className="text-footnote text-muted-foreground">
-                          {review.reviewer && (
-                            <>
-                              <Reviewer name={review.reviewer} />
-                              {' · '}
-                            </>
-                          )}
-                          {timeAgo(review.decided_at)}
-                        </span>
-                      )}
-                    </div>
+                  <TableCell className="hidden md:table-cell">
+                    <Decision review={review} />
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">
                     <time dateTime={review.created_at} title={formatDate(review.created_at)}>
@@ -198,6 +193,27 @@ export function ReviewsPage() {
   )
 }
 
+/** The review's state, and who decided it when. */
+function Decision({ review }: { review: ReviewRow }) {
+  return (
+    // The spaces between the lines keep them words apart for assistive tech, not one.
+    <div className="grid justify-items-start gap-1">
+      <StatusBadge status={REVIEW_STATUS[review.status]} />{' '}
+      {review.decided_at && (
+        <span className="text-footnote text-muted-foreground">
+          {review.reviewer && (
+            <>
+              <Reviewer name={review.reviewer} person={review.reviewer_name} />
+              {' · '}
+            </>
+          )}
+          {timeAgo(review.decided_at)}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /** The name the review is signed with, and who wrote it: a customer of the shop — their page —, or a guest. */
 function Writer({ review }: { review: ReviewRow }) {
   return (
@@ -213,16 +229,5 @@ function Writer({ review }: { review: ReviewRow }) {
         )}
       </span>
     </div>
-  )
-}
-
-/** The review's stars — as many filled as its rating —, read as «۴ از ۵». */
-function Stars({ rating }: { rating: number }) {
-  return (
-    <span role="img" aria-label={`${formatNumber(rating)} از ${formatNumber(5)}`} className="inline-flex items-center gap-0.5 whitespace-nowrap">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star key={star} aria-hidden className={cn('size-3.5', star <= rating ? 'fill-current text-warning' : 'text-faint')} />
-      ))}
-    </span>
   )
 }

@@ -1,3 +1,5 @@
+[فارسی](fa/Discounts.md)
+
 # Discounts
 
 Four ways a shop takes something off what its customers pay: discount codes («کدهای تخفیف») a customer types at the
@@ -10,31 +12,44 @@ sales are under «تخفیف و جوایز» in either panel; every shop runs it
 What a purchase, a renewal, extra traffic, extra time or extra devices cost a customer is worked out the same way in the
 bot, on the website and for an automatic renewal:
 
-1. **The price** — the plan's price for this customer: its first-purchase price while they have bought nothing, an agent's
-   price for an agent ([plans](Plans.md)); extra traffic, time and devices, the amount's own price.
+1. **The price** — the plan's price for this customer: its first-purchase price while they have bought nothing, its
+   agent price for an agent or a colleague of a «همکار» group, the lowest of those that are theirs ([plans](Plans.md));
+   for extra traffic, time and devices, the amount's own price.
 2. **The automatic discount** — of a sale running on that plan, the customer's own discount and their loyalty tier's
    discount, only the largest is taken. They are never added together.
 3. **The code** — a code the customer typed applies to what step 2 left.
 
-Amounts are whole Toman, rounded down; nothing ever costs less than zero. An order that comes to zero is free — the
-customer takes it with one button («🎁 دریافت رایگان»), nothing to pay.
+Amounts are whole Toman, rounded down; nothing ever costs less than zero. An order that comes to zero is free: the
+customer takes it with one button («🎁 دریافت رایگان»), with nothing to pay.
 
-A wallet top-up and an agent's traffic never take a discount, of any kind.
-
-An automatic renewal («تمدید خودکار») and the renewal's price shown before paying take the automatic discount; a code is
-only ever typed by the customer, at a checkout.
+- A wallet top-up and an agent's traffic never take a discount, of any kind.
+- An automatic renewal («تمدید خودکار») and the renewal's price shown before paying take the automatic discount. A code
+  is only ever typed by the customer, at a checkout.
+- A service the customer builds («سرویس دلخواه» — [Custom services](Custom-Services.md)) has no plan: it has no
+  first-purchase or agent price, only a sale for every plan reaches it, and a code held to some plans never holds for
+  it.
 
 ## Discount codes
 
 ### The list
 
-«کدهای تخفیف» › «کدها» lists the shop's codes, the newest first, each with what it takes off, what it is for, its window,
-how many times it was used and its state: «فعال», «شروع نشده» (its window has not begun), «تمام‌شده» (its window is over),
-«ظرفیت پر» (its uses are all taken) or «غیرفعال» (switched off). The switch on each row turns a code on or off at once.
-The search finds a code by its text or its note.
+«کدهای تخفیف» › «کدها» lists the shop's codes, the newest first. Each row has what the code takes off, what it is for,
+its window, how many times it was used, and its state:
+
+- «فعال»;
+- «شروع نشده» — its window has not begun;
+- «تمام‌شده» — its window is over;
+- «ظرفیت پر» — its uses are all taken;
+- «غیرفعال» — switched off.
+
+The switch on each row turns a code on or off at once. The search finds a code by its text or its note.
 
 A code that was used in an order is never deleted — the order keeps what it was charged and why; switch it off instead.
-One nobody used is deleted from its row's menu.
+Nor is one whose only orders were refunded: it counts no use, but those orders' history names it. For such a code, «حذف»
+in its row's menu asks nothing: it says at once that the code is kept, and offers only «بستن» — «این کد ۳ بار در
+سفارش‌ها استفاده شده و برای سابقه می‌ماند؛ به جای حذف، آن را غیرفعال کنید.», or «این کد فقط در سفارش‌هایی آمده که
+بازپرداخت شده‌اند؛ …». One nobody ordered with — or only with orders cancelled unpaid — is deleted from the same menu,
+after a question.
 
 ### A code's fields
 
@@ -48,9 +63,13 @@ One nobody used is deleted from its row's menu.
   - «رایگان» — the whole amount: the order is free.
 - «برای چه سفارش‌هایی» — every kind of order, or the ones ticked: «خرید», «تمدید», «حجم اضافه», «زمان اضافه»,
   «کاربر اضافه».
-- «شروع» and «پایان» — a day and an hour each, in the shop's time zone (`APP_TIMEZONE`); empty, from now and without end.
-  A code that should end at a given hour of a given day — an "hourly" code — is one whose «پایان» says so: from that
-  moment it is refused.
+- «شروع» and «پایان» — a Jalali day («1405/07/20») and an hour each, in the shop's time zone (`APP_TIMEZONE`); empty,
+  from now and without end. The form says the day back in words as you type it.
+  - A day typed for «پایان» ends at 23:00 of it, unless you pick another hour.
+  - A code that should end at a given hour of a given day — an "hourly" code — is one whose «پایان» says so: from that
+    moment it is refused.
+  - Neither may fall after 17 January 2038 («۲۸ دی ۱۴۱۶»), the last day the shop can keep: a later one is refused («…
+    نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد؛ …»). Leave «پایان» empty for no end.
 - «سقف کل استفاده» — how many orders may be made with it in all; empty, without limit.
 - «سقف استفاده هر مشتری» — how many by one customer; 1 makes it once a customer.
 - «محدودیت‌های بیشتر», folded:
@@ -59,28 +78,38 @@ One nobody used is deleted from its row's menu.
   - «سرورها» — every server, or the ones ticked. A purchase's server is the one the customer picks; a renewal's and an
     extra's is their service's.
   - «حداقل مبلغ سفارش (تومان)» — the least an order must come to, after the automatic discount, for the code to hold.
-  - «فقط برای خرید اول» — only a customer who has never bought a service from the shop.
+  - «فقط برای خرید اول» — only a customer who has never bought a service from the shop, by the rule of the
+    [first-purchase price](Plans.md#first-purchase-price): a purchase refunded since is none. It is asked again as the
+    order is delivered: one paid after another purchase of theirs fails, for you to give its money back, and the
+    customer is told it was no longer their first purchase.
   - «یادداشت» — for the shop alone (a campaign's name); the customer never sees it.
 - «فعال» — a code switched off is refused to everyone.
 
 ### When a code holds
 
-At a checkout a code holds when it is the shop's, switched on, inside its window, for that kind of order, plan and server,
-for a customer who has bought nothing when it asks that, for an order of at least its least, and while it has uses left —
-in all and for that customer. Otherwise the customer is told why, in their own words — «این کد تخفیف برای این پلن نیست.»,
-«مهلت استفاده از این کد تخفیف تمام شده است.», «ظرفیت استفاده از این کد تخفیف تمام شده است.» and so on — and nothing is
-ordered. A code is checked as it is typed and again as the customer pays.
+At a checkout a code holds when:
+
+- it is the shop's, switched on, and inside its window;
+- it is for that kind of order, that plan and that server;
+- the customer has bought nothing, when it asks that;
+- the order comes to at least its least;
+- it has uses left — in all, and for that customer.
+
+Otherwise the customer is told why, in their own words — «این کد تخفیف برای این پلن نیست.», «مهلت استفاده از این کد
+تخفیف تمام شده است.», «ظرفیت استفاده از این کد تخفیف تمام شده است.» and so on —, and nothing is ordered. A code is
+checked as it is typed and again as the customer pays.
 
 A customer may get 20 codes wrong in an hour, in the bot and on the website together; after that every code is refused
 until the hour is over — guessing codes leads nowhere.
 
 ### Uses, and giving them back
 
-A use is an order made with the code that is not cancelled — paid or still to be paid. So a code with one use left is
-taken by the first customer who orders with it: of two paying at the same moment, the other is told it is used up, and
-nothing is ordered for them.
+A use is an order made with the code that is neither cancelled nor refunded — paid or still to be paid. So a code with
+one use left is taken by the first customer who orders with it: of two paying at the same moment, the other is told it
+is used up, and nothing is ordered for them.
 
-An order nobody pays gives its use back: cancelled by support, or dropped as unpaid. An order made with a code is dropped
+An order nobody pays gives its use back: cancelled by support, or dropped as unpaid. So does a refunded one
+([refunds](Orders-And-Payments.md#refunds)): the customer may use the code again. An order made with a code is dropped
 sooner than any other unpaid order — after the hold set on «کدهای تخفیف» › «تنظیمات»:
 
 - «مهلت (دقیقه)» — 0 to 1440, 60 by default. An unpaid order made with a code that nothing happened to for that long,
@@ -91,7 +120,10 @@ sooner than any other unpaid order — after the hold set on «کدهای تخف
 The check runs every ten minutes, so an order may wait up to ten minutes past its hold.
 
 A customer coming back to the same checkout — the same plan, server and price with the same code — gets their own order
-back, not a second one, and is not counted twice against the code.
+back, not a second one, and is not counted twice against the code. A customer whose last use of a code is held by
+another unpaid order of theirs — another plan, another server — is told so, with its number: «این کد تخفیف روی سفارش
+پرداخت‌نشده دیگری از شما ثبت است (سفارش #N)؛ آن سفارش را پرداخت کنید، یا صبر کنید تا مهلت پرداختش تمام شود و کد آزاد
+شود.»
 
 ## Timed sales
 

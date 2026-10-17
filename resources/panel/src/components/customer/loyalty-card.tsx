@@ -1,11 +1,9 @@
+import { FACTS } from '@/components/customer/profile-cards'
 import { Fact, FactList } from '@/components/fact-list'
 import { TextLink } from '@/components/text-link'
 import { Card, CardContent, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import type { LoyaltyStanding } from '@/lib/api-types'
 import { formatMoney, formatPercent } from '@/lib/format'
-
-/** A fact's column, a little narrower than a dialog's: the card sits in the page's side column. */
-const FACTS = 'grid-cols-[minmax(5.5rem,auto)_1fr] gap-x-4 gap-y-2.5'
 
 /** The customer's loyalty tier (its discount and cashback), what they spent, and what is left to the next tier; only while the shop has tiers. */
 export function LoyaltyCard({ loyalty }: { loyalty: LoyaltyStanding }) {

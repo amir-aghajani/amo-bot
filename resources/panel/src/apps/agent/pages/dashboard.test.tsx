@@ -35,7 +35,7 @@ describe('the agent’s terms of selling', () => {
 
     const notice = (await screen.findByText(/فروش ربات شما متوقف است/)).closest('li')
     expect(notice?.textContent).toContain('فروش ربات شما متوقف است: تاریخ نمایندگی گذشته است.')
-    expect(notice?.textContent).toContain('برای تمدید نمایندگی با مدیر فروشگاه اصلی تماس بگیرید.')
+    expect(notice?.textContent).toContain('برای تمدید نمایندگی با پشتیبانی فروشگاه اصلی تماس بگیرید.')
     expect(notice?.textContent).not.toContain('این نماینده')
     expect(screen.queryByRole('link', { name: 'نمایندگان' })).toBeNull()
   })

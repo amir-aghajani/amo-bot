@@ -5,8 +5,8 @@ import { AreaChart, dayTicks, monotonePath, valueTicks, type AreaPoint } from '@
 /*
  * The overview's curve (components/dashboard/area-chart), drawn as plain SVG: the figure axis in five rounded steps from
  * zero — none with nothing above zero —, as many days as fit on the day axis — the last one always —, every label Persian
- * text read right to left in its place, a curve that never swings past a day's figure, and one day's figure under the
- * hand or the keyboard.
+ * text read right to left in its place, a curve that never swings past a day's figure — a single day a dot —, and one
+ * day's figure under the hand or the keyboard, in a box that stays inside the chart, the keyboard's read out.
  */
 
 describe('the figure axis', () => {
@@ -30,6 +30,18 @@ describe('the day axis', () => {
 
     expect(shown.at(-1)).toEqual({ index: 29, x: 882 })
     expect(shown.map((tick) => tick.index)).toEqual([2, 5, 8, 11, 14, 17, 20, 23, 26, 29])
+  })
+
+  it('labels them evenly apart, the step the widest label needs, whatever each one’s width', () => {
+    const xs = Array.from({ length: 30 }, (_, index) => 64 + index * (826 / 29))
+    // Narrow days with a wide one now and then: fitted one by one, they would stand two days apart here, three there.
+    const widths = Array.from({ length: 30 }, (_, index) => (index % 5 === 0 ? 60 : 20))
+
+    const shown = dayTicks(xs, widths, 902).map((tick) => tick.index)
+    const steps = shown.slice(1).map((index, at) => index - shown[at]!)
+
+    expect(shown.at(-1)).toBe(29)
+    expect(new Set(steps)).toEqual(new Set([4]))
   })
 
   it('labels every day that has room', () => {
@@ -82,16 +94,7 @@ describe('the chart', () => {
     vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 600, 240))
   })
 
-  const drawn = () =>
-    render(
-      <AreaChart
-        data={DAYS}
-        label="درآمد"
-        formatTick={(date) => `روز ${date.slice(-2)}`}
-        formatValue={(value) => `${value / 1000}K`}
-        tooltip={(point) => ({ title: `روز ${point.date.slice(-2)}`, body: <span>{point.value} تومان</span> })}
-      />,
-    )
+  const drawn = () => render(<Chart data={DAYS} />)
 
   it('draws the grid with its figures and the days', () => {
     drawn()
@@ -162,22 +165,94 @@ describe('the chart', () => {
     expect(screen.queryByText('120000 تومان')).toBeNull()
   })
 
-  it('walks the days with the keyboard: the first as it arrives, the arrows, Enter to hide', () => {
+  it('walks the days with the keyboard: the first as it arrives, the arrows, Enter to hide — each day read out', () => {
     drawn()
     const chart = screen.getByRole('application', { name: 'درآمد' })
 
     fireEvent.focus(chart)
-    expect(screen.getByText('0 تومان')).toBeTruthy()
+    expect(said()).toBe('روز 01: 0 تومان')
     fireEvent.keyDown(chart, { key: 'ArrowRight' })
     fireEvent.keyDown(chart, { key: 'ArrowRight' })
     fireEvent.keyDown(chart, { key: 'ArrowRight' })
-    expect(screen.getByText('80000 تومان')).toBeTruthy()
+    expect(said()).toBe('روز 03: 80000 تومان')
     fireEvent.keyDown(chart, { key: 'Enter' })
+    expect(said()).toBe('')
     expect(screen.queryByText('80000 تومان')).toBeNull()
     fireEvent.keyDown(chart, { key: 'ArrowLeft' })
-    expect(screen.getByText('120000 تومان')).toBeTruthy()
+    expect(said()).toBe('روز 02: 120000 تومان')
 
     fireEvent.blur(chart)
     expect(screen.queryByText('120000 تومان')).toBeNull()
   })
+
+  it('reads out nothing the hand points at: the box is for the eye', () => {
+    drawn()
+
+    fireEvent.pointerMove(screen.getByRole('application', { name: 'درآمد' }), { clientX: 330, clientY: 100 })
+
+    expect(screen.getByText('120000 تومان')).toBeTruthy()
+    expect(said()).toBe('')
+  })
+
+  it('comes back to the day it was on, after the hand or the focus left', () => {
+    drawn()
+    const chart = screen.getByRole('application', { name: 'درآمد' })
+
+    fireEvent.focus(chart)
+    fireEvent.keyDown(chart, { key: 'ArrowRight' })
+    fireEvent.blur(chart)
+    fireEvent.focus(chart)
+
+    expect(said()).toBe('روز 02: 120000 تومان')
+  })
+
+  it('starts again from an end once a shorter period took the place of the day it was on', () => {
+    const { rerender } = drawn()
+    const chart = screen.getByRole('application', { name: 'درآمد' })
+    fireEvent.focus(chart)
+    fireEvent.keyDown(chart, { key: 'ArrowRight' })
+    fireEvent.keyDown(chart, { key: 'ArrowRight' })
+
+    rerender(<Chart data={DAYS.slice(0, 1)} />)
+    fireEvent.keyDown(screen.getByRole('application', { name: 'درآمد' }), { key: 'ArrowLeft' })
+
+    expect(said()).toBe('روز 01: 0 تومان')
+  })
+
+  it('draws a single day as a dot: there is no curve to draw through it', () => {
+    render(<Chart data={[{ date: '2026-10-01', value: 50_000 }]} />)
+
+    const chart = screen.getByRole('application', { name: 'درآمد' })
+    expect(chart.querySelectorAll('path')).toHaveLength(0)
+    expect(chart.querySelectorAll('circle')).toHaveLength(1)
+  })
+
+  it('keeps the day’s box inside a chart too narrow for it on either side of the day — a phone’s', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 240))
+    vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 240))
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(176)
+    drawn()
+
+    // The middle day of three stands at 176 of 300: the box fits neither after it (to 362) nor before it (from −10).
+    fireEvent.pointerMove(screen.getByRole('application', { name: 'درآمد' }), { clientX: 176, clientY: 100 })
+
+    const box = screen.getByText('120000 تومان').closest('[aria-hidden]') as HTMLElement
+    expect(box.style.transform).toMatch(/^translate\(0px, /)
+  })
 })
+
+/** What the chart reads out of the day the keyboard is on. */
+const said = () => document.querySelector('[aria-live]')?.textContent ?? ''
+
+/** The chart of `data`, its labels as the tests read them. */
+function Chart({ data }: { data: AreaPoint[] }) {
+  return (
+    <AreaChart
+      data={data}
+      label="درآمد"
+      formatTick={(date) => `روز ${date.slice(-2)}`}
+      formatValue={(value) => `${value / 1000}K`}
+      tooltip={(point) => ({ title: `روز ${point.date.slice(-2)}`, body: <span>{point.value} تومان</span> })}
+    />
+  )
+}

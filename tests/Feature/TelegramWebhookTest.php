@@ -8,6 +8,7 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Enums\BotStatus;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Telegram\Controllers\WebhookController;
+use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\Topic;
 use App\Modules\Telegram\Update\AgentWebhookBudget;
 use App\Modules\Telegram\Update\Update;
@@ -76,6 +77,19 @@ final class TelegramWebhookTest extends HttpTestCase
         self::assertSame(['sendMessage', 'sendMessage'], $this->telegram()->calls(), 'the customer answered first, then the newcomer reported');
         self::assertSame((string) self::REPORT_GROUP, $this->telegram()->params(1)['chat_id']);
         self::assertSame((string) $threads[Topic::Users->value], $this->telegram()->params(1)['message_thread_id'], 'in the users topic');
+    }
+
+    /** The queue failing after the update is the log's news, never a 500 that has Telegram post the served update again and again. */
+    public function testAReportQueueThatFailsAfterTheUpdateStillAnswersOk(): void
+    {
+        $this->reportGroup();
+
+        $response = $this->whileListening('eloquent.retrieved: ' . ReportMessage::class, static fn(): never => throw new \RuntimeException('the queue broke'), fn(): ResponseInterface => $this->send('POST', '/webhooks/telegram/' . self::SECRET, self::START));
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame(['sendMessage'], $this->telegram()->calls(), 'the customer was answered');
+        self::assertTrue($this->log->hasErrorThatContains('queue failed after update 1: the queue broke'));
+        self::assertSame(1, ReportMessage::waiting()->count(), 'the newcomer\'s report waits for the next round');
     }
 
     public function testTheWrongSecretInThePathIsRefusedAndLogged(): void

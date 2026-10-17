@@ -45,6 +45,8 @@ describe('the client names', () => {
     expect(screen.getByRole('button', { name: /\{tg_id\}\s*شناسه عددی تلگرام مشتری/ })).toBeTruthy()
     expect(screen.getByRole('switch', { name: 'نام رندوم' }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('switch', { name: 'نام دلخواه' }).getAttribute('aria-checked')).toBe('false')
+    // The bounds of what a buyer types, in Latin digits as typed.
+    expect(screen.getByText(/بین 3 تا 32 کاراکتر از حروف و رقم انگلیسی/)).toBeTruthy()
   })
 
   it('name the sample customer as the pattern is typed: its default while blank, an unknown variable as typed', async () => {

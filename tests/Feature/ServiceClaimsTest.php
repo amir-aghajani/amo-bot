@@ -495,13 +495,13 @@ final class ServiceClaimsTest extends DatabaseTestCase
 
         self::assertSame([
             implode("\n", [
-                "🔗 <b>سرویس با لینک به حساب مشتری اضافه شد</b> · اشتراک #{$first->id}",
-                '👤 <a href="tg://user?id=5151">Ali</a> · @ali · <code>5151</code>',
+                "🔗 <b>سرویس با لینک به حساب مشتری اضافه شد</b> · اشتراک \u{200E}#{$first->id}",
+                '👤 <a href="tg://user?id=5151">Ali</a> · ' . "\u{200E}@ali · <code>5151</code>",
                 '🔖 سرویس: <code>manual&lt;1&gt;&amp;</code>',
                 '📍 لوکیشن: آلمان',
             ]),
             implode("\n", [
-                "🔗 <b>سرویس با لینک به حساب مشتری اضافه شد</b> · اشتراک #{$second->id}",
+                "🔗 <b>سرویس با لینک به حساب مشتری اضافه شد</b> · اشتراک \u{200E}#{$second->id}",
                 '👤 <a href="tg://user?id=7004">Sara</a> · بدون نام کاربری · <code>7004</code>',
                 '🔖 سرویس: <code>manual_2</code>',
                 '📍 لوکیشن: فرانسه',

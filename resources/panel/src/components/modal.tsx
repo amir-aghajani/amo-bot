@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { IconButton } from '@/components/icon-button'
 import { PortalContainerContext, useModalLayer } from '@/components/portal-container'
 import { createListeners } from '@/lib/listeners'
+import { PHONE, useMediaQuery } from '@/lib/use-media-query'
 import { useNativeDialog } from '@/lib/use-native-dialog'
 import { UnsavedScope, useUnsavedScope } from '@/lib/use-unsaved-guard'
 import { cn } from '@/lib/utils'
@@ -14,6 +15,11 @@ interface ModalProps {
   description?: ReactNode
   children: ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
+  /**
+   * Typing is the dialog's whole point (a text to write): its first field takes the focus on a phone too. Otherwise a
+   * phone's dialog opens with the focus on itself, its keyboard down (useNativeDialog).
+   */
+  typing?: boolean
 }
 
 /** The widest each size grows from `md` up; below it (a phone) the dialog is a full-width sheet (.app-modal). */
@@ -25,12 +31,12 @@ const EXIT_MS = 200
 /**
  * Every dialog of the panels, on the native <dialog> (showModal() brings the focus trap, Escape, the inert background
  * and the top layer). A title with its description, a ✕, then content that scrolls under a fixed header; on a phone a
- * sheet rising from the bottom edge. Floating layers opened inside (selects, menus, tooltips) and the toasts portal into
+ * sheet rising from the bottom edge, whose description scrolls with the content. Floating layers opened inside (selects, menus, tooltips) and the toasts portal into
  * the dialog, since the body is inert while it is open. The ✕, Escape and the backdrop ask before dropping unsaved
  * changes of a form inside, and wait while a request inside runs (`useHoldOpen`). While it fades out it keeps showing
  * what it showed, so its owner may let go of the row at once.
  */
-export function Modal({ open, onClose, title, description, children, size = 'md' }: ModalProps) {
+export function Modal({ open, onClose, title, description, children, size = 'md', typing = false }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const [container, setContainer] = useState<HTMLDialogElement | null>(null)
   const { scope, confirmDiscard } = useUnsavedScope()
@@ -39,6 +45,14 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
   const shown = useShown(open, { title, description, children })
   const titleId = useId()
   const descriptionId = useId()
+  // On a phone the head that stays is the title and the ✕ alone: the description (a gateway's, several lines) scrolls
+  // with the body, rather than keep a third of a short screen from it.
+  const phone = useMediaQuery(PHONE)
+  const described = shown?.description && (
+    <p id={descriptionId} className={cn('text-body text-muted-foreground', phone && 'pb-4')}>
+      {shown.description}
+    </p>
+  )
 
   const attach = useCallback((node: HTMLDialogElement | null) => {
     ref.current = node
@@ -48,11 +62,18 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
   const dismiss = () => {
     if (!holds.held()) confirmDiscard(onClose)
   }
-  const handlers = useNativeDialog(ref, open, dismiss)
+  const handlers = useNativeDialog(ref, open, dismiss, { typing })
   useModalLayer(container, open)
 
   return (
-    <dialog ref={attach} aria-labelledby={titleId} aria-describedby={shown?.description ? descriptionId : undefined} {...handlers} className={cn('app-modal text-popover-foreground', SIZES[size])}>
+    <dialog
+      ref={attach}
+      tabIndex={-1}
+      aria-labelledby={titleId}
+      aria-describedby={shown?.description ? descriptionId : undefined}
+      {...handlers}
+      className={cn('app-modal text-popover-foreground outline-none', SIZES[size])}
+    >
       <PortalContainerContext.Provider value={container}>
         <HoldsContext.Provider value={holds}>
           <UnsavedScope value={scope}>
@@ -62,18 +83,18 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
                   <h2 id={titleId} className="text-subtitle font-semibold">
                     {shown?.title}
                   </h2>
-                  {shown?.description && (
-                    <p id={descriptionId} className="text-body text-muted-foreground">
-                      {shown.description}
-                    </p>
-                  )}
+                  {!phone && described}
                 </div>
-                <IconButton onClick={dismiss} disabled={held} aria-label="بستن" className="-me-1.5 -mt-0.5">
+                {/* A finger's 44px on a phone, the icon where it stands. */}
+                <IconButton onClick={dismiss} disabled={held} aria-label="بستن" className="-me-1.5 -mt-0.5 max-md:-me-3 max-md:-mt-2 max-md:size-11">
                   <X className="size-4" aria-hidden />
                 </IconButton>
               </div>
 
-              <div className="min-h-0 flex-1 scrollbar-thin overflow-y-auto px-5 pb-5">{shown?.children}</div>
+              <div className="min-h-0 flex-1 scrollbar-thin overflow-y-auto px-5 pb-5">
+                {phone && described}
+                {shown?.children}
+              </div>
             </div>
           </UnsavedScope>
         </HoldsContext.Provider>

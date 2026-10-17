@@ -94,5 +94,7 @@ describe('the bots’ webhook', () => {
 
     expect((screen.getByRole('button', { name: 'ثبت Webhook' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('link', { name: 'برنامه' }).getAttribute('href')).toBe('/settings/app')
+    // The address has no spaces to wrap at: it breaks anywhere rather than past a phone's edge.
+    expect(screen.getByText('http://shop.example').className).toContain('break-all')
   })
 })

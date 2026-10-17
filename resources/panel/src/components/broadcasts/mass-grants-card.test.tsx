@@ -44,6 +44,7 @@ const GROUP_GIFT: MassGrantRow = {
   failed: 0,
   parts: [{ id: 21, server: { id: 1, name: 'آلمان' }, status: 'running', total: 4, granted: 0, skipped: 0, failed: 0, waiting_reason: null, last_failure: null }],
   reviewer: 'root',
+  reviewer_name: null,
   created_at: '2026-10-01T10:00:00Z',
   finished_at: null,
 }

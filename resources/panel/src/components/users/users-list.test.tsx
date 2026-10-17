@@ -65,6 +65,20 @@ describe('the role’s pill', () => {
   })
 })
 
+describe('the group’s pill', () => {
+  it('stays over a list narrowed to a group deleted since — said so, not «همه» —, and lets it go', async () => {
+    open('/users?group=7', [])
+
+    const pill = await screen.findByRole('combobox', { name: 'گروه گروه حذف‌شده' })
+    expect(server().sent('GET', '/api/admin/users')[0]?.query.get('group')).toBe('7')
+    fireEvent.keyDown(pill, { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('option', { name: 'همه' }))
+
+    await until(() => expect(server().sent('GET', '/api/admin/users').at(-1)?.query.get('group')).toBeNull())
+    expect(screen.queryByRole('combobox', { name: /^گروه / })).toBeNull()
+  })
+})
+
 describe('a list that found nobody', () => {
   it('asks for a shorter search when the search found nobody', async () => {
     open('/users', [])

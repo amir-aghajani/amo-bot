@@ -14,8 +14,8 @@ export function useServer(id: number, created: Probe | null) {
   const queryClient = useQueryClient()
   const query = serverQuery(id)
   const detail = useQuery(query)
-  // The last check's answer belongs to the server it was about: the page stays mounted from one server to another.
-  const [checked, setChecked] = useState<{ id: number; probe: Probe } | null>(created && { id, probe: created })
+  // The last check's answer (the page is drawn afresh for each server: ServerDetailPage keys it by the server's id).
+  const [lastProbe, setLastProbe] = useState<Probe | null>(created)
 
   const write = (change: (current: ServerDetailResponse) => ServerDetailResponse) => queryClient.setQueryData<ServerDetailResponse>(query.queryKey, (current) => current && change(current))
 
@@ -23,7 +23,7 @@ export function useServer(id: number, created: Probe | null) {
     mutationFn: () => api.post(`/servers/${id}/test`),
     meta: { invalidates: [queryKeys.servers] },
     onSuccess: ({ server, inbounds, probe }) => {
-      setChecked({ id, probe })
+      setLastProbe(probe)
       write(() => ({ server, inbounds }))
       if (probe.ok) toast.success('اتصال برقرار است')
       // Why, in the panel's words — the status card shows it all, with its detail.
@@ -55,7 +55,7 @@ export function useServer(id: number, created: Probe | null) {
   /** The connection saved from its card (ServerForm, whose save has the list read again). */
   const saved = (server: ServerRow) => write((current) => ({ ...current, server }))
 
-  return { detail, probe: checked?.id === id ? checked.probe : null, check, sync, sell, remove, saved }
+  return { detail, probe: lastProbe, check, sync, sell, remove, saved }
 }
 
 export type ServerPage = ReturnType<typeof useServer>

@@ -202,6 +202,25 @@ final class ThreeXuiClientTest extends TestCase
         self::assertSame('', $csrf->getHeaderLine('X-CSRF-Token'));
     }
 
+    /** The sign-in's own requests are redirected too (http:// typed for an https panel): the owner is told where to. */
+    public function testASignInRedirectedElsewhereSaysWhereItPoints(): void
+    {
+        foreach ([
+            'the CSRF token' => [new Response(301, ['Location' => 'https://panel.test:2053/abc/csrf-token'], '')],
+            'the login' => [self::ok('csrf-1'), new Response(308, ['Location' => 'https://panel.test:2053/abc/login'], '')],
+        ] as $case => $answers) {
+            $client = $this->client($answers);
+            try {
+                $client->get('/panel/api/server/status');
+                self::fail("{$case}: expected UnexpectedResponseException");
+            } catch (UnexpectedResponseException $e) {
+                self::assertTrue($e->isRedirect(), $case);
+                self::assertStringStartsWith('https://panel.test:2053/abc/', $e->location, $case);
+                self::assertStringContainsString('https', $e->hint, $case);
+            }
+        }
+    }
+
     public function testLoginRefusedByTheCsrfGuardIsReportedAsSuch(): void
     {
         // A proxy that drops cookies leaves the panel unable to match the token: Gin aborts with an empty 403.
@@ -252,6 +271,37 @@ final class ThreeXuiClientTest extends TestCase
             self::fail('expected AuthenticationException');
         } catch (AuthenticationException $e) {
             self::assertSame(AuthenticationFailure::Session, $e->failure);
+        }
+    }
+
+    /**
+     * A write of a session that is gone meets the CSRF guard first — before the session check — and a 403: signed in
+     * again, it goes through; refused again, it is the guard's refusal, not "no access".
+     */
+    public function testAWriteOfAnExpiredSessionRefusedByTheCsrfGuardIsRenewedOnceToo(): void
+    {
+        $client = $this->client([
+            ...self::loginExchange('s1', 'csrf-1'),
+            new Response(403, [], ''), // the session expired: no token kept to match
+            ...self::loginExchange('s2', 'csrf-2'),
+            self::ok(['added' => true]),
+        ]);
+
+        self::assertSame(['added' => true], $client->post('/panel/api/clients/add', ['client' => ['email' => 'a']]));
+        self::assertCount(6, $this->panel->calls());
+        self::assertSame('csrf-2', $this->panel->request(5)->getHeaderLine('X-CSRF-Token'), 'the new session\'s token');
+
+        $client = $this->client([
+            ...self::loginExchange('s1', 'csrf-1'),
+            new Response(403, [], ''),
+            ...self::loginExchange('s2', 'csrf-2'),
+            new Response(403, [], ''),
+        ]);
+        try {
+            $client->post('/panel/api/clients/add', ['client' => ['email' => 'a']]);
+            self::fail('expected AuthenticationException');
+        } catch (AuthenticationException $e) {
+            self::assertSame(AuthenticationFailure::Csrf, $e->failure);
         }
     }
 

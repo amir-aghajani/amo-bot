@@ -6,6 +6,7 @@ namespace App\Modules\Support\Services;
 
 use App\Core\Database\ChangeFeed;
 use App\Core\Database\Transitions;
+use App\Core\Exceptions\KeyReusedException;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Security\RateLimiter;
@@ -86,7 +87,6 @@ final class Tickets
     private const SUBJECT_SHORT = 'موضوع حداقل ' . self::SUBJECT_MIN . ' کاراکتر است.';
     private const BODY_MISSING = 'متن پیام را بنویسید.';
     private const NO_SUCH_SERVICE = 'این سرویس پیدا نشد.';
-    private const RATING_RANGE = 'امتیاز باید عددی بین 1 تا 5 باشد.';
 
     /** What reopening a ticket clears: its end, and the rating the customer gave it then. */
     private const REOPENED = ['closed_at' => null, 'rating' => null, 'rating_note' => null];
@@ -182,26 +182,31 @@ final class Tickets
     /**
      * Support answers — from a panel, the website's admin API or the report group; the message's channel follows the
      * actor (TicketChannel::of()). The ticket becomes answered and unread by the customer (a closed one opens again so).
-     * The customer is notified on every channel; the report group hears an answer written elsewhere.
+     * The customer is notified on every channel; the report group hears an answer written elsewhere. Under the request's
+     * Idempotency-Key `$key` (a panel's or the website's admin API's, when it sends one), the same answer again — the
+     * same words, the same picture by its name — finds the one the key wrote: nothing written, nobody told again.
      *
      * @param array<string, mixed> $input `body`
      * @throws ValidationException 422 on `body` or `file`, or on `status`: the ticket holds MESSAGES_MAX
+     * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another answer
      * @throws StorageFullException 503: an upload the host's disk has no room for
      */
-    public function answer(Ticket $ticket, Actor $actor, array $input, UploadedFileInterface|Attachment|null $picture): Ticket
+    public function answer(Ticket $ticket, Actor $actor, array $input, UploadedFileInterface|Attachment|null $picture, ?string $key = null): Ticket
     {
         $errors = [];
         $body = self::body($input, $errors);
         $attachment = $this->attachment($picture, $errors);
         ValidationException::ifAny($errors);
-        self::assertNotFull($ticket);
         $channel = TicketChannel::of($actor);
 
         $message = null;
-        $this->writing(function (?string &$kept) use ($ticket, $body, $attachment, $actor, $channel, &$message): Ticket {
+        $this->writing(function (?string &$kept) use ($ticket, $body, $attachment, $actor, $channel, $key, &$message): Ticket {
             $this->lock($ticket);
+            if ($key !== null && self::answeredBy($ticket, $key, $body, $attachment)) {
+                return $ticket;
+            }
             self::assertNotFull($ticket);
-            $message = $this->message($ticket, TicketAuthor::Support, $actor->name(), $body, $attachment, $channel, $kept);
+            $message = $this->message($ticket, TicketAuthor::Support, $actor->name(), $body, $attachment, $channel, $kept, $key);
             $answered = ['last_message_at' => now(), 'customer_unread' => true];
             if ($ticket->status === TicketStatus::Answered) {
                 $ticket->forceFill($answered)->save();
@@ -214,8 +219,11 @@ final class Tickets
 
             return $ticket;
         });
+        if ($message === null) {
+            return $ticket;
+        }
         $this->logger->info('Ticket {id} answered by {reviewer} ({channel})', ['id' => $ticket->id, 'reviewer' => $actor->reviewer, 'channel' => $channel->value]);
-        $this->notifier->ticketAnswered($ticket, $message ?? throw new \LogicException('The answer was not written.'));
+        $this->notifier->ticketAnswered($ticket, $message);
 
         return $ticket;
     }
@@ -271,9 +279,9 @@ final class Tickets
     public function rate(Ticket $ticket, array $input): Ticket
     {
         $errors = [];
-        $rating = Input::integerOf($input['rating'] ?? null);
-        if ($rating === null || $rating < 1 || $rating > 5) {
-            $errors['rating'] = [self::RATING_RANGE];
+        $rating = Validation::rating($input['rating'] ?? null);
+        if ($rating === null) {
+            $errors['rating'] = [Validation::RATING_RANGE];
         }
         $note = null;
         try {
@@ -346,6 +354,22 @@ final class Tickets
         $ticket->setRawAttributes($held->getAttributes(), sync: true);
     }
 
+    /**
+     * Whether the ticket holds the answer the request's key wrote (read under the ticket's lock): the same words and the
+     * same picture (by its name, or none) — the request again.
+     *
+     * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another answer
+     */
+    private static function answeredBy(Ticket $ticket, string $key, string $body, ?Attachment $attachment): bool
+    {
+        $earlier = TicketMessage::query()->where('ticket_id', $ticket->id)->where('request_key', $key)->lockForUpdate()->first();
+        if ($earlier === null) {
+            return false;
+        }
+
+        return $earlier->body === $body && $earlier->attachment_name === $attachment?->name ? true : throw new KeyReusedException();
+    }
+
     /** @throws ValidationException 422 on `status`: the ticket holds MESSAGES_MAX messages */
     private static function assertNotFull(Ticket $ticket): void
     {
@@ -366,7 +390,7 @@ final class Tickets
         return sprintf(self::PICTURES_FULL, Persian::digits((string) self::PICTURES_MAX));
     }
 
-    private function message(Ticket $ticket, TicketAuthor $author, ?string $reviewer, string $body, ?Attachment $attachment, TicketChannel $channel, ?string &$kept): TicketMessage
+    private function message(Ticket $ticket, TicketAuthor $author, ?string $reviewer, string $body, ?Attachment $attachment, TicketChannel $channel, ?string &$kept, ?string $key = null): TicketMessage
     {
         $picture = $this->attachments->keep($ticket, $attachment);
         $kept = $picture['attachment_path'] ?? null;
@@ -377,6 +401,7 @@ final class Tickets
             'reviewer' => $reviewer,
             'body' => $body,
             'channel' => $channel,
+            'request_key' => $key,
         ] + $picture);
     }
 

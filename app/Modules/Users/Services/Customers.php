@@ -12,6 +12,7 @@ use App\Modules\Referrals\Services\ReferralService;
 use App\Modules\Telegram\Reports\ShopReports;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
+use App\Support\Text;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 
@@ -39,8 +40,8 @@ final class Customers
     ) {}
 
     /**
-     * A Telegram profile as the shop keeps it: the handle without "@", and the names (one made only of invisible format
-     * characters is none).
+     * A Telegram profile as the shop keeps it: the handle without "@", and the names (one that shows nothing — spaces of
+     * any kind, zero-width or filler characters alone: Text::blank() — is none).
      *
      * @return array{username: string|null, first_name: string|null, last_name: string|null}
      */
@@ -181,8 +182,6 @@ final class Customers
             return null;
         }
 
-        $visible = trim((string) preg_replace('/\p{Cf}/u', '', $value));
-
-        return $visible === '' ? null : mb_substr(trim($value), 0, self::NAME_MAX);
+        return Text::blank($value) ? null : mb_substr(trim($value), 0, self::NAME_MAX);
     }
 }

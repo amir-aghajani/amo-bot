@@ -75,7 +75,7 @@ final class PanelConnectionTest extends TestCase
         self::assertSame([false, 60, 'https://sub.example.com/sub'], [$kept->verifyTls, $kept->timeout, $kept->subscriptionUrl]);
 
         self::assertSame(['https://panel.example.com/AbCdEf', ''], PanelConnection::addresses(new Server(['base_url' => 'https://panel.example.com/AbCdEf/'])), 'the address and the prefix alone');
-        self::assertSame(['https://panel.example.com', 'https://sub.example.com/sub'], PanelConnection::addresses(new Server(['base_url' => 'https://panel.example.com', 'meta' => ['subscription_url' => 'https://sub.example.com/sub']])));
+        self::assertSame(['https://panel.example.com', 'https://sub.example.com/sub'], PanelConnection::addresses(new Server(['base_url' => 'https://panel.example.com', 'meta' => ['subscription_url' => 'https://sub.example.com/sub/']])), 'both without a trailing slash, so a link never reads «//»');
     }
 
     public function testASecretGoesWithTheSameSchemeHostAndPort(): void
@@ -107,7 +107,7 @@ final class PanelConnectionTest extends TestCase
         }
         self::assertStringContainsString('بدون socks5://', self::errors(['proxy_host' => 'socks5://proxy.example.com'] + $proxy)['proxy_host'][0], 'what to leave out, said');
 
-        foreach (['Proxy.Example.COM' => 'proxy.example.com', '203.0.113.10' => '203.0.113.10', '[2001:DB8::1]' => '2001:db8::1', ' localhost ' => 'localhost'] as $typed => $kept) {
+        foreach (['Proxy.Example.COM' => 'proxy.example.com', '203.0.113.10' => '203.0.113.10', '۲۰۳٫۰٫۱۱۳٫۱۰' => '203.0.113.10', '[2001:DB8::1]' => '2001:db8::1', ' localhost ' => 'localhost'] as $typed => $kept) {
             self::assertSame($kept, self::check(['proxy_host' => $typed] + $proxy)['proxy_host'], $typed);
         }
 

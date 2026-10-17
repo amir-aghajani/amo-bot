@@ -24,8 +24,9 @@ use Psr\Log\LoggerInterface;
  *
  * Refused before anything changes (refusal()): an account with itself, either banned, a different way in of one kind on
  * each, two agents. One transaction, both rows locked in id order and judged again as they are then; recorded in
- * `account_merges` and logged. After it, each service whose client on its panel names its owner otherwise than the
- * survivor now is relabelled (relabel()).
+ * `account_merges` and logged. A «همکار» group never comes into an admin's or an agent's account by it
+ * (leaveAgentGroups()). After it, each service whose client on its panel names its owner otherwise than the survivor now
+ * is relabelled (relabel()).
  */
 final class AccountMerger
 {
@@ -127,7 +128,7 @@ final class AccountMerger
         }
         [$keep, $go] = self::older($a, $b) === $a ? [$a->id, $b->id] : [$b->id, $a->id];
 
-        [$survivor, $merge, $labels] = $this->db->transaction(function () use ($keep, $go, $actor): array {
+        [$survivor, $merge, $labels, $left] = $this->db->transaction(function () use ($keep, $go, $actor): array {
             $locked = User::query()->whereKey([$keep, $go])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $survivor = $locked->get($keep) ?? throw AccountRefusedException::offerGone();
             $merged = $locked->get($go) ?? throw AccountRefusedException::offerGone();
@@ -136,6 +137,7 @@ final class AccountMerger
                 throw $refusal;
             }
             $labels = $this->labels($survivor, $merged);
+            $left = $this->leaveAgentGroups($survivor, $merged);
 
             $moved = [];
             foreach (self::REFERENCES as $reference => $rule) {
@@ -171,10 +173,10 @@ final class AccountMerger
                 'actor' => $actor,
             ]);
 
-            return [User::query()->findOrFail($survivor->id), $merge, $labels];
+            return [User::query()->findOrFail($survivor->id), $merge, $labels, $left];
         });
 
-        $this->logger->info('Customer #{merged} was merged into customer #{survivor} by {actor}', ['merged' => $merge->merged_user_id, 'survivor' => $survivor->id, 'actor' => $actor, 'moved' => $merge->moved]);
+        $this->logger->info('Customer #{merged} was merged into customer #{survivor} by {actor}', ['merged' => $merge->merged_user_id, 'survivor' => $survivor->id, 'actor' => $actor, 'moved' => $merge->moved, 'agent_groups_left' => $left]);
         $this->relabel($survivor, $labels);
 
         return $survivor;
@@ -241,10 +243,14 @@ final class AccountMerger
         if ($survivor->referral_code === null && $merged->referral_code !== null) {
             $fill += $take('referral_code');
         }
-        // Who brought them: never the account they are now, nor the one that is gone.
-        $referrer = $survivor->referred_by === $merged->id ? null : $survivor->referred_by;
-        if ($referrer === null && $merged->referred_by !== null && $merged->referred_by !== $survivor->id) {
-            $referrer = $merged->referred_by;
+        // Who brought them — their own, else the merged account's: never the account they are now, nor the one that is
+        // gone, nor one they brought themselves down a chain of referrals (who would then be brought by whom they brought).
+        $referrer = null;
+        foreach ([$survivor->referred_by, $merged->referred_by] as $candidate) {
+            if ($candidate !== null && $candidate !== $survivor->id && $candidate !== $merged->id && !$this->broughtBy($candidate, $survivor->id)) {
+                $referrer = $candidate;
+                break;
+            }
         }
         if ($referrer !== $survivor->referred_by) {
             $fill['referred_by'] = $referrer;
@@ -268,6 +274,52 @@ final class AccountMerger
             $this->db->table('users')->where('id', $survivor->id)->update($fill + ['updated_at' => now()]);
         }
         $this->db->table('users')->where('id', $merged->id)->delete();
+    }
+
+    /**
+     * Whether `$customer` is up `$referrer`'s chain of referrers (the merged account's customers already the survivor's):
+     * `$referrer` was brought, at some remove, by them.
+     */
+    private function broughtBy(int $referrer, int $customer): bool
+    {
+        $seen = [];
+        for ($at = $referrer; !isset($seen[$at]); $at = (int) $next) {
+            if ($at === $customer) {
+                return true;
+            }
+            $seen[$at] = true;
+            $next = $this->db->table('users')->where('id', $at)->value('referred_by');
+            if ($next === null) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A «همکار» group sets its customers' prices, so a merge never brings one into a shop admin's or an agent's account —
+     * the way around the website's guard (UserActions::assignGroups()): an admin's other account put in one, then merged
+     * with theirs. While one side is an admin or an agent and the other neither, the other side's «همکار» memberships go
+     * before the groups are joined (the plain groups join as ever); the admin's or agent's own, the panel's to give, stay.
+     * Answers how many went.
+     */
+    private function leaveAgentGroups(User $survivor, User $merged): int
+    {
+        $privileged = static fn(User $user): bool => $user->isAdmin() || self::isAgent($user);
+        $plain = match (true) {
+            $privileged($survivor) && !$privileged($merged) => $merged,
+            $privileged($merged) && !$privileged($survivor) => $survivor,
+            default => null,
+        };
+        if ($plain === null) {
+            return 0;
+        }
+
+        return $this->db->table('customer_group_user')
+            ->where('user_id', $plain->id)
+            ->whereIn('customer_group_id', $this->db->table('customer_groups')->where('agent_pricing', true)->select('id'))
+            ->delete();
     }
 
     /** Move a table keyed by the customer and `$key`: the merged account's rows for keys the survivor has already go, the rest move. */

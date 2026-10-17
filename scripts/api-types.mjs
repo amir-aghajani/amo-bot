@@ -11,7 +11,8 @@
  *
  * The schemas use a small part of OpenAPI 3.0 — objects, arrays, enums, $ref, allOf, oneOf, nullable,
  * additionalProperties, and a binary string (an uploaded file: a Blob) — and this covers exactly that; anything else
- * fails loudly rather than turning into a wrong type. A write taken as JSON or as a form (a message with its picture)
+ * fails loudly rather than turning into a wrong type. What only narrows a value — bounds, a pattern, a format, `not` —
+ * changes no type, and is the validators' to hold. A write taken as JSON or as a form (a message with its picture)
  * takes either body.
  */
 import fs from 'node:fs'
@@ -58,9 +59,9 @@ const APIS = [
 const WRITES = ['post', 'put', 'patch', 'delete']
 
 /** A doc comment for a description, on one line when it fits on one. */
-function comment(description, indent) {
-  if (!description) return ''
-  const text = String(description).trim().replaceAll('*/', '*\\/')
+function comment(words, indent) {
+  if (!words) return ''
+  const text = String(words).trim().replaceAll('*/', '*\\/')
   const lines = text.split('\n')
   if (lines.length === 1) return `${indent}/** ${text} */\n`
   return `${indent}/**\n${lines.map((line) => `${indent} * ${line}`.trimEnd()).join('\n')}\n${indent} */\n`
@@ -180,15 +181,15 @@ function answerOf(operation, where) {
 function writesOf(api, claimed) {
   const members = []
   const addresses = new Set()
-  for (const [path, item] of Object.entries(description.paths)) {
-    const prefix = api.prefixes.find((candidate) => path === candidate || path.startsWith(`${candidate}/`))
+  for (const [route, item] of Object.entries(description.paths)) {
+    const prefix = api.prefixes.find((candidate) => route === candidate || route.startsWith(`${candidate}/`))
     if (prefix === undefined) continue
     for (const method of WRITES) {
       const operation = item[method]
       if (!operation) continue
-      const where = `${method.toUpperCase()} ${path}`
+      const where = `${method.toUpperCase()} ${route}`
       const parameters = [...(item.parameters ?? []), ...(operation.parameters ?? [])].map(resolved)
-      const relative = path.slice(prefix.length)
+      const relative = route.slice(prefix.length)
       const holes = relative.replace(/\{(\w+)\}/g, (_, name) => {
         const parameter = parameters.find((candidate) => candidate.in === 'path' && candidate.name === name)
         if (!parameter) throw new Error(`${where}: {${name}} is not described`)
@@ -197,7 +198,7 @@ function writesOf(api, claimed) {
       const address = holes === relative ? `'${relative}'` : `\`${holes}\``
       if (addresses.has(`${method} ${address}`)) throw new Error(`${where}: another write of ${api.type} is at the same address`)
       addresses.add(`${method} ${address}`)
-      claimed.add(`${method} ${path}`)
+      claimed.add(`${method} ${route}`)
       members.push(`${comment(operation.summary, '  ')}  | { method: '${method.toUpperCase()}'; path: ${address}; body: ${bodyOf(method, operation, where)}; answer: ${answerOf(operation, where)} }`)
     }
   }
@@ -221,10 +222,10 @@ const claimed = new Set()
 for (const api of APIS) {
   code += `\n${comment(api.description, '')}export type ${api.type} =\n${writesOf(api, claimed).join('\n')}\n`
 }
-for (const [path, item] of Object.entries(description.paths)) {
+for (const [route, item] of Object.entries(description.paths)) {
   for (const method of WRITES) {
-    if (item[method] && !claimed.has(`${method} ${path}`)) {
-      throw new Error(`${method.toUpperCase()} ${path}: a write under none of the APIs (APIS in scripts/api-types.mjs)`)
+    if (item[method] && !claimed.has(`${method} ${route}`)) {
+      throw new Error(`${method.toUpperCase()} ${route}: a write under none of the APIs (APIS in scripts/api-types.mjs)`)
     }
   }
 }

@@ -194,6 +194,17 @@ final class Files
     }
 
     /**
+     * Whether this script may call OPcache's API (opcache_invalidate(), opcache_reset()): a host may keep it to some
+     * scripts (opcache.restrict_api), and a call from any other only warns.
+     */
+    public static function mayUseOpcache(): bool
+    {
+        $restricted = (string) ini_get('opcache.restrict_api');
+
+        return $restricted === '' || str_starts_with((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''), $restricted);
+    }
+
+    /**
      * The bytes free on the disk the path (or its nearest existing parent) is on; null when the host does not say
      * (disk_free_space() disabled, a path outside open_basedir).
      */

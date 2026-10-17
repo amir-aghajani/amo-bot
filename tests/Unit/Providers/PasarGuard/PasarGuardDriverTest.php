@@ -7,6 +7,7 @@ namespace Tests\Unit\Providers\PasarGuard;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Forms\Fields\Field;
 use App\Modules\Providers\Drivers\PasarGuard\PasarGuardDriver;
+use App\Modules\Providers\Support\PanelConnection;
 use Tests\TestCase;
 
 /**
@@ -111,9 +112,14 @@ final class PasarGuardDriverTest extends TestCase
         foreach (['https://evil.example', 'https://pg.example:8443', 'http://pg.example'] as $url) {
             $errors = self::errors(['base_url' => $url, 'auth_mode' => 'token'] + self::OPTIONS, $keyed);
             self::assertSame(['api_token'], array_keys($errors), $url);
-            self::assertStringContainsString('آدرس پنل عوض شده است', $errors['api_token'][0]);
+            self::assertSame(PanelConnection::MOVED . 'کلید API را دوباره وارد کنید.', $errors['api_token'][0]);
         }
         self::assertSame(['password'], array_keys(self::errors(['base_url' => 'https://evil.example', 'auth_mode' => 'password', 'username' => 'admin'] + self::OPTIONS, $admin)));
+
+        // Nor another way to the same panel: a proxy switched on, the TLS certificate no longer checked.
+        $proxied = ['proxy_enabled' => true, 'proxy_host' => 'proxy.example.com', 'proxy_port' => 1080];
+        self::assertSame(['api_token'], array_keys(self::errors($proxied + ['base_url' => 'https://pg.example', 'auth_mode' => 'token'] + self::OPTIONS, $keyed)));
+        self::assertSame(['password'], array_keys(self::errors(['verify_tls' => false, 'base_url' => 'https://pg.example', 'auth_mode' => 'password', 'username' => 'admin'] + self::OPTIONS, $admin)));
     }
 
     /**

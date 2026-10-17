@@ -1,3 +1,5 @@
+[فارسی](fa/Plans.md)
+
 # Plans
 
 «فروشگاه › پلن‌ها» and «فروشگاه › دسته‌بندی‌ها», in both panels: what the shop sells. The bot's «خرید اشتراک» and the
@@ -25,10 +27,11 @@ colleagues) — and the servers it can be bought on. «افزودن پلن» ope
 **«قیمت و سهمیه»**
 
 - «قیمت (تومان)» — the plan's regular price, for every purchase and renewal: whole Toman (`120000`, `۱۲۰٬۰۰۰` and
-  `120,000` are all fine; a fraction is refused). `0` makes the plan free for everyone: its checkout offers one
+  `120,000` are all fine; a fraction is refused). Under each price the form says back what you typed («= ۱۲۰٬۰۰۰ تومان؛
+  قیمت عادی پلن، برای هر خرید و تمدید.»). `0` makes the plan free for everyone: its checkout offers one
   «🎁 دریافت رایگان» instead of the ways to pay, and the service comes at once, nothing taken (the shop's wallet settles
-  it, even while it is switched off). A free first plan for newcomers alone is a first-purchase price of `0` instead;
-  a free test that is no purchase at all — on each server's own terms, by the shop's quota — is a
+  it, even while it is switched off). For a free first plan for newcomers alone, set a first-purchase price of `0`
+  instead. A free test that is no purchase at all — on each server's own terms, by the shop's quota — is a
   [test account](Test-Accounts.md).
 - «قیمت خرید اول (تومان)» — optional, beside it: what a customer who has never bought a service in the shop pays for
   the plan as their first purchase ([below](#first-purchase-price)). Whole Toman, typed as the price is, and less than
@@ -40,7 +43,8 @@ colleagues) — and the servers it can be bought on. «افزودن پلن» ope
   required, since every sale draws it from the agent's pool.
 - «مدت اعتبار» — a number and, beside it, its unit: «روز» for a plan of days, «ساعت» for an hourly one (a one-hour test,
   a six-hour plan); at most 3650 days — 87600 hours —; `0` never ends. The term is kept in hours, so «۱ روز» and
-  «۲۴ ساعت» are the same term: a plan of whole days opens in days, any other in hours.
+  «۲۴ ساعت» are the same term: a plan of whole days opens in days, any other in hours. A purchase or a renewal that
+  would end its service after 17 January 2038 («۲۸ دی ۱۴۱۶») is refused ([Services](Services.md#watch-out-for)).
 - «تعداد کاربر» — how many devices may connect at the same time, 0 to 1000; `0` no limit. PasarGuard panels have no
   such limit, so it is not applied on a PasarGuard server. It is where a service starts, and where every renewal on the
   plan brings it back: extra devices («کاربر اضافه») raise the service's limit for the period they are bought for only
@@ -74,10 +78,11 @@ Less than a day before the end, the bot and the panels give its hour too, and th
 discount, or a free first plan. Every customer sees the plan: a newcomer at this price, everyone else at the plan's
 price.
 
-- **Who gets it** — a customer who has never bought a service in the shop. A purchase of theirs paid at some point,
-  whatever came of it since (delivered, failed, refunded), counts as having bought; an order never paid, or cancelled
-  unpaid, does not, and neither does a wallet top-up. Each shop counts its own customers: a customer of the main bot is
-  a newcomer in an agent's bot.
+- **Who gets it** — a customer who has never bought a service in the shop. A purchase of theirs that was paid and not
+  refunded counts as having bought — delivered, or failed and waiting for support's retry; a free plan too. An order
+  never paid, cancelled unpaid or refunded does not, and neither does a wallet top-up or a service given free (a prize, a
+  reward). So a customer whose only purchase was refunded is a newcomer again. Each shop counts its own customers: a
+  customer of the main bot is a newcomer in an agent's bot.
 - **In the bot** — such a customer is shown the plan at its first-purchase price, with a line under its details,
   «🎁 این قیمت ویژه اولین خرید شماست؛ قیمت عادی این پلن … است.» — a bot text you may reword, or empty to drop it
   ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)) —, and the checkout charges it.
@@ -88,7 +93,8 @@ price.
   nothing is taken.
 - **Two orders at the first-purchase price** made before either was paid — say one by card waiting for its receipt
   while the wallet buys another —: the one paid first is the first purchase, and one paid after another purchase fails,
-  for you to give its money back ([Orders and payments](Orders-And-Payments.md#payments)).
+  for you to give its money back ([refunds](Orders-And-Payments.md#refunds)). The customer is told it was no longer
+  their first purchase. A [first-purchase-only code](Discounts.md#a-codes-fields) is held to the same rule.
 
 The orders screen marks an order made at that price «قیمت خرید اول»: under its amount in the list (and in a customer's
 latest orders, on their page), beside it in the order's dialog.
@@ -147,7 +153,8 @@ puts the limit back as it was ([Orders and payments](Orders-And-Payments.md#refu
 
 ## How a customer buys one
 
-1. The bot lists the plans the shop can deliver now — by category, when there are categories.
+1. The bot lists the plans the shop can deliver now — by category, when there are categories. A list longer than 90
+   buttons — categories, plans, a plan's servers — comes in pages, with «بعدی» and «قبلی» under it.
 2. A plan's details, then its servers by name: the customer picks one. Name servers as customers should see them: the
    server's name is the «لوکیشن» of the delivery message and of the website's catalogue. Each server's button has the
    colour and width its server's form gives it ([Servers](Servers.md)).
@@ -173,7 +180,12 @@ list; press it to read why:
 - it is on no server (a server it was on was deleted);
 - none of its servers can sell now — each server's own reason is on the plan's form and on its badge: switched off,
   never checked yet, not serving subscription links, full, or with no inbound for sale;
-- in an agent's shop: the agent's traffic is less than the plan's.
+- in an agent's shop:
+  - the main shop keeps the plan from sale — marked «پنهان‌شده توسط پشتیبانی» instead, and only the owner shows it
+    again ([Agency](Agency.md#servers-and-plans-kept-from-an-agents-shop));
+  - the main shop keeps its servers from the shop;
+  - the shop's selling is suspended ([Agency](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum));
+  - the agent's traffic is less than the plan's.
 
 It comes back by itself once the cause is gone. A server that cannot sell is shown to the customer for no plan; the
 plan's other servers still sell.
@@ -196,7 +208,8 @@ plan's other servers still sell.
 «تغییر گروهی قیمت», above the list, raises or lowers the prices of the plans you pick at once:
 
 - **The plans** — ticked in a list, all of them at first.
-- **«افزایش» or «کاهش»**, by **«درصد»** (decimals are fine; a decrease is 100% at most) or by **«مبلغ ثابت»** in Toman.
+- **«افزایش» or «کاهش»**, by **«درصد»** (decimals are fine; 1000% at most, a decrease 100% at most) or by
+  **«مبلغ ثابت»** in Toman.
 - **«گرد کردن به»** — each new price rounded to the nearest 100, 1,000 or 10,000 Toman, or not at all.
 - **Which prices** — the plans' prices, their first-purchase prices, their agent prices, any of them. A plan without a
   first-purchase or agent price still has none.
@@ -231,8 +244,9 @@ Deleting a category is always possible: its plans stay, without a category.
 
 - **A plan with history cannot be deleted.** Picking a card at the checkout already makes an order: test with a copy of
   a plan, not with the real one, if you mean to delete it later.
-- **An agent's shop** sees every server of the installation in the form, but only the owner can mark inbounds for sale
-  or fix a server; the agent asks support.
+- **An agent's shop** sees the installation's servers in the form — all but those the main shop keeps from it, which
+  are not offered (one a plan is on already is marked so, and the plan does not sell on it). Only the owner can mark
+  inbounds for sale or fix a server: the agent asks the main shop's support.
 - **A pinned inbound switched off on its panel** makes the plan's form refuse to save: remove that entry and add it
   again.
 - **Changing a price** changes the next renewal of every service sold on the plan — the first-purchase price changes

@@ -120,6 +120,22 @@ final class BotMenuTest extends BotTestCase
         self::assertTrue($log->hasWarningThatContains('not a layout the editor would save'));
     }
 
+    public function testALayoutOfProgramsAllSwitchedOffShowsTheBuiltInMenuInItsForm(): void
+    {
+        // Only the wheel and gift codes, both off: nothing of the admin's layout is shown.
+        $this->service(KeyboardLayouts::class)->save('start', ['type' => 'reply', 'rows' => [[['action' => 'wheel', 'label' => 'گردونه', 'style' => null], ['action' => 'gift', 'label' => 'هدیه', 'style' => null]]]]);
+
+        $this->send($this->message('/start'));
+
+        self::assertSame([[Messages::MENU_BUY], [Messages::MENU_RENEW, Messages::MENU_SERVICES], [Messages::MENU_WALLET, Messages::MENU_TUTORIAL], [Messages::MENU_SUPPORT]], $this->replyKeyboard(0), 'the built-in menu, never an empty keyboard Telegram would refuse');
+        $this->send($this->message(Messages::MENU_SUPPORT));
+        self::assertSame([self::text(BotText::SupportUnavailable)], $this->said(), 'its buttons route');
+
+        $this->inlineStartMenu([[['action' => 'wheel', 'label' => 'گردونه', 'style' => null]]]);
+        $this->send($this->message('/start'));
+        self::assertSame([MainMenu::PLANS, MainMenu::RENEW, MainMenu::SUBSCRIPTIONS, MainMenu::WALLET, MainMenu::TUTORIAL, MainMenu::SUPPORT], $this->callbacks(1), 'as buttons, the form the admin chose');
+    }
+
     public function testALayoutKeptWithAButtonTheBotNoLongerHasReadsWithoutIt(): void
     {
         $log = $this->logs();
@@ -144,7 +160,7 @@ final class BotMenuTest extends BotTestCase
 
         $this->send($this->tap(MainMenu::SUPPORT));
 
-        self::assertSame([self::text(BotText::SupportContact, ['contact' => '@amo_support'])], $this->said());
+        self::assertSame([self::text(BotText::SupportContact, ['contact' => "\u{200E}@amo_support"])], $this->said(), 'a handle after the words, a left-to-right mark before it');
     }
 
     public function testTheTutorialIsTheAdminsWords(): void

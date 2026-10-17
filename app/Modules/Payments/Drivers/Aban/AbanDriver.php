@@ -40,9 +40,10 @@ final class AbanDriver implements GatewayDriver
                     'api_key',
                     '',
                     pattern: '/^ag_(live|test)_[a-z2-9]{48}$/D',
-                    mismatch: 'کلید API آبان گیت وی با ag_live_ (یا ag_test_ برای حالت آزمایشی) شروع می‌شود و بعد از آن ۴۸ حرف و رقم دارد؛ پنل آن را فقط همان لحظه ساخت کامل نشان می‌دهد.',
+                    // The prefixes are wrapped in Unicode isolates (U+2068…U+2069): in a right-to-left line «ag_test_» reads «_ag_test».
+                    mismatch: "کلید API آبان گیت وی با \u{2068}ag_live_\u{2069} (یا \u{2068}ag_test_\u{2069} برای حالت آزمایشی) شروع می‌شود و بعد از آن ۴۸ حرف و رقم دارد؛ پنل آن را فقط همان لحظه ساخت کامل نشان می‌دهد.",
                     missing: 'کلید API آبان گیت وی را وارد کنید.',
-                    spec: new FieldSpec('کلید API', hint: 'کلیدی که پنل آبان گیت وی هنگام ساخت نشان می‌دهد؛ کلید ag_test_ حالت آزمایشی است. فقط فروشگاه آن را دارد و رمزنگاری‌شده نگه داشته می‌شود.', placeholder: 'ag_live_…', ltr: true),
+                    spec: new FieldSpec('کلید API', hint: "کلیدی که پنل آبان گیت وی هنگام ساخت نشان می‌دهد؛ کلید \u{2068}ag_test_\u{2069} حالت آزمایشی است. فقط فروشگاه آن را دارد و رمزنگاری‌شده نگه داشته می‌شود.", placeholder: 'ag_live_…', ltr: true),
                 ),
                 new Toggle(
                     'show_card',
@@ -55,7 +56,7 @@ final class AbanDriver implements GatewayDriver
                 'آدرس سایت فروشگاه باید با https شروع شود و از اینترنت در دسترس باشد: آبان گیت وی نتیجه هر پرداخت را به آن خبر می‌دهد و مشتری را به آن برمی‌گرداند',
                 'کارمزد هر پرداخت هنگام ساخت آن از کیف پول کارمزد حساب آبان گیت وی شما برداشته می‌شود؛ وقتی خالی شود پرداختی باز نمی‌شود',
                 'هر صفحه پرداخت ۳۰ دقیقه مهلت دارد؛ بعد از آن مشتری پرداخت را دوباره شروع می‌کند',
-                'با کلید ag_test_ پولی جابه‌جا نمی‌شود ولی پرداختی که در آبان گیت وی شبیه‌سازی شود سفارش را واقعا تحویل می‌دهد',
+                "با کلید \u{2068}ag_test_\u{2069} پولی جابه‌جا نمی‌شود ولی پرداختی که در آبان گیت وی شبیه‌سازی شود سفارش را واقعا تحویل می‌دهد",
             ],
             traits: [self::KIND => GatewayKind::Online->value, self::BUILTIN => false],
         );
@@ -64,7 +65,7 @@ final class AbanDriver implements GatewayDriver
     /** «حالت آزمایشی» for a test key: no real money moves; none otherwise (the key no screen shows). */
     public function summary(array $settings): ?string
     {
-        return is_string($settings['api_key'] ?? null) && str_starts_with($settings['api_key'], AbanGateway::TEST_PREFIX) ? 'حالت آزمایشی: پولی جابه‌جا نمی‌شود' : null;
+        return is_string($settings['api_key'] ?? null) && str_starts_with($settings['api_key'], AbanGateway::TEST_PREFIX) ? self::TEST_MODE : null;
     }
 
     public function gateway(array $settings): GatewayInterface

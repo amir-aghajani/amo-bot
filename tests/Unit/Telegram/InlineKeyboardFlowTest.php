@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * Buttons laid out by how many share each one's row — a plan list, a plan's locations: consecutive ones of one number
  * fill rows of that many, one of another number starts its own, and a row reads right to left (Telegram lays it out left
- * to right).
+ * to right) — as a grid of so many a row does.
  */
 final class InlineKeyboardFlowTest extends TestCase
 {
@@ -23,6 +23,14 @@ final class InlineKeyboardFlowTest extends TestCase
         self::assertSame([['a'], ['b']], self::flow([['a', 2], ['b', 3]]), 'two of different widths share nothing');
         self::assertSame([['b', 'a'], ['c']], self::flow([['a', 7], ['b', 3], ['c', 0]]), 'held to one to three');
         self::assertSame([], self::flow([]));
+    }
+
+    public function testAGridReadsRightToLeftToo(): void
+    {
+        $buttons = array_map(static fn(string $text): array => InlineKeyboard::callback($text, $text), ['a', 'b', 'c', 'd', 'e']);
+        $rows = InlineKeyboard::make()->grid($buttons, 2)->build()['inline_keyboard'];
+
+        self::assertSame([['b', 'a'], ['d', 'c'], ['e']], array_map(static fn(array $row): array => array_column($row, 'text'), $rows), 'the amounts of a top-up, the first on the right');
     }
 
     /**

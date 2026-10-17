@@ -34,14 +34,24 @@ const SYSTEM = json({
   },
 } satisfies SystemResponse)
 
+const token = () => screen.getByLabelText<HTMLInputElement>('توکن ربات اصلی')
+
 describe('the Telegram card', () => {
   it('is the main bot’s, and says a save reaches it by the main bot’s way, whichever shop is open', async () => {
     server().on('GET', '/api/admin/system', SYSTEM)
     render(<TelegramSection settings={SETTINGS} meta={META} disabled={false} />, { wrapper: providers().wrapper })
 
     expect(screen.getByRole('heading', { name: 'ربات اصلی' })).toBeTruthy()
-    await until(() => expect(screen.getByText(/ربات با bot:poll کار می‌کند/)).toBeTruthy())
+    await until(() => expect(screen.getByText(/ربات با پولینگ کار می‌کند/)).toBeTruthy())
     expect(screen.queryByText(/ربات الان پیامی نمی‌گیرد/)).toBeNull()
+  })
+
+  it('breaks the webhook’s address anywhere — it has no spaces — rather than past a phone’s edge', async () => {
+    server().on('GET', '/api/admin/system', SYSTEM)
+    render(<TelegramSection settings={SETTINGS} meta={META} disabled={false} />, { wrapper: providers().wrapper })
+    await until(() => expect(screen.getByText(/ربات با پولینگ کار می‌کند/)).toBeTruthy())
+
+    expect(screen.getByText(META.webhook_url).className).toContain('break-all')
   })
 
   it('clears the token check’s result when the token is reverted', async () => {
@@ -63,24 +73,28 @@ describe('the Telegram card', () => {
   it('says before the save that the kept token is typed again once the Bot API’s address moves to another origin', async () => {
     server().on('GET', '/api/admin/system', SYSTEM)
     render(<TelegramSection settings={SETTINGS} meta={META} disabled={false} />, { wrapper: providers().wrapper })
-    await until(() => expect(screen.getByText(/ربات با bot:poll کار می‌کند/)).toBeTruthy())
+    await until(() => expect(screen.getByText(/ربات با پولینگ کار می‌کند/)).toBeTruthy())
     const typeAgain = /توکن ربات اصلی را دوباره وارد کنید/
 
     fireEvent.click(screen.getByRole('button', { name: 'تنظیمات پیشرفته' }))
     fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://api.telegram.org/mirror' } })
     expect(screen.queryByText(typeAgain)).toBeNull()
 
+    expect([token().placeholder, token().getAttribute('aria-describedby')]).toEqual(['1234…wxyz', expect.stringContaining('telegram_token-keeps')])
+
     fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://bot-api.example.com' } })
     expect(screen.getByText(typeAgain)).toBeTruthy()
+    // Asked as a moved server secret is: no hint of the kept one, nothing said of keeping it.
+    expect([token().placeholder, token().getAttribute('aria-describedby') ?? '']).toEqual(['', expect.not.stringContaining('telegram_token-keeps')])
 
-    fireEvent.change(screen.getByLabelText('توکن ربات اصلی'), { target: { value: '123456789:AAHnewtokennewtokennewtokennewtoken' } })
+    fireEvent.change(token(), { target: { value: '123456789:AAHnewtokennewtokennewtokennewtoken' } })
     expect(screen.queryByText(typeAgain)).toBeNull()
   })
 
   it('has nothing unsaved once the Bot API’s address is back where it was — the owner’s password typed for the move is none of it', async () => {
     server().on('GET', '/api/admin/system', SYSTEM)
     render(<TelegramSection settings={SETTINGS} meta={META} disabled={false} />, { wrapper: providers().wrapper })
-    await until(() => expect(screen.getByText(/ربات با bot:poll کار می‌کند/)).toBeTruthy())
+    await until(() => expect(screen.getByText(/ربات با پولینگ کار می‌کند/)).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'تنظیمات پیشرفته' }))
 
     fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://bot-api.example.com' } })
@@ -98,7 +112,7 @@ describe('the Telegram card', () => {
       .on('GET', '/api/admin/system', SYSTEM)
       .on('PUT', '/api/admin/settings/config/telegram', refusal(422, wrong, { current_password: [wrong] }))
     render(<TelegramSection settings={SETTINGS} meta={META} disabled={false} />, { wrapper: providers().wrapper })
-    await until(() => expect(screen.getByText(/ربات با bot:poll کار می‌کند/)).toBeTruthy())
+    await until(() => expect(screen.getByText(/ربات با پولینگ کار می‌کند/)).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'تنظیمات پیشرفته' }))
 
     fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://api.telegram.org/mirror' } })

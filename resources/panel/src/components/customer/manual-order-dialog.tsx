@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Ban, PackagePlus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,19 +9,20 @@ import { FormActions } from '@/components/form-footer'
 import { Modal } from '@/components/modal'
 import { MoneyField } from '@/components/money-field'
 import { NoteInput } from '@/components/note-input'
+import { useReadFailure } from '@/components/page'
 import { PageTabs, type PageTab } from '@/components/page-tabs'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { userLabel } from '@/components/user-identity'
-import { api, ApiError } from '@/lib/api'
+import { api } from '@/lib/api'
 import type { ManualOrderRequest, ManualOrderResponse, ManualPayment, PlanRow, UserRow } from '@/lib/api-types'
 import { useMainShop, useSession } from '@/lib/auth'
 import { decimalInput, formatBalance, formatBytes, formatDevices, formatDuration, formatGb, formatMoney, tomanOf, wholeNumberOf } from '@/lib/format'
 import { planOptionsQuery, plansQuery } from '@/lib/queries'
 import { queryKeys } from '@/lib/query-keys'
-import { randomToken } from '@/lib/random'
 import { MANUAL_PAYMENT } from '@/lib/statuses'
-import { useForm } from '@/lib/use-form'
+import { trimmed, useForm } from '@/lib/use-form'
+import { useRequestKey } from '@/lib/use-request-key'
 
 /** What the order gives: one of the shop's plans, or a service of support's own numbers. */
 type Kind = 'plan' | 'custom'
@@ -94,11 +95,11 @@ function ManualOrderForm({ customer, traffic, onClose }: { customer: UserRow; tr
   const plans = useQuery(plansQuery)
   const options = useQuery(planOptionsQuery)
   const { values, patch, error, setErrors, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(BLANK)
-  // One key per order: a retry after no answer finds the order it made; a refusal made none, and the next try is another.
-  const [key, setKey] = useState(() => randomToken(16))
+  const requestKey = useRequestKey()
   // What the kind picked picks from — the plans (their servers with them), or the servers —: a read that failed leaves
   // its pickers empty, so it says so over them, with a retry.
   const choices = values.kind === 'plan' ? { read: plans, what: 'لیست پلن‌ها' } : { read: options, what: 'لیست سرورها' }
+  const choicesFailure = useReadFailure(choices.read, choices.what)
 
   const plan = plans.data?.plans.find((row) => String(row.id) === values.plan_id) ?? null
   const servers: ServerChoice[] =
@@ -123,16 +124,13 @@ function ManualOrderForm({ customer, traffic, onClose }: { customer: UserRow; tr
       setErrors(missing)
       return
     }
-    const result = await submit(
-      () =>
-        api.post(`/users/${customer.id}/orders`, requestOf(values), { idempotencyKey: key }).catch((failure: unknown) => {
-          // A refusal made nothing: the next try is a new order. No answer at all keeps the key, so a retry finds it.
-          if (failure instanceof ApiError && failure.status >= 400 && failure.status < 500) setKey(randomToken(16))
-          throw failure
-        }),
-      { invalidates: CHANGES },
-    )
+    const request = requestOf(values)
+    // Sent again unchanged — after no answer, or a failure —, the order goes under the same key: the server makes it once.
+    // Changed, it is another order, under a new key.
+    const idempotencyKey = requestKey.keyFor([values.kind, ...Object.values(request).map(trimmed)])
+    const result = await submit(() => api.post(`/users/${customer.id}/orders`, request, { idempotencyKey }), { invalidates: CHANGES })
     if (result) {
+      requestKey.done()
       told(result, customer)
       onClose()
     }
@@ -146,7 +144,7 @@ function ManualOrderForm({ customer, traffic, onClose }: { customer: UserRow; tr
         </Callout>
       )}
       <PageTabs as="choice" value={values.kind} onChange={(kind) => patch({ kind, server_id: '' })} tabs={KINDS} aria-label="نوع سرویس" size="sm" className="w-fit" />
-      {choices.read.error && !choices.read.data && <ErrorState what={choices.what} error={choices.read.error} onRetry={() => void choices.read.refetch()} retrying={choices.read.isFetching} />}
+      {choicesFailure.error && !choices.read.data && <ErrorState what={choices.what} error={choicesFailure.error} onRetry={() => void choices.read.refetch()} retrying={choicesFailure.retrying} />}
 
       {values.kind === 'plan' ? (
         <Field id={`${id}-plan`} label="پلن" error={error('plan_id')}>
@@ -237,7 +235,7 @@ function ManualOrderForm({ customer, traffic, onClose }: { customer: UserRow; tr
 
 /** A plan in the picker: its price and package, and that it is switched off or kept from the shop by the owner. */
 function planHint(plan: PlanRow): string {
-  return [formatMoney(plan.price), formatGb(plan.traffic_gb), formatDuration(plan.duration_hours), !plan.is_active && 'خاموش', plan.hidden_by_owner && 'پنهان‌شده توسط مدیر']
+  return [formatMoney(plan.price), formatGb(plan.traffic_gb), formatDuration(plan.duration_hours), !plan.is_active && 'خاموش', plan.hidden_by_owner && 'پنهان‌شده توسط پشتیبانی']
     .filter(Boolean)
     .join(' · ')
 }

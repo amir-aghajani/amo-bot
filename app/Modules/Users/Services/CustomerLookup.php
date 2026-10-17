@@ -15,10 +15,10 @@ use App\Support\Input;
 /**
  * A customer of a shop named by their numeric Telegram id, as another customer — or support — types it, to hand them
  * something: a service («انتقال سرویس», Subscriptions\Services\ServiceTransfers) or money («انتقال موجودی»,
- * WalletTransfers). The id as typed (Persian digits and spaces are fine: Input::telegramIdOf()), a customer of that
- * shop. A customer's lookups are counted, every kind together: LOOKUPS per LOOKUP_WINDOW — a typo or two, never a scan
- * of the shop's customers. Whether the one found may receive what is the caller's to judge. Refusals are 422s under
- * `telegram_id`.
+ * WalletTransfers). The id as typed (Persian digits and spaces around it are fine, one split by a space is no id:
+ * Input::telegramIdOf()), a customer of that shop. A customer's lookups are counted, every kind together: LOOKUPS per
+ * LOOKUP_WINDOW — a typo or two, never a scan of the shop's customers. Whether the one found may receive what is the
+ * caller's to judge. Refusals are 422s under `telegram_id`.
  */
 final class CustomerLookup
 {

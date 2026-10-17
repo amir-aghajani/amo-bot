@@ -24,7 +24,10 @@ use App\Modules\Providers\Exceptions\UnsupportedOperationException;
  * per-inbound config links here.
  *
  * Every method throws a ProviderException (or a subclass) on failure; a missing client is a NotFoundException where a
- * return value cannot say so. Whatever a panel cannot answer is a null on the DTO, or UnsupportedOperationException.
+ * return value cannot say so. Whatever a panel cannot answer is a null on the DTO, or UnsupportedOperationException. A
+ * write that answers with the client as the panel has it afterwards (createClient(), updateClient(),
+ * rotateClientCredentials()) and fails once the panel took it — the read of the client after it — throws a failure
+ * marked so (ProviderException::afterWrite()): the caller asks the panel how it stands.
  */
 interface ProviderInterface
 {
@@ -59,8 +62,9 @@ interface ProviderInterface
     public function servesSubscriptions(): bool;
 
     /**
-     * Create a client attached to the given inbounds — every key at once, so the customer's one link carries them all.
-     * Empty only for a driver without inbounds. Returns the client as the panel has it.
+     * Create a client attached to the given inbounds — every key at once, so the customer's one link carries them all —,
+     * switched on or off as `$spec->enabled` says. Empty only for a driver without inbounds. Returns the client as the
+     * panel has it.
      *
      * @param list<string> $inboundKeys
      * @throws ProviderException
@@ -87,7 +91,7 @@ interface ProviderInterface
     public function rotateClientCredentials(string $name): ClientInfo;
 
     /**
-     * Switch the client off or back on (a client is made switched on, and updated as its spec says).
+     * Switch the client off or back on (a client is made and updated as its spec says).
      *
      * @throws NotFoundException
      * @throws ProviderException

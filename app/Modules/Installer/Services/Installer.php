@@ -129,12 +129,14 @@ final class Installer
     }
 
     /**
-     * Write the lock and delete the key: the installer is gone and the panel signs in from now on.
+     * Write the lock and delete the key: the installer is gone and the panel signs in from now on. A config.php that came
+     * by hand with its database already set gets its APP_KEY here at the latest: no shop is left without one.
      *
      * @throws ValidationException when a step the shop cannot run without is not done
      */
     public function finish(): void
     {
+        $this->prepareConfigFile();
         $status = $this->status();
 
         $errors = [];

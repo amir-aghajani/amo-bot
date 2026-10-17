@@ -62,6 +62,17 @@ describe('what it says', () => {
     expect(within(dialog()).getByText('کاربر اضافه · ۲ کاربر · طلایی · آلمان')).toBeTruthy()
   })
 
+  it('keeps its decisions at the sheet’s foot on a phone, a finger’s size each — a strip opened scrolls with the rest', () => {
+    show(paymentRow())
+    const section = within(dialog()).getByRole('region', { name: 'عملیات' })
+
+    expect(section.className.split(' ')).toEqual(expect.arrayContaining(['max-md:in-[.app-modal]:sticky', 'max-md:in-[.app-modal]:-bottom-5', 'max-md:in-[.app-modal]:bg-popover']))
+    expect(button('تایید و شارژ کیف پول').className).toContain('max-md:h-11')
+
+    fireEvent.click(button('رد کردن'))
+    expect(within(dialog()).getByRole('region', { name: 'عملیات' }).className).not.toContain('sticky')
+  })
+
   it('sets the card apart left to right, the holder’s name as written', () => {
     show(paymentRow())
     const card = within(dialog()).getByText('6037 •••• •••• 1119')
@@ -83,6 +94,29 @@ describe('what it says', () => {
         .getByRole('link', { name: /دانلود رسید/ })
         .getAttribute('href'),
     ).toBe(`${RECEIPT}?shop=1`)
+  })
+
+  it('says of money support took outside the shop that it was, never that a wallet paid it', () => {
+    const outside = paymentRow({
+      status: 'paid',
+      gateway: 'outside',
+      gateway_label: 'خارج از فروشگاه',
+      kind: 'instant',
+      method: 'خارج از فروشگاه',
+      summary: null,
+      receipt: null,
+      order: { ...paymentRow().order, type: 'purchase', status: 'fulfilled' },
+      actions: { ...paymentRow().actions, approve: false, reject: false, cancel: false },
+    })
+    show(outside)
+
+    expect(within(dialog()).getByText('پرداخت خارج از فروشگاه که پشتیبانی ثبت کرده؛ رسیدی در کار نیست')).toBeTruthy()
+    expect(within(dialog()).queryByText(/کیف پول؛/)).toBeNull()
+  })
+
+  it('says of a wallet’s payment that the wallet paid it', () => {
+    show(paymentRow({ status: 'paid', gateway: 'wallet', gateway_label: 'کیف پول', kind: 'instant', method: 'کیف پول', summary: null, receipt: null }))
+    expect(within(dialog()).getByText('پرداخت از کیف پول؛ رسیدی در کار نیست')).toBeTruthy()
   })
 
   it('keeps its status and who decided it two words apart, for assistive tech too', () => {

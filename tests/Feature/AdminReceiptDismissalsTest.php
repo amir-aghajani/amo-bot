@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Payments\Enums\PaymentStatus;
@@ -11,7 +12,6 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Payments\Services\Receipts;
-use App\Modules\Store\Enums\StaffGrant;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Texts\BotText;

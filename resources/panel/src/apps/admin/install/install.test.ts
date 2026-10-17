@@ -1,14 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { forgetKey, hasKey, installApi, keepKey, keyRefusal } from '@/apps/admin/install/install-api'
 import { firstOpen, isDone } from '@/apps/admin/install/steps'
 import { ApiError } from '@/lib/api'
 import type { InstallStatus } from '@/lib/api-types'
+import { STORAGE_KEYS } from '@/lib/storage'
 import { json, server } from '@/test/server'
 
 /*
  * The web installer (apps/admin/install): it opens on the first step the installation still needs, shows which are
- * done, and every request carries the install key the owner typed — the one the host's storage/install-key.txt holds.
+ * done, and every request carries the install key the owner typed — the one the host's storage/install-key.txt holds —,
+ * kept for the tab across a reload, and in the page where the browser keeps nothing.
  */
+
+// The key typed lives in the page as well as in the tab's storage: each test starts without one.
+afterEach(() => forgetKey())
 
 function status(ready: boolean, tables: boolean, admin: boolean): InstallStatus {
   return {
@@ -61,6 +66,30 @@ describe('the install key', () => {
     forgetKey()
 
     expect(hasKey()).toBe(false)
+  })
+
+  it('is kept across a reload of the tab', async () => {
+    server().on('GET', '/api/install', json(status(true, true, true)))
+    sessionStorage.setItem(STORAGE_KEYS.installKey, 'K7QX-M2PA-9DWE-HT3C')
+
+    await installApi.get('')
+
+    expect(server().sent('GET', '/api/install')[0]?.headers['x-install-key']).toBe('K7QX-M2PA-9DWE-HT3C')
+    expect(hasKey()).toBe(true)
+  })
+
+  it('goes with every request where the browser keeps nothing — private mode, blocked site data —, so the shop still installs', async () => {
+    // As a browser blocking site data does: the storage itself is refused.
+    vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() => {
+      throw new DOMException('The operation is insecure.', 'SecurityError')
+    })
+    server().on('GET', '/api/install', json(status(true, true, true)))
+
+    keepKey('K7QX-M2PA-9DWE-HT3C')
+    await installApi.get('')
+
+    expect(server().sent('GET', '/api/install')[0]?.headers['x-install-key']).toBe('K7QX-M2PA-9DWE-HT3C')
+    expect(hasKey()).toBe(true)
   })
 
   it('refused is a 403 on `key` with the server’s message; any other failure is not about the key', () => {

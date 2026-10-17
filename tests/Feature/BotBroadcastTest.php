@@ -7,9 +7,7 @@ namespace Tests\Feature;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Scheduling\Budget;
 use App\Modules\Bots\CurrentBot;
-use App\Modules\Notifications\Services\CustomerChats;
 use App\Modules\Orders\Enums\OrderStatus;
-use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\Pacer;
 use App\Modules\Telegram\Broadcasts\Audience;
 use App\Modules\Telegram\Broadcasts\BroadcastControl;
@@ -18,6 +16,7 @@ use App\Modules\Telegram\Broadcasts\BroadcastMode;
 use App\Modules\Telegram\Broadcasts\BroadcastService;
 use App\Modules\Telegram\Broadcasts\BroadcastStatus;
 use App\Modules\Telegram\Handlers\BroadcastHandler;
+use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\KeyboardLayouts;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Models\Broadcast;
@@ -32,7 +31,6 @@ use App\Modules\Users\Services\CustomerGroups;
 use App\Support\Persian;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
-use Psr\Log\LoggerInterface;
 use Tests\BotTestCase;
 use Tests\Fakes\RecordingSleeper;
 use Tests\Support\FakeTelegram;
@@ -287,6 +285,27 @@ final class BotBroadcastTest extends BotTestCase
         self::assertSame([Messages::BROADCAST_AUDIENCE_ASK], $this->said(), 'the draft waits for another audience');
     }
 
+    public function testTheGroupsToPickArePagedPastOneKeyboardsWorth(): void
+    {
+        $groups = array_map(fn(int $i): CustomerGroup => $this->customerGroup("گروه {$i}"), range(1, Buttons::LIST_PAGE + 1));
+        $this->send($this->message('/broadcast'));
+        $this->send($this->message('ویژه گروه'));
+        $taps = array_map(static fn(CustomerGroup $group): string => self::step('aud', Audience::GROUP, $group->id), $groups);
+        $page = static fn(int $page): string => self::text(BotText::SubscriptionsPage, ['page' => Persian::digits($page), 'pages' => Persian::digits(2)]);
+
+        $this->send($this->tap(self::step('aud', Audience::GROUP)));
+        self::assertSame([Messages::BROADCAST_GROUP_ASK . $page(1)], $this->said());
+        $callbacks = $this->callbacks(0);
+        self::assertSame([...array_slice($taps, 0, Buttons::LIST_PAGE), self::step('aud', Audience::GROUP, 'p', 2), self::step('aud')], $callbacks, "one keyboard's worth, «بعدی», and back to the audiences");
+
+        $this->send($this->tap(self::step('aud', Audience::GROUP, 'p', 2)));
+        self::assertSame([Messages::BROADCAST_GROUP_ASK . $page(2)], $this->said());
+        self::assertSame([$taps[Buttons::LIST_PAGE], self::step('aud', Audience::GROUP), self::step('aud')], $this->callbacks(0), 'the last group, «قبلی» to the first page');
+
+        $this->send($this->tap($taps[Buttons::LIST_PAGE]));
+        self::assertSame([self::card(self::content('text', 'ویژه گروه'), ['audience' => 'گروه «گروه ' . (Buttons::LIST_PAGE + 1) . '»', 'count' => Persian::number(0), 'blocked' => ''])], $this->said(), 'picked from the second page');
+    }
+
     public function testAGroupDeletedBeforeTheSendOrDuringTheRunReachesNobody(): void
     {
         $group = $this->customerGroup('VIP', [$this->ali]);
@@ -503,7 +522,7 @@ final class BotBroadcastTest extends BotTestCase
     public function testEachCallIsPacedAndAKnownBlockerCostsNone(): void
     {
         $sleeper = new RecordingSleeper();
-        $service = new BroadcastService($this->service(BotApi::class), $this->service(CustomerChats::class), new Pacer($sleeper), $this->service(LoggerInterface::class));
+        $service = $this->app()->container()->make(BroadcastService::class, ['pacer' => new Pacer($sleeper)]);
         $run = $service->start($this->boss, ['pin' => true] + $this->draft(5), null);
         $logs = $this->logs();
         $this->telegram()->on('copyMessage', static fn(array $params): mixed => $params['chat_id'] === '1002' ? FakeTelegram::error(403, 'Forbidden: bot was blocked by the user') : ['message_id' => 500]);
@@ -687,16 +706,33 @@ final class BotBroadcastTest extends BotTestCase
     {
         $service = $this->service(BroadcastService::class);
         $broken = $service->start($this->boss, $this->draft(5), null);
-        // Its admin's account is gone: there is no chat to copy the message from.
-        Broadcast::query()->whereKey($broken->id)->update(['user_id' => null]);
         $next = $service->start($this->boss, $this->draft(6), null);
+        $logs = $this->logs();
+        // Something of the shop's own breaks as the first run's message goes.
+        $this->telegram()->on('copyMessage', static fn(array $params): array => $params['message_id'] === '5' ? throw new \RuntimeException('the run broke') : ['message_id' => 900]);
+
+        $this->service(SendBroadcastsTask::class)->run();
+
+        self::assertTrue($logs->hasErrorThatContains('the run broke'));
+        self::assertSame([BroadcastStatus::Sending, null], [$broken->refresh()->status, $broken->lease_token], 'its hold let go: it is looked at again');
+        self::assertSame([BroadcastStatus::Done, 3], [$next->refresh()->status, $next->sent], 'the next run went on');
+    }
+
+    /** A run whose message has no chat to be copied from any more — its admin's account gone — ends: it would never send. */
+    public function testARunWhoseAdminIsGoneEndsInsteadOfSendingForever(): void
+    {
+        $service = $this->service(BroadcastService::class);
+        $orphan = $service->start($this->boss, $this->draft(5), 77);
+        Broadcast::query()->whereKey($orphan->id)->update(['user_id' => null]);
         $logs = $this->logs();
 
         $this->service(SendBroadcastsTask::class)->run();
 
-        self::assertTrue($logs->hasErrorThatContains('failed'));
-        self::assertSame([BroadcastStatus::Sending, null], [$broken->refresh()->status, $broken->lease_token], 'its hold let go: it is looked at again, and logged again');
-        self::assertSame([BroadcastStatus::Done, 3], [$next->refresh()->status, $next->sent], 'the next run went on');
+        self::assertSame([BroadcastStatus::Cancelled, null], [$orphan->refresh()->status, $orphan->lease_token]);
+        self::assertNotNull($orphan->finished_at);
+        self::assertSame([], $this->paramsOf('copyMessage'), 'nobody reached');
+        self::assertTrue($logs->hasWarningThatContains('no Telegram chat to send its message from'));
+        self::assertSame(0, Broadcast::sending()->count(), 'nothing left for the next tick to fail on');
     }
 
     /** @return array{message_id: int, mode: BroadcastMode, audience: string, pin: bool} A copy of message `$messageId` to everyone, unpinned. */

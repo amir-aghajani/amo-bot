@@ -73,7 +73,7 @@ final class Reauthentication
         $errors = [];
         $password = Input::password($input, 'password');
         if ($password === '') {
-            $errors['password'][] = 'رمز عبور حساب را وارد کنید.';
+            $errors['password'][] = EmailSignIn::NO_PASSWORD;
         }
         if ($user->hasTwoFactor() && Input::text($input, 'code') === '') {
             $errors['code'][] = TwoFactor::CODE_MISSING;

@@ -1,3 +1,5 @@
+[فارسی](fa/Custom-Services.md)
+
 # Custom services
 
 A customer builds a service of the traffic and the days they choose, instead of picking a plan. «سرویس دلخواه» sells
@@ -48,8 +50,9 @@ servers holds on those servers). A first-purchase price or an agent price is a p
 
 In «خرید اشتراک» the bot shows «🛠 ساخت سرویس دلخواه» under the plans (or the categories) — even when no plan is on sale:
 
-1. **The GB** — the tiers of a gigabyte, a button per amount offered, or any amount typed («۵۰ گیگ» is fine). One outside
-   the bounds is refused, saying them, and another is awaited.
+1. **The GB** — the tiers of a gigabyte, a button per amount offered, or any amount typed («۵۰ گیگ» and «۲ هزار گیگ» are
+   fine: [amounts typed](Bot-Guide.md#amounts-typed)). One outside the bounds is refused, saying them, and another is
+   awaited.
 2. **The days** — the same, for the days.
 3. **The server** — a button per server, by name; with only one, this step is skipped.
 4. **The checkout** — the GB and its price, the days and theirs, the devices, the server and what is paid, with the
@@ -60,9 +63,9 @@ Paid, it is delivered as any purchase: one client on every inbound the server se
 term from the first connection, with the devices you set. The service has **no plan**: «🌿 نام سرویس» reads «سرویس
 دلخواه». Its extras sell at the shop's prices ([Bot settings](Bot-Settings.md#extra-traffic-time-and-devices)).
 
-Every text of the builder is in the shop group of the bot texts ([Bot texts reference](Bot-Texts-Reference.md)). On the
-shop's website the same is `GET /custom-services` and `POST /custom-services/orders`
-([Store API: buying](Store-API-Buying.md#a-service-the-customer-builds)).
+Every text of the builder is in the shop group of the bot texts, their names starting `custom_`
+([Bot texts reference](Bot-Texts-Reference.md#group-shop)). On the shop's website the same is `GET /custom-services`
+and `POST /custom-services/orders` ([Store API: buying](Store-API-Buying.md#a-service-the-customer-builds)).
 
 ## Renewing a built service
 
@@ -77,9 +80,10 @@ discount code and the ways to pay.
 The price is the builder's tiers, discounted as a renewal of no plan: a sale for renewals of every plan, the customer's
 own percent or tier, and a code not limited to certain plans (one limited to servers holds on the service's own server).
 Paid, the renewal adds the GB and the days by the method picked and gives the builder's devices (as a plan's, from the
-end of the period in use: [Plans](Plans.md#devices-and-renewals)); the service **still has no plan**, so its next renewal is picked again — a plan picked then becomes its
-own — and **«تمدید خودکار» is never offered for it**, in the bot or on the website, until a renewal on a plan gives it
-one. On the website the same is `gb` and `days` in place of `plan_id` ([Store API: buying](Store-API-Buying.md#renewing-with-a-package-built)).
+end of the period in use: [Plans](Plans.md#devices-and-renewals)); the service **still has no plan**, so its next
+renewal is picked again — a plan picked then becomes its own — and **«تمدید خودکار» is never offered for it**, in the
+bot or on the website, until a renewal on a plan gives it one. On the website the same is `gb` and `days` in place of
+`plan_id` ([Store API: buying](Store-API-Buying.md#renewing-with-a-package-built)).
 
 ## In the panels and the report group
 

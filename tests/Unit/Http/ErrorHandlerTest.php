@@ -22,6 +22,7 @@ use Monolog\Handler\TestHandler;
 use Monolog\Logger;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Slim\Exception\HttpMethodNotAllowedException;
 use Slim\Exception\HttpNotFoundException;
 use Slim\Psr7\Factory\ServerRequestFactory;
 use Tests\TestCase;
@@ -122,6 +123,17 @@ final class ErrorHandlerTest extends TestCase
         self::assertSame('120', $response->getHeaderLine('Retry-After'), 'the wait, as a client reads it');
         self::assertSame(['message' => 'کمی صبر کنید.'], $this->decode($response));
         self::assertSame([], $this->log->getRecords(), 'an answer, not a failure');
+    }
+
+    public function testAWrongMethodSaysWhichTheAddressTakes(): void
+    {
+        $request = $this->request();
+        $response = $this->handle((new HttpMethodNotAllowedException($request))->setAllowedMethods(['GET', 'POST']), details: false);
+
+        self::assertSame(405, $response->getStatusCode());
+        self::assertSame('GET, POST', $response->getHeaderLine('Allow'), 'as HTTP asks of a 405');
+        self::assertSame(['message' => ErrorHandler::MESSAGES[405]], $this->decode($response));
+        self::assertSame([], $this->log->getRecords());
     }
 
     public function testAnErrorAnswerNamesTheRequestItAnswers(): void

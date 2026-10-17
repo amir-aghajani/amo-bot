@@ -115,6 +115,16 @@ describe('a server’s connection', () => {
     expect(screen.queryByText('احراز هویت')).toBeNull()
   })
 
+  it('says why the last contact failed: the diagnosis, and under it the panel’s or cURL’s words apart, left to right', async () => {
+    const curl = 'cURL error 7: Failed to connect to de-1.example port 2053: Connection refused'
+    facts(serverRow({ last_error: 'پنل روی این آدرس و پورت پاسخ نمی‌دهد؛ پورت، فایروال و روشن بودن سرور را بررسی کنید.', last_error_detail: curl }))
+
+    const detail = await screen.findByText(curl)
+    expect(detail.tagName).toBe('BDI')
+    expect(detail.getAttribute('dir')).toBe('ltr')
+    expect(screen.getByText(/^پنل روی این آدرس و پورت پاسخ نمی‌دهد/).textContent).not.toContain('cURL')
+  })
+
   it('is not shown while this installation lacks its connector', async () => {
     facts(serverRow({ driver: 'marzban', form: null }))
 

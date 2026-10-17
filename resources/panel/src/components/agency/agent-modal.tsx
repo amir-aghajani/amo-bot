@@ -1,9 +1,9 @@
 import { Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { StandingFacts } from '@/components/agency/agency-standing'
-import { AgencyTermsFields, termsBody, type AgencyTerms } from '@/components/agency/agency-terms-fields'
+import { AgencyTermsFields, termsBody, termsRead, type AgencyTerms } from '@/components/agency/agency-terms-fields'
 import { AgentBotName } from '@/components/agency/agent-bot-name'
-import { sellingTermsChanges, sellingTermsDraft, SellingTermsFields, type SellingTermsDraft } from '@/components/agency/selling-terms-fields'
+import { sellingTermsChanges, sellingTermsDraft, SellingTermsFields, sellingTermsRead, type SellingTermsDraft } from '@/components/agency/selling-terms-fields'
 import { TrafficLedger } from '@/components/agency/traffic-ledger'
 import { Balance } from '@/components/balance'
 import { BalanceAdjust } from '@/components/balance-adjust'
@@ -32,11 +32,15 @@ export function AgentModal({ agent, onClose, onSaved }: { agent: AgentRow | null
 
 function AgentForm({ agent, onClose, onSaved }: { agent: AgentRow; onClose: () => void; onSaved: (agent: AgentRow) => void }) {
   const kept = sellingTermsDraft(agent.standing?.expires_at ?? null, agent.standing?.monthly_minimum ?? null)
-  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<AgencyTerms & SellingTermsDraft>({
-    level_id: String(agent.level.id),
-    credit_limit: amountDraft(agent.credit_limit),
-    ...kept,
-  })
+  // A change is what the server would read otherwise: «۵۰۰٬۰۰۰» is no other credit than 500000.
+  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<AgencyTerms & SellingTermsDraft>(
+    {
+      level_id: String(agent.level.id),
+      credit_limit: amountDraft(agent.credit_limit),
+      ...kept,
+    },
+    { reads: (draft) => ({ ...termsRead(draft), ...sellingTermsRead(draft) }) },
+  )
 
   // Another level moves the agent between the levels' counts. The terms of selling go only as changed — a shop without
   // its row yet (no standing) keeps its own.
@@ -96,7 +100,7 @@ function TrafficBody({ agent, bot, onClose, onSaved }: { agent: AgentRow; bot: A
         notePlaceholders={{ add: 'مثلا: هدیه شروع کار', remove: 'مثلا: اصلاح اشتباه' }}
         submitLabels={{ add: 'افزایش حجم', remove: 'کاهش حجم' }}
         // The API takes the change signed: a negative gb takes away. The answer is the agent; the ledger under it is read again.
-        send={(direction, gb, note) => api.post(`/agency/agents/${agent.id}/traffic`, { gb: direction === 'remove' ? `-${gb}` : gb, note })}
+        send={(direction, gb, note, key) => api.post(`/agency/agents/${agent.id}/traffic`, { gb: direction === 'remove' ? `-${gb}` : gb, note }, { idempotencyKey: key })}
         invalidates={[queryKeys.agentTraffic(agent.id)]}
         onDone={(result, direction) => {
           onSaved(result.agent)

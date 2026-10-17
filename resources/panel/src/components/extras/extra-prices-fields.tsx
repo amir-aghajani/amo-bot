@@ -77,7 +77,7 @@ const KINDS: Record<ExtraKind, KindWords> = {
     about:
       'کاربرهایی که مشتری به تعداد کاربر هم‌زمان سرویسش اضافه می‌کند، تا پایان دوره فعلی سرویس؛ قیمتشان هم برای روزهای مانده تا همان روز حساب می‌شود و تمدید، تعداد کاربر پلن را می‌دهد. سرویسی که تعداد کاربرش نامحدود است، یا روی سروری است که تعداد کاربر را محدود نمی‌کند (PasarGuard)، کاربر اضافه نمی‌خرد.',
     agent: null,
-    unitPrice: `قیمت هر کاربر برای ${EXTRA_OFFER.PERIOD_DAYS} روز`,
+    unitPrice: `قیمت هر کاربر برای ${formatNumber(EXTRA_OFFER.PERIOD_DAYS)} روز`,
     options: 'تعدادهای پیشنهادی',
     option: 'تعداد پیشنهادی',
     unit: 'کاربر',
@@ -87,7 +87,7 @@ const KINDS: Record<ExtraKind, KindWords> = {
     none: 'با این قیمت‌ها کاربر اضافه فروخته نمی‌شود.',
     amount: formatDevices,
     example: '1',
-    charged: `این قیمت‌ها برای ${EXTRA_OFFER.PERIOD_DAYS} روز است؛ هر سرویس به نسبت روزهای مانده‌اش می‌پردازد، مثلا سرویسی که ${EXTRA_OFFER.PERIOD_DAYS / 2} روز مانده دارد نصف آن را.`,
+    charged: `این قیمت‌ها برای ${formatNumber(EXTRA_OFFER.PERIOD_DAYS)} روز است؛ هر سرویس به نسبت روزهای مانده‌اش می‌پردازد، مثلا سرویسی که ${formatNumber(EXTRA_OFFER.PERIOD_DAYS / 2)} روز مانده دارد نصف آن را.`,
   },
 }
 
@@ -98,14 +98,19 @@ interface ExtraPricesFieldsProps<P extends string> {
   form: HostForm<P>
   /** The form's names of the price list's fields: `extra_` (the shop's, in the bot settings) or `extras.` (a plan's own) before each. */
   prefix: P
+  /** Which fields wait as they are kept (the shop's list while extras are switched off: useHeldWhile); none by default. */
+  held?: (field: ExtraField) => boolean
 }
+
+/** No field waits. */
+const NEVER_HELD = () => false
 
 /**
  * The «حجم، زمان و کاربر اضافه» price-list editor, for the shop's list and a plan's own: per extra (traffic, time, devices), the
  * unit price, the amounts offered as buttons, the bounds a customer may type, and a live preview of the bot's buttons.
  * Fields live in the host form under `prefix` + name, the names the server refuses them by.
  */
-export function ExtraPricesFields<P extends string>({ form, prefix }: ExtraPricesFieldsProps<P>) {
+export function ExtraPricesFields<P extends string>({ form, prefix, held = NEVER_HELD }: ExtraPricesFieldsProps<P>) {
   const prices = extraPricesIn(prefix, form.values)
   // A field's change under the form's own name for it — a key made of the prefix, which no type names.
   const change = <K extends ExtraField>(field: K, value: ExtraPricesDraft[K]) => form.patch({ [`${prefix}${field}`]: value } as Partial<ExtraPricesAs<P>>)
@@ -114,9 +119,9 @@ export function ExtraPricesFields<P extends string>({ form, prefix }: ExtraPrice
   return (
     <div className="@container">
       <div className="grid gap-4 @xl:grid-cols-2 @5xl:grid-cols-3">
-        <ExtraBlock kind="traffic" prices={prices} change={change} error={error} />
-        <ExtraBlock kind="time" prices={prices} change={change} error={error} />
-        <ExtraBlock kind="devices" prices={prices} change={change} error={error} />
+        <ExtraBlock kind="traffic" prices={prices} change={change} error={error} held={held} />
+        <ExtraBlock kind="time" prices={prices} change={change} error={error} held={held} />
+        <ExtraBlock kind="devices" prices={prices} change={change} error={error} held={held} />
       </div>
     </div>
   )
@@ -127,10 +132,11 @@ interface ExtraBlockProps {
   prices: ExtraPricesDraft
   change: <K extends ExtraField>(field: K, value: ExtraPricesDraft[K]) => void
   error: (field: ExtraField) => string | undefined
+  held: (field: ExtraField) => boolean
 }
 
 /** One extra's prices: the unit price, the amounts offered, the bounds of what may be typed, and the bot's offer by them. */
-function ExtraBlock({ kind, prices, change, error }: ExtraBlockProps) {
+function ExtraBlock({ kind, prices, change, error, held }: ExtraBlockProps) {
   const id = useId()
   const words = KINDS[kind]
   const agentShop = !useMainShop()
@@ -149,6 +155,7 @@ function ExtraBlock({ kind, prices, change, error }: ExtraBlockProps) {
         onChange={(price) => change(field.price, price)}
         error={error(field.price)}
         hint={`خالی: فقط ${words.options} با قیمت خودشان فروخته می‌شوند و مشتری ${words.typed} نمی‌نویسد.`}
+        disabled={held(field.price)}
       />
 
       <PricedRowsEditor
@@ -171,15 +178,16 @@ function ExtraBlock({ kind, prices, change, error }: ExtraBlockProps) {
         }}
         noun="مقدار"
         most={EXTRA_OPTIONS.MOST}
+        disabled={held(field.options)}
       />
 
       <FieldGroup label={words.typed} hint={priced ? words.typedOn : words.typedOff} className="gap-2">
         <div className="grid grid-cols-2 gap-3">
           <Field id={`${id}-min`} label={`کمترین (${words.unit})`} error={error(field.min)}>
-            <Input dir="ltr" inputMode="numeric" autoComplete="off" value={prices[field.min]} onChange={(e) => change(field.min, e.target.value)} />
+            <Input dir="ltr" inputMode="numeric" autoComplete="off" value={prices[field.min]} onChange={(e) => change(field.min, e.target.value)} disabled={held(field.min)} />
           </Field>
           <Field id={`${id}-max`} label={`بیشترین (${words.unit})`} error={error(field.max)}>
-            <Input dir="ltr" inputMode="numeric" autoComplete="off" value={prices[field.max]} onChange={(e) => change(field.max, e.target.value)} />
+            <Input dir="ltr" inputMode="numeric" autoComplete="off" value={prices[field.max]} onChange={(e) => change(field.max, e.target.value)} disabled={held(field.max)} />
           </Field>
         </div>
       </FieldGroup>

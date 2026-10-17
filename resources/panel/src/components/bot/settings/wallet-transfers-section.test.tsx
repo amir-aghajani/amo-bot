@@ -72,6 +72,25 @@ describe('wallet transfers', () => {
   })
 })
 
+describe('wallet transfers switched off while an amount is edited', () => {
+  it('hold the amounts as they are kept — but one changed stays open, to fix once the server refused it', async () => {
+    const tooLow = 'کمترین مبلغ انتقال باید دست‌کم ۱٬۰۰۰ تومان باشد.'
+    server().on('PUT', PATH, refusal(422, tooLow, { wallet_transfer_min: [tooLow] }))
+    const toggle = await show(botSettingsRow({ wallet_transfer_enabled: true }))
+    const least = screen.getByLabelText<HTMLInputElement>('کمترین مبلغ انتقال (تومان)')
+
+    type('کمترین مبلغ انتقال (تومان)', '500')
+    fireEvent.click(toggle)
+    expect(screen.getByLabelText<HTMLInputElement>('بیشترین مبلغ هر انتقال (تومان)').disabled).toBe(true)
+    expect(least.disabled).toBe(false)
+    save()
+
+    expect(await screen.findByText(tooLow)).toBeTruthy()
+    expect(least.disabled).toBe(false)
+    expect(least.getAttribute('aria-invalid')).toBe('true')
+  })
+})
+
 describe('the section', () => {
   it('is the main shop’s, right after the wallet’s', async () => {
     await openBotSettings('/bot-settings/wallet-transfers')

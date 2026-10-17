@@ -18,12 +18,7 @@ use App\Modules\Updates\ReleaseKey;
 use App\Modules\Updates\Releases;
 use App\Modules\Updates\Updater;
 use App\Modules\Updates\Workspace;
-use GuzzleHttp\Exception\ConnectException;
-use GuzzleHttp\HandlerStack;
-use GuzzleHttp\Promise\PromiseInterface;
-use GuzzleHttp\Promise\RejectedPromise;
 use Illuminate\Database\Connection;
-use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 use Tests\HttpTestCase;
@@ -94,17 +89,9 @@ abstract class UpdateTestCase extends HttpTestCase
             'storage/cache/routes/routes-old.php' => '<?php return [];',
         ]);
 
-        $this->gitHub = new FakeGitHub();
-        $this->transport()->setHandler($this->gitHub);
+        $this->gitHub = $this->outgoingFake(FakeGitHub::class);
         $this->swap(Updater::class, $this->updater(), UpdateController::class);
         $this->loginAsAdmin();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->transport()->setHandler(static fn(RequestInterface $request): PromiseInterface => new RejectedPromise(new ConnectException('No network in the tests.', $request)));
-
-        parent::tearDown();
     }
 
     /** The key the test's releases are signed with, the shop's release key from the first time it is asked for. */
@@ -168,7 +155,6 @@ abstract class UpdateTestCase extends HttpTestCase
         return is_array($update) ? $update : [];
     }
 
-    /** The Updater of the test's shop: its folders, its key — the app's own services for the rest. */
     /** The version `$minors` minor versions after the shop's (one on: 0.1.1 → 0.2.0). */
     private static function ahead(int $minors): string
     {
@@ -177,6 +163,7 @@ abstract class UpdateTestCase extends HttpTestCase
         return "{$major}." . ($minor + $minors) . '.0';
     }
 
+    /** The Updater of the test's shop: its folders, its key — the app's own services for the rest. */
     private function updater(): Updater
     {
         $workspace = new Workspace($this->work);
@@ -198,14 +185,5 @@ abstract class UpdateTestCase extends HttpTestCase
             $this->schedulerLock,
             $this->routes,
         );
-    }
-
-    /** @return HandlerStack<callable(RequestInterface, array<array-key, mixed>): PromiseInterface> */
-    private function transport(): HandlerStack
-    {
-        $transport = $this->app()->container()->get('http.transport');
-        assert($transport instanceof HandlerStack);
-
-        return $transport;
     }
 }

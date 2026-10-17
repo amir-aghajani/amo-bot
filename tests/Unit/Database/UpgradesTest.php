@@ -270,6 +270,33 @@ final class UpgradesTest extends TestCase
         self::assertSame(['https://berlin.test:2053/base', 45, null], [$connection->baseUrl, $connection->timeout, $connection->proxy], 'its panel reached straight, its options as they were');
     }
 
+    public function testTheLinesAndAnswersWrittenBeforeTheKeysAreKeptWithoutOne(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.6.0', static function (): void {});
+        $user = $installed->table('users')->insertGetId(['telegram_id' => 1]);
+        $agent = $installed->table('bots')->insertGetId(['title' => 'agent']);
+        $line = ['user_id' => $user, 'type' => 'credit', 'amount' => '1000', 'balance_after' => '1000', 'reviewer' => 'root'];
+        $installed->table('wallet_transactions')->insert([$line, ['balance_after' => '2000'] + $line]);
+        $traffic = ['bot_id' => $agent, 'type' => 'adjust', 'bytes' => 1, 'balance_after' => 1, 'reviewer' => 'root'];
+        $installed->table('traffic_transactions')->insert([$traffic, ['balance_after' => 2] + $traffic]);
+        $ticket = $installed->table('tickets')->insertGetId(['user_id' => $user, 'subject' => 'قطعی اتصال']);
+        $answer = ['ticket_id' => $ticket, 'author' => 'support', 'reviewer' => 'root', 'body' => 'سلام', 'channel' => 'panel'];
+        $installed->table('ticket_messages')->insert([$answer, $answer]);
+        // A run that stopped after the wallet's column, before its index.
+        $installed->getSchemaBuilder()->table('wallet_transactions', static function (Blueprint $table): void {
+            $table->string('request_key', 64)->nullable();
+        });
+
+        self::upgradeToCode($installed);
+        self::upgradeToCode($installed);
+
+        self::assertSame(self::shape(self::freshInstall()), self::shape($installed));
+        foreach (['wallet_transactions', 'traffic_transactions', 'ticket_messages'] as $table) {
+            self::assertSame([null, null], $installed->table($table)->orderBy('id')->pluck('request_key')->all(), "{$table}: each row kept, with no key — many of them under the key's unique index");
+        }
+    }
+
     public function testTheUpgradesBetweenTwoVersionsRunInVersionOrder(): void
     {
         foreach (['0.1.0', '0.2.0', '0.3.0', '0.10.0', '0.11.0'] as $version) {

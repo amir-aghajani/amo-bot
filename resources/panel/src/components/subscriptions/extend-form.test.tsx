@@ -82,6 +82,13 @@ describe('extending one service', () => {
     expect(screen.getByRole('button', { name: 'افزایش زمان و حجم' })).toBeTruthy()
   })
 
+  it('says the customer is told in Telegram or by email — a customer of the website alone has no bot', async () => {
+    await extend()
+
+    expect(screen.getByText('مشتری در تلگرام یا با ایمیل می‌بیند چه چیزی به سرویسش اضافه شد.')).toBeTruthy()
+    expect(screen.getByText('در پیامی که مشتری در تلگرام یا با ایمیل می‌گیرد نشان داده می‌شود.')).toBeTruthy()
+  })
+
   it('does not notify the customer when its box is unticked, and describes only what was given', async () => {
     server().on('POST', URL, json({ subscription: SERVICE }))
     await extend()

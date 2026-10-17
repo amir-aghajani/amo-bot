@@ -9,8 +9,9 @@ import { json, refusal, server } from '@/test/server'
 /*
  * «حجم، زمان و کاربر اضافه» in the bot settings (components/bot/settings/extras-section): the switch and the shop's price list,
  * saved as one PUT of the group — the switch, every field as typed, the amounts offered that say something —; a change is
- * what the server would keep, so a blank row, the rows' order or how a number is written is none; and a refusal lands
- * under the field it names (`extra_…`), the amounts offered marked as one field, each going as its own field is typed.
+ * what the server would keep, so a blank row, the rows' order or how a number is written is none; switched off, the
+ * prices wait held as they are kept (useHeldWhile); and a refusal lands under the field it names (`extra_…`), the
+ * amounts offered marked as one field, each going as its own field is typed.
  */
 
 /** The shop's prices: 3٬000 a GB, 10 GB at that and 50 GB at 120٬000; a week at 20٬000. */
@@ -44,7 +45,7 @@ describe('the shop’s prices', () => {
     fireEvent.click(within(traffic).getByRole('button', { name: 'افزودن مقدار' }))
     type('حجم پیشنهادی ۱ (گیگابایت)', '10')
     fireEvent.click(within(traffic).getByRole('button', { name: 'افزودن مقدار' }))
-    type('قیمت هر کاربر برای 30 روز (تومان)', '30000')
+    type('قیمت هر کاربر برای ۳۰ روز (تومان)', '30000')
     fireEvent.click(within(screen.getByRole('group', { name: 'کاربر اضافه' })).getByRole('button', { name: 'افزودن مقدار' }))
     type('تعداد پیشنهادی ۱ (کاربر)', '2')
     type('قیمت تعداد پیشنهادی ۱ (تومان)', '50000')
@@ -77,7 +78,7 @@ describe('the shop’s prices', () => {
     expect(within(devices).getByText('یا تعداد دلخواه بین ۱ تا ۵ کاربر، هر کاربر ۳۰٬۰۰۰ تومان')).toBeTruthy()
     expect(within(devices).getByText(/هر سرویس به نسبت روزهای مانده‌اش می‌پردازد/)).toBeTruthy()
 
-    type('قیمت هر کاربر برای 30 روز (تومان)', '')
+    type('قیمت هر کاربر برای ۳۰ روز (تومان)', '')
     fireEvent.change(within(devices).getByLabelText('قیمت تعداد پیشنهادی ۱ (تومان)'), { target: { value: '' } })
     expect(within(devices).getByText('با این قیمت‌ها کاربر اضافه فروخته نمی‌شود.')).toBeTruthy()
   })
@@ -102,6 +103,32 @@ describe('the shop’s prices', () => {
     await show()
     fireEvent.click(screen.getByRole('switch', { name: 'فروش حجم، زمان و کاربر اضافه' }))
     expect(unsaved()).toBe(true)
+  })
+})
+
+describe('the shop’s prices while nothing is sold', () => {
+  it('wait as they are kept, held — the amounts offered whole —, and one changed stays open, as the save still carries it', async () => {
+    const traffic = await show()
+    type('قیمت هر روز (تومان)', '5000')
+
+    fireEvent.click(screen.getByRole('switch', { name: 'فروش حجم، زمان و کاربر اضافه' }))
+
+    expect(screen.getByLabelText<HTMLInputElement>('قیمت هر گیگابایت (تومان)').disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>('حجم پیشنهادی ۱ (گیگابایت)').disabled).toBe(true)
+    expect(within(traffic).getByRole<HTMLButtonElement>('button', { name: 'افزودن مقدار' }).disabled).toBe(true)
+    expect(within(traffic).getByRole<HTMLButtonElement>('button', { name: 'حذف حجم پیشنهادی ۱' }).disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>('بیشترین (گیگابایت)').disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>('قیمت هر روز (تومان)').disabled).toBe(false)
+  })
+
+  it('open once it is switched on', async () => {
+    await show({ ...PRICED, extras_enabled: false })
+    expect(screen.getByLabelText<HTMLInputElement>('قیمت هر گیگابایت (تومان)').disabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('switch', { name: 'فروش حجم، زمان و کاربر اضافه' }))
+
+    expect(screen.getByLabelText<HTMLInputElement>('قیمت هر گیگابایت (تومان)').disabled).toBe(false)
+    expect(screen.getByLabelText<HTMLInputElement>('حجم پیشنهادی ۱ (گیگابایت)').disabled).toBe(false)
   })
 })
 

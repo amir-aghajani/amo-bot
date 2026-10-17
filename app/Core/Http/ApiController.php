@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Http;
 
 use App\Core\Database\PageRequest;
+use App\Core\Database\Sorting;
 use App\Core\Exceptions\ValidationException;
 use App\Support\Input;
 use App\Support\Validation;
@@ -131,10 +132,12 @@ abstract class ApiController
     }
 
     /**
-     * The `ids` list of a reorder request, as integers.
+     * The `ids` list of a reorder request, as row ids — read as Input::integerOf() reads one: "2abc", a list or a
+     * boolean is no row's id —, as many as one reorder takes (Sorting::MAX_IDS) at most.
      *
      * @return list<int>
-     * @throws ValidationException when it is missing or empty
+     * @throws ValidationException when it is missing or empty, longer than a reorder takes (before any is read), or one
+     *                             is not an id
      */
     protected function reorderIds(Request $request): array
     {
@@ -142,7 +145,10 @@ abstract class ApiController
         if (!is_array($ids) || $ids === []) {
             throw ValidationException::on('ids', 'لیست شناسه‌ها خالی است.');
         }
+        Sorting::refuseTooMany($ids);
 
-        return array_values(array_map(intval(...), $ids));
+        $read = array_values(array_map(static fn(mixed $id): int => Input::integerOf($id) ?? 0, $ids));
+
+        return in_array(0, $read, true) ? throw ValidationException::on('ids', 'یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.') : $read;
     }
 }

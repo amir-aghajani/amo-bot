@@ -17,6 +17,7 @@ use App\Modules\Subscriptions\DTO\ExtraPrices;
 use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Forms\ExtraOptions;
 use App\Modules\Subscriptions\Forms\UnitPrice;
+use App\Support\Persian;
 
 /**
  * «حجم، زمان و کاربر اضافه» settings (the `extras` group of each shop's bot settings): the switch — off by default,
@@ -110,7 +111,7 @@ final class ExtrasSettings implements DeclaresSettings
         [$priceLabel, $optionsLabel, $minLabel, $maxLabel, $most, $defaultMax] = match ($kind) {
             ExtraKind::Traffic => ['قیمت هر گیگابایت', 'حجم‌های پیشنهادی', 'کمترین حجم دلخواه', 'بیشترین حجم دلخواه', Package::MAX_GB, 100],
             ExtraKind::Time => ['قیمت هر روز', 'زمان‌های پیشنهادی', 'کمترین زمان دلخواه', 'بیشترین زمان دلخواه', Package::MAX_DAYS, 30],
-            ExtraKind::Devices => ['قیمت هر کاربر برای 30 روز', 'تعدادهای پیشنهادی', 'کمترین تعداد دلخواه', 'بیشترین تعداد دلخواه', self::MAX_DEVICES, 5],
+            ExtraKind::Devices => ['قیمت هر کاربر برای ' . Persian::number(ExtraOffer::PERIOD_DAYS) . ' روز', 'تعدادهای پیشنهادی', 'کمترین تعداد دلخواه', 'بیشترین تعداد دلخواه', self::MAX_DEVICES, 5],
         };
         $price = new UnitPrice($name('price'), $key('price'), $priceLabel, Package::PRICE_MAX);
         $least = new Number($name('min'), $key('min'), default: 1, label: $minLabel, min: 1, max: $most, unit: $kind->unit());

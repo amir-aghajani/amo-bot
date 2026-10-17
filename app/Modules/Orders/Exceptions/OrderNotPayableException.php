@@ -16,7 +16,8 @@ final class OrderNotPayableException extends DomainRuleException
 {
     public function __construct(Order $order)
     {
-        parent::__construct("سفارش #{$order->id} دیگر باز نیست؛ یا قبلا پرداخت شده یا لغو شده است.");
+        // A left-to-right mark before the number: in the report group's Persian popup «#12» would read «12#».
+        parent::__construct("سفارش \u{200E}#{$order->id} دیگر باز نیست؛ یا قبلا پرداخت شده یا لغو شده است.");
     }
 
     protected function field(): string

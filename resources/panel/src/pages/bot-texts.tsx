@@ -10,7 +10,7 @@ import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { RowMenu, RowTitleButton } from '@/components/list-view'
-import { Page } from '@/components/page'
+import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel, type PageTab } from '@/components/page-tabs'
 import { SearchBox } from '@/components/search-box'
@@ -27,9 +27,17 @@ import { botTextsQuery } from '@/lib/queries'
 
 type Filter = 'all' | 'customized'
 
-/** Persian as people type it: Arabic ی/ک the same as Persian, the zero-width non-joiner and case ignored. */
+/**
+ * Persian as people type it: Arabic ی/ک the same as Persian; case, the zero-width non-joiner and the invisible direction
+ * marks ignored — a default carries a left-to-right mark before «#%order%», «/menu» or «@BotFather», so «سفارش #» finds
+ * it typed without one, or pasted from a bot message with one.
+ */
 function normalize(text: string): string {
-  return text.toLowerCase().replace(/‌/g, '').replace(/ي/g, 'ی').replace(/ك/g, 'ک')
+  return text
+    .toLowerCase()
+    .replace(/[\u{200C}\u{200E}\u{200F}]/gu, '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
 }
 
 /**
@@ -38,7 +46,9 @@ function normalize(text: string): string {
  */
 export function BotTextsPage() {
   const queryClient = useQueryClient()
-  const { data, error, refetch } = useQuery(botTextsQuery)
+  const read = useQuery(botTextsQuery)
+  const { data, refetch } = read
+  const failure = useReadFailure(read)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [editing, setEditing] = useState<BotTextRow | null>(null)
@@ -121,8 +131,8 @@ export function BotTextsPage() {
         </div>
 
         {!data ? (
-          error ? (
-            <ErrorState what="متن‌های ربات" error={error} onRetry={() => void refetch()} />
+          failure.error ? (
+            <ErrorState what="متن‌های ربات" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />
           ) : (
             [0, 1].map((i) => <Skeleton key={i} className="h-64 w-full rounded-xl" />)
           )

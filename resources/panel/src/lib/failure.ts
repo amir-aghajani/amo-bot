@@ -2,6 +2,7 @@ import { isRouteErrorResponse } from 'react-router'
 import { toast } from 'sonner'
 import { ApiError } from '@/lib/api'
 import { panelBuild } from '@/lib/config'
+import { isolateIds } from '@/lib/direction'
 import { formatDate, shownTimeZone } from '@/lib/format'
 import { isStaleBuildError, reloadedLately } from '@/lib/stale-build'
 
@@ -219,7 +220,9 @@ export function describeFailure(error: unknown, ...fields: string[]): Failure {
   const spec = FAILURE_KINDS[kind]
   const fieldWords = error instanceof ApiError ? fields.map((field) => error.field(field)).find((message) => message !== undefined) : undefined
   const worded = error instanceof ApiError && !error.facts.foreign && spec.serverWords && error.message !== ''
-  const message = fieldWords ?? (worded ? error.message : kind === 'stale-build' && reloadedLately() ? STALE_GAVE_UP : spec.description)
+  // The server's words name rows by number («(سفارش #12)»): each kept whole, right to left.
+  const serverWords = fieldWords ?? (worded ? error.message : undefined)
+  const message = serverWords !== undefined ? isolateIds(serverWords) : kind === 'stale-build' && reloadedLately() ? STALE_GAVE_UP : spec.description
 
   if (error instanceof ApiError) {
     return {
@@ -265,7 +268,8 @@ export function describeFailure(error: unknown, ...fields: string[]): Failure {
 function kindOf(error: unknown): FailureKind {
   // The router's own answer: an address no route takes.
   if (isRouteErrorResponse(error)) return error.status === 404 ? 'not-found' : 'crash'
-  if (!(error instanceof ApiError)) return isStaleBuildError(error) ? 'stale-build' : 'crash'
+  // A page's file that did not load while the browser is offline: the network's doing, not a new build's.
+  if (!(error instanceof ApiError)) return isStaleBuildError(error) ? (navigator.onLine === false ? 'offline' : 'stale-build') : 'crash'
 
   const { status, facts } = error
   if (status === 0) return facts.timedOut ? 'timeout' : facts.offline ? 'offline' : 'unreachable'

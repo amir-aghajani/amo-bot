@@ -7,6 +7,10 @@ namespace Tests\Feature\Store;
 use App\Core\Http\ErrorHandler;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderStatus;
+use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Orders\Exceptions\FirstPurchaseUsedException;
+use App\Modules\Orders\Exceptions\ServiceChangedHandsException;
+use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
@@ -63,6 +67,7 @@ final class StoreOrdersTest extends HttpTestCase
             'id' => $bought->id,
             'type' => 'purchase',
             'status' => 'fulfilled',
+            'failure' => null,
             'amount' => '120000.00',
             'pricing' => 'regular',
             'discount_amount' => '0.00',
@@ -94,6 +99,7 @@ final class StoreOrdersTest extends HttpTestCase
             'id' => $topUp->id,
             'type' => 'wallet_topup',
             'status' => 'pending',
+            'failure' => null,
             'amount' => '50000.00',
             'pricing' => 'regular',
             'discount_amount' => '0.00',
@@ -145,9 +151,31 @@ final class StoreOrdersTest extends HttpTestCase
 
         $response = $this->get($this->storeApi($this->website, "/orders/{$failed->id}"));
 
-        self::assertSame(['failed', 'paid'], [$this->decode($response)['order']['status'], $this->decode($response)['order']['payments'][0]['status']]);
+        self::assertSame(['failed', 'delivery', 'paid'], [$this->decode($response)['order']['status'], $this->decode($response)['order']['failure'], $this->decode($response)['order']['payments'][0]['status']], 'why, in a word: support finishes it');
         self::assertStringNotContainsString((string) $failed->notes, (string) $response->getBody(), "support's words stay in the shop");
         self::assertStringNotContainsString((string) $failed->diagnosis, (string) $response->getBody(), "and the owner's diagnosis");
+    }
+
+    public function testAFailedOrderSaysWhyInAWordForTheWebsiteToTellItsCustomer(): void
+    {
+        $subscription = $this->buy($this->customer, $this->plan, $this->server)->subscription ?? self::fail('Nothing was delivered.');
+        $failed = fn(string $notes, array $overrides = []): Order => $this->purchaseOrder($this->customer, $this->plan, $this->server, $overrides + ['status' => OrderStatus::Failed, 'notes' => $notes]);
+        $orders = [
+            ['first_purchase_used', $failed(FirstPurchaseUsedException::MESSAGE)],
+            // The same with a code for a first purchase only.
+            ['first_purchase_used', $failed(FirstPurchaseUsedException::code('WELCOME')->getMessage())],
+            ['service_changed_hands', $failed(ServiceChangedHandsException::MESSAGE, ['type' => OrderType::Renewal, 'server_id' => null, 'subscription_id' => $subscription->id])],
+            ['delivery', $failed('سرور در دسترس نیست.')],
+        ];
+
+        foreach ($orders as [$failure, $order]) {
+            $row = $this->decode($this->get($this->storeApi($this->website, "/orders/{$order->id}")))['order'];
+            self::assertSame(['failed', $failure], [$row['status'], $row['failure']], $failure);
+            self::assertStringNotContainsString((string) $order->notes, (string) json_encode($row, JSON_UNESCAPED_UNICODE), "{$failure}: support's words stay in the shop");
+        }
+        // Support's words on an order that did not fail say nothing of it.
+        $cancelled = $this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Cancelled, 'notes' => FirstPurchaseUsedException::MESSAGE]);
+        self::assertNull($this->decode($this->get($this->storeApi($this->website, "/orders/{$cancelled->id}")))['order']['failure']);
     }
 
     public function testARenewalIsWhereItsServiceIsAndAWalletPaymentIsInstant(): void

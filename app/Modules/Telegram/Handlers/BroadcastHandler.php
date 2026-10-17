@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Handlers;
 
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Providers\Models\Server;
 use App\Modules\Telegram\Broadcasts\Audience;
 use App\Modules\Telegram\Broadcasts\BroadcastControl;
 use App\Modules\Telegram\Broadcasts\BroadcastMode;
@@ -26,7 +27,8 @@ use App\Support\Persian;
 /**
  * /broadcast (bot admins only): the admin sends any message, and the bot answers with a draft card kept in the session:
  *   broadcast:mode            copy (from the bot, with link buttons) or forward (from its first sender)
- *   broadcast:aud[:key[:id]]  the audience (Broadcasts\Audience), each option with its size
+ *   broadcast:aud[:key[:id]]  the audience (Broadcasts\Audience), each option with its size (a group's or a server's
+ *                             list paged: broadcast:aud:{key}:p:{page})
  *   broadcast:pin             pin each message in its chat
  *   broadcast:btn[:clear]     link buttons typed a row a line (state broadcast.buttons), or removed
  *   broadcast:send / drop     start it (the draft claimed once, so a double tap sends once) / drop it
@@ -51,6 +53,9 @@ final class BroadcastHandler implements Handler
 
     /** Customers handled before the bot answers the admin; the scheduler takes it from there. */
     private const INLINE_LIMIT = 50;
+
+    /** `broadcast:aud:{key}:p:{page}`: that page of the groups or servers to pick, past one keyboard's worth. */
+    private const PAGE = 'p';
 
     public function __construct(
         private readonly BroadcastService $broadcasts,
@@ -98,7 +103,9 @@ final class BroadcastHandler implements Handler
         $steps = [
             'mode' => fn(array $draft) => $this->redraw($ctx, ['mode' => $draft['mode'] === BroadcastMode::Forward->value ? BroadcastMode::Copy->value : BroadcastMode::Forward->value] + $draft),
             'pin' => fn(array $draft) => $this->redraw($ctx, ['pin' => !$draft['pin']] + $draft),
-            'aud' => fn(array $draft) => $this->audience($ctx, $draft, $args[1] ?? null, isset($args[2]) ? (int) $args[2] : null),
+            'aud' => fn(array $draft) => ($args[2] ?? null) === self::PAGE
+                ? $this->audience($ctx, $draft, $args[1] ?? null, null, (int) ($args[3] ?? 1))
+                : $this->audience($ctx, $draft, $args[1] ?? null, isset($args[2]) ? (int) $args[2] : null),
             'btn' => fn(array $draft) => ($args[1] ?? '') === 'clear' ? $this->redraw($ctx, ['buttons' => []] + $draft) : $this->askButtons($ctx, $draft),
             'card' => fn(array $draft) => $this->redraw($ctx, $draft),
             'send' => fn(array $draft) => $this->send($ctx, $draft),
@@ -201,12 +208,12 @@ final class BroadcastHandler implements Handler
     }
 
     /**
-     * broadcast:aud: the audience picker with each one's size; `group` or `server` without an id lists what to pick;
-     * anything else sets that audience and goes back to the card.
+     * broadcast:aud: the audience picker with each one's size; `group` or `server` without an id lists what to pick (at
+     * `$page` of it); anything else sets that audience and goes back to the card.
      *
      * @param array<string, mixed> $draft
      */
-    private function audience(Context $ctx, array $draft, ?string $key, ?int $id): void
+    private function audience(Context $ctx, array $draft, ?string $key, ?int $id, int $page = 1): void
     {
         if ($key === null) {
             // An agent's bot has no agents of its own to write to.
@@ -220,7 +227,7 @@ final class BroadcastHandler implements Handler
         }
 
         if (in_array($key, Audience::WITH_ID, true) && $id === null) {
-            $this->pickOne($ctx, $key);
+            $this->pickOne($ctx, $key, $page);
 
             return;
         }
@@ -235,28 +242,33 @@ final class BroadcastHandler implements Handler
         $this->redraw($ctx, ['audience' => $audience->key, 'audience_id' => $audience->id] + $draft);
     }
 
-    /** The admin's groups, or the servers this bot's customers are on, each with how many customers it would reach. */
-    private function pickOne(Context $ctx, string $key): void
+    /**
+     * The admin's groups, or the servers this bot's customers are on, at `$page` of them past one keyboard's worth, each
+     * with how many customers it would reach.
+     */
+    private function pickOne(Context $ctx, string $key, int $page): void
     {
-        $choices = $key === Audience::GROUP
-            ? $this->groups->ordered()->map(static fn(CustomerGroup $group): int => $group->id)->all()
-            : Audience::servers()->modelKeys();
+        $choices = array_values(($key === Audience::GROUP ? $this->groups->ordered() : Audience::servers())->all());
         if ($choices === []) {
             $ctx->edit($key === Audience::GROUP ? Messages::BROADCAST_NO_GROUPS : Messages::BROADCAST_NO_SERVERS, ['reply_markup' => $this->buttons->backOnly(self::callback('aud'))]);
 
             return;
         }
 
-        $buttons = [];
-        foreach ($choices as $id) {
-            $audience = Audience::of($key, $id);
-            if ($audience !== null) {
-                $buttons[] = InlineKeyboard::callback(self::option($audience->name(), $audience->users()->count()), $this->audienceCallback($key, $id));
-            }
-        }
-        $ctx->edit($key === Audience::GROUP ? Messages::BROADCAST_GROUP_ASK : Messages::BROADCAST_SERVER_ASK, [
-            'reply_markup' => InlineKeyboard::make()->grid($buttons, 1)->row($this->buttons->back(self::callback('aud')))->build(),
-        ]);
+        [$shown, $page, $pages] = Buttons::slice($choices, $page);
+        $keyboard = InlineKeyboard::make()->grid(array_map(function (CustomerGroup|Server $named) use ($key): array {
+            $audience = Audience::ofOne($named);
+
+            return InlineKeyboard::callback(self::option($audience->name(), $audience->users()->count()), $this->audienceCallback($key, $named->id));
+        }, $shown), 1);
+        $text = $this->buttons->paged(
+            $keyboard,
+            $key === Audience::GROUP ? Messages::BROADCAST_GROUP_ASK : Messages::BROADCAST_SERVER_ASK,
+            $page,
+            $pages,
+            fn(int $at): string => $at > 1 ? self::callback('aud', $key, self::PAGE, $at) : $this->audienceCallback($key),
+        );
+        $ctx->edit($text, ['reply_markup' => $keyboard->row($this->buttons->back(self::callback('aud')))->build()]);
     }
 
     /** @param array<string, mixed> $draft */

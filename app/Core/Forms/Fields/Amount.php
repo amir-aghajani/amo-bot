@@ -8,6 +8,7 @@ use App\Core\Forms\FieldSpec;
 use App\Core\Forms\FieldType;
 use App\Support\Input;
 use App\Support\Money;
+use App\Support\Unit;
 
 /**
  * An amount of Toman between two bounds, kept as Money keeps it (a normalised decimal string); thousands separators and
@@ -53,7 +54,7 @@ final class Amount extends Field
 
     public function cast(mixed $kept): string
     {
-        $value = Input::amountOf($kept);
+        $value = Input::amountOf($kept, Unit::Toman);
 
         return $value !== null && $this->within((string) $value) ? Money::normalize((string) $value) : $this->default;
     }

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Subscriptions;
 
+use App\Modules\Catalog\DTO\Package;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ServiceTerms;
+use App\Support\LocalTime;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -666,6 +669,96 @@ final class ServiceTermsTest extends TestCase
 
         $extra = ServiceTerms::takeBack($queued(), 2 * 24, 10 * Traffic::GIGABYTE, renewal: false);
         self::assertSame(['2026-09-23 12:00:00', 20 * Traffic::GIGABYTE], [$extra->periodEndsAt?->format('Y-m-d H:i:s'), $extra->nextPeriodBytes], 'an extra\'s days move it back, its traffic comes off');
+    }
+
+    public function testNoRenewalEndsAServicePastTheLastDayTheShopKeeps(): void
+    {
+        // Ten days before the last moment the TIMESTAMP columns keep (MySQL would refuse a later one; SQLite does not).
+        Carbon::setTestNow(LocalTime::last()->subDays(10));
+        $days = static fn(int $days): Package => self::plan(['duration_hours' => $days * 24])->package();
+
+        $atTheEnd = ServiceTerms::renewal(self::row(usedGb: 5, daysLeft: 5), $days(5), carryTraffic: true);
+        self::assertEquals(LocalTime::last(), Carbon::instance($atTheEnd->expiry->deadline() ?? throw new \LogicException()), 'ending on the very last moment is fine');
+
+        foreach ([
+            'a running service, on its deadline' => [self::row(usedGb: 5, daysLeft: 5), $days(6), RenewalMethod::Extend],
+            'by ResetTime, from now' => [self::row(usedGb: 5, daysLeft: 5), $days(11), RenewalMethod::ResetTime],
+            'one waiting for its first connection, judged from now' => [self::row(usedGb: 0, daysLeft: null), $days(1), RenewalMethod::Extend],
+            'an ended one, its new term from now' => [self::row(usedGb: 5, daysLeft: -1, status: SubscriptionStatus::Expired), $days(11), RenewalMethod::Extend],
+        ] as $case => [$row, $package, $method]) {
+            try {
+                ServiceTerms::renewal($row, $package, carryTraffic: true, method: $method);
+                self::fail("Renewed past the bound: {$case}.");
+            } catch (TermTooLongException $e) {
+                self::assertSame('تاریخ پایان سرویس نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد؛ مدت کوتاه‌تری انتخاب کنید.', $e->getMessage(), $case);
+            }
+        }
+        self::assertSame(0, ServiceTerms::renewal(self::row(usedGb: 0, daysLeft: null), self::plan(['duration_hours' => 0])->package(), carryTraffic: true)->durationHours, 'a plan without a term lengthens nothing');
+    }
+
+    public function testDaysGivenOrBoughtStopAtTheLastDayTheShopKeeps(): void
+    {
+        Carbon::setTestNow(LocalTime::last()->subDays(10));
+        $running = static fn(): Subscription => self::row(usedGb: 5, daysLeft: 5);
+        $ended = static fn(): Subscription => self::row(usedGb: 5, daysLeft: -1, status: SubscriptionStatus::Expired);
+        $waiting = static fn(): Subscription => self::row(usedGb: 0, daysLeft: null)->forceFill(['duration_hours' => 24]);
+
+        self::assertSame([5, 10, 9, null], [
+            ServiceTerms::daysLeft($running()),
+            ServiceTerms::daysLeft($ended()),
+            ServiceTerms::daysLeft($waiting()),
+            ServiceTerms::daysLeft($running()->forceFill(['expires_at' => null, 'duration_hours' => 0])),
+        ], 'from the deadline, from now once it passed, from now and the term still waiting; none for a service that never ends');
+        self::assertSame(0, ServiceTerms::daysLeft(self::row(usedGb: 0, daysLeft: null)), 'a 30-day term waiting would already end past it');
+
+        ServiceTerms::grant($running(), 5, 0);
+        ServiceTerms::extra($ended(), 10, 0);
+        ServiceTerms::grant($waiting(), 9, 0);
+        foreach ([
+            'a grant' => static fn() => ServiceTerms::grant($running(), 6, 0),
+            'extra time' => static fn() => ServiceTerms::extra($running(), 6, 0),
+            'extra time starting a new term' => static fn() => ServiceTerms::extra($ended(), 11, 0),
+            'days onto a term still waiting' => static fn() => ServiceTerms::grant($waiting(), 10, 0),
+        ] as $case => $give) {
+            try {
+                $give();
+                self::fail("Given past the bound: {$case}.");
+            } catch (TermTooLongException) {
+                self::addToAssertionCount(1);
+            }
+        }
+
+        // Half a second past that moment, ten whole days no longer fit from now: never a day offered that is then refused.
+        Carbon::setTestNow(LocalTime::last()->subDays(10)->addMilliseconds(500));
+        self::assertSame([9, 8], [ServiceTerms::daysLeft($ended()), ServiceTerms::daysLeft($waiting())]);
+        ServiceTerms::extra($ended(), 9, 0);
+        ServiceTerms::grant($waiting(), 8, 0);
+        foreach (['extra time starting a new term' => static fn() => ServiceTerms::extra($ended(), 10, 0), 'days onto a term still waiting' => static fn() => ServiceTerms::grant($waiting(), 9, 0)] as $case => $give) {
+            try {
+                $give();
+                self::fail("Given past the bound: {$case}.");
+            } catch (TermTooLongException) {
+                self::addToAssertionCount(1);
+            }
+        }
+        Carbon::setTestNow(LocalTime::last()->subDays(10));
+
+        $pastAlready = self::row(usedGb: 0, daysLeft: null);
+        self::assertSame(40 * Traffic::GIGABYTE, ServiceTerms::grant($pastAlready, 0, 10 * Traffic::GIGABYTE)->totalBytes, 'traffic alone lengthens nothing, whatever the term');
+        self::assertSame(2, ServiceTerms::extra($running(), 0, 0, 1)->ipLimit, 'nor do devices');
+    }
+
+    public function testANewServiceStartsOnlyWhenItsTermEndsByTheLastDayTheShopKeeps(): void
+    {
+        Carbon::setTestNow(LocalTime::last()->subDays(10));
+
+        self::assertTrue(ServiceTerms::startsInTime(10 * 24));
+        self::assertTrue(ServiceTerms::startsInTime(0), 'a service that never ends');
+        self::assertFalse(ServiceTerms::startsInTime(10 * 24 + 1));
+        self::assertSame(10 * 24 * ServiceTerms::HOUR, ServiceTerms::newTerm(10 * 24)->pendingSeconds(), 'counted from the first connection');
+
+        $this->expectException(TermTooLongException::class);
+        ServiceTerms::newTerm(3650 * 24);
     }
 
     /** A 30-day service with `$limitGb` (0 = unlimited) and `$usedGb` used, `$daysLeft` to go — null: the clock never started. */

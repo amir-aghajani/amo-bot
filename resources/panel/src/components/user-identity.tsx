@@ -84,12 +84,24 @@ export function InitialsMark({ name, className }: { name: string; className?: st
 
 /**
  * The line under a customer's name: the handle ("@username", or "بدون نام کاربری"); for one without a Telegram account
- * their email in its place ("بدون ایمیل" without one) — set apart, left to right.
+ * their email in its place ("بدون ایمیل" without one) — set apart, left to right. Under a handle that names one who has
+ * no name, the Telegram id.
  */
 function SecondLine({ user }: { user: UserRef }) {
+  if (user.username && !user.name && user.telegram_id !== null) return <bdi dir="ltr">{user.telegram_id}</bdi>
   if (user.username) return <bdi dir="ltr">@{user.username}</bdi>
   if (user.telegram_id !== null) return NO_USERNAME
   return user.email ? <bdi dir="ltr">{user.email}</bdi> : NO_EMAIL
+}
+
+/** A customer's name in markup: the name, else — never «بدون نام» first while they have one — the handle; null for neither. */
+function shownName(user: UserRef, className?: string): ReactNode {
+  if (user.name) return <bdi className={className}>{user.name}</bdi>
+  return user.username ? (
+    <bdi dir="ltr" className={className}>
+      @{user.username}
+    </bdi>
+  ) : null
 }
 
 interface UserIdentityProps {
@@ -105,17 +117,23 @@ interface UserIdentityProps {
 }
 
 /**
- * Two fixed lines, so rows line up whatever the account has: the name line (the name, or "بدون نام" in tertiary ink)
- * and the handle line ("@username", or "بدون نام کاربری" — the email, for a customer without Telegram). The numeric id
- * is never here — it gets its own column. With `to`, the name is the link to the customer's page.
+ * Two fixed lines, so rows line up whatever the account has: the name line (the name — without one the handle, as every
+ * place one line names a customer; "بدون نام" in tertiary ink without either) and the handle line ("@username", or
+ * "بدون نام کاربری" — the email, for a customer without Telegram; the Telegram id under a handle on the name line). The
+ * shop's number for them is never here — it gets its own column. With `to`, the name is the link to the customer's
+ * page. A handle or an email too long for the line is cut at its end, its start kept; on a phone the lines may narrow
+ * further, for a row to fit.
  */
 export function UserIdentity({ user, avatar = false, status, badge, to, className }: UserIdentityProps) {
-  const name = user.name ? <bdi className="truncate font-medium text-foreground">{user.name}</bdi> : <span className="text-faint">{NO_NAME}</span>
+  const name = shownName(user, 'truncate font-medium text-foreground') ?? <span className="text-faint">{NO_NAME}</span>
+  // The handle line in Latin (a handle, an email, a Telegram id) runs left to right, so a cut takes its end; aligned to
+  // the right, under the name, while it fits.
+  const latin = Boolean(user.username) || (user.telegram_id === null && Boolean(user.email))
 
   return (
     <div className={cn('flex min-w-0 items-center gap-2.5', className)}>
       {avatar && <InitialsMark name={user.name ?? user.username ?? user.email ?? ''} />}
-      <div className="grid max-w-64 min-w-32 gap-0">
+      <div className="grid max-w-64 min-w-24 gap-0 sm:min-w-32">
         <div className="flex min-w-0 items-center gap-1.5 leading-[1.375rem]">
           {to ? (
             <Link to={to} className="flex min-w-0 rounded-sm underline-offset-4 outline-none hover:underline focus-visible:focus-ring">
@@ -127,7 +145,7 @@ export function UserIdentity({ user, avatar = false, status, badge, to, classNam
           {status === 'banned' && <StatusBadge status={USER_STATUS.banned} />}
           {badge}
         </div>
-        <div className="truncate text-footnote leading-5 text-muted-foreground">
+        <div dir={latin ? 'ltr' : undefined} className={cn('truncate text-footnote leading-5 text-muted-foreground', latin && 'text-right')}>
           <SecondLine user={user} />
         </div>
       </div>
@@ -137,25 +155,26 @@ export function UserIdentity({ user, avatar = false, status, badge, to, classNam
 
 /**
  * The customer among a dialog's facts (FactList): the name — the link to their page, but on that page itself — with the
- * handle, and the Telegram id on a line of its own; for a customer without Telegram, their email there instead.
+ * handle (without a name, the handle alone names them), and the Telegram id on a line of its own; for a customer
+ * without Telegram, their email there instead.
  */
 export function CustomerFacts({ user }: { user: UserRef }) {
   const { pathname } = useLocation()
   const page = userPage(user.id)
-  const name = user.name ? <bdi>{user.name}</bdi> : NO_NAME
+  const name = shownName(user) ?? NO_NAME
 
   return (
     <>
       <Fact label="مشتری">
         {/* A space, not a margin: the name's isolate takes its own direction (a Latin name is LTR), so a logical margin lands on its far side. */}
         {pathname === page ? name : <TextLink to={page}>{name}</TextLink>}{' '}
-        {user.username ? (
-          <bdi dir="ltr" className="text-footnote text-muted-foreground">
-            @{user.username}
-          </bdi>
-        ) : (
-          user.telegram_id !== null && <span className="text-footnote text-muted-foreground">{NO_USERNAME}</span>
-        )}
+        {user.username
+          ? user.name && (
+              <bdi dir="ltr" className="text-footnote text-muted-foreground">
+                @{user.username}
+              </bdi>
+            )
+          : user.telegram_id !== null && <span className="text-footnote text-muted-foreground">{NO_USERNAME}</span>}
       </Fact>
       {user.telegram_id !== null ? (
         <Fact label="شناسه تلگرام">

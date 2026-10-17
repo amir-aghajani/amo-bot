@@ -4,7 +4,7 @@ import { Search, Tags, Users, Wallet } from 'lucide-react'
 import { Balance } from '@/components/balance'
 import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
-import { Dash, ListView, RowMenu, SortableHead } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, RowMenu, SortableHead } from '@/components/list-view'
 import { SearchBox } from '@/components/search-box'
 import { useSectionShown } from '@/components/sectioned-page'
 import { StatusBadge } from '@/components/status-badge'
@@ -43,6 +43,7 @@ export function UsersList() {
     list: 'users',
     statuses: STATUSES,
     params: ['role', 'group'],
+    ids: ['group'],
     choices: { role: Object.keys(ROLES) },
     sorts: SORTS,
     address: '/users',
@@ -64,12 +65,17 @@ export function UsersList() {
   }
   // What found nothing, to say what to change: the search, the filters, or both.
   const searched = list.typed.trim() !== ''
-  const narrowed = list.filter !== '' || (list.params.role ?? '') !== '' || (list.params.group ?? '') !== ''
+  const inGroup = list.params.group ?? ''
+  const narrowed = list.filter !== '' || (list.params.role ?? '') !== '' || inGroup !== ''
+  // A group deleted while the list was narrowed to it (in the groups' section, or since the address was kept) still
+  // narrows it: its pill stays, under a name that says so, rather than reading «همه» — or going — over a narrowed list.
+  const groupOptions = (groups.data?.groups ?? []).map((row) => ({ value: String(row.id), label: row.name }))
+  if (inGroup !== '' && !groupOptions.some((option) => option.value === inGroup)) groupOptions.push({ value: inGroup, label: 'گروه حذف‌شده' })
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <SearchBox value={list.typed} onChange={list.setTyped} placeholder="نام، نام کاربری، ایمیل، موبایل، شناسه تلگرام یا شماره" aria-label="جستجوی کاربر" />
+        <SearchBox value={list.typed} onChange={list.setTyped} placeholder="نام، نام کاربری، ایمیل، موبایل یا شناسه" aria-label="جستجوی کاربر" />
         <FilterSelect label="وضعیت" value={list.filter} options={STATUSES.map((value) => ({ value, label: value === '' ? 'همه' : USER_STATUS[value].label }))} onChange={list.setFilter} />
         <FilterSelect
           label="نقش"
@@ -77,13 +83,8 @@ export function UsersList() {
           options={[{ value: '', label: 'همه' }, ...Object.entries(ROLES).map(([value, label]) => ({ value, label }))]}
           onChange={(value) => list.setParam('role', value)}
         />
-        {groups.data && groups.data.groups.length > 0 && (
-          <FilterSelect
-            label="گروه"
-            value={list.params.group ?? ''}
-            options={[{ value: '', label: 'همه' }, ...groups.data.groups.map((group) => ({ value: String(group.id), label: group.name }))]}
-            onChange={(value) => list.setParam('group', value)}
-          />
+        {groups.data && groupOptions.length > 0 && (
+          <FilterSelect label="گروه" value={inGroup} options={[{ value: '', label: 'همه' }, ...groupOptions]} onChange={(value) => list.setParam('group', value)} />
         )}
       </div>
 
@@ -92,7 +93,18 @@ export function UsersList() {
         noun="کاربران"
         unit="کاربر"
         skeletonRows={6}
-        empty={<EmptyState framed icon={Users} title="هنوز کاربری ثبت نشده است" description="اولین کسی که به ربات /start بزند یا در وب‌سایت ثبت‌نام کند این‌جا ظاهر می‌شود." />}
+        empty={
+          <EmptyState
+            framed
+            icon={Users}
+            title="هنوز کاربری ثبت نشده است"
+            description={
+              <>
+                اولین کسی که به ربات <bdi dir="ltr">/start</bdi> بزند یا در وب‌سایت ثبت‌نام کند این‌جا ظاهر می‌شود.
+              </>
+            }
+          />
+        }
         noMatch={
           <EmptyState
             framed
@@ -106,25 +118,28 @@ export function UsersList() {
           <TableHeader>
             <TableRow>
               <TableHead>کاربر</TableHead>
-              {/* The customer's number — «#12» in the search box is them alone, as every list takes it. */}
-              <TableHead className="hidden xl:table-cell">شماره</TableHead>
-              <TableHead className="hidden sm:table-cell">شناسه تلگرام</TableHead>
-              <TableHead className="hidden md:table-cell">موبایل</TableHead>
+              {/* The customer's number — «#12» in the search box is them alone, as every list takes it. Only on the widest
+                  screens: below them its room goes to the names. */}
+              <TableHead className="hidden 2xl:table-cell">شماره</TableHead>
+              {/* A phone held sideways has room for the Telegram id; a tablet, with the rail or the sidebar beside the
+                  page, has less: it comes back with the widest columns. */}
+              <TableHead className="hidden sm:table-cell md:hidden xl:table-cell">شناسه تلگرام</TableHead>
+              <TableHead className="hidden xl:table-cell">موبایل</TableHead>
               <SortableHead list={list} by="balance">
                 کیف پول
               </SortableHead>
               <SortableHead list={list} by="services" label="سرویس‌های فعال" className="hidden sm:table-cell">
                 سرویس‌ها
               </SortableHead>
-              <SortableHead list={list} by="orders" className="hidden lg:table-cell">
+              <SortableHead list={list} by="orders" className="hidden xl:table-cell">
                 سفارش‌ها
               </SortableHead>
-              <TableHead className="hidden lg:table-cell">گروه‌ها</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden xl:table-cell">گروه‌ها</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <SortableHead list={list} by="last_seen" className="hidden xl:table-cell">
                 آخرین بازدید
               </SortableHead>
-              <SortableHead list={list} by="joined" className="hidden md:table-cell">
+              <SortableHead list={list} by="joined" className="hidden xl:table-cell">
                 عضویت
               </SortableHead>
               <TableHead className="w-10">
@@ -137,11 +152,14 @@ export function UsersList() {
               <TableRow key={user.id} className={cn(user.status === 'banned' && 'text-muted-foreground')}>
                 <TableCell>
                   <UserIdentity user={user} avatar badge={user.role === 'admin' && <AdminMark />} to={userPage(user.id)} />
+                  <PhoneFacts className="ps-[2.625rem]">
+                    <StatusBadge status={USER_STATUS[user.status]} />
+                  </PhoneFacts>
                 </TableCell>
-                <TableCell className="hidden text-muted-foreground tabular xl:table-cell">
+                <TableCell className="hidden text-muted-foreground tabular 2xl:table-cell">
                   <span dir="ltr">#{user.id}</span>
                 </TableCell>
-                <TableCell className="hidden sm:table-cell">
+                <TableCell className="hidden sm:table-cell md:hidden xl:table-cell">
                   {user.telegram_id === null ? (
                     <Dash />
                   ) : (
@@ -150,7 +168,7 @@ export function UsersList() {
                     </bdi>
                   )}
                 </TableCell>
-                <TableCell className="hidden md:table-cell">
+                <TableCell className="hidden xl:table-cell">
                   {user.phone ? (
                     <bdi dir="ltr" className="text-footnote">
                       {user.phone}
@@ -171,8 +189,8 @@ export function UsersList() {
                     </>
                   )}
                 </TableCell>
-                <TableCell className="hidden tabular lg:table-cell">{user.counts.orders === 0 ? <Dash /> : formatNumber(user.counts.orders)}</TableCell>
-                <TableCell className="hidden lg:table-cell">
+                <TableCell className="hidden tabular xl:table-cell">{user.counts.orders === 0 ? <Dash /> : formatNumber(user.counts.orders)}</TableCell>
+                <TableCell className="hidden xl:table-cell">
                   {user.groups.length === 0 ? (
                     <Dash />
                   ) : (
@@ -185,11 +203,11 @@ export function UsersList() {
                     </span>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <StatusBadge status={USER_STATUS[user.status]} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground xl:table-cell">{user.last_seen_at ? timeAgo(user.last_seen_at) : <Dash />}</TableCell>
-                <TableCell className="hidden text-muted-foreground md:table-cell">{timeAgo(user.created_at)}</TableCell>
+                <TableCell className="hidden text-muted-foreground xl:table-cell">{timeAgo(user.created_at)}</TableCell>
                 <TableCell>
                   <RowMenu label={distinctUserLabel(user)}>
                     {user.telegram_id !== null && (

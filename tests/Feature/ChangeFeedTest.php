@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Core\Database\ChangeFeed;
 use App\Core\Database\Sequence;
+use App\Core\Scheduling\Shops;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Users\Models\User;
 use cebe\openapi\spec\Schema;
@@ -19,10 +20,11 @@ use Psr\Log\NullLogger;
 use Tests\HttpTestCase;
 
 /**
- * The panels' live view: every committed write to a table a panel shows moves its area's number, whoever wrote it and
- * in whichever shop; a write inside a transaction counts when the transaction commits and not when it rolls back; a
- * write made quietly counts for nothing; a number that cannot be written is logged and never fails the write; both
- * panels read the one count from GET /api/{admin,agent}/changes, its areas the API description's.
+ * The panels' live view: every committed write to a table a panel shows moves its area's number, whoever wrote it; a
+ * write inside a transaction counts when the transaction commits and not when it rolls back; a write made quietly
+ * counts for nothing; a number that cannot be written is logged and never fails the write; the owner reads every
+ * shop's numbers from GET /api/admin/changes, an agent's panel and a website's admins their own shop's, its areas the
+ * API description's.
  */
 final class ChangeFeedTest extends HttpTestCase
 {
@@ -164,12 +166,13 @@ final class ChangeFeedTest extends HttpTestCase
             $table->unsignedBigInteger('version')->default(0);
         });
         $db->getSchemaBuilder()->create('users', static fn(Blueprint $table) => $table->id());
-        $feed = new ChangeFeed($db, new NullLogger());
+        $feed = new ChangeFeed($db, $this->service(Shops::class), new NullLogger());
         $feed->listen();
 
         $db->table('users')->insert(['id' => 1]);
 
         self::assertSame(['users' => 1], $feed->versions());
+        self::assertSame(['users' => 1], $feed->versions(1), "the main shop's write");
     }
 
     public function testAWriteTheFeedCannotCountStillHappens(): void
@@ -195,27 +198,83 @@ final class ChangeFeedTest extends HttpTestCase
         self::assertSame(4040, User::query()->findOrFail($second->id)->telegram_id);
     }
 
-    public function testBothPanelsReadTheOneCountEveryShopMoves(): void
+    /**
+     * The owner follows every shop; an agent's panel its own shop — what is written across every shop, the servers, and
+     * the main shop's agency with it —, never another shop's customers or sales.
+     */
+    public function testTheOwnerFollowsEveryShopAndAnAgentTheirOwn(): void
     {
         $agentBot = $this->agentBot();
         $this->loginAsAdmin();
         $this->loginAsAgent($agentBot);
-        $before = $this->versions()['users'] ?? 0;
+        $owner = $this->panelVersions('/api/admin/changes');
+        $agent = $this->panelVersions('/api/agent/changes');
+        self::assertSame($this->versions(), $owner, 'the owner\'s are the installation\'s');
+        self::assertSame($this->versions($agentBot->id), $agent, 'the agent\'s their shop\'s');
 
-        CurrentBot::run($agentBot, fn() => $this->customer(['telegram_id' => 4040]));
+        $this->customer(['telegram_id' => 4040]);
+        $this->db()->table('plans')->update(['updated_at' => now()]);
+        self::assertSame([($owner['users'] ?? 0) + 1, ($owner['plans'] ?? 0) + 1], [$this->versions()['users'], $this->versions()['plans']], 'the main shop\'s customer and catalogue: the owner\'s to follow');
+        self::assertSame($agent, $this->panelVersions('/api/agent/changes'), 'and nothing of the agent\'s');
 
-        self::assertSame($before + 1, $this->versions()['users'], 'a write in the agent\'s shop moves the one count');
-        foreach (['/api/admin/changes', '/api/agent/changes'] as $path) {
-            $response = $this->get($path);
+        CurrentBot::run($agentBot, fn() => $this->customer(['telegram_id' => 5050]));
+        self::assertSame(($agent['users'] ?? 0) + 1, $this->panelVersions('/api/agent/changes')['users'], 'their own shop\'s customer');
+        self::assertSame(($owner['users'] ?? 0) + 2, $this->panelVersions('/api/admin/changes')['users'], 'the owner follows every shop');
 
-            self::assertSame(200, $response->getStatusCode(), $path);
-            self::assertSame($this->versions(), $this->decode($response)['versions'], $path);
-        }
+        CurrentBot::everywhere(fn() => $this->db()->table('subscriptions')->update(['updated_at' => now()]));
+        $this->fakeServer();
+        $this->db()->table('agency_levels')->update(['updated_at' => now()]);
+        $moved = $this->panelVersions('/api/agent/changes');
+        self::assertSame(
+            [($agent['subscriptions'] ?? 0) + 1, ($agent['servers'] ?? 0) + 1, ($agent['agency'] ?? 0) + 1],
+            [$moved['subscriptions'], $moved['servers'], $moved['agency']],
+            'what is written across every shop, the installation\'s servers, the main shop\'s agency',
+        );
+    }
+
+    /** A website's admins follow their shop as its panel does: another shop's customers move nothing for them. */
+    public function testAWebsitesAdminsFollowTheirOwnShop(): void
+    {
+        $agentBot = $this->agentBot();
+        $website = $this->website();
+        $this->loginAsStaff($website, $this->customer(['telegram_id' => 7001]));
+        $read = fn(): array => $this->decode($this->get($this->storeApi($website, '/admin/changes')))['versions'];
+        $before = $read();
+        self::assertSame($this->versions(1), $before);
+
+        CurrentBot::run($agentBot, fn() => $this->customer(['telegram_id' => 5050]));
+        self::assertSame($before, $read(), "an agent's customer is no news for the main shop's admins");
+
+        $this->customer(['telegram_id' => 4040]);
+        self::assertSame(($before['users'] ?? 0) + 1, $read()['users']);
+    }
+
+    /** What the owner's agency writes in the main shop is about an agent's shop too: counted for every shop. */
+    public function testTheOwnersAgencyMovesTheAgentsShop(): void
+    {
+        $agentBot = $this->agentBot();
+        $server = $this->fakeServer();
+        $this->loginAsAdmin();
+        $before = $this->versions($agentBot->id)['plans'] ?? 0;
+
+        $hidden = $this->putJson("/api/admin/agency/agents/{$agentBot->agent?->id}/hidden", ['server_ids' => [$server->id], 'plan_ids' => []]);
+
+        self::assertSame(200, $hidden->getStatusCode(), (string) $hidden->getBody());
+        self::assertSame($before + 1, $this->versions($agentBot->id)['plans'], 'the server hidden from their shop: their plans reload');
     }
 
     /** @return array<string, int> */
-    private function versions(): array
+    private function panelVersions(string $path): array
     {
-        return $this->service(ChangeFeed::class)->versions();
+        $response = $this->get($path);
+        self::assertSame(200, $response->getStatusCode(), $path);
+
+        return $this->decode($response)['versions'];
+    }
+
+    /** @return array<string, int> */
+    private function versions(?int $shop = null): array
+    {
+        return $this->service(ChangeFeed::class)->versions($shop);
     }
 }

@@ -2,14 +2,15 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { PlanPricesPreviewResponse, PlansResponse } from '@/lib/api-types'
 import { PlansPage } from '@/pages/plans'
-import { providers, until } from '@/test/render'
+import { providers, signedIn, until } from '@/test/render'
 import { planRow } from '@/test/rows'
 import { json, noContent, refusal, server } from '@/test/server'
 
 /*
  * The plans list (pages/plans): the flag on a plan the bot does not show, the other prices and the term under each
- * plan, no delete for a plan with history, and the bulk price change (components/plans/bulk-prices-modal): preview,
- * apply exactly what was previewed, and a refusal that names the plans.
+ * plan, no delete for a plan with history, a copy made once and shown where the server puts it, and the bulk price
+ * change (components/plans/bulk-prices-modal): preview, apply exactly what was previewed, and a refusal that names the
+ * plans.
  */
 
 const NO_SERVER = 'این پلن روی هیچ سروری نیست؛ از فرم پلن یک سرور به آن اضافه کنید.'
@@ -40,10 +41,10 @@ describe('the plans list', () => {
   })
 
   it('marks a plan the main shop’s owner keeps from sale in its place, saying why when pressed', async () => {
-    const hidden = 'مدیر فروشگاه اصلی این پلن را پنهان کرده است؛ تا آن را آزاد نکند، به مشتری‌ها فروخته نمی‌شود.'
+    const hidden = 'پشتیبانی فروشگاه اصلی این پلن را پنهان کرده است؛ تا آن را آزاد نکند، به مشتری‌ها فروخته نمی‌شود.'
     showPlans([planRow({ id: 1, name: 'یک‌ماهه', hidden_by_owner: true, unsellable_reason: hidden }), planRow()])
 
-    fireEvent.click(await screen.findByRole('button', { name: 'پنهان‌شده توسط مدیر' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'پنهان‌شده توسط پشتیبانی' }))
     expect(await screen.findByText(hidden)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'در ربات دیده نمی‌شود' })).toBeNull()
   })
@@ -117,6 +118,44 @@ describe('the plans list', () => {
     showPlans([planRow()])
 
     await until(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('پلن‌ها۱'))
+  })
+})
+
+/** «ساخت کپی» pressed in «ماهانه»'s menu. */
+async function copyMonthly() {
+  fireEvent.pointerDown(await screen.findByRole('button', { name: 'عملیات ماهانه' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'ساخت کپی' }))
+}
+
+/** The plans' names as the list orders them. */
+const listed = () =>
+  within(screen.getByRole('table', { name: 'پلن‌ها' }))
+    .getAllByRole('button', { name: /^(ماهانه|ماهانه \(کپی\)|تست)$/ })
+    .map((button) => button.textContent)
+
+describe('a plan’s copy', () => {
+  it('is made once however often it is pressed, and takes the place the server gives it — right after its plan', async () => {
+    let plans = [planRow({ id: 1, name: 'ماهانه' }), planRow({ id: 2, name: 'تست', sort: 2 })]
+    server()
+      .on('GET', '/api/admin/plans', () => json({ plans } satisfies PlansResponse))
+      .on('GET', '/api/admin/plans/options', json({ categories: [], servers: [] }))
+    const made = server().hold('POST', '/api/admin/plans/1/duplicate')
+    // The copy's form asks which shop it is in.
+    render(<PlansPage />, { wrapper: signedIn().wrapper })
+
+    await copyMonthly()
+    await until(() => expect(made.waiting).toBe(1))
+    await copyMonthly()
+    expect(screen.getByRole('menuitem', { name: 'ساخت کپی' }).getAttribute('aria-disabled')).toBe('true')
+    expect(server().sent('POST', '/api/admin/plans/1/duplicate')).toHaveLength(1)
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    const duplicate = planRow({ id: 9, name: 'ماهانه (کپی)', is_active: false, sort: 2 })
+    plans = [plans[0]!, duplicate, { ...plans[1]!, sort: 3 }]
+    made.answer(json({ plan: duplicate }))
+
+    await until(() => expect(listed()).toEqual(['ماهانه', 'ماهانه (کپی)', 'تست']))
+    expect(await screen.findByRole('dialog', { name: 'ویرایش «ماهانه (کپی)»' })).toBeTruthy()
   })
 })
 

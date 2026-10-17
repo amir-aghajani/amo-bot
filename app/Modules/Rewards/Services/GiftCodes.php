@@ -23,6 +23,7 @@ use App\Modules\Rewards\Models\GiftCode;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletSettings;
 use App\Support\Input;
+use App\Support\LocalTime;
 use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Validation;
@@ -152,7 +153,7 @@ final class GiftCodes
         $reward = $gift->reward();
         if ($reward === null || $this->eligibility->givable($customer, [$reward]) === []) {
             // A plan's service: none at all from an agent's shop whose selling is suspended, as Rewards::give() says.
-            throw new GiftCodeRefusedException(GiftCodeRefusal::Unavailable, $customer->shop()->sells() ? RewardUnavailableException::NO_SERVER : RewardUnavailableException::SUSPENDED);
+            throw new GiftCodeRefusedException(GiftCodeRefusal::Unavailable, $customer->shop()->sellsNow() ? RewardUnavailableException::NO_SERVER : RewardUnavailableException::SUSPENDED);
         }
 
         $given = $reward->plan === null ? $this->credit($gift, $customer, $reward) : $this->givePlan($gift, $customer, $reward, $tell);
@@ -244,7 +245,8 @@ final class GiftCodes
     }
 
     /**
-     * `$count` new codes the shop does not have yet: the prefix and a random part each, drawn again on a clash.
+     * `$count` new codes the shop does not have yet: the prefix and a random part each, drawn again on a clash. Kept as
+     * values, never as array keys, where a code of digits alone would turn into a number.
      *
      * @return list<string>
      */
@@ -254,15 +256,13 @@ final class GiftCodes
         while (count($codes) < $count) {
             $drawn = [];
             for ($i = count($codes); $i < $count; $i++) {
-                $drawn[$prefix . ReadableCode::make(self::RANDOM_LENGTH)] = true;
+                $drawn[] = $prefix . ReadableCode::make(self::RANDOM_LENGTH);
             }
-            foreach (GiftCode::query()->whereIn('code', array_keys($drawn))->pluck('code') as $taken) {
-                unset($drawn[$taken]);
-            }
-            $codes += $drawn;
+            $taken = GiftCode::query()->whereIn('code', $drawn)->pluck('code')->all();
+            $codes = array_values(array_unique([...$codes, ...array_diff($drawn, $taken)]));
         }
 
-        return array_keys($codes);
+        return $codes;
     }
 
     /**
@@ -322,6 +322,9 @@ final class GiftCodes
                 $errors['expires_on'][] = 'تاریخ پایان معتبر نیست.';
             } elseif ($expiresAt->lessThanOrEqualTo(now())) {
                 $errors['expires_on'][] = 'تاریخ پایان نمی‌تواند گذشته باشد.';
+            } elseif (LocalTime::tooLate($expiresAt)) {
+                // A day the database can keep (LocalTime::LAST_DAY).
+                $errors['expires_on'][] = LocalTime::tooLateFor('تاریخ پایان') . '؛ برای کدهای بدون پایان، آن را خالی بگذارید.';
             }
         }
         ValidationException::ifAny($errors);

@@ -12,6 +12,7 @@ use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Api\Limits;
+use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Handlers\SubscriptionHandler;
 use App\Modules\Telegram\Messages;
@@ -83,6 +84,50 @@ final class BotQrDeliveryTest extends BotTestCase
         self::assertSame([$this->delivered('USER_1', self::FIRST_LINK)], $this->said());
         self::assertSame(self::RECEIPT_MESSAGE, $this->telegram()->replyTarget(0), 'still a reply to the receipt');
         self::assertArrayNotHasKey('reply_markup', $this->params(0));
+    }
+
+    public function testACardTelegramWillNotTakeLeavesTheTextWithTheLink(): void
+    {
+        $order = $this->purchaseOrder($this->user, $this->plan, $this->server);
+        $payment = $this->receipt($this->cardPayment($order, $this->cardMethod()));
+        $this->service(PaymentService::class)->approve($payment, 'root');
+        $this->telegram()->reset();
+        $this->telegram()->fail(400, 'Bad Request: IMAGE_PROCESS_FAILED');
+
+        $this->service(CustomerNotifier::class)->paymentSettled($payment->refresh());
+
+        self::assertSame(['sendPhoto', 'sendMessage'], $this->calls(), 'the picture refused, the words go alone');
+        self::assertSame($this->delivered('USER_1', self::FIRST_LINK), $this->params(1)['text'], 'the link and all');
+        self::assertSame(self::RECEIPT_MESSAGE, $this->telegram()->replyTarget(1), 'still a reply to the receipt');
+    }
+
+    public function testACardTelegramCouldNotTakeForAMomentIsNotSentAsWordsInstead(): void
+    {
+        $order = $this->purchaseOrder($this->user, $this->plan, $this->server);
+        $payment = $this->receipt($this->cardPayment($order, $this->cardMethod()));
+        $this->service(PaymentService::class)->approve($payment, 'root');
+        $this->telegram()->reset();
+        $this->telegram()->fail(429, 'Too Many Requests: retry after 5');
+
+        try {
+            $this->service(CustomerNotifier::class)->paymentSettled($payment->refresh());
+        } catch (TelegramApiException) {
+            // Its notice is told again later, as any message Telegram asked to wait for.
+        }
+
+        self::assertSame(['sendPhoto'], $this->calls(), 'the card is what goes again, not the words in its place');
+    }
+
+    public function testTheLinkButtonsCardTelegramWillNotTakeLeavesTheTextWithTheLink(): void
+    {
+        $subscription = $this->subscription($this->user, $this->plan, $this->server, 'ali_1');
+        $this->telegram()->fail(413, 'Request Entity Too Large');
+
+        $this->send($this->tap(SubscriptionHandler::serviceCallback($subscription->id, 'link')));
+
+        self::assertSame(['editMessageMedia', 'deleteMessage', 'sendMessage', 'answerCallbackQuery'], $this->calls(), 'the screen goes, the words with the link come');
+        self::assertSame($this->linkShown('ali_1'), $this->params(2)['text']);
+        self::assertSame([SubscriptionHandler::serviceCallback($subscription->id)], $this->callbacks(2), 'back to managing the service');
     }
 
     public function testTheLinkButtonTurnsTheScreenIntoTheCard(): void

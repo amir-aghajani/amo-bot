@@ -1,3 +1,5 @@
+[فارسی](fa/API-Contract.md)
+
 # API contract
 
 Every endpoint PHP answers is described once, in OpenAPI 3.0.3: `resources/api/openapi.yaml`. Both sides are held to
@@ -12,8 +14,8 @@ written from the same file.
 - **Every operation** of `routes/api.php`, with the schema of every success answer. Errors share one shape,
   `ErrorResponse` (`{message, errors?, request_id}`), under `default`.
 - **Closed objects** (`additionalProperties: false`): a field the server sends, or a request carries, that the
-  description lacks is a failure, never a silent extra. In an answer every field is `required` and `nullable` where it
-  may be null.
+  description lacks is a failure, never a silent extra. An object without fields is a map of what its
+  `additionalProperties` says, or empty. In an answer every field is `required` and `nullable` where it may be null.
 - **Every request body.** A POST, PUT or PATCH has a named `requestBody` schema (so the generator makes a type, e.g.
   `PlanRequest`) or says it takes none with `x-no-body: true`. A request field is `required` when the server refuses
   the request without it; numbers may come as JSON numbers or text (`WholeNumberInput`, `AmountInput`), switches as
@@ -23,6 +25,10 @@ written from the same file.
   agent); what only one panel has is under `/api/admin/…` or `/api/agent/…`. Every operation of the owner's panel takes
   the `X-Shop` header (the shop its tab shows), and a file read takes the `shop` query parameter instead — an `<img>`
   sends no header.
+- **The `Idempotency-Key` header** of a write that may be sent again is a parameter of its own for each kind of write
+  (`IdempotencyKey` for a checkout, `TransferKey`, `ManualOrderKey`, `WalletAdjustmentKey`, `TrafficAdjustmentKey`,
+  `TicketAnswerKey`): required where the server refuses the request without one, and its description says what a
+  repeat is answered with and which change of the request is refused.
 - **Extension markers**:
   - `x-staff` on an operation of the shop's daily work that the website's admins have too — `true`, or the
     `StaffGrant` the shop must give for it — and `x-staff-recent: true` where it asks a recent sign-in without a grant
@@ -40,10 +46,15 @@ written from the same file.
   comes back: status, content type, every field. An address that is nobody's route may only answer 404 or 405. A test
   whose point is a request no client sends (a wrong type, a missing field) sends it through `unchecked()`; its answer is
   still validated, and an unchecked request that turns out to match fails the test.
-- **`tests/Unit/Http/ApiDescriptionTest`** checks the file is valid OpenAPI and names exactly the app's routes (a
-  `{panel}` path once per panel), that every change describes its body or says it takes none, that every owner's path
-  takes `X-Shop`, that the store's paths declare their key and token, that a body with a `captcha` says its action, and
-  that `routes/api.php` mounts for the websites' admins exactly the marked operations with their grants.
+- **`tests/Unit/Http/ApiDescriptionTest`** checks:
+  - the file is valid OpenAPI, and a website's own tools read it as it is (`league/openapi-psr7-validator` straight
+    from the YAML, with the YAML parser's default limits — see the pitfalls below);
+  - it names exactly the app's routes (a `{panel}` path once per panel, each shared path declaring its panels);
+  - every change describes its body or says it takes none;
+  - every object is closed, or a map (`testEveryObjectIsClosed`);
+  - every owner's path takes `X-Shop`, and the store's paths declare their key and token;
+  - a body with a `captcha` says its action;
+  - `routes/api.php` mounts for the websites' admins exactly the marked operations, with their grants.
 - **`tests/Feature/RouteGuardsTest`** walks every route with a field no operation takes, every guard in order, and
   another shop's row (a 404).
 - **`tests/Unit/Drivers/DriverFormsTest`** holds each driver family's request shapes to the registered drivers' forms,
@@ -79,9 +90,16 @@ subset of OpenAPI the file uses and fails loudly on a keyword it does not know.
 - **A changed request**: the service that reads it, its request schema, `pnpm api:types`, the screen that sends it.
 - After any edit of the description, `php scripts/docs.php` regenerates the reference pages and `docs/openapi.json`.
 
-YAML pitfalls: in a one-line `{ … }` mapping, a description containing a comma must be quoted; a `$ref` takes no
-sibling (wrap it: `{ allOf: [{ $ref: … }], description: … }`); shared property sets use anchors with `<<:` merge keys,
-the anchor above its aliases.
+YAML pitfalls:
+
+- In a one-line `{ … }` mapping, a description containing a comma must be quoted.
+- A `$ref` takes no sibling: wrap it (`{ allOf: [{ $ref: … }], description: … }`).
+- Shared property sets use anchors with `<<:` merge keys, the anchor above its aliases.
+- A single field repeated elsewhere shares its **wording** by an anchor on its description's text
+  (`description: &paymentGateway '…'`, then `description: *paymentGateway`), never by an anchor on the whole field. The
+  YAML parser's guard against an alias bomb allows at most 128 aliases of a shared mapping or list, and a website's own
+  tools read the file with that guard as it comes: past it, they refuse the file. An alias of a plain text is not
+  counted. `tests/Support/ApiDescription::read()` reads the file the same way, so the tests fail first.
 
 ## Where to start
 

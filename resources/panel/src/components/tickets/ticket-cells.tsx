@@ -1,7 +1,5 @@
-import { Star } from 'lucide-react'
 import { RowTitleLink } from '@/components/list-view'
 import type { TicketRow } from '@/lib/api-types'
-import { formatNumber } from '@/lib/format'
 
 /* What a ticket's row shows wherever it is listed — the tickets screen, a customer's page — and its own page reuses. */
 
@@ -26,15 +24,5 @@ export function TicketSubject({ ticket }: { ticket: Pick<TicketRow, 'id' | 'subj
         </span>
       )}
     </div>
-  )
-}
-
-/** The customer's word on a closed ticket, 1 to 5: «۴ از ۵» after a star. */
-export function TicketRating({ rating }: { rating: number }) {
-  return (
-    <span className="inline-flex items-center gap-1 whitespace-nowrap tabular">
-      <Star className="size-3.5 fill-current text-warning" aria-hidden />
-      {formatNumber(rating)} از {formatNumber(5)}
-    </span>
   )
 }

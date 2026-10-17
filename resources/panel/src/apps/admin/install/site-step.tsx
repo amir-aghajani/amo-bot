@@ -30,7 +30,7 @@ export function SiteStep({ status, onDone }: StepProps) {
   return (
     <PublicPanel
       title="سایت و ربات"
-      description="نام فروشگاه و آدرسی که سایت با آن باز می‌شود (Webhook ربات و آدرس Cron از آن ساخته می‌شوند). توکن ربات را اگر الان دارید وارد کنید؛ بعدا هم از «تنظیمات» می‌شود."
+      description="نام فروشگاه و آدرسی که سایت با آن باز می‌شود (Webhook ربات و آدرس Cron از آن ساخته می‌شوند). توکن ربات را اگر الان دارید وارد کنید؛ بعدا هم از «تنظیمات پنل › ربات تلگرام» می‌شود."
     >
       <form onSubmit={save} noValidate className="grid gap-4">
         <Field id="site_name" label="نام فروشگاه" error={error('name')}>

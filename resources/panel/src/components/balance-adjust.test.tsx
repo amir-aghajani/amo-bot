@@ -6,7 +6,7 @@ import { WalletModal, WalletPanel } from '@/components/users/wallet-modal'
 import type { AgentRow, UserWalletResponse } from '@/lib/api-types'
 import { providers, until } from '@/test/render'
 import { userRow } from '@/test/rows'
-import { json, server } from '@/test/server'
+import { json, offline, server } from '@/test/server'
 
 /*
  * A balance set right by hand (components/balance-adjust) — a customer's wallet, an agent's traffic: the amount goes in
@@ -89,6 +89,23 @@ describe('a wallet’s amount', () => {
     expect(sent('/api/admin/users/10/wallet').map((body) => (body as { amount: string }).amount)).toEqual(['150000', '150000'])
   })
 
+  it('once made, is emptied for the next — the submit just pressed held, not disabled, so it keeps the focus', async () => {
+    wallet()
+    const submit = screen.getByRole('button', { name: 'افزایش موجودی' }) as HTMLButtonElement
+    expect([submit.disabled, submit.getAttribute('aria-disabled')]).toEqual([false, 'true'])
+
+    fireEvent.change(screen.getByLabelText('مبلغ (تومان)'), { target: { value: '50000' } })
+    submit.focus()
+    fireEvent.click(submit)
+
+    await until(() => expect(sent('/api/admin/users/10/wallet')).toHaveLength(1))
+    await until(() => expect((screen.getByLabelText('مبلغ (تومان)') as HTMLInputElement).value).toBe(''))
+    expect(document.activeElement).toBe(submit)
+    expect([submit.disabled, submit.getAttribute('aria-disabled')]).toEqual([false, 'true'])
+    fireEvent.click(submit)
+    expect(sent('/api/admin/users/10/wallet')).toHaveLength(1)
+  })
+
   it('that is not a whole number of Toman is refused by the form, and nothing is sent', () => {
     wallet()
 
@@ -120,5 +137,66 @@ describe('an agent’s traffic', () => {
 
     expect(screen.getByText('یک عدد بنویسید، با حداکثر دو رقم اعشار.')).toBeTruthy()
     expect(sent('/api/admin/agency/agents/10/traffic')).toEqual([])
+  })
+
+  it('goes under a key, the same again after no answer: the server sets it right once', async () => {
+    server()
+      .on('GET', '/api/admin/agency/agents/10/traffic', json({ lines: [], meta: { page: 1, per_page: 25, total: 0, last_page: 1 } }))
+      .on('POST', '/api/admin/agency/agents/10/traffic', offline)
+    render(<TrafficModal agent={AGENT} onClose={() => undefined} onSaved={() => undefined} />, { wrapper: providers().wrapper })
+
+    adjust('حجم (گیگابایت)', '50', 'افزایش حجم')
+    await screen.findByRole('alert')
+    server().on('POST', '/api/admin/agency/agents/10/traffic', json({ agent: AGENT }))
+    fireEvent.click(screen.getByRole('button', { name: 'افزایش حجم' }))
+
+    await until(() => expect(keys('/api/admin/agency/agents/10/traffic')).toHaveLength(2))
+    const [first, again] = keys('/api/admin/agency/agents/10/traffic')
+    expect(first).toMatch(/^[0-9a-f]{32}$/)
+    expect(again).toBe(first)
+  })
+})
+
+/** The Idempotency-Key each change sent to `path` went under, in the order sent. */
+const keys = (path: string) =>
+  server()
+    .sent('POST', path)
+    .map((request) => request.headers['idempotency-key'])
+
+describe('a wallet’s change pressed again', () => {
+  it('after no answer goes under the same key, so the server makes it once', async () => {
+    wallet()
+    server().on('POST', '/api/admin/users/10/wallet', offline)
+
+    adjust('مبلغ (تومان)', '۵۰٬۰۰۰', 'افزایش موجودی')
+    await screen.findByRole('alert')
+    server().on('POST', '/api/admin/users/10/wallet', json({ user: CUSTOMER, transaction: null, transactions: [] }))
+    // Typed again as the server reads it: the same change.
+    adjust('مبلغ (تومان)', '50000', 'افزایش موجودی')
+
+    await until(() => expect(keys('/api/admin/users/10/wallet')).toHaveLength(2))
+    const [first, again] = keys('/api/admin/users/10/wallet')
+    expect(first).toMatch(/^[0-9a-f]{32}$/)
+    expect(again).toBe(first)
+  })
+
+  it('once it went through, or once it was edited, goes under a new key', async () => {
+    wallet()
+
+    adjust('مبلغ (تومان)', '50000', 'افزایش موجودی')
+    await until(() => expect(keys('/api/admin/users/10/wallet')).toHaveLength(1))
+    await until(() => expect((screen.getByLabelText('مبلغ (تومان)') as HTMLInputElement).value).toBe(''))
+    adjust('مبلغ (تومان)', '50000', 'افزایش موجودی')
+    await until(() => expect(keys('/api/admin/users/10/wallet')).toHaveLength(2))
+
+    server().on('POST', '/api/admin/users/10/wallet', offline)
+    adjust('مبلغ (تومان)', '50000', 'افزایش موجودی')
+    await screen.findByRole('alert')
+    server().on('POST', '/api/admin/users/10/wallet', json({ user: CUSTOMER, transaction: null, transactions: [] }))
+    fireEvent.click(screen.getByRole('radio', { name: 'کاهش' }))
+    adjust('مبلغ (تومان)', '50000', 'کاهش موجودی')
+    await until(() => expect(keys('/api/admin/users/10/wallet')).toHaveLength(4))
+
+    expect(new Set(keys('/api/admin/users/10/wallet')).size).toBe(4)
   })
 })

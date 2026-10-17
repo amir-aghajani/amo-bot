@@ -14,6 +14,7 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\WalletTransaction;
+use App\Support\Money;
 use Tests\BotTestCase;
 use Tests\Fakes\FakeProvider;
 
@@ -76,6 +77,21 @@ final class FreePlansTest extends BotTestCase
 
         self::assertSame(OrderStatus::Fulfilled, Order::query()->sole()->status, 'no card transfer of nothing');
         self::assertSame($this->walletMethod()->id, Payment::query()->sole()->payment_method_id, 'settled by the shop\'s own wallet');
+    }
+
+    public function testAFreeButtonWhosePlanIsPricedSinceShowsThePriceWhicheverWayItGoesThrough(): void
+    {
+        $this->walletMethod()->forceFill(['enabled' => false])->save();
+        $card = $this->cardMethod();
+        $take = $this->checkout($this->test);
+
+        // The admin prices the plan while «🎁 دریافت رایگان» is on screen.
+        $this->test->forceFill(['price' => '50000.00'])->save();
+        $this->send($this->tap($take));
+
+        self::assertSame(['text' => $card->label, 'callback_data' => $take], $this->inlineKeyboard(0)[0][0], 'its checkout again, the card a way to pay now');
+        self::assertStringContainsString(Money::format('50000'), $this->said()[0], 'at the price it costs now');
+        self::assertSame([0, 0], [Order::query()->count(), Payment::query()->count()], 'no card transfer asked of a button that said free');
     }
 
     public function testAFreeOrderGivenBackGivesNothingBack(): void

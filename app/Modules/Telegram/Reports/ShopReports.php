@@ -60,7 +60,8 @@ use Psr\Log\LoggerInterface;
  *
  * A report is written in a savepoint of the caller's transaction, so it stands or falls with what it reports. Words
  * that cannot be composed are logged and dropped; a database error goes up to the caller. The wording is fixed here (the
- * admins read it, not customers).
+ * admins read it, not customers). A row's number after Persian words has a left-to-right mark (U+200E) before it: bare,
+ * «سفارش #12» reads «12# سفارش».
  */
 final class ShopReports
 {
@@ -136,7 +137,7 @@ final class ShopReports
     {
         $this->report(Bot::MAIN, Topic::Agency, static function () use ($request): array {
             $lines = [
-                sprintf('🤝 <b>درخواست نمایندگی</b> · #%d', $request->id),
+                sprintf("🤝 <b>درخواست نمایندگی</b> · \u{200E}#%d", $request->id),
                 '👤 ' . self::customer($request->user),
                 ...self::note(self::CUSTOMER_NOTE, $request->note),
                 '⏳ در انتظار بررسی — همین‌جا، یا در صفحه «نمایندگان» پنل',
@@ -156,8 +157,8 @@ final class ShopReports
         $this->report(Bot::MAIN, Topic::Agency, static function () use ($request): array {
             $level = $request->level;
             $text = $request->status === AgencyRequestStatus::Approved
-                ? sprintf('✅ درخواست نمایندگی #%d تایید شد: سطح «%s»، هر گیگابایت %s.', $request->id, self::name($level->name ?? '—'), Money::format($level->price_per_gb ?? '0'))
-                : sprintf('❌ درخواست نمایندگی #%d رد شد.', $request->id);
+                ? sprintf("✅ درخواست نمایندگی \u{200E}#%d تایید شد: سطح «%s»، هر گیگابایت %s.", $request->id, self::name($level->name ?? '—'), Money::format($level->price_per_gb ?? '0'))
+                : sprintf("❌ درخواست نمایندگی \u{200E}#%d رد شد.", $request->id);
 
             return [
                 'text' => implode("\n", [$text, ...self::note(self::SUPPORT_NOTE, $request->reason)]),
@@ -205,7 +206,7 @@ final class ShopReports
             $method = $payment->method;
             $customer = $payment->order->user;
             $lines = [
-                sprintf('🧾 <b>رسید جدید</b> · پرداخت #%d', $payment->id),
+                sprintf("🧾 <b>رسید جدید</b> · پرداخت \u{200E}#%d", $payment->id),
                 '👤 ' . self::customer($customer),
                 self::purpose($payment->order),
                 sprintf('💳 مبلغ: %s · %s', Money::format($payment->amount), self::name($method->label)),
@@ -243,24 +244,25 @@ final class ShopReports
     public function latePayment(Payment $payment): void
     {
         $this->report($payment->shop(), Topic::Wallet, static fn(): array => ['text' => implode("\n", [
-            sprintf('💳 <b>پرداخت آنلاین پس از بسته شدن سفارش</b> · پرداخت #%d', $payment->id),
+            sprintf("💳 <b>پرداخت آنلاین پس از بسته شدن سفارش</b> · پرداخت \u{200E}#%d", $payment->id),
             '👤 ' . self::customer($payment->order->user),
             sprintf('💰 %s · %s', Money::format($payment->amount), self::name($payment->method->label)),
-            sprintf('سفارش #%d پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت.', $payment->order_id),
+            sprintf("سفارش \u{200E}#%d پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت.", $payment->order_id),
             '👛 موجودی: ' . Money::format($payment->order->user->balance()),
         ])]);
     }
 
     /**
-     * An online payment held for support (Payments\Services\OnlinePayments): its gateway answered what does not fit it, or
-     * kept money on it unsettled too long. Who, for what, how much on which method, its id at the gateway (`$gatewayId`),
-     * why — its note, then what the gateway said (`$detail`, no secret in it) — and who of support asked, when it was
-     * their «استعلام از درگاه» (`$by`).
+     * An online payment held for support (Payments\Services\OnlinePayments; its note one of PaymentService::HELD_NOTES):
+     * its gateway answered what does not fit it, kept money on it unsettled too long, or closed it after saying money had
+     * come in on it. Who, for what, how much on which method, its id at the gateway (`$gatewayId`), why — its note, then
+     * what the gateway said (`$detail`, no secret in it) — and who of support asked, when it was their «استعلام از درگاه»
+     * (`$by`).
      */
     public function heldPayment(Payment $payment, string $gatewayId, string $detail, ?string $by): void
     {
         $this->report($payment->shop(), Topic::Errors, fn(): array => ['text' => implode("\n", [
-            sprintf('⚠️ <b>پرداخت آنلاین برای بررسی پشتیبانی نگه داشته شد</b> · پرداخت #%d', $payment->id),
+            sprintf("⚠️ <b>پرداخت آنلاین برای بررسی پشتیبانی نگه داشته شد</b> · پرداخت \u{200E}#%d", $payment->id),
             '👤 ' . self::customer($payment->order->user),
             self::purpose($payment->order),
             sprintf('💳 مبلغ: %s · %s', Money::format($payment->amount), self::name($payment->method->label)),
@@ -277,20 +279,20 @@ final class ShopReports
     public function receiptApproved(Payment $payment): void
     {
         $this->verdict($payment, $payment->wasAutoApproved()
-            ? sprintf('✅ رسید پرداخت #%d خودکار تایید شد؛ در مهلت بررسی کسی آن را تایید یا رد نکرد.', $payment->id)
-            : sprintf('✅ رسید پرداخت #%d تایید شد.', $payment->id));
+            ? sprintf("✅ رسید پرداخت \u{200E}#%d خودکار تایید شد؛ در مهلت بررسی کسی آن را تایید یا رد نکرد.", $payment->id)
+            : sprintf("✅ رسید پرداخت \u{200E}#%d تایید شد.", $payment->id));
     }
 
     /** The receipt was rejected, with support's reason. */
     public function receiptRejected(Payment $payment, ?string $reason): void
     {
-        $this->verdict($payment, sprintf('❌ رسید پرداخت #%d رد شد.', $payment->id), $reason);
+        $this->verdict($payment, sprintf("❌ رسید پرداخت \u{200E}#%d رد شد.", $payment->id), $reason);
     }
 
     /** The payment was cancelled, with support's note. */
     public function receiptCancelled(Payment $payment, ?string $note): void
     {
-        $this->verdict($payment, sprintf('🚫 پرداخت #%d لغو شد.', $payment->id), $note);
+        $this->verdict($payment, sprintf("🚫 پرداخت \u{200E}#%d لغو شد.", $payment->id), $note);
     }
 
     /**
@@ -322,7 +324,7 @@ final class ShopReports
         };
 
         $this->report($order->shop(), Topic::Errors, static fn(): ?array => ReportMessage::query()->where('ref', self::DELIVERY_REF . $order->id)->exists() ? [
-            'text' => sprintf('✅ سفارش #%d با تلاش دوباره تحویل شد.', $order->id),
+            'text' => sprintf("✅ سفارش \u{200E}#%d با تلاش دوباره تحویل شد.", $order->id),
             'reply_ref' => self::DELIVERY_REF . $order->id,
             'clears_buttons' => true,
         ] : null);
@@ -335,7 +337,7 @@ final class ShopReports
     public function serviceClaimed(Subscription $subscription): void
     {
         $this->report($subscription->shop(), Topic::Purchases, static fn(): array => ['text' => implode("\n", [
-            sprintf('🔗 <b>سرویس با لینک به حساب مشتری اضافه شد</b> · اشتراک #%d', $subscription->id),
+            sprintf("🔗 <b>سرویس با لینک به حساب مشتری اضافه شد</b> · اشتراک \u{200E}#%d", $subscription->id),
             '👤 ' . self::customer($subscription->user),
             ...self::heldService($subscription),
         ])]);
@@ -348,7 +350,7 @@ final class ShopReports
     public function serviceTransferred(Subscription $subscription, User $from, Actor $by): void
     {
         $this->report($subscription->shop(), Topic::Purchases, fn(): array => ['text' => implode("\n", [
-            sprintf('🔁 <b>سرویس به مشتری دیگری منتقل شد</b> · اشتراک #%d', $subscription->id),
+            sprintf("🔁 <b>سرویس به مشتری دیگری منتقل شد</b> · اشتراک \u{200E}#%d", $subscription->id),
             '👤 از: ' . self::customer($from),
             '👤 به: ' . self::customer($subscription->user),
             ...self::heldService($subscription),
@@ -363,7 +365,7 @@ final class ShopReports
     public function walletTransferred(WalletTransfer $transfer): void
     {
         $this->report($transfer->shop(), Topic::Wallet, static fn(): array => ['text' => implode("\n", [
-            sprintf('💸 <b>انتقال موجودی بین مشتری‌ها</b> · انتقال #%d', $transfer->id),
+            sprintf("💸 <b>انتقال موجودی بین مشتری‌ها</b> · انتقال \u{200E}#%d", $transfer->id),
             '👤 از: ' . self::customer($transfer->sender),
             '👤 به: ' . self::customer($transfer->recipient),
             '💳 مبلغ: ' . Money::format($transfer->amount),
@@ -402,7 +404,7 @@ final class ShopReports
     {
         $this->report($order->shop(), Topic::Errors, static function () use ($order): array {
             $lines = [
-                sprintf('⚠️ <b>تحویل سفارش #%d ناموفق بود</b> (%s)', $order->id, $order->type->label()),
+                sprintf("⚠️ <b>تحویل سفارش \u{200E}#%d ناموفق بود</b> (%s)", $order->id, $order->type->label()),
                 '👤 ' . self::customer($order->user),
             ];
             $server = $order->type->forService() ? self::subscriptionOf($order)?->server : $order->server;
@@ -436,7 +438,7 @@ final class ShopReports
     {
         $this->report($ticket->shop(), Topic::Tickets, static function () use ($ticket, $message): array {
             $lines = [
-                sprintf('🎫 <b>تیکت جدید</b> · #%d', $ticket->id),
+                sprintf("🎫 <b>تیکت جدید</b> · \u{200E}#%d", $ticket->id),
                 '👤 ' . self::customer($ticket->user),
                 '📌 موضوع: ' . self::field($ticket->subject),
             ];
@@ -457,8 +459,8 @@ final class ShopReports
     {
         $this->report($ticket->shop(), Topic::Tickets, static function () use ($ticket, $message, $reopened): array {
             $lines = [$message->author === TicketAuthor::Customer
-                ? sprintf('💬 <b>پیام مشتری</b> · تیکت #%d · %s', $ticket->id, $message->channel->source())
-                : sprintf('↩️ <b>پاسخ پشتیبانی</b> · تیکت #%d · %s', $ticket->id, $message->channel->source())];
+                ? sprintf("💬 <b>پیام مشتری</b> · تیکت \u{200E}#%d · %s", $ticket->id, $message->channel->source())
+                : sprintf("↩️ <b>پاسخ پشتیبانی</b> · تیکت \u{200E}#%d · %s", $ticket->id, $message->channel->source())];
             if ($reopened) {
                 $lines[] = '🔓 تیکت دوباره باز شد.';
             }
@@ -470,20 +472,20 @@ final class ShopReports
     /** The ticket was closed (by the customer or by support), under its last report, which loses its button. */
     public function ticketClosed(Ticket $ticket, bool $byCustomer): void
     {
-        $this->ticketNews($ticket, sprintf('🔒 تیکت #%d بسته شد — %s.', $ticket->id, $byCustomer ? 'مشتری آن را بست' : 'پشتیبانی آن را بست'), false);
+        $this->ticketNews($ticket, sprintf("🔒 تیکت \u{200E}#%d بسته شد — %s.", $ticket->id, $byCustomer ? 'مشتری آن را بست' : 'پشتیبانی آن را بست'), false);
     }
 
     /** Support opened the closed ticket again: under its last report, «بستن تیکت» back under this one. */
     public function ticketReopened(Ticket $ticket): void
     {
-        $this->ticketNews($ticket, sprintf('🔓 تیکت #%d دوباره باز شد.', $ticket->id), true);
+        $this->ticketNews($ticket, sprintf("🔓 تیکت \u{200E}#%d دوباره باز شد.", $ticket->id), true);
     }
 
     /** The customer rated their closed ticket (a first rating, or a changed one), under its last report. */
     public function ticketRated(Ticket $ticket): void
     {
         $this->ticketNews($ticket, implode("\n", [
-            sprintf('⭐️ امتیاز مشتری به تیکت #%d: %s از ۵', $ticket->id, Persian::digits((int) $ticket->rating)),
+            sprintf("⭐️ امتیاز مشتری به تیکت \u{200E}#%d: %s از ۵", $ticket->id, Persian::digits((int) $ticket->rating)),
             ...self::note(self::CUSTOMER_NOTE, $ticket->rating_note),
         ]), false);
     }
@@ -493,7 +495,7 @@ final class ShopReports
     {
         $this->report($review->shop(), Topic::Reviews, static function () use ($review): array {
             $lines = [
-                sprintf('⭐️ <b>نظر جدید</b> · #%d', $review->id),
+                sprintf("⭐️ <b>نظر جدید</b> · \u{200E}#%d", $review->id),
                 '✍️ ' . self::name($review->name),
                 sprintf('%s%s (%s از ۵)', str_repeat('★', $review->rating), str_repeat('☆', 5 - $review->rating), Persian::digits($review->rating)),
             ];
@@ -716,7 +718,7 @@ final class ShopReports
     {
         $subscription = self::subscriptionOf($order);
         $lines = [
-            sprintf('🛍️ <b>خرید جدید</b> · سفارش #%d', $order->id),
+            sprintf("🛍️ <b>خرید جدید</b> · سفارش \u{200E}#%d", $order->id),
             '👤 ' . self::customer($order->user),
             // A service the customer built has no plan: its GB and days say what it is.
             ($order->isBuilt() ? '📦 ' : '📦 پلن: ') . self::name($order->packageName() ?? '—'),
@@ -748,13 +750,14 @@ final class ShopReports
 
     /**
      * «🎧 توسط پشتیبانی» — what support did, and who of them: an admin or an agent by name, the owner (or nobody's name)
-     * as plain «پشتیبانی» (Reviewers::shared()), so the owner's panel login reaches no group.
+     * as plain «پشتیبانی» (Reviewers::shared()), so the owner's panel login reaches no group. The admin («@sara»,
+     * «tg:…», «user#…», «agent#…») comes after a left-to-right mark: after the Persian words a handle would read «sara@».
      */
     private function bySupport(?string $reviewer, string $did = 'توسط پشتیبانی'): string
     {
         $by = $this->reviewers->shared($reviewer) ?? Reviewers::SUPPORT;
 
-        return '🎧 ' . $did . ($by === Reviewers::SUPPORT ? '' : ': ' . self::name($by));
+        return '🎧 ' . $did . ($by === Reviewers::SUPPORT ? '' : ": \u{200E}" . self::name($by));
     }
 
     /** A renewal: the service renewed, its new end — and its method, unless the usual «تمدید پلن فعلی». */
@@ -763,7 +766,7 @@ final class ShopReports
         $subscription = self::subscriptionOf($order);
         $method = $order->renewal_method;
         $lines = [
-            sprintf('♻️ <b>تمدید سرویس</b> · سفارش #%d', $order->id) . ($method === null || $method === RenewalMethod::Extend ? '' : ' · ' . $method->label()),
+            sprintf("♻️ <b>تمدید سرویس</b> · سفارش \u{200E}#%d", $order->id) . ($method === null || $method === RenewalMethod::Extend ? '' : ' · ' . $method->label()),
             '👤 ' . self::customer($order->user),
         ];
         if ($subscription !== null) {
@@ -779,7 +782,7 @@ final class ShopReports
     {
         $subscription = self::subscriptionOf($order);
         $lines = [
-            sprintf('%s <b>%s</b> · سفارش #%d', self::extraIcon($order), $order->type->label(), $order->id),
+            sprintf("%s <b>%s</b> · سفارش \u{200E}#%d", self::extraIcon($order), $order->type->label(), $order->id),
             '👤 ' . self::customer($order->user),
         ];
         if ($subscription !== null) {
@@ -831,7 +834,7 @@ final class ShopReports
         $payment = self::paymentOf($order);
         $bot = $order->user->ownBot;
         $lines = [
-            sprintf('💾 <b>خرید حجم نمایندگی</b> · سفارش #%d', $order->id),
+            sprintf("💾 <b>خرید حجم نمایندگی</b> · سفارش \u{200E}#%d", $order->id),
             '👤 ' . self::customer($order->user),
             '📦 حجم: ' . Messages::bytes((int) $order->traffic_bytes),
             self::paid($order, $payment),
@@ -847,7 +850,7 @@ final class ShopReports
     {
         $payment = self::paymentOf($order);
         $lines = [
-            sprintf('💰 <b>شارژ کیف پول</b> · سفارش #%d', $order->id),
+            sprintf("💰 <b>شارژ کیف پول</b> · سفارش \u{200E}#%d", $order->id),
             '👤 ' . self::customer($order->user),
             self::paid($order, $payment),
             '👛 موجودی: ' . Money::format($order->user->balance()),
@@ -902,25 +905,26 @@ final class ShopReports
     private static function purpose(Order $order): string
     {
         return match ($order->type) {
-            OrderType::Purchase => sprintf('📦 خرید %s · %s · سفارش #%d', self::name($order->packageName() ?? '—'), self::name($order->server->name ?? '—'), $order->id),
-            OrderType::Renewal => sprintf('♻️ تمدید <code>%s</code> · سفارش #%d', htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
-            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => sprintf('%s %s %s برای <code>%s</code> · سفارش #%d', self::extraIcon($order), $order->type->label(), self::quantity($order), htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
-            OrderType::WalletTopUp => sprintf('💰 شارژ کیف پول · سفارش #%d', $order->id),
-            OrderType::Traffic => sprintf('💾 خرید حجم نمایندگی (%s) · سفارش #%d', Messages::bytes((int) $order->traffic_bytes), $order->id),
+            OrderType::Purchase => sprintf("📦 خرید %s · %s · سفارش \u{200E}#%d", self::name($order->packageName() ?? '—'), self::name($order->server->name ?? '—'), $order->id),
+            OrderType::Renewal => sprintf("♻️ تمدید <code>%s</code> · سفارش \u{200E}#%d", htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
+            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => sprintf("%s %s %s برای <code>%s</code> · سفارش \u{200E}#%d", self::extraIcon($order), $order->type->label(), self::quantity($order), htmlspecialchars(self::subscriptionOf($order)->remote_name ?? '—'), $order->id),
+            OrderType::WalletTopUp => sprintf("💰 شارژ کیف پول · سفارش \u{200E}#%d", $order->id),
+            OrderType::Traffic => sprintf("💾 خرید حجم نمایندگی (%s) · سفارش \u{200E}#%d", Messages::bytes((int) $order->traffic_bytes), $order->id),
         };
     }
 
     /**
      * A customer as the group reads them: the name (a profile link), the handle and the Telegram id side by side. One
-     * without Telegram shows the name, their email and their number in the shop («#12»).
+     * without Telegram shows the name, their email and their number in the shop («#12»). The handle comes after the name,
+     * a left-to-right mark before it as before the number: after a Persian name «@sara» would read «sara@».
      */
     private static function customer(User $user): string
     {
         $name = self::name($user->name() ?? 'بدون نام');
         if ($user->telegram_id === null) {
-            return sprintf('%s · %s · <code>#%d</code>', $name, $user->email !== null ? htmlspecialchars($user->email) : 'بدون ایمیل', $user->id);
+            return sprintf("%s · %s · \u{200E}<code>#%d</code>", $name, $user->email !== null ? htmlspecialchars($user->email) : 'بدون ایمیل', $user->id);
         }
-        $handle = $user->handle() === null ? 'بدون نام کاربری' : '@' . htmlspecialchars($user->handle());
+        $handle = $user->handle() === null ? 'بدون نام کاربری' : "\u{200E}@" . htmlspecialchars($user->handle());
 
         return sprintf('<a href="tg://user?id=%d">%s</a> · %s · <code>%d</code>', $user->telegram_id, $name, $handle, $user->telegram_id);
     }

@@ -13,6 +13,7 @@ use App\Modules\Telegram\Api\Limits;
 use App\Modules\Telegram\Api\Refusal;
 use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Models\ReportMessage;
+use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Modules\Users\Services\CustomerPictures;
 use Illuminate\Database\Eloquent\Builder;
 use Psr\Log\LoggerInterface;
@@ -291,14 +292,16 @@ final class ReportSender
     }
 
     /**
-     * A refused picture: trouble with Telegram, the group or the topic goes up (it would refuse the text too); a refusal
-     * of the picture itself lets the report go as text.
+     * A refused picture: Telegram out of reach or asking to wait, or the topic gone or closed, goes up (the text would
+     * fare no better, and the topic is made or opened again); any other refusal lets the report go as text. A copy's
+     * "forbidden" or "chat not found" may be the customer's chat it is copied from (they blocked the bot, their account is
+     * gone) as well as the group: the text tells them apart — refused in turn, the group's trouble holds everything.
      *
      * @throws TelegramApiException
      */
     private function throwUnlessThePicturesOwn(TelegramApiException $e): void
     {
-        if ($e->refusal()->isTransient() || $e->is(Refusal::ThreadGone, Refusal::TopicClosed) || GroupProblem::of($e) !== null) {
+        if ($e->refusal()->isTransient() || $e->is(Refusal::ThreadGone, Refusal::TopicClosed)) {
             throw $e;
         }
     }
@@ -320,7 +323,7 @@ final class ReportSender
                 throw $e;
             }
             $this->logger->warning('Report {id}: Telegram could not parse its markup ({message}); sent as plain words', ['id' => $message->id, 'message' => $e->getMessage()]);
-            $sent = $this->api->sendText($chatId, html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5), $options);
+            $sent = $this->api->sendText($chatId, TelegramHtml::visible($text), $options);
         }
 
         return (int) ($sent['message_id'] ?? 0);

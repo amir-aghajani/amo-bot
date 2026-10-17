@@ -93,15 +93,9 @@ final class ClientNaming
     public function next(User $user, Server $server, bool $test = false): string
     {
         $pattern = $test ? $this->settings->testPattern() : $this->settings->pattern();
-        $rule = $this->rule($server);
-        for ($try = 0; $try < self::TRIES; $try++) {
-            $name = $rule->fit($this->render($pattern, $user, min(ClientNamePattern::NAME_MAX, $rule->max ?? ClientNamePattern::NAME_MAX)));
-            if (!self::taken($server, $name)) {
-                return $name;
-            }
-        }
+        $max = min(ClientNamePattern::NAME_MAX, $this->rule($server)->max ?? ClientNamePattern::NAME_MAX);
 
-        throw new NoServerAvailableException("نام آزادی برای کلاینت روی «{$server->name}» پیدا نشد؛ الگوی نام کاربری سرویس را در تنظیمات ربات بررسی کنید.");
+        return $this->free($server, fn(): string => $this->render($pattern, $user, $max), "نام آزادی برای کلاینت روی «{$server->name}» پیدا نشد؛ الگوی نام کاربری سرویس را در تنظیمات ربات بررسی کنید.");
     }
 
     /**
@@ -141,7 +135,7 @@ final class ClientNaming
         return match ($mode) {
             ClientNameMode::Sequential => null,
             ClientNameMode::Random => $this->randomOn($server, $seed),
-            ClientNameMode::Custom => $this->typed(trim((string) $typed), $server),
+            ClientNameMode::Custom => $this->typed((string) $typed, $server),
         };
     }
 
@@ -154,7 +148,7 @@ final class ClientNaming
      */
     public function chosen(string $typed, Server $server): string
     {
-        return $this->typed(trim($typed), $server);
+        return $this->typed($typed, $server);
     }
 
     /**
@@ -225,25 +219,38 @@ final class ClientNaming
      */
     private function randomOn(Server $server, ?string $seed): string
     {
+        return $this->free($server, static fn(int $try): string => self::random($seed === null ? null : $seed . '|' . $try), "نام تصادفی آزادی روی «{$server->name}» پیدا نشد.");
+    }
+
+    /**
+     * The first name `$draw` makes for a try — TRIES at most, each made to fit the server's panel — that no service on
+     * the server carries.
+     *
+     * @param \Closure(int): string $draw
+     * @throws NoServerAvailableException `$none` once every try was taken
+     */
+    private function free(Server $server, \Closure $draw, string $none): string
+    {
         $rule = $this->rule($server);
         for ($try = 0; $try < self::TRIES; $try++) {
-            $name = $rule->fit(self::random($seed === null ? null : $seed . '|' . $try));
+            $name = $rule->fit($draw($try));
             if (!self::taken($server, $name)) {
                 return $name;
             }
         }
 
-        throw new NoServerAvailableException("نام تصادفی آزادی روی «{$server->name}» پیدا نشد.");
+        throw new NoServerAvailableException($none);
     }
 
     /**
-     * A name the buyer typed, while it is one, the server's panel takes it as it is, and no service on the server carries
-     * it.
+     * A name the buyer typed — trimmed, its Persian or Arabic digits Latin (a Persian keyboard types those) —, while it is
+     * one, the server's panel takes it as it is, and no service on the server carries it.
      *
      * @throws ValidationException 422 on `client_name`
      */
-    private function typed(string $name, Server $server): string
+    private function typed(string $typed, Server $server): string
     {
+        $name = Persian::latinDigits(trim($typed));
         if (preg_match(self::OWN, $name) !== 1) {
             throw ValidationException::on('client_name', self::NOT_A_NAME);
         }

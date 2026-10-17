@@ -15,7 +15,8 @@ use Tests\HttpTestCase;
 /**
  * The reviews screen (both panels and the website's admin API): the list (newest first, by status and search, the pending
  * ones counted for the sidebar and the dashboard) and support's decisions — approve, reject, either again, delete — each
- * taken once, a refused state worded by the state it found, recorded under the deciding principal. Each shop sees its own.
+ * taken once, a refused state worded by the state it found, recorded under the deciding principal (one of the shop's
+ * admins read with their name). Each shop sees its own.
  */
 final class AdminReviewsApiTest extends HttpTestCase
 {
@@ -51,6 +52,7 @@ final class AdminReviewsApiTest extends HttpTestCase
             'status' => 'approved',
             'customer' => ['id' => $this->ali->id, 'name' => 'Ali', 'username' => 'ali', 'telegram_id' => self::TELEGRAM_ID, 'email' => null],
             'reviewer' => null,
+            'reviewer_name' => null,
             'decided_at' => null,
             'created_at' => '2026-10-08T12:00:00+00:00',
             'actions' => ['approve' => false, 'reject' => true],
@@ -127,7 +129,7 @@ final class AdminReviewsApiTest extends HttpTestCase
         $_SESSION = [];
         $this->loginAsAgent($bot);
         $agentList = $this->decode($this->get('/api/agent/reviews'));
-        self::assertSame([[$theirs->id, 'پشتیبانی']], array_map(static fn(array $row): array => [$row['id'], $row['reviewer']], $agentList['reviews']), "the agent reads the owner's login as support");
+        self::assertSame([[$theirs->id, 'پشتیبانی', null]], array_map(static fn(array $row): array => [$row['id'], $row['reviewer'], $row['reviewer_name']], $agentList['reviews']), "the agent reads the owner's login as support, by no name");
         self::assertSame(404, $this->postJson("/api/agent/reviews/{$mains->id}/reject")->getStatusCode());
         self::assertSame(404, $this->deleteJson("/api/agent/reviews/{$mains->id}")->getStatusCode());
         self::assertSame('@agent_shop_bot', $this->decode($this->postJson("/api/agent/reviews/{$theirs->id}/reject"))['review']['reviewer']);
@@ -137,7 +139,7 @@ final class AdminReviewsApiTest extends HttpTestCase
     public function testTheShopsAdminsModerateFromItsWebsite(): void
     {
         $website = $this->website();
-        $sara = $this->customer(['telegram_id' => 7001, 'username' => 'sara']);
+        $sara = $this->customer(['telegram_id' => 7001, 'username' => 'sara', 'first_name' => 'Sara']);
         $review = $this->review($this->ali, 'Ali R.', 5, 'سرعت عالی و پشتیبانی خوب.');
         $this->loginAsStaff($website, $sara);
 
@@ -146,7 +148,8 @@ final class AdminReviewsApiTest extends HttpTestCase
         self::assertSame(1, $list['meta']['pending']);
 
         $approved = $this->decode($this->postJson($this->storeApi($website, "/admin/reviews/{$review->id}/approve")))['review'];
-        self::assertSame(['approved', '@sara'], [$approved['status'], $approved['reviewer']], 'under their own name');
+        self::assertSame(['approved', '@sara', 'Sara'], [$approved['status'], $approved['reviewer'], $approved['reviewer_name']], 'under their own handle, by their name');
+        self::assertSame('Sara', $this->decode($this->get($this->storeApi($website, '/admin/reviews')))['reviews'][0]['reviewer_name'], 'in the list too');
         $again = $this->postJson($this->storeApi($website, "/admin/reviews/{$review->id}/approve"));
         self::assertSame([422, ['status' => [Reviews::APPROVED]]], [$again->getStatusCode(), $this->decode($again)['errors']]);
         self::assertSame(204, $this->deleteJson($this->storeApi($website, "/admin/reviews/{$review->id}"))->getStatusCode());

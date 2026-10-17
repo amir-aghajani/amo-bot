@@ -1,3 +1,5 @@
+[فارسی](fa/Store-API-Sign-In.md)
+
 # Store API: signing in
 
 How a customer signs in to a shop's website, and what a session is. Paths are under the
@@ -159,14 +161,24 @@ export function TelegramButton({ clientId, referralCode }: { clientId: string; r
 }
 ```
 
-Refusals: `401` — the token is not one, was made for another site
-(`این ورود برای این وب‌سایت صادر نشده است؛ Client ID وب‌سایت را بررسی کنید.` — use `GET /`'s Client ID), expired, or
-its nonce is spent or expired: get a new nonce and try again; `403` banned; `422` Telegram sign-in off, or a field
-missing (`nonce`, or `id_token` when neither it nor a redirect's `code` is sent); `429` too many failures; `502` Telegram
-out of reach — the nonce stays good for another try. `POST /auth/nonce` itself is `429` once this address network asked
-for 120 nonces, states and codes in 10 minutes, and `503`
-(`ورود به وب‌سایت این فروشگاه الان شلوغ است؛ چند دقیقه دیگر دوباره امتحان کنید.`) while the shop keeps as many sign-ins
-begun as it takes ([limits and lifetimes](#limits-and-lifetimes)).
+Refusals of `POST /auth/telegram`:
+
+- `401` — the token is not one, was made for another site (`این ورود برای این وب‌سایت صادر نشده است؛ Client ID
+  وب‌سایت را بررسی کنید.` — use `GET /`'s Client ID), expired, or its nonce is spent or expired: get a new nonce and
+  try again;
+- `403` — banned;
+- `422` — Telegram sign-in off, or a field missing (`nonce`, or `id_token` when neither it nor a redirect's `code` is
+  sent);
+- `429` — too many failures;
+- `502` — Telegram out of reach: the nonce stays good for another try.
+
+`POST /auth/nonce` itself is refused three ways:
+
+- `422` (`ورود با تلگرام و Google برای این وب‌سایت فعال نیست.`) while neither Telegram nor Google sign-in is on: no
+  sign-in would take the nonce;
+- `429` once this address network asked for 120 nonces, states and codes in 10 minutes;
+- `503` (`ورود به وب‌سایت این فروشگاه الان شلوغ است؛ چند دقیقه دیگر دوباره امتحان کنید.`) while the shop keeps as many
+  sign-ins begun as it takes ([limits and lifetimes](#limits-and-lifetimes)).
 
 ## Telegram: the redirect
 
@@ -258,16 +270,21 @@ export async function finishTelegramRedirect() {
 }
 ```
 
-Refusals besides the popup's: `422` on `redirect_uri` (`آدرس بازگشت باید یک آدرس http یا https روی آدرس وب‌سایت یا
-یکی از Originهای مجاز آن باشد، بدون #.`) or on `code_challenge` (none, or not an S256 challenge), `422` on `state` when
-it is missing and on `code_verifier` when it is missing or not 43 to 128 of `A-Z a-z 0-9 - . _ ~` — the state still
-good —, `422` while no Client Secret is kept (`ورود با redirect برای این وب‌سایت آماده نیست؛ Client Secret تلگرام در پنل
-وارد نشده است.`), `401` when the state is spent, older than 10 minutes or another flow's, or the verifier is not the one
-its challenge was made of (`این درخواست ورود منقضی شده یا قبلا استفاده شده است؛ دوباره وارد شوید.`), or Telegram
-refuses the code (`تلگرام کد ورود را نپذیرفت؛ دوباره وارد شوید.`). A post that passed those field checks spends its
-state, whatever comes of it: after a `401` — or a `502`, Telegram out of reach — start again from step 1, with a new
-verifier. On `/me/*` the same failures — and a state another session asked for — are a `422` on `code`, the session
-untouched. Asking for the address is `429` and `503` as a nonce is.
+Refusals besides the popup's:
+
+- `422` while no Client Secret is kept (`ورود با redirect برای این وب‌سایت آماده نیست؛ Client Secret تلگرام در پنل
+  وارد نشده است.`);
+- `422` on `redirect_uri` (`آدرس بازگشت باید یک آدرس http یا https روی آدرس وب‌سایت یا یکی از Originهای مجاز آن
+  باشد، بدون #.`) or on `code_challenge` (none, or not an S256 challenge), when asking for the address;
+- `422` on `state` when it is missing, and on `code_verifier` when it is missing or not 43 to 128 of
+  `A-Z a-z 0-9 - . _ ~` — the state is still good then;
+- `401` when the state is spent, older than 10 minutes or another flow's, or the verifier is not the one its challenge
+  was made of (`این درخواست ورود منقضی شده یا قبلا استفاده شده است؛ دوباره وارد شوید.`), or Telegram refuses the code
+  (`تلگرام کد ورود را نپذیرفت؛ دوباره وارد شوید.`).
+
+A post that passed those field checks spends its state, whatever comes of it: after a `401` — or a `502`, Telegram out
+of reach — start again from step 1, with a new verifier. On `/me/*` the same failures — and a state another session
+asked for — are a `422` on `code`, the session untouched. Asking for the address is `429` and `503` as a nonce is.
 
 ## Google
 
@@ -558,9 +575,9 @@ visitor's, and hold your form's own submissions to a pace of your own before ask
 
 `POST /auth/telegram`, `/auth/google` and `/auth/register` take `referral_code`, a customer's invite code
 ([the referral program](Store-API-After-Buying.md#the-referral-program)). Only a newcomer — an account the sign-in makes
-— becomes the code's owner's referral; a customer the shop knew already is never attributed again. An unknown code, a
-banned customer's, or the program switched off at that moment, is ignored without an error. Keep the code a visitor arrived with and send it with their
-sign-ins:
+— becomes the code's owner's referral; a customer the shop knew already is never attributed again. The code is read in
+any case, Persian digits too. An unknown code, a banned customer's, or the program switched off at that moment, is
+ignored without an error. Keep the code a visitor arrived with and send it with their sign-ins:
 
 ```ts
 // Any page: https://shop.example.com/?ref=k7m2xq9p

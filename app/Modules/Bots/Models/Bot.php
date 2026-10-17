@@ -50,7 +50,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $agency_expires_at When the agent's agency ends — its selling then; null: never
  * @property Carbon|null $expiry_warned_at When the agent was warned of that end, once per date
  * @property string|null $monthly_minimum The Toman of traffic the agent buys each Jalali month at least; null: none
- * @property string|null $minimum_checked_month The last Jalali month («1405-07») judged against it, or the one it was set in
+ * @property string|null $minimum_checked_month The last Jalali month («1405-07») judged against it, or the one it was set in; behind last month while a passed end holds the shop (its judgment waits for the end to lift)
  * @property string|null $minimum_warned_month The Jalali month the agent was warned of falling short in
  * @property Carbon|null $selling_suspended_at Since when its shop sells nothing new; null while it sells
  * @property SellingSuspension|null $suspension_reason Why
@@ -123,6 +123,17 @@ class Bot extends Model
     public function sells(): bool
     {
         return $this->sellingSuspension() === null;
+    }
+
+    /**
+     * sells() as the database has it now, not as this copy was read: a bot's polling process keeps its shop's row for
+     * seconds, and a suspension holds from the moment it is written (the owner's, the hourly task's). An agent's row is
+     * read again without a lock — a free test locks the shop's row before its customer's, so a caller holding a
+     * customer's lock must not take it.
+     */
+    public function sellsNow(): bool
+    {
+        return $this->isMain() || (self::query()->find($this->id) ?? $this)->sells();
     }
 
     /**

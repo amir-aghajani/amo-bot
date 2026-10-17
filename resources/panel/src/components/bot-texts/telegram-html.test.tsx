@@ -1,13 +1,14 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { fillSamples, plainText, TelegramHtml, visibleLength } from '@/components/bot-texts/telegram-html'
+import { fillSamples, plainText, TelegramHtml, TelegramText, visibleLength } from '@/components/bot-texts/telegram-html'
 import type { CustomEmojisResponse } from '@/lib/api-types'
 import { providers, until } from '@/test/render'
 import { json, server } from '@/test/server'
 
 /*
  * The bot texts' preview draws Telegram HTML as Telegram shows it — the tags Telegram knows become their look, anything
- * else is only its text — from the parsed tree, never injected: what an admin typed can never run, load or navigate.
+ * else is only its text; the entities Telegram reads, any other as typed; each paragraph in its own direction — from the
+ * parsed tree, never injected: what an admin typed can never run, load or navigate.
  */
 
 /** The elements a preview may consist of. */
@@ -83,6 +84,31 @@ describe('the preview', () => {
     expect(shown.textContent).toBe('<b>not bold</b> & more')
   })
 
+  it('reads the entities Telegram reads — its four names and numeric ones —, any other as typed, as the customer sees it', () => {
+    const typed = '&lt;&gt;&amp;&quot; &#128512; &nbsp;&copy; &LT; &ltx'
+    const seen = '<>&" 😀 &nbsp;&copy; &LT; &ltx'
+
+    expect(preview(typed).textContent).toBe(seen)
+    expect(plainText(typed)).toBe(seen)
+  })
+
+  it('lays each paragraph out in its own first letter’s direction, as Telegram does — a quote’s and a code block’s too', () => {
+    const { container } = render(<TelegramText html={'سلام\nhttps://sub.example.com/s/1<blockquote>quote</blockquote><pre>code</pre>'} />, { wrapper: providers().wrapper })
+
+    const paragraphs = '[unicode-bidi:plaintext]'
+    expect(container.firstElementChild?.classList.contains(paragraphs)).toBe(true)
+    expect(container.querySelector('.tg-quote')?.classList.contains(paragraphs)).toBe(true)
+    expect(container.querySelector('.tg-pre')?.classList.contains(paragraphs)).toBe(true)
+  })
+
+  it('shows a date and time as its words, formatting inside it drawn', () => {
+    const shown = preview('تمدید تا <tg-time unix="1647531900" format="wDT"><b>۲۶</b> اسفند</tg-time>')
+
+    expect(shown.textContent).toBe('تمدید تا ۲۶ اسفند')
+    expect(shown.querySelector('strong')?.textContent).toBe('۲۶')
+    expect(shown.querySelector('tg-time')).toBeNull()
+  })
+
   it('draws a premium emoji from its id, its plain emoji standing in for the picture', async () => {
     const shown = preview('<tg-emoji emoji-id="5368324170671202286">👍</tg-emoji> عالی <tg-emoji>🔥</tg-emoji>')
 
@@ -93,24 +119,43 @@ describe('the preview', () => {
   })
 })
 
+/** Plain samples by name: what the bot escapes in an HTML text. */
+const plain = (samples: Record<string, string>) => Object.fromEntries(Object.entries(samples).map(([name, sample]) => [name, { sample, html: false }]))
+
 describe('the samples in a wording', () => {
   it('fill each variable once — a sample is never read again for variables', () => {
-    expect(fillSamples('سلام %name% — %plan%', { name: '%plan%', plan: 'Gold' }, false)).toBe('سلام %plan% — Gold')
+    expect(fillSamples('سلام %name% — %plan%', plain({ name: '%plan%', plan: 'Gold' }), false)).toBe('سلام %plan% — Gold')
   })
 
   it('are escaped for a text Telegram reads as HTML, as the bot escapes a real value', () => {
-    const filled = fillSamples('<b>%name%</b>', { name: '<i>Amir</i> & "co"' }, true)
+    const filled = fillSamples('<b>%name%</b>', plain({ name: '<i>Amir</i> & "co"' }), true)
 
     expect(filled).toBe('<b>&lt;i&gt;Amir&lt;/i&gt; &amp; &quot;co&quot;</b>')
     expect(preview(filled).querySelector('em')).toBeNull()
   })
 
+  it('go in as they are where the bot fills the variable with another text’s wording — its markup drawn, not shown as tags', () => {
+    const filled = fillSamples('💳 %card%%card_holder%', { card: { sample: '6037 & co', html: false }, card_holder: { sample: '\n👤 به نام <b>سارا احمدی</b>', html: true } }, true)
+
+    expect(filled).toBe('💳 6037 &amp; co\n👤 به نام <b>سارا احمدی</b>')
+    const shown = preview(filled)
+    expect(shown.querySelector('strong')?.textContent).toBe('سارا احمدی')
+    expect(shown.textContent).not.toContain('<b>')
+  })
+
+  it('take the left-to-right mark the bot puts before a handle or a number with words before it on its line, and only there', () => {
+    expect(fillSamples('🤖 ربات شما: %bot%\n👤 %bot%', plain({ bot: '@my_shop_bot' }), true)).toBe('🤖 ربات شما: \u{200E}@my_shop_bot\n👤 @my_shop_bot')
+    expect(fillSamples('<b>به</b> %name% و %name%', plain({ name: '#12' }), false)).toBe('<b>به</b> \u{200E}#12 و \u{200E}#12')
+    expect(fillSamples('<b>%client%</b> %name%', plain({ client: 'ali_1', name: '@sara' }), true), 'a tag or a variable is no word').toBe('<b>ali_1</b> @sara')
+    expect(fillSamples('به \u{200E}%name% و %plan%', plain({ name: '@sara', plan: 'یک‌ماهه' }), false), 'one mark, and none before words').toBe('به \u{200E}@sara و یک‌ماهه')
+  })
+
   it('go in as typed for a popup or a button', () => {
-    expect(fillSamples('%name%!', { name: '<Amir>' }, false)).toBe('<Amir>!')
+    expect(fillSamples('%name%!', plain({ name: '<Amir>' }), false)).toBe('<Amir>!')
   })
 
   it('leave a variable without a sample as it is', () => {
-    expect(fillSamples('%unknown% %name%', { name: 'Amir' }, true)).toBe('%unknown% Amir')
+    expect(fillSamples('%unknown% %name%', plain({ name: 'Amir' }), true)).toBe('%unknown% Amir')
   })
 })
 
@@ -125,5 +170,14 @@ describe('a wording read as text', () => {
     expect(visibleLength('<tg-emoji emoji-id="5368324170671202286">👍</tg-emoji>')).toBe(2)
     expect(visibleLength('<b>سلام</b> 😀')).toBe(7)
     expect(visibleLength('\n\nab')).toBe(4)
+    // As the server's check counts it (TelegramHtml::visibleLength()): an entity as Telegram reads it — one it does not
+    // read is shown as typed, and counted so; one it reads is one character, its «;» or not.
+    expect(visibleLength('<b>سلام</b> <tg-emoji emoji-id="5368324170671202286">👍</tg-emoji> &lt;')).toBe(9)
+    expect(visibleLength('⚠️')).toBe(2)
+    expect(visibleLength('&nbsp;a')).toBe(7)
+    expect(visibleLength('&lt&#65&#x42;')).toBe(3)
+    expect(visibleLength('<tg-time unix="1647531900" format="wDT">۲۲:۴۵ فردا</tg-time>')).toBe(10)
+    // A «>» inside a quoted value is the tag's, as strip_tags() reads it.
+    expect(visibleLength('<a href="https://x.example/?a>b">لینک</a>')).toBe(4)
   })
 })

@@ -12,7 +12,8 @@ import { json, refusal, server } from '@/test/server'
  * labelled by the group's read — which, failing, the switches' card says too, with a way to ask again; never a skeleton
  * that pulses for ever. The group's card says what the group gets — the agency's requests in the main bot's shop alone
  * —, where a bot not known yet gets its name — an agent's with its token, never the owner's settings —, sends a «پیام
- * تست», and a refused action is shown once, as the panel's toast, with the server's message.
+ * تست» (every operation held meanwhile, the focus kept), and a refused action is shown once, as the panel's toast, with
+ * the server's message.
  */
 
 const SETTINGS = botSettingsRow()
@@ -44,6 +45,29 @@ describe('the report topics', () => {
     expect(screen.getAllByRole('button', { name: 'تلاش دوباره' }).length).toBeGreaterThan(0)
     await until(() => expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0))
   })
+
+  it('keep saying it while it is asked again — both cards’ buttons spinning, asking once —, until the answer', async () => {
+    server().on('GET', '/api/admin/bot/report-group', refusal(500, 'خطای سرور.'))
+    showSection()
+    await screen.findByText('بخش‌های گزارش بارگذاری نشد.')
+    const again = server().hold('GET', '/api/admin/bot/report-group')
+    const [group, topics] = screen.getAllByRole('button', { name: 'تلاش دوباره' }) as [HTMLElement, HTMLElement]
+
+    topics.focus()
+    fireEvent.click(topics)
+    await until(() => expect([group, topics].map((retry) => retry.getAttribute('aria-busy'))).toEqual(['true', 'true']))
+    expect(screen.getByText('گروه گزارش‌ها بارگذاری نشد.')).toBeTruthy()
+    expect(screen.getByText('بخش‌های گزارش بارگذاری نشد.')).toBeTruthy()
+    expect(document.activeElement).toBe(topics)
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0)
+    fireEvent.click(group)
+    fireEvent.click(topics)
+    expect(server().sent('GET', '/api/admin/bot/report-group')).toHaveLength(2)
+
+    again.answer(json({ group: GROUP } satisfies ReportGroupResponse))
+    expect(await screen.findByRole('button', { name: 'پیام تست' })).toBeTruthy()
+    expect(screen.queryByText(/بارگذاری نشد/)).toBeNull()
+  })
 })
 
 describe('the report group', () => {
@@ -70,6 +94,26 @@ describe('the report group', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'پیام تست' }))
 
     await until(() => expect(toast.success).toHaveBeenCalledWith('پیام تست به ۶ تاپیک فرستاده شد'))
+  })
+
+  it('holds every operation while one runs, the one pressed keeping the focus', async () => {
+    server().on('GET', '/api/admin/bot/report-group', json({ group: GROUP } satisfies ReportGroupResponse))
+    const sending = server().hold('POST', '/api/admin/bot/report-group/test')
+    showSection()
+    const test = await screen.findByRole('button', { name: 'پیام تست' })
+
+    test.focus()
+    fireEvent.click(test)
+    await until(() => expect(sending.waiting).toBe(1))
+
+    for (const name of ['پیام تست', 'بررسی دوباره', 'اتصال گروه دیگر', 'قطع اتصال']) {
+      const button = screen.getByRole('button', { name }) as HTMLButtonElement
+      expect([button.disabled, button.getAttribute('aria-disabled')], name).toEqual([false, 'true'])
+    }
+    expect(document.activeElement).toBe(test)
+
+    sending.answer(json({ group: GROUP, queued: 6, sent: 6 } satisfies ReportGroupTestResponse))
+    await until(() => expect(test.getAttribute('aria-disabled')).toBeNull())
   })
 
   it('whose bot is not known yet says where its name comes from — for the shop on screen', async () => {

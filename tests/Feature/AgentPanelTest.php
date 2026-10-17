@@ -293,13 +293,14 @@ final class AgentPanelTest extends HttpTestCase
         $this->agentBot($this->agent(overrides: ['telegram_id' => 601, 'first_name' => 'Sara']), 0, ['token' => '601000:AAsecond-agent-bot-token-0123456789', 'telegram_id' => 601000, 'username' => 'sara_shop_bot', 'title' => null]);
         $reza = $this->agent(overrides: ['telegram_id' => 602, 'first_name' => 'Reza']);
         CurrentBot::run(Bot::MAIN, fn() => $this->service(AgencyActions::class)->revoke($reza, null));
+        $nameless = $this->agent(overrides: ['telegram_id' => 603, 'first_name' => null])->ownBot ?? self::fail('no shop');
         $this->loginAsAdmin();
 
         $shops = $this->decode($this->get('/api/admin/shops'))['shops'];
 
-        self::assertSame(['فروشگاه اصلی', 'فروشگاه نماینده', 'نماینده: Sara', 'نماینده: Reza'], array_column($shops, 'name'), 'the handle is said apart, never as the name');
-        self::assertSame([null, 'agent_shop_bot', 'sara_shop_bot', null], array_column($shops, 'username'), "the main bot's is config.php's, none here");
-        self::assertSame(['active', 'active', 'active', 'disabled'], array_column($shops, 'status'), 'an agency that ended keeps its shop, its bot off');
+        self::assertSame(['فروشگاه اصلی', 'فروشگاه نماینده', 'نماینده: Sara', 'نماینده: Reza', "نماینده: \u{2068}#{$nameless->id}\u{2069}"], array_column($shops, 'name'), 'the handle is said apart, never as the name; a number set apart, right to left');
+        self::assertSame([null, 'agent_shop_bot', 'sara_shop_bot', null, null], array_column($shops, 'username'), "the main bot's is config.php's, none here");
+        self::assertSame(['active', 'active', 'active', 'disabled', 'active'], array_column($shops, 'status'), 'an agency that ended keeps its shop, its bot off');
 
         $this->openShop($reza->ownBot ?? self::fail('no shop'));
         $opened = $this->decode($this->get('/api/admin/auth/me'))['session']['shop'];

@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Core\Database\Lease;
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Providers\Enums\ConnectionFailure;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\GrantStatus;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
@@ -18,6 +20,7 @@ use App\Modules\Subscriptions\Models\MigrationLeftover;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\Grants;
 use App\Modules\Subscriptions\Services\ProvisioningService;
+use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
 use Illuminate\Database\QueryException;
@@ -83,6 +86,41 @@ final class ServiceHoldTest extends DatabaseTestCase
         self::assertSame($this->plan->id, $this->subscription->plan_id);
     }
 
+    public function testARenewalThePanelTookThoughItsAnswerNeverCameIsDeliveredOnce(): void
+    {
+        $logs = $this->logs();
+        FakeProvider::$unanswered = [$this->server->id => ['updateClient']];
+
+        $order = $this->payRenewal();
+
+        self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status, (string) $order->notes);
+        self::assertSame('2026-10-30', $this->subscription->refresh()->expires_at?->format('Y-m-d'), 'the plan\'s 30 days the panel has, on the row');
+        self::assertCount(1, FakeProvider::$updated, 'never sent again: a retry would have added the 30 days twice');
+        self::assertTrue($logs->hasInfoThatContains('took the update of client ali_1 though it did not answer'));
+    }
+
+    public function testARenewalThePanelTookThoughItsReadBackWasRefusedIsDeliveredOnce(): void
+    {
+        FakeProvider::$unread = [$this->server->id => ['updateClient']];
+
+        $order = $this->payRenewal();
+
+        self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status, (string) $order->notes);
+        self::assertSame('2026-10-30', $this->subscription->refresh()->expires_at?->format('Y-m-d'), 'what the panel has, on the row');
+        self::assertCount(1, FakeProvider::$updated, 'a failed order\'s retry would have added the 30 days twice');
+    }
+
+    public function testARenewalWhoseAnswerNeverCameFailsWhileThePanelDoesNotHaveIt(): void
+    {
+        // The update timed out before the panel took it: the client is as it was.
+        FakeProvider::$failing = [$this->server->id => ['updateClient' => ConnectionFailure::Timeout]];
+
+        $order = $this->payRenewal();
+
+        self::assertSame(OrderStatus::Failed, $order->refresh()->status);
+        self::assertSame('2026-09-30', $this->subscription->refresh()->expires_at?->format('Y-m-d'), 'nothing given');
+    }
+
     public function testAMoveWhoseHoldRanOutAfterBothPanelsChangedPointsTheServiceAtItsNewClient(): void
     {
         $target = $this->sellingServer('هلند');
@@ -131,6 +169,22 @@ final class ServiceHoldTest extends DatabaseTestCase
 
         self::assertSame(['ali_1'], FakeProvider::$rotated, 'rotated once: the link handed out is the one that works');
         self::assertSame(FakeProvider::$clients[$this->server->id]['ali_1']->subscriptionUrl, $this->subscription->refresh()->subscription_url);
+    }
+
+    public function testALinkIsNeverRotatedForACustomerTheServiceLeftMeanwhile(): void
+    {
+        $read = Subscription::query()->findOrFail($this->subscription->id); // as Ali's screen read it
+        $sara = $this->customer(['telegram_id' => 1002, 'username' => 'sara']);
+        $this->subscription->forceFill(['user_id' => $sara->id])->save(); // handed to Sara as Ali taps «تغییر لینک»
+
+        try {
+            $this->service(ProvisioningService::class)->rotateLink($read);
+            self::fail('Ali was given the new link of Sara\'s service');
+        } catch (ValidationException $e) {
+            self::assertSame(['status' => [ServiceTransfers::MOVED_ON]], $e->errors());
+        }
+
+        self::assertSame([], FakeProvider::$rotated, 'Sara\'s link stands');
     }
 
     public function testAChangeKeepsItsHoldThroughCallsSlowerThanOneHold(): void

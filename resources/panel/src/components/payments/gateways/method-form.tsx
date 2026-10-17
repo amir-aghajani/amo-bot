@@ -4,7 +4,7 @@ import { DriverFields } from '@/components/driver-form/driver-fields'
 import { Field } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
 import { MoneyField } from '@/components/money-field'
-import { cardsDraft, cardsPayload, newCard, type CardDraft } from '@/components/payments/cards'
+import { cardsDraft, cardsPayload, cardsRead, newCard, type CardDraft } from '@/components/payments/cards'
 import { CardsEditor } from '@/components/payments/cards-editor'
 import { gatewayKind } from '@/components/payments/gateways'
 import { SwitchRow } from '@/components/switch-row'
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { DriverDescription, DriverValues, PaymentMethodCreateRequest, PaymentMethodRow, PaymentMethodUpdateRequest } from '@/lib/api-types'
 import { amountDraft } from '@/lib/format'
-import { trimmed, useForm } from '@/lib/use-form'
+import { asAmount, trimmed, useForm } from '@/lib/use-form'
 
 interface MethodFormProps {
   driver: DriverDescription
@@ -52,7 +52,8 @@ const text = (values: MethodDraft, name: string): string => {
 export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProps) {
   // What the row keeps (its `config`, closed per driver): its form's fields by name.
   const stored: DriverValues | undefined = method ? { ...method.config } : undefined
-  const cards = gatewayKind(driver) === 'manual'
+  const kind = gatewayKind(driver)
+  const cards = kind === 'manual'
   // The fields are the driver's own form's — the API's closed request of that driver (tests/Unit/Drivers/DriverFormsTest
   // holds the two together) —, with the label, the bounds, the switch and a card method's cards: what a save sends, and
   // what is unsaved of it.
@@ -74,7 +75,16 @@ export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProp
       // A new card method starts with one blank card to fill in.
       ...(cards ? { cards: method && 'cards' in method ? cardsDraft(method.cards) : [newCard([])] } : {}),
     },
-    { reads: (draft) => trimmed(formOf(draft)) },
+    // What the server would read otherwise: the bounds and the cards' caps by their digits («۵۰٬۰۰۰» is 50000).
+    {
+      reads: (draft) =>
+        trimmed({
+          ...formOf(draft),
+          min_amount: asAmount(text(draft, 'min_amount')),
+          max_amount: asAmount(text(draft, 'max_amount')),
+          ...(cards ? { cards: cardsRead(cardsOf(draft)) } : {}),
+        }),
+    },
   )
 
   const save = handleSubmit(async () => {
@@ -91,7 +101,8 @@ export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProp
   return (
     <form onSubmit={save} noValidate className="grid gap-5">
       <Field id="method_label" label="نام روش" error={error('label')} hint="روی دکمه پرداخت نوشته می‌شود؛ با چند روش از یک نوع، فرقشان را در نام بیاورید.">
-        <Input value={text(values, 'label')} onChange={(e) => set('label', e.target.value)} placeholder="کارت به کارت (ملت)" autoFocus={!method} />
+        {/* The example is the method's own kind: a bank's name beside a card method's, a gateway's own name else. */}
+        <Input value={text(values, 'label')} onChange={(e) => set('label', e.target.value)} placeholder={cards ? 'کارت به کارت (ملت)' : driver.label} autoFocus={!method} />
       </Field>
 
       <div className="grid gap-5 sm:grid-cols-2">
@@ -119,6 +130,9 @@ export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProp
 
       <DriverFields driver={driver} stored={stored} draft={driverPart(values)} set={set} error={error} idPrefix="method" />
 
+      {/* An online gateway's terms of setting it up — the shop's address it calls, Variza's webhook address to give it —, for an edit too. */}
+      {kind === 'online' && driver.notes.length > 0 && <GatewayNotes notes={driver.notes} />}
+
       {cards && <CardsEditor cards={cardsOf(values)} onChange={(next) => set('cards', next)} errors={errors.cards} idPrefix="method" />}
 
       <SwitchRow
@@ -132,5 +146,32 @@ export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProp
 
       <FormActions error={formError} onCancel={onCancel} submitLabel={method ? 'ذخیره تغییرات' : 'افزودن روش'} busy={busy} dirty={dirty} onRevert={revert} />
     </form>
+  )
+}
+
+/** An address in a driver's note («https://…/payments/webhooks/variza»). */
+const ADDRESS = /(https?:\/\/\S+)/
+
+/** A driver's notes about its gateway, a line each — an address in one set apart left to right, to be read and copied whole. */
+function GatewayNotes({ notes }: { notes: readonly string[] }) {
+  return (
+    <ul aria-label="درباره این درگاه" className="grid gap-1 rounded-lg border border-border px-3 py-2.5 text-footnote text-muted-foreground">
+      {notes.map((note) => (
+        <li key={note} className="flex gap-2">
+          <span aria-hidden className="mt-2 size-1 shrink-0 rounded-full bg-faint" />
+          <span className="min-w-0 break-words">
+            {note.split(ADDRESS).map((part, index) =>
+              index % 2 === 1 ? (
+                <bdi key={index} dir="ltr" className="break-all text-foreground select-all">
+                  {part}
+                </bdi>
+              ) : (
+                part
+              ),
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }

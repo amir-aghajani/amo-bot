@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TicketDetail, TicketResponse } from '@/lib/api-types'
 import { AuthProvider, RequireAuth } from '@/lib/auth'
-import { idLabel } from '@/lib/direction'
+import { idLabel, isolate } from '@/lib/direction'
 import { formatDate } from '@/lib/format'
 import { TicketPage } from '@/pages/ticket'
 import { OWNER, testQueryClient, until } from '@/test/render'
@@ -115,12 +115,21 @@ describe('a ticket’s page', () => {
     expect(header?.textContent).toMatch(/^پشتیبانیپنل/)
   })
 
-  it('shows the customer’s rating and note, once given', async () => {
+  it('shows the customer’s rating — the stars a review has — and note, once given', async () => {
     open(answer(ticketDetail({ status: 'closed', rating: 4, rating_note: 'پاسخ سریع بود' })))
     await title()
 
-    expect(screen.getByText('۴ از ۵')).toBeTruthy()
+    const stars = screen.getByRole('img', { name: '۴ از ۵' })
+    expect(stars.querySelectorAll('svg.fill-current')).toHaveLength(4)
     expect(screen.getByText('پاسخ سریع بود')).toBeTruthy()
+  })
+
+  it('breaks a long rating note with no space in it inside its card', async () => {
+    const note = 'https://example.com/'.padEnd(300, 'x')
+    open(answer(ticketDetail({ status: 'closed', rating: 2, rating_note: note })))
+    await title()
+
+    expect(screen.getByText(note).className).toContain('wrap-anywhere')
   })
 })
 
@@ -257,7 +266,8 @@ describe('the answer', () => {
   })
 
   it('shows the server’s refusal of a picture under it, with the focus on that field', async () => {
-    const wrong = 'تصویر باید JPG، PNG یا WebP باشد.'
+    // As the server words it (Picture::FORMATS): each format set apart.
+    const wrong = `تصویر باید ${isolate('JPG')}، ${isolate('PNG')} یا ${isolate('WebP')} باشد.`
     server().on('POST', ANSWER, refusal(422, wrong, { file: [wrong] }))
     open()
     await title()
@@ -354,7 +364,7 @@ describe('closing and opening again', () => {
 
       await until(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(server().sent('POST', '/api/admin/tickets/12/reopen')).toEqual([])
-      expect(screen.getByText('۴ از ۵')).toBeTruthy()
+      expect(screen.getByRole('img', { name: '۴ از ۵' })).toBeTruthy()
     })
 
     it('opens once confirmed, the rating gone with it', async () => {
@@ -366,7 +376,7 @@ describe('closing and opening again', () => {
       await until(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('در انتظار پاسخ'))
       expect(server().sent('POST', '/api/admin/tickets/12/reopen')).toHaveLength(1)
       expect(screen.queryByRole('dialog')).toBeNull()
-      expect(screen.queryByText('۴ از ۵')).toBeNull()
+      expect(screen.queryByRole('img', { name: '۴ از ۵' })).toBeNull()
       expect(toast.success).toHaveBeenCalledWith('تیکت دوباره باز شد')
     })
 

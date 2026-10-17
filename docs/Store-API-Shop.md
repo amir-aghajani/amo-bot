@@ -1,3 +1,5 @@
+[فارسی](fa/Store-API-Shop.md)
+
 # Store API: the shop
 
 What anyone may read with the store key alone: the shop itself, what it sells now, and how its servers stand. Paths are
@@ -37,12 +39,9 @@ program's terms.
 - `shop.name` — the main shop's name, or an agent's bot's title (else its @username, else the main shop's name).
   `shop.bot` is `null` while the bot's @username is unknown.
 - `shop.taking_orders` — whether the shop takes orders now: its bot switched on, and — an agent's shop — its selling
-  not suspended by the main shop. While it is `false`, a purchase, a renewal, extra traffic, time or devices and a
-  top-up are refused with a `503` — `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.` while the bot is off, and a
-  receipt with it; `فروش این فروشگاه فعلا متوقف است؛ …` while the selling is suspended, when a renewal's preview and a
-  code's check say it as a `422` on `status` and a receipt for an earlier order is still taken
-  ([the flow](Store-API-Buying.md#the-flow)). What it sells is still read (a suspended agent's shop offers no plan), and
-  customers still sign in. Say so where the site sells.
+  not suspended by the main shop. While it is `false`, every ordering request is refused with a `503`
+  ([the flow](Store-API-Buying.md#the-flow) says which words, and what is still taken). What it sells is still read (a
+  suspended agent's shop offers no plan), and customers still sign in. Say so where the site sells.
 - `shop.service_claims` — whether a customer may add a service to their account by its link now (it stays so while
   `taking_orders` is false: adding a service is no order)
   ([adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)): the main shop's alone, while
@@ -69,7 +68,7 @@ program's terms.
 `GET /plans` is exactly what the bot's «خرید اشتراک» offers now: every active category in the bot's order — an empty one
 too — then the plans of no category (or of one switched off) as a last group with `"category": null`. A plan is listed
 only while it can be delivered: switched on, on a server able to sell it, and — in an agent's shop — covered by the
-agent's traffic. A shop without categories has this one group, or none when it sells nothing now. Read with a customer's
+agent's traffic and not kept from sale by the main shop (servers it hides from the agent sell nothing new either). A shop without categories has this one group, or none when it sells nothing now. Read with a customer's
 token, it is what the bot offers that customer ([read signed in](#read-signed-in)).
 
 `GET /plans` → `200`
@@ -150,14 +149,15 @@ token, it is what the bot offers that customer ([read signed in](#read-signed-in
 | `offer_price` | what the reader pays for it today, in Toman: the lowest of its prices that is theirs, less their largest automatic discount; `price`'s own while there is none. Show this as the price ([discounts](#discounts)) |
 | `discount` | the automatic discount `offer_price` took — `source` (`sale`, `personal` or `tier`), `label` (the customer's words: «فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪»), `percent`, and a sale's `ends_at` (else `null`) —; `null` for none |
 | `traffic_gb` | gigabytes, decimals allowed; `0` unlimited |
-| `duration_hours` | the term, exactly, in hours — counted from the customer's **first connection**; `0` never ends. Plans may be sold by the hour from this release (a one-hour test); a plan of whole days says its days × 24 |
+| `duration_hours` | the term, exactly, in hours — counted from the customer's **first connection**; `0` never ends. A plan may be sold by the hour (a one-hour test); a plan of whole days says its days × 24 |
 | `duration_days` | the same term in whole days, rounded up — a one-hour plan says `1`; `0` never ends. Kept for the sites made before `duration_hours`: show the term from `duration_hours` |
 | `devices` | devices at once; `0` no limit |
 | `category_id` | the category it is listed under; `null` for the last group |
 | `locations` | the servers it can be bought on today («لوکیشن» in the bot), in the plan's order — at least one; the customer picks one, which becomes `server_id` at checkout |
 
 `GET /plans/{id}` answers `{ "plan": … }`, one plan in the same shape, or `404` for one the shop does not sell now
-(switched off, on no server able to deliver it, or more than an agent's traffic covers). Prices and locations change with
+(switched off, on no server able to deliver it, or — in an agent's shop — more than the agent's traffic covers, or kept
+from sale by the main shop). Prices and locations change with
 the shop: cache briefly (a minute) and read again before a checkout.
 
 ### Read signed in
@@ -173,9 +173,9 @@ read is theirs alone.
 ### First-purchase prices
 
 A plan may have a price of its own for a customer's first purchase, `first_purchase_price` («قیمت خرید اول»): what a
-customer who has never bought a service in the shop pays for it — a purchase of theirs paid at some point, whatever came
-of it since (delivered, failed, refunded), is one; an order never paid, or cancelled unpaid, is none, and neither is a
-wallet top-up. Every plan is sold to everyone: only what it costs differs. Each shop counts its own customers'.
+customer who has never bought a service in the shop pays for it — a purchase of theirs paid and not given back
+(delivered, being delivered, or failed and waiting for support) is one; a purchase refunded since is none, and neither is
+an order never paid, one cancelled unpaid, a service given free or a wallet top-up. Every plan is sold to everyone: only what it costs differs. Each shop counts its own customers'.
 
 - **A guest** reads it on every plan that has one: show it as the price of a first purchase, with `price` beside it —
   `"0.00"` is a free first purchase.
@@ -183,8 +183,10 @@ wallet top-up. Every plan is sold to everyone: only what it costs differs. Each 
   ([a purchase](Store-API-Buying.md#a-purchase)); the order's `amount` is what it was made at.
 - **One who has** reads `null` on every plan: they pay `price`. A request made again with its `Idempotency-Key` still
   answers the order it made, at its own amount.
-- **Two at once** — both ordered at the first-purchase price before either was paid —: the one paid first is their
-  first purchase, and the other is not delivered (the order `failed`, for support to give the money back).
+- **Two at once** — both ordered at the first-purchase price, or with a code for a first purchase only, before either
+  was paid —: the one paid first is their first purchase, and the other is never delivered. That order is `failed`,
+  its `failure` `first_purchase_used` ([why an order failed](Store-API-Buying.md#why-an-order-failed)), and support
+  settles the payment with the customer; its `payment_settled` notice tells them why.
 - **Its service renews at `price`**, by its customer or by itself ([a renewal](Store-API-Buying.md#a-renewal)) — at
   `agent_price` for an agent or a colleague.
 
@@ -217,8 +219,8 @@ by the service's plan) and take a code too.
 
 ## How its servers stand
 
-`GET /status` — the servers of the shop's plans that are switched on, in the servers' order — never their addresses,
-their connectors or what their panels said. A plan switched on that `GET /plans` leaves out (it can be delivered
+`GET /status` — the servers of the shop's plans that are switched on, in the servers' order (in an agent's shop, not
+those the main shop hides from it) — never their addresses, their connectors or what their panels said. A plan switched on that `GET /plans` leaves out (it can be delivered
 nowhere, or an agent's traffic does not cover it) still brings its servers here.
 
 `GET /status` → `200`

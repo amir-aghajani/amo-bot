@@ -242,6 +242,28 @@ function Section({ perform }: { perform: NonNullable<Options['perform']> }) {
   return createElement(OperationsSection<Action>, { ops, specs: SPECS, subject: 'این سفارش', alternative: (action) => (action === 'cancel' ? ALTERNATIVE : null) })
 }
 
+describe('a press', () => {
+  it('on one that runs at once, twice before the buttons show it running — a double click —, runs it once', async () => {
+    let finish!: (value: unknown) => void
+    const perform = vi.fn<NonNullable<Options['perform']>>(() => new Promise((resolve) => (finish = resolve)))
+    render(createElement(Section, { perform }), { wrapper: providers().wrapper })
+
+    fireEvent.click(screen.getByRole('button', { name: 'تایید' }))
+    fireEvent.click(screen.getByRole('button', { name: 'تایید' }))
+    fireEvent.click(screen.getByRole('button', { name: 'لغو' }))
+
+    await until(() => expect(perform).toHaveBeenCalled())
+    expect(perform).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('سفارش لغو می‌شود.')).toBeNull()
+    await act(async () => finish('fresh'))
+    await until(() => expect(screen.getByRole('button', { name: 'تایید' }).getAttribute('aria-busy')).toBeNull())
+
+    fireEvent.click(screen.getByRole('button', { name: 'تایید' }))
+    await until(() => expect(perform).toHaveBeenCalledTimes(2))
+    await act(async () => finish('fresh'))
+  })
+})
+
 describe('a strip’s alternative', () => {
   it('runs the operation forced, with nothing failed before it, its hint read with its button', async () => {
     const perform = vi.fn<NonNullable<Options['perform']>>(() => Promise.resolve('fresh'))

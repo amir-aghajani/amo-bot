@@ -25,7 +25,10 @@ use App\Modules\Subscriptions\Enums\SubscriptionAction;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Exceptions\MoveException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Log\LoggerInterface;
 
@@ -61,11 +64,18 @@ final class SubscriptionActions
     /** The refusal past PANEL_WORK; TooManyAttemptsException::wait() adds the wait. */
     public const TOO_MUCH_PANEL_WORK = 'درخواست زیادی به پنل سرورها فرستاده‌اید';
 
+    /** Why a service is not deleted while an order of it is not finished with (%d: that order's number). */
+    public const OPEN_ORDER = 'سفارش #%d این سرویس هنوز تمام نشده است (در انتظار پرداخت، در حال تحویل یا تحویل ناموفق)؛ اول آن را تحویل، لغو یا بازپرداخت کنید، بعد سرویس را حذف کنید.';
+
+    /** The column withOpenOrder() reads a service with: the number of its open order, or null. */
+    private const OPEN_ORDER_COLUMN = 'open_order_id';
+
     public function __construct(
         private readonly ProvisioningService $provisioning,
         private readonly CustomerNotifier $notifier,
         private readonly TrafficPool $pool,
         private readonly RateLimiter $limiter,
+        private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -193,26 +203,54 @@ final class SubscriptionActions
     }
 
     /**
-     * Delete the service for good: its client off the panel and its row gone (ProvisioningService::delete()). The
-     * customer is notified only when a running service was taken away — and not at all when `$notify` is off (a refund
-     * says it in its own message).
+     * Delete the service for good: its client off the panel and its row gone (ProvisioningService::delete()). Refused
+     * while an order of it is not finished with (Order::OPEN: unpaid, being delivered, or failed and waiting for
+     * support): it would be left with no service to deliver to. Asked under the service's row lock, as an order for it is
+     * opened (OrderService::holding()), before its panel is — and again as the row is removed, so one opened while the
+     * panel deleted the client keeps the row (marked deleted: its client is gone) and the refusal names it. The customer
+     * is notified only when a running service was taken away — and not at all when `$notify` is off (a refund says it in
+     * its own message).
      *
      * @param bool $leavePanel do not contact the panel (out of reach): the row goes and the client stays on the panel
      *                         for the admin to remove
      * @throws ActorRefusedException 403 a shop admin's own service
-     * @throws ValidationException|PanelFailedException|ServiceBusyException|TooManyAttemptsException
+     * @throws ValidationException 422 on `status` (OPEN_ORDER), on `leave_panel`
+     * @throws PanelFailedException|ServiceBusyException|TooManyAttemptsException
      * @throws ModelNotFoundException when the service is gone meanwhile
      */
     public function delete(Subscription $subscription, Actor $actor, ?string $note, bool $leavePanel, bool $notify = true): void
     {
         self::notTheirOwn($subscription, $actor);
+        self::unlessOpen($this->db->transaction(static function () use ($subscription): ?int {
+            $subscription->newModelQuery()->whereKey($subscription->id)->lockForUpdate()->value('id');
+
+            return self::orderHolding($subscription, Order::OPEN);
+        }));
         if ($leavePanel) {
             $this->mayLeave($subscription, $actor);
         }
         $this->panelWork($subscription, $actor);
         $running = $subscription->isActive();
-        if ($this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->delete($subscription, $leavePanel)) && $running && $notify) {
+        $open = static fn(Subscription $held): bool => self::orderHolding($held, Order::OPEN) !== null;
+        if (!$this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->delete($subscription, $leavePanel, kept: $open))) {
+            self::unlessOpen(self::orderHolding($subscription, Order::OPEN));
+
+            return;
+        }
+        if ($running && $notify) {
             $this->notifier->serviceDeleted($subscription, $note);
+        }
+    }
+
+    /**
+     * Refuse the delete while the order `$open` (its number) is not finished with.
+     *
+     * @throws ValidationException 422 on `status`
+     */
+    private static function unlessOpen(?int $open): void
+    {
+        if ($open !== null) {
+            throw ValidationException::on('status', sprintf(self::OPEN_ORDER, $open));
         }
     }
 
@@ -239,7 +277,8 @@ final class SubscriptionActions
      * - disable, move: an active one;
      * - enable: one switched off here — an ended one needs a renewal, not a switch;
      * - transfer: one that may change hands (ServiceTransfers::transferable(): no free test, its client still on its panel);
-     * - delete: anything, including one whose client is gone from the panel.
+     * - delete: anything, including one whose client is gone from the panel — while no order of it is open (delete(),
+     *   openOrderOf()).
      *
      * @return array<string, bool> By SubscriptionAction value
      */
@@ -247,17 +286,54 @@ final class SubscriptionActions
     {
         $actions = [];
         foreach (SubscriptionAction::cases() as $action) {
-            $actions[$action->value] = match ($action) {
-                SubscriptionAction::Sync => $subscription->status !== SubscriptionStatus::Deleted,
-                SubscriptionAction::Extend => $subscription->isActive() && ($subscription->hasTerm() || $subscription->traffic_limit_bytes > 0),
-                SubscriptionAction::Disable, SubscriptionAction::Move => $subscription->isActive(),
-                SubscriptionAction::Enable => $subscription->status === SubscriptionStatus::Disabled,
-                SubscriptionAction::Transfer => ServiceTransfers::transferable($subscription),
-                SubscriptionAction::Delete => true,
-            };
+            $actions[$action->value] = self::may($subscription, $action);
         }
 
         return $actions;
+    }
+
+    /** Whether the service's state allows `$action` now (allowed()). */
+    private static function may(Subscription $subscription, SubscriptionAction $action): bool
+    {
+        return match ($action) {
+            SubscriptionAction::Sync => $subscription->status !== SubscriptionStatus::Deleted,
+            SubscriptionAction::Extend => $subscription->isActive() && ($subscription->hasTerm() || $subscription->traffic_limit_bytes > 0),
+            SubscriptionAction::Disable, SubscriptionAction::Move => $subscription->isActive(),
+            SubscriptionAction::Enable => $subscription->status === SubscriptionStatus::Disabled,
+            SubscriptionAction::Transfer => ServiceTransfers::transferable($subscription),
+            SubscriptionAction::Delete => self::openOrderOf($subscription) === null,
+        };
+    }
+
+    /**
+     * `$services` each read with the number of its order that holds it from being deleted (orderHolding() of Order::OPEN),
+     * in the same query: a page of them asks nothing more for openOrderOf().
+     *
+     * @param Builder<Subscription> $services
+     * @return Builder<Subscription>
+     */
+    public static function withOpenOrder(Builder $services): Builder
+    {
+        return $services->addSelect([self::OPEN_ORDER_COLUMN => Order::query()
+            ->select('id')
+            ->whereColumn('orders.subscription_id', 'subscriptions.id')
+            ->whereIn('status', Order::OPEN)
+            ->orderBy('id')
+            ->limit(1)]);
+    }
+
+    /**
+     * The number of the service's open order (Order::OPEN, the first by id) — as withOpenOrder() read it, or asked now —;
+     * null for none.
+     */
+    public static function openOrderOf(Subscription $subscription): ?int
+    {
+        if (!array_key_exists(self::OPEN_ORDER_COLUMN, $subscription->getAttributes())) {
+            return self::orderHolding($subscription, Order::OPEN);
+        }
+        $id = $subscription->getAttribute(self::OPEN_ORDER_COLUMN);
+
+        return $id !== null ? (int) $id : null;
     }
 
     /**
@@ -285,7 +361,7 @@ final class SubscriptionActions
      */
     private function allow(Subscription $subscription, SubscriptionAction $action): void
     {
-        if ($this->allowed($subscription)[$action->value]) {
+        if (self::may($subscription, $action)) {
             return;
         }
 
@@ -304,6 +380,23 @@ final class SubscriptionActions
     }
 
     /**
+     * The number of the service's first order (by id) in `$statuses`, `$except` aside — one that holds the service from
+     * being removed (delete(), a refund's removal: RefundedDeliveries) —; null for none.
+     *
+     * @param list<string> $statuses OrderStatus values
+     */
+    public static function orderHolding(Subscription $subscription, array $statuses, ?Order $except = null): ?int
+    {
+        $orders = Order::query()->where('subscription_id', $subscription->id)->whereIn('status', $statuses);
+        if ($except !== null) {
+            $orders->whereKeyNot($except->id);
+        }
+        $id = $orders->orderBy('id')->value('id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    /**
      * Refuse a shop admin (who is also a customer) changing their own service: another admin or a panel decides that.
      * Reading its panel again decides nothing, so sync() does not ask.
      *
@@ -317,7 +410,8 @@ final class SubscriptionActions
     }
 
     /**
-     * Refuse days for a service that never ends and traffic for an unlimited one, each under its field.
+     * Refuse days for a service that never ends, or more than end it by the last day the shop keeps
+     * (ServiceTerms::daysLeft()), and traffic for an unlimited one, each under its field.
      *
      * @throws ValidationException
      */
@@ -326,6 +420,8 @@ final class SubscriptionActions
         $errors = [];
         if ($gift->days > 0 && !$subscription->hasTerm()) {
             $errors['days'][] = 'این سرویس تاریخ پایان ندارد؛ روزی به آن اضافه نمی‌شود.';
+        } elseif ($gift->days > 0 && ServiceTerms::daysLeft($subscription) < $gift->days) {
+            $errors['days'][] = TermTooLongException::message();
         }
         if ($gift->bytes > 0 && $subscription->traffic_limit_bytes === 0) {
             $errors['traffic_gb'][] = 'حجم این سرویس نامحدود است؛ حجمی به آن اضافه نمی‌شود.';

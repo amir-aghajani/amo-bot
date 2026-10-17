@@ -8,7 +8,9 @@ use App\Modules\Catalog\Models\Plan;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Exceptions\RefundRefusedException;
 use App\Modules\Payments\Models\Payment;
+use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Referrals\Models\ReferralCommission;
@@ -24,7 +26,9 @@ use Tests\BotTestCase;
 
 /**
  * Referral commissions: the rate of money that came in (never a wallet purchase), credited once per payment and announced once,
- * the first-payment-only rule, one level only, standing after a refund, never in the payment's way when it fails.
+ * the first-payment-only rule, one level only, taken back by a top-up's refund, whose money leaves the shop (refused once
+ * spent, as the top-up is) — a purchase's refund, its money kept in the shop as wallet credit, leaves it —, never in the
+ * payment's way when it fails.
  */
 final class ReferralCommissionTest extends BotTestCase
 {
@@ -168,16 +172,95 @@ final class ReferralCommissionTest extends BotTestCase
         self::assertSame('0.00', $this->referrer->balance(), 'one level only');
     }
 
-    public function testARefundLeavesTheCommissionStanding(): void
+    public function testATopUpsRefundTakesItsCommissionBackOutOfTheReferrersWalletAndTellsThem(): void
     {
         $purchase = $this->paidByCard($this->purchaseOrder($this->friend, $this->plan, $this->server));
         $topUp = $this->paidByCard($this->topUpOrder($this->friend, '100000'));
+        self::assertSame('22000.00', $this->referrer->balance());
 
-        self::assertTrue($this->service(PaymentService::class)->refund($purchase, 'admin', null), 'its money stays in the shop, as the customer\'s balance');
-        self::assertTrue($this->service(PaymentService::class)->refund($topUp, 'admin', null), 'given back outside the shop — the shop\'s call');
+        $this->telegram()->reset();
+        $this->service(PaymentActions::class)->refund($topUp, $this->panelActor(), 'درخواست مشتری');
 
-        self::assertSame([PaymentStatus::Refunded, PaymentStatus::Refunded], [$purchase->refresh()->status, $topUp->refresh()->status]);
-        self::assertSame('22000.00', $this->referrer->balance(), 'earned for bringing a customer who paid');
+        self::assertSame(['12000.00', '0.00'], [$this->referrer->balance(), $this->friend->balance()], "its money went back out of the shop, and the top-up's 10,000 with it");
+        $line = WalletTransaction::query()->where('user_id', $this->referrer->id)->latest('id')->firstOrFail();
+        self::assertSame([sprintf(ReferralService::LINE_TAKEN_BACK, $topUp->id), '10000.00'], [$line->description, $line->amount], "its own line, without support's note to the customer");
+        self::assertFalse(ReferralCommission::query()->where('payment_id', $topUp->id)->exists(), 'no longer one of their earnings');
+        self::assertSame('12000.00', $this->service(ReferralService::class)->statsFor($this->referrer)['earned']);
+        self::assertSame([self::text(BotText::ReferralCommissionTakenBack, ['commission' => Money::format('10000'), 'balance' => Messages::balance('12000.00')])], $this->telegram()->sentTo(self::CHAT), 'told as of a commission');
+        self::assertTrue(ReferralCommission::query()->where('payment_id', $purchase->id)->exists(), "the purchase's stands");
+    }
+
+    public function testAPurchasesRefundLeavesItsCommissionAsItsMoneyStaysInTheShopEvenOnceSpent(): void
+    {
+        $this->referralProgram(firstOnly: true);
+        $purchase = $this->paidByCard($this->purchaseOrder($this->friend, $this->plan, $this->server));
+        $this->service(WalletService::class)->debit($this->referrer, '5000', 'خرید');
+
+        $this->telegram()->reset();
+        $this->service(PaymentActions::class)->refund($purchase, $this->panelActor(), 'درخواست مشتری');
+
+        self::assertSame([PaymentStatus::Refunded, '120000.00'], [$purchase->refresh()->status, $this->friend->balance()], "refunded to the customer's wallet: the money is still the shop's");
+        self::assertSame(['7000.00', 1], [$this->referrer->balance(), ReferralCommission::query()->where('payment_id', $purchase->id)->count()], 'the commission stands, spent or not');
+        self::assertSame([], $this->telegram()->sentTo(self::CHAT), 'the referrer is told nothing');
+
+        $this->paidByCard($this->topUpOrder($this->friend, '50000'));
+        self::assertSame('7000.00', $this->referrer->balance(), 'the commission it earned keeps the next payment from being the first');
+    }
+
+    public function testATopUpsRefundIsRefusedWhileTheReferrerHasSpentItsCommissionAndNothingIsTakenBack(): void
+    {
+        $topUp = $this->paidByCard($this->topUpOrder($this->friend, '100000'));
+        $this->service(WalletService::class)->debit($this->referrer, '5000', 'خرید');
+
+        foreach ([
+            'from the panels' => fn() => $this->service(PaymentActions::class)->refund($topUp, $this->panelActor(), null),
+            'at the bottom' => fn() => $this->service(PaymentService::class)->refund($topUp, 'admin', null),
+        ] as $way => $refund) {
+            try {
+                $refund();
+                self::fail("refused {$way}");
+            } catch (RefundRefusedException $e) {
+                self::assertSame(RefundRefusedException::commissionSpent('5000.00')->getMessage(), $e->getMessage(), $way);
+            }
+        }
+
+        self::assertSame([PaymentStatus::Paid, '5000.00', 1], [$topUp->refresh()->status, $this->referrer->balance(), ReferralCommission::query()->count()], 'nothing refunded, nothing taken back');
+        self::assertSame('100000.00', $this->friend->balance(), 'the top-up stays in their wallet');
+    }
+
+    public function testAnAgentReferrersCreditCoversTheCommissionTakenBack(): void
+    {
+        $agent = $this->agent(credit: '50000', overrides: ['telegram_id' => self::FRIEND + 5]);
+        $friend = $this->customer(['telegram_id' => self::FRIEND + 6, 'referred_by' => $agent->id]);
+        $topUp = $this->paidByCard($this->topUpOrder($friend, '100000'));
+        $this->service(WalletService::class)->debit($agent, '10000', 'خرید');
+
+        self::assertTrue($this->service(PaymentService::class)->refund($topUp, 'admin', null));
+        self::assertSame('-10000.00', $agent->balance(), 'below zero within their credit, as their own top-up would');
+    }
+
+    public function testAPaymentRefundedBeforeItsCommissionWasCreditedEarnsNothing(): void
+    {
+        $this->referralProgram(enabled: false);
+        $topUp = $this->paidByCard($this->topUpOrder($this->friend, '100000'));
+        $readBefore = Payment::query()->findOrFail($topUp->id);
+        self::assertTrue($this->service(PaymentService::class)->refund($topUp, 'admin', null));
+        $this->referralProgram();
+
+        self::assertTrue($readBefore->isPaid());
+        self::assertNull($this->service(ReferralService::class)->reward($readBefore), 'the copy read before the refund still says paid; the row, under its lock, does not');
+        self::assertSame('0.00', $this->referrer->balance());
+    }
+
+    public function testATopUpRefundedWithItsCommissionLeavesTheNextPaymentTheFirst(): void
+    {
+        $this->referralProgram(firstOnly: true);
+        $topUp = $this->paidByCard($this->topUpOrder($this->friend, '100000'));
+        self::assertTrue($this->service(PaymentService::class)->refund($topUp, 'admin', null));
+
+        $this->paidByCard($this->topUpOrder($this->friend, '50000'));
+
+        self::assertSame('5000.00', $this->referrer->balance(), 'its money went back out of the shop: it was no first money in');
     }
 
     public function testACommissionThatFailsIsLoggedAndNeverStandsInThePaymentsWay(): void

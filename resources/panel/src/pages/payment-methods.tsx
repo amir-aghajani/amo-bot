@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { ErrorState } from '@/components/error-state'
 import { Dash, ListView, RowTitleButton } from '@/components/list-view'
-import { Page } from '@/components/page'
+import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { AddMethodModal } from '@/components/payments/add-method-modal'
 import { gatewayIcon, hasNote, MethodNote } from '@/components/payments/gateways'
@@ -39,6 +39,7 @@ export function PaymentMethodsPage() {
   })
   const methods = list.rows
   const drivers = useQuery({ ...paymentDriversQuery, enabled: editor.open })
+  const driversFailure = useReadFailure(drivers)
 
   return (
     <Page>
@@ -95,7 +96,8 @@ export function PaymentMethodsPage() {
               return (
                 <TableRow key={method.id} className={cn(!method.enabled && 'text-muted-foreground')}>
                   <OrderCell list={list} index={index} label={method.label} />
-                  <TableCell>
+                  {/* On a phone the details under the name wrap: on one line they would push the switch and the menu out of sight. */}
+                  <TableCell className="max-md:whitespace-normal">
                     <div className="flex items-center gap-3">
                       <span aria-hidden className={cn('flex size-8 shrink-0 items-center justify-center rounded-lg bg-fill-hover text-foreground', !method.enabled && 'text-faint')}>
                         {Icon ? <Icon className="size-4" /> : <span className="text-footnote font-semibold">{method.driver_label.slice(0, 2)}</span>}
@@ -164,8 +166,8 @@ export function PaymentMethodsPage() {
               />
             )
           }
-          return drivers.error ? (
-            <ErrorState what="درایورهای پرداخت" error={drivers.error} onRetry={() => void drivers.refetch()} retrying={drivers.isFetching} />
+          return driversFailure.error ? (
+            <ErrorState what="درایورهای پرداخت" error={driversFailure.error} onRetry={() => void drivers.refetch()} retrying={driversFailure.retrying} />
           ) : (
             <Skeleton className="h-64 w-full" />
           )

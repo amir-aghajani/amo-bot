@@ -53,7 +53,7 @@ describe('the pill', () => {
 const payments = (request: SentRequest) =>
   json({
     payments: [paymentRow({ id: request.query.has('user') ? 7 : 8 })],
-    meta: { page: 1, per_page: 25, total: 1, last_page: 1, sort: 'created', dir: 'desc', awaiting_review: 0, paid: 0, paid_amount: '0.00' },
+    meta: { page: 1, per_page: 25, total: 1, last_page: 1, sort: 'created', dir: 'desc', awaiting_review: 0, held: 0, paid: 0, paid_amount: '0.00' },
   } satisfies PaymentsResponse)
 
 describe('a list narrowed to a customer', () => {

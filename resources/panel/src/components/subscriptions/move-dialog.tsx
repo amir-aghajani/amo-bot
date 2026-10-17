@@ -4,6 +4,7 @@ import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
 import { Field } from '@/components/field'
 import { Modal, useHoldOpen } from '@/components/modal'
+import { useReadFailure } from '@/components/page'
 import { useServerChoices, type ServerChoices } from '@/components/subscriptions/server-choices'
 import { SkipServerPrompt } from '@/components/subscriptions/skip-server-prompt'
 import { useMoveBatch, type MoveBatch, type Outcome } from '@/components/subscriptions/use-move-batch'
@@ -40,6 +41,7 @@ function MoveBody({ subscriptions, batch, servers: readServers, onClose }: { sub
   // The dialog stays while the batch runs.
   useHoldOpen(batch.running)
   const servers = useServerChoices(readServers)
+  const serversFailure = useReadFailure(servers)
   const { movable, queue, running, started, question } = batch
   // The way out takes the focus whenever the button pressed has gone: the start, once the batch runs; the prompt's, once
   // it is answered (while it asks, the prompt has it).
@@ -63,14 +65,14 @@ function MoveBody({ subscriptions, batch, servers: readServers, onClose }: { sub
     <div className="grid gap-4">
       <div className="grid gap-1 text-body text-muted-foreground">
         <p>
-          هر سرویس با زمان و حجم باقی‌مانده‌اش روی سرور مقصد ساخته و از سرور قبلی حذف می‌شود؛ لینکش عوض می‌شود و لینک جدید در ربات برای مشتری می‌رود. اگر سرور قبلی جواب ندهد، می‌پرسیم بدون حذف از آن
-          ادامه دهیم یا انتقال لغو شود.
+          هر سرویس با زمان و حجم باقی‌مانده‌اش روی سرور مقصد ساخته و از سرور قبلی حذف می‌شود؛ لینکش عوض می‌شود و لینک جدید در تلگرام یا با ایمیل برای مشتری می‌رود. اگر سرور قبلی جواب ندهد، می‌پرسیم
+          بدون حذف از آن ادامه دهیم یا انتقال لغو شود.
         </p>
         {inactive > 0 && <p>{formatNumber(inactive)} سرویس انتخاب‌شده فعال نیست و منتقل نمی‌شود.</p>}
         {already > 0 && <p>{formatNumber(already)} سرویس همین حالا روی این سرور است.</p>}
       </div>
 
-      {servers.error && <ErrorState what="لیست سرورها" error={servers.error} onRetry={() => void servers.refetch()} retrying={servers.isFetching} />}
+      {serversFailure.error && <ErrorState what="لیست سرورها" error={serversFailure.error} onRetry={() => void servers.refetch()} retrying={serversFailure.retrying} />}
 
       <Field id="move_target" label="سرور مقصد">
         {(control) => (

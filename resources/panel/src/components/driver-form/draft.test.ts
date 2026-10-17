@@ -95,4 +95,46 @@ describe('a driver’s form', () => {
     expect(leftBehind(panel, token, { base_url: 'https://panel.example.com:2053/other', token: '', clear_token: false }, kept)).toBe(false)
     expect(leftBehind(panel, token, { base_url: 'https://evil.example', token: '', clear_token: false }, kept)).toBe(true)
   })
+
+  it('reads a proxy’s host a secret belongs with as the server keeps it: in lower case, its digits Latin, without brackets', () => {
+    const panel: DriverDescription = {
+      ...SMTP,
+      fields: [field('proxy_host'), field('proxy_password', { type: 'secret', secret: true, default: null, bound_to: ['proxy_host'], moved: 'x' })],
+    }
+    const password = panel.fields[1] as FieldDescription
+    const moved = (host: string, kept: string) =>
+      leftBehind(panel, password, { proxy_host: host, proxy_password: '', clear_proxy_password: false }, { proxy_host: kept, proxy_password: { set: true, hint: '••••' } })
+
+    expect(moved('Proxy.Example.com', 'proxy.example.com')).toBe(false)
+    expect(moved('۲۰۳٫۰٫۱۱۳٫۱۰', '203.0.113.10')).toBe(false)
+    expect(moved('[2001:DB8::1]', '2001:db8::1')).toBe(false)
+    expect(moved('other.example.com', 'proxy.example.com')).toBe(true)
+  })
+
+  it('reads a list or an amount a secret belongs with by what it holds, as the server reads it', () => {
+    const gateway: DriverDescription = {
+      ...SMTP,
+      fields: [
+        field('ports', { type: 'list', default: [] }),
+        field('fee', { type: 'amount', default: '0' }),
+        field('key', { type: 'secret', secret: true, default: null, bound_to: ['ports', 'fee'], moved: 'x' }),
+      ],
+    }
+    const key = gateway.fields[2] as FieldDescription
+    const kept = { ports: [50, 100], fee: '5000.00', key: { set: true, hint: '••••' } }
+    const draft = driverDraft(gateway, kept)
+
+    expect(leftBehind(gateway, key, draft, kept)).toBe(false)
+    expect(leftBehind(gateway, key, { ...draft, ports: '۵۰، ۱۰۰', fee: '5,000' }, kept)).toBe(false)
+    expect(leftBehind(gateway, key, { ...draft, ports: '50, 200' }, kept)).toBe(true)
+    expect(leftBehind(gateway, key, { ...draft, fee: '6000' }, kept)).toBe(true)
+  })
+
+  it('shows a field while a number it names holds a listed value, typed in any digits', () => {
+    const tiered: DriverDescription = { ...SMTP, fields: [field('tier', { type: 'number', default: 1 }), field('extra', { when: { tier: ['5'] } })] }
+
+    expect(shownFields(tiered, { tier: '۵', extra: '' }).map((shown) => shown.name)).toEqual(['tier', 'extra'])
+    expect(shownFields(tiered, { tier: ' 5 ', extra: '' }).map((shown) => shown.name)).toEqual(['tier', 'extra'])
+    expect(shownFields(tiered, { tier: '4', extra: '' }).map((shown) => shown.name)).toEqual(['tier'])
+  })
 })

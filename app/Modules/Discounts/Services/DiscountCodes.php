@@ -34,9 +34,10 @@ use Illuminate\Database\UniqueConstraintViolationException;
  * Discount codes («کدهای تخفیف»): kept by the panels, and judged at every checkout by apply(), which decides whether
  * a code holds for what the customer buys and what it takes off.
  *
- * A use is an order made with the code that is not cancelled. A quote counts uses without the customer's own unpaid
- * orders (their checkout may be reopening one); the order that takes a use counts again under the code's row lock
- * (reserve()), so the last use goes to one customer only. Wrong codes are rate-limited per customer (tried()).
+ * A use is an order made with the code that is neither cancelled nor refunded: either gives its use back. A quote counts
+ * uses without the customer's own unpaid orders (their checkout may be reopening one); the order that takes a use counts
+ * again under the code's row lock (reserve()), so the last use goes to one customer only — and a use their own other
+ * unpaid order holds is said so. Wrong codes are rate-limited per customer (tried()).
  */
 final class DiscountCodes
 {
@@ -62,6 +63,12 @@ final class DiscountCodes
     public const USED_UP = 'ظرفیت استفاده از این کد تخفیف تمام شده است.';
     public const USED_BY_YOU = 'شما از این کد تخفیف به اندازه مجاز استفاده کرده‌اید.';
 
+    /**
+     * The use a new order would take is held by the customer's own other unpaid order, by its number (reserve()) — a
+     * left-to-right mark before it, or in the bot's Persian line «#12» reads «12#».
+     */
+    public const HELD_BY_YOU = "این کد تخفیف روی سفارش پرداخت‌نشده دیگری از شما ثبت است (سفارش \u{200E}#%d)؛ آن سفارش را پرداخت کنید، یا صبر کنید تا مهلت پرداختش تمام شود و کد آزاد شود.";
+
     private const CODE_PATTERN = '/^[\p{L}\p{N}_-]+$/u';
     private const TAKEN = 'این کد در فروشگاه هست؛ کد دیگری بنویسید.';
 
@@ -86,7 +93,10 @@ final class DiscountCodes
             throw new DiscountCodeRefusedException(self::NOT_FOUND);
         }
         self::judge($code, $user, $target, $amount);
-        self::assertUsesLeft($code, ...self::uses($code, $user, sparingPending: true));
+        $refusal = self::usesRefusal($code, ...self::uses($code, $user, sparingPending: true));
+        if ($refusal !== null) {
+            throw new DiscountCodeRefusedException($refusal);
+        }
 
         return self::line($code, $amount);
     }
@@ -134,6 +144,8 @@ final class DiscountCodes
     /**
      * Takes one use of the code for the order the customer's checkout is creating. Called inside OrderService::open()'s
      * transaction: the code's row is locked and its uses counted again, so two customers cannot both take its last use.
+     * A use held by the customer's own other unpaid order (the quote spared it) is said so, with that order's number:
+     * paying it uses the code there, and its payment time running out frees it (ExpireOrdersTask).
      *
      * @throws DiscountCodeRefusedException switched off, gone, or no use left
      */
@@ -143,13 +155,26 @@ final class DiscountCodes
         if ($code === null || !$code->enabled) {
             throw new DiscountCodeRefusedException($code === null ? self::NOT_FOUND : self::OFF);
         }
-        self::assertUsesLeft($code, ...self::uses($code, $user, sparingPending: false));
+        $refusal = self::usesRefusal($code, ...self::uses($code, $user, sparingPending: false));
+        if ($refusal === null) {
+            return;
+        }
+
+        $held = $code->orders()->where('user_id', $user->id)->where('status', OrderStatus::Pending->value)->latest('id')->value('id');
+        if ($held !== null && self::usesRefusal($code, ...self::uses($code, $user, sparingPending: true)) === null) {
+            throw new DiscountCodeRefusedException(sprintf(self::HELD_BY_YOU, $held));
+        }
+
+        throw new DiscountCodeRefusedException($refusal);
     }
 
-    /** The panels' list: every code, newest first, searched by its text or its note, with its uses. */
+    /** The panels' list: every code, newest first, searched by its text or its note, with its uses and whether it is kept. */
     public function page(PageRequest $list): Page
     {
-        $query = DiscountCode::query()->withCount(['orders as uses' => self::counted(...)])->orderByDesc('id');
+        $query = DiscountCode::query()
+            ->withCount(['orders as uses' => self::counted(...)])
+            ->withExists(['orders as kept' => self::keeping(...)])
+            ->orderByDesc('id');
         $list->search($query, static function (Builder $query, string $term): void {
             $query->where(static function (Builder $match) use ($term): void {
                 Page::whereContains($match, 'code', self::normalize($term));
@@ -191,7 +216,8 @@ final class DiscountCodes
     }
 
     /**
-     * Deletes a code nobody used; one with uses is kept for its orders' history (switch it off instead).
+     * Deletes a code no order but a cancelled one was made with; one with others — open, paid, refunded since — is kept
+     * for their history (switch it off instead), refunded ones said apart: they count no use.
      *
      * @throws DiscountInUseException
      */
@@ -200,20 +226,24 @@ final class DiscountCodes
         if ($code->orders()->where(self::counted(...))->exists()) {
             throw new DiscountInUseException();
         }
+        if ($code->orders()->where('status', OrderStatus::Refunded->value)->exists()) {
+            throw DiscountInUseException::refunded();
+        }
         $code->delete();
     }
 
-    /** @return array<string, mixed> One code as the panels show it, its uses read with it. */
+    /** @return array<string, mixed> One code as the panels show it, its uses and whether it is kept read with it. */
     public function present(DiscountCode $code): array
     {
-        $code->loadCount(['orders as uses' => self::counted(...)]);
+        $code->loadCount(['orders as uses' => self::counted(...)])->loadExists(['orders as kept' => self::keeping(...)]);
 
         return $this->presentAll(new Collection([$code]))[0];
     }
 
     /**
-     * Codes as the panels show them, with their uses (withCount `uses`); the plans and servers they name are read once
-     * for the whole list.
+     * Codes as the panels show them, with their uses (withCount `uses`) and whether an order keeps them (withExists
+     * `kept`: `deletable` says up front what delete() would answer); the plans and servers they name are read once for
+     * the whole list.
      *
      * @param Collection<int, DiscountCode> $codes
      * @return list<array<string, mixed>>
@@ -243,6 +273,7 @@ final class DiscountCodes
             'per_user' => $code->per_user,
             'enabled' => $code->enabled,
             'uses' => (int) $code->uses,
+            'deletable' => $code->kept !== true,
             'state' => self::state($code)->value,
             'created_at' => $code->created_at->toIso8601String(),
         ])->all());
@@ -301,15 +332,14 @@ final class DiscountCodes
         return [(int) ($row->uses_all ?? 0), (int) ($row->uses_theirs ?? 0)];
     }
 
-    /** @throws DiscountCodeRefusedException */
-    private static function assertUsesLeft(DiscountCode $code, int $all, int $theirs): void
+    /** Why the code has no use left for the customer, by its uses in all and theirs; null while it has. */
+    private static function usesRefusal(DiscountCode $code, int $all, int $theirs): ?string
     {
-        if ($code->max_uses !== null && $all >= $code->max_uses) {
-            throw new DiscountCodeRefusedException(self::USED_UP);
-        }
-        if ($code->per_user !== null && $theirs >= $code->per_user) {
-            throw new DiscountCodeRefusedException(self::USED_BY_YOU);
-        }
+        return match (true) {
+            $code->max_uses !== null && $all >= $code->max_uses => self::USED_UP,
+            $code->per_user !== null && $theirs >= $code->per_user => self::USED_BY_YOU,
+            default => null,
+        };
     }
 
     /** What the code takes off `$amount`: its percent (up to its cap), its Toman, or all of it — never more than `$amount`. */
@@ -334,15 +364,27 @@ final class DiscountCodes
             $code->type === DiscountType::Percent ? (int) $code->value : null,
             $code->id,
             code: $code->code,
+            firstOnly: $code->first_purchase_only,
         );
     }
 
     /**
-     * An order that counts as a use of its code: anything but cancelled.
+     * An order that counts as a use of its code: anything but cancelled unpaid or refunded, which give the use back.
      *
      * @param Builder<Order> $query
      */
     private static function counted(Builder $query): void
+    {
+        $query->whereNotIn('status', [OrderStatus::Cancelled->value, OrderStatus::Refunded->value]);
+    }
+
+    /**
+     * An order that keeps its code from being deleted (delete()): anything but cancelled unpaid — a refunded one too, for
+     * its history.
+     *
+     * @param Builder<Order> $query
+     */
+    private static function keeping(Builder $query): void
     {
         $query->where('status', '!=', OrderStatus::Cancelled->value);
     }

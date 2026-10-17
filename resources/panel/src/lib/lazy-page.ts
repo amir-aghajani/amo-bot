@@ -11,7 +11,8 @@ export interface LazyPage<P extends object> {
 /**
  * A page as its own chunk, loaded when first wanted. A page preloaded by the time it is drawn renders at once — no
  * skeleton, and no Suspense fallback flash. A tab opened before an upgrade asks for the old build's chunk, which is
- * gone: it reloads once for the new build, else the failure goes to the error boundary.
+ * gone: it reloads once for the new build, else the failure goes to the error boundary — and a link to the page about
+ * to be followed again (lib/prefetch) asks for its chunk again.
  */
 export function lazyPage<M, P extends object>(load: () => Promise<M>, pick: (module: M) => ComponentType<P>): LazyPage<P> {
   let loaded: ComponentType<P> | undefined
@@ -29,12 +30,19 @@ export function lazyPage<M, P extends object>(load: () => Promise<M>, pick: (mod
       },
     ))
 
-  const Lazy = lazy(() =>
-    fetchPage().then(
-      (component) => ({ default: component }),
-      (error: unknown) => (isStaleBuildError(error) && reloadForNewBuild() ? new Promise<never>(() => {}) : Promise.reject(error)),
-    ),
-  )
+  /** The lazy component's load failed: React keeps that failure for good, for every draw of the page it holds. */
+  let failed = false
+  const waiting = () =>
+    lazy(() =>
+      fetchPage().then(
+        (component) => ({ default: component }),
+        (error: unknown) => {
+          failed = true
+          return isStaleBuildError(error) && reloadForNewBuild() ? new Promise<never>(() => {}) : Promise.reject(error)
+        },
+      ),
+    )
+  let Lazy = waiting()
 
   function Page(props: P): ReactElement {
     // Chosen once, at mount, so the component never changes under React: the page itself when its chunk is loaded, else
@@ -43,5 +51,16 @@ export function lazyPage<M, P extends object>(load: () => Promise<M>, pick: (mod
     return createElement(Component, props)
   }
 
-  return Object.assign(Page, { preload: () => loadAhead(fetchPage) })
+  return Object.assign(Page, {
+    preload: () => {
+      // Asked again after a failure (a link to the page about to be followed, the connection back): the page drawn next
+      // waits for a lazy component of its own, not the one React holds failed. Never from React's own draws, whose
+      // retries of a failed page would ask without end.
+      if (failed) {
+        failed = false
+        Lazy = waiting()
+      }
+      loadAhead(fetchPage)
+    },
+  })
 }

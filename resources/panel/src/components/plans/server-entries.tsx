@@ -4,6 +4,7 @@ import { Plus, Server as ServerIcon, X } from 'lucide-react'
 import { ErrorState } from '@/components/error-state'
 import { FieldGroup } from '@/components/field'
 import { IconButton } from '@/components/icon-button'
+import { useReadFailure } from '@/components/page'
 import { PageTabs } from '@/components/page-tabs'
 import { TextLink } from '@/components/text-link'
 import { Badge } from '@/components/ui/badge'
@@ -58,6 +59,7 @@ function inboundAddress(inbound: PlanInboundRef): string {
  */
 export function ServerEntries({ entries, onChange, options, errors = [], addServers }: ServerEntriesProps) {
   const servers = options.data?.servers ?? []
+  const failure = useReadFailure(options)
   const [serverId, setServerId] = useState('')
   const [mode, setMode] = useState<Mode>('all')
   const [picked, setPicked] = useState<number[]>([])
@@ -113,7 +115,7 @@ export function ServerEntries({ entries, onChange, options, errors = [], addServ
                   {server?.unsellable_reason && <p className="text-footnote text-warning">{server.unsellable_reason} تا درست نشود، مشتری این سرور را نمی‌بیند.</p>}
                   {/* Not among the choices: a server the main shop's owner keeps from this (an agent's) shop. */}
                   {!server && options.data ? (
-                    <p className="text-footnote text-warning">مدیر فروشگاه اصلی این سرور را برای این فروشگاه پنهان کرده است؛ پلن روی آن فروخته نمی‌شود.</p>
+                    <p className="text-footnote text-warning">پشتیبانی فروشگاه اصلی این سرور را برای این فروشگاه پنهان کرده است؛ پلن روی آن فروخته نمی‌شود.</p>
                   ) : inbounds.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {inbounds.map((inbound) => (
@@ -139,8 +141,8 @@ export function ServerEntries({ entries, onChange, options, errors = [], addServ
       )}
 
       {options.data === undefined ? (
-        options.error ? (
-          <ErrorState what="سرورها" error={options.error} onRetry={() => void options.refetch()} retrying={options.isFetching} />
+        failure.error ? (
+          <ErrorState what="سرورها" error={failure.error} onRetry={() => void options.refetch()} retrying={failure.retrying} />
         ) : (
           <Skeleton className="h-24 w-full" />
         )

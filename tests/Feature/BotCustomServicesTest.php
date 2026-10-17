@@ -84,13 +84,13 @@ final class BotCustomServicesTest extends BotTestCase
 
         $this->send($this->tap(CustomServiceHandler::PREFIX));
         self::assertSame([$this->trafficScreen()], $this->said());
-        self::assertSame([['custom:10', 'custom:50'], ['custom:100'], [MainMenu::PLANS]], $this->rows(), 'two amounts a row, and back to the plans');
-        self::assertSame(Messages::traffic(Traffic::bytesOfGb(10)), $this->inlineKeyboard(0)[0][0]['text']);
+        self::assertSame([['custom:50', 'custom:10'], ['custom:100'], [MainMenu::PLANS]], $this->rows(), 'two amounts a row, the first on the right, and back to the plans');
+        self::assertSame(Messages::traffic(Traffic::bytesOfGb(10)), $this->inlineKeyboard(0)[0][1]['text']);
 
         $this->send($this->tap(CustomServiceHandler::daysCallback(50)));
         self::assertSame([$this->daysScreen(50)], $this->said());
-        self::assertSame([['custom:50:30', 'custom:50:60'], [CustomServiceHandler::PREFIX]], $this->rows());
-        self::assertSame(Messages::duration(30 * Package::HOURS_A_DAY), $this->inlineKeyboard(0)[0][0]['text']);
+        self::assertSame([['custom:50:60', 'custom:50:30'], [CustomServiceHandler::PREFIX]], $this->rows());
+        self::assertSame(Messages::duration(30 * Package::HOURS_A_DAY), $this->inlineKeyboard(0)[0][1]['text']);
 
         $this->send($this->tap(CustomServiceHandler::serverCallback(50, 30)));
         self::assertSame([self::text(BotText::CustomServer, ['traffic' => Messages::traffic(Traffic::bytesOfGb(50)), 'duration' => Messages::duration(30 * Package::HOURS_A_DAY)])], $this->said());
@@ -132,6 +132,8 @@ final class BotCustomServicesTest extends BotTestCase
         self::assertSame([CustomServiceHandler::PREFIX], $this->callbacks(0));
         $this->send($this->message('سلام'));
         self::assertSame([self::text(BotText::CustomTrafficInvalid, ['least' => '۱', 'most' => '۵۰۰'])], $this->said(), 'no number is none either');
+        $this->send($this->message('۷۵ روز'));
+        self::assertSame([self::text(BotText::CustomTrafficInvalid, ['least' => '۱', 'most' => '۵۰۰'])], $this->said(), 'days are no GB');
 
         $this->send($this->message('۷۵ گیگ'));
         self::assertSame(['sendMessage'], $this->calls(), 'the next step as a new message');
@@ -140,6 +142,8 @@ final class BotCustomServicesTest extends BotTestCase
         $this->send($this->message('100'));
         self::assertSame([self::text(BotText::CustomDaysInvalid, ['least' => '۱', 'most' => '۹۰'])], $this->said());
         self::assertSame([CustomServiceHandler::daysCallback(75)], $this->callbacks(0));
+        $this->send($this->message('۴۵ گیگ'));
+        self::assertSame([self::text(BotText::CustomDaysInvalid, ['least' => '۱', 'most' => '۹۰'])], $this->said(), 'GB are no days');
 
         $this->send($this->message('45'));
         self::assertSame([self::text(BotText::CustomCheckout, [
@@ -213,7 +217,7 @@ final class BotCustomServicesTest extends BotTestCase
 
         $this->send($this->tap($checkout));
         self::assertSame([BotTexts::paragraphs($this->checkoutText('آلمان', '170000'), self::text(BotText::CheckoutNamePattern))], $this->said());
-        self::assertSame([$this->pay(50, 30, $this->germany), ClientNameHandler::modeCallback(ClientNameMode::Sequential, $checkout), $custom, CustomServiceHandler::daysCallback(50)], $this->callbacks(0));
+        self::assertSame([$this->pay(50, 30, $this->germany), $custom, ClientNameHandler::modeCallback(ClientNameMode::Sequential, $checkout), CustomServiceHandler::daysCallback(50)], $this->callbacks(0));
 
         $this->send($this->tap($custom));
         $this->send($this->message('my-vpn'));

@@ -68,12 +68,14 @@ export function ShellProvider({ panel, children }: { panel: PanelShell; children
   const [mobileOpen, setMobileOpen] = useState(false)
   const { pathname } = useLocation()
 
-  // Navigating always dismisses the phone drawer.
+  // Navigating always dismisses the phone drawer — and so does a window grown past a phone's (a phone turned on its
+  // side), whose sidebar takes over: turned back, the drawer stays shut.
   const [drawerPath, setDrawerPath] = useState(pathname)
   if (drawerPath !== pathname) {
     setDrawerPath(pathname)
     setMobileOpen(false)
   }
+  if (mobileOpen && !isMobile) setMobileOpen(false)
 
   const toggleCollapsed = useCallback(() => {
     setChoice(!collapsed)

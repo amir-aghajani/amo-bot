@@ -37,8 +37,9 @@ use Tests\Support\FakeAban;
  * AbanGateway, an online gateway for card-to-card payments to the merchant's own card: a checkout opens an invoice in
  * Rial for 30 minutes, calling the shop back and sending the customer back to it, and shows its page, the exact sum it
  * asks (a few Rial more, never credited) and the card; its call — or the customer's return, or the shop's own asking —
- * reads the invoice and claims a paid one once (verify, then 409: paid all the same); paid in part waits, money in;
- * expired or cancelled closes, another order or amount is held for support; an invoice no longer pending is never opened
+ * reads the invoice and claims a paid one once (verify, then 409: paid all the same); paid in part waits, money in — and,
+ * expired then, is held for support; expired or cancelled closes, another order or amount is held for support; an
+ * invoice no longer pending is never opened
  * as a page; a test key is Aban's test mode, whose invoices a live key does not see.
  */
 final class AbanPaymentsTest extends HttpTestCase
@@ -67,6 +68,11 @@ final class AbanPaymentsTest extends HttpTestCase
         self::assertSame(['api_key' => 'secret', 'show_card' => 'toggle'], array_column($described['fields'], 'type', 'name'));
         self::assertNull($driver->summary(['api_key' => FakeAban::KEY, 'show_card' => true]));
         self::assertSame('حالت آزمایشی: پولی جابه‌جا نمی‌شود', $driver->summary(['api_key' => FakeAban::TEST_KEY, 'show_card' => true]));
+
+        // Each key prefix in a Persian sentence set apart: right to left, a bare «ag_test_» reads «_ag_test».
+        $words = json_encode($described, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        self::assertSame(0, preg_match('/(?<!\x{2068})ag_(live|test)_(?!\x{2069}|…)/u', $words), 'every «ag_live_» and «ag_test_» but the placeholder isolated');
+        self::assertStringContainsString("کلید \u{2068}ag_test_\u{2069} حالت آزمایشی است", $words);
     }
 
     public function testACheckoutOpensAnInvoiceInRialAndShowsItsPageTheExactSumAndTheCard(): void
@@ -86,7 +92,7 @@ final class AbanPaymentsTest extends HttpTestCase
         self::assertSame([
             'amount_rial' => 500000,
             'order_id' => $invoices->orderId($payment),
-            'description' => sprintf('سفارش #%d', $payment->order_id),
+            'description' => sprintf("سفارش \u{200E}#%d", $payment->order_id),
             'expiry_minutes' => AbanGateway::PAGE_MINUTES,
             'callback_url' => $invoices->callbackUrl($payment),
             'return_url' => $invoices->callbackUrl($payment),
@@ -148,7 +154,7 @@ final class AbanPaymentsTest extends HttpTestCase
         self::assertSame(PaymentStatus::Paid, $payment->refresh()->status);
     }
 
-    public function testPaidInPartWaitsAndExpiredOrCancelledCloses(): void
+    public function testPaidInPartWaitsThenExpiredIsHeldForSupportAndCancelledCloses(): void
     {
         $payment = $this->topUp('50000')->payment()->refresh();
         $id = $this->aban->onlyInvoice();
@@ -159,9 +165,14 @@ final class AbanPaymentsTest extends HttpTestCase
         self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
 
         $this->aban->expire($id);
-        self::assertSame(OnlineState::Closed, $online->check($payment));
-        self::assertSame([PaymentStatus::Failed, PaymentService::NOTE_LINK_CLOSED], [$payment->refresh()->status, $payment->note]);
-        self::assertSame(OrderStatus::Pending, $payment->order->status, 'the order is still the customer\'s to pay');
+        try {
+            $online->check($payment);
+            self::fail('held for support');
+        } catch (GatewayUnavailableException $e) {
+            self::assertTrue($e->held);
+        }
+        self::assertSame([PaymentStatus::Failed, PaymentService::NOTE_CLOSED_WITH_MONEY], [$payment->refresh()->status, $payment->note]);
+        self::assertTrue(OnlinePayments::awaitsSupport($payment), 'a part of the money came: support looks at once, the order paid no other way meanwhile');
 
         $other = $this->topUp('40000', $this->abanMethod('آبان گیت وی ۲'))->payment()->refresh();
         $this->aban->cancel((string) $other->reference);

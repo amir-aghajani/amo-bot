@@ -5,7 +5,7 @@ import { CodeForm } from '@/components/discounts/code-form'
 import { kindsWords, namedWords } from '@/components/discounts/targets'
 import { windowWords } from '@/components/discounts/window'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, RowTitleButton } from '@/components/list-view'
+import { ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
 import { EditorModal, useEditor } from '@/components/row-editor'
 import { SearchBox } from '@/components/search-box'
 import { SectionActions } from '@/components/sectioned-page'
@@ -45,9 +45,25 @@ function codeTargets(code: Pick<DiscountCodeRow, 'order_types' | 'plans' | 'serv
   return parts.join(' · ')
 }
 
+/** How often a code was used: «۳», or «۳ از ۱۰» against its cap. */
+function uses(code: Pick<DiscountCodeRow, 'uses' | 'max_uses'>): string {
+  return code.max_uses === null ? formatNumber(code.uses) : `${formatNumber(code.uses)} از ${formatNumber(code.max_uses)}`
+}
+
 /**
- * The discount codes, newest first, searched by code or note, edited in a dialog. A code that was used is kept for the
- * orders' history: it can only be switched off, not deleted.
+ * Why a code cannot be deleted, as the row says (`deletable`, the server's own rule): its orders keep it for their
+ * history — those that used it, or, when none counts, those refunded since. Null for a code that may go.
+ */
+function keptFor(code: Pick<DiscountCodeRow, 'deletable' | 'uses'>): string | null {
+  if (code.deletable) return null
+  return code.uses > 0
+    ? `این کد ${formatNumber(code.uses)} بار در سفارش‌ها استفاده شده و برای سابقه می‌ماند؛ به جای حذف، آن را غیرفعال کنید.`
+    : 'این کد فقط در سفارش‌هایی آمده که بازپرداخت شده‌اند؛ استفاده‌ای از آن حساب نمی‌شود، ولی برای سابقه آن سفارش‌ها می‌ماند. به جای حذف، آن را غیرفعال کنید.'
+}
+
+/**
+ * The discount codes, newest first, searched by code or note, edited in a dialog. A code an order names is kept for the
+ * orders' history: it can only be switched off, not deleted — and its delete says so before anything is asked.
  */
 export function CodesList() {
   const editor = useEditor<DiscountCodeRow>()
@@ -79,7 +95,7 @@ export function CodesList() {
     <>
       <SectionActions>{add('default')}</SectionActions>
 
-      <SearchBox value={list.typed} onChange={list.setTyped} placeholder="کد، یا یادداشت آن" aria-label="جستجوی کد تخفیف" />
+      <SearchBox value={list.typed} onChange={list.setTyped} placeholder="کد یا یادداشت آن" aria-label="جستجوی کد تخفیف" />
 
       <ListView
         list={list}
@@ -102,8 +118,8 @@ export function CodesList() {
               <TableHead>کد</TableHead>
               <TableHead>تخفیف</TableHead>
               <TableHead className="hidden lg:table-cell">زمان</TableHead>
-              <TableHead>استفاده</TableHead>
-              <TableHead>وضعیت</TableHead>
+              <TableHead className="hidden md:table-cell">استفاده</TableHead>
+              <TableHead className="hidden md:table-cell">وضعیت</TableHead>
               <TableHead>فعال</TableHead>
               <ActionsHead />
             </TableRow>
@@ -120,6 +136,10 @@ export function CodesList() {
                     </RowTitleButton>
                     {code.note && <span className="text-footnote text-muted-foreground">{code.note}</span>}
                   </div>
+                  <PhoneFacts>
+                    <StatusBadge status={DISCOUNT_STATE[code.state]} />
+                    <span className="tabular">{uses(code)} استفاده</span>
+                  </PhoneFacts>
                 </TableCell>
                 <TableCell>
                   <div className="grid gap-0.5">
@@ -128,8 +148,8 @@ export function CodesList() {
                   </div>
                 </TableCell>
                 <TableCell className="hidden text-footnote text-muted-foreground lg:table-cell">{windowWords(code.starts_at, code.ends_at)}</TableCell>
-                <TableCell className="tabular">{code.max_uses === null ? formatNumber(code.uses) : `${formatNumber(code.uses)} از ${formatNumber(code.max_uses)}`}</TableCell>
-                <TableCell>
+                <TableCell className="hidden tabular md:table-cell">{uses(code)}</TableCell>
+                <TableCell className="hidden md:table-cell">
                   <StatusBadge status={DISCOUNT_STATE[code.state]} />
                 </TableCell>
                 <TableCell>
@@ -159,7 +179,7 @@ export function CodesList() {
         title="حذف کد تخفیف"
         description={(code) => `کد ${code.code} حذف می‌شود و دیگر پذیرفته نمی‌شود.`}
         details={() => 'برای کنار گذاشتن موقت، کافی است آن را غیرفعال کنید.'}
-        kept={(code) => (code.uses > 0 ? `این کد ${formatNumber(code.uses)} بار در سفارش‌ها استفاده شده و برای سابقه می‌ماند؛ به جای حذف، آن را غیرفعال کنید.` : null)}
+        kept={keptFor}
         removed="کد تخفیف حذف شد"
         onClose={() => setRemoving(null)}
       />

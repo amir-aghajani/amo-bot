@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { keepPreviousData, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
+import { hashKey, keepPreviousData, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router'
 import { useSectionShown } from '@/components/sectioned-page'
 import type { PageMeta, SortDirection } from '@/lib/api-types'
@@ -46,6 +46,8 @@ interface UsePagedListOptions<R, K, F extends string, S extends string> {
   params?: readonly string[]
   /** The values a filter may take when they are a closed set (an enum, the orders' `type`); any other value is no filter. */
   choices?: Readonly<Record<string, readonly string[]>>
+  /** The filters that name a row by its id (`server`, `user`): a value that is no whole number is no filter — the API would refuse it. */
+  ids?: readonly string[]
   /**
    * The keys the column headers sort by on the server (the API's `sort`, SortableHead). The first is the list's own
    * order, read descending (newest or largest first).
@@ -74,6 +76,7 @@ export function usePagedList<K extends string, R extends { meta: PageMeta } & Re
   statuses = ['' as F],
   params = [],
   choices = {},
+  ids = [],
   sorts = [],
   address,
 }: UsePagedListOptions<R, K, F, S>) {
@@ -89,8 +92,11 @@ export function usePagedList<K extends string, R extends { meta: PageMeta } & Re
   const own: ListOrder<S> | null = first === undefined ? null : { sort: first, dir: 'desc' }
   const blank: View = { search: '', status: statuses[0] as F, params: Object.fromEntries(params.map((name) => [name, ''])), order: own, page: 1 }
 
-  /** A filter's value from an address: '' (no filter) for one outside its `choices`. */
-  const filterOf = (name: string, value: string | null): string => (value === null || (choices[name] !== undefined && !choices[name].includes(value)) ? '' : value)
+  /** A filter's value from an address: '' (no filter) for one outside its `choices`, or an id that is no whole number. */
+  const filterOf = (name: string, value: string | null): string => {
+    if (value === null || (choices[name] !== undefined && !choices[name].includes(value))) return ''
+    return ids.includes(name) && !isId(value) ? '' : value
+  }
 
   /** The view an address names; what it leaves out, or names wrongly, takes the default. */
   const named = (query: URLSearchParams): View => {
@@ -181,17 +187,21 @@ export function usePagedList<K extends string, R extends { meta: PageMeta } & Re
   const sorted = view.order !== null && !sameOrder(view.order, own) ? view.order : null
   const query = queryOf(view, '')
 
+  const key = [...queryKey, { search: view.search, status: view.status, page: view.page, ...narrowing, ...sorted }]
   const result = useQuery({
-    queryKey: [...queryKey, { search: view.search, status: view.status, page: view.page, ...narrowing, ...sorted }],
+    queryKey: key,
     queryFn: () => read(query),
     placeholderData: keepPreviousData,
     // A list in a hidden section passes the live updates by, and reads afresh once it is shown.
     subscribed: shown,
   })
 
-  // The page on screen lost its last rows (deleted) while the list still has some: step back a page.
-  if (result.data && !result.isPlaceholderData && result.data[list].length === 0 && result.data.meta.total > 0 && view.page > 1) {
-    setState((current) => ({ view: { ...current.view, page: current.view.page - 1 }, entry: 'replace' }))
+  // A page past the list's end (an old link, a list that shrank), which the server answers with its last page; or a page
+  // with no rows while the list still has some, its last ones deleted: the view — and its address — go to the list's
+  // last page, in one step.
+  const { data } = result
+  if (data && !result.isPlaceholderData && view.page > 1 && (view.page > data.meta.last_page || (data[list].length === 0 && data.meta.total > 0))) {
+    setState((current) => ({ view: { ...current.view, page: Math.max(1, Math.min(current.view.page - 1, data.meta.last_page)) }, entry: 'replace' }))
   }
 
   const rows: Row[] = result.data ? [...result.data[list]] : []
@@ -203,8 +213,11 @@ export function usePagedList<K extends string, R extends { meta: PageMeta } & Re
     rows,
     meta: result.data?.meta as R['meta'] | undefined,
     isPending: result.isPending,
+    isFetching: result.isFetching,
     isPlaceholderData: result.isPlaceholderData,
     error: result.error,
+    /** The view's read: another view's failure is not this one's. */
+    readKey: hashKey(key),
     refetch: () => void queryClient.invalidateQueries({ queryKey }),
     typed,
     setTyped,
@@ -226,6 +239,12 @@ export function usePagedList<K extends string, R extends { meta: PageMeta } & Re
     /** A deleted row: out of every cached page and its count. */
     remove: (id: number) => rewrite(id, (current) => ({ ...current, [list]: current[list].filter((r) => r.id !== id), meta: { ...current.meta, total: current.meta.total - 1 } }) as R),
   }
+}
+
+/** A row's id as an address writes it: a whole number, from 1, in Latin digits. */
+function isId(text: string): boolean {
+  const id = Number(text)
+  return Number.isSafeInteger(id) && id > 0 && String(id) === text
 }
 
 /** `view` with `changes` (filters merged), back on page 1 when they narrow or order the list differently. */

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SubscriptionModal } from '@/components/subscriptions/subscription-modal'
 import type { Session, SubscriptionRow } from '@/lib/api-types'
+import { idLabel } from '@/lib/direction'
 import { formatDate } from '@/lib/format'
 import { AGENT_SHOP, OWNER, signedIn, until } from '@/test/render'
 import { CLAIMED_AT, claimedServiceRow, subscriptionRow } from '@/test/rows'
@@ -112,6 +113,27 @@ describe('a delete the panel did not take', () => {
   })
 })
 
+describe('a delete while an order of the service is open', () => {
+  const OPEN_ORDER = 'سفارش #142 این سرویس هنوز تمام نشده است (در انتظار پرداخت، در حال تحویل یا تحویل ناموفق)؛ اول آن را تحویل، لغو یا بازپرداخت کنید، بعد سرویس را حذف کنید.'
+
+  it('says which order holds it, once, and deletes nothing', async () => {
+    server().on('POST', `/api/admin/subscriptions/${SERVICE.id}/delete`, refusal(422, OPEN_ORDER, { status: [OPEN_ORDER] }))
+    const { onDeleted, onStale } = show()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف سرویس' }))
+    fireEvent.click(screen.getByRole('button', { name: 'حذف سرویس' }))
+
+    // The order it names kept whole, right to left: «سفارش #142», never «142# سفارش».
+    const said = OPEN_ORDER.replace('#142', idLabel(142))
+    await until(() => expect(screen.getByText(said)).toBeTruthy())
+    expect(screen.getAllByText(said)).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'حذف فقط از فروشگاه' })).toBeNull()
+    expect(onDeleted).not.toHaveBeenCalled()
+    expect(onStale).toHaveBeenCalled()
+    expect(deletes()).toEqual([{ note: '' }])
+  })
+})
+
 /** A service a customer added by its link, a client made by hand on its panel: no plan until a renewal gives it one. */
 const CLAIMED = claimedServiceRow()
 const KEEP_CLIENT = 'حذف فقط از فروشگاه (کلاینت روی پنل می‌ماند)'
@@ -212,6 +234,22 @@ describe('a service whose link no longer works', () => {
   })
 })
 
+describe('a service gone from its panel', () => {
+  it('is deleted from the shop, said as it is — no client to remove, no customer told, no note to write', async () => {
+    const gone = subscriptionRow({ status: 'deleted', actions: { sync: false, extend: false, enable: false, disable: false, move: false, transfer: false, delete: true } })
+    server().on('POST', `/api/admin/subscriptions/${gone.id}/delete`, noContent)
+    const handlers = show(gone)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'حذف سرویس' }))
+    expect(screen.getByText(/کلاینت این سرویس دیگر روی پنل نیست/)).toBeTruthy()
+    expect(screen.queryByText(/کلاینت از پنل و سرویس از فروشگاه کامل حذف می‌شود/)).toBeNull()
+    expect(screen.queryByLabelText('توضیح برای مشتری')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'حذف سرویس' }))
+    await until(() => expect(handlers.onDeleted).toHaveBeenCalledWith(gone))
+  })
+})
+
 /** What a fact of the modal says, by its label. */
 const fact = (label: string) => screen.getByText(label).nextElementSibling?.textContent
 
@@ -255,6 +293,15 @@ describe('its facts', () => {
     expect(fact('پلن')).toBe('طلایی')
   })
 
+  it('say a value in one ink whatever it is — «خاموش» as «روشن» —, the quieter ink kept for the moments', async () => {
+    show(subscriptionRow({ auto_renew: false }))
+
+    const off = await screen.findByText('خاموش')
+    expect(off.tagName).toBe('DD')
+    expect(off.className).not.toContain('text-muted-foreground')
+    expect(screen.getByText('خرید').nextElementSibling?.firstElementChild?.className).toContain('text-muted-foreground')
+  })
+
   it('say when an ended service goes by itself, and how long is left', async () => {
     const at = new Date(Date.now() + 10 * 3_600_000).toISOString()
     show(subscriptionRow({ status: 'expired', ended_at: new Date(Date.now() - 2 * 3_600_000).toISOString(), removes_at: at }))
@@ -278,8 +325,9 @@ describe('its facts', () => {
   it('say when a service added by its link was claimed, and that the customer picks its plan when renewing — not that it was lost', async () => {
     show(CLAIMED)
 
-    expect(await screen.findByText('افزودن')).toBeTruthy()
-    expect(fact('افزودن')).toBe(`افزوده‌شده با لینک مشتری در ${formatDate(CLAIMED_AT)}`)
+    // A moment, as «خرید» is: in the quieter ink of every sheet's moments.
+    expect(await screen.findByText('افزودن با لینک')).toBeTruthy()
+    expect(fact('افزودن با لینک')).toBe(formatDate(CLAIMED_AT))
     // No «first renewal»: a renewed one whose plan was deleted since says the same.
     expect(fact('پلن')).toBe('بدون پلنمشتری هنگام تمدید یکی از پلن‌هایی را که روی سرور این سرویس فروخته می‌شوند انتخاب می‌کند.')
     expect(screen.queryByText('پلن حذف شده')).toBeNull()
@@ -290,7 +338,7 @@ describe('its facts', () => {
     show()
 
     expect(await screen.findByText('خرید')).toBeTruthy()
-    expect(screen.queryByText('افزودن')).toBeNull()
+    expect(screen.queryByText('افزودن با لینک')).toBeNull()
   })
 
   it('say a service its customer built is one, as the bot does — no plan was deleted from under it', async () => {

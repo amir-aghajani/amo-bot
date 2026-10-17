@@ -79,6 +79,16 @@ describe('the reviews', () => {
     expect(within(approved).getByText('root')).toBeTruthy()
   })
 
+  it('name one of the shop’s admins who decided one by their name where the server read it', async () => {
+    const decided = reviewRow({ status: 'rejected', reviewer: 'user#12', reviewer_name: 'سارا احمدی', decided_at: '2026-10-07T10:00:00Z', actions: { approve: true, reject: false } })
+    open('/reviews', reviews([decided]))
+
+    const [, row] = within(await table()).getAllByRole('row')
+    if (!row) throw new Error('A review is listed.')
+    expect(within(row).getByText('سارا احمدی')).toBeTruthy()
+    expect(within(row).queryByText(/کاربر/)).toBeNull()
+  })
+
   it('say there is none yet, with the screen’s own empty text', async () => {
     open('/reviews', reviews([], { pending: 0 }))
 

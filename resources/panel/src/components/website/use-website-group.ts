@@ -6,9 +6,12 @@ import { queryKeys } from '@/lib/query-keys'
 import { trimmed, useForm } from '@/lib/use-form'
 import type { SettingsGroup } from '@/lib/use-settings-group'
 
-/** A secret the website keeps, as its field (SecretField) shows it: nothing of it comes back, so the field says what leaving it blank does. */
+/**
+ * A secret the website keeps, as its field (SecretField) shows it: nothing of it comes back, so its placeholder only says
+ * one is stored, masked as the server masks a password it never shows (SecretField says what leaving it blank does).
+ */
 export function keptSecret(kept: boolean): SecretState {
-  return { set: kept, hint: 'برای نگه‌داشتن مقدار فعلی خالی بگذارید' }
+  return { set: kept, hint: kept ? '••••••••' : '' }
 }
 
 /**

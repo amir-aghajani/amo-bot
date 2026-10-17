@@ -32,13 +32,24 @@ export function useShops() {
   return useQuery({ queryKey: queryKeys.shops, queryFn: () => api.get<ShopsResponse>('/shops').then((data) => data.shops), enabled: useShellReads() })
 }
 
+/** A shop as a menu item's link (useOpenShop's `link`): `onSelect` for the item, `href` and `onClick` for its <a>. */
+export interface ShopLink {
+  href: string
+  onClick: (event: MouseEvent) => void
+  onSelect: () => void
+}
+
 /** A press the page handles itself: the main button with no key that asks for a new tab or window. */
 const plainPress = (event: MouseEvent) => event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
 
 /**
  * Opening a shop (the shop picker, the agents list): ask about unsaved drafts first, then load the panel afresh at the
- * shop's dashboard address — nothing of the current shop stays in memory. `opening` is the shop being opened. `link(id)`
- * gives a real link: a new tab opens it as any link, a plain press goes through `open`.
+ * shop's dashboard address — nothing of the current shop stays in memory. `opening` is the shop being opened.
+ *
+ * `link(id)` is a menu item that is a real link (DropdownMenuItem asChild over an <a>): `onSelect` goes on the item,
+ * `href` and `onClick` on the link. A new tab or window opens it as any link; a plain press (a click, Enter) goes through
+ * `open` from the item's select, so the menu closes first — a press the link itself held back (preventDefault) would
+ * keep the menu open, and its pointer lock, under the unsaved-changes question.
  */
 export function useOpenShop() {
   const [opening, setOpening] = useState<number | null>(null)
@@ -50,14 +61,21 @@ export function useOpenShop() {
   }, [])
 
   const link = useCallback(
-    (id: number) => ({
-      href: shopHome(id),
-      onClick: (event: MouseEvent) => {
-        if (!plainPress(event)) return
-        event.preventDefault()
-        void open(id)
-      },
-    }),
+    (id: number): ShopLink => {
+      // The press on the link: the item's select runs inside it, after the link's own handler.
+      let press: MouseEvent | null = null
+      return {
+        href: shopHome(id),
+        onClick: (event: MouseEvent) => {
+          press = event
+        },
+        onSelect: () => {
+          if (press === null || !plainPress(press)) return
+          press.preventDefault()
+          void open(id)
+        },
+      }
+    },
     [open],
   )
 

@@ -97,6 +97,8 @@ final class AdminWebhooksApiTest extends HttpTestCase
         self::assertSame(200, $response->getStatusCode());
         self::assertSame([true, true], array_column($this->decode($response)['bots'], 'done'));
         self::assertSame([BotWebhooks::DISABLED, BotWebhooks::DISABLED], array_column($this->decode($response)['bots'], 'message'));
+        self::assertStringContainsString('«ثبت Webhook»', BotWebhooks::DISABLED, 'the way back is the panel\'s own button: an owner on a shared host has no console');
+        self::assertStringNotContainsString('bot:', BotWebhooks::DISABLED);
         self::assertSame([FakeTelegram::TOKEN, FakeTelegram::AGENT_TOKEN], $this->tokensOf('deleteWebhook'));
         self::assertNotSame('webhook', $this->decode($this->get('/api/admin/system'))['system']['bot']['mode']);
     }

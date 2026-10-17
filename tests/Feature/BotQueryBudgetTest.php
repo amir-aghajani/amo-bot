@@ -31,9 +31,10 @@ final class BotQueryBudgetTest extends BotTestCase
     {
         parent::setUp();
 
-        // A live shop has every area's number already: its first write there is not what an update costs.
+        // A live shop has every area's number already — the installation's and its own —: its first write there is not
+        // what an update costs.
         foreach (array_unique(ChangeFeed::AREAS) as $area) {
-            $this->db()->table('change_versions')->insertOrIgnore(['area' => $area, 'version' => 1]);
+            $this->db()->table('change_versions')->insertOrIgnore([['area' => $area, 'version' => 1], ['area' => "{$area}.1", 'version' => 1]]);
         }
         // And the bot has its settings, as the poller holds them between two reads.
         $this->service(Settings::class)->get('bot.enabled');

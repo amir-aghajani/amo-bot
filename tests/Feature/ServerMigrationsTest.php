@@ -14,6 +14,7 @@ use App\Modules\Providers\Exceptions\ConnectionException;
 use App\Modules\Providers\Exceptions\PanelApiException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
+use App\Modules\Providers\Services\ServerHealth;
 use App\Modules\Subscriptions\Enums\MigrationStatus;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\MigrationLeftover;
@@ -97,8 +98,8 @@ final class ServerMigrationsTest extends HttpTestCase
         self::assertSame(201, $response->getStatusCode());
         $job = $this->decode($response)['migration'];
         self::assertSame(
-            ['queued', 3, 0, 'migrate', ['id' => $this->source->id, 'name' => 'آلمان'], ['id' => $this->target->id, 'name' => 'هلند'], true, null, self::ADMIN_USERNAME],
-            [$job['status'], $job['total'], $job['moved'], $job['mode'], $job['source'], $job['target'], $job['notify'], $job['plans'], $job['reviewer']],
+            ['queued', 3, 0, 'migrate', ['id' => $this->source->id, 'name' => 'آلمان'], ['id' => $this->target->id, 'name' => 'هلند'], true, null, self::ADMIN_USERNAME, null],
+            [$job['status'], $job['total'], $job['moved'], $job['mode'], $job['source'], $job['target'], $job['notify'], $job['plans'], $job['reviewer'], $job['reviewer_name']],
         );
         self::assertSame([], FakeProvider::$created, 'nothing moves until it is worked on');
 
@@ -138,6 +139,12 @@ final class ServerMigrationsTest extends HttpTestCase
         $card = $this->decode($this->get("/api/admin/servers/{$this->source->id}/migrations"));
         self::assertSame([[$job['id'], 'done']], array_map(static fn(array $row): array => [$row['id'], $row['status']], $card['migrations']));
         self::assertSame(['pending' => 0, 'last_error' => null], $card['leftovers']);
+
+        // Kept by an admin's handle — as a panel's reviewer is kept everywhere — it reads as their name on the card.
+        $this->admin(['telegram_id' => self::BOSS_TELEGRAM_ID, 'username' => 'boss']);
+        ServerMigration::query()->whereKey($job['id'])->update(['reviewer' => '@boss']);
+        $row = $this->decode($this->get("/api/admin/servers/{$this->source->id}/migrations"))['migrations'][0];
+        self::assertSame(['@boss', 'Boss'], [$row['reviewer'], $row['reviewer_name']]);
     }
 
     public function testARescueCarriesTheShopsOwnCopyNeverAsksTheDeadPanelAndRemovesWhatItLeftOnceItAnswers(): void
@@ -344,12 +351,14 @@ final class ServerMigrationsTest extends HttpTestCase
         $job = $this->work($id);
         self::assertSame(['running', 0, 0], [$job['status'], $job['moved'], $job['failed']]);
         self::assertSame('سرور قبلی «آلمان»: ' . ProviderErrorPresenter::describe(new ConnectionException(ConnectionFailure::Timeout, 'Connection timed out')), $job['waiting_reason'], "why, in the owner's words");
+        self::assertSame('source', $job['waiting_on'], 'the source holds it: the one a rescue goes on without');
         self::assertSame([], FakeProvider::$created);
         $job = $this->work($id);
         self::assertStringStartsWith('سرور مبدا «آلمان»: ', (string) $job['waiting_reason'], 'in backoff: it waits without asking');
+        self::assertSame('source', $job['waiting_on']);
 
         $job = $this->decode($this->postJson("/api/admin/servers/{$this->source->id}/migrations/{$id}/rescue"))['migration'];
-        self::assertSame(['rescue', 'running', null], [$job['mode'], $job['status'], $job['waiting_reason']]);
+        self::assertSame(['rescue', 'running', null, null], [$job['mode'], $job['status'], $job['waiting_reason'], $job['waiting_on']]);
         $job = $this->work($id);
 
         self::assertSame(['done', 2, 2], [$job['status'], $job['moved'], $job['left_behind']]);
@@ -391,6 +400,26 @@ final class ServerMigrationsTest extends HttpTestCase
         self::assertSame(['failed', 1, 'سرور مقصد «هلند»: سرور غیرفعال است.'], [$job['status'], $job['moved'], $job['reason']]);
     }
 
+    public function testTheJobSaysWhichPanelHoldsItAsItsNextTurnMeetsThem(): void
+    {
+        $this->mirrored($this->subscription($this->ali, $this->plan, $this->source, 'ali_1'));
+        FakeProvider::$down = [$this->source->id];
+        $id = $this->decode($this->start(['target_server_id' => $this->target->id, 'mode' => 'migrate']))['migration']['id'];
+        self::assertSame('source', $this->work($id)['waiting_on']);
+        $onCard = fn(): ?string => $this->card()['migrations'][0]['waiting_on'];
+
+        // The target stops answering too (a customer's screen found it so).
+        $this->service(ServerHealth::class)->record($this->target, 'پاسخ نداد');
+        self::assertSame('target', $onCard(), 'both out of reach: the target is asked first, and a rescue would wait on it as well');
+        $this->service(ServerHealth::class)->record($this->target->refresh(), null);
+        self::assertSame('source', $onCard(), 'the target answers again: the source alone holds it now');
+        Carbon::setTestNow(now()->addMinutes(Server::BACKOFF_MINUTES + 1));
+        self::assertSame('source', $onCard(), 'past its backoff, its last contact still failed: the next turn asks it again');
+        $this->service(ServerHealth::class)->record($this->source->refresh(), null);
+        self::assertNull($onCard(), 'both answer: the next turn goes on, held by neither');
+        self::assertNotNull($this->card()['migrations'][0]['waiting_reason'], 'until it does, the reason it last waited for stays');
+    }
+
     public function testATargetOutOfReachHoldsTheJobUntilItAnswers(): void
     {
         $ali = $this->mirrored($this->subscription($this->ali, $this->plan, $this->source, 'ali_1'));
@@ -400,6 +429,7 @@ final class ServerMigrationsTest extends HttpTestCase
         $job = $this->work($id);
         self::assertSame(['running', 0, 0], [$job['status'], $job['moved'], $job['failed']]);
         self::assertStringStartsWith('سرور مقصد «هلند»: ', (string) $job['waiting_reason']);
+        self::assertSame('target', $job['waiting_on'], 'the target holds it: a rescue would not help');
         self::assertSame([], FakeProvider::$deleted, 'the old client stays while the new one is not made');
 
         FakeProvider::$down = [];
@@ -442,8 +472,45 @@ final class ServerMigrationsTest extends HttpTestCase
         $off->refresh();
         self::assertSame([$this->target->id, SubscriptionStatus::Disabled], [$off->server_id, $off->status], 'still switched off');
         self::assertFalse(FakeProvider::$created[0]['spec']->enabled, 'made switched off on the target');
+        self::assertFalse(FakeProvider::$clients[$this->target->id]['ali_2']->enabled, 'and it is off there');
+        self::assertSame([], FakeProvider::$enabled, 'made so: no switch after it');
         self::assertSame([$this->source->id, $this->source->id], [$ended->refresh()->server_id, $usedUp->refresh()->server_id]);
         self::assertSame(SubscriptionStatus::Expired, $usedUp->status);
+    }
+
+    public function testASwitchedOffServiceTheTargetDoesNotMakeSwitchedOffStaysWhereItWas(): void
+    {
+        $off = $this->mirrored($this->subscription($this->ali, $this->plan, $this->source, 'ali_1', ['status' => SubscriptionStatus::Disabled, 'disabled_at' => now()]), enabled: false);
+        // A connector that cannot make it switched off refuses to make it (PasarGuard takes its user back).
+        FakeProvider::$refusing = [$this->target->id => ['createClient']];
+
+        $job = $this->work($this->decode($this->start(['target_server_id' => $this->target->id, 'mode' => 'migrate', 'include_disabled' => true]))['migration']['id']);
+
+        self::assertSame(['done', 0, 1], [$job['status'], $job['moved'], $job['failed']]);
+        self::assertSame([$this->source->id, SubscriptionStatus::Disabled], [$off->refresh()->server_id, $off->status]);
+        self::assertArrayNotHasKey('ali_1', FakeProvider::$clients[$this->target->id] ?? [], 'nothing of it on the target');
+        self::assertArrayHasKey('ali_1', FakeProvider::$clients[$this->source->id], 'the old one not deleted');
+        self::assertFalse(FakeProvider::$clients[$this->source->id]['ali_1']->enabled, 'still off where it was');
+    }
+
+    public function testASwitchedOffServiceMadeSwitchedOnOnTheTargetIsTakenBackThere(): void
+    {
+        $off = $this->mirrored($this->subscription($this->ali, $this->plan, $this->source, 'ali_1', ['status' => SubscriptionStatus::Disabled, 'disabled_at' => now()]), enabled: false);
+        // The target makes the user but neither switches it off nor takes it back: it fails after the write, the user on.
+        FakeProvider::$unread = [$this->target->id => ['createClient']];
+        FakeProvider::$onCall = function (int $server, string $call): void {
+            $made = FakeProvider::$clients[$this->target->id]['ali_1'] ?? null;
+            if ($server === $this->target->id && $call === 'findClient' && $made !== null) {
+                FakeProvider::put($this->target, new ClientInfo(...['enabled' => true] + get_object_vars($made)));
+            }
+        };
+
+        $job = $this->work($this->decode($this->start(['target_server_id' => $this->target->id, 'mode' => 'migrate', 'include_disabled' => true]))['migration']['id']);
+
+        self::assertSame(['done', 0, 1], [$job['status'], $job['moved'], $job['failed']]);
+        self::assertSame([$this->source->id, SubscriptionStatus::Disabled], [$off->refresh()->server_id, $off->status]);
+        self::assertArrayNotHasKey('ali_1', FakeProvider::$clients[$this->target->id], 'no working client of a switched-off service on the target');
+        self::assertFalse(FakeProvider::$clients[$this->source->id]['ali_1']->enabled, 'still off where it was');
     }
 
     public function testOnlyThePlansChosenMove(): void

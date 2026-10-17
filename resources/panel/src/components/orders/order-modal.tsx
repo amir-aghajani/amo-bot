@@ -122,7 +122,7 @@ function Facts({ order }: { order: OrderRow }) {
       <DiscountFact order={order} />
       {order.manual && (
         <Fact label="ثبت دستی">
-          توسط <Reviewer name={order.manual.by ?? 'پشتیبانی'} />
+          توسط <Reviewer name={order.manual.by ?? 'پشتیبانی'} person={order.manual.by_name} />
         </Fact>
       )}
       {order.manual?.note && <Fact label="یادداشت پشتیبانی">{order.manual.note}</Fact>}

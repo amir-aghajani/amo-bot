@@ -15,12 +15,15 @@ use App\Modules\Support\Models\Ticket;
 use App\Modules\Support\Models\TicketMessage;
 use App\Modules\Support\Services\Tickets;
 use App\Modules\Support\Tasks\PruneTicketsTask;
+use App\Modules\Telegram\Api\Limits;
 use App\Modules\Telegram\Handlers\TicketHandler;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\ReportSender;
 use App\Modules\Telegram\Reports\TicketClose;
 use App\Modules\Telegram\Texts\BotText;
+use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 use App\Support\Persian;
@@ -187,6 +190,22 @@ final class BotTicketsTest extends BotTestCase
         self::assertNull(TicketMessage::query()->latest('id')->firstOrFail()->attachment_file_id);
     }
 
+    public function testAnAlbumWithItsWordsOnTheFirstPictureIsOneMessage(): void
+    {
+        $this->send($this->tap(TicketHandler::START));
+
+        $this->send($this->message(null, ['photo' => [['file_id' => 'first']], 'caption' => 'این خطا را می‌دهد', 'media_group_id' => 'album-1']));
+        $ticket = Ticket::query()->sole();
+        self::assertSame([self::text(BotText::TicketOpened, ['ticket' => (string) $ticket->id, 'subject' => 'این خطا را می‌دهد'])], $this->said());
+
+        // The album's next picture comes as an update of its own: the message took the first, and it is not asked about.
+        $this->send($this->message(null, ['photo' => [['file_id' => 'second']], 'media_group_id' => 'album-1']));
+        self::assertSame([], $this->calls(), 'not «🖼️ تصویر رسید؛ حالا توضیح آن را … بنویسید»');
+
+        $this->send($this->message('از دیشب وصل نمی‌شود'));
+        self::assertSame([null, 2], [TicketMessage::query()->latest('id')->firstOrFail()->attachment_file_id, TicketMessage::query()->count()], 'the next words go alone');
+    }
+
     public function testWhatIsNeitherWordsNorAPictureIsRefusedTheMessageStillAwaited(): void
     {
         $this->send($this->tap(TicketHandler::START));
@@ -346,6 +365,22 @@ final class BotTicketsTest extends BotTestCase
         ], $this->inlineKeyboard(0), '«🖼️ تصویر ۱» over them, «پاسخ» on the right, «بستن تیکت» beside it; back to the page it came from');
     }
 
+    public function testAScreenWhoseWordingLeavesNoRoomCutsTheLatestMessageToFitOneTelegramMessage(): void
+    {
+        // The admin's words take most of a message, and the one message there is shorter than a screen shows of one.
+        $texts = $this->service(BotTexts::class);
+        $texts->save(BotText::TicketScreen, BotText::TicketScreen->spec()->default . "\n" . str_repeat('—', 3400));
+        $texts->save(BotText::TicketFromCustomer, BotText::TicketFromCustomer->spec()->default . "\n" . str_repeat('—', 450));
+        $ticket = $this->ticket($this->ali, 'قطعی اتصال', str_repeat('ب', 500));
+
+        $this->send($this->tap(TicketHandler::screenCallback($ticket->id, 1)));
+
+        self::assertSame(['editMessageText', 'answerCallbackQuery'], $this->calls(), 'the screen, not the error');
+        $screen = $this->said()[0];
+        self::assertLessThanOrEqual(Limits::MESSAGE, TelegramHtml::visibleLength($screen), 'within what Telegram takes');
+        self::assertStringContainsString('ب…', $screen, 'the message cut to fit');
+    }
+
     public function testAnotherCustomersTicketIsNotThere(): void
     {
         $theirs = $this->ticket($this->customer(['telegram_id' => 7272]), 'تیکت مشتری دیگر');
@@ -468,7 +503,7 @@ final class BotTicketsTest extends BotTestCase
         // «🗂️ مشاهده تیکت»: the screen, a message of its own too.
         $this->send($this->tap(TicketHandler::viewFromNotice($ticket->id)));
         self::assertSame(['sendMessage', 'answerCallbackQuery'], $this->calls());
-        self::assertStringStartsWith("🎫 <b>تیکت #{$ticket->id}</b>", $this->said()[0]);
+        self::assertStringStartsWith("🎫 <b>تیکت \u{200E}#{$ticket->id}</b>", $this->said()[0], 'the number marked to read left to right in the Persian line');
         self::assertSame(TicketHandler::listCallback(1), array_slice($this->callbacks(0), -1)[0], 'back to the list');
 
         // Support closes it: «⭐ امتیاز» while it is not rated, and the screen.
@@ -498,7 +533,7 @@ final class BotTicketsTest extends BotTestCase
 
         $report = $this->telegram()->params(0);
         self::assertSame((string) $threads['tickets'], $report['message_thread_id']);
-        self::assertStringContainsString("🎫 <b>تیکت جدید</b> · #{$ticket->id}", $report['text']);
+        self::assertStringContainsString("🎫 <b>تیکت جدید</b> · \u{200E}#{$ticket->id}", $report['text']);
         self::assertStringContainsString('📌 موضوع: قطعی اتصال', $report['text']);
         self::assertStringContainsString('📨 از ربات', $report['text']);
         self::assertSame(TicketClose::buttons($ticket->id), FakeTelegram::markupOf($report)['inline_keyboard'] ?? null);
@@ -508,7 +543,7 @@ final class BotTicketsTest extends BotTestCase
         $this->telegram()->reset();
         $this->service(ReportSender::class)->flush();
         $text = $this->telegram()->params(0)['text'];
-        self::assertStringContainsString("💬 <b>پیام مشتری</b> · تیکت #{$ticket->id} · از ربات", $text);
+        self::assertStringContainsString("💬 <b>پیام مشتری</b> · تیکت \u{200E}#{$ticket->id} · از ربات", $text);
         self::assertStringContainsString('🖼 همراه یک تصویر', $text);
     }
 

@@ -38,7 +38,9 @@ final class PanelSettings
             $host = "[{$host}]"; // a bare IPv6 address
         }
         $tls = Raw::string($this->all, 'subCertFile') !== '' && Raw::string($this->all, 'subKeyFile') !== '';
+        // A path of "/" serves the links at the server's root.
+        $path = trim(Raw::string($this->all, 'subPath', '/sub/'), '/');
 
-        return sprintf('%s://%s:%d/%s/', $tls ? 'https' : 'http', $host, Raw::int($this->all, 'subPort', 2096), trim(Raw::string($this->all, 'subPath', '/sub/'), '/'));
+        return sprintf('%s://%s:%d/%s', $tls ? 'https' : 'http', $host, Raw::int($this->all, 'subPort', 2096), $path === '' ? '' : "{$path}/");
     }
 }

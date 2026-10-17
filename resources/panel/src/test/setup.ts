@@ -1,12 +1,13 @@
 import { notifyManager } from '@tanstack/react-query'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, expect, vi } from 'vitest'
+import { restoreWindow } from '@/test/browser'
 import { server, startServer } from '@/test/server'
 
 /*
  * Around every test: a fresh fake server in place of `fetch` before it; after it, nothing left behind (rendered trees
- * unmounted, spies restored, real timers, the address back at the owner's panel, storage emptied) and two checks —
- * every request was answered by the test, and the API description takes every request sent.
+ * unmounted, spies restored, real timers, the address back at the owner's panel, the window at its size, storage
+ * emptied) and two checks — every request was answered by the test, and the API description takes every request sent.
  */
 
 // react-query notifies readers in batches after a timer; here after the microtasks instead — the same batches in the
@@ -24,6 +25,7 @@ afterEach(() => {
   vi.useRealTimers()
   window.history.replaceState(null, '', '/admin/')
   document.head.querySelectorAll('base').forEach((base) => base.remove())
+  restoreWindow()
   localStorage.clear()
   sessionStorage.clear()
   expect(

@@ -78,7 +78,7 @@ final class MassGrantsTest extends HttpTestCase
 
         self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
         $gift = $this->decode($response)['grant'];
-        self::assertSame(['running', 'all', 3, 5 * Traffic::GIGABYTE, 3, self::ADMIN_USERNAME], [$gift['status'], $gift['audience'], $gift['days'], $gift['traffic_bytes'], $gift['total'], $gift['reviewer']]);
+        self::assertSame(['running', 'all', 3, 5 * Traffic::GIGABYTE, 3, self::ADMIN_USERNAME, null], [$gift['status'], $gift['audience'], $gift['days'], $gift['traffic_bytes'], $gift['total'], $gift['reviewer'], $gift['reviewer_name']], "the owner's login, by no name");
         self::assertSame(['آلمان', 'فنلاند'], array_column(array_column($gift['parts'], 'server'), 'name'), 'a part on each server with services');
 
         $gift = $this->decode($this->postJson("/api/admin/mass-grants/{$gift['id']}/run"))['grant'];
@@ -94,6 +94,20 @@ final class MassGrantsTest extends HttpTestCase
 
         $parts = $this->decode($this->get("/api/admin/servers/{$this->germany->id}/grants"))['grants'];
         self::assertSame([$gift['id'], false], [$parts[0]['mass_grant_id'], $parts[0]['agents_only']], "on its server's page too");
+    }
+
+    public function testWhoIssuedAGiftIsNamedAsOnEveryScreenOnBothCards(): void
+    {
+        $this->admin(['telegram_id' => self::BOSS_TELEGRAM_ID, 'username' => 'boss']);
+        $byOwner = $this->decode($this->postJson('/api/admin/mass-grants', ['days' => 1, 'traffic_gb' => 0, 'audience' => 'server', 'server_id' => $this->finland->id]))['grant'];
+        $this->postJson("/api/admin/mass-grants/{$byOwner['id']}/cancel");
+        $byBoss = $this->decode($this->postJson('/api/admin/mass-grants', ['days' => 1, 'traffic_gb' => 0, 'audience' => 'all']))['grant'];
+        // Kept by an admin's handle — as a panel's reviewer is kept everywhere — it reads as their name.
+        Grant::query()->whereKey($byBoss['id'])->update(['reviewer' => '@boss']);
+
+        $named = static fn(array $rows): array => array_map(static fn(array $row): array => [$row['reviewer'], $row['reviewer_name']], $rows);
+        self::assertSame([['@boss', 'Boss'], [self::ADMIN_USERNAME, null]], $named($this->decode($this->get('/api/admin/mass-grants'))['grants']), 'newest first');
+        self::assertSame([['@boss', 'Boss'], [self::ADMIN_USERNAME, null]], $named($this->decode($this->get("/api/admin/servers/{$this->finland->id}/grants"))['grants']), "the server's card");
     }
 
     public function testAGiftForTheAgentsReachesTheirServicesOnly(): void

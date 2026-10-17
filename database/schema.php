@@ -63,7 +63,8 @@ return [
          * `sequences` — named counters that only go up (Core\Database\Sequence), e.g. the number in "USER_7".
          *
          * `change_versions` — the panels' live view (Core\Database\ChangeFeed): a version per area of the shop, bumped
-         * when a write to one of its tables commits.
+         * when a write to one of its tables commits — the installation's (`users`), a shop's (`users.3`) and every
+         * shop's (`users.*`).
          */
         'settings' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
@@ -185,11 +186,15 @@ return [
             // Who wrote a line by hand (a panel, a website admin), as Auth\Services\Reviewers keeps them; null for the
             // shop's own lines.
             $table->string('reviewer', 64)->nullable();
+            // The Idempotency-Key of support's credit or debit that wrote the line; null for every other line.
+            $table->string('request_key', 64)->nullable();
             $table->timestamp('created_at')->nullable();
 
             // A customer's last line (their balance, off the index alone) and their ledger newest first. Named: the
             // default name would pass MySQL's 64 characters after the longest prefix.
             $table->index(['user_id', 'id', 'balance_after'], 'wallet_transactions_balance_index');
+            // A key answered by the one line it wrote (WalletService).
+            $table->unique(['user_id', 'request_key']);
         },
 
         'wallet_transfers' => static function (Blueprint $table): void {
@@ -237,7 +242,7 @@ return [
          * browser may call from. Sign-in: Telegram (`telegram_login`, `telegram_client_id`, `telegram_client_secret`
          * encrypted, needed for the redirect flow only), email sign-up (`email_signup`), Google (`google_client_id`). The
          * captcha its forms ask: `captcha_driver` (null: none) and `captcha_config` (encrypted JSON). Its admins
-         * (Store\Http\StaffMiddleware): `staff_enabled`, `staff_strong_sign_in`, `staff_grants` (Store\Enums\StaffGrant).
+         * (Store\Http\StaffMiddleware): `staff_enabled`, `staff_strong_sign_in`, `staff_grants` (Auth\StaffGrant).
          *
          * `customer_sessions` — a website sign-in per device: `token_hash` (the bearer token's sha256; the token is shown
          * once), `device` and `ip` for the session list. Ends 30 days unused, or at `expires_at` (180 days after the
@@ -1156,10 +1161,14 @@ return [
             $table->string('description', 255)->nullable();
             $table->foreignId('order_id')->nullable()->constrained('orders')->nullOnDelete();
             $table->string('reviewer', 191)->nullable();
+            // The Idempotency-Key of the owner's adjustment that wrote the line; null for every other line.
+            $table->string('request_key', 64)->nullable();
             $table->timestamp('created_at')->nullable();
 
             $table->index(['bot_id', 'id']);
             $table->index('order_id');
+            // A key answered by the one line it wrote (TrafficPool::adjust()).
+            $table->unique(['bot_id', 'request_key']);
         },
 
         /*
@@ -1204,10 +1213,14 @@ return [
             $table->string('attachment_path', 100)->nullable();
             $table->string('attachment_name', 255)->nullable();
             $table->string('channel', 8);
+            // The Idempotency-Key of support's answer (a panel, the website's admin API); null for every other message.
+            $table->string('request_key', 64)->nullable();
             $table->timestamp('created_at')->nullable();
 
             // A ticket's conversation in order (its page), and its messages counted from the index (the panels' list).
             $table->index(['ticket_id', 'id']);
+            // A key answered by the one answer it wrote (Tickets::answer()).
+            $table->unique(['ticket_id', 'request_key']);
             // The uploaded pictures the shop keeps still — few: a customer's are a budget's, and they go a while after
             // their ticket closed — read from the index alone for the housekeeping that lets them go
             // (TicketAttachments::prune()), never every message of every ticket closed.

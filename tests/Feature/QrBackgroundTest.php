@@ -78,6 +78,17 @@ final class QrBackgroundTest extends DatabaseTestCase
         self::assertSame([], $this->kept());
     }
 
+    public function testWhatIsNoPictureIsToldTheFormatsInReadingOrder(): void
+    {
+        try {
+            $this->service(QrBackground::class)->store(self::upload('hello, not a picture'));
+            self::fail('The file was taken.');
+        } catch (ValidationException $e) {
+            // Bare, «JPG، PNG» would be one left-to-right run that a right-to-left sentence reads «PNG ،JPG».
+            self::assertSame(['file' => ["تصویر باید \u{2068}JPG\u{2069}، \u{2068}PNG\u{2069} یا \u{2068}WebP\u{2069} باشد."]], $e->errors());
+        }
+    }
+
     #[DataProvider('uploadsRefusedUnread')]
     public function testAnUploadTheServerCutShortOrOneTooBigIsRefusedBeforeItIsRead(int $error, int $size): void
     {

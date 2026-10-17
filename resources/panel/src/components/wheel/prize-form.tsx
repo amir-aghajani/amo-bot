@@ -24,7 +24,10 @@ interface PrizeFormProps {
 interface Draft {
   label: string
   kind: WheelPrizeKind
+  /** The amount of the kind picked, in its unit. */
   amount: string
+  /** What was typed for the other kinds, for a switch back: a number never carries over into another kind's unit. */
+  kept: Partial<Record<WheelPrizeKind, string>>
   plan_id: string
   weight: string
   enabled: boolean
@@ -51,12 +54,13 @@ function requestOf(draft: Draft): WheelPrizeRequest {
 
 /** A wheel slice created or edited: its label, what it gives (nothing, Toman, GB, days or a free service) and its weight. */
 export function PrizeForm({ prize, invalidates, onSaved, onCancel }: PrizeFormProps) {
-  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(
+  const { values, set, patch, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(
     {
       label: prize?.label ?? '',
       kind: prize?.kind ?? 'wallet',
       // "10000.00", "2.50", "7.00" as the admin would type them.
       amount: prize?.amount ? String(Number(prize.amount)) : '',
+      kept: {},
       plan_id: prize?.plan ? String(prize.plan.id) : '',
       weight: prize ? String(prize.weight) : '1',
       enabled: prize?.enabled ?? true,
@@ -65,6 +69,9 @@ export function PrizeForm({ prize, invalidates, onSaved, onCancel }: PrizeFormPr
   )
   const amountField = AMOUNTS[values.kind]
   const amount = amountField?.decimal ? decimalOf(values.amount) : wholeOf(values.amount)
+
+  /** Another kind: its own amount back, the one typed for this kind kept for a switch back. */
+  const pick = (kind: WheelPrizeKind) => patch({ kind, amount: values.kept[kind] ?? '', kept: { ...values.kept, [values.kind]: values.amount } })
 
   const save = handleSubmit(async () => {
     const body = requestOf(values)
@@ -83,7 +90,7 @@ export function PrizeForm({ prize, invalidates, onSaved, onCancel }: PrizeFormPr
 
       <Field id="prize_kind" label="جایزه" error={error('kind')} hint={values.kind === 'nothing' ? '«پوچ» چیزی نمی‌دهد؛ برای این‌که هر چرخشی برنده نباشد.' : undefined}>
         {(control) => (
-          <Select value={values.kind} onValueChange={(kind) => set('kind', kind as WheelPrizeKind)}>
+          <Select value={values.kind} onValueChange={(kind) => pick(kind as WheelPrizeKind)}>
             <SelectTrigger {...control} className="w-full">
               <SelectValue />
             </SelectTrigger>

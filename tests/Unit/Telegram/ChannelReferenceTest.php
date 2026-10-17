@@ -25,6 +25,7 @@ final class ChannelReferenceTest extends TestCase
         yield 'handle' => ['@my_channel', '@my_channel'];
         yield 'plain name' => ['  my_channel ', '@my_channel'];
         yield 'numeric id' => ['-1001234567890', -1001234567890];
+        yield 'numeric id typed on a Persian keyboard' => ['-۱۰۰۱۲۳۴۵۶۷۸۹۰', -1001234567890];
     }
 
     #[DataProvider('publicForms')]

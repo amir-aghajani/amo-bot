@@ -45,6 +45,26 @@ final class RequestOriginTest extends TestCase
         self::assertSame('192.0.2.1', $origin->clientIp(self::request('192.0.2.1', '2001:db8::5')), 'a range that cannot be is trusted for nothing');
     }
 
+    public function testARangeWhoseLengthIsNoNumberTrustsNobody(): void
+    {
+        // Read as /0, "10.0.0.1/" would trust every address — and anyone's X-Forwarded-For would name the browser.
+        $origin = RequestOrigin::trusting('10.0.0.1/, 192.0.2.0/x, 198.51.100.0/-8');
+
+        foreach (['10.0.0.1', '192.0.2.9', '198.51.100.3', '203.0.113.9'] as $remote) {
+            self::assertSame($remote, $origin->clientIp(self::request($remote, '6.6.6.6')), "{$remote} is no trusted proxy");
+        }
+    }
+
+    public function testAThrottleCountsIpv6ByItsNetworkAndIpv4ByItsAddress(): void
+    {
+        self::assertSame('2001:db8:aa:bb::/64', RequestOrigin::network('2001:db8:aa:bb:1:2:3:4'));
+        self::assertSame('2001:db8:aa::/48', RequestOrigin::network('2001:db8:aa:bb:1:2:3:4', 48));
+        self::assertSame('2001:db8:aa:b0::/60', RequestOrigin::network('2001:db8:aa:bb:1:2:3:4', 60), 'a length within a byte');
+        self::assertSame('203.0.113.7', RequestOrigin::network('203.0.113.7'));
+        self::assertSame('::ffff:203.0.113.7', RequestOrigin::network('::ffff:203.0.113.7'), 'an IPv4 address written as IPv6 is that address');
+        self::assertSame('not-an-address', RequestOrigin::network('not-an-address'));
+    }
+
     public function testHttpsIsTheSchemeOrWhatAProxySays(): void
     {
         $origin = new RequestOrigin();

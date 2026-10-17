@@ -10,6 +10,7 @@ use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Agency\Models\TrafficTransaction;
+use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Orders\Models\Order;
@@ -17,6 +18,7 @@ use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
 use App\Support\JalaliMonth;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -31,6 +33,7 @@ final class AgencyDirectory
         private readonly TrafficPool $pool,
         private readonly Bots $bots,
         private readonly AgencyStanding $standing,
+        private readonly Reviewers $reviewers,
     ) {}
 
     /**
@@ -61,7 +64,7 @@ final class AgencyDirectory
             $query->whereIn('user_id', User::idsMatching($list->term, listed: false));
         }
 
-        return Page::fetch($query, $list, $this->presentRequest(...), $list->sort(['created' => 'id'], 'created'));
+        return Page::fetchTogether($query, $list, $this->presentRequests(...), $list->sort(['created' => 'id'], 'created'));
     }
 
     /**
@@ -125,25 +128,42 @@ final class AgencyDirectory
         ];
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<string, mixed> One request, its customer and level loaded with it. */
     public function presentRequest(AgencyRequest $request): array
     {
-        $open = $request->status === AgencyRequestStatus::Pending;
+        return $this->presentRequests(new Collection([$request]))[0];
+    }
 
-        return [
-            'id' => $request->id,
-            'user' => UserDirectory::presentRef($request->user),
-            'user_status' => $request->user->status->value,
-            'agent' => $request->user->isAgent(),
-            'status' => $request->status->value,
-            'note' => $request->note,
-            'level' => $request->level === null ? null : AgencyLevels::presentRef($request->level),
-            'reason' => $request->reason,
-            'reviewer' => $request->reviewer,
-            'decided_at' => $request->decided_at?->toIso8601String(),
-            'created_at' => $request->created_at->toIso8601String(),
-            'actions' => ['approve' => $open, 'reject' => $open],
-        ];
+    /**
+     * Requests as the page shows them, the names of the shop's admins who decided them — in the report group — read once
+     * for them all (Reviewers::names()).
+     *
+     * @param Collection<int, AgencyRequest> $requests
+     * @return list<array<string, mixed>>
+     */
+    private function presentRequests(Collection $requests): array
+    {
+        $names = $this->reviewers->names($requests->pluck('reviewer'));
+
+        return array_values($requests->map(static function (AgencyRequest $request) use ($names): array {
+            $open = $request->status === AgencyRequestStatus::Pending;
+
+            return [
+                'id' => $request->id,
+                'user' => UserDirectory::presentRef($request->user),
+                'user_status' => $request->user->status->value,
+                'agent' => $request->user->isAgent(),
+                'status' => $request->status->value,
+                'note' => $request->note,
+                'level' => $request->level === null ? null : AgencyLevels::presentRef($request->level),
+                'reason' => $request->reason,
+                'reviewer' => $request->reviewer,
+                'reviewer_name' => $names[$request->reviewer ?? ''] ?? null,
+                'decided_at' => $request->decided_at?->toIso8601String(),
+                'created_at' => $request->created_at->toIso8601String(),
+                'actions' => ['approve' => $open, 'reject' => $open],
+            ];
+        })->all());
     }
 
     /** @return array<string, mixed> */

@@ -4,7 +4,7 @@ import { Shuffle } from 'lucide-react'
 import { toast } from 'sonner'
 import { CheckList, optionsRead } from '@/components/check-list'
 import { Disclosure } from '@/components/disclosure'
-import { OrderKindsField, PlansField } from '@/components/discounts/targets'
+import { OrderKindsField, PlansField, targetsRead } from '@/components/discounts/targets'
 import { windowEnd, windowRequest, type WindowEnd } from '@/components/discounts/window'
 import { WindowField } from '@/components/discounts/window-field'
 import { Field } from '@/components/field'
@@ -19,7 +19,7 @@ import type { DiscountCodeRequest, DiscountCodeRow, DiscountType, OwnOrderType }
 import { formatNumber } from '@/lib/format'
 import { planOptionsQuery } from '@/lib/queries'
 import { DISCOUNT_TYPE } from '@/lib/statuses'
-import { useForm } from '@/lib/use-form'
+import { asAmount, asWhole, trimmed, useForm } from '@/lib/use-form'
 
 interface CodeFormProps {
   code: DiscountCodeRow | null
@@ -84,6 +84,24 @@ function requestOf(draft: Draft): DiscountCodeRequest {
 }
 
 /**
+ * The draft as the server reads it, for `dirty`: its text trimmed, its amounts and counts by their digits («۵۰٬۰۰۰» is
+ * 50000), what it applies to as sets — a value typed back as it was, or ticked in another order, is no change.
+ */
+function readOf(draft: Draft): unknown {
+  return trimmed({
+    ...requestOf(draft),
+    ...(draft.type === 'free' ? {} : { value: asAmount(draft.value) }),
+    ...(draft.type === 'percent' ? { max_discount: asAmount(draft.max_discount) } : {}),
+    min_amount: asAmount(draft.min_amount),
+    order_types: targetsRead(draft.order_types),
+    plan_ids: targetsRead(draft.plan_ids),
+    server_ids: targetsRead(draft.server_ids),
+    max_uses: asWhole(draft.max_uses),
+    per_user: asWhole(draft.per_user),
+  })
+}
+
+/**
  * A discount code created or edited: its text, what it takes off (a percent with an optional cap, Toman, or everything),
  * what it applies to (order kinds, plans, servers, first purchases, a minimum amount), its window and its use limits.
  */
@@ -107,7 +125,7 @@ export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps
       per_user: code?.per_user === null || code === null ? '' : String(code.per_user),
       enabled: code?.enabled ?? true,
     },
-    { reads: requestOf },
+    { reads: readOf },
   )
 
   const save = handleSubmit(async () => {
@@ -121,7 +139,7 @@ export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps
 
   return (
     <form onSubmit={save} noValidate className="grid gap-5">
-      <Field id="code_text" label="کد" error={error('code')} hint="همان چیزی که مشتری می‌نویسد؛ ۳ تا ۳۲ حرف، رقم، خط تیره یا زیرخط. بزرگی و کوچکی حروف فرقی ندارد.">
+      <Field id="code_text" label="کد" error={error('code')} hint="همان چیزی که مشتری می‌نویسد؛ 3 تا 32 حرف، رقم، خط تیره یا زیرخط. بزرگی و کوچکی حروف فرقی ندارد.">
         {(control) => (
           <div className="flex gap-2">
             <Input

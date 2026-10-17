@@ -46,13 +46,13 @@ final class AgencyTermLines
         );
     }
 
-    /** The end's line, then `$more` that are given. */
+    /** The end's line, then `$more` that are given; a line the admin emptied is left out, never an empty line. */
     private function lines(Bot $bot, ?Html ...$more): Html|string
     {
         $lines = array_values(array_filter([
             $bot->agency_expires_at === null ? null : $this->texts->part(BotText::AgencyExpiryLine, ['date' => Persian::date($bot->agency_expires_at, withTime: true)]),
             ...$more,
-        ]));
+        ], static fn(?Html $line): bool => $line !== null && $line->html !== ''));
 
         return $lines === [] ? '' : Html::lines(...$lines);
     }

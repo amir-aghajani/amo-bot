@@ -15,7 +15,8 @@ import { json, refusal, server, type Answer } from '@/test/server'
  * A customer's page (pages/customer): who they are — the three identifiers apart —, then a card of each thing of theirs,
  * each card from its own read and in its own state (a failed read says so with a way to ask again, the other cards
  * stand), each row opening its own screen's dialog and each card leading to that screen narrowed to the customer. A
- * customer the shop does not have is not found; another customer's page starts afresh.
+ * customer the shop does not have is not found, one whose read failed stays said while it is asked again; another
+ * customer's page starts afresh.
  */
 
 const CUSTOMER = userRow()
@@ -30,7 +31,7 @@ const DETAIL: UserDetailResponse = {
 
 const META = { page: 1, per_page: 25, total: 1, last_page: 1 }
 
-const PAYMENTS = json({ payments: [paymentRow()], meta: { ...META, sort: 'created', dir: 'desc', awaiting_review: 1, paid: 0, paid_amount: '0.00' } } satisfies PaymentsResponse)
+const PAYMENTS = json({ payments: [paymentRow()], meta: { ...META, sort: 'created', dir: 'desc', awaiting_review: 1, held: 0, paid: 0, paid_amount: '0.00' } } satisfies PaymentsResponse)
 
 /** What the server answers each of the page's reads — the customer's own as `detail` says. */
 function answers({ detail = json(DETAIL) }: { detail?: Answer } = {}) {
@@ -89,6 +90,15 @@ describe('a customer’s page', () => {
     expect(screen.getByRole('link', { name: 'گفتگو در تلگرام' }).getAttribute('href')).toBe('https://t.me/amir')
   })
 
+  it('is headed by the handle of a customer without a name, as every one-line label names them — «بدون نام» only with neither', async () => {
+    answers({ detail: json({ ...DETAIL, user: { ...CUSTOMER, name: null } }) })
+    open()
+
+    const title = await screen.findByRole('heading', { level: 1 })
+    expect(title.querySelector('bdi[dir="ltr"]')?.textContent).toBe('@amir')
+    expect(title.textContent).not.toContain('بدون نام')
+  })
+
   it('says of a customer who signed up on the website their email — and offers no chat in Telegram they do not have', async () => {
     answers({ detail: json({ ...DETAIL, user: { ...CUSTOMER, username: null, telegram_id: null, email: 'amir@example.com' } }) })
     open()
@@ -139,7 +149,11 @@ describe('a customer’s page', () => {
   it('names what a payment paid for as the payments screen does: an extra by its amount, not its service’s plan', async () => {
     answers()
     const extra = paymentRow({ order: { ...paymentRow().order, id: 31, type: 'extra_traffic', plan: 'طلایی', subscription_id: 1, traffic_bytes: 10 * 1024 ** 3 } })
-    server().on('GET', '/api/admin/payments', json({ payments: [extra], meta: { ...META, sort: 'created', dir: 'desc', awaiting_review: 1, paid: 0, paid_amount: '0.00' } } satisfies PaymentsResponse))
+    server().on(
+      'GET',
+      '/api/admin/payments',
+      json({ payments: [extra], meta: { ...META, sort: 'created', dir: 'desc', awaiting_review: 1, held: 0, paid: 0, paid_amount: '0.00' } } satisfies PaymentsResponse),
+    )
     open()
 
     await until(() => expect(within(card('پرداخت‌ها')).getByText('۱۰ گیگابایت')).toBeTruthy())
@@ -155,7 +169,7 @@ describe('a customer’s page', () => {
     server().on(
       'GET',
       '/api/admin/payments',
-      json({ payments, meta: { ...META, total: 2, sort: 'created', dir: 'desc', awaiting_review: 0, paid: 1, paid_amount: '50000.00' } } satisfies PaymentsResponse),
+      json({ payments, meta: { ...META, total: 2, sort: 'created', dir: 'desc', awaiting_review: 0, held: 1, paid: 1, paid_amount: '50000.00' } } satisfies PaymentsResponse),
     )
     open()
 
@@ -287,7 +301,7 @@ describe('a customer’s page', () => {
       .on(
         'POST',
         '/api/admin/users/10/orders',
-        json({ order: orderRow({ type: 'purchase', status: 'fulfilled', manual: { by: 'root', payment: 'free', note: null } }), subscription: subscriptionRow() }, 201),
+        json({ order: orderRow({ type: 'purchase', status: 'fulfilled', manual: { by: 'root', by_name: null, payment: 'free', note: null } }), subscription: subscriptionRow() }, 201),
       )
     open()
     await until(() => expect([reads('subscriptions'), reads('orders')]).toEqual([1, 1]))
@@ -342,6 +356,22 @@ describe('a customer the page cannot show', () => {
     expect(await screen.findByText('این صفحه پیدا نشد')).toBeTruthy()
     // The panel's own question about its session aside.
     expect(server().requests.map((request) => request.path)).toEqual(['/api/admin/auth/me'])
+  })
+
+  it('whose read failed stays said while it is asked again — never the loading page, which would drop the focus', async () => {
+    answers({ detail: refusal(500, 'خطای سرور.') })
+    open()
+    const retry = await screen.findByRole('button', { name: 'تلاش دوباره' })
+    const again = server().hold('GET', '/api/admin/users/10')
+
+    retry.focus()
+    fireEvent.click(retry)
+    await until(() => expect(retry.getAttribute('aria-busy')).toBe('true'))
+    expect(document.activeElement).toBe(retry)
+    expect(screen.queryByLabelText('در حال بارگذاری مشتری')).toBeNull()
+
+    again.answer(json(DETAIL))
+    await until(() => expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('امیر'))
   })
 
   it('stays as it was when a later read of the customer fails, with the failure shown above the cards', async () => {

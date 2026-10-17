@@ -8,6 +8,7 @@ use App\Core\Http\ErrorHandler;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderStatus;
+use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Models\Payment;
@@ -22,8 +23,10 @@ use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\CustomerExtras;
 use App\Modules\Users\Models\User;
+use App\Support\Money;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Http\Message\ResponseInterface;
 use Tests\Fakes\FakeProvider;
 use Tests\HttpTestCase;
@@ -68,13 +71,66 @@ final class StoreExtrasTest extends HttpTestCase
     public function testWhatMayBeBoughtIsTheShopsPriceList(): void
     {
         self::assertSame(['extras' => [
-            'traffic' => ['price' => '2000.00', 'options' => [['quantity' => 10, 'price' => '18000.00'], ['quantity' => 50, 'price' => '100000.00']], 'custom' => ['min' => 1, 'max' => 100], 'days' => null],
-            'time' => ['price' => '1000.00', 'options' => [['quantity' => 7, 'price' => '7000.00'], ['quantity' => 30, 'price' => '25000.00']], 'custom' => ['min' => 1, 'max' => 60], 'days' => null],
+            'traffic' => self::undiscounted(['price' => '2000.00', 'options' => [['quantity' => 10, 'price' => '18000.00'], ['quantity' => 50, 'price' => '100000.00']], 'custom' => ['min' => 1, 'max' => 100], 'days' => null]),
+            'time' => self::undiscounted(['price' => '1000.00', 'options' => [['quantity' => 7, 'price' => '7000.00'], ['quantity' => 30, 'price' => '25000.00']], 'custom' => ['min' => 1, 'max' => 60], 'days' => null]),
             'devices' => null,
         ]], $this->decode($this->get($this->extrasOf($this->subscription))), 'each amount offered with what it costs — its own price, or the price of a GB or a day times it —, and any amount between the bounds; no devices priced');
 
         self::assertSame(['traffic' => true, 'time' => true, 'devices' => false], $this->row($this->subscription)['extras']);
         self::assertSame(0, Order::query()->count(), 'nothing ordered for a look');
+    }
+
+    /**
+     * Each price is shown beside what the order charges for it — less the customer's largest automatic discount, as the
+     * bot's buttons show it —, and sent back as the amount shown it is paid: an amount offered, and one typed.
+     *
+     * @param \Closure(self): void $discounted
+     * @param array{source: string, label: string, percent: int, ends_at: string|null}|null $discount
+     * @param array{string, string, string} $charged A GB's price, the 10 GB's and the 50 GB's, as the order charges them
+     */
+    #[DataProvider('automaticDiscounts')]
+    public function testEachPriceIsShownAsItsOrderChargesIt(\Closure $discounted, ?array $discount, array $charged): void
+    {
+        $discounted($this);
+
+        $traffic = $this->decode($this->get($this->extrasOf($this->subscription)))['extras']['traffic'];
+
+        self::assertSame([
+            'price' => '2000.00',
+            'offer_price' => $charged[0],
+            'discount' => $discount,
+            'options' => [['quantity' => 10, 'price' => '18000.00', 'offer_price' => $charged[1]], ['quantity' => 50, 'price' => '100000.00', 'offer_price' => $charged[2]]],
+            'custom' => ['min' => 1, 'max' => 100],
+            'days' => null,
+        ], $traffic, 'the shop\'s prices, and what the order charges for each');
+
+        $offered = $this->showing(10, $traffic['options'][0]['offer_price'], 'shown-1');
+        self::assertSame(['settled', $charged[1]], [$offered['outcome'] ?? null, $offered['order']['amount'] ?? null], 'the amount offered, paid at the price shown');
+        $typed = $this->showing(25, Money::times($traffic['offer_price'], 25), 'shown-2');
+        self::assertSame('settled', $typed['outcome'] ?? null, 'an amount typed, at 25 times the price of a GB shown');
+        self::assertSame(Money::subtract(Money::subtract('500000', $charged[1]), $typed['order']['amount']), $this->ali->balance());
+    }
+
+    /** @return iterable<string, array{\Closure(self): void, array{source: string, label: string, percent: int, ends_at: string|null}|null, array{string, string, string}}> */
+    public static function automaticDiscounts(): iterable
+    {
+        yield 'their own percent' => [static function (self $test): void {
+            $test->ali->forceFill(['discount_percent' => 10])->save();
+        }, ['source' => 'personal', 'label' => 'تخفیف اختصاصی شما ۱۰٪', 'percent' => 10, 'ends_at' => null], ['1800.00', '16200.00', '90000.00']];
+        yield 'their loyalty tier' => [static function (self $test): void {
+            $test->loyaltyTier('طلایی', '0', 5);
+        }, ['source' => 'tier', 'label' => 'سطح طلایی ۵٪', 'percent' => 5, 'ends_at' => null], ['1900.00', '17100.00', '95000.00']];
+        yield 'a sale' => [static function (self $test): void {
+            $test->sale('حراج', 20, ['ends_at' => '2026-10-08 12:00:00']);
+        }, ['source' => 'sale', 'label' => 'حراج ۲۰٪', 'percent' => 20, 'ends_at' => '2026-10-08T12:00:00+00:00'], ['1600.00', '14400.00', '80000.00']];
+        yield 'the largest of them' => [static function (self $test): void {
+            $test->ali->forceFill(['discount_percent' => 10])->save();
+            $test->loyaltyTier('طلایی', '0', 15);
+            $test->sale('حراج', 5);
+        }, ['source' => 'tier', 'label' => 'سطح طلایی ۱۵٪', 'percent' => 15, 'ends_at' => null], ['1700.00', '15300.00', '85000.00']];
+        yield 'a sale of purchases alone' => [static function (self $test): void {
+            $test->sale('حراج خرید', 30, ['order_types' => [OrderType::Purchase->value]]);
+        }, null, ['2000.00', '18000.00', '100000.00']];
     }
 
     public function testAPlansOwnPriceListIsWhatItsServicesBuyAt(): void
@@ -98,9 +154,9 @@ final class StoreExtrasTest extends HttpTestCase
         FakeProvider::mirror($own);
 
         self::assertSame(['extras' => [
-            'traffic' => ['price' => null, 'options' => [['quantity' => 20, 'price' => '30000.00']], 'custom' => null, 'days' => null],
+            'traffic' => self::undiscounted(['price' => null, 'options' => [['quantity' => 20, 'price' => '30000.00']], 'custom' => null, 'days' => null]),
             'time' => null,
-            'devices' => ['price' => '10000.00', 'options' => [], 'custom' => ['min' => 1, 'max' => 2], 'days' => 30],
+            'devices' => self::undiscounted(['price' => '10000.00', 'options' => [], 'custom' => ['min' => 1, 'max' => 2], 'days' => 30]),
         ]], $this->decode($this->get($this->extrasOf($own))));
         self::assertSame(['traffic' => true, 'time' => false, 'devices' => true], $this->row($own)['extras']);
 
@@ -320,6 +376,19 @@ final class StoreExtrasTest extends HttpTestCase
         self::assertSame([0, '500000.00'], [Order::query()->count(), $this->ali->balance()]);
     }
 
+    public function testTheAmountsARefusalListsAreAtWhatTheirOrdersChargeTheCustomer(): void
+    {
+        $this->ali->forceFill(['discount_percent' => 10])->save();
+
+        $response = $this->buying($this->subscription, ExtraKind::Traffic, 101, $this->walletMethod());
+
+        self::assertSame(
+            [422, ['این مقدار فروخته نمی‌شود؛ حجم اضافه بین ۱ تا ۱۰۰ گیگابایت بنویسید، یا یکی از این‌ها را بخرید: ۱۰ گیگابایت (۱۶٬۲۰۰ تومان)، ۵۰ گیگابایت (۹۰٬۰۰۰ تومان).']],
+            [$response->getStatusCode(), $this->decode($response)['errors']['gb'] ?? null],
+            'their 10% off each, as the listing\'s offer_price says',
+        );
+    }
+
     public function testTheWaysToPayExtrasAreTheCheckoutsWalletAmongThem(): void
     {
         $unbound = ['min_amount' => null, 'max_amount' => null];
@@ -376,7 +445,7 @@ final class StoreExtrasTest extends HttpTestCase
         $traffic = fn(): ?array => $this->decode($this->get($this->storeApi($website, "/subscriptions/{$service->id}/extras")))['extras']['traffic'];
 
         $offered = $traffic();
-        self::assertSame(['price' => '2000.00', 'options' => [['quantity' => 10, 'price' => '18000.00']], 'custom' => ['min' => 1, 'max' => 30], 'days' => null], $offered, 'their 30 GB: no 50 GB, nothing typed past 30');
+        self::assertSame(self::undiscounted(['price' => '2000.00', 'options' => [['quantity' => 10, 'price' => '18000.00']], 'custom' => ['min' => 1, 'max' => 30], 'days' => null]), $offered, 'their 30 GB: no 50 GB, nothing typed past 30');
 
         $bought = $this->send('POST', $this->storeApi($website, "/subscriptions/{$service->id}/extra-traffic"), ['gb' => 10, 'method_id' => $wallet->id], ['Idempotency-Key' => 'agent-1']);
         self::assertSame('settled', $this->decode($bought)['checkout']['outcome'] ?? null, (string) $bought->getBody());
@@ -397,7 +466,7 @@ final class StoreExtrasTest extends HttpTestCase
         FakeProvider::mirror($this->subscription);
 
         self::assertSame(
-            ['price' => '12000.00', 'options' => [['quantity' => 1, 'price' => '12000.00'], ['quantity' => 2, 'price' => '20000.00']], 'custom' => ['min' => 1, 'max' => 5], 'days' => 12],
+            self::undiscounted(['price' => '12000.00', 'options' => [['quantity' => 1, 'price' => '12000.00'], ['quantity' => 2, 'price' => '20000.00']], 'custom' => ['min' => 1, 'max' => 5], 'days' => 12]),
             $this->decode($this->get($this->extrasOf($this->subscription)))['extras']['devices'],
             "12 of 30 days: 30,000 a device and the two's own 50,000, prorated",
         );
@@ -476,6 +545,39 @@ final class StoreExtrasTest extends HttpTestCase
     private function extrasOf(Subscription $subscription): string
     {
         return $this->storeApi($this->website, "/subscriptions/{$subscription->id}/extras");
+    }
+
+    /**
+     * An offer as GET …/extras answers it to a customer no automatic discount reaches: what each price charges is the
+     * price itself.
+     *
+     * @param array{price: string|null, options: list<array{quantity: int, price: string}>, custom: array{min: int, max: int}|null, days: int|null} $offer
+     * @return array<string, mixed>
+     */
+    private static function undiscounted(array $offer): array
+    {
+        return [
+            'price' => $offer['price'],
+            'offer_price' => $offer['price'],
+            'discount' => null,
+            'options' => array_map(static fn(array $option): array => $option + ['offer_price' => $option['price']], $offer['options']),
+            'custom' => $offer['custom'],
+            'days' => $offer['days'],
+        ];
+    }
+
+    /**
+     * `$gb` GB of extra traffic for setUp()'s service from the wallet, naming `$shown` as the amount the website showed:
+     * the checkout's answer.
+     *
+     * @return array<string, mixed>
+     */
+    private function showing(int $gb, string $shown, string $key): array
+    {
+        $response = $this->send('POST', $this->storeApi($this->website, "/subscriptions/{$this->subscription->id}/extra-traffic"), ['gb' => $gb, 'method_id' => $this->walletMethod()->id, 'expected_amount' => $shown], ['Idempotency-Key' => $key]);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+
+        return $this->decode($response)['checkout'];
     }
 
     /** `$quantity` of `$kind` for the service, under the kind's own field as the website sends it, paid with `$method`. */

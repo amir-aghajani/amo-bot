@@ -51,7 +51,8 @@ use Tests\Fakes\FakeProvider;
  */
 final class ShopReportsTest extends BotTestCase
 {
-    private const ALI = '<a href="tg://user?id=5151">Ali</a> · @ali · <code>5151</code>';
+    /** A customer as the group reads them: the handle after a left-to-right mark, which reads it «@ali» after a Persian name. */
+    private const ALI = '<a href="tg://user?id=5151">Ali</a> · ' . "\u{200E}@ali · <code>5151</code>";
 
     protected function setUp(): void
     {
@@ -68,7 +69,7 @@ final class ShopReportsTest extends BotTestCase
         $order = $this->buy($this->customer(['username' => 'ali']), $this->plan([], $server), $server);
 
         self::assertSame(implode("\n", [
-            "🛍️ <b>خرید جدید</b> · سفارش #{$order->id}",
+            "🛍️ <b>خرید جدید</b> · سفارش \u{200E}#{$order->id}",
             '👤 ' . self::ALI,
             '📦 پلن: یک‌ماهه',
             '📍 لوکیشن: آلمان',
@@ -88,15 +89,15 @@ final class ShopReportsTest extends BotTestCase
 
         $sale = $this->reported(Topic::Purchases);
         self::assertStringContainsString('💳 مبلغ: ۱۲۰٬۰۰۰ تومان · کارت به کارت (ملت)', $sale);
-        self::assertStringEndsWith('👥 پورسانت معرف: ۱۲٬۰۰۰ تومان برای <a href="tg://user?id=7070">Reza</a> · @reza · <code>7070</code>', $sale);
+        self::assertStringEndsWith('👥 پورسانت معرف: ۱۲٬۰۰۰ تومان برای <a href="tg://user?id=7070">Reza</a> · ' . "\u{200E}@reza · <code>7070</code>", $sale);
 
         [$receipt, $verdict] = ReportMessage::query()->where('topic', Topic::Receipts->value)->oldest('id')->get()->all();
         self::assertSame("receipt:{$payment->id}", $receipt->ref);
         self::assertSame([self::TELEGRAM_ID, self::RECEIPT_MESSAGE], [$receipt->copy_chat_id, $receipt->copy_message_id], 'the customer\'s own picture is copied');
-        self::assertStringContainsString("📦 خرید یک‌ماهه · آلمان · سفارش #{$payment->order_id}", $receipt->text);
+        self::assertStringContainsString("📦 خرید یک‌ماهه · آلمان · سفارش \u{200E}#{$payment->order_id}", $receipt->text);
         self::assertStringContainsString('⏳ در انتظار بررسی در پنل مدیریت', $receipt->text, 'no window: only the admin decides');
         self::assertSame("receipt:{$payment->id}", $verdict->reply_ref);
-        self::assertSame("✅ رسید پرداخت #{$payment->id} تایید شد.", $verdict->text);
+        self::assertSame("✅ رسید پرداخت \u{200E}#{$payment->id} تایید شد.", $verdict->text);
     }
 
     public function testATopUpIsReportedWithTheNewBalance(): void
@@ -105,7 +106,7 @@ final class ShopReportsTest extends BotTestCase
         $this->paidByCard($order);
 
         self::assertSame(implode("\n", [
-            "💰 <b>شارژ کیف پول</b> · سفارش #{$order->id}",
+            "💰 <b>شارژ کیف پول</b> · سفارش \u{200E}#{$order->id}",
             '👤 ' . self::ALI,
             '💳 مبلغ: ۲۵۰٬۰۰۰ تومان · کارت به کارت (ملت)',
             '👛 موجودی: ۲۵۰٬۰۰۰ تومان',
@@ -127,7 +128,7 @@ final class ShopReportsTest extends BotTestCase
 
         $subscription->refresh();
         self::assertSame(implode("\n", [
-            "♻️ <b>تمدید سرویس</b> · سفارش #{$order->id}",
+            "♻️ <b>تمدید سرویس</b> · سفارش \u{200E}#{$order->id}",
             '👤 ' . self::ALI,
             '🔖 سرویس: <code>ali_1</code> · یک‌ماهه · آلمان',
             '📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours),
@@ -148,7 +149,7 @@ final class ShopReportsTest extends BotTestCase
         $this->service(PaymentService::class)->createForOrder($order, $this->walletMethod());
         self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status, (string) $order->notes);
 
-        self::assertSame("♻️ <b>تمدید سرویس</b> · سفارش #{$order->id} · ریست حجم + افزایش روز", explode("\n", $this->reported(Topic::Renewals))[0]);
+        self::assertSame("♻️ <b>تمدید سرویس</b> · سفارش \u{200E}#{$order->id} · ریست حجم + افزایش روز", explode("\n", $this->reported(Topic::Renewals))[0]);
     }
 
     public function testExtraTrafficOrTimeIsReportedWithRenewalsWithTheServiceAsItNowStands(): void
@@ -163,7 +164,7 @@ final class ShopReportsTest extends BotTestCase
 
         self::assertSame([
             implode("\n", [
-                "🔋 <b>حجم اضافه</b> · سفارش #{$traffic->id}",
+                "🔋 <b>حجم اضافه</b> · سفارش \u{200E}#{$traffic->id}",
                 '👤 ' . self::ALI,
                 '🔖 سرویس: <code>ali_1</code> · آلمان',
                 '➕ ۱۰ گیگابایت',
@@ -172,7 +173,7 @@ final class ShopReportsTest extends BotTestCase
                 '💳 مبلغ: ۲۰٬۰۰۰ تومان · کیف پول',
             ]),
             implode("\n", [
-                "⏳ <b>زمان اضافه</b> · سفارش #{$time->id}",
+                "⏳ <b>زمان اضافه</b> · سفارش \u{200E}#{$time->id}",
                 '👤 ' . self::ALI,
                 '🔖 سرویس: <code>ali_1</code> · آلمان',
                 '➕ ۷ روز',
@@ -194,7 +195,7 @@ final class ShopReportsTest extends BotTestCase
 
         self::assertSame([
             implode("\n", [
-                "👥 <b>کاربر اضافه</b> · سفارش #{$devices->id}",
+                "👥 <b>کاربر اضافه</b> · سفارش \u{200E}#{$devices->id}",
                 '👤 ' . self::ALI,
                 '🔖 سرویس: <code>ali_1</code> · آلمان',
                 '➕ ۳ کاربر',
@@ -216,7 +217,7 @@ final class ShopReportsTest extends BotTestCase
 
         self::assertSame(OrderStatus::Failed, $order->refresh()->status);
         $error = $this->reported(Topic::Errors);
-        self::assertStringStartsWith("⚠️ <b>تحویل سفارش #{$order->id} ناموفق بود</b> (خرید)\n👤 " . self::ALI . "\n📍 سرور: آلمان\n", $error);
+        self::assertStringStartsWith("⚠️ <b>تحویل سفارش \u{200E}#{$order->id} ناموفق بود</b> (خرید)\n👤 " . self::ALI . "\n📍 سرور: آلمان\n", $error);
         self::assertNotSame($order->notes, $order->diagnosis);
         self::assertStringContainsString('❗️ علت: ' . htmlspecialchars((string) $order->diagnosis), $error, "the main bot's group is the owner's: the diagnosis");
         self::assertStringEndsWith('«تلاش دوباره برای تحویل» را بزنید — همین‌جا یا در صفحه «سفارش‌ها» در پنل.', $error);
@@ -230,7 +231,7 @@ final class ShopReportsTest extends BotTestCase
         self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status);
         self::assertCount(1, $this->reportedIn(Topic::Purchases), 'delivered by the retry');
         $delivered = ReportMessage::query()->where('topic', Topic::Errors->value)->latest('id')->firstOrFail();
-        self::assertSame(["✅ سفارش #{$order->id} با تلاش دوباره تحویل شد.", "delivery:{$order->id}", true], [$delivered->text, $delivered->reply_ref, $delivered->clears_buttons], 'answered under the failure, its button gone');
+        self::assertSame(["✅ سفارش \u{200E}#{$order->id} با تلاش دوباره تحویل شد.", "delivery:{$order->id}", true], [$delivered->text, $delivered->reply_ref, $delivered->clears_buttons], 'answered under the failure, its button gone');
 
         try {
             $this->service(OrderActions::class)->retry($order);
@@ -257,9 +258,9 @@ final class ShopReportsTest extends BotTestCase
         $payments->reject($rejected, 'admin', 'دوباره'); // decided already: nothing new
 
         self::assertSame([
-            ["receipt:{$rejected->id}", "❌ رسید پرداخت #{$rejected->id} رد شد.\n📝 توضیح پشتیبانی: مبلغ کم است"],
-            ["receipt:{$cancelled->id}", "🚫 پرداخت #{$cancelled->id} لغو شد.\n📝 توضیح پشتیبانی: تکراری"],
-            ["receipt:{$automatic->id}", "✅ رسید پرداخت #{$automatic->id} خودکار تایید شد؛ در مهلت بررسی کسی آن را تایید یا رد نکرد."],
+            ["receipt:{$rejected->id}", "❌ رسید پرداخت \u{200E}#{$rejected->id} رد شد.\n📝 توضیح پشتیبانی: مبلغ کم است"],
+            ["receipt:{$cancelled->id}", "🚫 پرداخت \u{200E}#{$cancelled->id} لغو شد.\n📝 توضیح پشتیبانی: تکراری"],
+            ["receipt:{$automatic->id}", "✅ رسید پرداخت \u{200E}#{$automatic->id} خودکار تایید شد؛ در مهلت بررسی کسی آن را تایید یا رد نکرد."],
         ], ReportMessage::query()->whereNotNull('reply_ref')->oldest('id')->get()->map(static fn(ReportMessage $row): array => [$row->reply_ref, $row->text])->all());
     }
 
@@ -275,7 +276,7 @@ final class ShopReportsTest extends BotTestCase
         self::assertSame(implode("\n", [
             '👤 <b>کاربر جدید</b>',
             '<a href="tg://user?id=8080">Sara</a> · بدون نام کاربری · <code>8080</code>',
-            '👥 معرف: <a href="tg://user?id=7070">Reza</a> · @reza · <code>7070</code>',
+            '👥 معرف: <a href="tg://user?id=7070">Reza</a> · ' . "\u{200E}@reza · <code>7070</code>",
         ]), $this->reported(Topic::Users), 'reported once, when they first came');
     }
 
@@ -306,8 +307,8 @@ final class ShopReportsTest extends BotTestCase
         $this->paidByCard($order);
 
         self::assertSame(implode("\n", [
-            "💾 <b>خرید حجم نمایندگی</b> · سفارش #{$order->id}",
-            '👤 <a href="tg://user?id=7007">Mina</a> · @mina · <code>7007</code>',
+            "💾 <b>خرید حجم نمایندگی</b> · سفارش \u{200E}#{$order->id}",
+            '👤 <a href="tg://user?id=7007">Mina</a> · ' . "\u{200E}@mina · <code>7007</code>",
             '📦 حجم: ' . Messages::bytes(Traffic::bytesOfGb(20)),
             '💳 مبلغ: ' . Money::format($order->amount) . ' · کارت به کارت (ملت)',
             '🗄 حجم باقی‌مانده نماینده: ' . Messages::bytes(Traffic::bytesOfGb(20)),
@@ -398,7 +399,7 @@ final class ShopReportsTest extends BotTestCase
         Carbon::setTestNow(now()->addMinutes(OrderService::STALE_PROCESSING_MINUTES + 1));
         self::assertTrue($this->service(OrderService::class)->resume($order->refresh()));
         self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status);
-        self::assertStringContainsString("سفارش #{$order->id}", $this->reported(Topic::Purchases), 'reported as it is delivered at last');
+        self::assertStringContainsString("سفارش \u{200E}#{$order->id}", $this->reported(Topic::Purchases), 'reported as it is delivered at last');
     }
 
     public function testATicketsReportTheDatabaseRefusesTakesItsChangeBack(): void

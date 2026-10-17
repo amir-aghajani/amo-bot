@@ -28,9 +28,11 @@ use Psr\Log\LoggerInterface;
  *   purchase with a price (the admin's choice). Decided once per newcomer: the ReferralBonus row's unique invitee
  *   settles a race.
  * - the plan reward («جایزه دعوت»): each time the referrer's referrals who bought something with a price reach another
- *   multiple of the admin's number, the referrer gets the plan's service free. One ReferralReward row per milestone is
- *   claimed before giving; only the milestone reached now is given, so lowering the number never pays out several.
- * "Bought" here is Order::paidPurchases(): a free plan must not unlock these.
+ *   multiple of the admin's number, the referrer gets the plan's service free. Each referral's first purchase takes the
+ *   next milestone its count reached, above every one claimed so far — one ReferralReward row a milestone, claimed under
+ *   a lock on the referrer before anything is given —, so two first purchases at once that cross two milestones give
+ *   both, and lowering the number never pays out several at once.
+ * "Bought" here is Order::keptPurchases(): neither a free plan nor a purchase refunded since unlocks these.
  * While an alert on the referrer stands (ReferralAlerts), both are withheld and recorded as decided, so clearing the
  * alert never pays them later.
  */
@@ -72,13 +74,13 @@ final class ReferralGifts
 
     /**
      * A payment settled (called once, by the call that won it): when it paid a referred customer's first purchase with a
-     * price (Order::paidPurchases(), paid any way) — a free plan neither counts nor uses the gift up — gives the start
-     * gift (when paid on purchase) and the plan reward.
+     * price (Order::keptPurchases(), paid any way) — a free plan neither counts nor uses the gift up, and one refunded
+     * since leaves the next purchase their first — gives the start gift (when paid on purchase) and the plan reward.
      */
     public function purchased(Payment $payment): void
     {
         $order = $payment->order;
-        if (!$this->settings->enabled() || !$payment->isPaid() || !Order::paidPurchases()->whereKey($order->id)->exists()) {
+        if (!$this->settings->enabled() || !$payment->isPaid() || !Order::keptPurchases()->whereKey($order->id)->exists()) {
             return;
         }
         $customer = $order->user;
@@ -154,18 +156,11 @@ final class ReferralGifts
             return;
         }
 
-        $buyers = Order::paidPurchases()->whereIn('user_id', $referrer->referrals()->select('id'))->distinct()->count('user_id');
-        $milestone = intdiv($buyers, $every) * $every;
-        if ($milestone === 0) {
+        $reward = $this->claimMilestone($referrer, $every);
+        if ($reward === null) {
             return;
         }
-
-        try {
-            // Claimed before anything is given: of two first purchases settled at once, one gives it.
-            $reward = ReferralReward::query()->create(['referrer_id' => $referrer->id, 'milestone' => $milestone]);
-        } catch (UniqueConstraintViolationException) {
-            return;
-        }
+        $milestone = $reward->milestone;
         if ($this->alerts->flagged($referrer)) {
             $this->logger->info('The referral reward of user {referrer} at {milestone} withheld: an alert on them stands', ['referrer' => $referrer->id, 'milestone' => $milestone]);
 
@@ -189,5 +184,24 @@ final class ReferralGifts
         $reward->update(['order_id' => $order->id]);
         $this->notifier->referralRewarded($referrer, $plan->name, $milestone);
         $this->rewards->sendService($given);
+    }
+
+    /**
+     * Claims the milestone this first purchase brings the referrer: the lowest multiple of `$every` above the highest one
+     * claimed so far that their referrals who bought (Order::keptPurchases()) have reached — null for none. Under a lock
+     * on the referrer, so first purchases settled at once take their milestones one after the other, each the next: none
+     * is lost when two cross two at once, nor taken twice. One whose plan could not be given was deleted again, so the
+     * next first purchase claims it — unless one above it was claimed meanwhile.
+     */
+    private function claimMilestone(User $referrer, int $every): ?ReferralReward
+    {
+        return $this->db->transaction(static function () use ($referrer, $every): ?ReferralReward {
+            User::query()->whereKey($referrer->id)->lockForUpdate()->value('id');
+            $buyers = Order::keptPurchases()->whereIn('user_id', $referrer->referrals()->select('id'))->distinct()->count('user_id');
+            $claimed = (int) ReferralReward::query()->where('referrer_id', $referrer->id)->max('milestone');
+            $milestone = (intdiv($claimed, $every) + 1) * $every;
+
+            return $milestone > $buyers ? null : ReferralReward::query()->create(['referrer_id' => $referrer->id, 'milestone' => $milestone]);
+        }, Ledger::ATTEMPTS);
     }
 }

@@ -142,9 +142,16 @@ final class Pricing
      */
     public function extra(User $user, Subscription $subscription, ExtraKind $kind, string $base, ?string $code = null): Quote
     {
-        $quote = self::quoted($this->automatic($user), $base, OrderPricing::Regular, $kind->orderType(), $subscription->plan_id);
+        return $this->coded(self::extraOffer($this->automatic($user), $subscription, $kind, $base), $user, $code, new CodeTarget($kind->orderType(), $subscription->plan_id, $subscription->server_id));
+    }
 
-        return $this->coded($quote, $user, $code, new CodeTarget($kind->orderType(), $subscription->plan_id, $subscription->server_id));
+    /**
+     * An extra's price at `$base` for a customer already read, as they browse its amounts (no code): less the largest
+     * automatic discount for its service's plan — what offer() is to a plan.
+     */
+    public static function extraOffer(AutomaticDiscounts $automatic, Subscription $subscription, ExtraKind $kind, string $base): Quote
+    {
+        return self::quoted($automatic, $base, OrderPricing::Regular, $kind->orderType(), $subscription->plan_id);
     }
 
     /**

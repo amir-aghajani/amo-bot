@@ -6,6 +6,7 @@ import { SwitchRow } from '@/components/switch-row'
 import { TextLink } from '@/components/text-link'
 import { api } from '@/lib/api'
 import type { BotPaymentsSettingsRequest, BotSettingsData } from '@/lib/api-types'
+import { queryKeys } from '@/lib/query-keys'
 
 /**
  * «پرداخت کارت به کارت», in every shop: how a card-to-card payment is taken — the card's message protected from
@@ -17,6 +18,8 @@ export function PaymentsSection({ settings }: { settings: BotSettingsData }) {
   const group = useBotSettingsGroup(
     { card_protect: settings.card_protect, card_to_support: settings.card_to_support, receipt_single: settings.receipt_single } satisfies BotPaymentsSettingsRequest,
     (values) => api.put('/bot/settings/payments', values),
+    // A card-to-card method says whether its card is given in support's chat (`to_support`).
+    { invalidates: [queryKeys.paymentMethods] },
   )
   const { values, set, error } = group
   const noContact = settings.card_to_support && settings.support_contact.trim() === ''

@@ -110,7 +110,7 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`PATCH /api/{panel}/payment-methods/{id}`](#patch-apipanelpayment-methodsid) | Switch a payment method on or off |
 | [`DELETE /api/{panel}/payment-methods/{id}`](#delete-apipanelpayment-methodsid) | Delete a payment method |
 | [`GET /api/{panel}/bot/settings`](#get-apipanelbotsettings) | The bot's settings, every group, and the QR card's background |
-| [`PUT /api/{panel}/bot/settings/{group}`](#put-apipanelbotsettingsgroup) | Save one group of the bot's settings |
+| [`PUT /api/{panel}/bot/settings/{group}`](#put-apipanelbotsettingsgroup) | Save one group of the bot's settings, whole |
 | [`GET /api/{panel}/bot/qr-background`](#get-apipanelbotqr-background) | The background picture QR cards are drawn on |
 | [`POST /api/{panel}/bot/qr-background`](#post-apipanelbotqr-background) | Upload a custom QR background |
 | [`DELETE /api/{panel}/bot/qr-background`](#delete-apipanelbotqr-background) | Reset the QR background to the default picture |
@@ -123,7 +123,7 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`DELETE /api/{panel}/bot/report-group`](#delete-apipanelbotreport-group) | Disconnect the report group |
 | [`POST /api/{panel}/bot/report-group/link`](#post-apipanelbotreport-grouplink) | Make a one-time link that adds the bot to a group with topics |
 | [`POST /api/{panel}/bot/report-group/check`](#post-apipanelbotreport-groupcheck) | Check the report group with Telegram again |
-| [`POST /api/{panel}/bot/report-group/test`](#post-apipanelbotreport-grouptest) | Send a test message to every topic |
+| [`POST /api/{panel}/bot/report-group/test`](#post-apipanelbotreport-grouptest) | Send a test message to every topic whose reports are on |
 | [`GET /api/{panel}/keyboards`](#get-apipanelkeyboards) | The bot's keyboards as laid out, and the actions and styles a button can have |
 | [`PUT /api/{panel}/keyboards/{name}`](#put-apipanelkeyboardsname) | Save a keyboard |
 | [`POST /api/{panel}/keyboards/{name}/reset`](#post-apipanelkeyboardsnamereset) | Reset a keyboard to the default layout |
@@ -157,7 +157,7 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`POST /api/{panel}/gift-codes`](#post-apipanelgift-codes) | Create a batch of gift codes |
 | [`POST /api/{panel}/gift-codes/discard`](#post-apipanelgift-codesdiscard) | Delete a batch's unredeemed codes, including expired ones |
 | [`GET /api/{panel}/gift-codes/batches`](#get-apipanelgift-codesbatches) | All gift code batches, newest first, with their counts |
-| [`GET /api/{panel}/gift-codes/unused`](#get-apipanelgift-codesunused) | A batch's unredeemed codes, oldest first |
+| [`GET /api/{panel}/gift-codes/unused`](#get-apipanelgift-codesunused) | A batch's codes that can still be redeemed (neither redeemed nor expired), oldest first |
 | [`DELETE /api/{panel}/gift-codes/{id}`](#delete-apipanelgift-codesid) | Delete an unredeemed gift code |
 | [`GET /api/{panel}/wheel/prizes`](#get-apipanelwheelprizes) | The lucky wheel's slices, in their order |
 | [`POST /api/{panel}/wheel/prizes`](#post-apipanelwheelprizes) | Add a wheel slice |
@@ -205,7 +205,7 @@ Sign out of this panel. A session of the other panel in the same browser stays s
 
 ### GET /api/{panel}/changes
 
-The change feed's version of each area. The panel reloads what an area shows when its number moves.
+The change feed's version of each area. The panel reloads what an area shows when its number moves. The owner's panel counts every shop's writes; an agent's panel and the website's admins count their own shop's, and what is written for every shop (`ChangesResponse`).
 
 - **On the website:** the website's admins can also use it, as [`GET /changes`](Store-Admin-API-Reference.md#get-changes).
 
@@ -263,7 +263,7 @@ The dashboard. The period's figures, compared with the period before.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `range` | query | [RangeDays](API-Schemas.md#rangedays) | no |  |
+| `range` | query | [RangeDays](API-Schemas.md#rangedays) | no | The period, in days up to today; left out, 30 |
 
 **Answers**
 
@@ -282,7 +282,7 @@ All broadcast («ارسال همگانی») runs, newest first. Broadcasts are c
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -301,7 +301,7 @@ Pause a broadcast that is sending.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -322,7 +322,7 @@ Resume a paused broadcast. The scheduler continues sending it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -343,7 +343,7 @@ Cancel a broadcast. Messages already sent stay.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -364,7 +364,7 @@ Unpin a finished pinned broadcast. Starts and returns a new unpin («لغو پی
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -445,7 +445,7 @@ Reorder the plans.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -520,7 +520,7 @@ Update a plan.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -562,7 +562,7 @@ Switch a plan on or off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -581,7 +581,7 @@ A row's on/off switch (a plan, a category). A JSON boolean only.
 
 ### DELETE /api/{panel}/plans/{id}
 
-Delete a plan. Only a plan nothing was sold with.
+Delete a plan. Only a plan no order or service was ever made with; otherwise a 409 (switch it off instead).
 
 - **On the website:** the website's admins can also use it, as [`DELETE /plans/{id}`](Store-Admin-API-Reference.md#delete-plansid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
@@ -589,7 +589,7 @@ Delete a plan. Only a plan nothing was sold with.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -608,7 +608,7 @@ Duplicate a plan. The copy starts switched off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -662,7 +662,7 @@ Reorder the categories.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -685,7 +685,7 @@ Update a category.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -713,7 +713,7 @@ Switch a category on or off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -740,7 +740,7 @@ Delete a category. Its plans become uncategorised.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -760,10 +760,10 @@ The shop's customers. Newest first, or sorted by `sort` and `dir`.
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `status` | query | string | no | The status tab. Empty for all |
+| `status` | query | [UserStatus](API-Schemas.md#userstatus) | no | Only the banned customers (`banned`), or only the others (`active`). Empty for all |
 | `role` | query | [UserRole](API-Schemas.md#userrole) | no | Only the bot's admins (`admin`), or only everyone else (`customer`) |
 | `group` | query | integer | no | A customer group's id: only its members |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [UserSort](API-Schemas.md#usersort) | no | What to sort by. Anything else sorts by sign-up time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -784,7 +784,7 @@ One customer, as their page shows them. Their row, referral numbers and, for an 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -803,7 +803,7 @@ Ban or unban a customer. On the website's admin API, an admin's account (their o
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -828,7 +828,7 @@ Make a customer a bot admin, or take the role back. An admin can use /broadcast,
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -853,7 +853,7 @@ Set a customer's personal discount («تخفیف اختصاصی»). It lasts unt
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -880,7 +880,7 @@ A customer's wallet balance and ledger.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -899,7 +899,8 @@ Credit or debit a customer's wallet.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each credit or debit (a UUID; the panels send one with every change, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is a change of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the line the key wrote (a 200) and the wallet as it is now: never a second credit or debit, even when two arrive at the same moment, and never refused for what changed since (a debit the balance no longer covers). The same key with another `type`, `amount` or `description` is a 422 on `idempotency_key`; so is a malformed key. A key is the customer's for good: the next change takes a new key. |
 
 **Body**, as JSON:
 
@@ -915,6 +916,7 @@ A manual credit or debit, with the line the customer sees in their ledger. A deb
 
 | Status | What it is | Body |
 |---|---|---|
+| `200` | The line the key wrote before, with the wallet as it is now | [WalletAdjustmentResponse](API-Schemas.md#walletadjustmentresponse) |
 | `201` | Written | [WalletAdjustmentResponse](API-Schemas.md#walletadjustmentresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
@@ -928,7 +930,7 @@ Make an order for a customer by hand («افزودن سفارش»), paid and del
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | yes | A key the panel makes for each order support makes by hand (a UUID), and a new one after a refusal: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key (a network retry) returns the order the key made, as it is now: never a second order or charge, and never refused for what changed since (the wallet it charged, the name it took). Two identical requests at the same moment get one order. A key already used for another order of the customer's, or for another way to pay, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week. |
 
 **Body**, as JSON:
@@ -957,7 +959,7 @@ An order support makes for a customer by hand: a plan (`plan_id`), or — withou
 
 ### PUT /api/{panel}/users/{id}/groups
 
-Set a customer's groups. Replaces their groups with the ones listed.
+Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. A 422 on `group_ids` when one is not a group of the shop.
 
 - **On the website:** the website's admins can also use it, as [`PUT /users/{id}/groups`](Store-Admin-API-Reference.md#put-usersidgroups).
 
@@ -965,7 +967,7 @@ Set a customer's groups. Replaces their groups with the ones listed.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -992,7 +994,7 @@ Turn off a customer's two-factor sign-in on the website. For a customer who lost
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1013,7 +1015,7 @@ Sign a customer out of the website on every device. All their sessions end; the 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1041,7 +1043,7 @@ All customer groups, in their order, with each group's member count.
 
 Add a customer group.
 
-- **On the website:** the website's admins can also use it, as [`POST /customer-groups`](Store-Admin-API-Reference.md#post-customer-groups).
+- **On the website:** the website's admins can also use it, as [`POST /customer-groups`](Store-Admin-API-Reference.md#post-customer-groups), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Body**, as JSON:
 
@@ -1063,11 +1065,11 @@ A customer group to add or update.
 
 Reorder the customer groups.
 
-- **On the website:** the website's admins can also use it, as [`POST /customer-groups/reorder`](Store-Admin-API-Reference.md#post-customer-groupsreorder).
+- **On the website:** the website's admins can also use it, as [`POST /customer-groups/reorder`](Store-Admin-API-Reference.md#post-customer-groupsreorder), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -1082,15 +1084,15 @@ The rows of an admin-ordered list in their new order, by id. At most 1000.
 
 ### PUT /api/{panel}/customer-groups/{id}
 
-Update a customer group.
+Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can.
 
-- **On the website:** the website's admins can also use it, as [`PUT /customer-groups/{id}`](Store-Admin-API-Reference.md#put-customer-groupsid).
+- **On the website:** the website's admins can also use it, as [`PUT /customer-groups/{id}`](Store-Admin-API-Reference.md#put-customer-groupsid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1112,13 +1114,13 @@ A customer group to add or update.
 
 Delete a customer group. Its members just leave it.
 
-- **On the website:** the website's admins can also use it, as [`DELETE /customer-groups/{id}`](Store-Admin-API-Reference.md#delete-customer-groupsid).
+- **On the website:** the website's admins can also use it, as [`DELETE /customer-groups/{id}`](Store-Admin-API-Reference.md#delete-customer-groupsid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1139,11 +1141,11 @@ All orders. Newest first, or sorted by `sort` and `dir`; with the count of stuck
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `status` | query | string | no | The status tab: an OrderStatus, or `stuck` (paid but not delivered, because the delivery failed or stalled). Empty for all |
-| `type` | query | string | no |  |
+| `type` | query | [OrderType](API-Schemas.md#ordertype) | no | Only the orders of this type. Empty for all |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `from` | query | string (date) | no | The first day to include, in the shop's time zone |
 | `to` | query | string (date) | no | The last day to include, in the shop's time zone |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [OrderSort](API-Schemas.md#ordersort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -1164,7 +1166,7 @@ One order, as the list shows it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1183,7 +1185,7 @@ Retry delivering a paid order whose delivery failed or stalled.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1204,7 +1206,7 @@ Cancel an unpaid order. Its open payments are cancelled with it, including one w
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1223,7 +1225,7 @@ Support's note to the customer with a decision (a cancellation, a rejection, a s
 
 ### GET /api/{panel}/payments
 
-All payments. Newest first, or sorted by `sort` and `dir`; with the count of receipts to review and the list's paid total.
+All payments. Newest first, or sorted by `sort` and `dir`; with the counts of receipts to review and of payments held for support, and the list's paid total.
 
 - **On the website:** the website's admins can also use it, as [`GET /payments`](Store-Admin-API-Reference.md#get-payments).
 
@@ -1232,11 +1234,11 @@ All payments. Newest first, or sorted by `sort` and `dir`; with the count of rec
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `status` | query | string | no | The status tab. Empty for all |
+| `status` | query | string | no | The status tab: a PaymentStatus, or `held` (online payments held for support and still waiting: pending, or failed with their page). Empty for all payments |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `from` | query | string (date) | no | The first day to include, in the shop's time zone |
 | `to` | query | string (date) | no | The last day to include, in the shop's time zone |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [PaymentSort](API-Schemas.md#paymentsort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -1281,7 +1283,7 @@ One payment, as the list shows it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1292,7 +1294,7 @@ One payment, as the list shows it.
 
 ### GET /api/{panel}/payments/{id}/receipt
 
-The payment's receipt picture. A receipt sent in the bot is fetched from Telegram. A picture the browser can show is sent inline; anything else (a HEIC photo) as a download.
+The payment's receipt picture. A receipt sent in the bot is fetched from Telegram. A picture the browser can show is sent inline; anything else (a HEIC photo) as a download. A 404 when there is none (none sent, or Telegram no longer has it); a 502 while Telegram cannot be reached.
 
 - **On the website:** the website's admins can also use it, as [`GET /payments/{id}/receipt`](Store-Admin-API-Reference.md#get-paymentsidreceipt).
 
@@ -1300,7 +1302,7 @@ The payment's receipt picture. A receipt sent in the bot is fetched from Telegra
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
 
 **Answers**
@@ -1320,7 +1322,7 @@ Approve a payment and deliver what it paid for. With a receipt in review, or by 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1341,7 +1343,7 @@ Reject a receipt.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1368,7 +1370,7 @@ Cancel an unpaid payment and its open order. If another payment of the order has
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1395,7 +1397,7 @@ Remind the customer to pay. The answer says whether the reminder reached them.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1416,7 +1418,7 @@ Ask an online payment's gateway what came of it, and act on its word: paid, the 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1437,7 +1439,7 @@ Retry the delivery of what a paid payment bought.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1450,7 +1452,7 @@ Retry the delivery of what a paid payment bought.
 
 ### POST /api/{panel}/payments/{id}/refund
 
-Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet. What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are.
+Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amount goes to the customer's wallet; a wallet top-up is taken back out of the wallet, and the commission it earned the customer's referrer out of theirs (any other refund's commission stands: its money stays in the shop). What the order gave a service is taken back first: a purchase's service removed (its client off its panel, the service off the shop), a renewal's or an extra's term and traffic taken off the service and its device limit put back (an extra's devices while their period lasts), once; in an agent's shop the traffic it drew goes back to the agent. A 422 on `note` over 190 characters (it becomes the wallet line's description) or on `status`, and also when what the order added is gone or cannot be taken back (a top-up already spent, or its commission by the referrer, an agent's traffic already sold, a service whose panel fails, a purchase's service another paid or open order holds, a service handed to another customer since): then nothing is refunded. A service switched off stays off. The service's own refusals (busy, too many panel operations) come as they are.
 
 - **On the website:** the website's admins can also use it, as [`POST /payments/{id}/refund`](Store-Admin-API-Reference.md#post-paymentsidrefund), when the website grants `refunds` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
@@ -1458,7 +1460,7 @@ Refund a paid payment. For a purchase, a renewal or an agent's traffic, the amou
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1486,11 +1488,11 @@ All the shop's services: sold, renewed or given, the free test accounts, and tho
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `status` | query | string | no | The status tab. Empty for all |
+| `status` | query | string | no | The status tab: a SubscriptionStatus, or `expiring` (active services ending within `meta.expiring_days`, free test accounts aside). Empty for all |
 | `kind` | query | [SubscriptionKind](API-Schemas.md#subscriptionkind) | no | Only the services of this kind. Empty for all |
-| `server` | query | integer | no |  |
+| `server` | query | integer | no | A server's id: only the services on it |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [SubscriptionSort](API-Schemas.md#subscriptionsort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -1511,7 +1513,7 @@ One service, as the list shows it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1530,7 +1532,7 @@ Refresh a service's usage and term from its panel.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1551,7 +1553,7 @@ Add days and traffic to a service, on top of what it has.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1581,7 +1583,7 @@ Switch a service off on its panel.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1608,7 +1610,7 @@ Switch a service back on.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1629,7 +1631,7 @@ Move a service to another server. It keeps its remaining days and traffic.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1649,7 +1651,7 @@ Move an active service to another server, keeping its remaining days and traffic
 
 ### POST /api/{panel}/subscriptions/{id}/delete
 
-Delete a service from its panel and from the shop.
+Delete a service from its panel and from the shop. A 422 on `status` while an order of the service is not finished with — unpaid, being delivered, or failed and waiting for a retry (`pending`, `paid`, `processing`, `failed`) —, which it names: «سفارش #142 این سرویس هنوز تمام نشده است …»; deliver, cancel or refund that order first. A 403 for a shop admin's own service.
 
 - **On the website:** the website's admins can also use it, as [`POST /subscriptions/{id}/delete`](Store-Admin-API-Reference.md#post-subscriptionsiddelete), when the website grants `delete` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
@@ -1657,7 +1659,7 @@ Delete a service from its panel and from the shop.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1685,7 +1687,7 @@ Delete a service from its panel and from the shop, permanently. The customer is 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `telegram_id` | query | string | yes | The recipient's numeric Telegram id (Persian digits are read too). |
 
 **Answers**
@@ -1705,7 +1707,7 @@ Hand a service to another customer of the shop («انتقال سرویس»), fo
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -1735,7 +1737,7 @@ All support tickets. Latest activity first; searchable by customer, subject or n
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `status` | query | [TicketStatus](API-Schemas.md#ticketstatus) | no | The status tab. Empty for all tickets |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -1754,7 +1756,7 @@ One ticket, with its whole conversation.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -1773,7 +1775,8 @@ Answer a ticket as support. Send JSON, or a form to attach a picture. The ticket
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each answer (a UUID; the panels send one with every answer, and a new one once it went or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is an answer of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the ticket as it is now, the key's answer in it once: never a second message, nor the customer told twice, even when two arrive at the same moment, and never refused for the messages the ticket took since. The same key with another `body`, or another picture (told by its file name; none is another too), is a 422 on `idempotency_key`; so is a malformed key. A key is the ticket's for good: the next answer takes a new key. |
 
 **Body**, as JSON:
 
@@ -1796,7 +1799,7 @@ A ticket message with a picture, as a browser form uploads it. A form without a 
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Answered | [TicketResponse](API-Schemas.md#ticketresponse) |
+| `200` | Answered — or, again with its key, the ticket as it is now with the key's answer in it once | [TicketResponse](API-Schemas.md#ticketresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/tickets/{id}/messages/{message}/attachment
@@ -1809,7 +1812,7 @@ A ticket message's picture. Served from the shop's files or fetched from Telegra
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `message` | path | integer | yes | A message of the ticket (`TicketMessageRow.id`) |
 | `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
 
@@ -1830,7 +1833,7 @@ Close a ticket. The customer and the report group are notified. A 422 on `status
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1851,7 +1854,7 @@ Reopen a closed ticket. It waits for support again, and its rating is cleared. A
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1874,7 +1877,7 @@ All reviews written on the website. Newest first; searchable by the signed name,
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `status` | query | [ReviewStatus](API-Schemas.md#reviewstatus) | no | The status tab. Empty for all reviews |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -1893,7 +1896,7 @@ Approve a pending or rejected review. The website shows it from now on (the Stor
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1914,7 +1917,7 @@ Reject a pending or approved review. It is kept but no longer shown on the websi
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -1935,7 +1938,7 @@ Delete a review, whatever its status. A 403 for an admin's own review.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -2030,6 +2033,47 @@ One of:
 | `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AbanGateway method cannot go without one (type another instead). |
 | `show_card` | boolean | yes | Show the card, its holder and the exact sum with copy buttons under the page — for a sum up to 10,000,000 Toman, the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts. |
 
+**`PlisioMethodCreateRequest`** — A new Plisio method: its driver and its form (PlisioMethodRequest), with the label, the secret key and the dollar's rate required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `plisio` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The secret key as Plisio's panel shows it: 16 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: a Plisio method cannot go without one (type another instead). |
+| `usd_rate` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman a US dollar is, 1,000 to 100,000,000: what each order is converted at to be asked of Plisio in dollars. |
+| `currencies` | string | no | Plisio's ids of the coins offered, comma-separated — any case, spaces or Persian commas taken ("usdt_trx، trx" is "USDT_TRX,TRX") —; blank for every coin switched on in Plisio's panel. At most 300 characters. |
+
+**`AqayePardakhtMethodCreateRequest`** — A new AqayePardakht method: its driver and its form (AqayePardakhtMethodRequest), with the label and the pin required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `aqayepardakht` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `pin` | string | no | The gateway's pin as AqayePardakht's panel shows it: 4 to 128 Latin letters, digits, `_` and `-`; `sandbox` for its test service, where no money moves — a payment there still delivers its order. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `pin`). |
+| `clear_pin` | boolean | no | True empties the kept pin, which is refused: an AqayePardakht method cannot go without one (type another instead). |
+
+**`VarizaMethodCreateRequest`** — A new Variza method: its driver and its form (VarizaMethodRequest), with the label, both secrets and the card required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `variza` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The API key as Variza's profile shows it: 16 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: a Variza method cannot go without one (type another instead). |
+| `webhook_secret` | string | no | The secret Variza signs its webhooks with, as its profile shows it: 8 to 255 Latin letters, digits and signs. Only a webhook it signs is believed. Kept encrypted, never shown back; left blank or out, the kept one stays; required as `api_key` is. |
+| `clear_webhook_secret` | boolean | no | True empties the kept secret, which is refused: a Variza method cannot go without one (type another instead). |
+| `card` | string | yes | `random` (or «تصادفی»), `variza` (or «واریزا»), or the last four digits of one of the merchant's cards at Variza — any case, Persian digits taken; kept as `random`, `variza` or the digits. |
+
 **Answers**
 
 | Status | What it is | Body |
@@ -2054,7 +2098,7 @@ Reorder the payment methods.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2075,7 +2119,7 @@ Update a payment method. Sends its driver's form again: a card method's with its
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -2144,6 +2188,44 @@ One of:
 | `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AbanGateway method cannot go without one (type another instead). |
 | `show_card` | boolean | yes | Show the card, its holder and the exact sum with copy buttons under the page — for a sum up to 10,000,000 Toman, the shop's own limit for showing it; a larger one is paid on AbanGateway's page alone, which splits a sum above a card's daily ceiling (about 15 million Toman) into parts. |
 
+**`PlisioMethodRequest`** — A Plisio method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's secret key from Plisio's panel (API › API settings), how many Toman a dollar is, and the coins offered. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The secret key as Plisio's panel shows it: 16 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: a Plisio method cannot go without one (type another instead). |
+| `usd_rate` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Toman a US dollar is, 1,000 to 100,000,000: what each order is converted at to be asked of Plisio in dollars. |
+| `currencies` | string | no | Plisio's ids of the coins offered, comma-separated — any case, spaces or Persian commas taken ("usdt_trx، trx" is "USDT_TRX,TRX") —; blank for every coin switched on in Plisio's panel. At most 300 characters. |
+
+**`AqayePardakhtMethodRequest`** — An AqayePardakht method's form: the label customers pick it by, its switch, the amounts it is offered for (AqayePardakht takes 1,000 to 400,000,000 Toman), and the gateway's pin from AqayePardakht's panel. It names `pin` (blank keeps the kept one) or `clear_pin`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `pin` | string | no | The gateway's pin as AqayePardakht's panel shows it: 4 to 128 Latin letters, digits, `_` and `-`; `sandbox` for its test service, where no money moves — a payment there still delivers its order. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `pin`). |
+| `clear_pin` | boolean | no | True empties the kept pin, which is refused: an AqayePardakht method cannot go without one (type another instead). |
+
+**`VarizaMethodRequest`** — A Variza method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API key and webhook signing secret from Variza's profile, and the card its payments go to. It names each secret (blank keeps the kept one) or its `clear_*`, as the panels' form does with every save.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The API key as Variza's profile shows it: 16 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: a Variza method cannot go without one (type another instead). |
+| `webhook_secret` | string | no | The secret Variza signs its webhooks with, as its profile shows it: 8 to 255 Latin letters, digits and signs. Only a webhook it signs is believed. Kept encrypted, never shown back; left blank or out, the kept one stays; required as `api_key` is. |
+| `clear_webhook_secret` | boolean | no | True empties the kept secret, which is refused: a Variza method cannot go without one (type another instead). |
+| `card` | string | yes | `random` (or «تصادفی»), `variza` (or «واریزا»), or the last four digits of one of the merchant's cards at Variza — any case, Persian digits taken; kept as `random`, `variza` or the digits. |
+
 **Answers**
 
 | Status | What it is | Body |
@@ -2159,11 +2241,11 @@ Switch a payment method on or off. A 404 for «خارج از فروشگاه».
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
-A payment method's on/off switch. A JSON boolean only.
+A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2178,13 +2260,13 @@ A payment method's on/off switch. A JSON boolean only.
 
 ### DELETE /api/{panel}/payment-methods/{id}
 
-Delete a payment method. The wallet cannot be deleted; «خارج از فروشگاه» is not found (404).
+Delete a payment method. A 409 for the wallet, which cannot be deleted, and for a method payments were made with (switch it off instead); «خارج از فروشگاه» is not found (404).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -2206,13 +2288,13 @@ The bot's settings, every group, and the QR card's background.
 
 ### PUT /api/{panel}/bot/settings/{group}
 
-Save one group of the bot's settings.
+Save one group of the bot's settings, whole. Answers every setting as saved.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `group` | path | [BotSettingsGroup](#botsettingsgroup) | yes |  |
+| `group` | path | [BotSettingsGroup](#botsettingsgroup) | yes | The group to save. One the shop's screen does not have is a 404: an agent's shop has no `service_claims` or `custom_services` |
 
 **Body**, as JSON:
 
@@ -2466,7 +2548,7 @@ The background picture QR cards are drawn on.
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | [Picture](API-Schemas.md#response-picture) | the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif` |
+| `200` | [Picture](API-Schemas.md#response-picture) | the bytes, as `image/jpeg`, `image/png`, `image/webp` |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/{panel}/bot/qr-background
@@ -2512,7 +2594,7 @@ The channels a customer must join, in their order.
 
 ### POST /api/{panel}/bot/channels
 
-Add a required channel by its link, @handle or id.
+Add a required channel by its link, @handle or id. It is looked up with Telegram: a 422 on `link` when it is not found, already listed, or the bot is not an admin there; a 502 while Telegram cannot be reached.
 
 **Body**, as JSON:
 
@@ -2535,7 +2617,7 @@ Reorder the required channels.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2556,7 +2638,7 @@ Check a channel with Telegram again.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -2575,7 +2657,7 @@ Remove a required channel.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -2608,7 +2690,7 @@ Disconnect the report group. The bot stays in the group.
 
 ### POST /api/{panel}/bot/report-group/link
 
-Make a one-time link that adds the bot to a group with topics.
+Make a one-time link that adds the bot to a group with topics. Any older link stops working. A 422 on `link` while the bot's username is not known yet.
 
 **Body:** none.
 
@@ -2621,7 +2703,7 @@ Make a one-time link that adds the bot to a group with topics.
 
 ### POST /api/{panel}/bot/report-group/check
 
-Check the report group with Telegram again.
+Check the report group with Telegram again: its title, its topics and the bot's rights; when all is well, the topics it lacks are made. A 422 on `group` while none is connected; a 502 while Telegram cannot be reached (nothing changes).
 
 **Body:** none.
 
@@ -2634,7 +2716,7 @@ Check the report group with Telegram again.
 
 ### POST /api/{panel}/bot/report-group/test
 
-Send a test message to every topic.
+Send a test message to every topic whose reports are on. They are queued, and sent at once as far as Telegram allows. A 422 on `group` while none is connected.
 
 **Body:** none.
 
@@ -2664,7 +2746,7 @@ Save a keyboard.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `name` | path | string | yes |  |
+| `name` | path | string | yes | A keyboard's name (`KeyboardLayoutData.name`); one the bot does not have is a 404 |
 
 **Body**, as JSON:
 
@@ -2690,7 +2772,7 @@ Reset a keyboard to the default layout.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `name` | path | string | yes |  |
+| `name` | path | string | yes | A keyboard's name (`KeyboardLayoutData.name`); one the bot does not have is a 404 |
 
 **Body:** none.
 
@@ -2725,7 +2807,7 @@ Customers whose referral link brought someone. Most referrals first, or sorted b
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [ReferrerSort](API-Schemas.md#referrersort) | no | What to sort by. Anything else sorts by number of referrals |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -2748,7 +2830,7 @@ Who brought whom. Newest first, or sorted by `sort` and `dir`.
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `referrer` | query | integer | no | A customer's id: only the customers their link brought (not the referrer themselves) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [InviteeSort](API-Schemas.md#inviteesort) | no | What to sort by. Anything else sorts by sign-up time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -2770,7 +2852,7 @@ Referral commissions paid. Newest first, or sorted by `sort` and `dir`.
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [ReferralCommissionSort](API-Schemas.md#referralcommissionsort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -2792,7 +2874,7 @@ Alerts on referrers whose referrals look fake. Newest first. An alert stays unti
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -2811,7 +2893,7 @@ Clear a referral alert. The referrer earns start gifts and plan rewards again fr
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -2819,7 +2901,7 @@ Clear a referral alert. The referrer earns start gifts and plan rewards again fr
 
 | Status | What it is | Body |
 |---|---|---|
-| `204` | Cleared | none |
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/bot/custom-emojis
@@ -2848,7 +2930,7 @@ A premium emoji's still picture, fetched from Telegram.
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | The picture's bytes. Any other file type Telegram returns is sent as a download, never rendered | the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/octet-stream` |
+| `200` | [EmojiPicture](API-Schemas.md#response-emojipicture) | the bytes, as `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `application/octet-stream` |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/bot/custom-emojis/{id}/animation
@@ -2871,7 +2953,7 @@ A premium emoji's animation, fetched from Telegram. A 404 for a still emoji.
 
 ### DELETE /api/{panel}/bot/custom-emojis/{id}
 
-Remove a premium emoji from the picker.
+Remove a premium emoji from the picker. Texts that use it keep it. A 404 for one the picker does not have.
 
 **Parameters**
 
@@ -3006,7 +3088,7 @@ The discount codes, newest first, each with its uses. Searchable by code or note
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -3056,7 +3138,7 @@ Update a discount code. Send the whole form; its past uses stay.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -3095,9 +3177,11 @@ Switch a discount code on or off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
+
+A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3118,7 +3202,7 @@ Delete an unused discount code. A code with uses (orders made with it and not ca
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -3171,7 +3255,7 @@ Update a sale. Send the whole form.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -3202,9 +3286,11 @@ Switch a sale on or off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
+
+A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3225,7 +3311,7 @@ Delete a sale. Orders it discounted keep their discount lines.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -3245,7 +3331,7 @@ The gift codes, newest first, each with who redeemed it and what it gave. Filter
 | `batch` | query | string | no | A batch's label: only its codes. Empty for all |
 | `status` | query | [GiftCodeStatus](#giftcodestatus) | no | Only codes with this status |
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -3270,7 +3356,7 @@ A batch of gift codes to create. Every refusal is returned at once, under its fi
 | `plan_id` | integer | no | For `plan` codes (required): the plan whose service each code gives. Any plan of the shop, even one that is switched off. |
 | `batch` | string | yes | The batch label (at most 64 characters). A batch is listed, copied and deleted by its label. |
 | `prefix` | string | no | A prefix for every code: Latin letters and digits, at most 12 (dashes and spaces are dropped, letters upper-cased). Blank for none. |
-| `expires_on` | string | no | The last day the codes can be redeemed, in the shop's time zone (YYYY-MM-DD, today or later). Blank or left out: never expires. |
+| `expires_on` | string | no | The last day the codes can be redeemed, in the shop's time zone (YYYY-MM-DD): today or later, and no later than 2038-01-17 — the last day the database's timestamps hold on any shop's clock (MySQL's end at 2038-01-19 03:14:07 UTC); a later one is a 422 on `expires_on` that names it. Blank or left out: never expires. |
 
 **Answers**
 
@@ -3309,13 +3395,13 @@ All gift code batches, newest first, with their counts.
 
 ### GET /api/{panel}/gift-codes/unused
 
-A batch's unredeemed codes, oldest first. For copying and handing out.
+A batch's codes that can still be redeemed (neither redeemed nor expired), oldest first. For copying and handing out.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `batch` | query | string | yes |  |
+| `batch` | query | string | yes | The batch's label (`GiftCodeBatch.batch`) |
 
 **Answers**
 
@@ -3332,7 +3418,7 @@ Delete an unredeemed gift code. A redeemed code stays (a 422 on `status`).
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -3382,7 +3468,7 @@ Reorder the wheel slices.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3403,7 +3489,7 @@ Update a wheel slice.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -3433,9 +3519,11 @@ Switch a wheel slice on or off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
+
+A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3456,7 +3544,7 @@ Delete a wheel slice. Spins that landed on it keep a copy of it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -3475,7 +3563,7 @@ The wheel spins, newest first, each with the slice it landed on and what it gave
 |---|---|---|---|---|
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -3495,7 +3583,7 @@ The free test accounts the shop gave, newest first, each with where it stands an
 | `status` | query | [TestAccountState](#testaccountstate) | no | Only tests in this state. Empty for all |
 | `user` | query | integer | no | A customer's id: only their rows (their page links here) |
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -3556,7 +3644,7 @@ Update a loyalty tier.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -3584,7 +3672,7 @@ Delete a loyalty tier. Its customers drop to the tier below; their past orders d
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -3635,7 +3723,7 @@ Update a cashback rule.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -3664,9 +3752,11 @@ Switch a cashback rule on or off.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
+
+A row's on/off switch, as its list's toggle sends it: a payment method, a wheel slice, a cashback rule, a discount code or a sale. A JSON boolean only (a 422 on `enabled` otherwise).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3687,7 +3777,7 @@ Delete a cashback rule. Cashback it already credited stays with the customers.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -3704,7 +3794,7 @@ The nightly lottery draws among buyers, newest first, each with its prize and wi
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -3758,8 +3848,8 @@ Operations only the owner's panel has.
 | [`POST /api/admin/servers/{id}/migrations/{migration}/resume`](#post-apiadminserversidmigrationsmigrationresume) | Go on with a paused move from where it stopped |
 | [`POST /api/admin/servers/{id}/migrations/{migration}/cancel`](#post-apiadminserversidmigrationsmigrationcancel) | End a move |
 | [`POST /api/admin/servers/{id}/migrations/{migration}/rescue`](#post-apiadminserversidmigrationsmigrationrescue) | Go on with a migration as a rescue («نجات») |
-| [`POST /api/admin/servers/{id}/leftovers/clean`](#post-apiadminserversidleftoversclean) | Remove the clients moves of services left on the server's panel now, for a few seconds |
-| [`DELETE /api/admin/servers/{id}/leftovers`](#delete-apiadminserversidleftovers) | Forget the clients moves of services left on the server's panel, for a panel that is gone for good |
+| [`POST /api/admin/servers/{id}/leftovers/clean`](#post-apiadminserversidleftoversclean) | Remove the old clients that moves of services left on the server's panel now, for a few seconds |
+| [`DELETE /api/admin/servers/{id}/leftovers`](#delete-apiadminserversidleftovers) | Forget the old clients that moves of services left on the server's panel, for a panel that is gone for good |
 | [`GET /api/admin/mass-grants`](#get-apiadminmass-grants) | The latest mass gifts |
 | [`POST /api/admin/mass-grants`](#post-apiadminmass-grants) | Give days and traffic to running services |
 | [`POST /api/admin/mass-grants/{id}/run`](#post-apiadminmass-grantsidrun) | Apply a mass gift for a few seconds |
@@ -3793,7 +3883,7 @@ Operations only the owner's panel has.
 
 ### POST /api/admin/auth/login
 
-Sign the owner in. The session works in the shop named by `X-Shop`; if that shop does not exist, even the right credentials get a 404.
+Sign the owner in. The session works in the shop named by `X-Shop`; if that shop does not exist, even the right credentials get a 404. A 401 for a wrong username or password (one answer for both); a 422 for a field left blank; a 429 while this address or this username must wait after failures; a 503 while no login is set up in config.php.
 
 **Body**, as JSON:
 
@@ -3826,7 +3916,7 @@ Start recovering a lost login. Writes a one-time key into the host's files, wher
 
 ### POST /api/admin/auth/recovery
 
-Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends. A wrong key counts as a failed sign-in.
+Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends. A 422 under the field refused — a wrong or expired key on `key`, which counts as a failed sign-in —, or on `file` while the server may not write config.php; a 429 while this address must wait after failures.
 
 **Body**, as JSON:
 
@@ -3848,7 +3938,7 @@ A new panel login set without the old one: the recovery key from the host's file
 
 ### PUT /api/admin/auth/credentials
 
-Change the panel's login. Every other session ends; this one stays signed in.
+Change the panel's login. Every other session ends; this one stays signed in. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures.
 
 **Body**, as JSON:
 
@@ -4176,7 +4266,7 @@ One server, with its inbounds.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -4193,7 +4283,7 @@ Update a server.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4274,7 +4364,7 @@ Delete a server. Only a server with no service on it, nor a move of services fro
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -4291,7 +4381,7 @@ Check a saved server's panel. Also records whether it serves subscription links.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -4304,13 +4394,13 @@ Check a saved server's panel. Also records whether it serves subscription links.
 
 ### POST /api/admin/servers/{id}/inbounds/sync
 
-Read the panel's inbounds again.
+Read the panel's inbounds again. A 502 when the panel cannot list them; the stored ones stay.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -4329,8 +4419,8 @@ Switch whether an inbound is sold.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
-| `inbound` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `inbound` | path | integer | yes | An inbound of the server (`ServerInboundRow.id`) |
 
 **Body**, as JSON:
 
@@ -4355,7 +4445,7 @@ A server's free test accounts («اکانت تست»): whether it gives them, an
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -4372,7 +4462,7 @@ Save a server's test terms. A test already given keeps the terms it got.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4400,7 +4490,7 @@ A server's latest grants. Also how many services a new grant would reach.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -4417,7 +4507,7 @@ Give days and traffic to the services on a server.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4446,8 +4536,8 @@ Apply a grant to the next few services.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
-| `grant` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `grant` | path | integer | yes | A grant's part on the server (`ServerGrantRow.id`) |
 
 **Body:** none.
 
@@ -4466,8 +4556,8 @@ Stop a grant. Services already given it keep it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
-| `grant` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `grant` | path | integer | yes | A grant's part on the server (`ServerGrantRow.id`) |
 
 **Body:** none.
 
@@ -4480,13 +4570,13 @@ Stop a grant. Services already given it keep it.
 
 ### GET /api/admin/servers/{id}/migrations
 
-The latest moves of a server's services to another server («انتقال سرویس‌ها»), newest first. Also the clients moves left on its panel.
+The latest moves of a server's services to another server («انتقال سرویس‌ها»), newest first. Also the old clients that moves left on its panel.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -4503,7 +4593,7 @@ Start moving the server's services, every shop's, to another server. It is queue
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4532,7 +4622,7 @@ What a move of the server's services would cover with these filters: how many, o
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4559,7 +4649,7 @@ A move of the server's services, with each service it could not move and why.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
 
 **Answers**
@@ -4577,7 +4667,7 @@ Move the next few services. The page keeps calling this while it is open.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
 
 **Body:** none.
@@ -4597,7 +4687,7 @@ Pause a queued or running move where it is. A 422 on `status` when it is not.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
 
 **Body:** none.
@@ -4617,7 +4707,7 @@ Go on with a paused move from where it stopped. A 422 on `status` when it is not
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
 
 **Body:** none.
@@ -4637,7 +4727,7 @@ End a move. The services moved stay moved; the rest stay where they are. A 422 o
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
 
 **Body:** none.
@@ -4657,7 +4747,7 @@ Go on with a migration as a rescue («نجات»): the source is no longer asked
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 | `migration` | path | integer | yes | A move of the server's services (`ServerMigrationRow.id`) |
 
 **Body:** none.
@@ -4671,13 +4761,13 @@ Go on with a migration as a rescue («نجات»): the source is no longer asked
 
 ### POST /api/admin/servers/{id}/leftovers/clean
 
-Remove the clients moves of services left on the server's panel now, for a few seconds. The panel is asked even while it is in backoff; once it cannot be reached, it stops.
+Remove the old clients that moves of services left on the server's panel now, for a few seconds. The panel is asked even while it is in backoff; once it cannot be reached, it stops.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -4690,13 +4780,13 @@ Remove the clients moves of services left on the server's panel now, for a few s
 
 ### DELETE /api/admin/servers/{id}/leftovers
 
-Forget the clients moves of services left on the server's panel, for a panel that is gone for good. None is removed from it.
+Forget the old clients that moves of services left on the server's panel, for a panel that is gone for good. None is removed from it.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -4750,7 +4840,7 @@ Apply a mass gift for a few seconds. The screen keeps calling this while it is o
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -4769,7 +4859,7 @@ Stop a mass gift. What was already given stays.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -4835,9 +4925,9 @@ Requests to become an agent. Newest first (`dir=asc` for oldest first); one stat
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `status` | query | string | no | The status tab. Empty for all |
+| `status` | query | [AgencyRequestStatus](#agencyrequeststatus) | no | The status tab. Empty for all requests |
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [AgencyRequestSort](#agencyrequestsort) | no | What to sort by. Anything else sorts by creation time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -4856,7 +4946,7 @@ Approve an agency request. Sets the level and the starting credit, and the terms
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4884,7 +4974,7 @@ Reject an agency request. The customer is notified, with the note.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4911,7 +5001,7 @@ The agents. Newest first, or sorted by `sort` and `dir`; on one level or all.
 |---|---|---|---|---|
 | `level` | query | integer | no | A level's id. Empty for all levels |
 | `search` | query | string | no | The search text ("#12" finds by number) |
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [AgentSort](#agentsort) | no | What to sort by. Anything else sorts by sign-up time |
 | `dir` | query | [SortDirection](API-Schemas.md#sortdirection) | no | The sort direction. Default `desc` (newest or largest first) |
 
@@ -4930,7 +5020,7 @@ Change an agent's level and credit, and their terms of selling — `expires_at` 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4958,7 +5048,7 @@ End an agency. The agent's bot stops; the agent is notified, with the note.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -4983,8 +5073,8 @@ An agent's traffic ledger. Newest line first.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
-| `page` | query | integer, at least 1 | no |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -5001,7 +5091,8 @@ Adjust an agent's traffic. A negative `gb` takes traffic away.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each adjustment (a UUID; the panel sends one with every adjustment, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is an adjustment of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the agent as they are now, the key's line written once: never a second adjustment, even when two arrive at the same moment, and never refused for traffic the agent's bot has sold since. The same key with another `gb` or `note` is a 422 on `idempotency_key`; so is a malformed key. A key is the agent's for good: the next adjustment takes a new key. |
 
 **Body**, as JSON:
 
@@ -5016,7 +5107,7 @@ A manual adjustment of an agent's traffic (never below zero), with the note for 
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Saved | [AgentResponse](#agentresponse) |
+| `200` | Saved — or, again with its key, the agent as they are now, the key's line written once | [AgentResponse](#agentresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/admin/agency/agents/{id}/suspend
@@ -5027,7 +5118,7 @@ Suspend an agent's selling by hand: their shop takes no purchase, renewal, extra
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -5052,7 +5143,7 @@ Resume an agent's selling, whatever suspended it. The agent is notified. A 422 o
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body:** none.
 
@@ -5071,7 +5162,7 @@ What the owner keeps from an agent's shop: every server of the installation and 
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -5082,13 +5173,13 @@ What the owner keeps from an agent's shop: every server of the installation and 
 
 ### PUT /api/admin/agency/agents/{id}/hidden
 
-Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط مدیر» in their panel), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan).
+Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط پشتیبانی» in their panel, which calls the owner «پشتیبانی فروشگاه اصلی»), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan).
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -5143,7 +5234,7 @@ Reorder the agency levels.
 
 **Body**, as JSON:
 
-The rows of an admin-ordered list in their new order, by id. At most 1000.
+The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on `ids` for an empty list, more than 1000, or anything in it that is not an id (a fraction, «2abc», a list, a boolean, 0 or less: «یکی از شناسه‌ها درست نیست؛ صفحه را دوباره باز کنید.»). An id of no row is passed over, and rows left out keep their place after the listed ones.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -5164,7 +5255,7 @@ Update an agency level.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Body**, as JSON:
 
@@ -5190,7 +5281,7 @@ Delete an agency level. Refused (409) while agents are on it.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `id` | path | integer | yes |  |
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
 
 **Answers**
 
@@ -5305,7 +5396,7 @@ Save one group of the config.php settings.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `group` | path | [ConfigGroup](#configgroup) | yes |  |
+| `group` | path | [ConfigGroup](#configgroup) | yes | The group to save, as `ConfigSettingsResponse.groups` has it |
 
 **Body**, as JSON:
 
@@ -5433,7 +5524,7 @@ Operations only an agent's panel has.
 
 ### POST /api/agent/auth/link
 
-Sign an agent in with the code from their one-time link. The main bot gives the link; the session works in the agent's own shop. If another agent is signed in in this browser, the request needs `replace: true`; without it the answer is a 409 on `replace` and the link stays unused, so the panel can ask first.
+Sign an agent in with the code from their one-time link. The main bot gives the link; the session works in the agent's own shop. If another agent is signed in in this browser, the request needs `replace: true`; without it the answer is a 409 on `replace` and the link stays unused, so the panel can ask first. A 401 for a code no link carries now (used, expired or never made, or the agency ended); a 429 while this address must wait after failures.
 
 **Body**, as JSON:
 
@@ -5483,7 +5574,7 @@ The agent's traffic ledger. Newest line first.
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `page` | query | integer, at least 1 | no |  |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 
 **Answers**
 
@@ -5677,7 +5768,7 @@ An AbanGateway method (abangateway.ir), an online gateway: the customer transfer
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
 | `config` | [AbanGatewayConfig](#abangatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -5749,6 +5840,7 @@ A customer's request to become an agent.
 | `level` | [AgencyLevelRef](API-Schemas.md#agencylevelref) or null | yes | The level given on approval. |
 | `reason` | string or null | yes | Support's note on a rejection. |
 | `reviewer` | string or null | yes | Who decided it: the panel login, or a bot admin (@username or tg:&lt;id&gt;). |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `decided_at` | string (date-time) or null | yes |  |
 | `created_at` | string (date-time) | yes |  |
 | `actions` | object | yes |  |
@@ -5890,6 +5982,37 @@ The answer of `GET /api/app`, which the panels call first.
 | `installed` | boolean | yes | False until the web installer has finished; the panel then shows the installer. |
 | `timezone` | string | yes | The shop's time zone (APP_TIMEZONE, an IANA name such as Asia/Tehran). The panels show every date and time in it, as the bot does. |
 
+### AqayePardakhtGatewayConfig
+
+An AqayePardakht method's settings (`AqayePardakhtMethodRow.config`): the gateway's pin, kept encrypted and never shown — only whether one is kept and a hint to recognise it (`sandbox` is its test service).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `pin` | [SecretState](#secretstate) | yes |  |
+
+### AqayePardakhtMethodRow
+
+An AqayePardakht method (aqayepardakht.ir), an online gateway: the customer pays with any bank card on the bank's page through Shaparak — reached from a page on the shop's own address — and is sent back to the shop; AqayePardakht confirms it, with no receipt and no review.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `aqayepardakht` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `config` | [AqayePardakhtGatewayConfig](#aqayepardakhtgatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) | yes |  |
+| `updated_at` | string (date-time) | yes |  |
+
 ### AtlasPayGatewayConfig
 
 An AtlasPay method's settings (`AtlasPayMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it.
@@ -5910,7 +6033,7 @@ An AtlasPay method (atlaspay.space), an online gateway: the customer pays by car
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
 | `config` | [AtlasPayGatewayConfig](#atlaspaygatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -6164,6 +6287,7 @@ A `%name%` placeholder the bot fills in when it sends the text.
 | `name` | string | yes |  |
 | `description` | string | yes |  |
 | `sample` | string | yes | The sample value the screen's preview uses. |
+| `html` | boolean | yes | True: the bot fills it with Telegram HTML (another text's wording, or lines of them) and never escapes it, so its `sample` is HTML too and a preview inserts it as it is. False: plain text, which the bot escapes in an HTML text (`BotTextRow.html`); a preview escapes its sample the same way. |
 | `required` | boolean | yes | The wording must contain it (a delivery message needs its link). |
 
 ### BotTextsResponse
@@ -6187,10 +6311,8 @@ A cashback rule («کش‌بک»): this percent of what a delivered order paid g
 | `id` | integer | yes |  |
 | `percent` | integer | yes |  |
 | `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) | yes |  |
-| `customer_group` | object or null | yes |  |
-| `customer_group.id` | integer | yes |  |
-| `customer_group.name` | string | yes |  |
-| `payment_method` | object or null | yes |  |
+| `customer_group` | [NamedRef](API-Schemas.md#namedref) or null | yes | Only its members; null for anyone. |
+| `payment_method` | object or null | yes | Only orders paid with it, by its label; null for any. |
 | `payment_method.id` | integer | yes |  |
 | `payment_method.label` | string | yes |  |
 | `enabled` | boolean | yes |  |
@@ -6298,7 +6420,7 @@ A CubePay method (cubevps.ir), an online gateway: the customer pays on CubePay's
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
 | `config` | [CubePayGatewayConfig](#cubepaygatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -6383,7 +6505,8 @@ A discount code («کد تخفیف») a customer types at checkout, in the bot o
 | `max_uses` | integer or null | yes | Total uses allowed; null for no limit. |
 | `per_user` | integer or null | yes | Uses allowed per customer; null for no limit. |
 | `enabled` | boolean | yes |  |
-| `uses` | integer | yes | Orders made with it that are not cancelled. An unpaid order frees its use when it is cancelled or expires (see the `hold_minutes` bot setting). |
+| `uses` | integer | yes | Orders made with it that are neither cancelled nor refunded. An unpaid order frees its use when it is cancelled or expires (see the `hold_minutes` bot setting); a refunded one gives it back. |
+| `deletable` | boolean | yes | Whether `DELETE /discount-codes/{id}` would delete it: false while any order but a cancelled one names it — refunded ones too, which count no use — and it is kept for their history (switch it off instead). The delete is a 409 then. |
 | `state` | [DiscountState](#discountstate) | yes |  |
 | `created_at` | string (date-time) | yes |  |
 
@@ -6492,7 +6615,7 @@ A gift code («کد هدیه»), redeemable once by one customer of the shop.
 | `batch` | string or null | yes | Its batch label. |
 | `kind` | [GiftCodeKind](API-Schemas.md#giftcodekind) | yes |  |
 | `amount` | string or null | yes | Toman, for the wallet; null for a plan. |
-| `plan` | [RewardPlanRef](#rewardplanref) or null | yes | The plan it gives; null for a Toman code, or when the plan was deleted (then nobody can redeem it). |
+| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan it gives; null for a Toman code, or when the plan was deleted (then nobody can redeem it). |
 | `expires_at` | string (date-time) or null | yes | When it expires (the first moment it can no longer be redeemed); null for never. |
 | `status` | [GiftCodeStatus](#giftcodestatus) | yes |  |
 | `redeemed_by` | [UserRef](API-Schemas.md#userref) or null | yes | Who redeemed it; null while unredeemed, or once their account is gone. |
@@ -6661,7 +6784,7 @@ One nightly draw among buyers («قرعه‌کشی شبانه»): its day, its e
 | `prize` | object | yes |  |
 | `prize.kind` | [LotteryPrizeKind](#lotteryprizekind) | yes |  |
 | `prize.amount` | string or null | yes | Toman (wallet), GB (traffic) or days (days); null for a plan. |
-| `prize.plan` | [RewardPlanRef](#rewardplanref) or null | yes | For a plan prize: the plan; null once it is deleted. |
+| `prize.plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | For a plan prize: the plan; null once it is deleted. |
 | `prize.words` | string | yes | What it gives, as the customer reads it. |
 | `winners` | list of [LotteryWinnerRow](#lotterywinnerrow) | yes |  |
 | `created_at` | string (date-time) | yes |  |
@@ -6753,7 +6876,7 @@ A card-to-card method, with its cards: each payment is shown one of them at rand
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
 | `config` | [ManualGatewayConfig](#manualgatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -6816,6 +6939,7 @@ A grant: days and traffic for the running services on every server, or only the 
 | `failed` | integer | yes |  |
 | `parts` | list of [MassGrantPart](#massgrantpart) | yes |  |
 | `reviewer` | string or null | yes |  |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `created_at` | string (date-time) | yes |  |
 | `finished_at` | string (date-time) or null | yes |  |
 
@@ -6918,6 +7042,9 @@ One of:
 - [ZarinpalMethodRow](#zarinpalmethodrow)
 - [AtlasPayMethodRow](#atlaspaymethodrow)
 - [AbanMethodRow](#abanmethodrow)
+- [PlisioMethodRow](#plisiomethodrow)
+- [AqayePardakhtMethodRow](#aqayepardakhtmethodrow)
+- [VarizaMethodRow](#varizamethodrow)
 - [UnregisteredMethodRow](#unregisteredmethodrow)
 
 ### PaymentMethodsResponse
@@ -6925,6 +7052,39 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `methods` | list of [PaymentMethodRow](#paymentmethodrow) | yes |  |
+
+### PlisioGatewayConfig
+
+A Plisio method's settings (`PlisioMethodRow.config`): the merchant's secret key, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, how many Toman a US dollar is, and the coins offered.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `api_key` | [SecretState](#secretstate) | yes |  |
+| `usd_rate` | integer | yes | Toman a US dollar is: an order's Toman are asked of Plisio in dollars at this rate, a cent rounded up. The owner keeps it up with the market; 0 for a method saved without one, which opens no invoice. |
+| `currencies` | string | yes | The coins offered, Plisio's ids comma-separated ("USDT_TRX,TRX,TON"); "" for every coin switched on in Plisio's panel. |
+
+### PlisioMethodRow
+
+A Plisio method (plisio.net), an online gateway for crypto: the customer pays a coin of their choice on Plisio's page and Plisio confirms it on its chain, with no receipt and no review. An order is asked of Plisio in US dollars, at the owner's rate.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `plisio` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `config` | [PlisioGatewayConfig](#plisiogatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) | yes |  |
+| `updated_at` | string (date-time) | yes |  |
 
 ### PriceTierInput
 
@@ -7070,20 +7230,6 @@ String: `purchases`, `renewals`, `wallet`, `receipts`, `users`, `errors`, `agenc
 | `id` | integer | yes |  |
 | `status` | [OrderStatus](API-Schemas.md#orderstatus) | yes |  |
 
-### RewardPlanRef
-
-| Field | Type | Required | What it is |
-|---|---|---|---|
-| `id` | integer | yes |  |
-| `name` | string | yes |  |
-
-### RewardServiceRef
-
-| Field | Type | Required | What it is |
-|---|---|---|---|
-| `id` | integer | yes |  |
-| `name` | string | yes | The client's name on the panel. |
-
 ### SaleResponse
 
 | Field | Type | Required | What it is |
@@ -7115,7 +7261,7 @@ A timed sale («فروش ویژه»): a percent off the listed plans, for the li
 
 ### SecretState
 
-A secret as a settings screen sees it: never the value, only whether one is stored and a short hint to recognise it.
+A secret as a settings screen sees it: never the value, only whether one is stored and a short hint to recognise it — dots, and the last four characters of a token or key at least 12 characters long (a password, or a shorter secret, shows dots alone). Empty while none is stored.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -7180,6 +7326,7 @@ A grant's part on one server («افزودن زمان و حجم»): the grant's 
 | `waiting_reason` | string or null | yes | Why it is paused at its current service: what keeps the shop from using the panel (unreachable, a credential refused or missing…). It retries by itself. Null while it is moving. |
 | `last_failure` | string or null | yes | The last service the panel refused, and why. |
 | `reviewer` | string or null | yes |  |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `created_at` | string (date-time) | yes |  |
 | `finished_at` | string (date-time) or null | yes |  |
 
@@ -7194,9 +7341,7 @@ A server's grants card: its latest grants, and how many services a new grant wou
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `grants` | list of [ServerGrantRow](#servergrantrow) | yes |  |
-| `audience` | object | yes |  |
-| `audience.running` | integer | yes |  |
-| `audience.unstarted` | integer | yes |  |
+| `audience` | [GrantReach](#grantreach) | yes |  |
 
 ### ServerInboundRow
 
@@ -7237,7 +7382,7 @@ A service a move could not carry, and why.
 
 ### ServerMigrationLeftovers
 
-The clients moves of services left on the server's panel (a rescue's old ones, mostly), still to remove: they would work again once it answers. The scheduler removes them once the panel answers again.
+The old clients that moves of services left on the server's panel (a rescue's, mostly), still to remove: they would work again once it answers. The scheduler removes them once the panel answers again.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -7302,9 +7447,11 @@ A move of a server's services, every shop's, to another server («انتقال �
 | `skipped` | integer | yes | Services it had nothing to carry for when their turn came: ended by time or traffic, gone from their panel, moved or deleted meanwhile. |
 | `left_behind` | integer | yes | The clients it left on a panel still there to be removed — the old ones a rescue left on the source's, any a panel did not say it deleted or made. Those removed since no longer count. |
 | `waiting_reason` | string or null | yes | Why it is held at its current service: a panel out of reach (the target's, or the source's in a migration). It tries again by itself. Null while it moves. |
+| `waiting_on` | string: `source`, `target` or null | yes | Whose panel it waits for: `target`, or — in a migration only — `source`. When both are down, a panel in backoff is named before one whose last request failed, and the target before the source. Only a wait on the source is helped by «ادامه با حالت نجات» (`POST …/rescue`), since a rescue never asks the source. Null while it moves, or once the panel it waited for answers again (it goes on at its next turn). |
 | `reason` | string or null | yes | Why it failed: what keeps the target from taking more. |
 | `last_failure` | string or null | yes | The latest service it could not move, and why. |
 | `reviewer` | string or null | yes | Who started it. |
+| `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `created_at` | string (date-time) | yes |  |
 | `started_at` | string (date-time) or null | yes | When its first turn began. |
 | `finished_at` | string (date-time) or null | yes |  |
@@ -7317,7 +7464,7 @@ String: `queued`, `running`, `paused`, `done`, `cancelled`, `failed`.
 
 ### ServerMigrationsResponse
 
-A server's «انتقال سرویس‌ها» card: its latest moves (from it), newest first, and the clients moves left on its panel.
+A server's «انتقال سرویس‌ها» card: its latest moves (from it), newest first, and the old clients that moves left on its panel.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -7345,7 +7492,8 @@ A server's «انتقال سرویس‌ها» card: its latest moves (from it), 
 | `sort` | integer | yes |  |
 | `notes` | string or null | yes |  |
 | `last_checked_at` | string (date-time) or null | yes |  |
-| `last_error` | string or null | yes |  |
+| `last_error` | string or null | yes | Why the last contact with the panel failed, a Persian sentence (as a probe's `error`); null when it answered. |
+| `last_error_detail` | string or null | yes | The technical detail behind `last_error` (the panel's message, cURL's text, as a probe's `error_detail`), in English; null when it has none. |
 | `serves_subscriptions` | boolean or null | yes | Whether the panel served subscription links at the last check; null if never checked. A server without them cannot be sold. |
 | `unsellable_reason` | string or null | yes | Why nothing can be sold on or moved to the server now (switched off, no subscription links, full, connector missing…); null when it can. |
 | `counts` | object | yes |  |
@@ -7511,6 +7659,7 @@ One line of an agent's traffic ledger.
 | `description` | string or null | yes |  |
 | `order_id` | integer or null | yes |  |
 | `reviewer` | string or null | yes | Who made the change, for an adjustment or extension: the agent's bot, the owner's login (which anyone but the owner sees as «پشتیبانی»), or a website admin. |
+| `reviewer_name` | string or null | yes | The name of the admin of the bot's shop (its website's) `reviewer` is, as their account has it (their first and last name), to show beside it — read in that shop whichever panel lists the line. Null for the owner, the agent's bot, an admin whose account is gone or shows no name, a handle no admin of that shop has now, and while `reviewer` is null. |
 | `created_at` | string (date-time) or null | yes |  |
 
 ### TrafficLinesResponse
@@ -7532,7 +7681,7 @@ A method whose driver is no longer installed. No checkout offers it, even when s
 | `kind` | string: `null` or null | yes | Unknown without the driver. |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
 | `config` | object | yes | Not shown, since without the driver it is unknown which settings are secrets. |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -7581,6 +7730,39 @@ An update's step: `download` (fetch and verify the files), `extract` (unpack), `
 
 String: `download`, `extract`, `preflight`, `install`, `done`, `rolled_back`.
 
+### VarizaGatewayConfig
+
+A Variza method's settings (`VarizaMethodRow.config`): the merchant's API key and the webhook's signing secret, kept encrypted and never shown — only whether each is kept and a hint to recognise it —, and the card its payments go to.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `api_key` | [SecretState](#secretstate) | yes |  |
+| `webhook_secret` | [SecretState](#secretstate) | yes |  |
+| `card` | string | yes | `random` (the active card of the merchant's with fewest payments today), `variza` (Variza's cards, settled to a wallet and on in Tether), or the last four digits of one of the merchant's cards at Variza. |
+
+### VarizaMethodRow
+
+A Variza method (variza.ir), an online gateway: the customer transfers the exact sum its page asks to the merchant's card (or Variza's), and Variza confirms it from the bank's text message — its word a webhook it signs, to the shop's address for it —, with no receipt and no review.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `variza` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `config` | [VarizaGatewayConfig](#varizagatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) | yes |  |
+| `updated_at` | string (date-time) | yes |  |
+
 ### WalletMethodRequest
 
 The wallet, the built-in method: its label, its switch and the amounts it is offered for.
@@ -7604,7 +7786,7 @@ The wallet, the built-in method.
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
 | `config` | object | yes | Nothing to configure. |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -7729,7 +7911,7 @@ A lucky wheel («گردونه شانس») slice. Its chance is its weight divide
 | `label` | string | yes | The text the wheel shows. |
 | `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
 | `amount` | string or null | yes | Toman (wallet), GB (traffic) or days (days); null for nothing and plan. |
-| `plan` | [RewardPlanRef](#rewardplanref) or null | yes | For a plan slice: the plan; null once the plan is deleted (then nobody can win it). |
+| `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | For a plan slice: the plan; null once the plan is deleted (then nobody can win it). |
 | `weight` | integer | yes |  |
 | `enabled` | boolean | yes |  |
 | `sort` | integer | yes |  |
@@ -7754,7 +7936,7 @@ A lucky wheel spin: the slice it landed on (as the slice was then) and the resul
 | `given` | boolean | yes | The prize was given (for a plan: ordered). False when it could not be: the cost was refunded and the spin does not count for the cooldown. |
 | `outcome` | string or null | yes | Why it was not given; null when it was. |
 | `order` | [RewardOrderRef](#rewardorderref) or null | yes | For a plan slice: the order that delivered its service. |
-| `subscription` | [RewardServiceRef](#rewardserviceref) or null | yes | The service that got the traffic or days, or the plan's new service. |
+| `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | The service that got the traffic or days, or the plan's new service, by its client's name on the panel. |
 | `created_at` | string (date-time) | yes |  |
 
 ### WheelSpinsResponse
@@ -7785,7 +7967,7 @@ A Zarinpal method (zarinpal.com), an online gateway: the customer pays with any 
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»), Zarinpal's sandbox or AbanGateway's test key («حالت آزمایشی: پولی جابه‌جا نمی‌شود»). Null when it has none (the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always). |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
 | `config` | [ZarinpalGatewayConfig](#zarinpalgatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |

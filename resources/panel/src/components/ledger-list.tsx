@@ -25,7 +25,8 @@ export function LedgerList({ entries }: { entries: LedgerEntry[] }) {
             {entry.credit ? <ArrowUpRight className="size-4" /> : <ArrowDownLeft className="size-4" />}
           </span>
           <div className="min-w-0 flex-1">
-            <div className="truncate">{entry.title}</div>
+            {/* Wrapped, never cut: the title carries the line's note, which the reader may have nowhere else. */}
+            <div className="wrap-break-word">{entry.title}</div>
             <div className="text-footnote text-faint">{entry.detail}</div>
           </div>
           <span dir="ltr" className={cn('font-medium whitespace-nowrap tabular', entry.credit ? 'text-success' : 'text-danger')}>

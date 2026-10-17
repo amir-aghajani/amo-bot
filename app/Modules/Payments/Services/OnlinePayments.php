@@ -28,9 +28,10 @@ use Psr\Log\LoggerInterface;
  * while (Tasks\OnlinePaymentsTask). Paid: settled — its order delivered, or its money to the wallet once the order had
  * closed (PaymentService::settleOnline()) — and the customer told, by whichever call settled it; closed: failed, for the
  * customer to pay again — and settled all the same, should the gateway take money on it later. Waiting with money in at
- * the gateway: marked so (hasMoneyIn()), never given up on by the shop alone. The asks about one payment take turns
- * (a lock file per payment under `$turns`, shared hosting having no lock server): the gateway's answer and what the shop
- * does with it are one step, read afresh — two at once could otherwise settle what the other holds.
+ * the gateway: marked so (hasMoneyIn()), never given up on by the shop alone — closed by the gateway after that, it is
+ * held for support at once. The asks about one payment take turns (one of TURNS lock files under `$turns`, picked by the
+ * payment's id — shared hosting having no lock server): the gateway's answer and what the shop does with it are one
+ * step, read afresh — two at once could otherwise settle what the other holds.
  */
 final class OnlinePayments
 {
@@ -69,7 +70,8 @@ final class OnlinePayments
 
     /**
      * Whether its gateway said money came in on it that it has not settled yet — a part of the sum, a receipt in the
-     * gateway's own review (OnlineVerdict::$moneyIn): asked on long after its page closed (Tasks\OnlinePaymentsTask).
+     * gateway's own review (OnlineVerdict::$moneyIn): asked on long after its page closed (Tasks\OnlinePaymentsTask), and
+     * held for support should the gateway close it.
      */
     public static function hasMoneyIn(Payment $payment): bool
     {
@@ -96,6 +98,26 @@ final class OnlinePayments
     }
 
     /**
+     * A signed webhook's word on the payment (Contracts\SignedWebhook — a gateway that answers no question): kept on it
+     * as its invoice's `heard`, once and while it is unpaid, then acted on as any ask is (check()) — its gateway's check()
+     * reads it. What it came to.
+     *
+     * @param array<string, mixed> $word
+     * @throws GatewayUnavailableException `held`: the payment is support's
+     */
+    public function hear(Payment $payment, array $word): OnlineState
+    {
+        $this->inTurn($payment, static function () use ($payment, $word): void {
+            // Sent again (a gateway retries until it hears a 200): the first word stays.
+            if (!isset($payment->invoice['heard'])) {
+                self::mark($payment, ['heard' => $word]);
+            }
+        });
+
+        return $this->check($payment);
+    }
+
+    /**
      * Gives up on an unpaid payment whose page closed long ago (Tasks\OnlinePaymentsTask): failed, the customer free to
      * pay again. Should the gateway take money on it after all, its callback still settles it (check()).
      */
@@ -111,7 +133,7 @@ final class OnlinePayments
     public function holdUnsettled(Payment $payment, int $hours): void
     {
         $this->inTurn($payment, function () use ($payment, $hours): void {
-            if (!in_array($payment->status, [PaymentStatus::Paid, PaymentStatus::Refunded], true)) {
+            if (!$payment->status->isSettled()) {
                 $this->hold($payment, sprintf('the gateway kept money on payment #%d unsettled for %d hours after its page closed', $payment->id, $hours), null, PaymentService::NOTE_UNSETTLED);
             }
         });
@@ -179,14 +201,15 @@ final class OnlinePayments
 
     /**
      * ask(), its turn taken and the payment read afresh: paid or refunded is paid without asking; never opened on its
-     * gateway, or held and since cancelled by support, is closed; held and still waiting is support's.
+     * gateway, or held and since cancelled by support, is closed; held and still waiting is support's. One the gateway
+     * closes after saying money came in on it is closed, then held (hold()).
      *
      * @return array{OnlineState, OnlineSettlement|null}
-     * @throws GatewayUnavailableException
+     * @throws GatewayUnavailableException `held` when this answer held it
      */
     private function askNow(Payment $payment, ?string $by): array
     {
-        if (in_array($payment->status, [PaymentStatus::Paid, PaymentStatus::Refunded], true)) {
+        if ($payment->status->isSettled()) {
             return [OnlineState::Paid, OnlineSettlement::Decided];
         }
         if ($payment->link === null || (self::isHeld($payment) && !self::awaitsSupport($payment))) {
@@ -218,6 +241,13 @@ final class OnlinePayments
         }
         if ($verdict->state === OnlineState::Closed) {
             $this->payments->closeOnline($payment);
+            // Money it once said came in on it, closed with nothing settled: support looks at the gateway at once.
+            if (self::hasMoneyIn($payment)) {
+                $detail = sprintf('the gateway closed payment #%d after saying money had come in on it', $payment->id);
+                $this->hold($payment, $detail, $by, PaymentService::NOTE_CLOSED_WITH_MONEY);
+
+                throw new GatewayUnavailableException($detail, held: true);
+            }
         } elseif ($verdict->moneyIn && !self::hasMoneyIn($payment) && self::mark($payment, ['money_in' => true])) {
             $this->logger->info('Online payment {id} has money in at its gateway, not settled yet', ['id' => $payment->id]);
         }
@@ -227,9 +257,10 @@ final class OnlinePayments
 
     /**
      * Leaves a payment to support — its gateway answered what does not fit it (another order, a smaller amount, an
-     * underpayment its customer accepted), or kept money on it unsettled too long: never settled by the shop's own asking
-     * from then on — the gateway would only say "verified before" —, its note (`$note`) saying so on the payments screen,
-     * the log what the gateway said, and the report group told once (ShopReports::heldPayment()), in one transaction.
+     * underpayment its customer accepted), kept money on it unsettled too long, or closed it after saying money had come
+     * in on it: never settled by the shop's own asking from then on — the gateway would only say "verified before" —, its
+     * note (`$note`) saying so on the payments screen, the log what the gateway said, and the report group told once
+     * (ShopReports::heldPayment()), in one transaction.
      */
     private function hold(Payment $payment, string $detail, ?string $by, string $note = PaymentService::NOTE_HELD): void
     {

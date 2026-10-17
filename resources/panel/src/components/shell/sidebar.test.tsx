@@ -2,7 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { toast } from 'sonner'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { AGENT_NAV } from '@/apps/agent/nav'
 import { AppShell } from '@/components/shell/app-shell'
 import type { PanelShell } from '@/components/shell/shell-context'
@@ -10,7 +10,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, RequireAuth } from '@/lib/auth'
 import { ThemeProvider } from '@/lib/theme'
-import { PHONE } from '@/lib/use-media-query'
+import { resizeWindow } from '@/test/browser'
 import { testQueryClient, until } from '@/test/render'
 import { json, server } from '@/test/server'
 
@@ -47,21 +47,7 @@ async function showPanel() {
 }
 
 /** The window is a phone's: the sidebar is a drawer behind the topbar's menu. */
-function onAPhone() {
-  vi.spyOn(window, 'matchMedia').mockImplementation(
-    (query) =>
-      ({
-        matches: query === PHONE,
-        media: query,
-        onchange: null,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-        addListener: () => undefined,
-        removeListener: () => undefined,
-        dispatchEvent: () => false,
-      }) satisfies MediaQueryList,
-  )
-}
+const onAPhone = () => resizeWindow(400)
 
 /** The phone's drawer, opened from the topbar. */
 function openDrawer(): HTMLElement {

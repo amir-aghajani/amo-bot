@@ -10,8 +10,9 @@ import { cn } from '@/lib/utils'
  * `destructive` the solid red of a deletion, `danger` its quiet form (`danger-outline` with a red hairline); `link` a
  * button that reads as a link.
  * Local additions to re-apply after a shadcn reinstall: `icon` (drawn before the label), `busy` (the icon becomes a
- * spinner and the button is held), and holding by `aria-disabled` — the button keeps the focus and ignores presses,
- * where `disabled` would drop the keyboard on the document.
+ * spinner and the button is held), holding by `aria-disabled` — the button keeps the focus and ignores presses, where
+ * `disabled` would drop the keyboard on the document —, and the 44px press on a phone (`touch-target`): small ones side
+ * by side keep 44px between their middles there, or the later one's press covers part of the earlier.
  */
 const buttonVariants = cva(
   "relative inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap select-none transition-[background-color,color,box-shadow,opacity] duration-150 outline-none focus-visible:focus-ring disabled:pointer-events-none disabled:opacity-45 aria-disabled:pointer-events-none aria-disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -81,7 +82,8 @@ function Button({
       disabled={disabled}
       aria-disabled={held || undefined}
       aria-busy={busy || undefined}
-      className={cn(buttonVariants({ variant, size, className }))}
+      // A finger's 44px press on a phone, however small it is drawn (index.css's `touch-target`) — not a link in its line.
+      className={cn(buttonVariants({ variant, size }), variant !== 'link' && 'touch-target', className)}
       onClick={held ? (event: React.MouseEvent<HTMLButtonElement>) => event.preventDefault() : onClick}
       {...props}
     >

@@ -15,15 +15,15 @@ import { systemQuery } from '@/lib/queries'
 import { randomToken } from '@/lib/random'
 import { trimmed } from '@/lib/use-form'
 import { useProbe } from '@/lib/use-probe'
-import { originOf } from '@/lib/utils'
 
 /**
  * When a save here reaches the main bot (config.php is read once per process): on webhooks, the next request (a new bot
- * or secret needs the webhook set again); with bot:poll, once it restarts.
+ * or secret needs the webhook set again); by polling (a developer's bot:poll), once it restarts — said without the
+ * command's name, which is no owner's to run.
  */
 const AFTER_SAVE: Record<BotMode, string> = {
   webhook: 'ربات روی Webhook است و مقادیر تازه از پیام بعدی به کار می‌روند؛ اگر توکن ربات دیگری را گذاشتید یا رمز Webhook را عوض کردید، Webhook را پایین‌تر دوباره ثبت کنید.',
-  polling: 'ربات با bot:poll کار می‌کند و مقادیر تازه را وقتی دوباره راه بیفتد می‌خواند؛ روی هاست، Webhook را پایین‌تر ثبت کنید تا از پیام بعدی به کار بروند.',
+  polling: 'ربات با پولینگ کار می‌کند و مقادیر تازه را وقتی دوباره راه بیفتد می‌خواند؛ روی هاست، Webhook را پایین‌تر ثبت کنید تا از پیام بعدی به کار بروند.',
   offline: 'ربات الان پیامی نمی‌گیرد: Webhook را پایین‌تر ثبت کنید.',
 }
 
@@ -77,14 +77,14 @@ export function TelegramSection({ settings, meta, disabled }: { settings: Config
   const { values, set, error, setFormError, busy } = group
   // The token typed, else the stored one.
   const test = useProbe(() => api.post('/settings/config/telegram/test', { token: values.token || undefined }))
-  // A kept token goes only to the Bot API address it was saved for: one moved to another origin is typed again or cleared.
-  const tokenLeftBehind = settings.token.set && values.token === '' && !values.clear_token && originOf(values.api_url) !== originOf(settings.api_url)
   // Every bot's token goes to the Bot API's address: moved to another origin, the owner's password is asked with the save.
   function movesBotApi(address: string): boolean {
     const to = originOrNull(address)
     return to !== null && to !== originOrNull(settings.api_url)
   }
   const moving = movesBotApi(values.api_url)
+  // A kept token goes only to the Bot API address it was saved for: one moved to another origin is typed again or cleared.
+  const tokenLeftBehind = moving && settings.token.set && values.token === '' && !values.clear_token
 
   const check = async () => {
     setFormError(null)
@@ -122,8 +122,18 @@ export function TelegramSection({ settings, meta, disabled }: { settings: Config
           }}
           clear={values.clear_token}
           onClear={(clear) => set('clear_token', clear)}
+          // Moved with the address, the kept one cannot stay: asked again as a moved server secret is (DriverFields).
+          stays={!tokenLeftBehind}
           error={test.failure ? (test.failure.field('token') ?? test.failure.message) : error('token')}
-          hint={tokenLeftBehind ? TOKEN_MOVED : 'از BotFather با دستور /newbot یا /token بگیرید.'}
+          hint={
+            tokenLeftBehind ? (
+              TOKEN_MOVED
+            ) : (
+              <>
+                از BotFather با دستور <bdi dir="ltr">/newbot</bdi> یا <bdi dir="ltr">/token</bdi> بگیرید.
+              </>
+            )
+          }
         />
         <Field id="telegram_username" label="نام کاربری ربات اصلی" optional error={error('username')} hint="بدون @؛ با «بررسی توکن» به‌طور خودکار پر می‌شود.">
           <Input dir="ltr" autoComplete="off" spellCheck={false} value={values.username} onChange={(e) => set('username', e.target.value.replace(/^@/, ''))} placeholder="my_shop_bot" />
@@ -181,10 +191,24 @@ export function TelegramSection({ settings, meta, disabled }: { settings: Config
           error={error('webhook_secret')}
           hint={
             <>
-              بخشی از آدرس Webhook است: <bdi dir="ltr">{meta.webhook_url}</bdi>. بعد از تغییر، Webhook را در کارت «دریافت پیام‌ها» دوباره ثبت کنید.
+              بخشی از آدرس Webhook است:{' '}
+              <bdi dir="ltr" className="break-all">
+                {meta.webhook_url}
+              </bdi>
+              . بعد از تغییر، Webhook را در کارت «دریافت پیام‌ها» دوباره ثبت کنید.
             </>
           }
-          action={<Button variant="secondary" size="icon" icon={RefreshCw} aria-label="تولید رمز تازه" title="تولید رمز تازه" onClick={() => set('webhook_secret', randomToken(24))} />}
+          action={
+            <Button
+              variant="secondary"
+              size="icon"
+              icon={RefreshCw}
+              aria-label="تولید رمز تازه"
+              title="تولید رمز تازه"
+              onClick={() => set('webhook_secret', randomToken(24))}
+              className="max-md:size-11"
+            />
+          }
         />
       </Disclosure>
     </SectionCard>

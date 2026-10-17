@@ -22,7 +22,8 @@ final class DiscountForm
 
     /**
      * `starts_at` and `ends_at` as the panels send them — "2026-03-20T18:00" on the shop's clock (LocalTime::moment()),
-     * whatever the admin's browser says —, returned in UTC; blank or null is open on that side.
+     * whatever the admin's browser says, no later than the shop keeps (LocalTime::LAST_DAY) —, returned in UTC; blank or
+     * null is open on that side.
      *
      * @param array<string, mixed> $input
      * @param array<string, list<string>> $errors
@@ -35,6 +36,11 @@ final class DiscountForm
             $moment = LocalTime::moment($input[$field] ?? null);
             if ($moment === false) {
                 $errors[$field][] = self::NOT_A_MOMENT;
+
+                continue;
+            }
+            if ($moment !== null && LocalTime::tooLate($moment)) {
+                $errors[$field][] = LocalTime::tooLateFor($field === 'starts_at' ? 'زمان شروع' : 'زمان پایان') . '؛ برای بدون محدودیت، خالی بگذارید.';
 
                 continue;
             }

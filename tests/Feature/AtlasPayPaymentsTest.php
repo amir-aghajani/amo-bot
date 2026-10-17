@@ -41,7 +41,8 @@ use Tests\Support\FakeAtlasPay;
  * Telegram account and shows the mini app's link and the sum AtlasPay asks (its markup and last digit apart, never
  * credited; a sum below the order's is refused); its call to the shop — or the shop's own asking — settles a confirmed
  * or settled order; one the customer paid short and AtlasPay took all the same, or an answer not saying the shop's order
- * and sum, is held for support; rejected or expired closes; a receipt or an underpayment in review waits, money in; the
+ * and sum, is held for support; rejected or expired closes; a receipt or an underpayment in review waits, money in — and,
+ * rejected then, is held for support; the
  * card, when AtlasPay gives it, is shown while the page takes money and kept encrypted.
  */
 final class AtlasPayPaymentsTest extends HttpTestCase
@@ -235,7 +236,7 @@ final class AtlasPayPaymentsTest extends HttpTestCase
         }
     }
 
-    public function testARejectedOrExpiredOrderClosesItsPageAndOneInReviewWaits(): void
+    public function testOneInReviewWaitsARejectionAfterItIsHeldForSupportAndAnExpiredOrderClosesItsPage(): void
     {
         $payment = $this->topUp('50000')->payment()->refresh();
         $id = $this->atlasPay->onlyOrder();
@@ -248,13 +249,19 @@ final class AtlasPayPaymentsTest extends HttpTestCase
         self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
 
         $this->atlasPay->reject($id);
-        self::assertSame(OnlineState::Closed, $online->check($payment));
-        self::assertSame([PaymentStatus::Failed, PaymentService::NOTE_LINK_CLOSED], [$payment->refresh()->status, $payment->note]);
-        self::assertSame(OrderStatus::Pending, $payment->order->status, 'the order is still the customer\'s to pay');
+        try {
+            $online->check($payment);
+            self::fail('held for support');
+        } catch (GatewayUnavailableException $e) {
+            self::assertTrue($e->held);
+        }
+        self::assertSame([PaymentStatus::Failed, PaymentService::NOTE_CLOSED_WITH_MONEY], [$payment->refresh()->status, $payment->note], 'money was said to be in: support looks at once');
+        self::assertSame(OrderStatus::Pending, $payment->order->status);
 
         $other = $this->topUp('40000', $this->atlasPayMethod('اطلس‌پی ۲'))->payment()->refresh();
         $this->atlasPay->expire((int) $other->invoice['order_id']);
-        self::assertSame(OnlineState::Closed, $online->check($other));
+        self::assertSame(OnlineState::Closed, $online->check($other), 'nothing came in on it: closed, for the customer to pay again');
+        self::assertSame([PaymentStatus::Failed, PaymentService::NOTE_LINK_CLOSED], [$other->refresh()->status, $other->note]);
     }
 
     public function testTheCardAtlasPayGivesIsShownWhileThePageTakesMoneyAndKeptEncrypted(): void

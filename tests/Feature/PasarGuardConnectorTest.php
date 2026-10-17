@@ -33,7 +33,9 @@ final class PasarGuardConnectorTest extends HttpTestCase
             self::answer(['groups' => [
                 ['id' => 3, 'name' => 'VIP', 'inbound_tags' => ['VLESS TCP', 'Trojan WS'], 'is_disabled' => false, 'total_users' => 4],
                 ['id' => 5, 'name' => 'Old', 'inbound_tags' => [], 'is_disabled' => true, 'total_users' => 0],
-            ], 'total' => 2]),
+                // A panel sets its words no limit: the shop keeps what its columns hold.
+                ['id' => 7, 'name' => str_repeat('آلمان ', 60), 'inbound_tags' => array_map(static fn(int $i): string => "VLESS Reality {$i}", range(1, 12)), 'is_disabled' => false, 'total_users' => 0],
+            ], 'total' => 3]),
         );
 
         $response = $this->postJson('/api/admin/servers', self::form(['base_url' => 'https://pg.example:8000/']));
@@ -55,9 +57,12 @@ final class PasarGuardConnectorTest extends HttpTestCase
         $server = Server::query()->findOrFail($data['server']['id']);
         self::assertNotSame(self::KEY, $server->getRawOriginal('api_token'), 'stored encrypted');
         $groups = $server->inbounds()->oldest('id')->get();
-        self::assertSame(['3', '5'], $groups->pluck('remote_key')->all());
-        self::assertSame(['VIP', 'Old'], $groups->pluck('remark')->all());
-        self::assertSame([true, false], $groups->pluck('enabled')->all());
+        self::assertSame(['3', '5', '7'], $groups->pluck('remote_key')->all());
+        self::assertSame(['VIP', 'Old'], $groups->pluck('remark')->take(2)->all());
+        self::assertSame([true, false, true], $groups->pluck('enabled')->all());
+        $long = $groups->last();
+        self::assertSame([255, 128], [mb_strlen((string) $long?->remark), mb_strlen((string) $long?->tag)], 'cut to what server_inbounds keeps');
+        self::assertStringEndsWith('…', (string) $long?->tag);
     }
 
     public function testARefusedKeyIsExplainedInPersianWithWhereToMakeAnother(): void

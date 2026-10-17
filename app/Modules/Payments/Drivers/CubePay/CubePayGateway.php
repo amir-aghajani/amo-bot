@@ -6,13 +6,12 @@ namespace App\Modules\Payments\Drivers\CubePay;
 
 use App\Modules\Payments\Contracts\OnlineGateway;
 use App\Modules\Payments\Drivers\GatewayHttp;
+use App\Modules\Payments\Drivers\OnlinePage;
 use App\Modules\Payments\DTO\CardTransfer;
 use App\Modules\Payments\DTO\OnlineInvoice;
 use App\Modules\Payments\DTO\OnlineRequest;
 use App\Modules\Payments\DTO\OnlineVerdict;
-use App\Modules\Payments\DTO\PayLink;
 use App\Modules\Payments\DTO\PaymentInitiation;
-use App\Modules\Payments\DTO\PaymentResult;
 use App\Modules\Payments\Exceptions\GatewayUnavailableException;
 use App\Modules\Payments\Models\Payment;
 use App\Support\Money;
@@ -28,10 +27,12 @@ use GuzzleHttp\ClientInterface;
  * delivered and credited at its own price. Its details kept on the payment (`payments.invoice`): the order's id at
  * CubePay, a card payment's authority, what CubePay was asked for (`price`) and of it the fee (`fee`), the exact sum the
  * page asks (`pay_amount`: CubePay adds a few Toman to tell transfers apart) and, when CubePay said that sum, the card
- * it gave and whether the merchant asked CubePay to show it in the bot.
+ * it gave and whether the merchant asked CubePay to show it in the bot. A card payment's authority is its reference.
  */
 final class CubePayGateway implements OnlineGateway
 {
+    use OnlinePage;
+
     public const CREATE = 'https://cubevps.ir/pay/create-order.php';
     public const VERIFY = 'https://cubevps.ir/smspay/api/verify-payment.php';
     public const STATUS = 'https://cubevps.ir/pay/check-order-status.php';
@@ -47,9 +48,6 @@ final class CubePayGateway implements OnlineGateway
 
     /** Minutes a page takes money when CubePay says nothing of it: its router's hour. */
     private const MINUTES = 60;
-
-    /** The longest of CubePay's own words a log line keeps. */
-    private const SAID_MAX = 200;
 
     /**
      * @param string $feePercent The percent of the amount the customer pays as CubePay's fee: Latin digits, up to two
@@ -84,15 +82,12 @@ final class CubePayGateway implements OnlineGateway
      */
     public function initiate(Payment $payment): PaymentInitiation
     {
-        if ($payment->link === null) {
-            return PaymentInitiation::instant();
-        }
         $invoice = $payment->invoice ?? [];
         $exact = is_int($invoice['pay_amount'] ?? null) && $invoice['pay_amount'] > 0 ? $invoice['pay_amount'] : null;
         $asked = match (true) {
             $exact !== null => Money::normalize($exact),
             is_int($invoice['price'] ?? null) && $invoice['price'] > 0 => Money::normalize($invoice['price']),
-            default => $payment->amount,
+            default => null,
         };
         $fee = is_int($invoice['fee'] ?? null) && $invoice['fee'] > 0 ? Money::normalize($invoice['fee']) : null;
         $card = $invoice['card'] ?? null;
@@ -100,13 +95,7 @@ final class CubePayGateway implements OnlineGateway
             ? new CardTransfer($card['number'], is_string($card['holder'] ?? null) && $card['holder'] !== '' ? $card['holder'] : null, '')
             : null;
 
-        return PaymentInitiation::link(new PayLink($payment->link, $payment->link_expires_at?->toDateTimeImmutable(), $asked, $shown, $fee));
-    }
-
-    /** CubePay said it was paid before this runs (Services\OnlinePayments): its authority, if it has one, is the reference. */
-    public function settle(Payment $payment): PaymentResult
-    {
-        return PaymentResult::success($payment->reference);
+        return $this->page($payment, $asked, $shown, $fee);
     }
 
     public function open(Payment $payment, OnlineRequest $request): OnlineInvoice
@@ -264,7 +253,7 @@ final class CubePayGateway implements OnlineGateway
      */
     private static function refusal(string $what, int $status, array $answer): string
     {
-        $said = is_string($answer['message'] ?? null) ? mb_substr($answer['message'], 0, self::SAID_MAX) : '';
+        $said = GatewayHttp::said($answer['message'] ?? null);
         $meaning = match ($status) {
             401 => ' — the API token is wrong: set the one @cubepy_bot gives in the payment method',
             403 => ' — the merchant account is not approved yet',

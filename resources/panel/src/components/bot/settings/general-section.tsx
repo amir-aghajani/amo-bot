@@ -7,14 +7,19 @@ import { SwitchRow } from '@/components/switch-row'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotGeneralSettingsRequest, BotSettingsData } from '@/lib/api-types'
+import { queryKeys } from '@/lib/query-keys'
 
 /**
  * The master switch, the phone rule, and the way to support — which card payments in support's private chat need: with
  * that switch on («پرداخت کارت به کارت»), an emptied contact is warned of, since the bot then shows the card again.
  */
 export function GeneralSection({ settings }: { settings: BotSettingsData }) {
-  const group = useBotSettingsGroup({ enabled: settings.enabled, phone_required: settings.phone_required, support_contact: settings.support_contact } satisfies BotGeneralSettingsRequest, (values) =>
-    api.put('/bot/settings/general', values),
+  const group = useBotSettingsGroup(
+    { enabled: settings.enabled, phone_required: settings.phone_required, support_contact: settings.support_contact } satisfies BotGeneralSettingsRequest,
+    (values) => api.put('/bot/settings/general', values),
+    // The owner's dashboard says the bot is off by its switch («غیرفعال از تنظیمات»), and a card-to-card method whether
+    // its card is given in support's chat — which the contact here decides with «پرداخت کارت به کارت» (`to_support`).
+    { invalidates: [queryKeys.system, queryKeys.paymentMethods] },
   )
   const { values, set, error } = group
   const cardsBack = settings.card_to_support && values.support_contact.trim() === ''
@@ -23,7 +28,7 @@ export function GeneralSection({ settings }: { settings: BotSettingsData }) {
     <SectionCard form={group} title="عمومی" description="روشن و خاموش کردن ربات، تایید شماره مشتری و راه تماس با پشتیبانی.">
       <SwitchRow
         label="ربات فعال باشد"
-        hint="خاموش که باشد، ربات به هر پیام مشتری فقط یک اطلاعیه غیرفعال بودن می‌دهد و منو را برمی‌دارد. برای تعطیلی موقت یا وقتی سرورها در دسترس نیستند."
+        hint="خاموش که باشد، ربات به هر پیام مشتری فقط یک اطلاعیه غیرفعال بودن می‌دهد و منو را برمی‌دارد، و وب‌سایت فروشگاه هم سفارش نمی‌گیرد. برای تعطیلی موقت یا وقتی سرورها در دسترس نیستند."
         checked={values.enabled}
         onCheckedChange={(checked) => set('enabled', checked)}
         error={error('enabled')}

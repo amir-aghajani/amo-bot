@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api'
 import { useJobRunner } from '@/lib/use-job-runner'
@@ -88,6 +89,19 @@ describe('a job under way on a card', () => {
     await wait(60_000)
     expect(asked).toHaveLength(1)
     expect(ended).not.toHaveBeenCalled()
+  })
+
+  it('stops at a failure of the panel’s own code — said and reported, never asked again in silence', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(toast, 'error')
+    const bug = new TypeError('x is undefined')
+    const { asked, read } = card(() => bug)
+
+    await until(() => expect(consoleError).toHaveBeenCalledWith('The panel failed:', bug))
+    expect(toast.error).toHaveBeenCalled()
+    await wait(60_000)
+    expect(asked).toHaveLength(1)
+    expect(read()).not.toContainEqual(CHANGED)
   })
 
   it('is left unfinished when the card goes — nothing more asked, nothing read again —, and another job starts its own run', async () => {

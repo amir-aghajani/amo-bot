@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Admin\Api;
 
+use App\Core\Exceptions\KeyReusedException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Auth\Principal;
+use App\Modules\Store\Http\IdempotencyKey;
 use App\Modules\Support\Exceptions\AttachmentUnavailableException;
 use App\Modules\Support\Models\Ticket;
 use App\Modules\Support\Models\TicketMessage;
@@ -48,14 +50,16 @@ final class TicketsController extends ApiController
     }
 
     /**
-     * POST /tickets/{id}/messages — {body}, and `file` as a form: support's answer
+     * POST /tickets/{id}/messages — {body}, and `file` as a form: support's answer; with an Idempotency-Key if the caller
+     * sends one, the same answer again finds the one the key wrote.
      *
      * @param array<string, string> $args
      * @throws ValidationException 422
+     * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another answer
      */
     public function answer(Request $request, Response $response, array $args): Response
     {
-        $this->support->answer($this->find($args), Principal::of($request)->actor(), $this->input($request), $this->uploadedFile($request));
+        $this->support->answer($this->find($args), Principal::of($request)->actor(), $this->input($request), $this->uploadedFile($request), IdempotencyKey::optional($request));
 
         return $this->ticket($response, $args);
     }

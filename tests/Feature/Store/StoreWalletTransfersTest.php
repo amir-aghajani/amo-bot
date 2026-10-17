@@ -117,7 +117,7 @@ final class StoreWalletTransfersTest extends HttpTestCase
         $feed = $this->decode($this->get($this->storeApi($this->website, '/notifications')))['notifications'];
         self::assertSame([NoticeType::WalletSent->value], array_column($feed, 'type'), "the sender's own notice");
         $lines = $this->decode($this->get($this->storeApi($this->website, '/wallet/transactions')))['transactions'];
-        self::assertSame(['debit', '30000.00', 'انتقال موجودی به Sara (@sara)'], [$lines[0]['type'], $lines[0]['amount'], $lines[0]['description']]);
+        self::assertSame(['debit', '30000.00', "انتقال موجودی به \u{200E}Sara (\u{200E}@sara)"], [$lines[0]['type'], $lines[0]['amount'], $lines[0]['description']]);
 
         $this->bearer($this->customerSession($this->sara));
         $feed = $this->decode($this->get($this->storeApi($this->website, '/notifications')))['notifications'];

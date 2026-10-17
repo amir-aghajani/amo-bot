@@ -21,7 +21,7 @@ use App\Modules\Providers\Models\Server;
  * prefix its subscription links start with, and for a panel the shop's host cannot reach directly, the SOCKS5 proxy its
  * requests go through. Kept in `servers.base_url`, `servers.meta` and the `proxy_*` columns (its password encrypted),
  * read back by of(). Every connector's form uses the same fields for them — address() with the connector's own rule,
- * options() under «تنظیمات پیشرفته» — and binds the way in's secrets to the address's host (bound()).
+ * options() under «تنظیمات پیشرفته» — and binds the way in's secrets to the address's host and the way there (bound()).
  */
 final class PanelConnection
 {
@@ -40,13 +40,18 @@ final class PanelConnection
     /** The field of the panel's address, which the way in's secrets are bound to. */
     public const ADDRESS = 'base_url';
 
+    /** How a refusal of a way in's secret left blank while what it is bound to changed (bound()) begins: the secret's words follow. */
+    public const MOVED = 'آدرس پنل، پراکسی یا بررسی گواهی TLS عوض شده است؛ ';
+
     /** The longest address kept (servers.base_url, and the subscription links' prefix). */
     private const ADDRESS_MAX = 255;
 
     /** Seconds a request may take unless the server sets its own. */
     public const DEFAULT_TIMEOUT = 30;
     private const MIN_TIMEOUT = 5;
-    private const MAX_TIMEOUT = 120;
+
+    /** The longest a server may give its panel's requests: what the longest delivery is sized by (ProvisioningService). */
+    public const MAX_TIMEOUT = 120;
 
     /** A host that does not answer at all is given up on early; one that answers slowly gets the whole timeout. */
     private const CONNECT_TIMEOUT = 10;
@@ -80,8 +85,9 @@ final class PanelConnection
     }
 
     /**
-     * The panel's address and its subscription links' prefix ('' for the panel's own) — read from `base_url` and `meta`
-     * alone, so a row of those two columns will do, and no proxy password is decrypted for them.
+     * The panel's address and its subscription links' prefix ('' for the panel's own), each without a trailing slash —
+     * read from `base_url` and `meta` alone, so a row of those two columns will do, and no proxy password is decrypted
+     * for them.
      *
      * @return array{string, string}
      */
@@ -89,7 +95,13 @@ final class PanelConnection
     {
         $subscriptionUrl = $server->meta['subscription_url'] ?? null;
 
-        return [rtrim(trim($server->base_url), '/'), is_string($subscriptionUrl) ? $subscriptionUrl : ''];
+        return [self::bare($server->base_url), is_string($subscriptionUrl) ? self::bare($subscriptionUrl) : ''];
+    }
+
+    /** An address as the links are built on it: trimmed, without its trailing slash. */
+    private static function bare(string $address): string
+    {
+        return rtrim(trim($address), '/');
     }
 
     /**
@@ -185,7 +197,7 @@ final class PanelConnection
                     '',
                     pattern: '/^[^\x00-\x1f\x7f]{1,255}$/u',
                     mismatch: 'رمز پراکسی حداکثر 255 کاراکتر است، بدون کاراکترهای کنترلی.',
-                    hint: static fn(string $password): string => '••••••••',
+                    hint: Secret::hidden(),
                     boundTo: ['proxy_host' => null, 'proxy_port' => null],
                     moved: 'آدرس یا پورت پراکسی عوض شده است؛ رمز پراکسی را دوباره وارد کنید.',
                     spec: new FieldSpec('رمز پراکسی', advanced: true, when: self::WITH_PROXY),
@@ -209,14 +221,15 @@ final class PanelConnection
 
     /**
      * What a secret of the way in is bound to (Secret::$boundTo): the panel's address by its origin (scheme, host, port;
-     * another path is the same panel). When the address moves to another host, a kept secret is never sent there: it
-     * must be typed again.
+     * another path is the same panel), and the way a request takes there — the proxy's host and port, and the TLS check,
+     * without which a proxy could read what goes through it. When one of them changes, a kept secret is never sent the
+     * new way: it must be typed again. A proxy switched off sends it straight to the panel it was given for: no change.
      *
-     * @return array<string, \Closure(mixed): ?string>
+     * @return array<string, (\Closure(mixed): ?string)|null>
      */
     public static function bound(): array
     {
-        return [self::ADDRESS => Secret::byOrigin()];
+        return [self::ADDRESS => Secret::byOrigin(), 'proxy_host' => null, 'proxy_port' => null, 'verify_tls' => null];
     }
 
     /**

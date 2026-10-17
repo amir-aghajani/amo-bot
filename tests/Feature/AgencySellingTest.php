@@ -64,7 +64,8 @@ use Tests\BotTestCase;
  * — in the bot, the agent's own words, a message at the step tapped or typed —, while the bot, its services and the
  * delivery of what was paid run on, and the agent still buys traffic. A Jalali month
  * on the shop's clock below the minimum suspends once it is over; buying this month's minimum lifts it at once; an end
- * extended lifts its own. The agent and the owner's report group hear each step once.
+ * extended lifts its own — but for last month's minimum, judged then. The agent and the owner's report group hear each
+ * step once.
  */
 final class AgencySellingTest extends BotTestCase
 {
@@ -210,6 +211,78 @@ final class AgencySellingTest extends BotTestCase
 
         self::assertSame([null, '1405-08'], [$this->bot->refresh()->sellingSuspension(), $this->bot->minimum_checked_month], 'Aban judged; Azar already reached it');
         self::assertSame([], $this->toAgent(), 'no suspension told and lifted at once');
+    }
+
+    public function testAnEndLiftedOverAMinimumsSuspensionLeavesTheShopSuspendedForTheMinimum(): void
+    {
+        $this->wallet($this->agent, '5000000');
+        $this->sellingTerms($this->bot, Carbon::parse('2026-12-01 12:00:00'), '500000');
+        Carbon::setTestNow('2026-11-21 21:00:00'); // 1 Azar, 00:30 in Tehran: Aban, with nothing bought, is over
+        $this->judge();
+        self::assertSame(SellingSuspension::Minimum, $this->bot->refresh()->suspension_reason);
+
+        Carbon::setTestNow('2026-12-01 12:00:00');
+        $this->judge();
+        self::assertSame(SellingSuspension::Expired, $this->bot->refresh()->suspension_reason, 'the end passed: its reason stands over the minimum\'s');
+
+        $this->telegram()->reset();
+        $this->sellingTerms($this->bot, Carbon::parse('2027-03-01 12:00:00'), '500000');
+
+        self::assertSame([SellingSuspension::Minimum, '1405-08'], [$this->bot->refresh()->sellingSuspension(), $this->bot->minimum_checked_month], 'extended: Aban still fell short, and Azar has not reached it');
+        self::assertSame([self::text(BotText::AgencySuspended, ['reason' => SellingSuspension::Minimum->words(), 'note' => ''])], $this->toAgent(), 'told why it stays shut — never that it sells');
+
+        $this->buyTraffic(200);
+        self::assertNull($this->bot->refresh()->sellingSuspension(), "Azar's 600,000 lift it, as ever");
+    }
+
+    public function testAMonthEndedWhileThePassedEndHeldTheShopIsJudgedAsTheEndIsLifted(): void
+    {
+        $this->wallet($this->agent, '5000000');
+        $this->sellingTerms($this->bot, Carbon::parse('2026-11-15 12:00:00'), '500000');
+        Carbon::setTestNow('2026-11-15 13:00:00'); // 24 Aban
+        $this->judge();
+        Carbon::setTestNow('2026-11-22 10:00:00'); // 1 Azar: Aban over, nothing bought in it
+        $this->judge();
+        self::assertSame([SellingSuspension::Expired, '1405-07'], [$this->bot->refresh()->suspension_reason, $this->bot->minimum_checked_month], 'Aban waits for the end to lift');
+
+        $this->sellingTerms($this->bot, Carbon::parse('2027-03-01 12:00:00'), '500000');
+        self::assertSame(SellingSuspension::Minimum, $this->bot->refresh()->sellingSuspension(), 'judged as the end lifted: short');
+    }
+
+    public function testAnEndLiftedOnceThisMonthReachedTheMinimumSells(): void
+    {
+        $this->wallet($this->agent, '5000000');
+        $this->sellingTerms($this->bot, Carbon::parse('2026-11-15 12:00:00'), '500000');
+        Carbon::setTestNow('2026-11-15 13:00:00');
+        $this->judge();
+        Carbon::setTestNow('2026-11-22 10:00:00'); // 1 Azar
+        $this->judge();
+        $this->buyTraffic(200);
+
+        $this->telegram()->reset();
+        $this->sellingTerms($this->bot, Carbon::parse('2027-03-01 12:00:00'), '500000');
+
+        self::assertSame([null, '1405-08'], [$this->bot->refresh()->sellingSuspension(), $this->bot->minimum_checked_month], 'Aban fell short, but Azar reached it: it sells, Aban judged');
+        self::assertSame([self::text(BotText::AgencyResumed)], $this->toAgent());
+    }
+
+    public function testTrafficReadForItsDeliveryBeforeTheShopWasSuspendedStillLiftsTheSuspension(): void
+    {
+        $this->sellingTerms($this->bot, null, '500000');
+        Carbon::setTestNow('2026-11-21 21:00:00'); // 1 Azar, 00:30 in Tehran: Aban, with nothing bought, is over
+        $orders = $this->service(OrderService::class);
+        // Azar's minimum, paid and read for its delivery with the agent's shop as it was then.
+        $order = $orders->openTraffic($this->agent, 200);
+        self::assertTrue($orders->markPaid($order));
+        $order->load(OrderService::DELIVERY_RELATIONS);
+        // The hour's task suspends the shop for Aban before the delivery is done.
+        $this->judge();
+        self::assertSame(SellingSuspension::Minimum, $this->bot->refresh()->sellingSuspension());
+
+        self::assertTrue($orders->deliver($order));
+
+        self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status);
+        self::assertNull($this->bot->refresh()->sellingSuspension(), "Azar's 600,000 reach it: it sells again at once, not an hour later");
     }
 
     public function testEverySellingDoorIsShutWhileSuspendedAndOpensAgain(): void
@@ -437,6 +510,24 @@ final class AgencySellingTest extends BotTestCase
         self::assertStringContainsString(self::text(BotText::AgencyExpiryLine, ['date' => Persian::date($end, withTime: true)]), $text);
         self::assertStringContainsString(self::text(BotText::AgencyMonthLine, ['month' => 'مهر ۱۴۰۵', 'purchased' => Money::format('150000'), 'minimum' => Money::format('500000')]), $text);
         self::assertStringContainsString(self::text(BotText::AgencySellingLine, ['reason' => SellingSuspension::Manual->words()]), $text);
+    }
+
+    /** A line of the terms the admin emptied is left out — no empty line where it stood. */
+    public function testATermsLineTheAdminEmptiedLeavesNoEmptyLine(): void
+    {
+        $this->wallet($this->agent, '5000000');
+        $end = Carbon::parse('2026-12-01 12:00:00');
+        $this->sellingTerms($this->bot, $end, '500000');
+        $this->service(AgencyStanding::class)->suspendByHand($this->bot, null);
+        $this->service(BotTexts::class)->save(BotText::AgencyMonthLine, '');
+
+        $this->send($this->message('/start', chat: self::AGENT_TELEGRAM_ID));
+        $this->send($this->tap(MainMenu::AGENCY, chat: self::AGENT_TELEGRAM_ID));
+
+        self::assertStringContainsString(
+            self::text(BotText::AgencyExpiryLine, ['date' => Persian::date($end, withTime: true)]) . "\n" . self::text(BotText::AgencySellingLine, ['reason' => SellingSuspension::Manual->words()]),
+            $this->said()[0],
+        );
     }
 
     /** The hourly task, as the scheduler runs it. */

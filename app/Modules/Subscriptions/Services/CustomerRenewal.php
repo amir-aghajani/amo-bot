@@ -16,6 +16,7 @@ use App\Modules\Subscriptions\DTO\RenewalWindow;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
 use App\Modules\Subscriptions\Enums\RenewalRefusal;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -82,6 +83,8 @@ final class CustomerRenewal
      * OrderService orders at without a code), and the service as the renewal would leave it — from the row's last copy
      * of the panel's numbers, nothing saved and no panel asked (the delivery reads the panel first). Null while there is
      * none: refusal() says why.
+     *
+     * @throws TermTooLongException when the renewal would end the service past the last day the shop keeps
      */
     public function preview(Subscription $subscription, int|CustomPrice|null $with = null, ?RenewalMethod $method = null): ?RenewalPreview
     {
@@ -174,22 +177,24 @@ final class CustomerRenewal
      * and what opens it otherwise. Any time once it has ended — its status says so, or it is past its deadline or out
      * of traffic before a sync did —, or while the shop holds no service back (both 0). A running one once its deadline
      * is within the window's days, or once at most the window's percent of its traffic is left: one whose clock has not
-     * started, or that never ends, has no deadline to come near, and only its traffic lets it in. A service switched
-     * off or gone is no matter of the window (planFor() refuses it). Automatic renewal goes by its own days.
+     * started has no deadline to come near yet, and only its traffic lets it in before then. One that never ends by time
+     * has no deadline to wait for: only its traffic holds it back — with no percent for it (none set, or no quota), it is
+     * let in at once, the window's days being nothing it could come within. A service switched off or gone is no matter of
+     * the window (planFor() refuses it). Automatic renewal goes by its own days.
      */
     public function window(Subscription $subscription): RenewalWindow
     {
         $days = $this->settings->windowDays();
         $percent = $this->settings->windowPercent();
         $runs = $subscription->isActive() && !$subscription->isExpiredByTime() && !$subscription->isExpiredByTraffic();
-        if (!$runs || ($days === 0 && $percent === 0)) {
+        $limit = $subscription->traffic_limit_bytes;
+        $byTraffic = $percent > 0 && $limit > 0;
+        if (!$runs || ($days === 0 && $percent === 0) || (!$subscription->hasTerm() && !$byTraffic)) {
             return new RenewalWindow(true);
         }
 
         $deadline = $subscription->expires_at;
         $opensAt = $days > 0 && $deadline !== null ? $deadline->copy()->subDays($days) : null;
-        $limit = $subscription->traffic_limit_bytes;
-        $byTraffic = $percent > 0 && $limit > 0;
         if (($opensAt !== null && $opensAt->lessThanOrEqualTo(now())) || ($byTraffic && ($subscription->remainingBytes() ?? 0) * 100 <= $limit * $percent)) {
             return new RenewalWindow(true);
         }

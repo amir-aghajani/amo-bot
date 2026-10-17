@@ -1,4 +1,3 @@
-import { Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useConfigGroup } from '@/apps/admin/settings/use-config-group'
 import { driverDraft, driverPayload, type DriverDraft } from '@/components/driver-form/draft'
@@ -7,6 +6,7 @@ import { DriverPicker } from '@/components/driver-form/driver-picker'
 import { Field } from '@/components/field'
 import { FormError } from '@/components/form-footer'
 import { SectionCard } from '@/components/section-card'
+import { SendIcon } from '@/components/send-icon'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -136,7 +136,7 @@ export function MailTestCard() {
                   placeholder="you@example.com"
                   className="min-w-0 flex-1"
                 />
-                <Button type="submit" variant="secondary" icon={Send} busy={form.busy}>
+                <Button type="submit" variant="secondary" icon={SendIcon} busy={form.busy}>
                   ارسال
                 </Button>
               </div>

@@ -31,11 +31,11 @@ final class BotRandomTopUpsTest extends BotTestCase
         $this->send($this->tap(TopUpHandler::START));
 
         self::assertSame([
-            [TopUpHandler::checkoutCallback(50000), TopUpHandler::checkoutCallback(100000)],
-            [TopUpHandler::checkoutCallback(200000), TopUpHandler::checkoutCallback(500000)],
+            [TopUpHandler::checkoutCallback(100000), TopUpHandler::checkoutCallback(50000)],
+            [TopUpHandler::checkoutCallback(500000), TopUpHandler::checkoutCallback(200000)],
             ['topup:custom'],
             [MainMenu::WALLET],
-        ], $this->rows());
+        ], $this->rows(), 'two a row in reading order: the smaller on the right');
     }
 
     public function testTheAmountsDrawnComeAfterThePresetsAndEachOpensItsCheckout(): void
@@ -46,12 +46,12 @@ final class BotRandomTopUpsTest extends BotTestCase
         $this->send($this->tap(TopUpHandler::START));
 
         self::assertSame([
-            [TopUpHandler::checkoutCallback(50000), TopUpHandler::checkoutCallback(61000)],
-            [TopUpHandler::checkoutCallback(60000), TopUpHandler::checkoutCallback(62000)],
+            [TopUpHandler::checkoutCallback(61000), TopUpHandler::checkoutCallback(50000)],
+            [TopUpHandler::checkoutCallback(62000), TopUpHandler::checkoutCallback(60000)],
             ['topup:custom'],
             [MainMenu::WALLET],
         ], $this->rows());
-        self::assertSame([Money::format(60000), Money::format(62000)], array_column($this->inlineKeyboard(0)[1], 'text'), 'worded as the presets are');
+        self::assertSame([Money::format(62000), Money::format(60000)], array_column($this->inlineKeyboard(0)[1], 'text'), 'worded as the presets are');
 
         $this->send($this->tap(TopUpHandler::checkoutCallback(62000)));
         self::assertSame([self::text(BotText::TopupCheckout, ['amount' => Money::format(62000)])], $this->said());

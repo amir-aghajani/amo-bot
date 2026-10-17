@@ -65,6 +65,36 @@ final class ProviderErrorPresenter
         return $detail === '' ? $message : "{$message} ({$detail})";
     }
 
+    /**
+     * A line join() made, apart again — the screens show the detail on a line of its own, left to right: the parentheses
+     * that close it, after a diagnosis (which ends with its full stop). A line of another shape is all diagnosis.
+     *
+     * @return array{message: string, detail: string}
+     */
+    public static function split(string $line): array
+    {
+        if (str_ends_with($line, ')')) {
+            // Back to the parenthesis that opens the last one, bytewise: a parenthesis is never part of another UTF-8 character.
+            $depth = 0;
+            for ($open = strlen($line) - 1; $open > 0; $open--) {
+                $depth += match ($line[$open]) {
+                    ')' => 1,
+                    '(' => -1,
+                    default => 0,
+                };
+                if ($depth === 0) {
+                    $message = substr($line, 0, $open - 1);
+                    if ($line[$open - 1] === ' ' && str_ends_with($message, '.')) {
+                        return ['message' => $message, 'detail' => substr($line, $open + 1, -1)];
+                    }
+                    break;
+                }
+            }
+        }
+
+        return ['message' => $line, 'detail' => ''];
+    }
+
     private static function connection(ConnectionFailure $failure): string
     {
         return match ($failure) {

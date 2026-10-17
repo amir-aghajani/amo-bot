@@ -29,7 +29,7 @@ function overview(orders: number, days: 7 | 30 = 30): DashboardResponse {
       users_total: 40,
     },
     series: [],
-    attention: { payments_to_review: 0, stuck_orders: 0, open_tickets: 0, pending_reviews: 0, pending_orders: 0, servers_with_errors: 0, expiring_soon: 0 },
+    attention: { payments_to_review: 0, stuck_orders: 0, open_tickets: 0, pending_reviews: 0, held_payments: 0, servers_with_errors: 0, pending_orders: 0, expiring_soon: 0 },
     traffic_shortage: null,
     agency_standing: null,
     expiring_days: 3,

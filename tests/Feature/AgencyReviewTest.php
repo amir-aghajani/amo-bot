@@ -8,6 +8,7 @@ use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Agency\Services\AgencyActions;
+use App\Modules\Agency\Services\AgencySettings;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\AgencyReview;
@@ -15,6 +16,7 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
+use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 
 /**
@@ -53,7 +55,7 @@ final class AgencyReviewTest extends BotTestCase
         $request = AgencyRequest::query()->sole();
         $report = ReportMessage::query()->where('topic', 'agency')->sole();
         self::assertSame("agency:{$request->id}", $report->ref);
-        self::assertStringContainsString("🤝 <b>درخواست نمایندگی</b> · #{$request->id}", $report->text);
+        self::assertStringContainsString("🤝 <b>درخواست نمایندگی</b> · \u{200E}#{$request->id}", $report->text);
         self::assertStringContainsString('<code>' . self::CHAT . '</code>', $report->text, 'who asked');
         self::assertStringContainsString('📝 توضیح مشتری: کانال فروش دارم', $report->text);
         self::assertSame(AgencyReview::buttons($request->id), (array) $report->keyboard);
@@ -67,9 +69,9 @@ final class AgencyReviewTest extends BotTestCase
 
         $this->send($this->press("ag:ok:{$request->id}"));
         self::assertSame(['editMessageReplyMarkup', 'answerCallbackQuery'], $this->calls());
-        self::assertSame(["ag:lv:{$request->id}:{$this->level->id}", "ag:lv:{$request->id}:{$other->id}", "ag:bk:{$request->id}"], $this->callbacks(0), 'a level a button, in their order, then back');
+        self::assertSame(["ag:lv:{$request->id}:{$other->id}", "ag:lv:{$request->id}:{$this->level->id}", "ag:bk:{$request->id}"], $this->callbacks(0), 'a level a button, in their order — the first on the right —, then back');
         $labels = array_column(array_merge(...$this->inlineKeyboard(0)), 'text');
-        foreach ([[$this->level, $labels[0]], [$other, $labels[1]]] as [$level, $label]) {
+        foreach ([[$this->level, $labels[1]], [$other, $labels[0]]] as [$level, $label]) {
             self::assertStringContainsString($level->name, $label);
             self::assertStringContainsString(Money::format($level->price_per_gb), $label, 'named with its price per GB');
         }
@@ -142,6 +144,24 @@ final class AgencyReviewTest extends BotTestCase
         self::assertSame(['editMessageReplyMarkup', 'answerCallbackQuery'], $this->calls());
         self::assertSame('این درخواست رد شده است.', $this->popup(), 'what it came to');
         self::assertSame(AgencyRequestStatus::Rejected, $request->refresh()->status);
+        self::assertFalse($this->customer->refresh()->isAgent());
+    }
+
+    public function testTermsRefusedAsTheyStandKeepTheRequestsButtonsForAnotherTry(): void
+    {
+        $request = $this->agencyRequest($this->customer);
+        // The program's term would end the agency past the last day the shop keeps (LocalTime::LAST_DAY).
+        Carbon::setTestNow('2030-01-01 12:00:00');
+        $settings = $this->service(AgencySettings::class);
+        $settings->save(['term_days' => AgencySettings::TERM_MAX_DAYS] + $settings->present());
+
+        $this->send($this->press("ag:lv:{$request->id}:{$this->level->id}"));
+
+        self::assertSame(['editMessageReplyMarkup', 'answerCallbackQuery'], $this->calls());
+        self::assertSame(AgencyReview::buttons($request->id), $this->buttonsUnder(self::REQUEST_POST), "the request's buttons back, never taken off");
+        self::assertSame('true', $this->params(1)['show_alert']);
+        self::assertStringContainsString('تاریخ پایان نمایندگی نمی‌تواند بعد از', (string) $this->popup(), 'why, in a popup');
+        self::assertSame(AgencyRequestStatus::Pending, $request->refresh()->status);
         self::assertFalse($this->customer->refresh()->isAgent());
     }
 

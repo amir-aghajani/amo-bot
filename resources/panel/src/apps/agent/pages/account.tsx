@@ -13,7 +13,7 @@ import { ConfirmModal } from '@/components/confirm-modal'
 import { ErrorState } from '@/components/error-state'
 import { Fact, FactList } from '@/components/fact-list'
 import { Dash } from '@/components/list-view'
-import { Page } from '@/components/page'
+import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { StatCard, StatGrid } from '@/components/stat-card'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,9 @@ import { queryKeys } from '@/lib/query-keys'
  * signing out other browsers. Traffic is bought, and the bot's token handed over, in the main bot.
  */
 export function AccountPage() {
-  const { data, error, isPending, refetch } = useQuery(accountQuery)
+  const read = useQuery(accountQuery)
+  const { data, isPending, refetch } = read
+  const failure = useReadFailure(read)
 
   const account = data?.account
   const bot = account?.bot
@@ -44,7 +46,7 @@ export function AccountPage() {
         description="ربات شما با همین فروشگاه کار می‌کند: پلن‌ها، قیمت‌ها و مشتری‌هایش مال شماست و سرویس‌ها روی سرورهای فروشگاه ساخته می‌شوند. هر سرویسی که ربات می‌فروشد یا تمدید می‌کند، حجم پلنش را از حجم شما برمی‌دارد؛ حجمی هم که از صفحه اشتراک‌ها به سرویسی اضافه می‌کنید از همین حجم کم می‌شود."
       />
 
-      {error && <ErrorState what="حساب نمایندگی" error={error} onRetry={() => void refetch()} />}
+      {failure.error && <ErrorState what="حساب نمایندگی" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />}
 
       {bot?.problem && (
         <Callout tone="warning" icon={TriangleAlert}>
@@ -61,7 +63,7 @@ export function AccountPage() {
           </Callout>
         ) : (
           <Callout tone="info" icon={Bot}>
-            ربات شما هنوز وصل نشده است: در ربات اصلی از «نمایندگی» ← «ربات من» توکنی را که @BotFather داده بفرستید.
+            ربات شما هنوز وصل نشده است: در ربات اصلی از «نمایندگی» ← «ربات من» توکنی را که <bdi dir="ltr">@BotFather</bdi> داده بفرستید.
           </Callout>
         ))}
       {data?.traffic_shortage && <TrafficShortageNotice shortage={data.traffic_shortage} help={BUY_TRAFFIC} />}
@@ -118,7 +120,7 @@ export function AccountPage() {
               <CardHeading>
                 <CardTitle>شرایط فروش</CardTitle>
                 <CardDescription>
-                  پایان نمایندگی و کف خرید حجم ماهانه را مدیر فروشگاه اصلی تعیین می‌کند. بعد از پایان نمایندگی، یا ماهی که خرید حجمش به کف نرسد، در ربات شما {SUSPENDED_SALES} تازه انجام نمی‌شود؛
+                  پایان نمایندگی و کف خرید حجم ماهانه را پشتیبانی فروشگاه اصلی تعیین می‌کند. بعد از پایان نمایندگی، یا ماهی که خرید حجمش به کف نرسد، در ربات شما {SUSPENDED_SALES} تازه انجام نمی‌شود؛
                   سرویس‌های فعلی مشتری‌ها کار می‌کنند.
                 </CardDescription>
               </CardHeading>
