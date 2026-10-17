@@ -8,7 +8,10 @@ Telegram bot; the owner runs the shop from a web panel; and AmoBot makes each se
 up in the browser, with no shell.
 
 Everything a customer, an agent or a shop owner sees is Persian and right to left, by design: prices in Toman, dates in
-the Jalali calendar. The code and the documentation are English; the documentation is being translated into Persian.
+the Jalali calendar. The code is English; the documentation is English and Persian.
+
+**Documentation: [amir-aghajani.github.io/amo-bot](https://amir-aghajani.github.io/amo-bot/)** — in English and in
+[فارسی](https://amir-aghajani.github.io/amo-bot/#/fa/), with search.
 
 > **Status: pre-release.** Versions are 0.x. [Releases](docs/Releases.md) says what each version brought — its
 > *Unreleased* section is what `main` has that no release has yet —, and the [Roadmap](docs/Roadmap.md) what is done
@@ -179,10 +182,10 @@ composer serve               # http://127.0.0.1:8080 — the web installer, unti
 ## Documentation
 
 The documentation is the [`docs/`](docs/Home.md) folder: English, the default — start at [Home](docs/Home.md) — and
-Persian, [فارسی](docs/fa/Home.md), being translated (a page not translated yet is read in English). The same pages are
-the project's GitHub wiki and its GitHub Pages site, rendered by Docsify
-([how they are published](docs/Contributing.md#documentation)). A release zip carries no `docs/`: read them at
-https://github.com/amir-aghajani/amo-bot/tree/main/docs.
+Persian, [فارسی](docs/fa/Home.md), every page translated. Its site, https://amir-aghajani.github.io/amo-bot/, shows the
+same pages with a sidebar, search and both languages, and so does the project's
+[GitHub wiki](https://github.com/amir-aghajani/amo-bot/wiki) ([how they are published](docs/Contributing.md#documentation)).
+A release zip carries no `docs/`: read them there.
 
 ### For shop owners
 

@@ -103,7 +103,8 @@ the repository's own view on GitHub, the project's GitHub wiki, and GitHub Pages
   page by hand (the Wiki tab's *Create the first page*); the export then replaces it. Until that page exists, a run says
   so in a warning and publishes nothing — run the workflow again by hand (Actions › Wiki › Run workflow) once the page
   is there.
-- **GitHub Pages** serves `docs/` as it is: Settings › Pages › Deploy from a branch, the default branch, `/docs`.
+- **GitHub Pages** serves `docs/` as it is, at https://amir-aghajani.github.io/amo-bot/ (the repository's About links
+  it): Settings › Pages › Deploy from a branch, the default branch, `/docs`.
   `docs/index.html` is [Docsify](https://docsify.js.org), which renders the Markdown in the browser — its script, its
   theme and its search pinned by version from jsDelivr, with the `_Sidebar.md` of a page's folder as its sidebar and
   `Home.md` as its front page —, and `docs/.nojekyll` keeps GitHub's Jekyll from hiding the `_`-named files. There is

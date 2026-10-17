@@ -114,10 +114,10 @@ request به آن اجرا می‌کند ([تست](Testing.md#اجرا-در-ci))
   Features › Wikis) و یک صفحه را دستی بسازید (*Create the first page* در تب Wiki)؛ بعد خروجی جای آن را می‌گیرد. تا
   وقتی آن صفحه وجود ندارد، هر اجرا این را در یک هشدار می‌گوید و چیزی منتشر نمی‌کند؛ وقتی صفحه ساخته شد، Workflow را
   دوباره دستی اجرا کنید (Actions › Wiki › Run workflow).
-- **سرویس GitHub Pages** پوشه <code dir="ltr">docs/</code> را همان‌طور که هست ارائه می‌کند: Settings › Pages › Deploy
-  from a branch، شاخه پیش‌فرض، <code dir="ltr">/docs</code>. فایل `docs/index.html` همان
-  [Docsify](https://docsify.js.org) است که Markdown را در مرورگر رندر می‌کند (اسکریپت، تم و جستجوی آن با نسخه مشخص از
-  jsDelivr بارگذاری می‌شوند، با <code dir="ltr">_Sidebar.md</code> پوشه هر صفحه به عنوان نوار کناری و `Home.md` به عنوان
+- **سرویس GitHub Pages** پوشه <code dir="ltr">docs/</code> را همان‌طور که هست در https://amir-aghajani.github.io/amo-bot/
+  ارائه می‌کند (بخش About مخزن به آن پیوند دارد): Settings › Pages › Deploy from a branch، شاخه پیش‌فرض، پوشه <code dir="ltr">/docs</code>.
+  فایل `docs/index.html` همان [Docsify](https://docsify.js.org) است که Markdown را در مرورگر رندر می‌کند (اسکریپت، تم و
+  جستجوی آن با نسخه مشخص از jsDelivr بارگذاری می‌شوند، با <code dir="ltr">_Sidebar.md</code> پوشه هر صفحه به عنوان نوار کناری و `Home.md` به عنوان
   صفحه اول)، و `docs/.nojekyll` نمی‌گذارد Jekyll در GitHub فایل‌هایی را که نامشان با `_` شروع می‌شود پنهان کند. چیزی
   برای بیلد یا نصب نیست؛ هر سرور فایل استاتیک آن را روی سیستم خودتان پیش‌نمایش می‌دهد (`npx docsify-cli serve docs`).
 - **هر سیستم مستندات Markdown دیگری** همین فایل‌ها را می‌خواند: MkDocs (`docs_dir: docs`، با `nav` آن که از روی

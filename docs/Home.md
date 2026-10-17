@@ -81,6 +81,7 @@ shop's admins' in the [admin API reference](Store-Admin-API-Reference.md).
 ## These pages
 
 One tree of Markdown pages in the repository's `docs/` folder, written to be read as it is in three places: the
-repository on GitHub, the project's GitHub wiki and GitHub Pages. English is their own language; a Persian translation
-is under way — the first line of a page links to its other versions. How they are written, checked and published:
+repository on GitHub, the project's GitHub wiki and [GitHub Pages](https://amir-aghajani.github.io/amo-bot/). English
+is their own language, and every page has its Persian translation — the first line of a page links to its other
+versions. How they are written, checked and published:
 [Contributing](Contributing.md#documentation).
