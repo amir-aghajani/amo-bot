@@ -473,9 +473,9 @@ final class AdminPlansApiTest extends HttpTestCase
 
         self::assertNotNull(Plan::query()->find($plan->id));
         self::assertSame($plan->id, $order?->refresh()->plan_id, 'the order keeps its plan');
-        $deleting = array_key_first(array_filter($statements, static fn(string $sql): bool => preg_match('/^delete from\W+plans\W/i', $sql) === 1));
+        $deleting = array_key_first(array_filter($statements, static fn(string $sql): bool => preg_match('/^delete from\W+' . self::TABLE_PREFIX . 'plans\W/i', $sql) === 1));
         self::assertNotNull($deleting);
-        self::assertSame([], array_filter(array_slice($statements, 0, (int) $deleting), static fn(string $sql): bool => preg_match('/^select\W.*\W(orders|subscriptions)\W/is', $sql) === 1), 'nothing asked of its orders before the statement that decides');
+        self::assertSame([], array_filter(array_slice($statements, 0, (int) $deleting), static fn(string $sql): bool => preg_match('/^select\W.*\W' . self::TABLE_PREFIX . '(orders|subscriptions)\W/is', $sql) === 1), 'nothing asked of its orders before the statement that decides');
     }
 
     public function testOptionsListServersWithTheirInbounds(): void

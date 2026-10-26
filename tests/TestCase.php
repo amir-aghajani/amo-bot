@@ -24,6 +24,7 @@ use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Promise\RejectedPromise;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Monolog\Handler\TestHandler;
@@ -105,6 +106,9 @@ abstract class TestCase extends BaseTestCase
 
     /** The PHP every test plays the host as (PhpVersion::setTestHost()): one without known holes, whatever runs the suite. */
     public const HOST_PHP = '8.4.27';
+
+    /** The prefix every test's tables have (DB_PREFIX). */
+    public const TABLE_PREFIX = 'amo_';
 
     /** Who the shop's emails come from once a test sets its mail up (mail()). */
     protected const MAIL_FROM = 'shop@example.com';
@@ -208,6 +212,9 @@ abstract class TestCase extends BaseTestCase
             $config->setMany(self::CONFIG);
             self::$app = Application::boot(dirname(__DIR__), $config->path());
             self::empty(self::runDir());
+            // Every table behind a prefix, as on a shop sharing its database (DB_PREFIX): SQL that names a table bare
+            // fails here, not there.
+            self::$app->container()->get(Connection::class)->setTablePrefix(self::TABLE_PREFIX);
             // A relation read row by row in a list (an N+1) fails the test; live it is only logged (DatabaseManager).
             Model::handleLazyLoadingViolationUsing(null);
             Model::preventAccessingMissingAttributes();
@@ -272,6 +279,12 @@ abstract class TestCase extends BaseTestCase
         self::$definitions ??= require $this->app()->basePath('bootstrap/container.php');
 
         return self::$definitions[$id] ?? \DI\autowire($id);
+    }
+
+    /** A table as the statements the app sends name it, quoted behind the tables' prefix: `"amo_orders"`. */
+    protected static function sqlTable(string $table): string
+    {
+        return '"' . self::TABLE_PREFIX . $table . '"';
     }
 
     /** Deliver services as text: the QR card (which needs GD) is covered by its own suite. */

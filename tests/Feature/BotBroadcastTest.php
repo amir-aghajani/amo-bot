@@ -352,9 +352,9 @@ final class BotBroadcastTest extends BotTestCase
 
         $moment = null;
         $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use ($group, &$moment): void {
-            if ($moment === null && str_starts_with($query->sql, 'select * from "customer_groups"')) {
+            if ($moment === null && str_starts_with($query->sql, 'select * from ' . self::sqlTable('customer_groups'))) {
                 $moment = 'looked';
-            } elseif ($moment === 'looked' && str_starts_with($query->sql, 'update "telegram_sessions"')) {
+            } elseif ($moment === 'looked' && str_starts_with($query->sql, 'update ' . self::sqlTable('telegram_sessions'))) {
                 // «ارسال» found the group there and takes the draft: the panel deletes the group right then.
                 CustomerGroup::query()->whereKey($group->id)->delete();
                 $moment = 'deleted';

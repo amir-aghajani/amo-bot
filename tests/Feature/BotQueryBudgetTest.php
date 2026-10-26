@@ -171,7 +171,7 @@ final class BotQueryBudgetTest extends BotTestCase
     {
         $tables = [];
         foreach ($queries as $sql) {
-            if (preg_match('/^\s*(?:insert(?:\s+or\s+\w+)?\s+into|update|delete\s+from)\s+"(\w+)"/i', $sql, $match) === 1) {
+            if (preg_match('/^\s*(?:insert(?:\s+or\s+\w+)?\s+into|update|delete\s+from)\s+"' . self::TABLE_PREFIX . '(\w+)"/i', $sql, $match) === 1) {
                 $tables[] = $match[1];
             }
         }

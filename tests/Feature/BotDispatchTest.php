@@ -425,7 +425,7 @@ final class BotDispatchTest extends BotTestCase
     {
         $waiting = true;
         $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use ($table, $other, &$waiting): void {
-            if ($waiting && str_starts_with($query->sql, 'select') && str_contains($query->sql, "from \"{$table}\"")) {
+            if ($waiting && str_starts_with($query->sql, 'select') && str_contains($query->sql, 'from ' . self::sqlTable($table))) {
                 $waiting = false;
                 $other();
             }

@@ -14,6 +14,10 @@ tests themselves. Run everything with `composer check` and `pnpm check` before a
   (`TestCase::CONFIG`: an in-memory SQLite database, a fixed `APP_KEY`, UTC, no bot token, no panel login), deleted as
   soon as it is read — never this machine's. Every file the app writes (`TestCase::FILES`: the install lock and keys, the
   throttle's counts, uploads, the scheduler's state…) goes to a folder of the run's own, emptied after each test.
+- **On prefixed tables**: every table is behind `TestCase::TABLE_PREFIX` (`amo_`), as on a shop that shares its database
+  (`DB_PREFIX`), so SQL that names a table bare fails a test. Raw SQL names its columns through the grammar
+  (`$query->getQuery()->getGrammar()->wrap('orders.created_at')`); a test that knows a statement by its table names it
+  with `sqlTable('orders')` (`"amo_orders"`), and its own raw SQL adds `TABLE_PREFIX`.
 - **Off the network**: every outgoing transport answers "no network" until a test hands it a fake, and nothing sleeps.
 - **Strict**: random order, and a deprecation, a notice or stray output fails a test. PHPStan checks the tests too.
 

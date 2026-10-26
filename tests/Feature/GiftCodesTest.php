@@ -196,7 +196,7 @@ final class GiftCodesTest extends DatabaseTestCase
 
         // The server switched off the moment the code is taken: the delivery finds no server.
         $refused = $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use ($server): void {
-            if (str_starts_with(strtolower($query->sql), 'update "gift_codes"') && str_contains($query->sql, 'redeemed_by')) {
+            if (str_starts_with(strtolower($query->sql), 'update ' . self::sqlTable('gift_codes')) && str_contains($query->sql, 'redeemed_by')) {
                 Server::query()->whereKey($server->id)->update(['is_active' => false]);
             }
         }, function (): ?GiftCodeRefusedException {

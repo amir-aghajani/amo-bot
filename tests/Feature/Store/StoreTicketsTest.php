@@ -276,7 +276,7 @@ final class StoreTicketsTest extends HttpTestCase
         Carbon::setTestNow(now()->addMinute());
         $writes = [];
         $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use (&$writes): void {
-            if (preg_match('/^update\s+"tickets"/i', $query->sql) === 1) {
+            if (preg_match('/^update\s+' . self::sqlTable('tickets') . '/i', $query->sql) === 1) {
                 $writes[] = $query->sql;
             }
         }, fn(): ResponseInterface => $this->postJson($this->storeApi($this->website, "/tickets/{$ticket['id']}/messages"), ['body' => 'یک نکته دیگر']));

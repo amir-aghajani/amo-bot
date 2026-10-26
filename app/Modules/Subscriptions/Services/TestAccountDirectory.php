@@ -35,10 +35,15 @@ final class TestAccountDirectory
     public function search(PageRequest $list): Page
     {
         $now = now();
+        // The columns as the grammar names them: with the tables' prefix (DB_PREFIX), which raw SQL never gets.
+        [$delivered, $made, $tested] = array_map(
+            TestAccount::query()->getQuery()->getGrammar()->wrap(...),
+            ['orders.fulfilled_at', 'orders.created_at', 'test_accounts.created_at'],
+        );
         $query = TestAccount::query()->select('test_accounts.*')->selectSub(
             Order::paidPurchases()->selectRaw('1')
                 ->whereColumn('orders.user_id', 'test_accounts.user_id')
-                ->whereRaw('COALESCE(orders.fulfilled_at, orders.created_at) > test_accounts.created_at')
+                ->whereRaw("COALESCE({$delivered}, {$made}) > {$tested}")
                 ->limit(1),
             'bought_after',
         );

@@ -249,7 +249,7 @@ final class BotPurchaseFlowTest extends BotTestCase
         // The moment the payment marks the order paid, another process (support's retry, the resume task) takes its delivery.
         $taken = false;
         $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use (&$taken): void {
-            if (!$taken && str_starts_with($query->sql, 'update "orders"') && in_array(OrderStatus::Paid->value, $query->bindings, true)) {
+            if (!$taken && str_starts_with($query->sql, 'update ' . self::sqlTable('orders')) && in_array(OrderStatus::Paid->value, $query->bindings, true)) {
                 $taken = true;
                 Order::query()->update(['status' => OrderStatus::Processing->value]);
             }

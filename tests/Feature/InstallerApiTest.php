@@ -113,13 +113,13 @@ final class InstallerApiTest extends HttpTestCase
         $this->install('POST', '/api/install/database', $this->database());
         // A table is missing, and an index of its name stands in the way of making it.
         $this->db()->getSchemaBuilder()->drop('sequences');
-        $this->db()->statement('CREATE INDEX sequences ON settings (key)');
+        $this->db()->statement('CREATE INDEX ' . self::TABLE_PREFIX . 'sequences ON ' . self::TABLE_PREFIX . 'settings (key)');
         $logs = $this->logs();
 
         $refused = $this->install('POST', '/api/install/tables');
 
         self::assertSame(422, $refused->getStatusCode());
-        self::assertStringContainsString('already an index named sequences', $this->decode($refused)['errors']['tables'][0], "the database's words: what the owner fixes it by");
+        self::assertStringContainsString('already an index named ' . self::TABLE_PREFIX . 'sequences', $this->decode($refused)['errors']['tables'][0], "the database's words: what the owner fixes it by");
         self::assertTrue($logs->hasErrorThatContains('The tables could not be made'));
     }
 

@@ -260,7 +260,7 @@ final class ServiceHoldTest extends DatabaseTestCase
     /** The database refuses to point a service at another server — its disk failed, say. */
     private function refusingMoves(): void
     {
-        $this->db()->statement("CREATE TRIGGER refusing_moves BEFORE UPDATE OF server_id ON subscriptions BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END");
+        $this->db()->statement('CREATE TRIGGER refusing_moves BEFORE UPDATE OF server_id ON ' . self::TABLE_PREFIX . "subscriptions BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END");
     }
 
     /** @param \Closure(): mixed $work */

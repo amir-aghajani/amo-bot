@@ -47,6 +47,12 @@ jobs:
             found { print }
           ' docs/Releases.md > build/notes.md
           test -s build/notes.md || { echo "docs/Releases.md has no section for ${version}"; exit 1; }
+          # Its links lead to the pages as this tag has them: relative ones would lead nowhere on the release's page or
+          # in the shops' updater. A link to a heading of the notes themselves goes to docs/Releases.md.
+          DOCS="https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs" perl -pi -e '
+            s{\]\((#[^)\s]*)\)}{]($ENV{DOCS}/Releases.md$1)}g;
+            s{\]\((?![a-z][a-z0-9+.-]*:|#|/)([^)\s]+)\)}{]($ENV{DOCS}/$1)}gi;
+          ' build/notes.md
           test -n "${RELEASE_SIGNING_KEY}" || { echo "The RELEASE_SIGNING_KEY secret is not set: no unsigned release is published (docs/Releasing.md)"; exit 1; }
 
       - run: composer install --no-interaction --no-progress

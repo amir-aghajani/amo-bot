@@ -37,7 +37,7 @@ use Tests\HttpTestCase;
 final class StoreCheckoutIdempotencyTest extends HttpTestCase
 {
     /** The statement that looks for the order a request's key came to (OrderService::keyed()). */
-    private const KEYED = 'select * from "orders" where "id" in (select "order_id" from "request_keys" where "user_id" = ? and "key" = ?';
+    private const KEYED = 'select * from "' . self::TABLE_PREFIX . 'orders" where "id" in (select "order_id" from "' . self::TABLE_PREFIX . 'request_keys" where "user_id" = ? and "key" = ?';
 
     private Website $website;
 

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.7.1
+  version: 0.7.2
   description: |
     AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.
 

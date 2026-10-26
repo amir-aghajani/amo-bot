@@ -166,7 +166,7 @@ final class CustomerRenewalChoicesTest extends DatabaseTestCase
 
         $plansRead = 0;
         $pickable = $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use (&$plansRead): void {
-            if (str_contains($query->sql, 'from "plans"')) {
+            if (str_contains($query->sql, 'from ' . self::sqlTable('plans'))) {
                 ++$plansRead;
             }
         }, fn() => $this->renewal()->pickable($page));
@@ -186,7 +186,7 @@ final class CustomerRenewalChoicesTest extends DatabaseTestCase
 
         $plansRead = 0;
         $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use (&$plansRead): void {
-            if (str_contains($query->sql, 'from "plans"')) {
+            if (str_contains($query->sql, 'from ' . self::sqlTable('plans'))) {
                 ++$plansRead;
             }
         }, fn() => $this->renewal()->pickable($page->whereNotNull('plan_id')));

@@ -23,9 +23,6 @@ use Illuminate\Support\Carbon;
  */
 final class ReferralDirectory
 {
-    /** What a row's commissions add up to, beside it (a subquery of a users list): none is 0. */
-    private const SUM = 'COALESCE(SUM(referral_commissions.commission), 0)';
-
     public function __construct(private readonly ReferralSettings $settings) {}
 
     /**
@@ -66,7 +63,7 @@ final class ReferralDirectory
             ->whereHas('referrals')
             ->withCount('referrals')
             ->withMax('referrals', 'created_at')
-            ->addSelect(['earned' => ReferralCommission::query()->selectRaw(self::SUM)->whereColumn('referral_commissions.referrer_id', 'users.id')])
+            ->addSelect(['earned' => self::earned(ReferralCommission::query())->whereColumn('referral_commissions.referrer_id', 'users.id')])
             ->addSelect(['open_alerts' => ReferralAlert::query()->selectRaw('COUNT(*)')->whereColumn('referral_alerts.referrer_id', 'users.id')]);
         if ($list->term !== '') {
             User::matching($query, $list->term);
@@ -118,7 +115,7 @@ final class ReferralDirectory
         $query = User::query()
             ->whereNotNull('referred_by')
             ->with('referrer')
-            ->addSelect(['earned' => ReferralCommission::withPayer()->selectRaw(self::SUM)
+            ->addSelect(['earned' => self::earned(ReferralCommission::withPayer())
                 ->whereColumn(ReferralCommission::PAYER . '.id', 'users.id')
                 ->whereColumn('referral_commissions.referrer_id', 'users.referred_by')]);
         $referrer = $list->id('referrer');
@@ -176,6 +173,20 @@ final class ReferralDirectory
                 'created_at' => $commission->created_at?->toIso8601String(),
             ];
         }, $sort);
+    }
+
+    /**
+     * What a row's commissions add up to, beside it (a subquery of a users list): none is 0. The column as the grammar
+     * names it, with the tables' prefix (DB_PREFIX).
+     *
+     * @param Builder<ReferralCommission> $commissions
+     * @return Builder<ReferralCommission>
+     */
+    private static function earned(Builder $commissions): Builder
+    {
+        $commission = $commissions->getQuery()->getGrammar()->wrap('referral_commissions.commission');
+
+        return $commissions->selectRaw("COALESCE(SUM({$commission}), 0)");
     }
 
     private static function money(mixed $sum): string

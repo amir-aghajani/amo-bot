@@ -13,6 +13,7 @@ use App\Modules\Users\Models\User;
 use cebe\openapi\spec\Operation;
 use cebe\openapi\spec\Parameter;
 use cebe\openapi\spec\PathItem;
+use Illuminate\Database\Connection;
 use Slim\Psr7\Factory\ServerRequestFactory;
 use Tests\HttpTestCase;
 
@@ -63,7 +64,8 @@ final class RowsWithoutTimesTest extends HttpTestCase
         foreach ($this->db()->select("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'") as $table) {
             $times = array_values(array_intersect(['created_at', 'updated_at'], array_column($this->db()->select("PRAGMA table_info(\"{$table->name}\")"), 'name')));
             if ($times !== []) {
-                $this->db()->table($table->name)->update(array_fill_keys($times, null));
+                // The name as the database has it, its prefix in it already.
+                $this->db()->withoutTablePrefix(static fn(Connection $db) => $db->table($table->name)->update(array_fill_keys($times, null)));
             }
         }
 

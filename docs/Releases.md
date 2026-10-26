@@ -13,6 +13,15 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.7.2
+
+### Fixed
+
+- **A shop whose tables have a prefix** (`DB_PREFIX`, «پیشوند جدول‌ها») can open «اکانت تست» and the referral
+  program's lists of referrers and of the customers they brought again: each stopped with a server error, its database
+  query naming a table without the prefix.
+- **The release notes' links** on GitHub's release page lead to the pages they name, as the release has them.
+
 ## Version 0.7.1
 
 ### Security

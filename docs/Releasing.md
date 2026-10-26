@@ -85,7 +85,9 @@ that writes zips (Windows 10+, macOS) or `zip` (Linux), and, to sign, PHP's sodi
 section and that the signing secret is set — no unsigned release is ever published —, runs `composer check` (on PHP
 8.3) and `pnpm check` again, builds and signs the release with `scripts/release.php` (the key the shops trust now taken
 from the last release's tag), and publishes the GitHub release: the zip, `release.json` and `release.json.sig`, its
-notes that section of [Releases](Releases.md). The shops' daily check sees it within a day; «بررسی دوباره» at once.
+notes that section of [Releases](Releases.md), its relative links turned into links to the pages as the tag has them
+(`https://github.com/<owner>/<repo>/blob/v1.2.3/docs/…`) — relative ones would lead nowhere on the release's page. The
+shops' daily check sees it within a day; «بررسی دوباره» at once.
 
 Every push to `main` and every pull request runs the checks on PHP 8.3–8.5 and builds the panels
 (`.github/workflows/ci.yml`, [Testing](Testing.md#ci)).
